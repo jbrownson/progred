@@ -77,15 +77,15 @@ impl App {
         }
     }
 
-    /// The chosen entry's action — from the frame's popup, else the
+    /// The chosen entry's action — from the frame's offers, else the
     /// query's inferred atom.
     pub(crate) fn chosen_action(
-        popup: &Option<completion::Popup>,
+        completion: &Option<completion::Offers>,
         query: &LineEditState,
         choice: usize,
         labels: bool,
     ) -> completion::EntryAction {
-        popup
+        completion
             .as_ref()
             .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
             .map(|entry| entry.action.clone())
@@ -361,12 +361,12 @@ impl App {
     pub(crate) fn insert_key(
         &mut self,
         descends: &[navigate::Descend<App>],
-        popup: &Option<completion::Popup>,
+        completion: &Option<completion::Offers>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
             && match &event.key {
-                // While pending, plain vertical arrows drive the popup
+                // While pending, plain vertical arrows drive completion
                 // choice; chorded arrows stay structure keys.
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
                     if !modifiers::command(&event.modifiers) =>
@@ -375,7 +375,10 @@ impl App {
                         Some(current)
                             if current.stage() != selection::Stage::Edge =>
                         {
-                            let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
+                            let len = completion
+                                .as_ref()
+                                .map(|offers| offers.entries.len())
+                                .unwrap_or(0);
                             let choice = current.choice();
                             current.set_choice(match direction {
                                 NamedKey::ArrowUp => choice.saturating_sub(1),
@@ -394,7 +397,12 @@ impl App {
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
                         let query = current.edit().unwrap_or(&fallback);
-                        let action = Self::chosen_action(popup, query, current.choice(), labels);
+                        let action = Self::chosen_action(
+                            completion,
+                            query,
+                            current.choice(),
+                            labels,
+                        );
                         if labels {
                             self.commit_label(root, current.path().to_vec(), &action);
                         } else {

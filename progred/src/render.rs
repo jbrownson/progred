@@ -36,17 +36,22 @@ pub fn line_edit<C: 'static, Cv: Canvas + 'static>(
     editing: Option<&LineEditState>,
     edit: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
+    let style = styles.line_style(line);
+    let placeholder_style = TextStyle {
+        family: style.family,
+        ..styles.dim.clone()
+    };
     match editing {
         Some(state) => text_edit(
             LineEditDescription {
                 state,
                 focused: true,
-                presentation: styles.line_presentation(&line.prefix, &line.suffix),
+                presentation: styles.line_presentation(line),
                 style: &styles.edit,
                 placeholder: line
                     .placeholder
                     .as_deref()
-                    .map(|placeholder| (placeholder, &styles.dim)),
+                    .map(|placeholder| (placeholder, &placeholder_style)),
             },
             tcx,
             edit,
@@ -55,12 +60,12 @@ pub fn line_edit<C: 'static, Cv: Canvas + 'static>(
             Some(placeholder) => text(
                 tcx,
                 &format!("{}{}{}", line.prefix, placeholder, line.suffix),
-                &styles.dim,
+                &placeholder_style,
             ),
             None => text(
                 tcx,
                 &format!("{}{}{}", line.prefix, line.text, line.suffix),
-                &styles.string,
+                &style,
             ),
         },
     }

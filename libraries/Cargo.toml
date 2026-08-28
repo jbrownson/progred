@@ -8,4 +8,5 @@ gid = { path = "../gid" }
 grap-runtime = { package = "grap", path = "../grap" }
 progred-display = { path = "../display" }
 puri = { path = "../ui/puri" }
+puri-widgets = { path = "../ui/puri-widgets" }
 im = "15"

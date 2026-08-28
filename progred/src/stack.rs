@@ -25,7 +25,7 @@ impl<World> Clone for Stack<World> {
     }
 }
 
-pub fn load<World>() -> Stack<World> {
+pub fn load<World: 'static>() -> Stack<World> {
     let library = Library::merge_all(libraries());
     let foreign = library.functions.clone();
     let projection = Projection::new(library.projections);
@@ -36,7 +36,7 @@ pub fn load<World>() -> Stack<World> {
     }
 }
 
-fn libraries<World>() -> impl Iterator<Item = Library<World, Hover>> {
+fn libraries<World: 'static>() -> impl Iterator<Item = Library<World, Hover>> {
     [
         name::library(),
         text::library(),

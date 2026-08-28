@@ -4,7 +4,7 @@
 
 use crate::{Library, name};
 use gid::{Cells, Value};
-use progred_display::{Layout, LineEdit, line_edit};
+use progred_display::{Layout, LineEdit, TextFamily, line_edit};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -20,7 +20,17 @@ pub fn layout<World, Hover>(
     prefix: impl Into<String>,
     suffix: impl Into<String>,
 ) -> Layout<World, Hover> {
-    layout_with_placeholder(text, None::<String>, update, prefix, suffix)
+    layout_with_family(text, update, prefix, suffix, TextFamily::SystemUi)
+}
+
+pub fn layout_with_family<World, Hover>(
+    text: impl Into<String>,
+    update: Value,
+    prefix: impl Into<String>,
+    suffix: impl Into<String>,
+    family: TextFamily,
+) -> Layout<World, Hover> {
+    description(text, None::<String>, update, prefix, suffix, family)
 }
 
 pub fn layout_with_placeholder<World, Hover>(
@@ -30,12 +40,31 @@ pub fn layout_with_placeholder<World, Hover>(
     prefix: impl Into<String>,
     suffix: impl Into<String>,
 ) -> Layout<World, Hover> {
+    description(
+        text,
+        placeholder,
+        update,
+        prefix,
+        suffix,
+        TextFamily::SystemUi,
+    )
+}
+
+fn description<World, Hover>(
+    text: impl Into<String>,
+    placeholder: Option<impl Into<String>>,
+    update: Value,
+    prefix: impl Into<String>,
+    suffix: impl Into<String>,
+    family: TextFamily,
+) -> Layout<World, Hover> {
     line_edit(LineEdit {
         text: text.into(),
         placeholder: placeholder.map(Into::into),
         update,
         prefix: prefix.into(),
         suffix: suffix.into(),
+        family,
     })
 }
 
@@ -65,6 +94,21 @@ mod tests {
         assert_eq!(line.update, update);
         assert_eq!(line.prefix, "(");
         assert_eq!(line.suffix, ")");
+        assert_eq!(line.family, TextFamily::SystemUi);
+    }
+
+    #[test]
+    fn layout_can_request_a_monospace_editor() {
+        let Layout::LineEdit(line) = layout_with_family::<(), ()>(
+            "b4e0fe",
+            Value::from(gid::new_cell_id()),
+            "#",
+            "",
+            TextFamily::Monospace,
+        ) else {
+            panic!("stock line-edit layout")
+        };
+        assert_eq!(line.family, TextFamily::Monospace);
     }
 
     #[test]

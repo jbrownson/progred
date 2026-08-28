@@ -1,10 +1,12 @@
 //! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
 
-use crate::{Library, line_edit, name, text};
+use crate::{Library, f64, line_edit, name, text};
 use gid::{Cells, Step, Value};
 use grap_runtime::{ForeignFunction, ForeignFunctions};
-use progred_display::{Face, Layout, Paint, ProjectionInput, activatable, centered_row, descend, leaf};
+use progred_display::{Face, Layout, Paint, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col, descend, leaf, on_activate, on_hover, on_point, popover};
 use puri::{Affine, Brush, Color, Command, Drawing, Leaf, Rect, RoundedRect, Shape, Stroke};
+use puri_widgets::color_picker::{self, Hsva};
+use std::rc::Rc;
 
 mod named;
 
@@ -14,6 +16,8 @@ pub mod vocabulary {
     pub const RGB: CellId = CellId::from_u128(0x6c8a17cbe463186cc8b07e536ccffa6b);
     pub const RGBA: CellId = CellId::from_u128(0xf77aef58bcc71dd838f089adc650e2d4);
     pub const UPDATE: CellId = CellId::from_u128(0xd3fd7b475567d1881c9023c90bd9864c);
+    pub const PICKER: CellId = CellId::from_u128(0xd30d721bc1db563c75f899cc15c10580);
+    pub const HUE: CellId = CellId::from_u128(0x4d226747147aa5cc9e6629e34c43a366);
 }
 
 #[derive(Clone, Copy)]
@@ -107,6 +111,101 @@ fn replace_color(current: &Value, color: Encoded) -> Option<Value> {
     Some(Value::Record(fields))
 }
 
+fn picker_selection(hue: f64) -> Value {
+    Value::record([(
+        vocabulary::PICKER,
+        Value::record([(vocabulary::HUE, f64::value(hue))]),
+    )])
+}
+
+fn picker_hue(selection: Option<&Value>) -> Option<f64> {
+    selection
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::PICKER))
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::HUE))
+        .and_then(f64::read)
+}
+
+fn without_picker(selection: Option<&Value>) -> Value {
+    let mut fields = selection
+        .and_then(Value::as_record)
+        .cloned()
+        .unwrap_or_default();
+    fields.remove(&vocabulary::PICKER);
+    Value::Record(fields)
+}
+
+fn picker_leaf<World, Hover>(drawing: Drawing<Brush>) -> Layout<World, Hover> {
+    leaf(Leaf::Drawing(drawing.map_paint(Paint::Brush)))
+}
+
+fn picker_update(
+    original: Value,
+    color: Hsva,
+    update: impl Fn(Hsva, PointEvent) -> Hsva + 'static,
+    update_hue: bool,
+) -> progred_display::PointHandler {
+    Rc::new(move |point| {
+        let color = update(color, point);
+        let rgba = color.to_rgba8();
+        let encoded = if matches!(encoded(&original), Some(Encoded::Rgba(_))) {
+            Encoded::Rgba(rgba)
+        } else {
+            Encoded::Rgb([rgba[0], rgba[1], rgba[2]])
+        };
+        PointUpdate {
+            value: replace_color(&original, encoded).unwrap_or_else(|| original.clone()),
+            selection: update_hue.then(|| picker_selection(color.hue)),
+        }
+    })
+}
+
+fn hsva(encoded: Encoded) -> Hsva {
+    let rgba = match encoded {
+        Encoded::Rgb([red, green, blue]) => [red, green, blue, 0xff],
+        Encoded::Rgba(rgba) => rgba,
+    };
+    Hsva::from_rgba8(rgba)
+}
+
+fn picker<World, Hover>(
+    original: &Value,
+    encoded: Encoded,
+    hue: f64,
+) -> Layout<World, Hover> {
+    let color = Hsva {
+        hue,
+        ..hsva(encoded)
+    };
+    let plane = on_point(
+        picker_leaf(color_picker::plane(color)),
+        picker_update(original.clone(), color, |color, point| {
+            color.with_plane(point.x, point.y)
+        }, false),
+    );
+    let hue = on_point(
+        picker_leaf(color_picker::hue(color)),
+        picker_update(original.clone(), color, |color, point| {
+            color.with_hue(point.x)
+        }, true),
+    );
+    col(
+        0,
+        8.0,
+        [plane, hue]
+            .into_iter()
+            .chain(matches!(encoded, Encoded::Rgba(_)).then(|| {
+                on_point(
+                    picker_leaf(color_picker::alpha(color)),
+                    picker_update(original.clone(), color, |color, point| {
+                        color.with_alpha(point.x)
+                    }, false),
+                )
+            })),
+    )
+}
+
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
@@ -152,13 +251,35 @@ fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
     }))
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let encoded = encoded(input.value)?;
     let color = read(input.value)?;
+    let initial_hue = hsva(encoded).hue;
+    let selected_hue = picker_hue(input.selection);
+    let next_selection = if selected_hue.is_some() {
+        without_picker(input.selection)
+    } else {
+        picker_selection(initial_hue)
+    };
     let target = input.targets.current();
-    let swatch = activatable(swatch(color), target.hover, target.select);
+    let swatch = if input.writable {
+        let select_picker = target.select_with;
+        on_activate(
+            swatch(color),
+            target.hover.clone(),
+            Rc::new(move |world| select_picker(world, next_selection.clone())),
+        )
+    } else {
+        swatch(color)
+    };
+    let swatch = on_hover(swatch, target.hover);
+    let swatch = if input.writable && let Some(hue) = selected_hue {
+        popover(swatch, picker(input.value, encoded, hue))
+    } else {
+        swatch
+    };
     let name = name::read(input.value).map(|_| {
         descend(
             Step::Key(name::vocabulary::NAME),
@@ -166,11 +287,12 @@ pub fn display<World, Hover: Clone>(
             None,
         )
     });
-    let spelling = line_edit::layout(
+    let spelling = line_edit::layout_with_family(
         spelling(encoded),
         grap_runtime::ffi(vocabulary::UPDATE),
         "#",
         "",
+        TextFamily::Monospace,
     );
     Some(centered_row(
         4.0,
@@ -180,11 +302,13 @@ pub fn display<World, Hover: Clone>(
     ))
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));
     cells.set_value(vocabulary::UPDATE, name::record("color update", []));
+    cells.set_value(vocabulary::PICKER, name::record("color picker", []));
+    cells.set_value(vocabulary::HUE, name::record("hue", []));
     named::insert(&mut cells);
     Library {
         cells,
@@ -281,11 +405,13 @@ mod tests {
         let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
         let target = |_| progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_: &mut ()| false),
+            select_with: std::rc::Rc::new(|_: &mut (), _| false),
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&target),
@@ -310,7 +436,39 @@ mod tests {
         assert!(matches!(
             &children[1],
             Layout::LineEdit(line)
-                if line.text == "b4e0fe" && line.prefix == "#" && line.suffix.is_empty()
+                if line.text == "b4e0fe"
+                    && line.prefix == "#"
+                    && line.suffix.is_empty()
+                    && line.family == TextFamily::Monospace
+        ));
+    }
+
+    #[test]
+    fn a_read_only_color_has_no_picker_activation_or_popup() {
+        let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
+        let selection = picker_selection(0.1);
+        let target = |_| progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            select_with: std::rc::Rc::new(|_: &mut (), _| false),
+            hover: (),
+        };
+        let layout = display::<(), ()>(&ProjectionInput {
+            env: &NoEval,
+            value: &color,
+            writable: false,
+            selection: Some(&selection),
+            state: None,
+            targets: progred_display::ProjectionTargets::new(&target),
+        })
+        .expect("read-only color projection");
+        let Layout::Row { children, .. } = layout else {
+            panic!("color projection is one row")
+        };
+
+        assert!(matches!(
+            children[0],
+            Layout::OnHover { ref child, .. }
+                if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_)))
         ));
     }
 
@@ -325,11 +483,13 @@ mod tests {
         );
         let target = |_| progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_: &mut ()| false),
+            select_with: std::rc::Rc::new(|_: &mut (), _| false),
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&target),
@@ -350,6 +510,73 @@ mod tests {
             &children[2],
             Layout::LineEdit(line) if line.text == "663399"
         ));
+    }
+
+    #[test]
+    fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
+        let extra = new_cell_id();
+        let color = Value::record(
+            value(Color::from_rgba8(0x66, 0x33, 0x99, 0xff))
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(extra, Value::from(vec![7])),
+        );
+        let selection = picker_selection(0.1);
+        let target = |_| progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            select_with: std::rc::Rc::new(|_: &mut (), _| false),
+            hover: (),
+        };
+        let layout = display::<(), ()>(&ProjectionInput {
+            env: &NoEval,
+            value: &color,
+            writable: true,
+            selection: Some(&selection),
+            state: None,
+            targets: progred_display::ProjectionTargets::new(&target),
+        })
+        .expect("selected color projection");
+        let Layout::Row { children, .. } = layout else {
+            panic!("color projection is one row")
+        };
+        let Layout::Popover { content, .. } = &children[0] else {
+            panic!("picker mode floats from the swatch")
+        };
+        let Layout::Col { children, .. } = content.as_ref() else {
+            panic!("picker controls are stacked")
+        };
+        let Layout::OnPoint { handler, .. } = &children[0] else {
+            panic!("saturation/value is a point control")
+        };
+        let updated = handler(PointEvent { x: 1.0, y: 0.0 });
+
+        assert_eq!(
+            updated.value.as_record().unwrap().get(&extra),
+            Some(&Value::from(vec![7]))
+        );
+        assert!(matches!(encoded(&updated.value), Some(Encoded::Rgb(_))));
+        assert!(updated.selection.is_none());
+
+        let Layout::OnPoint { handler, .. } = &children[1] else {
+            panic!("hue is a point control")
+        };
+        let updated = handler(PointEvent { x: 0.25, y: 0.0 });
+        assert_eq!(picker_hue(updated.selection.as_ref()), Some(0.25));
+    }
+
+    #[test]
+    fn closing_the_picker_removes_only_its_selection_state() {
+        let other = new_cell_id();
+        let mut selection = picker_selection(0.25).as_record().unwrap().clone();
+        selection.insert(other, Value::from(vec![7]));
+        let closed = without_picker(Some(&Value::Record(selection)));
+
+        assert_eq!(picker_hue(Some(&closed)), None);
+        assert_eq!(
+            closed.as_record().unwrap().get(&other),
+            Some(&Value::from(vec![7]))
+        );
     }
 
     struct NoEval;

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 use crate::completion::{resolve_entry, resolve_label};
-use crate::completion::{Entry, EntryAction, HasPopup, Popup, completion_entries};
+use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries};
 use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
@@ -95,6 +95,7 @@ impl<World> Projection<World> {
         &self,
         env: &dyn progred_display::Env,
         value: &Value,
+        writable: bool,
         selection: Option<&Value>,
         state: Option<&Value>,
         targets: progred_display::ProjectionTargets<'_, World, Hover>,
@@ -102,6 +103,7 @@ impl<World> Projection<World> {
         let input = progred_display::ProjectionInput {
             env,
             value,
+            writable,
             selection,
             state,
             targets,
@@ -259,6 +261,11 @@ enum ChoiceKind<Out> {
     Overlay {
         children: Vec<ChoiceLayout<Out>>,
     },
+    Popover {
+        trigger: Box<ChoiceLayout<Out>>,
+        content: Box<ChoiceLayout<Out>>,
+        map: Box<dyn FnOnce(Measured<Out>, Measured<Out>) -> Measured<Out>>,
+    },
     Pad {
         insets: Insets,
         child: Box<ChoiceLayout<Out>>,
@@ -399,6 +406,21 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
+    fn popover(
+        trigger: Self,
+        content: Self,
+        map: impl FnOnce(Measured<Out>, Measured<Out>) -> Measured<Out> + 'static,
+    ) -> Self {
+        Self {
+            widths: trigger.widths,
+            kind: ChoiceKind::Popover {
+                trigger: Box::new(trigger),
+                content: Box::new(content),
+                map: Box::new(map),
+            },
+        }
+    }
+
     fn pad(insets: Insets, child: Self) -> Self {
         let widths = child.widths.plus(insets.x0 + insets.x1);
         Self {
@@ -463,6 +485,10 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .iter()
                 .map(|child| child.select(choices, shared, available))
                 .fold(0.0_f64, f64::max),
+            ChoiceKind::Popover { trigger, content, .. } => {
+                content.select(choices, shared, available);
+                trigger.select(choices, shared, available)
+            }
             ChoiceKind::Pad { insets, child } => {
                 let horizontal = insets.x0 + insets.x1;
                 child.select(choices, shared, (available - horizontal).max(0.0)) + horizontal
@@ -520,6 +546,10 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     child.inspect(depth + 1, trace);
                 }
             }
+            ChoiceKind::Popover { trigger, content, .. } => {
+                trigger.inspect(depth + 1, trace);
+                content.inspect(depth + 1, trace);
+            }
             ChoiceKind::Alternatives { options, .. } => {
                 trace.alternatives += 1;
                 trace.multiway_alternatives += usize::from(options.len() > 2);
@@ -557,6 +587,10 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 for child in children {
                     child.inspect_selection(choices, shared, depth + 1, trace);
                 }
+            }
+            ChoiceKind::Popover { trigger, content, .. } => {
+                trigger.inspect_selection(choices, shared, depth + 1, trace);
+                content.inspect_selection(choices, shared, depth + 1, trace);
             }
             ChoiceKind::Alternatives { id, options } => {
                 let selected = choices[*id];
@@ -610,6 +644,14 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     .into_iter()
                     .map(|child| child.settle(choices, shared))
                     .collect(),
+            ),
+            ChoiceKind::Popover {
+                trigger,
+                content,
+                map,
+            } => map(
+                trigger.settle(choices, shared),
+                content.settle(choices, shared),
             ),
             ChoiceKind::Pad { insets, child } => pad(insets, child.settle(choices, shared)),
             ChoiceKind::Alternatives { id, options } => options
@@ -890,6 +932,21 @@ fn prepare<
                 }
             })
         }
+        progred_display::Layout::OnPoint { child, handler } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            let path = path.to_vec();
+            let point = hooks.point.clone();
+            let writable = !cx.source.transient() && writable_at(&cx.sources, &path);
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                if writable {
+                    realize_point(path, handler, point, inner)
+                } else {
+                    inner
+                }
+            })
+        }
         progred_display::Layout::OnHover { child, hover } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
@@ -959,6 +1016,31 @@ fn prepare<
                     )
                 })
                 .collect())
+        }
+        progred_display::Layout::Popover { trigger, content } => {
+            let trigger = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *trigger, build,
+            );
+            let content = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *content, build,
+            );
+            let fill = Color::new([0.985, 0.985, 0.99, 1.0]);
+            let stroke = cx.styles.dim.brush.clone();
+            ChoiceLayout::popover(trigger, content, move |trigger, content| {
+                let card = measured::pad(Insets::uniform(10.0 * scale), content);
+                let card = before(card, move |p, placement| {
+                    let shape = RoundedRect::from_rect(placement.rect, 6.0 * scale);
+                    p.fill(shape, fill, Affine::IDENTITY);
+                    p.stroke(
+                        shape,
+                        Stroke::new(scale),
+                        stroke,
+                        Affine::IDENTITY,
+                    );
+                    p.occlude(placement);
+                });
+                placed::popover(trigger, card, 4.0 * scale)
+            })
         }
         progred_display::Layout::Pad {
             left,
@@ -1331,6 +1413,30 @@ fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
+fn realize_point<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    handler: progred_display::PointHandler,
+    start: Rc<
+        dyn Fn(
+            &mut C,
+            Path,
+            Placement,
+            progred_display::PointHandler,
+            Point,
+        ) -> bool,
+    >,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    before(inner, move |p, placement| {
+        p.handler().on_pointer_down(move |world, event| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            is_primary_contact(event)
+                && placement.contains(point)
+                && start(world, path.clone(), placement, handler.clone(), point)
+        });
+    })
+}
+
 fn event_value(
     kind: CellId,
     fields: impl IntoIterator<Item = (CellId, Value)>,
@@ -1611,17 +1717,19 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
     line: progred_display::LineEdit,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    let editing = cx
-        .selection
-        .filter(|selection| selection.path() == path)
-        .and_then(Selection::edit);
+    let writable = !cx.source.transient() && writable_at(&cx.sources, path);
+    let editing = if writable {
+        cx.selection
+            .filter(|selection| selection.path() == path)
+            .and_then(Selection::edit)
+    } else {
+        None
+    };
     let active = editing.is_some();
     let edit = hooks.edit.clone();
     let content = render::line_edit(tcx, cx.styles, &line, editing, move |ctx| edit(ctx));
 
-    // A transient evaluation result has no writable source location.
-    // Its owner supplies the surrounding interaction identity.
-    if cx.source.transient() {
+    if !writable {
         return content;
     }
 
@@ -1634,7 +1742,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         true
     });
     let content = before(content, move |p, _| p.select_landmark(select));
-    let presentation = cx.styles.line_presentation(&line.prefix, &line.suffix);
+    let presentation = cx.styles.line_presentation(&line);
     let scale = cx.styles.scale;
     let start_edit = hooks.start_edit.clone();
     let edit = hooks.edit.clone();
@@ -1707,6 +1815,7 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
 /// the remaining host-owned editor state and measurement caches.
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path)>,
+    pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
     /// Mount the stock editor described by a Rust projection. Its
     /// first pointer event then uses `edit` below for caret placement.
     pub start_edit: Rc<dyn Fn(&mut C, Path, progred_display::LineEdit)>,
@@ -1727,6 +1836,18 @@ pub struct Hooks<C> {
     /// Apply a Grap event handler at `path` with the event as data and
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
+    /// Begin a continuous point control at its settled placement.
+    pub point: Rc<
+        dyn Fn(
+            &mut C,
+            Path,
+            Placement,
+            progred_display::PointHandler,
+            Point,
+        ) -> bool,
+    >,
+    /// Commit one of the exact offers shown by an engaged pending.
+    pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
 }
 
 fn select_handler<C: 'static>(
@@ -1747,10 +1868,16 @@ fn projection_target<C: 'static>(
 ) -> progred_display::ProjectionTarget<C, Hover> {
     let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
     let selected = path.clone();
+    let selected_with = path.clone();
     let select = hooks.select.clone();
+    let select_payload = hooks.select_payload.clone();
     progred_display::ProjectionTarget {
         select: Rc::new(move |world| {
             select(world, selected.to_vec());
+            true
+        }),
+        select_with: Rc::new(move |world, payload| {
+            select_payload(world, selected_with.to_vec(), payload);
             true
         }),
         hover: Hover::Value(path),
@@ -2464,8 +2591,13 @@ fn prepare_transient_root<
     let origin = path.to_vec();
     let select = hooks.select.clone();
     let select_origin = origin.clone();
+    let select_payload = hooks.select_payload.clone();
+    let payload_origin = origin.clone();
     let result_hooks = Hooks {
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
+        select_payload: Rc::new(move |ctx, _, payload| {
+            select_payload(ctx, payload_origin.clone(), payload)
+        }),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         edit: Rc::new(|_| None),
@@ -2473,6 +2605,8 @@ fn prepare_transient_root<
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_| false),
         apply: hooks.apply.clone(),
+        point: hooks.point.clone(),
+        commit_offer: hooks.commit_offer.clone(),
     };
     let result_cx = Cx {
         sources: cx.sources,
@@ -2761,6 +2895,7 @@ fn present_layout<C: 'static>(
             projection.apply(
                 &ProjectEnv { cx },
                 value,
+                !cx.source.transient() && writable_at(&cx.sources, path),
                 selection,
                 state,
                 progred_display::ProjectionTargets::new(&target),
@@ -2799,7 +2934,7 @@ fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
 /// projection — engagement derived from the selection, wrapped as an
 /// ordinary descend so it highlights, clicks, and navigates like the
 /// value it may become. Engaged, its placement emits the completion
-/// popup for the shell to draw over the body.
+/// floating completion card.
 fn pending_view<
     C: 'static,
     Cv: Canvas + 'static,
@@ -2846,10 +2981,9 @@ fn placeholder<
     }
 }
 
-/// A focused completion query: the editor plus its popup, emitted at
-/// placement for the shell to draw over the body. Serves both pending
-/// stages — a value and a new field's label (`labels` narrows the
-/// offers there).
+/// A focused completion query: the editor plus an ordinary floating
+/// card. Serves both pending stages — a value and a new field's label
+/// (`labels` narrows the offers there).
 fn query_content<
     C: 'static,
     Cv: Canvas + 'static,
@@ -2860,8 +2994,7 @@ fn query_content<
     labels: bool,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    // The same inputs the shell's card view reads: the drawn rows
-    // and this stash's keyboard commit must answer from one list.
+    // The card and keyboard commit must answer from one list.
     let entries = completion_entries(&cx.sources, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
@@ -2877,17 +3010,17 @@ fn query_content<
     // The FRAME holds the slot's width as a minimum — the text field
     // stays content-sized (a blank query is a bare caret), and the
     // frame around it is what never shrinks to a sliver. Framed
-    // before the decorate so the popup anchor and the caret clicks
+    // before the decorate so the floater anchor and the caret clicks
     // span it; the air around it is the caller's [`slot_insets`].
     let content = min_width(slot_width(cx.styles), content);
     let edit = hooks.edit.clone();
+    let offers = Offers {
+        entries: entries.clone(),
+    };
     let scale = cx.styles.scale;
-    before(content, move |p, placement| {
+    let trigger = before(content, move |p, placement| {
         let rect = placement.rect;
-        *p.popup() = Some(Popup {
-            anchor: rect,
-            entries,
-        });
+        *p.completion() = Some(offers);
         // Clicks in the query place the caret, straight through the
         // edit hook — the selection transition is never involved, so
         // clicking what you are typing can't discard it.
@@ -2914,15 +3047,21 @@ fn query_content<
                     true
                 })
         });
-    })
+    });
+    let commit_offer = hooks.commit_offer.clone();
+    let choice = cx.selection.map(Selection::choice).unwrap_or(0);
+    let card = completion_card(tcx, cx.styles, &entries, choice, move |world, action| {
+        commit_offer(world, action)
+    });
+    placed::popover(trigger, card, 4.0 * scale)
 }
 
 /// The drawn completion card: entry rows under the pending anchor,
 /// the chosen one highlighted, styled by what each entry commits.
-/// The shell places it after the body, so it overlays and its
-/// handlers win: clicking a row commits it, and the card swallows
-/// every other click so nothing lands on content underneath.
-pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
+/// Its floater is raised after the body, so its handlers win: clicking
+/// a row commits it, and the card swallows every other click so
+/// nothing lands on content underneath.
+pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     entries: &[Entry],

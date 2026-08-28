@@ -465,18 +465,22 @@ pub fn on(child: Value, handler: Value) -> Value {
 /// Decode a layout value into the display language, attaching the
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
-pub fn decode<World, Hover: Clone>(
+pub fn decode<World: 'static, Hover: Clone>(
     value: &Value,
     select: &ActionHandler<World>,
     hover: &Hover,
 ) -> Option<Layout<World, Hover>> {
     decode_with(value, &|| ProjectionTarget {
         select: select.clone(),
+        select_with: {
+            let select = select.clone();
+            std::rc::Rc::new(move |world, _| select(world))
+        },
         hover: hover.clone(),
     })
 }
 
-fn decode_with<World, Hover: Clone>(
+fn decode_with<World: 'static, Hover: Clone>(
     value: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Layout<World, Hover>> {
@@ -642,7 +646,7 @@ fn decode_with<World, Hover: Clone>(
     None
 }
 
-fn children<World, Hover: Clone>(
+fn children<World: 'static, Hover: Clone>(
     list: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Vec<Layout<World, Hover>>> {
@@ -873,13 +877,13 @@ fn read_step(value: &Value) -> Option<Step> {
     })
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     decode_with(input.value, &|| input.targets.current())
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),

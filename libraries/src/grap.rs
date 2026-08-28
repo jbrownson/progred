@@ -373,6 +373,7 @@ mod tests {
     fn unit_target(_: Vec<Step>) -> progred_display::ProjectionTarget<(), ()> {
         progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_| false),
+            select_with: std::rc::Rc::new(|_, _| false),
             hover: (),
         }
     }
@@ -380,6 +381,7 @@ mod tests {
     fn relative_target(steps: Vec<Step>) -> progred_display::ProjectionTarget<(), Vec<Step>> {
         progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_| false),
+            select_with: std::rc::Rc::new(|_, _| false),
             hover: steps,
         }
     }
@@ -388,6 +390,7 @@ mod tests {
         ProjectionInput {
             env,
             value,
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&unit_target),
@@ -401,6 +404,7 @@ mod tests {
         ProjectionInput {
             env,
             value,
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&relative_target),

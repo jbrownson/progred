@@ -46,8 +46,26 @@ pub fn editor(scale: f64) -> Styles {
 }
 
 impl Styles {
-    pub fn line_presentation(&self, prefix: &str, suffix: &str) -> LineEditPresentation {
+    pub fn line_presentation(
+        &self,
+        line: &progred_display::LineEdit,
+    ) -> LineEditPresentation {
         LineEditPresentation::new(self.string.size, self.string.brush.clone())
-            .with_affixes(prefix, suffix)
+            .with_family(line_family(line.family))
+            .with_affixes(&line.prefix, &line.suffix)
+    }
+
+    pub fn line_style(&self, line: &progred_display::LineEdit) -> TextStyle {
+        TextStyle {
+            family: line_family(line.family),
+            ..self.string.clone()
+        }
+    }
+}
+
+fn line_family(family: progred_display::TextFamily) -> GenericFamily {
+    match family {
+        progred_display::TextFamily::SystemUi => GenericFamily::SystemUi,
+        progred_display::TextFamily::Monospace => GenericFamily::Monospace,
     }
 }

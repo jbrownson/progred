@@ -149,11 +149,13 @@ mod tests {
                 .map(|projection| {
                     let target = |_| progred_display::ProjectionTarget {
                         select: Rc::new(|_: &mut ()| false),
+                        select_with: Rc::new(|_: &mut (), _| false),
                         hover: (),
                     };
                     projection(&ProjectionInput {
                         env: &NoEval,
                         value: &value,
+                        writable: true,
                         selection: None,
                         state: None,
                         targets: progred_display::ProjectionTargets::new(&target),

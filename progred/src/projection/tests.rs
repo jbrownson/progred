@@ -17,6 +17,7 @@ fn projection_target_appends_relative_steps() {
     let field = gid::new_cell_id();
     let hooks = Hooks::<Vec<Path>> {
         select: Rc::new(|selections, path| selections.push(path)),
+        select_payload: Rc::new(|selections, path, _| selections.push(path)),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         edit: Rc::new(|_| None),
@@ -24,6 +25,8 @@ fn projection_target_appends_relative_steps() {
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_| false),
         apply: Rc::new(|_, _, _, _| false),
+        point: Rc::new(|_, _, _, _, _| false),
+        commit_offer: Rc::new(|_, _| {}),
     };
     let target = projection_target(
         &[Step::Key(parent)],
@@ -36,9 +39,13 @@ fn projection_target_appends_relative_steps() {
     );
     let mut selections = Vec::new();
     assert!((target.select)(&mut selections));
+    assert!((target.select_with)(&mut selections, Value::record([])));
     assert_eq!(
         selections,
-        [vec![Step::Key(parent), Step::Key(field)]]
+        [
+            vec![Step::Key(parent), Step::Key(field)],
+            vec![Step::Key(parent), Step::Key(field)]
+        ]
     );
 }
 
@@ -75,6 +82,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
     let value = Value::record([]);
     let target = |_| progred_display::ProjectionTarget {
         select: Rc::new(|_: &mut ()| false),
+        select_with: Rc::new(|_: &mut (), _| false),
         hover: Hover::Value(Rc::from([])),
     };
     let apply = |projection: &Projection<()>| {
@@ -82,6 +90,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
             .apply(
                 &NoEval,
                 &value,
+                true,
                 None,
                 None,
                 progred_display::ProjectionTargets::new(&target),
@@ -169,6 +178,7 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
         &mut tcx,
         Hooks {
             select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|selected, path, line| selected.push((path, line))),
             toggle: Rc::new(|_, _| {}),
             edit: Rc::new(|_| None),
@@ -176,6 +186,8 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
             apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
         },
     );
     let height = measured.extent.height().max(1.0);
@@ -210,11 +222,13 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
     let layout = {
         let target = |_| progred_display::ProjectionTarget {
             select: Rc::new(|_: &mut ()| false),
+            select_with: Rc::new(|_: &mut (), _| false),
             hover: Hover::Value(Rc::from(path.clone())),
         };
         stack.projection.apply(
             &NoEval,
             value,
+            true,
             None,
             None,
             progred_display::ProjectionTargets::new(&target),
@@ -1367,6 +1381,7 @@ fn partials_receive_selection_and_annotations_positionally() {
             &mut tcx,
             Hooks::<()> {
                 select: Rc::new(|_, _| {}),
+                select_payload: Rc::new(|_, _, _| {}),
                 start_edit: Rc::new(|_, _, _| {}),
                 toggle: Rc::new(|_, _| {}),
                 edit: Rc::new(|_| None),
@@ -1374,6 +1389,8 @@ fn partials_receive_selection_and_annotations_positionally() {
                 insert: Rc::new(|_, _| {}),
                 delete: Rc::new(|_| false),
                 apply: Rc::new(|_, _, _, _| false),
+                point: Rc::new(|_, _, _, _, _| false),
+                commit_offer: Rc::new(|_, _| {}),
             },
         )
         .extent
@@ -1476,6 +1493,7 @@ fn a_projection_defined_as_data_realizes() {
         &mut tcx,
         Hooks::<()> {
             select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             edit: Rc::new(|_| None),
@@ -1483,6 +1501,8 @@ fn a_projection_defined_as_data_realizes() {
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
             apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);
@@ -1552,6 +1572,7 @@ fn a_data_event_realizes_the_apply_hook() {
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {
             select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             edit: Rc::new(|_| None),
@@ -1562,6 +1583,8 @@ fn a_data_event_realizes_the_apply_hook() {
                 events.push((path, handler, event));
                 true
             }),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);

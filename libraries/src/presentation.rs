@@ -69,11 +69,13 @@ mod tests {
     fn projected(value: &Value, env: &dyn Env) -> Option<Layout<(), ()>> {
         let target = |_| progred_display::ProjectionTarget {
             select: Rc::new(|_| false),
+            select_with: Rc::new(|_, _| false),
             hover: (),
         };
         display(&ProjectionInput {
             env,
             value,
+            writable: true,
             selection: None,
             state: None,
             targets: ProjectionTargets::new(&target),

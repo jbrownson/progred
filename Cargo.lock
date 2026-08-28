@@ -3172,6 +3172,7 @@ dependencies = [
  "im",
  "progred-display",
  "puri",
+ "puri-widgets",
 ]
 
 [[package]]
@@ -3228,6 +3229,13 @@ dependencies = [
  "skrifa",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "puri-widgets"
+version = "0.1.0"
+dependencies = [
+ "puri",
 ]
 
 [[package]]

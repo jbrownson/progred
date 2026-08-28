@@ -279,6 +279,7 @@ fn place_with_annotations_using(
     };
     let hooks = Hooks::<World> {
         select: Rc::new(|_, _| {}),
+        select_payload: Rc::new(|_, _, _| {}),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         edit: Rc::new(|_| None),
@@ -286,6 +287,8 @@ fn place_with_annotations_using(
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_| false),
         apply: Rc::new(|_, _, _, _| false),
+        point: Rc::new(|_, _, _, _, _| false),
+        commit_offer: Rc::new(|_, _| {}),
     };
     // Timed as the frame perf canary: projection is reported
     // separately, while the total also includes placement, hover,
@@ -616,6 +619,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         &mut tcx,
         Hooks {
             select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
                 world.selection = Some(Selection::from_line(
                     &Sources {
@@ -638,6 +642,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 world.applied = Some(path);
                 true
             }),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
         },
     );
     let path = vec![
@@ -719,6 +725,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         &mut frame_tcx,
         Hooks {
             select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             edit: Rc::new(|world: &mut ClickWorld| {
@@ -740,6 +747,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
             apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
         },
     );
     let active = measured::place(active, Placement::root(rect));
@@ -1264,26 +1273,23 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
 }
 
 #[test]
-fn popup_rows_claim_their_entries_and_the_card_occludes() {
-    let popup = Popup {
-        anchor: Rect::new(0.0, 0.0, 10.0, 10.0),
-        entries: vec![
-            Entry {
-                display: "\"x\"".to_string(),
-                detail: None,
-                matches: Vec::new(),
-                id: false,
-                action: EntryAction::Value(crate::test_values::text("x")),
-            },
-            Entry {
-                display: "new list".to_string(),
-                detail: None,
-                matches: Vec::new(),
-                id: false,
-                action: EntryAction::NewList,
-            },
-        ],
-    };
+fn completion_rows_claim_their_entries_and_the_card_occludes() {
+    let entries = vec![
+        Entry {
+            display: "\"x\"".to_string(),
+            detail: None,
+            matches: Vec::new(),
+            id: false,
+            action: EntryAction::Value(crate::test_values::text("x")),
+        },
+        Entry {
+            display: "new list".to_string(),
+            detail: None,
+            matches: Vec::new(),
+            id: false,
+            action: EntryAction::NewList,
+        },
+    ];
     let place_card = |pointer| {
         let mut fonts = parley::FontContext::new();
         let mut layouts = parley::LayoutContext::new();
@@ -1294,10 +1300,10 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
             scale: 1.0,
             cache: &mut cache,
         };
-        let card = popup_view::<World, Bench>(
+        let card = completion_card::<World, Bench>(
             &mut tcx,
             &crate::styles::editor(1.0),
-            &popup.entries,
+            &entries,
             0,
             |_, _| {},
         );

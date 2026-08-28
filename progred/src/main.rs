@@ -210,6 +210,23 @@ struct PendingScrub {
     spelling: Option<String>,
 }
 
+struct PendingPoint {
+    root: workspace::Root,
+    path: gid::Path,
+    rect: Rect,
+    handler: progred_display::PointHandler,
+    recorded: bool,
+}
+
+impl PendingPoint {
+    fn update(&self, point: Point) -> progred_display::PointUpdate {
+        (self.handler)(progred_display::PointEvent {
+            x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
+            y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
+        })
+    }
+}
+
 impl PendingScrub {
     fn new(origin: Point, scale: f64, action: placed::ScrubAction) -> Self {
         let gesture = (action.handler)();
@@ -347,6 +364,8 @@ pub(crate) struct App {
     /// pointer input remains available to controls; this runs only as
     /// the editor fallback after the movement threshold is crossed.
     scrub: Option<PendingScrub>,
+    /// A continuous point control owns pointer motion until release.
+    point: Option<PendingPoint>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
@@ -697,7 +716,11 @@ impl ApplicationHandler<UserEvent> for App {
                             || dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
-                            || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
+                            || self.insert_key(
+                                &dispatch.descends,
+                                &dispatch.completion,
+                                &key_event,
+                            )
                             || self.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
@@ -796,7 +819,8 @@ impl ApplicationHandler<UserEvent> for App {
                         );
                         self.pointer = Some(position);
                         frame_input_changed = true;
-                        let moved = dispatch.handler.dispatch_pointer_move(self, &update)
+                        let moved = self.dispatch_point_move(&update)
+                            || dispatch.handler.dispatch_pointer_move(self, &update)
                             || self.dispatch_scrub_move(&update);
                         if moved || update.pointer.pointer_type != PointerType::Touch {
                             moved
@@ -824,11 +848,14 @@ impl ApplicationHandler<UserEvent> for App {
                         self.pressed = false;
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_up(self, &button);
-                        handled || self.scrub.take().is_some()
+                        handled
+                            || self.point.take().is_some()
+                            || self.scrub.take().is_some()
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
                         self.pressed = false;
+                        self.point = None;
                         self.scrub = None;
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
@@ -839,8 +866,9 @@ impl ApplicationHandler<UserEvent> for App {
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_cancel(self, &pointer);
                         let resize_cancelled = self.model.workspace.cancel_resize();
+                        let point_cancelled = self.point.take().is_some();
                         let scrub_cancelled = self.scrub.take().is_some();
-                        handled || resize_cancelled || scrub_cancelled
+                        handled || resize_cancelled || point_cancelled || scrub_cancelled
                     }
                     _ => false,
                 };
@@ -1002,6 +1030,7 @@ fn main() {
         pending_scroll: None,
         pending_pointer: None,
         scrub: None,
+        point: None,
         last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
@@ -1079,6 +1108,77 @@ impl App {
                 }
             }
             self.refresh_title();
+        }
+        true
+    }
+
+    fn start_point(
+        &mut self,
+        root: workspace::Root,
+        path: gid::Path,
+        placement: puri::Placement,
+        handler: progred_display::PointHandler,
+        point: Point,
+    ) -> bool {
+        self.point = Some(PendingPoint {
+            root,
+            path,
+            rect: placement.rect,
+            handler,
+            recorded: false,
+        });
+        self.update_point(point)
+    }
+
+    fn dispatch_point_move(&mut self, update: &PointerUpdate) -> bool {
+        self.point.is_some()
+            && self.update_point(Point::new(
+                update.current.position.x,
+                update.current.position.y,
+            ))
+    }
+
+    fn update_point(&mut self, point: Point) -> bool {
+        let Some(active) = &self.point else {
+            return false;
+        };
+        let root = active.root.clone();
+        let path = active.path.clone();
+        let update = active.update(point);
+        if self.sources().resolve(&path) != Some(&update.value) {
+            let before = self.model.doc.clone();
+            if selection::set_value(
+                &mut self.model.doc,
+                &self.stack.library,
+                &path,
+                update.value,
+            ) {
+                if self.point.as_ref().is_some_and(|point| !point.recorded) {
+                    self.model.history.record(before, Some(path.clone()));
+                    if let Some(point) = &mut self.point {
+                        point.recorded = true;
+                    }
+                }
+                self.refresh_title();
+            }
+        }
+        if let Some(payload) = update.selection {
+            let recorded = self
+                .model
+                .selection
+                .as_ref()
+                .filter(|selection| selection.root() == &root && selection.path() == path)
+                .map(selection::Selection::recorded);
+            if let Some(recorded) = recorded {
+                let mut next = selection::Selection::from_payload(
+                    &self.sources(),
+                    path,
+                    payload,
+                )
+                .with_root(root);
+                next.preserve_recorded(recorded);
+                self.model.selection = Some(next);
+            }
         }
         true
     }
@@ -1545,6 +1645,7 @@ impl App {
             workspace: workspace::Workspace::default(),
         };
         self.hover = None;
+        self.point = None;
         self.scrub = None;
         self.doc_path = path;
         self.revealed = None;
