@@ -3,15 +3,17 @@
 //! frame rendering replays those commands at the current placement.
 
 use super::Cx;
+use crate::frame::Hovered;
+use crate::hover::{Hover, SourceTrace};
 use crate::placed::{Placed, leaf};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Cells, Step, Value};
 use measured::{Extent, Measured};
 use progred_libraries::{absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
-use kurbo::{Affine, BezPath, Circle, Rect};
+use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use peniko::Brush;
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq)]
@@ -74,10 +76,88 @@ struct Recording {
     program: Value,
     fuel: usize,
     faces: Faces,
+    input: SourceTrace,
     document: Cells,
     library: Cells,
     dependencies: BTreeSet<CellId>,
-    commands: Rc<DrawList>,
+    drawing: Rc<Recorded>,
+}
+
+struct Recorded {
+    commands: DrawList,
+    hits: Vec<Hit>,
+}
+
+struct Hit {
+    shape: puri::Shape,
+    transform: Affine,
+    inverse: Affine,
+    bounds: Rect,
+    source: SourceTrace,
+}
+
+impl Hit {
+    fn new(shape: puri::Shape, transform: Affine, source: SourceTrace) -> Self {
+        let bounds = transform.transform_rect_bbox(shape_bounds(&shape));
+        Self {
+            shape,
+            transform,
+            inverse: transform.inverse(),
+            bounds,
+            source,
+        }
+    }
+
+    fn contains(&self, point: Point) -> bool {
+        self.bounds.contains(point) && shape_contains(&self.shape, self.inverse * point)
+    }
+}
+
+impl Recorded {
+    fn target_at(&self, point: Point, outer: Affine) -> Option<Hovered> {
+        let point = outer.inverse() * point;
+        self.hits
+            .iter()
+            .rev()
+            .find(|hit| hit.contains(point))
+            .map(|hit| Hovered::Tree(Hover::Drawing(hit.source.clone())))
+    }
+
+    fn highlight<C: Canvas>(
+        &self,
+        canvas: &mut C,
+        outer: Affine,
+        source: &SourceTrace,
+        brush: &Brush,
+    ) {
+        for hit in self.hits.iter().filter(|hit| hit.source.contains(source)) {
+            canvas.fill(
+                hit.shape.clone(),
+                brush.clone(),
+                outer * hit.transform,
+            );
+        }
+    }
+}
+
+fn shape_bounds(shape: &puri::Shape) -> Rect {
+    match shape {
+        puri::Shape::Rect(shape) => shape.bounding_box(),
+        puri::Shape::RoundedRect(shape) => shape.bounding_box(),
+        puri::Shape::Circle(shape) => shape.bounding_box(),
+        puri::Shape::Line(shape) => shape.bounding_box(),
+        puri::Shape::Path(shape) => shape.bounding_box(),
+    }
+}
+
+fn shape_contains(shape: &puri::Shape, point: Point) -> bool {
+    match shape {
+        puri::Shape::Rect(shape) => shape.contains(point),
+        puri::Shape::RoundedRect(shape) => shape.contains(point),
+        puri::Shape::Circle(shape) => shape.contains(point),
+        puri::Shape::Line(shape) => shape.contains(point),
+        puri::Shape::Path(shape) => shape.contains(point),
+    }
 }
 
 impl Memo {
@@ -107,36 +187,40 @@ impl Memo {
 }
 
 impl Node {
-    fn commands(
+    fn drawing(
         &mut self,
         program: &Value,
         fuel: usize,
         faces: &Faces,
+        input: &SourceTrace,
         document: &Cells,
         library: &Cells,
-        record: impl FnOnce() -> (DrawList, BTreeSet<CellId>),
-    ) -> Rc<DrawList> {
+        record: impl FnOnce() -> (Recorded, BTreeSet<CellId>),
+    ) -> Rc<Recorded> {
         match self.recording.take() {
-            Some(mut recording) if recording.valid(program, fuel, faces, document, library) => {
+            Some(mut recording)
+                if recording.valid(program, fuel, faces, input, document, library) =>
+            {
                 recording.document = document.clone();
                 recording.library = library.clone();
-                let commands = recording.commands.clone();
+                let drawing = recording.drawing.clone();
                 self.recording = Some(recording);
-                commands
+                drawing
             }
             _ => {
-                let (commands, dependencies) = record();
-                let commands = Rc::new(commands);
+                let (drawing, dependencies) = record();
+                let drawing = Rc::new(drawing);
                 self.recording = Some(Recording {
                     program: program.clone(),
                     fuel,
                     faces: faces.clone(),
+                    input: input.clone(),
                     document: document.clone(),
                     library: library.clone(),
                     dependencies,
-                    commands: commands.clone(),
+                    drawing: drawing.clone(),
                 });
-                commands
+                drawing
             }
         }
     }
@@ -148,12 +232,14 @@ impl Recording {
         program: &Value,
         fuel: usize,
         faces: &Faces,
+        input: &SourceTrace,
         document: &Cells,
         library: &Cells,
     ) -> bool {
         self.program == *program
             && self.fuel == fuel
             && self.faces == *faces
+            && self.input == *input
             && ((self.document.ptr_eq(document) && self.library.ptr_eq(library))
                 || self.dependencies.iter().all(|cell| {
                     resolved(&self.document, &self.library, *cell)
@@ -295,9 +381,12 @@ fn record_program(
     library: &Cells,
     foreign: &grap::ForeignFunctions,
     faces: &Faces,
+    input: &SourceTrace,
     fuel: usize,
-) -> (DrawList, BTreeSet<CellId>) {
+) -> (Recorded, BTreeSet<CellId>) {
     let canvas = RefCell::new(DrawList::new());
+    let hits = RefCell::new(Vec::new());
+    let origins = RefCell::new(HashMap::<grap::Expression, Option<SourceTrace>>::new());
     let path = RefCell::new(BezPath::new());
     let unit = Value::record([]);
     let functions = [
@@ -363,6 +452,21 @@ fn record_program(
                 else {
                     return Ok(absent::value());
                 };
+                let cached = origins.borrow().get(&call).cloned();
+                let source = match cached {
+                    Some(source) => source,
+                    None => {
+                        let source = context
+                            .source_origin(call)
+                            .map(|origin| SourceTrace::from_grap(origin, input));
+                        origins.borrow_mut().insert(call, source.clone());
+                        source
+                    }
+                };
+                if let Some(source) = source {
+                    hits.borrow_mut()
+                        .push(Hit::new(shape.clone(), transform, source));
+                }
                 canvas
                     .borrow_mut()
                     .fill(shape, faces.resolve(paint), transform);
@@ -389,11 +493,18 @@ fn record_program(
         "drawing program diagnostics: {:?}",
         evaluation.diagnostics,
     );
-    (canvas.into_inner(), evaluation.dependencies)
+    (
+        Recorded {
+            commands: canvas.into_inner(),
+            hits: hits.into_inner(),
+        },
+        evaluation.dependencies,
+    )
 }
 
 pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
+    path: &[Step],
     width: f64,
     ascent: f64,
     descent: f64,
@@ -408,25 +519,54 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
     };
     let node = cx.drawing_memo.node();
     let faces = Faces::new(cx.styles);
+    let input = SourceTrace::from_path(
+        &cx.sources,
+        path.iter()
+            .cloned()
+            .chain([Step::Key(layout_data::vocabulary::PROGRAM)])
+            .collect::<Rc<[Step]>>(),
+    );
     let document = cx.sources.doc.cells.clone();
     let library = cx.sources.library.clone();
     let foreign = cx.foreign.clone();
+    let drawing = Rc::new(move || {
+        node.borrow_mut().drawing(
+            &program,
+            fuel,
+            &faces,
+            &input,
+            &document,
+            &library,
+            || record_program(
+                &program,
+                &document,
+                &library,
+                &foreign,
+                &faces,
+                &input,
+                fuel,
+            ),
+        )
+    });
+    let highlight = cx.styles.accent_wash.brush.clone();
     leaf(extent, move |builder, placement| {
         let outer = Affine::translate((placement.rect.x0, placement.rect.y0))
             * Affine::scale(scale);
-        builder.ink(move |canvas: &mut Cv, _| {
-            let commands = node.borrow_mut().commands(
-                &program,
-                fuel,
-                &faces,
-                &document,
-                &library,
-                || record_program(&program, &document, &library, &foreign, &faces, fuel),
-            );
+        let probe_drawing = drawing.clone();
+        builder.claim_dynamic(placement, move |point| {
+            probe_drawing().target_at(point, outer)
+        });
+        builder.ink(move |canvas: &mut Cv, ink| {
+            let drawing = drawing();
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
                 outer,
-                |canvas| puri::draw::replay_at(&commands, canvas, outer),
+                |canvas| {
+                    puri::draw::replay_at(&drawing.commands, canvas, outer);
+                    if let Some(source) = ink.hovered_trace {
+                        drawing.highlight(canvas, outer, source, &highlight);
+                    }
+                },
             );
         });
     })
@@ -446,11 +586,25 @@ mod tests {
         library: &Cells,
         dependency: CellId,
         recordings: &Cell<usize>,
-    ) -> Rc<DrawList> {
-        node.commands(program, 100, faces, document, library, || {
-            recordings.set(recordings.get() + 1);
-            (DrawList::new(), BTreeSet::from([dependency]))
-        })
+    ) -> Rc<Recorded> {
+        node.drawing(
+            program,
+            100,
+            faces,
+            &SourceTrace::Stored(Rc::from([])),
+            document,
+            library,
+            || {
+                recordings.set(recordings.get() + 1);
+                (
+                    Recorded {
+                        commands: DrawList::new(),
+                        hits: Vec::new(),
+                    },
+                    BTreeSet::from([dependency]),
+                )
+            },
+        )
     }
 
     #[test]
@@ -548,5 +702,67 @@ mod tests {
         );
         assert!(!Rc::ptr_eq(&face_change, &program_change));
         assert_eq!(recordings.get(), 4);
+    }
+
+    #[test]
+    fn recorded_hits_use_paint_order_and_the_current_placement() {
+        let back = SourceTrace::Stored(Rc::from([Step::Key(new_cell_id())]));
+        let front = SourceTrace::Stored(Rc::from([Step::Key(new_cell_id())]));
+        let drawing = Recorded {
+            commands: DrawList::new(),
+            hits: vec![
+                Hit::new(
+                    puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                    Affine::IDENTITY,
+                    back,
+                ),
+                Hit::new(
+                    puri::Shape::Circle(Circle::new((5.0, 5.0), 4.0)),
+                    Affine::IDENTITY,
+                    front.clone(),
+                ),
+            ],
+        };
+
+        assert_eq!(
+            drawing.target_at(
+                Point::new(25.0, 35.0),
+                Affine::translate((20.0, 30.0)),
+            ),
+            Some(Hovered::Tree(Hover::Drawing(front))),
+        );
+    }
+
+    #[test]
+    fn a_source_descendant_highlights_the_operation_that_contains_it() {
+        let cell = new_cell_id();
+        let call = new_cell_id();
+        let argument = new_cell_id();
+        let source = SourceTrace::InCell {
+            cell,
+            path: Rc::from([Step::Key(call)]),
+        };
+        let hovered = SourceTrace::InCell {
+            cell,
+            path: Rc::from([Step::Key(call), Step::Key(argument)]),
+        };
+        let drawing = Recorded {
+            commands: DrawList::new(),
+            hits: vec![Hit::new(
+                puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                Affine::IDENTITY,
+                source,
+            )],
+        };
+        let mut highlighted = DrawList::new();
+
+        drawing.highlight(
+            &mut highlighted,
+            Affine::IDENTITY,
+            &hovered,
+            &Brush::from(peniko::Color::WHITE),
+        );
+
+        assert_eq!(highlighted.0.len(), 1);
     }
 }

@@ -58,6 +58,18 @@ pub const DEFAULT_FUEL: usize = 1_024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Expression(usize);
 
+/// Where a source expression came from before evaluation. Generated
+/// runtime values have no origin; expressions read from the input or a
+/// cell retain their structural route for host tooling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceOrigin {
+    Input(Vec<gid::Step>),
+    Cell {
+        cell: CellId,
+        path: Vec<gid::Step>,
+    },
+}
+
 #[derive(Clone)]
 pub struct ForeignFunction {
     call: Rc<dyn Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt>>,
@@ -669,6 +681,7 @@ pub struct Context<'a> {
     dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
     expressions: Vec<Lowered>,
+    origins: Vec<OriginNode>,
     cell_states: Vec<CellState>,
     indices: CellIndices,
 }
@@ -676,9 +689,23 @@ pub struct Context<'a> {
 #[derive(Clone)]
 struct Lowered {
     source: Value,
+    origin: Option<OriginId>,
     form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
     elements: Option<Vec<Expression>>,
+}
+
+#[derive(Clone, Copy)]
+struct OriginId(usize);
+
+enum OriginRoot {
+    Input,
+    Cell(CellId),
+}
+
+enum OriginNode {
+    Root(OriginRoot),
+    Child { parent: OriginId, step: gid::Step },
 }
 
 #[derive(Clone)]
@@ -738,21 +765,40 @@ impl<'a> Context<'a> {
 
     fn run(self, expression: &Value) -> Evaluation {
         self.conclude(|context| {
-            let expression = context.lower_source(expression);
+            let expression = context.lower_source(expression, OriginRoot::Input);
             let environment = Environment::with_indices(context.indices.clone());
             context.eval_runtime(expression, &environment)
         })
     }
 
     fn lower(&mut self, value: &Value) -> Expression {
-        self.lower_with(value, false)
+        self.lower_with(value, false, None)
     }
 
-    fn lower_source(&mut self, value: &Value) -> Expression {
-        self.lower_with(value, true)
+    fn lower_source(&mut self, value: &Value, root: OriginRoot) -> Expression {
+        let origin = OriginId(self.origins.len());
+        self.origins.push(OriginNode::Root(root));
+        self.lower_with(value, true, Some(origin))
     }
 
-    fn lower_with(&mut self, value: &Value, descend_data: bool) -> Expression {
+    fn lower_unattributed_source(&mut self, value: &Value) -> Expression {
+        self.lower_with(value, true, None)
+    }
+
+    fn child_origin(&mut self, parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
+        parent.map(|parent| {
+            let origin = OriginId(self.origins.len());
+            self.origins.push(OriginNode::Child { parent, step });
+            origin
+        })
+    }
+
+    fn lower_with(
+        &mut self,
+        value: &Value,
+        descend_data: bool,
+        origin: Option<OriginId>,
+    ) -> Expression {
         let mut lowered_fields = None;
         let mut lowered_elements = None;
         let form = match value {
@@ -760,7 +806,10 @@ impl<'a> Context<'a> {
             Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
                 let fields: Vec<_> = fields
                     .iter()
-                    .map(|(field, value)| (*field, self.lower_with(value, descend_data)))
+                    .map(|(field, value)| {
+                        let child = self.child_origin(origin, gid::Step::Key(*field));
+                        (*field, self.lower_with(value, descend_data, child))
+                    })
                     .collect();
                 let function = lowered_field(&fields, vocabulary::FUNCTION)
                     .expect("the source record contains a function field");
@@ -796,7 +845,17 @@ impl<'a> Context<'a> {
                 };
                 Form::Lambda {
                     parameters,
-                    body: self.lower_with(fields.get(&vocabulary::BODY).unwrap(), descend_data),
+                    body: {
+                        let child = self.child_origin(
+                            origin,
+                            gid::Step::Key(vocabulary::BODY),
+                        );
+                        self.lower_with(
+                            fields.get(&vocabulary::BODY).unwrap(),
+                            descend_data,
+                            child,
+                        )
+                    },
                 }
             }
             Value::Record(fields) => {
@@ -804,7 +863,10 @@ impl<'a> Context<'a> {
                     lowered_fields = Some(
                         fields
                             .iter()
-                            .map(|(field, value)| (*field, self.lower_with(value, true)))
+                            .map(|(field, value)| {
+                                let child = self.child_origin(origin, gid::Step::Key(*field));
+                                (*field, self.lower_with(value, true, child))
+                            })
                             .collect(),
                     );
                 }
@@ -814,8 +876,14 @@ impl<'a> Context<'a> {
                 if descend_data {
                     lowered_elements = Some(
                         elements
-                            .values()
-                            .map(|value| self.lower_with(value, true))
+                            .iter()
+                            .map(|(position, value)| {
+                                let child = self.child_origin(
+                                    origin,
+                                    gid::Step::Element(position.clone()),
+                                );
+                                self.lower_with(value, true, child)
+                            })
                             .collect(),
                     );
                 }
@@ -826,6 +894,7 @@ impl<'a> Context<'a> {
         let expression = Expression(self.expressions.len());
         self.expressions.push(Lowered {
             source: value.clone(),
+            origin,
             form,
             fields: lowered_fields,
             elements: lowered_elements,
@@ -835,6 +904,27 @@ impl<'a> Context<'a> {
 
     pub fn value(&self, expression: Expression) -> &Value {
         &self.expressions[expression.0].source
+    }
+
+    pub fn source_origin(&self, expression: Expression) -> Option<SourceOrigin> {
+        let mut origin = self.expressions[expression.0].origin?;
+        let mut path = Vec::new();
+        loop {
+            match &self.origins[origin.0] {
+                OriginNode::Root(OriginRoot::Input) => {
+                    path.reverse();
+                    return Some(SourceOrigin::Input(path));
+                }
+                OriginNode::Root(OriginRoot::Cell(cell)) => {
+                    path.reverse();
+                    return Some(SourceOrigin::Cell { cell: *cell, path });
+                }
+                OriginNode::Child { parent, step } => {
+                    path.push(step.clone());
+                    origin = *parent;
+                }
+            }
+        }
     }
 
     pub fn eval(
@@ -992,7 +1082,7 @@ impl<'a> Context<'a> {
                             self.absent(Diagnostic::MissingCell(cell), absent::MISSING_CELL),
                         ));
                     };
-                    let expression = self.lower_source(&value);
+                    let expression = self.lower_source(&value, OriginRoot::Cell(cell));
                     self.cell_states[index.0] = CellState::Ready(expression);
                     self.eval_resolved_cell(index, cell, expression, environment)
                 }
@@ -1257,7 +1347,7 @@ impl<'a> Context<'a> {
         arguments: Vec<(CellId, Value)>,
     ) -> Result<RuntimeValue, Halt> {
         let environment = Environment::with_indices(self.indices.clone());
-        let function = self.lower_source(function);
+        let function = self.lower_source(function, OriginRoot::Input);
         let callable = self.eval_runtime(function, &environment)?;
         if let Some(closure) = self.runtime_closure(&callable) {
             let mut bound = Vec::with_capacity(closure.params.len());
@@ -1337,7 +1427,7 @@ impl<'a> Context<'a> {
                         })
                     })
                     .collect::<Option<Vec<_>>>()?;
-                let body = self.lower_source(fields.get(&vocabulary::BODY)?);
+                let body = self.lower_unattributed_source(fields.get(&vocabulary::BODY)?);
                 Some(Closure {
                     params: params.into(),
                     body,
@@ -1392,6 +1482,7 @@ pub fn evaluate(
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
         expressions: Vec::new(),
+        origins: Vec::new(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
@@ -1417,6 +1508,7 @@ pub fn evaluate_scoped<'a>(
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
         expressions: Vec::new(),
+        origins: Vec::new(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
@@ -1446,6 +1538,7 @@ pub fn apply(
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
         expressions: Vec::new(),
+        origins: Vec::new(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
@@ -1472,6 +1565,7 @@ pub fn apply_scoped<'a>(
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
         expressions: Vec::new(),
+        origins: Vec::new(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
@@ -2136,6 +2230,37 @@ mod tests {
         );
         assert_eq!(evaluation.result, blob("drawn"));
         assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn a_foreign_call_retains_its_cell_relative_source_origin() {
+        let function = new_cell_id();
+        let foreign = new_cell_id();
+        let source = RefCell::new(None);
+        let functions = [foreign];
+        let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
+            *source.borrow_mut() = context.source_origin(call);
+            Ok(blob("drawn"))
+        };
+        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let stored = lambda([], call(Value::from(foreign), []));
+
+        let evaluation = evaluate_scoped(
+            &call(Value::from(function), []),
+            |cell| (cell == function).then(|| stored.clone()),
+            &ForeignFunctions::default(),
+            &overlay,
+            20,
+        );
+
+        assert_eq!(evaluation.result, blob("drawn"));
+        assert_eq!(
+            *source.borrow(),
+            Some(SourceOrigin::Cell {
+                cell: function,
+                path: vec![gid::Step::Key(vocabulary::BODY)],
+            }),
+        );
     }
 
     #[test]

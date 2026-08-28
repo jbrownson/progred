@@ -43,6 +43,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
     let ink = crate::placed::Ink {
         hovered: hovered.as_ref(),
         hovered_secondary: None,
+        hovered_trace: None,
         debug_geometry: false,
     };
     for render in renders {
@@ -416,6 +417,22 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
         _ => panic!("the scene starts with the sky fill"),
     };
+    let (linked, _) = place_with_annotations_using(
+        &doc,
+        None,
+        &Annotations::default(),
+        1400.0,
+        Some(outer * Point::new(10.0, 10.0)),
+        None,
+        source,
+        &drawing_memo,
+    );
+    assert!(matches!(
+        &linked.hit,
+        Some(Claim::Direct(Hovered::Tree(Hover::Drawing(
+            crate::hover::SourceTrace::InCell { .. }
+        ))))
+    ), "unexpected drawing link: {:?}", linked.hit);
     let native_iterations = 16;
     let native_start = std::time::Instant::now();
     let (native, native_stats) = (1..native_iterations).fold(

@@ -177,6 +177,7 @@ pub(crate) struct PendingPaint {
     pub(crate) viewport: Size,
     pub(crate) renders: Vec<placed::Render<Paint>>,
     pub(crate) hovered_secondary: Option<hover::Secondary>,
+    pub(crate) hovered_trace: Option<hover::SourceTrace>,
 }
 
 struct PendingScroll {
@@ -1465,27 +1466,30 @@ impl App {
             .pending_paint
             .take()
             .filter(|pending| pending.scale == scale && pending.viewport == viewport);
-        let (renders, hovered_secondary) = match pending {
+        let (renders, hovered_secondary, hovered_trace) = match pending {
             Some(PendingPaint {
                 renders,
                 hovered_secondary,
+                hovered_trace,
                 ..
-            }) => (renders, hovered_secondary),
+            }) => (renders, hovered_secondary, hovered_trace),
             None => {
                 let Frame {
                     dispatch,
                     renders,
                     hovered_secondary,
+                    hovered_trace,
                 } = self.build_frame(scale, viewport);
                 self.last_descends = dispatch.descends.clone();
                 self.dispatch = Some(dispatch);
-                (renders, hovered_secondary)
+                (renders, hovered_secondary, hovered_trace)
             }
         };
         self.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
+            hovered_trace: hovered_trace.as_ref(),
             debug_geometry: self.model.view.debug_geometry,
         };
         let mut paint = Paint {
@@ -1591,27 +1595,30 @@ impl App {
             .pending_paint
             .take()
             .filter(|pending| pending.scale == scale && pending.viewport == viewport);
-        let (renders, hovered_secondary) = match pending {
+        let (renders, hovered_secondary, hovered_trace) = match pending {
             Some(PendingPaint {
                 renders,
                 hovered_secondary,
+                hovered_trace,
                 ..
-            }) => (renders, hovered_secondary),
+            }) => (renders, hovered_secondary, hovered_trace),
             None => {
                 let Frame {
                     dispatch,
                     renders,
                     hovered_secondary,
+                    hovered_trace,
                 } = self.build_frame(scale, viewport);
                 self.last_descends = dispatch.descends.clone();
                 self.dispatch = Some(dispatch);
-                (renders, hovered_secondary)
+                (renders, hovered_secondary, hovered_trace)
             }
         };
         self.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
+            hovered_trace: hovered_trace.as_ref(),
             debug_geometry: self.model.view.debug_geometry,
         };
         let mut paint = Paint {

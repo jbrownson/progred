@@ -21,6 +21,9 @@ pub enum Hover {
     /// A click here opens a pending sibling after the element at
     /// this path — the flat list separator's action.
     Insert(Rc<[Step]>),
+    /// A painted Grap operation linked back to the expression that
+    /// emitted it.
+    Drawing(SourceTrace),
     /// A click here commits the completion entry at this index. An
     /// index, not the entry: a hover stores ADDRESSES, never values,
     /// so what it means re-derives from the LIVE entries each frame —
@@ -29,12 +32,88 @@ pub enum Hover {
     Entry(usize),
 }
 
+/// A structural source location used by execution-linked display.
+/// Cell-relative routes survive multiple projections of the same cell;
+/// stored routes identify an ordinary document occurrence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SourceTrace {
+    Stored(Rc<[Step]>),
+    InCell {
+        cell: CellId,
+        path: Rc<[Step]>,
+    },
+}
+
+impl SourceTrace {
+    pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>) -> Self {
+        path.iter()
+            .rposition(|step| *step == Step::Follow)
+            .and_then(|follow| {
+                sources
+                    .resolve(&path[..follow])
+                    .and_then(Value::as_cell)
+                    .map(|cell| Self::InCell {
+                        cell,
+                        path: Rc::from(&path[follow + 1..]),
+                    })
+            })
+            .unwrap_or(Self::Stored(path))
+    }
+
+    pub(crate) fn descendant(&self, steps: &[Step]) -> Self {
+        let append = |path: &[Step]| {
+            path.iter()
+                .cloned()
+                .chain(steps.iter().cloned())
+                .collect::<Rc<[Step]>>()
+        };
+        match self {
+            Self::Stored(path) => Self::Stored(append(path)),
+            Self::InCell { cell, path } => Self::InCell {
+                cell: *cell,
+                path: append(path),
+            },
+        }
+    }
+
+    pub(crate) fn from_grap(origin: grap::SourceOrigin, input: &Self) -> Self {
+        match origin {
+            grap::SourceOrigin::Input(path) => input.descendant(&path),
+            grap::SourceOrigin::Cell { cell, path } => Self::InCell {
+                cell,
+                path: path.into(),
+            },
+        }
+    }
+
+    pub(crate) fn contains(&self, other: &Self) -> bool {
+        fn contains(parent: &[Step], child: &[Step]) -> bool {
+            child.starts_with(parent)
+        }
+        match (self, other) {
+            (Self::Stored(parent), Self::Stored(child)) => contains(parent, child),
+            (
+                Self::InCell {
+                    cell: parent_cell,
+                    path: parent,
+                },
+                Self::InCell {
+                    cell: child_cell,
+                    path: child,
+                },
+            ) => parent_cell == child_cell && contains(parent, child),
+            _ => false,
+        }
+    }
+}
+
 /// What makes two projected locations secondary copies. Cell values
 /// match wherever that cell is referenced. Other values match only
 /// at the same path inside the same nearest enclosing cell.
 #[derive(Clone, Debug)]
 pub(crate) enum Secondary {
     Cell(CellId),
+    Stored(Rc<[Step]>),
     InCell {
         cell: CellId,
         path: Rc<[Step]>,
@@ -52,11 +131,25 @@ impl Secondary {
     ) -> Option<Self> {
         match value.as_cell() {
             Some(cell) => Some(Self::Cell(cell)),
-            None => enclosing.map(|(cell, relative_from)| Self::InCell {
-                cell,
-                path,
-                relative_from,
+            None => Some(match enclosing {
+                Some((cell, relative_from)) => Self::InCell {
+                    cell,
+                    path,
+                    relative_from,
+                },
+                None => Self::Stored(path),
             }),
+        }
+    }
+
+    pub(crate) fn from_trace(trace: &SourceTrace) -> Self {
+        match trace {
+            SourceTrace::Stored(path) => Self::Stored(path.clone()),
+            SourceTrace::InCell { cell, path } => Self::InCell {
+                cell: *cell,
+                path: path.clone(),
+                relative_from: 0,
+            },
         }
     }
 
@@ -78,6 +171,7 @@ impl PartialEq for Secondary {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Cell(left), Self::Cell(right)) => left == right,
+            (Self::Stored(left), Self::Stored(right)) => left == right,
             (
                 Self::InCell {
                     cell: left_cell,
@@ -111,6 +205,7 @@ pub(crate) fn hover_secondary(
 ) -> Option<Secondary> {
     match hover {
         Hover::Value(path) => Secondary::from_path(sources, path.clone(), sources.resolve(path)?),
+        Hover::Drawing(source) => Some(Secondary::from_trace(source)),
         Hover::Entry(index) => {
             let current = selection?;
             let labels = match current.stage() {
@@ -208,5 +303,34 @@ mod tests {
             secondary(&sources, vec![Step::Element(positions[0].clone())]),
             secondary(&sources, vec![Step::Element(positions[1].clone())])
         );
+    }
+
+    #[test]
+    fn source_traces_contain_descendants_only_within_the_same_source_scope() {
+        let cell = new_cell_id();
+        let other = new_cell_id();
+        let outer = new_cell_id();
+        let inner = new_cell_id();
+        let function = SourceTrace::InCell {
+            cell,
+            path: Rc::from([Step::Key(outer)]),
+        };
+        let call_part = SourceTrace::InCell {
+            cell,
+            path: Rc::from([Step::Key(outer), Step::Key(inner)]),
+        };
+        let peer = SourceTrace::InCell {
+            cell,
+            path: Rc::from([Step::Key(inner)]),
+        };
+        let other_cell = SourceTrace::InCell {
+            cell: other,
+            path: Rc::from([Step::Key(outer), Step::Key(inner)]),
+        };
+
+        assert!(function.contains(&call_part));
+        assert!(!call_part.contains(&function));
+        assert!(!function.contains(&peer));
+        assert!(!function.contains(&other_cell));
     }
 }

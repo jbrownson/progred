@@ -807,7 +807,7 @@ fn prepare<
             fuel,
             program,
         } => ChoiceLayout::fixed(drawing::program_leaf(
-            cx, width, ascent, descent, fuel, program,
+            cx, path, width, ascent, descent, fuel, program,
         )),
         progred_display::Layout::Query => {
             let engaged = cx.pending_edge_under(path).map(|(query, _)| query);
@@ -2451,7 +2451,7 @@ fn prepare_transient_root<
         fuel: std::cell::Cell::new(fuel),
         drawing_memo: cx.drawing_memo,
     };
-    let projected = prepare_location(
+    prepare_location(
         &result_cx,
         projection,
         tcx,
@@ -2462,13 +2462,7 @@ fn prepare_transient_root<
         None,
         &result_hooks,
         build,
-    );
-    // The transient result is not another projection of the stored
-    // source value. Its inner views may install ordinary hover claims while
-    // rendering, so cover them across this whole arm.
-    ChoiceLayout::map(projected, 0.0, |projected| {
-        placed::after(projected, |p, placement| hover_block(p, placement))
-    })
+    )
 }
 
 /// Adds one GID step to the active source and resolves that location.

@@ -57,6 +57,7 @@ pub(crate) struct Frame {
     /// The cell-relative location the resolved hover refers to, for
     /// the render pass's secondary marks.
     pub(crate) hovered_secondary: Option<hover::Secondary>,
+    pub(crate) hovered_trace: Option<hover::SourceTrace>,
 }
 
 /// What the resting pointer claims in the document or application
@@ -219,6 +220,18 @@ fn reveal_axis(
         scroll += (adjusted_start - pad - viewport_start) / scale;
     }
     scroll.clamp(0.0, maximum)
+}
+
+fn drawing_source_target<World>(
+    sources: &sources::Sources<'_>,
+    descends: &[navigate::Descend<World>],
+    source: &hover::SourceTrace,
+) -> Option<(workspace::Root, Rect)> {
+    descends.iter().find_map(|descend| {
+        let root = descend.root.as_ref()?;
+        (hover::SourceTrace::from_path(sources, descend.path.clone()) == *source)
+            .then(|| (root.clone(), descend.rect))
+    })
 }
 
 fn scroll_offset(
@@ -386,46 +399,66 @@ impl App {
                     .map(|rect| (root.clone(), rect))
             });
             target.is_some_and(|(view, rect)| {
-                let pad = 12.0 * scale;
-                let Some(region) = dispatch
-                    .view_regions
-                    .iter()
-                    .find(|region| region.root == view)
-                else {
-                    return false;
-                };
-                let before = self
-                    .model
-                    .workspace
-                    .view(&view)
-                    .expect("the selected view is live")
-                    .scroll;
-                let next = Vec2::new(
-                    reveal_axis(
-                        before.x,
-                        region.maximum.x,
-                        rect.x0,
-                        rect.x1,
-                        region.rect.x0,
-                        region.rect.x1,
-                        pad,
-                        scale,
-                    ),
-                    reveal_vertical_scroll(
-                        before.y,
-                        region.maximum.y,
-                        rect,
-                        region.rect,
-                        pad,
-                        scale,
-                    ),
-                );
-                if let Some(selected_view) = self.model.workspace.view_mut(&view) {
-                    selected_view.scroll = next;
-                }
-                next != before
+                self.reveal_rect(dispatch, &view, rect, scale)
             })
         }
+    }
+
+    fn reveal_drawing_source(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
+        let Some(Hovered::Tree(hover::Hover::Drawing(source))) = &self.hover else {
+            return false;
+        };
+        let target = {
+            let sources = self.sources();
+            drawing_source_target(&sources, &dispatch.descends, source)
+        };
+        target.is_some_and(|(view, rect)| {
+            self.reveal_rect(dispatch, &view, rect, scale)
+        })
+    }
+
+    fn reveal_rect(
+        &mut self,
+        dispatch: &Dispatch,
+        view: &workspace::Root,
+        rect: Rect,
+        scale: f64,
+    ) -> bool {
+        let pad = 12.0 * scale;
+        let Some(region) = dispatch
+            .view_regions
+            .iter()
+            .find(|region| &region.root == view)
+        else {
+            return false;
+        };
+        let Some(before) = self.model.workspace.view(view).map(|view| view.scroll) else {
+            return false;
+        };
+        let next = Vec2::new(
+            reveal_axis(
+                before.x,
+                region.maximum.x,
+                rect.x0,
+                rect.x1,
+                region.rect.x0,
+                region.rect.x1,
+                pad,
+                scale,
+            ),
+            reveal_vertical_scroll(
+                before.y,
+                region.maximum.y,
+                rect,
+                region.rect,
+                pad,
+                scale,
+            ),
+        );
+        if let Some(view) = self.model.workspace.view_mut(view) {
+            view.scroll = next;
+        }
+        next != before
     }
 
     pub(crate) fn view_flags(&self) -> ViewFlags {
@@ -477,12 +510,13 @@ impl App {
             self.pressed,
             hover_reach,
         );
+        let sources = sources::Sources {
+            doc: &self.model.doc,
+            library: &self.stack.library,
+        };
         let hovered_secondary = match &self.hover {
             Some(Hovered::Tree(hover)) => hover::hover_secondary(
-                &sources::Sources {
-                    doc: &self.model.doc,
-                    library: &self.stack.library,
-                },
+                &sources,
                 self.model
                     .workspace
                     .selected_or_document(
@@ -497,6 +531,13 @@ impl App {
             Some(Hovered::Divider(_)) => None,
             Some(Hovered::Blocked) => None,
             None => None,
+        };
+        let hovered_trace = match &self.hover {
+            Some(Hovered::Tree(hover::Hover::Value(path))) => {
+                Some(hover::SourceTrace::from_path(&sources, path.clone()))
+            }
+            Some(Hovered::Tree(hover::Hover::Drawing(source))) => Some(source.clone()),
+            _ => None,
         };
         let extended_rects = debug_geometry
             .then(|| {
@@ -541,6 +582,7 @@ impl App {
             },
             renders,
             hovered_secondary,
+            hovered_trace,
         }
     }
 
@@ -555,13 +597,17 @@ impl App {
     ) -> bool {
         let before = self.hover.clone();
         let mut frame = self.build_frame(scale, viewport);
-        if reveal_selection && self.reveal_selection(&frame.dispatch, scale) {
+        let revealed_selection =
+            reveal_selection && self.reveal_selection(&frame.dispatch, scale);
+        let revealed_source = self.reveal_drawing_source(&frame.dispatch, scale);
+        if revealed_selection || revealed_source {
             frame = self.build_frame(scale, viewport);
         }
         let Frame {
             dispatch,
             renders,
             hovered_secondary,
+            hovered_trace,
         } = frame;
         let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
@@ -571,6 +617,7 @@ impl App {
             viewport,
             renders,
             hovered_secondary,
+            hovered_trace,
         });
         hover_changed
     }
@@ -1067,7 +1114,7 @@ pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
-    use gid::{CellId, Cells, Document, Value};
+    use gid::{CellId, Cells, Document, Step, Value};
     use measured::Output;
 
     #[test]
@@ -1123,6 +1170,42 @@ mod frame_tests {
         assert_eq!(
             reveal_vertical_scroll(300.0, 100.0, target, viewport, 12.0, 1.0),
             100.0
+        );
+    }
+
+    #[test]
+    fn a_drawing_source_finds_the_projected_occurrence_inside_its_cell() {
+        let cell = CellId::from_u128(1);
+        let call = CellId::from_u128(2);
+        let mut cells = Cells::new();
+        cells.set_value(cell, Value::record([(call, Value::from(vec![1]))]));
+        let doc = Document {
+            root: Some(Value::Cell(cell)),
+            cells,
+        };
+        let library = Cells::new();
+        let root = workspace::Root::document();
+        let rect = Rect::new(10.0, 20.0, 30.0, 40.0);
+        let descends = [navigate::Descend::<App> {
+            root: Some(root.clone()),
+            path: Rc::from([Step::Follow, Step::Key(call)]),
+            rect,
+            select: Rc::new(|_| true),
+        }];
+
+        assert_eq!(
+            drawing_source_target(
+                &sources::Sources {
+                    doc: &doc,
+                    library: &library,
+                },
+                &descends,
+                &hover::SourceTrace::InCell {
+                    cell,
+                    path: Rc::from([Step::Key(call)]),
+                },
+            ),
+            Some((root, rect)),
         );
     }
 

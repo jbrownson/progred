@@ -27,6 +27,7 @@ pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
 enum ProbeTarget {
     Retains(Hovered),
     Exact(Hovered),
+    Dynamic(Box<dyn Fn(Point) -> Option<Hovered>>),
     Occludes,
 }
 
@@ -60,6 +61,16 @@ impl Probe {
         }
     }
 
+    pub fn dynamic(
+        placement: Placement,
+        target_at: impl Fn(Point) -> Option<Hovered> + 'static,
+    ) -> Self {
+        Self {
+            placement,
+            target: ProbeTarget::Dynamic(Box::new(target_at)),
+        }
+    }
+
     fn extended_rect(&self, reach: f64) -> Option<Rect> {
         if self.placement.clipped_out() {
             return None;
@@ -82,6 +93,9 @@ impl Probe {
             return Some(match &self.target {
                 ProbeTarget::Retains(target) | ProbeTarget::Exact(target) => {
                     Claim::Direct(target.clone())
+                }
+                ProbeTarget::Dynamic(target_at) => {
+                    return target_at(point).map(Claim::Direct);
                 }
                 ProbeTarget::Occludes => Claim::Occludes,
             });
@@ -138,6 +152,9 @@ pub struct Ink<'a> {
     /// The cell-relative location the hover refers to; its other
     /// projections carry the faint secondary mark.
     pub hovered_secondary: Option<&'a Secondary>,
+    /// The actual structural source under the pointer, independent of
+    /// value-equivalence highlighting.
+    pub hovered_trace: Option<&'a crate::hover::SourceTrace>,
     /// Draw each leaf's honest placement rectangle after its own ink.
     pub debug_geometry: bool,
 }
@@ -334,6 +351,16 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         }
     }
 
+    pub fn claim_dynamic(
+        &mut self,
+        placement: Placement,
+        target_at: impl Fn(Point) -> Option<Hovered> + 'static,
+    ) {
+        if !placement.clipped_out() {
+            self.placed.probes.push(Probe::dynamic(placement, target_at));
+        }
+    }
+
     /// Contribute an unnamed region that blocks targets below it.
     pub fn occlude(&mut self, placement: Placement) {
         if !placement.clipped_out() {
@@ -482,13 +509,6 @@ pub fn before<C: 'static, Cv: 'static>(
     place_before: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     measured::before_into(child, built_into(place_before))
-}
-
-pub fn after<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    place_after: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
-) -> Measured<Placed<C, Cv>> {
-    measured::after_into(child, built_into(place_after))
 }
 
 pub fn decorate<C: 'static, Cv: 'static>(
@@ -676,6 +696,7 @@ mod tests {
         Ink {
             hovered: None,
             hovered_secondary: None,
+            hovered_trace: None,
             debug_geometry: false,
         }
     }
@@ -810,6 +831,7 @@ mod tests {
             Ink {
                 hovered: None,
                 hovered_secondary: None,
+                hovered_trace: None,
                 debug_geometry: true,
             },
         );
