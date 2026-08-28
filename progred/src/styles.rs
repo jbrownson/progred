@@ -12,6 +12,7 @@ pub struct Styles {
     pub dim: TextStyle,
     pub id: TextStyle,
     pub accent_wash: TextStyle,
+    pub selection_wash: Brush,
     pub ink: TextStyle,
     pub edit: EditStyle,
     pub scale: f64,
@@ -34,6 +35,7 @@ pub fn editor(scale: f64) -> Styles {
             ..style(13.0, [0.55, 0.58, 0.64, 1.0], None)
         },
         accent_wash: style(14.0, [0.0, 0.48, 1.0, 0.30], None),
+        selection_wash: Brush::from(Color::new([0.0, 0.38, 0.90, 0.50])),
         ink: style(14.0, [0.13, 0.14, 0.16, 1.0], None),
         edit: EditStyle {
             selection: Brush::from(Color::new([0.0, 0.48, 1.0, 0.30])),

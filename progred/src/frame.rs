@@ -222,16 +222,25 @@ fn reveal_axis(
     scroll.clamp(0.0, maximum)
 }
 
+fn drawing_source_descend<'a, World>(
+    sources: &sources::Sources<'_>,
+    descends: &'a [navigate::Descend<World>],
+    source: &hover::SourceTrace,
+) -> Option<&'a navigate::Descend<World>> {
+    descends.iter().find_map(|descend| {
+        (descend.root.is_some()
+            && hover::SourceTrace::from_path(sources, descend.path.clone()) == *source)
+            .then_some(descend)
+    })
+}
+
 fn drawing_source_target<World>(
     sources: &sources::Sources<'_>,
     descends: &[navigate::Descend<World>],
     source: &hover::SourceTrace,
 ) -> Option<(workspace::Root, Rect)> {
-    descends.iter().find_map(|descend| {
-        let root = descend.root.as_ref()?;
-        (hover::SourceTrace::from_path(sources, descend.path.clone()) == *source)
-            .then(|| (root.clone(), descend.rect))
-    })
+    drawing_source_descend(sources, descends, source)
+        .and_then(|descend| descend.root.clone().map(|root| (root, descend.rect)))
 }
 
 fn scroll_offset(
@@ -304,6 +313,10 @@ pub(crate) fn derive_hover<C: 'static, Cv>(
     }
 }
 
+fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
+    !matches!(hover, Some(Hovered::Tree(hover::Hover::Drawing(_)))) || linking
+}
+
 pub(crate) struct FrameDescription<'a> {
     model: &'a Model,
     stack: &'a stack::Stack<App>,
@@ -360,6 +373,16 @@ impl App {
         outcome
     }
 
+    pub(crate) fn select_drawing_source(
+        &mut self,
+        descends: &[navigate::Descend<App>],
+        source: &hover::SourceTrace,
+    ) -> bool {
+        let select = drawing_source_descend(&self.sources(), descends, source)
+            .map(|descend| descend.select.clone());
+        select.is_some_and(|select| select(self))
+    }
+
     /// Scroll-to-reveal, computed from the freshly retained dispatch
     /// pass BEFORE anything draws, so the reveal lands in the next
     /// presented frame with no corrective flash. Fires once per
@@ -405,6 +428,9 @@ impl App {
     }
 
     fn reveal_drawing_source(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
+        if !crate::modifiers::link(&self.modifiers) {
+            return false;
+        }
         let Some(Hovered::Tree(hover::Hover::Drawing(source))) = &self.hover else {
             return false;
         };
@@ -514,7 +540,12 @@ impl App {
             doc: &self.model.doc,
             library: &self.stack.library,
         };
+        let show_source_hover = source_hover_visible(
+            self.hover.as_ref(),
+            crate::modifiers::link(&self.modifiers),
+        );
         let hovered_secondary = match &self.hover {
+            Some(Hovered::Tree(_)) if !show_source_hover => None,
             Some(Hovered::Tree(hover)) => hover::hover_secondary(
                 &sources,
                 self.model
@@ -533,6 +564,7 @@ impl App {
             None => None,
         };
         let hovered_trace = match &self.hover {
+            Some(Hovered::Tree(_)) if !show_source_hover => None,
             Some(Hovered::Tree(hover::Hover::Value(path))) => {
                 Some(hover::SourceTrace::from_path(&sources, path.clone()))
             }
@@ -594,8 +626,7 @@ impl App {
         scale: f64,
         viewport: Size,
         reveal_selection: bool,
-    ) -> bool {
-        let before = self.hover.clone();
+    ) {
         let mut frame = self.build_frame(scale, viewport);
         let revealed_selection =
             reveal_selection && self.reveal_selection(&frame.dispatch, scale);
@@ -609,7 +640,6 @@ impl App {
             hovered_secondary,
             hovered_trace,
         } = frame;
-        let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         self.pending_paint = Some(PendingPaint {
@@ -619,7 +649,6 @@ impl App {
             hovered_secondary,
             hovered_trace,
         });
-        hover_changed
     }
 }
 
@@ -739,6 +768,7 @@ fn project_workspace_view(
                 .selection
                 .as_ref()
                 .filter(|selection| selection.root() == &view.root),
+            source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
             raw,
             styles,
@@ -1138,6 +1168,18 @@ mod frame_tests {
                 reveal_selection: true,
             }
         );
+    }
+
+    #[test]
+    fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
+        let code = Hovered::Tree(hover::Hover::Value(Rc::from([])));
+        let drawing = Hovered::Tree(hover::Hover::Drawing(hover::SourceTrace::Stored(
+            Rc::from([]),
+        )));
+
+        assert!(source_hover_visible(Some(&code), false));
+        assert!(!source_hover_visible(Some(&drawing), false));
+        assert!(source_hover_visible(Some(&drawing), true));
     }
 
     #[test]

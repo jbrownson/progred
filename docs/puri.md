@@ -130,14 +130,20 @@ Focus:
 
 Caching:
 
-- No framework caches. Immediate-mode toolkits prove per-frame
-  recomputation is viable; start there.
-- The anticipated exception is text shaping: a caller-threaded memo
-  table keyed by (text, style, width) — transparent memoization of a
-  pure function, owned and passed by the caller like any other state.
-  The same pattern, one level up (memoized projection subtrees), is the
-  future incremental-computation hook. Neither exists until profiling
-  demands it.
+- No hidden framework caches. Ordinary projection, layout, hover, and
+  rendering recompute every frame.
+- The two approved cross-frame exceptions are explicit and
+  caller-owned: text shaping memoizes its pure inputs, and Progred's
+  canvas projection records commands with the cells its Grap
+  evaluation read. No other subsystem predicts whether a changed
+  input matters. Every changed frame input remints and presents a
+  whole frame; if that becomes too slow, the next step is one general
+  dependency-tracked invalidation system.
+- The pending frame handed from an event to the following redraw is
+  pipeline staging, not a cache: it ensures the already-minted
+  successor is painted instead of minting it twice. Explicit sharing
+  inside one layout pass is likewise part of the layout DAG rather
+  than cross-frame memoization.
 
 ## Layout Boundary
 

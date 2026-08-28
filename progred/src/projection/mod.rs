@@ -6,7 +6,7 @@ use crate::completion::{resolve_entry, resolve_label};
 use crate::completion::{Entry, EntryAction, HasPopup, Popup, completion_entries};
 use crate::filter;
 use crate::frame::Hovered;
-use crate::hover::{Hover, Secondary};
+use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
 use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
@@ -127,6 +127,9 @@ struct Cx<'a> {
     /// The selected cell-relative location whose other projections
     /// carry the secondary mark.
     secondary: Option<Secondary>,
+    /// The selected structural source, normalized across projections
+    /// for execution-linked output.
+    selected_trace: Option<SourceTrace>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
     drawing_memo: &'a DrawingMemo,
@@ -1159,7 +1162,7 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     before(inner, move |p, placement| {
         p.handler().on_pointer_down(move |world, event| {
             is_primary_contact(event)
-                && !command(&event.state.modifiers)
+                && !crate::modifiers::pick(&event.state.modifiers)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && handler(world)
         });
@@ -1343,7 +1346,7 @@ fn pointer_fields(
                     .modifiers
                     .shift()
                     .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&state.modifiers)
+                crate::modifiers::command(&state.modifiers)
                     .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
             ]
             .into_iter()
@@ -1441,7 +1444,7 @@ fn key_value(event: &KeyboardEvent) -> Value {
                     .modifiers
                     .shift()
                     .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&event.modifiers)
+                crate::modifiers::command(&event.modifiers)
                     .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
             ]
             .into_iter()
@@ -1613,7 +1616,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
-                && !command(&event.state.modifiers)
+                && !crate::modifiers::pick(&event.state.modifiers)
                 && placement.contains(Point::new(
                     event.state.position.x,
                     event.state.position.y,
@@ -1693,15 +1696,6 @@ pub struct Hooks<C> {
     /// Apply a Grap event handler at `path` with the event as data and
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
-}
-
-/// The platform command modifier, for pointer gestures.
-pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
-    if cfg!(target_os = "macos") {
-        modifiers.meta()
-    } else {
-        modifiers.ctrl()
-    }
 }
 
 fn select_handler<C: 'static>(
@@ -2143,7 +2137,11 @@ pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
+    /// Selection belonging to this editable view.
     pub selection: Option<&'a Selection>,
+    /// Selection from any view, used only to link generated output
+    /// back to its structural source.
+    pub source_selection: Option<&'a Selection>,
     pub annotations: &'a Annotations,
     pub raw: bool,
     pub styles: &'a Styles,
@@ -2187,6 +2185,7 @@ pub(crate) fn project_with_drawing_memo<
         root,
         root_path,
         selection,
+        source_selection,
         annotations,
         raw,
         styles,
@@ -2208,6 +2207,9 @@ pub(crate) fn project_with_drawing_memo<
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
         secondary: secondary_of(&sources, selection),
+        selected_trace: source_selection.map(|selection| {
+            SourceTrace::from_path(&sources, Rc::from(selection.path()))
+        }),
     };
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
@@ -2328,7 +2330,7 @@ fn bind_delete_with<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     on_key(child, move |ctx, event| {
-        crate::plain(event)
+        crate::modifiers::plain(&event.modifiers)
             && matches!(
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
@@ -2447,6 +2449,7 @@ fn prepare_transient_root<
         styles: cx.styles,
         selection: None,
         secondary: None,
+        selected_trace: cx.selected_trace.clone(),
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
         drawing_memo: cx.drawing_memo,
