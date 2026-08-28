@@ -1,11 +1,11 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::completion;
+use crate::modifiers;
 use crate::navigate;
-use crate::projection;
 use crate::selection;
 use crate::sources;
-use crate::{App, plain};
+use crate::App;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::CLIPBOARD_FORMAT;
 use gid::{Path, Step, Value};
@@ -24,7 +24,7 @@ impl App {
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
-            && plain(event)
+            && modifiers::plain(&event.modifiers)
             && matches!(
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
@@ -203,7 +203,7 @@ impl App {
         descends: &[navigate::Descend<App>],
         event: &KeyboardEvent,
     ) -> bool {
-        if !event.state.is_down() || !projection::command(&event.modifiers) {
+        if !event.state.is_down() || !modifiers::command(&event.modifiers) {
             return false;
         }
         let Key::Character(c) = &event.key else {
@@ -279,7 +279,7 @@ impl App {
     /// the query as characters. Claims the chord even when the pick
     /// declines (the label stage takes only what can label).
     pub(crate) fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !projection::command(&event.modifiers) {
+        if !event.state.is_down() || !modifiers::command(&event.modifiers) {
             return false;
         }
         if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
@@ -369,7 +369,7 @@ impl App {
                 // While pending, plain vertical arrows drive the popup
                 // choice; chorded arrows stay structure keys.
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                    if !projection::command(&event.modifiers) =>
+                    if !modifiers::command(&event.modifiers) =>
                 {
                     match &mut self.model.selection {
                         Some(current)
@@ -410,7 +410,7 @@ impl App {
                             .map(|current| current.root().clone())
                             .unwrap_or_else(|| self.model.workspace.document_root().clone());
                         let started = match selection.as_ref() {
-                            Some(current) if projection::command(&event.modifiers) => {
+                            Some(current) if modifiers::command(&event.modifiers) => {
                                 selection::pending_insert(&sources, current.path(), shift)
                             }
                             Some(current) => {
@@ -477,8 +477,8 @@ impl App {
         }
         let set = match &event.key {
             Key::Character(c) if c.as_str() == " " => None,
-            Key::Named(NamedKey::ArrowUp) if projection::command(&event.modifiers) => Some(true),
-            Key::Named(NamedKey::ArrowDown) if projection::command(&event.modifiers) => Some(false),
+            Key::Named(NamedKey::ArrowUp) if modifiers::command(&event.modifiers) => Some(true),
+            Key::Named(NamedKey::ArrowDown) if modifiers::command(&event.modifiers) => Some(false),
             _ => return false,
         };
         let Some(current) = &self.model.selection else {

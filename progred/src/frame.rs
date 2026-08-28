@@ -405,6 +405,9 @@ impl App {
     }
 
     fn reveal_drawing_source(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
+        if !self.linking {
+            return false;
+        }
         let Some(Hovered::Tree(hover::Hover::Drawing(source))) = &self.hover else {
             return false;
         };
@@ -515,6 +518,7 @@ impl App {
             library: &self.stack.library,
         };
         let hovered_secondary = match &self.hover {
+            Some(Hovered::Tree(hover::Hover::Drawing(_))) if !self.linking => None,
             Some(Hovered::Tree(hover)) => hover::hover_secondary(
                 &sources,
                 self.model
@@ -532,12 +536,16 @@ impl App {
             Some(Hovered::Blocked) => None,
             None => None,
         };
-        let hovered_trace = match &self.hover {
-            Some(Hovered::Tree(hover::Hover::Value(path))) => {
-                Some(hover::SourceTrace::from_path(&sources, path.clone()))
+        let hovered_trace = if self.linking {
+            match &self.hover {
+                Some(Hovered::Tree(hover::Hover::Value(path))) => {
+                    Some(hover::SourceTrace::from_path(&sources, path.clone()))
+                }
+                Some(Hovered::Tree(hover::Hover::Drawing(source))) => Some(source.clone()),
+                _ => None,
             }
-            Some(Hovered::Tree(hover::Hover::Drawing(source))) => Some(source.clone()),
-            _ => None,
+        } else {
+            None
         };
         let extended_rects = debug_geometry
             .then(|| {

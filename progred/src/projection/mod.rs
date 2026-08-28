@@ -1159,7 +1159,7 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     before(inner, move |p, placement| {
         p.handler().on_pointer_down(move |world, event| {
             is_primary_contact(event)
-                && !command(&event.state.modifiers)
+                && !crate::modifiers::pick(&event.state.modifiers)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && handler(world)
         });
@@ -1343,7 +1343,7 @@ fn pointer_fields(
                     .modifiers
                     .shift()
                     .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&state.modifiers)
+                crate::modifiers::command(&state.modifiers)
                     .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
             ]
             .into_iter()
@@ -1441,7 +1441,7 @@ fn key_value(event: &KeyboardEvent) -> Value {
                     .modifiers
                     .shift()
                     .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&event.modifiers)
+                crate::modifiers::command(&event.modifiers)
                     .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
             ]
             .into_iter()
@@ -1613,7 +1613,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
-                && !command(&event.state.modifiers)
+                && !crate::modifiers::pick(&event.state.modifiers)
                 && placement.contains(Point::new(
                     event.state.position.x,
                     event.state.position.y,
@@ -1693,15 +1693,6 @@ pub struct Hooks<C> {
     /// Apply a Grap event handler at `path` with the event as data and
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
-}
-
-/// The platform command modifier, for pointer gestures.
-pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
-    if cfg!(target_os = "macos") {
-        modifiers.meta()
-    } else {
-        modifiers.ctrl()
-    }
 }
 
 fn select_handler<C: 'static>(
@@ -2328,7 +2319,7 @@ fn bind_delete_with<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     on_key(child, move |ctx, event| {
-        crate::plain(event)
+        crate::modifiers::plain(&event.modifiers)
             && matches!(
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)

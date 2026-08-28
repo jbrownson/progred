@@ -19,6 +19,7 @@ mod macos_surface;
 mod macos_menu;
 mod menu;
 mod model;
+mod modifiers;
 mod navigate;
 mod placed;
 mod projection;
@@ -257,6 +258,9 @@ pub(crate) struct App {
     /// the model for air hysteresis, pressed-gesture freezing, and the
     /// event-to-redraw handoff.
     pub(crate) hover: Option<Hovered>,
+    /// Pointer-driven traversal of nonlocal graph links. Keyboard
+    /// shortcuts using the same modifier do not enter this mode.
+    pub(crate) linking: bool,
     /// A button is down: gestures keep the hover they began with, so
     /// hover resolution stands down until release.
     pub(crate) pressed: bool,
@@ -384,14 +388,6 @@ pub(crate) fn edge_path(selection: &Option<selection::Selection>) -> Option<gid:
         }
         _ => None,
     }
-}
-
-/// No modifiers at all — the gate for the bare editing keys.
-pub(crate) fn plain(event: &KeyboardEvent) -> bool {
-    !(event.modifiers.ctrl()
-        || event.modifiers.meta()
-        || event.modifiers.alt()
-        || event.modifiers.shift())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -538,6 +534,22 @@ impl ApplicationHandler<UserEvent> for App {
             window.request_redraw();
         }
 
+        if let WindowEvent::ModifiersChanged(state) = &event
+            && self.linking
+            && !modifiers::link(
+                &ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
+            )
+        {
+            self.linking = false;
+            let size = window.inner_size();
+            self.retain_dispatch(
+                scale,
+                Size::new(size.width as f64, size.height as f64),
+                false,
+            );
+            window.request_redraw();
+        }
+
         if !matches!(
             event,
             WindowEvent::KeyboardInput {
@@ -605,6 +617,7 @@ impl ApplicationHandler<UserEvent> for App {
                     update.current.position.y,
                 );
                 self.pointer = Some(position);
+                self.linking = modifiers::link(&update.current.modifiers);
                 self.pending_pointer = Some(PendingPointer {
                     event: update.clone(),
                     scale,
@@ -672,7 +685,7 @@ impl ApplicationHandler<UserEvent> for App {
                         if raw || !puri::interact::is_primary_contact(&button) {
                             raw
                         } else if let Some(target) = self.hover.clone() {
-                            if projection::command(&button.state.modifiers) {
+                            if modifiers::pick(&button.state.modifiers) {
                                 placed::dispatch_target(
                                     &dispatch.picks,
                                     self,
@@ -732,6 +745,7 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
+                        self.linking = false;
                         self.pressed = false;
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
@@ -900,6 +914,7 @@ fn main() {
         cursor_icon: CursorIcon::Default,
         pointer: None,
         hover: None,
+        linking: false,
         pressed: false,
         revealed: None,
         dispatch: None,
@@ -1213,7 +1228,7 @@ impl App {
         let open = self.menu.open().is_some();
         if open
             && event.state.is_down()
-            && plain(event)
+            && modifiers::plain(&event.modifiers)
             && matches!(event.key, Key::Named(NamedKey::Escape))
         {
             self.menu.close()
