@@ -10,6 +10,7 @@ use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
 use crate::workspace::Root;
+use gid::Path;
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
@@ -120,6 +121,23 @@ pub struct TargetAction<C> {
     action: EditorAction<C>,
 }
 
+/// A semantic scrub attached to one projected value. The shell
+/// recognizes the gesture and retains this start-frame mapping for
+/// its duration, so reminting cannot move the scrub's origin.
+#[derive(Clone)]
+pub struct ScrubAction {
+    root: Option<Root>,
+    target: Hovered,
+    pub path: Path,
+    pub handler: progred_display::ScrubHandler,
+}
+
+impl ScrubAction {
+    pub fn root(&self) -> Option<&Root> {
+        self.root.as_ref()
+    }
+}
+
 /// A nested scroll container's settled geometry, retained so
 /// selection reveal can update the same view state as pointer scroll.
 pub struct ViewRegion {
@@ -144,6 +162,18 @@ pub fn dispatch_target<C>(
         })
 }
 
+pub fn scrub_target(
+    actions: &[ScrubAction],
+    root: Option<&Root>,
+    target: &Hovered,
+) -> Option<ScrubAction> {
+    actions.iter().rev().find_map(|candidate| {
+        (candidate.root.as_ref().is_none_or(|candidate| Some(candidate) == root)
+            && candidate.target == *target)
+            .then(|| candidate.clone())
+    })
+}
+
 /// What ink may condition on: the frame's RESOLVED hover, decided
 /// from this same pass's geometry before any render runs.
 #[derive(Clone, Copy)]
@@ -163,6 +193,7 @@ pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
     pub activations: Vec<TargetAction<C>>,
     pub picks: Vec<TargetAction<C>>,
+    pub scrubs: Vec<ScrubAction>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C>>,
@@ -196,6 +227,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             probes: Vec::new(),
             activations: Vec::new(),
             picks: Vec::new(),
+            scrubs: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -209,6 +241,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
         append(&mut self.probes, above.probes);
         append(&mut self.activations, above.activations);
         append(&mut self.picks, above.picks);
+        append(&mut self.scrubs, above.scrubs);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -392,6 +425,22 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
                 root: None,
                 target,
                 action: Box::new(action),
+            });
+        }
+    }
+
+    pub fn scrub(
+        &mut self,
+        target: Hovered,
+        path: Path,
+        handler: progred_display::ScrubHandler,
+    ) {
+        if self.visible {
+            self.placed.scrubs.push(ScrubAction {
+                root: None,
+                target,
+                path,
+                handler,
             });
         }
     }
@@ -599,6 +648,9 @@ pub fn in_view<C: 'static, Cv: 'static>(
             .chain(&mut placed.picks)
         {
             action.root = Some(root.clone());
+        }
+        for scrub in &mut placed.scrubs {
+            scrub.root = Some(root.clone());
         }
         placed
     })

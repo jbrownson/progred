@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use crate::{Library, absent, line_edit, logic, name};
+use crate::{Library, absent, line_edit, logic, name, number};
 use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
@@ -57,15 +57,42 @@ pub fn read(value: &Value) -> Option<f64> {
         .map(f64::from_le_bytes)
 }
 
+impl number::Scrubbable for f64 {
+    fn magnitude(self) -> f64 {
+        self
+    }
+
+    fn minimum_precision() -> f64 {
+        0.0
+    }
+
+    fn scrubbable(self) -> bool {
+        self.is_finite()
+    }
+
+    fn from_offset(start: Self, offset: f64, precision: f64) -> Self {
+        number::rounded(start + offset, precision)
+    }
+
+    fn spelling(self, precision: f64) -> String {
+        if precision >= 1.0 {
+            self.round().to_string()
+        } else {
+            let decimal_places = (-precision.log10()).round().clamp(0.0, 16.0) as usize;
+            format!("{self:.decimal_places$}")
+        }
+    }
+}
+
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let content = read(input.value)?.to_string();
-    Some(line_edit::layout(
-        content,
-        grap_runtime::ffi(vocabulary::UPDATE),
-        "",
-        "",
+    let number = read(input.value)?;
+    Some(number::layout(
+        input,
+        number,
+        vocabulary::UPDATE,
+        value,
     ))
 }
 

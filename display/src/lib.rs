@@ -83,6 +83,24 @@ pub enum RowAlignment {
 /// action itself.
 pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
+/// A semantic two-dimensional scrub, recognized by the editor from
+/// raw pointer input. The projection owns how displacement changes
+/// its value; buttons, modifiers, and click/drag recognition stay in
+/// the host.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScrubEvent {
+    pub movement_x: f64,
+    pub distance_y: f64,
+}
+
+pub struct ScrubUpdate {
+    pub value: Value,
+    pub spelling: Option<String>,
+}
+
+pub type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
+pub type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
+
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
 /// libraries never receive its absolute document path.
@@ -159,6 +177,11 @@ pub enum Layout<World, Hover> {
     OnEvent {
         child: Box<Layout<World, Hover>>,
         handler: Value,
+    },
+    OnScrub {
+        child: Box<Layout<World, Hover>>,
+        target: Hover,
+        handler: ScrubHandler,
     },
     OnHover {
         child: Box<Layout<World, Hover>>,
@@ -277,6 +300,15 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 handler,
             } => Self::OnEvent {
                 child: child.clone(),
+                handler: handler.clone(),
+            },
+            Self::OnScrub {
+                child,
+                target,
+                handler,
+            } => Self::OnScrub {
+                child: child.clone(),
+                target: target.clone(),
                 handler: handler.clone(),
             },
             Self::OnHover { child, hover } => Self::OnHover {
@@ -512,6 +544,18 @@ pub fn on_event<World, Hover>(
 ) -> Layout<World, Hover> {
     Layout::OnEvent {
         child: Box::new(child),
+        handler,
+    }
+}
+
+pub fn on_scrub<World, Hover>(
+    child: Layout<World, Hover>,
+    target: Hover,
+    handler: ScrubHandler,
+) -> Layout<World, Hover> {
+    Layout::OnScrub {
+        child: Box::new(child),
+        target,
         handler,
     }
 }

@@ -18,7 +18,7 @@ use crate::render::{self, text};
 #[cfg(test)]
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::annotations::Annotations;
-use crate::selection::{Selection, Stage, last_follow};
+use crate::selection::{Selection, Stage, last_follow, writable_at};
 #[cfg(test)]
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge,
@@ -124,6 +124,7 @@ struct Cx<'a> {
     annotations: &'a Annotations,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
+    scrub_spelling: Option<(&'a [Step], &'a str)>,
     /// The selected cell-relative location whose other projections
     /// carry the secondary mark.
     secondary: Option<Secondary>,
@@ -819,13 +820,14 @@ fn prepare<
                 None => render::text(tcx, "…", &cx.styles.dim),
             })
         }
-        progred_display::Layout::LineEdit(line) => ChoiceLayout::fixed(line_edit_view(
-            cx,
-            tcx,
-            path,
-            line,
-            hooks,
-        )),
+        progred_display::Layout::LineEdit(mut line) => {
+            if let Some((scrub_path, spelling)) = cx.scrub_spelling
+                && scrub_path == path
+            {
+                line.text = spelling.to_owned();
+            }
+            ChoiceLayout::fixed(line_edit_view(cx, tcx, path, line, hooks))
+        }
         progred_display::Layout::OnClick { child, handler } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
@@ -868,6 +870,24 @@ fn prepare<
             let path = path.to_vec();
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 realize_event_with(path, handler, apply, scale, inner)
+            })
+        }
+        progred_display::Layout::OnScrub {
+            child,
+            target,
+            handler,
+        } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            let path = path.to_vec();
+            let writable = !cx.source.transient() && writable_at(&cx.sources, &path);
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                if writable {
+                    realize_scrub(path, target, handler, inner)
+                } else {
+                    inner
+                }
             })
         }
         progred_display::Layout::OnHover { child, hover } => {
@@ -1297,6 +1317,17 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
                 )
             });
         }
+    })
+}
+
+fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    target: Hover,
+    handler: progred_display::ScrubHandler,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    before(inner, move |p, _| {
+        p.scrub(Hovered::Tree(target), path, handler);
     })
 }
 
@@ -2167,7 +2198,7 @@ pub fn project<
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    project_with_drawing_memo(description, tcx, hooks, &DrawingMemo::default())
+    project_with_drawing_memo(description, tcx, hooks, &DrawingMemo::default(), None)
 }
 
 pub(crate) fn project_with_drawing_memo<
@@ -2178,6 +2209,7 @@ pub(crate) fn project_with_drawing_memo<
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
     drawing_memo: &DrawingMemo,
+    scrub_spelling: Option<(&[Step], &str)>,
 ) -> Measured<Placed<C, Cv>> {
     drawing_memo.begin();
     let ProjectDescription {
@@ -2201,6 +2233,7 @@ pub(crate) fn project_with_drawing_memo<
         annotations,
         styles,
         selection,
+        scrub_spelling,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         drawing_memo,
@@ -2448,6 +2481,7 @@ fn prepare_transient_root<
         annotations: cx.annotations,
         styles: cx.styles,
         selection: None,
+        scrub_spelling: None,
         secondary: None,
         selected_trace: cx.selected_trace.clone(),
         source: Source::Transient { owner: path },
