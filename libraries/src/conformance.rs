@@ -185,6 +185,64 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
     assert_eq!(evaluation.remaining_fuel, 5);
 }
 
+/// The prepared and deferred clause routes must agree: moving a
+/// literal clause list behind a cell changes only the fuel of reaching
+/// it — the cell evaluation plus the list evaluation, one burn more
+/// than the literal's stand-in burn — never the result.
+#[test]
+fn clause_lists_behind_cells_agree_with_literal_clauses() {
+    let binder = new_cell_id();
+    let cases = Value::list([
+        Value::record([
+            (control::vocabulary::PATTERN, blob("other")),
+            (grap::vocabulary::EXPRESSION, blob("never")),
+        ]),
+        Value::record([
+            (
+                control::vocabulary::PATTERN,
+                Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+            ),
+            (grap::vocabulary::EXPRESSION, Value::from(binder)),
+        ]),
+    ]);
+    let bindings = Value::list([Value::record([
+        (control::vocabulary::BIND, Value::from(binder)),
+        (control::vocabulary::VALUE, blob("bound")),
+    ])]);
+    let matches = |clauses: Value| {
+        grap::call(
+            Value::from(control::vocabulary::MATCH),
+            [
+                (control::vocabulary::VALUE, blob("subject")),
+                (control::vocabulary::CASES, clauses),
+            ],
+        )
+    };
+    let lets = |clauses: Value| {
+        grap::call(
+            Value::from(control::vocabulary::LET),
+            [
+                (control::vocabulary::BINDINGS, clauses),
+                (grap::vocabulary::EXPRESSION, Value::from(binder)),
+            ],
+        )
+    };
+    let check = |program: &dyn Fn(Value) -> Value, clauses: Value| {
+        let reference = new_cell_id();
+        let literal = evaluate(&program(clauses.clone()), 20);
+        let referenced = evaluate_resolving(
+            &program(Value::from(reference)),
+            |cell| (cell == reference).then(|| clauses.clone()),
+            20,
+        );
+        assert_eq!(literal.result, referenced.result);
+        assert!(literal.diagnostics.is_empty() && referenced.diagnostics.is_empty());
+        assert_eq!(literal.remaining_fuel, referenced.remaining_fuel + 1);
+    };
+    check(&matches, cases);
+    check(&lets, bindings);
+}
+
 /// Arithmetic burns like any strict call: call(1) + function(1) +
 /// left(1) + right(1) = 4, whatever numeric fast path the
 /// implementation takes.
