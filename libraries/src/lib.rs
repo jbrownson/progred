@@ -7,6 +7,8 @@ use progred_display::Partial;
 
 pub mod absent;
 pub mod color;
+#[cfg(test)]
+mod conformance;
 pub mod control;
 pub mod f64;
 pub mod geometry;
