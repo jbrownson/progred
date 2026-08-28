@@ -186,6 +186,9 @@ impl RuntimeValue {
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
         let mut fields: Vec<_> = fields.into_iter().collect();
+        if fields.windows(2).all(|pair| pair[0].0 < pair[1].0) {
+            return Self(RuntimeValueKind::Record(fields.into()));
+        }
         fields.sort_by_key(|(field, _)| *field);
         let fields = fields.into_iter().fold(Vec::new(), |mut unique, field| {
             if unique
@@ -352,9 +355,32 @@ struct F64Representation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct CellIndex(usize);
 
+/// Cell ids are minted from an OS CSPRNG, so folding their bytes is
+/// already a uniform hash; SipHash would only add per-lookup cost.
+#[derive(Debug, Default)]
+struct FoldHasher(u64);
+
+impl std::hash::Hasher for FoldHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0_u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.0 ^= u64::from_le_bytes(word);
+        }
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
 #[derive(Debug, Default)]
 struct CellIndexTable {
-    by_cell: std::collections::HashMap<CellId, CellIndex>,
+    by_cell: std::collections::HashMap<
+        CellId,
+        CellIndex,
+        std::hash::BuildHasherDefault<FoldHasher>,
+    >,
     cells: Vec<CellId>,
 }
 
@@ -398,7 +424,7 @@ pub struct Environment {
     frame: Option<Rc<EnvironmentFrame>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct EnvironmentFrame {
     parent: Option<Rc<EnvironmentFrame>>,
     bindings: Vec<(CellIndex, RuntimeValue)>,
@@ -467,6 +493,37 @@ impl Environment {
                 .into_iter()
                 .map(|(cell, value)| (cell_index(&self.indices, cell), value)),
         )
+    }
+
+    /// Add bindings at the innermost level in place, copying the frame
+    /// only while another environment still shares it. Lookup, equality,
+    /// and reification are the same as through [`Self::extended_runtime`];
+    /// sequential binders avoid a frame allocation per binding.
+    pub fn push_runtime(
+        &mut self,
+        bindings: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    ) {
+        let indices = self.indices.clone();
+        self.push_indexed(
+            bindings
+                .into_iter()
+                .map(|(cell, value)| (cell_index(&indices, cell), value)),
+        );
+    }
+
+    fn push_indexed(&mut self, bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>) {
+        match &mut self.frame {
+            Some(frame) => Rc::make_mut(frame).bindings.extend(bindings),
+            None => {
+                let bindings: Vec<_> = bindings.into_iter().collect();
+                if !bindings.is_empty() {
+                    self.frame = Some(Rc::new(EnvironmentFrame {
+                        parent: None,
+                        bindings,
+                    }));
+                }
+            }
+        }
     }
 
     fn extended_indexed(
@@ -676,6 +733,12 @@ pub struct Context<'a> {
     foreign: &'a ForeignFunctions,
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
+    /// How many active scopes override the f64 representation; the
+    /// lowered-data cache applies only while none do.
+    scoped_f64: usize,
+    /// The representation currently in effect, refreshed on scope
+    /// pushes and pops so value lowering avoids a scope walk.
+    active_f64: Option<F64Representation>,
     remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
     dependencies: BTreeSet<CellId>,
@@ -683,6 +746,9 @@ pub struct Context<'a> {
     expressions: Vec<Lowered>,
     origins: Vec<OriginNode>,
     cell_states: Vec<CellState>,
+    /// Per cell index, the remembered overlay/permanent resolution
+    /// (`None` = not resolved yet); scoped tables are never cached.
+    foreign_cache: Vec<Option<Option<ResolvedForeign>>>,
     indices: CellIndices,
 }
 
@@ -693,6 +759,9 @@ struct Lowered {
     form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
     elements: Option<Vec<Expression>>,
+    /// Data lowered through the base f64 representation, reused across
+    /// evaluations of the same expression while no scope overrides f64.
+    data_runtime: Option<RuntimeValue>,
 }
 
 #[derive(Clone, Copy)]
@@ -898,6 +967,7 @@ impl<'a> Context<'a> {
             form,
             fields: lowered_fields,
             elements: lowered_elements,
+            data_runtime: None,
         });
         expression
     }
@@ -976,9 +1046,20 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         match self.expressions[expression.0].form.clone() {
-            Form::Data => Ok(self.lower_runtime(RuntimeValue::from_value(
-                self.value(expression).clone(),
-            ))),
+            Form::Data => {
+                if self.scoped_f64 == 0 {
+                    if let Some(cached) = &self.expressions[expression.0].data_runtime {
+                        return Ok(cached.clone());
+                    }
+                }
+                let value = self.lower_runtime(RuntimeValue::from_value(
+                    self.value(expression).clone(),
+                ));
+                if self.scoped_f64 == 0 {
+                    self.expressions[expression.0].data_runtime = Some(value.clone());
+                }
+                Ok(value)
+            }
             Form::Cell(index) => self.eval_cell(index, environment),
             Form::Call { function } => self.eval_call(expression, function, environment),
             Form::Lambda { parameters, body } => {
@@ -996,7 +1077,7 @@ impl<'a> Context<'a> {
     }
 
     fn lower_runtime(&self, value: RuntimeValue) -> RuntimeValue {
-        match (&value.0, self.f64_representation()) {
+        match (&value.0, self.active_f64) {
             (RuntimeValueKind::Data(source), Some(representation)) => {
                 match (representation.decode)(source) {
                     Some(number) => RuntimeValue::original_f64(
@@ -1052,10 +1133,12 @@ impl<'a> Context<'a> {
         index: CellIndex,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        let cell = self.indices.borrow().cell(index);
         if let Some(value) = environment.get_index(index) {
-            Ok(self.lower_runtime(value.clone()))
-        } else if let Some(foreign) = self.foreign_target_cell(cell) {
+            let value = value.clone();
+            return Ok(self.lower_runtime(value));
+        }
+        let cell = self.indices.borrow().cell(index);
+        if let Some(foreign) = self.cached_foreign_target(index, cell) {
             Ok(RuntimeValue(RuntimeValueKind::Foreign(foreign)))
         } else {
             while self.cell_states.len() <= index.0 {
@@ -1143,16 +1226,21 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let callable = self.eval_runtime(function, environment)?;
+        let callable = match callable.0 {
+            RuntimeValueKind::Closure(closure) => {
+                return self.eval_grap_call(closure, call, environment);
+            }
+            RuntimeValueKind::Foreign(foreign) => {
+                return self.call_foreign(&foreign, call, environment);
+            }
+            other => RuntimeValue(other),
+        };
         if let Some(closure) = self.runtime_closure(&callable) {
             return self.eval_grap_call(closure, call, environment);
         }
         let foreign = match &callable.0 {
-            RuntimeValueKind::Foreign(foreign) => Some(foreign.clone()),
             RuntimeValueKind::Data(value) => self.foreign_target(value),
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Closure(_) => None,
+            _ => None,
         };
         match foreign {
             Some(foreign) => self.call_foreign(&foreign, call, environment),
@@ -1163,16 +1251,42 @@ impl<'a> Context<'a> {
         }
     }
 
+    fn cached_foreign_target(&mut self, index: CellIndex, cell: CellId) -> Option<ResolvedForeign> {
+        if let Some(resolved) = self.scoped_foreign_target(cell) {
+            return Some(resolved);
+        }
+        if self.foreign_cache.len() <= index.0 {
+            self.foreign_cache.resize(index.0 + 1, None);
+        }
+        if let Some(resolved) = &self.foreign_cache[index.0] {
+            return resolved.clone();
+        }
+        let resolved = self.fixed_foreign_target(cell);
+        self.foreign_cache[index.0] = Some(resolved.clone());
+        resolved
+    }
+
     fn foreign_target_cell(&self, cell: CellId) -> Option<ResolvedForeign> {
-        if let Some(function) = self
-            .foreign_scopes
+        self.scoped_foreign_target(cell)
+            .or_else(|| self.fixed_foreign_target(cell))
+    }
+
+    fn scoped_foreign_target(&self, cell: CellId) -> Option<ResolvedForeign> {
+        self.foreign_scopes
             .iter()
             .rev()
             .find_map(|scope| scope.get(cell))
-            .cloned()
-        {
-            Some(ResolvedForeign::Permanent { cell, function })
-        } else if self.overlay.is_some_and(|overlay| overlay.handles(cell)) {
+            .map(|function| ResolvedForeign::Permanent {
+                cell,
+                function: function.clone(),
+            })
+    }
+
+    /// Resolution through the borrowed overlay and permanent table only.
+    /// Both are fixed for the whole evaluation, so this answer may be
+    /// remembered per cell; scoped tables are always consulted live.
+    fn fixed_foreign_target(&self, cell: CellId) -> Option<ResolvedForeign> {
+        if self.overlay.is_some_and(|overlay| overlay.handles(cell)) {
             Some(ResolvedForeign::Scoped(cell))
         } else {
             self.foreign
@@ -1224,9 +1338,14 @@ impl<'a> Context<'a> {
         functions: ForeignFunctions,
         run: impl FnOnce(&mut Self) -> T,
     ) -> T {
+        let overrides_f64 = functions.f64.is_some();
+        self.scoped_f64 += overrides_f64 as usize;
         self.foreign_scopes.push(functions);
+        self.active_f64 = self.f64_representation();
         let result = run(self);
         self.foreign_scopes.pop();
+        self.active_f64 = self.f64_representation();
+        self.scoped_f64 -= overrides_f64 as usize;
         result
     }
 
@@ -1477,6 +1596,8 @@ pub fn evaluate(
         foreign,
         overlay: None,
         foreign_scopes: Vec::new(),
+        scoped_f64: 0,
+        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1484,6 +1605,7 @@ pub fn evaluate(
         expressions: Vec::new(),
         origins: Vec::new(),
         cell_states: Vec::new(),
+        foreign_cache: Vec::new(),
         indices: CellIndices::default(),
     }
     .run(expression)
@@ -1503,6 +1625,8 @@ pub fn evaluate_scoped<'a>(
         foreign,
         overlay: Some(overlay),
         foreign_scopes: Vec::new(),
+        scoped_f64: 0,
+        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1510,6 +1634,7 @@ pub fn evaluate_scoped<'a>(
         expressions: Vec::new(),
         origins: Vec::new(),
         cell_states: Vec::new(),
+        foreign_cache: Vec::new(),
         indices: CellIndices::default(),
     }
     .run(expression)
@@ -1533,6 +1658,8 @@ pub fn apply(
         foreign,
         overlay: None,
         foreign_scopes: Vec::new(),
+        scoped_f64: 0,
+        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1540,6 +1667,7 @@ pub fn apply(
         expressions: Vec::new(),
         origins: Vec::new(),
         cell_states: Vec::new(),
+        foreign_cache: Vec::new(),
         indices: CellIndices::default(),
     }
     .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
@@ -1560,6 +1688,8 @@ pub fn apply_scoped<'a>(
         foreign,
         overlay: Some(overlay),
         foreign_scopes: Vec::new(),
+        scoped_f64: 0,
+        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1567,6 +1697,7 @@ pub fn apply_scoped<'a>(
         expressions: Vec::new(),
         origins: Vec::new(),
         cell_states: Vec::new(),
+        foreign_cache: Vec::new(),
         indices: CellIndices::default(),
     }
     .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
@@ -1665,6 +1796,23 @@ mod tests {
         );
         assert_eq!(evaluation.result, blob("local"));
         assert!(evaluation.dependencies.is_empty());
+    }
+
+    #[test]
+    fn parameters_shadow_foreign_functions() {
+        let function = new_cell_id();
+        let foreign = ForeignFunctions::default()
+            .register(function, ForeignFunction::new(|_, _, _| Ok(blob("foreign"))));
+        let shadowed = call(
+            lambda([function], Value::from(function)),
+            [(function, blob("bound"))],
+        );
+        assert_eq!(
+            evaluate(&shadowed, |_| None, &foreign, 30).result,
+            blob("bound"),
+        );
+        let unshadowed = evaluate(&Value::from(function), |_| None, &foreign, 30);
+        assert_eq!(unshadowed.result, ffi(function));
     }
 
     #[test]

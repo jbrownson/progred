@@ -58,14 +58,15 @@ fn do_foreign(
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    let Some(expressions) = context.elements(expressions).map(<[_]>::to_vec) else {
+    let Some(count) = context.elements(expressions).map(<[_]>::len) else {
         return Ok(absent::with_reason(vocabulary::INVALID_EXPRESSIONS).into());
     };
-    expressions
-        .into_iter()
-        .try_fold(absent::value().into(), |_, expression| {
-            context.eval_runtime(expression, environment)
-        })
+    let mut result = None;
+    for index in 0..count {
+        let expression = context.elements(expressions).unwrap()[index];
+        result = Some(context.eval_runtime(expression, environment)?);
+    }
+    Ok(result.unwrap_or_else(|| absent::value().into()))
 }
 
 fn quote_foreign(
@@ -152,9 +153,8 @@ fn match_foreign(
         return Ok(context.missing_runtime_argument(vocabulary::CASES));
     };
     let value = context.eval_runtime(value, environment)?;
-    let cases_value = context.eval(cases, environment)?;
     if let Some(cases) = context.elements(cases) {
-        return match select_lowered(context, &value, &cases) {
+        return match select_lowered(context, &value, cases) {
             LoweredSelection::Expression {
                 expression,
                 bindings,
@@ -163,6 +163,7 @@ fn match_foreign(
             LoweredSelection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
         };
     }
+    let cases_value = context.eval(cases, environment)?;
     match select(&value.to_value(), &cases_value) {
         Selection::Expression {
             expression,
@@ -184,7 +185,6 @@ fn bindings_foreign(
     let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
         return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
     };
-    let bindings_value = context.eval(bindings, environment)?;
     if let Some(binding_count) = context.elements(bindings).map(<[_]>::len) {
         let mut environment = environment.clone();
         for index in 0..binding_count {
@@ -208,10 +208,10 @@ fn bindings_foreign(
             };
             let value = context.eval_runtime(value, &environment)?;
             if let Some(binder) = binder {
-                environment = environment.extended_runtime([(binder, value)]);
+                environment.push_runtime([(binder, value)]);
             } else if let Some(pattern) = pattern {
                 match destructure_runtime(&pattern, &value) {
-                    Ok(Some(bindings)) => environment = environment.extended_runtime(bindings),
+                    Ok(Some(bindings)) => environment.push_runtime(bindings),
                     Ok(None) => return Ok(absent::value().into()),
                     Err(InvalidBinder) => {
                         return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
@@ -221,6 +221,7 @@ fn bindings_foreign(
         }
         return context.eval_runtime(expression, &environment);
     }
+    let bindings_value = context.eval(bindings, environment)?;
     let Some(bindings) = bindings_value.as_list() else {
         return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
     };

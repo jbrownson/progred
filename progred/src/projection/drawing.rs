@@ -13,7 +13,7 @@ use puri::draw::{Canvas, DrawList};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use peniko::Brush;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq)]
@@ -341,12 +341,13 @@ fn transform(
     expression: grap::Expression,
     environment: &grap::Environment,
 ) -> Result<Option<Affine>, grap::Halt> {
-    let Some(operations) = context.elements(expression).map(|items| items.to_vec()) else {
+    let Some(operation_count) = context.elements(expression).map(<[_]>::len) else {
         let value = context.eval(expression, environment)?;
         return Ok(layout_data::read_transform(&value));
     };
     let mut transform = Affine::IDENTITY;
-    for operation in operations {
+    for index in 0..operation_count {
+        let operation = context.elements(expression).unwrap()[index];
         if let Some(point) = context.field(operation, layout_data::vocabulary::TRANSLATE) {
             let (Some(x), Some(y)) = (
                 context.field(point, layout_data::vocabulary::X),
@@ -386,7 +387,8 @@ fn record_program(
 ) -> (Recorded, BTreeSet<CellId>) {
     let canvas = RefCell::new(DrawList::new());
     let hits = RefCell::new(Vec::new());
-    let origins = RefCell::new(HashMap::<grap::Expression, Option<SourceTrace>>::new());
+    // Fill call sites are few; a scan beats hashing per drawn shape.
+    let origins = RefCell::new(Vec::<(grap::Expression, Option<SourceTrace>)>::new());
     let path = RefCell::new(BezPath::new());
     let unit = Value::record([]);
     let functions = [
@@ -452,14 +454,18 @@ fn record_program(
                 else {
                     return Ok(absent::value());
                 };
-                let cached = origins.borrow().get(&call).cloned();
+                let cached = origins
+                    .borrow()
+                    .iter()
+                    .find(|(site, _)| *site == call)
+                    .map(|(_, source)| source.clone());
                 let source = match cached {
                     Some(source) => source,
                     None => {
                         let source = context
                             .source_origin(call)
                             .map(|origin| SourceTrace::from_grap(origin, input));
-                        origins.borrow_mut().insert(call, source.clone());
+                        origins.borrow_mut().push((call, source.clone()));
                         source
                     }
                 };

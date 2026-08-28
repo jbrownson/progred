@@ -487,6 +487,51 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     );
 }
 
+/// Profiling loop: re-record the IoP tree drawing from a cold memo
+/// each iteration so a sampler sees mostly interpreter time.
+/// `cargo test --release -p progred iop_tree_profile_loop -- --ignored`
+#[test]
+#[ignore]
+fn iop_tree_profile_loop() {
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
+        .expect("the IoP tree demo parses");
+    let declaration = crate::workspace::declarations(doc.root.as_ref())
+        .into_iter()
+        .next()
+        .expect("the picture is declared as a pane");
+    let root = doc.root.as_ref().unwrap();
+    let value = crate::spine::get(root, &declaration.value_path);
+    let projection = crate::spine::get(root, &declaration.projection_path);
+    let source = Some((
+        declaration.value_path.as_slice(),
+        value,
+        projection,
+    ));
+    let iterations: usize = std::env::var("IOP_PROFILE_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(30);
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        let drawing_memo = DrawingMemo::default();
+        let (bench, _) = place_with_annotations_using(
+            &doc,
+            None,
+            &Annotations::default(),
+            1400.0,
+            None,
+            None,
+            source,
+            &drawing_memo,
+        );
+        std::hint::black_box(&bench.list);
+    }
+    eprintln!(
+        "IoP profile: {iterations} cold frames, {:.1?} each",
+        start.elapsed() / iterations as u32,
+    );
+}
+
 #[test]
 fn sample_text_line_claims_its_own_hover() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/sample.gid"))
