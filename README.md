@@ -53,7 +53,8 @@ make serve-web
 
 The browser build is served at `http://localhost:8080`; another device on the
 same network can use this machine's LAN address. Built-in documents are
-available from the Examples menu.
+available from the Examples menu. Deferred native iPad and spatial visionOS
+work is recorded in [`docs/platforms.md`](docs/platforms.md).
 
 Cargo build scripts and procedural macros execute dependency code. Ordinary
 Cargo commands in this repository intentionally stop at a tripwire; read
