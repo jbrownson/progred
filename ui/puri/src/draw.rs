@@ -284,7 +284,12 @@ impl Canvas for DrawList {
         self.0.push(DrawCmd::GlyphRun(run));
     }
 
-    fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self)) {
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
         let outer = std::mem::take(&mut self.0);
         content(self);
         let children = std::mem::replace(&mut self.0, outer);

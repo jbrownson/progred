@@ -782,8 +782,7 @@ mod checked_in_files {
 
     #[test]
     fn every_sample_cell_definition_is_root_reachable() {
-        let (doc, _) =
-            parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
+        let (doc, _) = parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
         let reached = root_reachable_cells(&doc);
         let mut orphans: Vec<_> = doc
             .cells

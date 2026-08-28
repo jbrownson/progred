@@ -36,7 +36,8 @@ struct CacheEntry {
 
 impl TextCache {
     pub fn sweep(&mut self) {
-        self.0.retain(|_, entry| std::mem::replace(&mut entry.used, false));
+        self.0
+            .retain(|_, entry| std::mem::replace(&mut entry.used, false));
     }
 }
 
@@ -321,9 +322,9 @@ mod tests {
             .0
             .iter()
             .filter_map(|cmd| match cmd {
-                DrawCmd::GlyphRun(run) => Some(
-                    run.transform.translation().y + run.glyphs.first()?.y as f64,
-                ),
+                DrawCmd::GlyphRun(run) => {
+                    Some(run.transform.translation().y + run.glyphs.first()?.y as f64)
+                }
                 _ => None,
             })
             .collect();

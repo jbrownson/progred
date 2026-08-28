@@ -149,11 +149,7 @@ pub fn centered_row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out
     row_aligned(gap, children, true)
 }
 
-fn row_aligned<Out>(
-    gap: f64,
-    children: Vec<Measured<Out>>,
-    centered: bool,
-) -> Measured<Out> {
+fn row_aligned<Out>(gap: f64, children: Vec<Measured<Out>>, centered: bool) -> Measured<Out> {
     let width = children.iter().map(|c| c.extent.width).sum::<f64>()
         + gap * children.len().saturating_sub(1) as f64;
     let (ascent, descent) = if centered {
@@ -405,12 +401,7 @@ fn place_into<Out: Output>(layout: Measured<Out>, placement: Placement, out: &mu
                 } else {
                     at.y - child.extent.ascent
                 };
-                let rect = Rect::new(
-                    x,
-                    y,
-                    x + child.extent.width,
-                    y + child.extent.height(),
-                );
+                let rect = Rect::new(x, y, x + child.extent.width, y + child.extent.height());
                 place_into(child, child_placement(placement, rect), out);
                 x += advance;
             }

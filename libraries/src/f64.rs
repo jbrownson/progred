@@ -80,12 +80,7 @@ pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let number = read(input.value)?;
-    Some(number::layout(
-        input,
-        number,
-        vocabulary::UPDATE,
-        value,
-    ))
+    Some(number::layout(input, number, vocabulary::UPDATE, value))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -109,10 +104,7 @@ fn expression_precedence(value: &Value) -> Option<Precedence> {
     (fields.len() == 3).then_some(())?;
     fields.get(&vocabulary::LEFT)?;
     fields.get(&vocabulary::RIGHT)?;
-    fields
-        .get(&FUNCTION)?
-        .as_cell()
-        .and_then(precedence)
+    fields.get(&FUNCTION)?.as_cell().and_then(precedence)
 }
 
 fn operand<World, Hover: Clone>(
@@ -249,9 +241,7 @@ fn lerp(
     let end = context.eval_f64(end, environment)?;
     let amount = context.eval_f64(amount, environment)?;
     Ok(match (start, end, amount) {
-        (Some(start), Some(end), Some(amount)) => {
-            RuntimeValue::f64(start + (end - start) * amount)
-        }
+        (Some(start), Some(end), Some(amount)) => RuntimeValue::f64(start + (end - start) * amount),
         (None, _, _) => absent::with_reason(vocabulary::START_NOT_F64).into(),
         (_, None, _) => absent::with_reason(vocabulary::END_NOT_F64).into(),
         (_, _, None) => absent::with_reason(vocabulary::AMOUNT_NOT_F64).into(),
@@ -341,10 +331,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     }
     cells.set_value(
         vocabulary::PI,
-        overlay_value(
-            &value(std::f64::consts::PI),
-            name::record("π", []),
-        ),
+        overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
     );
     Library {
         cells,

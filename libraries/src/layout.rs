@@ -128,8 +128,7 @@ pub mod vocabulary {
     pub const QUAD_TO: CellId = CellId::from_u128(0xda1c37c330243e538702cb0e19a711ce);
     pub const CURVE_TO: CellId = CellId::from_u128(0x44bfb8ebda540e9c037328f706c0c142);
     pub const CLOSE: CellId = CellId::from_u128(0xadf2742dbde1b09b03e1fc649f5e1f58);
-    pub const LINEAR_GRADIENT: CellId =
-        CellId::from_u128(0x7595f5eee03cd47be1f3fee10806d6a9);
+    pub const LINEAR_GRADIENT: CellId = CellId::from_u128(0x7595f5eee03cd47be1f3fee10806d6a9);
     pub const STOPS: CellId = CellId::from_u128(0x5d4211d5e7184a41fe1ffaa2cd5865c9);
     pub const OFFSET: CellId = CellId::from_u128(0xf348e826a277875d63e7a0197730f036);
     pub const TRANSFORM: CellId = CellId::from_u128(0x0c69b749e5d076609a6642a20b736fb4);
@@ -170,10 +169,7 @@ fn drawing_projection(
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
         return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
-    Ok(node(
-        vocabulary::DRAWING,
-        context.eval(value, environment)?,
-    ))
+    Ok(node(vocabulary::DRAWING, context.eval(value, environment)?))
 }
 
 fn number(value: f64) -> Value {
@@ -289,10 +285,7 @@ pub fn drawing(
 pub fn fill(shape: Value, paint: Value) -> Value {
     node(
         vocabulary::FILL,
-        Value::record([
-            (vocabulary::SHAPE, shape),
-            (vocabulary::PAINT, paint),
-        ]),
+        Value::record([(vocabulary::SHAPE, shape), (vocabulary::PAINT, paint)]),
     )
 }
 
@@ -611,11 +604,7 @@ fn decode_with<World: 'static, Hover: Clone>(
     if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
         let child = decode_with(content, target)?;
         let interaction = target();
-        return Some(on_activate(
-            child,
-            interaction.hover,
-            interaction.select,
-        ));
+        return Some(on_activate(child, interaction.hover, interaction.select));
     }
     if let Some(content) = fields.get(&vocabulary::PICKABLE) {
         let content = content.as_record()?;
@@ -628,10 +617,7 @@ fn decode_with<World: 'static, Hover: Clone>(
         ));
     }
     if let Some(content) = fields.get(&vocabulary::HOVERABLE) {
-        return Some(on_hover(
-            decode_with(content, target)?,
-            target().hover,
-        ));
+        return Some(on_hover(decode_with(content, target)?, target().hover));
     }
     if let Some(content) = fields.get(&vocabulary::HOVER_BLOCK) {
         return Some(block_hover(decode_with(content, target)?));
@@ -749,17 +735,20 @@ fn read_optional_transform(fields: &gid::Record) -> Option<Affine> {
 }
 
 pub fn read_transform(value: &Value) -> Option<Affine> {
-    value.as_list()?.values().try_fold(Affine::IDENTITY, |transform, operation| {
-        let fields = operation.as_record()?;
-        if let Some(point) = fields.get(&vocabulary::TRANSLATE) {
-            let point = read_point(point)?;
-            Some(transform * Affine::translate((point.x, point.y)))
-        } else if let Some(angle) = fields.get(&vocabulary::ROTATE) {
-            Some(transform * Affine::rotate(read_number(angle)?))
-        } else {
-            None
-        }
-    })
+    value
+        .as_list()?
+        .values()
+        .try_fold(Affine::IDENTITY, |transform, operation| {
+            let fields = operation.as_record()?;
+            if let Some(point) = fields.get(&vocabulary::TRANSLATE) {
+                let point = read_point(point)?;
+                Some(transform * Affine::translate((point.x, point.y)))
+            } else if let Some(angle) = fields.get(&vocabulary::ROTATE) {
+                Some(transform * Affine::rotate(read_number(angle)?))
+            } else {
+                None
+            }
+        })
 }
 
 pub fn read_shape(value: &Value) -> Option<Shape> {
@@ -778,8 +767,8 @@ pub fn read_shape(value: &Value) -> Option<Shape> {
         let content = content.as_record()?;
         Some(Shape::Circle(Circle::new(
             Point::new(
-            read_number(content.get(&vocabulary::X)?)?,
-            read_number(content.get(&vocabulary::Y)?)?,
+                read_number(content.get(&vocabulary::X)?)?,
+                read_number(content.get(&vocabulary::Y)?)?,
             ),
             read_nonnegative(content.get(&vocabulary::RADIUS)?)?,
         )))
@@ -1081,15 +1070,15 @@ mod tests {
         let Layout::Surround {
             left:
                 progred_display::Ink::Delim {
-                delim: Delim::Brace,
-                side: progred_display::Side::Open,
-            },
+                    delim: Delim::Brace,
+                    side: progred_display::Side::Open,
+                },
             child,
             right:
                 progred_display::Ink::Delim {
-                delim: Delim::Brace,
-                side: progred_display::Side::Close,
-            },
+                    delim: Delim::Brace,
+                    side: progred_display::Side::Close,
+                },
         } = &forms[1]
         else {
             panic!("bracket decodes to a surround of delim ink");
@@ -1099,7 +1088,10 @@ mod tests {
         };
         assert!(matches!(
             &children[0],
-            Layout::Descend { step: Step::Follow, .. }
+            Layout::Descend {
+                step: Step::Follow,
+                ..
+            }
         ));
     }
 

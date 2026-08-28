@@ -3,12 +3,12 @@
 use crate::selection::Selection;
 use crate::workspace::Root;
 use gid::{Path, Step};
+use kurbo::Rect;
 use progred_display::ActionHandler;
 use progred_libraries::name;
 use std::collections::HashMap;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use kurbo::Rect;
 
 /// A projected value's settled position: the path it stands for and the
 /// rect it occupied, collected fresh every frame in placement order.
@@ -95,9 +95,9 @@ pub fn step_selection<'a, World>(
     }
     .filter(|_| event.state.is_down() && !modified)?;
     let Some(selection) = selection else {
-        return descends
-            .iter()
-            .find(|descend| root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.is_empty());
+        return descends.iter().find(|descend| {
+            root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.is_empty()
+        });
     };
     let path = selection.path();
     let order = reading_order(descends, root, line);
@@ -119,12 +119,10 @@ pub fn step_selection<'a, World>(
         }
         (NamedKey::ArrowLeft, Some(at)) if !order[at].row => found(&order[at - 1]),
         (NamedKey::ArrowLeft, _) => path.split_last().and_then(|(_, parent)| {
-            descends
-                .iter()
-                .find(|descend| {
-                    root.is_none_or(|root| descend.root.as_ref() == Some(root))
-                        && descend.path.as_ref() == parent
-                })
+            descends.iter().find(|descend| {
+                root.is_none_or(|root| descend.root.as_ref() == Some(root))
+                    && descend.path.as_ref() == parent
+            })
         }),
         _ => None,
     }
@@ -155,11 +153,7 @@ pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
 /// own first line, never a row. Order is rebuilt from per-parent
 /// registration order, which is document order; the raw list settles
 /// children first.
-fn reading_order<World>(
-    descends: &[Descend<World>],
-    root: Option<&Root>,
-    line: f64,
-) -> Vec<Stop> {
+fn reading_order<World>(descends: &[Descend<World>], root: Option<&Root>, line: f64) -> Vec<Stop> {
     let by_path: HashMap<&[Step], usize> = descends
         .iter()
         .enumerate()

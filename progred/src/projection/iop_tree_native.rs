@@ -27,12 +27,7 @@ struct Branch {
     width: f64,
 }
 
-pub(super) fn draw<C: Canvas>(
-    canvas: &mut C,
-    width: f64,
-    height: f64,
-    outer: Affine,
-) -> Stats {
+pub(super) fn draw<C: Canvas>(canvas: &mut C, width: f64, height: f64, outer: Affine) -> Stats {
     sky(canvas, width, height, outer);
     mountains(canvas, width, height, outer);
     let (branch_count, blossom_points) = branches(canvas, width, height, outer);

@@ -8,8 +8,7 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const ABSENT: CellId = grap_runtime::absent::ABSENT;
-    pub const UNSPECIFIED: CellId =
-        CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
+    pub const UNSPECIFIED: CellId = CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
 }
 
 pub fn value() -> Value {
@@ -35,10 +34,7 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
-    cells.set_value(
-        vocabulary::UNSPECIFIED,
-        named_reason("unspecified absence"),
-    );
+    cells.set_value(vocabulary::UNSPECIFIED, named_reason("unspecified absence"));
     Library {
         cells,
         ..Library::default()

@@ -1,44 +1,44 @@
 //! The editor's tree-projection runtime: interpret display layouts,
 //! retain source provenance, and fall back to total structural display.
 
+use crate::annotations::Annotations;
+use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries};
 #[cfg(test)]
 use crate::completion::{resolve_entry, resolve_label};
-use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries};
 use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
-use crate::navigate::{Descend, HasDescends};
-use crate::placed::{self, Placed, before, decorate, leaf, on_key};
-use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
-#[cfg(test)]
-use crate::navigate::{projected_name_owner, step_selection};
 #[cfg(test)]
 use crate::identity::short_id;
+use crate::navigate::{Descend, HasDescends};
+#[cfg(test)]
+use crate::navigate::{projected_name_owner, step_selection};
+use crate::placed::{self, Placed, before, decorate, leaf, on_key};
 use crate::render::{self, text};
 #[cfg(test)]
 use crate::sample::{sample_document, sample_vocabulary};
-use crate::annotations::Annotations;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 #[cfg(test)]
 use crate::selection::{
-    break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge,
-    pending_follow, pending_insert, pending_into, pending_value, resolve_query, set_collapse,
-    set_value, to_clipboard, toggle_collapse, write_through,
+    break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge, pending_follow,
+    pending_insert, pending_into, pending_value, resolve_query, set_collapse, set_value,
+    to_clipboard, toggle_collapse, write_through,
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{
-    absent, f64 as f64_convention, layout as layout_data, presentation, text,
-};
-mod location;
+use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
+use progred_libraries::{absent, f64 as f64_convention, layout as layout_data, presentation, text};
 mod drawing;
 #[cfg(test)]
 mod iop_tree_native;
+mod location;
 pub(crate) use drawing::Memo as DrawingMemo;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use gid::{Cells, Document, new_cell_id};
+use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use location::Location;
+use peniko::{Brush, Color};
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
@@ -50,14 +50,12 @@ use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{Key, KeyState, NamedKey};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerScrollEvent, PointerType, PointerUpdate,
 };
-use ui_events::ScrollDelta;
-use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
-use peniko::{Brush, Color};
 
 type SharedPath = Rc<[Step]>;
 
@@ -108,11 +106,8 @@ impl<World> Projection<World> {
             state,
             targets,
         };
-        self.partials
-            .iter()
-            .find_map(|partial| partial(&input))
+        self.partials.iter().find_map(|partial| partial(&input))
     }
-
 }
 
 /// Read-only projection context threaded through every view.
@@ -346,9 +341,21 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
     ) -> Self {
         let gaps = gap * children.len().saturating_sub(1) as f64;
         let widths = Widths {
-            preferred: children.iter().map(|child| child.widths.preferred).sum::<f64>() + gaps,
-            minimum: children.iter().map(|child| child.widths.minimum).sum::<f64>() + gaps,
-            maximum: children.iter().map(|child| child.widths.maximum).sum::<f64>() + gaps,
+            preferred: children
+                .iter()
+                .map(|child| child.widths.preferred)
+                .sum::<f64>()
+                + gaps,
+            minimum: children
+                .iter()
+                .map(|child| child.widths.minimum)
+                .sum::<f64>()
+                + gaps,
+            maximum: children
+                .iter()
+                .map(|child| child.widths.maximum)
+                .sum::<f64>()
+                + gaps,
         };
         Self {
             widths,
@@ -453,12 +460,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn select(
-        &self,
-        choices: &mut [usize],
-        shared: &[Option<Self>],
-        available: f64,
-    ) -> f64 {
+    fn select(&self, choices: &mut [usize], shared: &[Option<Self>], available: f64) -> f64 {
         match &self.kind {
             ChoiceKind::Fixed(measured) => measured.extent.width,
             ChoiceKind::Use(id) => shared[*id]
@@ -485,7 +487,9 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .iter()
                 .map(|child| child.select(choices, shared, available))
                 .fold(0.0_f64, f64::max),
-            ChoiceKind::Popover { trigger, content, .. } => {
+            ChoiceKind::Popover {
+                trigger, content, ..
+            } => {
                 content.select(choices, shared, available);
                 trigger.select(choices, shared, available)
             }
@@ -546,7 +550,9 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     child.inspect(depth + 1, trace);
                 }
             }
-            ChoiceKind::Popover { trigger, content, .. } => {
+            ChoiceKind::Popover {
+                trigger, content, ..
+            } => {
                 trigger.inspect(depth + 1, trace);
                 content.inspect(depth + 1, trace);
             }
@@ -588,7 +594,9 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     child.inspect_selection(choices, shared, depth + 1, trace);
                 }
             }
-            ChoiceKind::Popover { trigger, content, .. } => {
+            ChoiceKind::Popover {
+                trigger, content, ..
+            } => {
                 trigger.inspect_selection(choices, shared, depth + 1, trace);
                 content.inspect_selection(choices, shared, depth + 1, trace);
             }
@@ -654,13 +662,12 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 content.settle(choices, shared),
             ),
             ChoiceKind::Pad { insets, child } => pad(insets, child.settle(choices, shared)),
-            ChoiceKind::Alternatives { id, options } => options
-                .into_iter()
-                .nth(choices[id])
-                .map_or_else(
+            ChoiceKind::Alternatives { id, options } => {
+                options.into_iter().nth(choices[id]).map_or_else(
                     || row(0.0, Vec::new()),
                     |option| option.settle(choices, shared),
-                ),
+                )
+            }
         }
     }
 }
@@ -736,11 +743,7 @@ mod choice_tests {
         ))
     }
 
-    fn select(
-        layout: &ChoiceLayout<Output>,
-        count: usize,
-        available: f64,
-    ) -> (f64, Vec<usize>) {
+    fn select(layout: &ChoiceLayout<Output>, count: usize, available: f64) -> (f64, Vec<usize>) {
         let mut choices = vec![0; count];
         let width = layout.select(&mut choices, &[], available);
         (width, choices)
@@ -775,8 +778,7 @@ mod choice_tests {
             0.0,
             vec![nested, fixed(40.0)],
         );
-        let layout =
-            ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating]);
+        let layout = ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating]);
 
         let (width, choices) = select(&layout, 2, 70.0);
 
@@ -801,10 +803,7 @@ mod choice_tests {
 
     #[test]
     fn a_wider_backup_does_not_hide_a_later_fit() {
-        let layout = ChoiceLayout::alternatives(
-            0,
-            vec![fixed(100.0), fixed(120.0), fixed(70.0)],
-        );
+        let layout = ChoiceLayout::alternatives(0, vec![fixed(100.0), fixed(120.0), fixed(70.0)]);
 
         let (width, choices) = select(&layout, 1, 80.0);
 
@@ -827,10 +826,7 @@ mod choice_tests {
 /// Lower a projection layout to measured boxes. Puri leaves
 /// become place-continuations; interaction nodes become Puri handlers.
 #[allow(clippy::too_many_arguments)]
-fn prepare<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -901,10 +897,7 @@ fn prepare<
                 realize_pick_with(target, picked, pick, inner)
             })
         }
-        progred_display::Layout::OnEvent {
-            child,
-            handler,
-        } => {
+        progred_display::Layout::OnEvent { child, handler } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
@@ -962,15 +955,7 @@ fn prepare<
                 .into_iter()
                 .map(|child| {
                     prepare(
-                        cx,
-                        projection,
-                        tcx,
-                        path,
-                        ancestors,
-                        hooks,
-                        value,
-                        child,
-                        build,
+                        cx, projection, tcx, path, ancestors, hooks, value, child, build,
                     )
                 })
                 .collect();
@@ -985,38 +970,22 @@ fn prepare<
                 .into_iter()
                 .map(|child| {
                     prepare(
-                        cx,
-                        projection,
-                        tcx,
-                        path,
-                        ancestors,
-                        hooks,
-                        value,
-                        child,
-                        build,
+                        cx, projection, tcx, path, ancestors, hooks, value, child, build,
                     )
                 })
                 .collect();
             ChoiceLayout::col(baseline, gap * scale, children)
         }
-        progred_display::Layout::Overlay { children } => {
-            ChoiceLayout::overlay(children
+        progred_display::Layout::Overlay { children } => ChoiceLayout::overlay(
+            children
                 .into_iter()
                 .map(|child| {
                     prepare(
-                        cx,
-                        projection,
-                        tcx,
-                        path,
-                        ancestors,
-                        hooks,
-                        value,
-                        child,
-                        build,
+                        cx, projection, tcx, path, ancestors, hooks, value, child, build,
                     )
                 })
-                .collect())
-        }
+                .collect(),
+        ),
         progred_display::Layout::Popover { trigger, content } => {
             let trigger = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *trigger, build,
@@ -1031,12 +1000,7 @@ fn prepare<
                 let card = before(card, move |p, placement| {
                     let shape = RoundedRect::from_rect(placement.rect, 6.0 * scale);
                     p.fill(shape, fill, Affine::IDENTITY);
-                    p.stroke(
-                        shape,
-                        Stroke::new(scale),
-                        stroke,
-                        Affine::IDENTITY,
-                    );
+                    p.stroke(shape, Stroke::new(scale), stroke, Affine::IDENTITY);
                     p.occlude(placement);
                 });
                 placed::popover(trigger, card, 4.0 * scale)
@@ -1049,44 +1013,19 @@ fn prepare<
             bottom,
             child,
         } => {
-            let insets = Insets::new(
-                left * scale,
-                top * scale,
-                right * scale,
-                bottom * scale,
-            );
+            let insets = Insets::new(left * scale, top * scale, right * scale, bottom * scale);
             ChoiceLayout::pad(
                 insets,
                 prepare(
-                    cx,
-                    projection,
-                    tcx,
-                    path,
-                    ancestors,
-                    hooks,
-                    value,
-                    *child,
-                    build,
+                    cx, projection, tcx, path, ancestors, hooks, value, *child, build,
                 ),
             )
         }
-        progred_display::Layout::Surround {
-            left,
-            child,
-            right,
-        } => {
+        progred_display::Layout::Surround { left, child, right } => {
             let gap = 2.0 * scale;
             let reserved = side_advance(scale, &left) + side_advance(scale, &right) + 2.0 * gap;
             let inner = prepare(
-                cx,
-                projection,
-                tcx,
-                path,
-                ancestors,
-                hooks,
-                value,
-                *child,
-                build,
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
             let path = path.to_vec();
             let target = value.cloned();
@@ -1094,9 +1033,7 @@ fn prepare<
             let select = hooks.select.clone();
             let pick = hooks.pick.clone();
             ChoiceLayout::map(inner, reserved, move |inner| {
-                surround_sides(
-                    scale, dim, path, target, select, pick, left, inner, right,
-                )
+                surround_sides(scale, dim, path, target, select, pick, left, inner, right)
             })
         }
         progred_display::Layout::Descend {
@@ -1135,16 +1072,7 @@ fn prepare<
         progred_display::Layout::Transient {
             value: computed,
             fuel,
-        } => prepare_transient_root(
-            cx,
-            projection,
-            tcx,
-            path,
-            computed,
-            fuel,
-            hooks,
-            build,
-        ),
+        } => prepare_transient_root(cx, projection, tcx, path, computed, fuel, hooks, build),
         progred_display::Layout::Shared { id: key, child } => {
             if let Some(id) = build.shared_ids.get(&key).copied() {
                 let widths = build.shared[id]
@@ -1180,15 +1108,7 @@ fn prepare<
                     .into_iter()
                     .map(|option| {
                         prepare(
-                            cx,
-                            projection,
-                            tcx,
-                            path,
-                            ancestors,
-                            hooks,
-                            value,
-                            option,
-                            build,
+                            cx, projection, tcx, path, ancestors, hooks, value, option, build,
                         )
                     })
                     .collect(),
@@ -1205,10 +1125,7 @@ fn display_delim(delim: progred_display::Delim) -> Delim {
     }
 }
 
-fn prepare_at<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -1249,11 +1166,13 @@ fn contextual_projection<C>(
     contextual: Option<Vec<progred_display::Partial<C, Hover>>>,
 ) -> Option<Projection<C>> {
     contextual.map(|partials| {
-        Projection::new(partials.into_iter().chain(
-            ambient
-                .into_iter()
-                .flat_map(|projection| projection.partials.iter().copied()),
-        ))
+        Projection::new(
+            partials.into_iter().chain(
+                ambient
+                    .into_iter()
+                    .flat_map(|projection| projection.partials.iter().copied()),
+            ),
+        )
     })
 }
 
@@ -1294,21 +1213,19 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
             let function = function.clone();
             let apply = apply.clone();
             p.handler().on_pointer_down(move |world, event| {
-                placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                )) && apply(
-                    world,
-                    path.clone(),
-                    function.clone(),
-                    pointer_button_value(
-                        layout_data::vocabulary::POINTER_DOWN,
-                        layout_data::vocabulary::TOUCH_START,
-                        placement,
-                        scale,
-                        event,
-                    ),
-                )
+                placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        pointer_button_value(
+                            layout_data::vocabulary::POINTER_DOWN,
+                            layout_data::vocabulary::TOUCH_START,
+                            placement,
+                            scale,
+                            event,
+                        ),
+                    )
             });
         }
         {
@@ -1361,15 +1278,14 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
             let function = function.clone();
             let apply = apply.clone();
             p.handler().on_scroll(move |world, event| {
-                if placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                )) && apply(
-                    world,
-                    path.clone(),
-                    function.clone(),
-                    scroll_value(placement, scale, event),
-                ) {
+                if placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        scroll_value(placement, scale, event),
+                    )
+                {
                     ScrollOutcome::consume(event)
                 } else {
                     ScrollOutcome::pass(event)
@@ -1381,22 +1297,12 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
             let function = function.clone();
             let apply = apply.clone();
             p.handler().on_key(move |world, event| {
-                apply(
-                    world,
-                    path.clone(),
-                    function.clone(),
-                    key_value(event),
-                )
+                apply(world, path.clone(), function.clone(), key_value(event))
             });
         }
         {
             p.handler().on_ime(move |world, event| {
-                apply(
-                    world,
-                    path.clone(),
-                    function.clone(),
-                    ime_value(event),
-                )
+                apply(world, path.clone(), function.clone(), ime_value(event))
             });
         }
     })
@@ -1416,15 +1322,7 @@ fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
 fn realize_point<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     handler: progred_display::PointHandler,
-    start: Rc<
-        dyn Fn(
-            &mut C,
-            Path,
-            Placement,
-            progred_display::PointHandler,
-            Point,
-        ) -> bool,
-    >,
+    start: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     before(inner, move |p, placement| {
@@ -1437,10 +1335,7 @@ fn realize_point<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-fn event_value(
-    kind: CellId,
-    fields: impl IntoIterator<Item = (CellId, Value)>,
-) -> Value {
+fn event_value(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record(
         [(layout_data::vocabulary::EVENT_KIND, Value::Cell(kind))]
             .into_iter()
@@ -1470,10 +1365,7 @@ fn pointer_fields(
             layout_data::vocabulary::COUNT,
             f64_convention::value(f64::from(state.count)),
         ),
-        (
-            layout_data::vocabulary::SCALE,
-            f64_convention::value(scale),
-        ),
+        (layout_data::vocabulary::SCALE, f64_convention::value(scale)),
     ];
     fields.push((
         layout_data::vocabulary::MODIFIERS,
@@ -1544,9 +1436,7 @@ fn pointer_cancel_value(event: &ui_events::pointer::PointerInfo) -> Value {
 fn scroll_value(placement: Placement, scale: f64, event: &PointerScrollEvent) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.state);
     let (x, y) = match event.delta {
-        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => {
-            (f64::from(x), f64::from(y))
-        }
+        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
         ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
     };
     fields.extend([
@@ -1617,10 +1507,7 @@ fn ime_value(event: &ImeEvent) -> Value {
             layout_data::vocabulary::IME_COMMIT
         }
     };
-    fields.push((
-        layout_data::vocabulary::EVENT_STATE,
-        Value::Cell(state),
-    ));
+    fields.push((layout_data::vocabulary::EVENT_STATE, Value::Cell(state)));
     event_value(layout_data::vocabulary::IME, fields)
 }
 
@@ -1631,7 +1518,9 @@ fn realize_pick_with<C: 'static, Cv: Canvas + 'static>(
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     before(inner, move |p, _| {
-        p.pick(Hovered::Tree(target), move |world| pick(world, picked.clone()));
+        p.pick(Hovered::Tree(target), move |world| {
+            pick(world, picked.clone())
+        });
     })
 }
 
@@ -1640,21 +1529,16 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
     hover: Option<Hover>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let highlight = matches!(
-        hover.as_ref(),
-        Some(Hover::Toggle(_) | Hover::Insert(_))
-    );
-    before(inner, move |p, placement| {
-        match hover {
-            Some(hover) => {
-                if highlight {
-                    light_hover(p, placement, hover, scale);
-                } else {
-                    hover_claim(p, placement, hover);
-                }
+    let highlight = matches!(hover.as_ref(), Some(Hover::Toggle(_) | Hover::Insert(_)));
+    before(inner, move |p, placement| match hover {
+        Some(hover) => {
+            if highlight {
+                light_hover(p, placement, hover, scale);
+            } else {
+                hover_claim(p, placement, hover);
             }
-            None => hover_block(p, placement),
         }
+        None => hover_block(p, placement),
     })
 }
 
@@ -1683,10 +1567,7 @@ fn tree_hovered<'a>(ink: placed::Ink<'a>) -> Option<&'a Hover> {
     }
 }
 
-fn leaf_display<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn leaf_display<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     tcx: &mut TextCtx,
     content: puri::Leaf<progred_display::Paint>,
@@ -1756,10 +1637,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
                 && !crate::modifiers::pick(&event.state.modifiers)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     if !active {
                         start_edit(ctx, path.to_vec(), line.clone());
@@ -1800,14 +1678,11 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
         progred_display::Paint::Face(face) => face_style(styles, face).brush.clone(),
         progred_display::Paint::Brush(brush) => brush,
     });
-    leaf(
-        extent,
-        move |p, placement| {
-            let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
-                * Affine::scale(scale);
-            puri::draw::draw(drawing, p, transform, Clone::clone);
-        },
-    )
+    leaf(extent, move |p, placement| {
+        let transform =
+            Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
+        puri::draw::draw(drawing, p, transform, Clone::clone);
+    })
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
@@ -1837,15 +1712,7 @@ pub struct Hooks<C> {
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
     /// Begin a continuous point control at its settled placement.
-    pub point: Rc<
-        dyn Fn(
-            &mut C,
-            Path,
-            Placement,
-            progred_display::PointHandler,
-            Point,
-        ) -> bool,
-    >,
+    pub point: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
 }
@@ -1917,8 +1784,7 @@ impl Cx<'_> {
     /// `path`.
     fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         let current = self.selection?;
-        (current.stage() == Stage::Label
-            && current.path() == path)
+        (current.stage() == Stage::Label && current.path() == path)
             .then(|| Some((current.edit()?, current.choice())))
             .flatten()
     }
@@ -1949,15 +1815,12 @@ fn delim_style(scale: f64) -> DelimStyle {
 /// settles, so reserve the capped grown width; the final leaf below
 /// takes only its actual height-derived width.
 fn delim_advance(scale: f64, delim: Delim) -> f64 {
-    delim_style(scale).bow(delim) * delim::MAX_GROWTH
-        + 2.0 * SIDE_BEARING_EM * 14.0 * scale
+    delim_style(scale).bow(delim) * delim::MAX_GROWTH + 2.0 * SIDE_BEARING_EM * 14.0 * scale
 }
 
 fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
     match ink {
-        progred_display::Ink::Delim { delim, .. } => {
-            delim_advance(scale, display_delim(*delim))
-        }
+        progred_display::Ink::Delim { delim, .. } => delim_advance(scale, display_delim(*delim)),
     }
 }
 
@@ -2145,7 +2008,10 @@ fn slot_width(styles: &Styles) -> f64 {
 /// the paint changes. The charge is exactly the text frame: the
 /// empty line SHAPED, the same runtime metrics the engaged editor's
 /// frame takes — no measured constants, one source.
-fn placeholder_box<C: 'static, Cv: Canvas + 'static>(tcx: &mut TextCtx, styles: &Styles) -> Measured<Placed<C, Cv>> {
+fn placeholder_box<C: 'static, Cv: Canvas + 'static>(
+    tcx: &mut TextCtx,
+    styles: &Styles,
+) -> Measured<Placed<C, Cv>> {
     let extent = Extent {
         width: slot_width(styles),
         ..text::<C, Cv>(tcx, "", &styles.name).extent
@@ -2239,8 +2105,7 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
             } else if matches!(
                 tree_hovered(ink),
                 Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
-            )
-            {
+            ) {
                 hover_highlight(scale, cv, rect);
             }
         });
@@ -2317,10 +2182,7 @@ fn projection_is_absent(value: &Value) -> bool {
 }
 
 #[cfg(test)]
-pub fn project<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+pub fn project<C: 'static, Cv: Canvas + 'static>(
     description: ProjectDescription<'_, C>,
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
@@ -2328,10 +2190,7 @@ pub fn project<
     project_with_drawing_memo(description, tcx, hooks, &DrawingMemo::default(), None)
 }
 
-pub(crate) fn project_with_drawing_memo<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
     description: ProjectDescription<'_, C>,
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
@@ -2367,9 +2226,8 @@ pub(crate) fn project_with_drawing_memo<
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
         secondary: secondary_of(&sources, selection),
-        selected_trace: source_selection.map(|selection| {
-            SourceTrace::from_path(&sources, Rc::from(selection.path()))
-        }),
+        selected_trace: source_selection
+            .map(|selection| SourceTrace::from_path(&sources, Rc::from(selection.path()))),
     };
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
@@ -2391,9 +2249,7 @@ pub(crate) fn project_with_drawing_memo<
             grap::DEFAULT_FUEL,
         )
     });
-    let layout = match projected
-        .filter(|evaluation| !projection_is_absent(&evaluation.result))
-    {
+    let layout = match projected.filter(|evaluation| !projection_is_absent(&evaluation.result)) {
         Some(evaluation) => prepare_transient_root(
             &cx,
             projection,
@@ -2457,8 +2313,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
             } else if matches!(
                 tree_hovered(ink),
                 Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
-            )
-            {
+            ) {
                 hover_highlight(scale, cv, rect);
             }
         });
@@ -2575,10 +2430,7 @@ fn secondary_mark_with<C: 'static, Cv: Canvas + 'static>(
 /// Starts the ordinary projection at a value with no document source.
 /// Interaction attributes the transient tree to `owner`, while its
 /// children remain read-only and have no document paths of their own.
-fn prepare_transient_root<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -2641,10 +2493,7 @@ fn prepare_transient_root<
 /// child. A concrete missing layout replaces the ordinary pending
 /// view without inventing a value at that location.
 #[allow(clippy::too_many_arguments)]
-fn prepare_descend<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -2661,7 +2510,9 @@ fn prepare_descend<
     path.push(step.clone());
     let contextual_projection = contextual_projection(projection, contextual_partials);
     let child_projection = contextual_projection.as_ref().or(projection);
-    if step == Step::Follow && let Some(parent) = parent {
+    if step == Step::Follow
+        && let Some(parent) = parent
+    {
         let mut ancestors = ancestors.clone();
         if let Some(cell) = parent.as_cell() {
             ancestors.cells.insert(cell);
@@ -2699,10 +2550,7 @@ fn prepare_descend<
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prepare_location<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_location<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     present_projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -2742,10 +2590,7 @@ fn prepare_location<
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prepare_missing_layout<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_missing_layout<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -2756,15 +2601,7 @@ fn prepare_missing_layout<
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
     let inner = prepare(
-        cx,
-        projection,
-        tcx,
-        path,
-        ancestors,
-        hooks,
-        None,
-        layout,
-        build,
+        cx, projection, tcx, path, ancestors, hooks, None, layout, build,
     );
     let landmark: SharedPath = Rc::from(path);
     let transient = cx.source.transient();
@@ -2773,23 +2610,12 @@ fn prepare_missing_layout<
     let select = select_handler(landmark.clone(), hooks);
     let delete = hooks.delete.clone();
     ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(
-            transient,
-            selected,
-            scale,
-            landmark,
-            select,
-            delete,
-            inner,
-        )
+        descend_landmark_with(transient, selected, scale, landmark, select, delete, inner)
     })
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prepare_present_value<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
@@ -2836,15 +2662,7 @@ fn prepare_present_value<
     let delete = hooks.delete.clone();
     let landmark = landmark_path.clone();
     let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(
-            transient,
-            selected,
-            scale,
-            landmark,
-            select,
-            delete,
-            inner,
-        )
+        descend_landmark_with(transient, selected, scale, landmark, select, delete, inner)
     });
     let grounded = match ground_decoration(cx, path, value) {
         Some((scale, color)) => {
@@ -2882,26 +2700,28 @@ fn present_layout<C: 'static>(
     {
         return collapsed;
     }
-    let project_layout = || projection
-        .and_then(|projection| {
-            // Editor state arrives positionally: the payload only at
-            // the selected path, the annotations only at this one.
-            let selection = cx
-                .selection
-                .filter(|current| current.path() == path)
-                .map(Selection::payload);
-            let state = cx.annotations.at(path);
-            let target = |steps| projection_target(path, hooks, steps);
-            projection.apply(
-                &ProjectEnv { cx },
-                value,
-                !cx.source.transient() && writable_at(&cx.sources, path),
-                selection,
-                state,
-                progred_display::ProjectionTargets::new(&target),
-            )
-        })
-        .unwrap_or_else(|| structure::of(cx, path, value, hooks));
+    let project_layout = || {
+        projection
+            .and_then(|projection| {
+                // Editor state arrives positionally: the payload only at
+                // the selected path, the annotations only at this one.
+                let selection = cx
+                    .selection
+                    .filter(|current| current.path() == path)
+                    .map(Selection::payload);
+                let state = cx.annotations.at(path);
+                let target = |steps| projection_target(path, hooks, steps);
+                projection.apply(
+                    &ProjectEnv { cx },
+                    value,
+                    !cx.source.transient() && writable_at(&cx.sources, path),
+                    selection,
+                    state,
+                    progred_display::ProjectionTargets::new(&target),
+                )
+            })
+            .unwrap_or_else(|| structure::of(cx, path, value, hooks))
+    };
     project_layout()
 }
 
@@ -2935,10 +2755,7 @@ fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
 /// ordinary descend so it highlights, clicks, and navigates like the
 /// value it may become. Engaged, its placement emits the completion
 /// floating completion card.
-fn pending_view<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn pending_view<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
@@ -2946,9 +2763,7 @@ fn pending_view<
 ) -> Measured<Placed<C, Cv>> {
     let engaged = cx
         .selection
-        .filter(|current| {
-            current.stage() == Stage::Pending && current.path() == path.as_slice()
-        })
+        .filter(|current| current.stage() == Stage::Pending && current.path() == path.as_slice())
         .and_then(Selection::edit);
     let content = placeholder(cx, tcx, engaged, false, hooks);
     // Engaged, the generic ring IS the slot's chrome: it draws
@@ -2965,10 +2780,7 @@ fn pending_view<
 /// widget in two states and the transition between them is pure
 /// chrome. The caller owns identity (descend, highlight, clicks);
 /// `labels` picks the slot's role.
-fn placeholder<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn placeholder<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     engaged: Option<&LineEditState>,
@@ -2984,10 +2796,7 @@ fn placeholder<
 /// A focused completion query: the editor plus an ordinary floating
 /// card. Serves both pending stages — a value and a new field's label
 /// (`labels` narrows the offers there).
-fn query_content<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn query_content<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
@@ -3239,10 +3048,7 @@ fn atom_content<C: 'static, Cv: Canvas + 'static>(
 /// [`descend`] to mark, and the ring spans the QUERY frame alone, the
 /// way a value pending's does. Clicks inside belong to the query's
 /// own caret target; clicks beside fall through like any pending's.
-fn label_query<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
+fn label_query<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,

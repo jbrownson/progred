@@ -144,10 +144,8 @@ fn functions() -> ForeignFunctions {
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
                 loop {
-                    let result = context.call_prepared_runtime(
-                        &step,
-                        [(vocabulary::STATE, state.clone())],
-                    )?;
+                    let result = context
+                        .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
                     if result.is_absent() {
                         break Ok(RuntimeValue::record([
                             (vocabulary::LIST, RuntimeValue::list(items)),
@@ -198,8 +196,7 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::ITERATE,
             ForeignFunction::runtime(|context, call, environment| {
-                let Some(mut state) =
-                    evaluated(context, call, environment, vocabulary::INITIAL)?
+                let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
                     return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
                 };
@@ -208,10 +205,8 @@ fn functions() -> ForeignFunctions {
                 };
                 let step = context.prepare_callable(step, environment)?;
                 loop {
-                    let next = context.call_prepared_runtime(
-                        &step,
-                        [(vocabulary::STATE, state.clone())],
-                    )?;
+                    let next = context
+                        .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
                     if next.is_absent() {
                         break Ok(state);
                     }

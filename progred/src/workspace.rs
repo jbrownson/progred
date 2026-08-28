@@ -6,10 +6,10 @@
 
 use crate::annotations::Annotations;
 use gid::{CellId, Cells, Path, Step, Value};
+use kurbo::{Rect, Size, Vec2};
 use progred_libraries::{name, presentation};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use kurbo::{Rect, Size, Vec2};
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 
@@ -56,7 +56,10 @@ pub enum Target {
     /// `anchor` is the current document path through which ordinary
     /// editing reaches this cell. The Rc root distinguishes duplicate
     /// views of that occurrence.
-    Cell { cell: CellId, anchor: Path },
+    Cell {
+        cell: CellId,
+        anchor: Path,
+    },
     /// A pane declared by an occurrence beneath the document root.
     /// Its source path is both its editable root and its durable
     /// identity within this document; the surrounding [`Root`] keeps
@@ -221,9 +224,7 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
             .into_iter()
             .flat_map(move |declarations| {
                 declarations.iter().filter_map(move |(position, value)| {
-                    value
-                        .as_record()?
-                        .get(&presentation::vocabulary::VALUE)?;
+                    value.as_record()?.get(&presentation::vocabulary::VALUE)?;
                     let parent = vec![
                         Step::Key(vocabulary::PANES),
                         Step::Key(field),
@@ -398,9 +399,11 @@ impl Workspace {
         normalize(&mut right);
         self.left.panes = left;
         self.right.panes = right;
-        if self.dragging.as_ref().is_some_and(|drag| {
-            !self.divider_is_live(&drag.divider)
-        }) {
+        if self
+            .dragging
+            .as_ref()
+            .is_some_and(|drag| !self.divider_is_live(&drag.divider))
+        {
             self.dragging = None;
         }
     }
@@ -555,12 +558,12 @@ impl Workspace {
         };
         match divider {
             Divider::Columns(Side::Left) => {
-                self.left_width = (drag.before + ratio(point.x - drag.start.x, size.width))
-                    .clamp(0.0, 1.0);
+                self.left_width =
+                    (drag.before + ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
             }
             Divider::Columns(Side::Right) => {
-                self.right_width = (drag.before - ratio(point.x - drag.start.x, size.width))
-                    .clamp(0.0, 1.0);
+                self.right_width =
+                    (drag.before - ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
             }
             Divider::Panes {
                 side,
@@ -731,11 +734,7 @@ impl Divider {
 }
 
 fn ratio(value: f64, total: f64) -> f64 {
-    if total > 0.0 {
-        value / total
-    } else {
-        0.0
-    }
+    if total > 0.0 { value / total } else { 0.0 }
 }
 
 fn normalize(panes: &mut [Pane]) {
@@ -909,10 +908,7 @@ mod tests {
                             presentation::vocabulary::VALUE,
                             Value::from(CellId::from_u128(1)),
                         ),
-                        (
-                            vocabulary::PROJECTION,
-                            Value::from(CellId::from_u128(9)),
-                        ),
+                        (vocabulary::PROJECTION, Value::from(CellId::from_u128(9))),
                     ])]),
                 ),
                 (
@@ -1011,11 +1007,7 @@ mod tests {
         let columns = Divider::Columns(Side::Left);
         workspace.left_width = 0.05;
         workspace.start_resize(columns.clone(), Vec2::new(180.0, 0.0));
-        assert!(workspace.resize(
-            &columns,
-            Vec2::new(180.0, 0.0),
-            Size::new(1_000.0, 600.0),
-        ));
+        assert!(workspace.resize(&columns, Vec2::new(180.0, 0.0), Size::new(1_000.0, 600.0),));
         assert_eq!(workspace.left_width, 0.05);
         let geometry = workspace.geometry(Size::new(1_000.0, 600.0), 1.0);
         let left_width = geometry
@@ -1035,11 +1027,7 @@ mod tests {
             after: lower,
         };
         workspace.start_resize(panes.clone(), Vec2::new(0.0, 300.0));
-        assert!(workspace.resize(
-            &panes,
-            Vec2::new(0.0, 450.0),
-            Size::new(1_000.0, 600.0),
-        ));
+        assert!(workspace.resize(&panes, Vec2::new(0.0, 450.0), Size::new(1_000.0, 600.0),));
         assert_eq!(workspace.left.panes[0].height, 0.75);
         assert_eq!(workspace.left.panes[1].height, 0.25);
     }

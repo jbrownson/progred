@@ -608,9 +608,7 @@ impl LineEdit {
     pub fn geometry(&self) -> LineEditGeometry {
         let selection_y = self.metrics.ascent - self.layout_baseline;
         let cursor_y = self.metrics.ascent - self.editor_baseline;
-        let translate = |rect: Rect, y: f64| {
-            Rect::new(rect.x0, rect.y0 + y, rect.x1, rect.y1 + y)
-        };
+        let translate = |rect: Rect, y: f64| Rect::new(rect.x0, rect.y0 + y, rect.x1, rect.y1 + y);
         LineEditGeometry {
             text: self.text.clone(),
             metrics: self.metrics,
@@ -682,13 +680,7 @@ impl LineEdit {
                          layouts,
                          clipboard,
                      }| {
-                        state.handle_key(
-                            &key_presentation,
-                            fonts,
-                            layouts,
-                            clipboard,
-                            event,
-                        )
+                        state.handle_key(&key_presentation, fonts, layouts, clipboard, event)
                     },
                 )
             });
@@ -724,8 +716,9 @@ impl LineEdit {
             p.handler().on_pointer_cancel(move |ctx, _| {
                 with_cancel(ctx).is_some_and(|edit| edit.state.pointer_up())
             });
-            p.handler()
-                .on_ime(move |ctx, event| with(ctx).is_some_and(|edit| edit.state.handle_ime(event)));
+            p.handler().on_ime(move |ctx, event| {
+                with(ctx).is_some_and(|edit| edit.state.handle_ime(event))
+            });
         }
     }
 }
@@ -791,8 +784,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
 
     let selection: Vec<Rect> = if focused {
         let mut rects = Vec::new();
-        editor
-            .selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
+        editor.selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
         rects
     } else {
         Vec::new()
@@ -846,12 +838,7 @@ mod tests {
     }
 
     impl Canvas for DrawFrame {
-        fn fill(
-            &mut self,
-            shape: impl Into<Shape>,
-            brush: impl Into<Brush>,
-            transform: Affine,
-        ) {
+        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
             self.list.fill(shape, brush, transform);
         }
 
@@ -1408,13 +1395,8 @@ mod tests {
             scale: 1.0,
             cache: &mut cache,
         };
-        let state = LineEditState::from_parts(
-            "ab",
-            1,
-            1,
-            Some(("XY".to_string(), Some((2, 2)))),
-            None,
-        );
+        let state =
+            LineEditState::from_parts("ab", 1, 1, Some(("XY".to_string(), Some((2, 2)))), None);
         let style = EditStyle {
             selection: Brush::default(),
             cursor: Brush::default(),
@@ -1554,10 +1536,7 @@ mod tests {
         let presentation = presentation();
         let mut state = state("hello world");
         let selected = |state: &LineEditState| {
-            let (start, end) = (
-                state.anchor.min(state.focus),
-                state.anchor.max(state.focus),
-            );
+            let (start, end) = (state.anchor.min(state.focus), state.anchor.max(state.focus));
             state.text()[start..end].to_string()
         };
 

@@ -1,4 +1,6 @@
-use puri::{Affine, Brush, Circle, Color, ColorStop, Command, Drawing, Gradient, Line, Rect, Shape, Stroke};
+use puri::{
+    Affine, Brush, Circle, Color, ColorStop, Command, Drawing, Gradient, Line, Rect, Shape, Stroke,
+};
 
 pub const WIDTH: f64 = 192.0;
 pub const PLANE_HEIGHT: f64 = 128.0;
@@ -102,17 +104,14 @@ fn drawing(height: f64, commands: Vec<Command<Brush>>) -> Drawing<Brush> {
 
 fn marker(center: (f64, f64), radius: f64) -> Vec<Command<Brush>> {
     let shape = Shape::Circle(Circle::new(center, radius));
-    [
-        (2.5, Color::BLACK),
-        (1.25, Color::WHITE),
-    ]
-    .map(|(width, color)| Command::Stroke {
-        shape: shape.clone(),
-        style: Stroke::new(width),
-        paint: Brush::from(color),
-        transform: Affine::IDENTITY,
-    })
-    .into()
+    [(2.5, Color::BLACK), (1.25, Color::WHITE)]
+        .map(|(width, color)| Command::Stroke {
+            shape: shape.clone(),
+            style: Stroke::new(width),
+            paint: Brush::from(color),
+            transform: Affine::IDENTITY,
+        })
+        .into()
 }
 
 pub fn plane(color: Hsva) -> Drawing<Brush> {
@@ -121,20 +120,38 @@ pub fn plane(color: Hsva) -> Drawing<Brush> {
         Command::Fill {
             shape: rect.clone(),
             paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
-                .with_stops([
-                    ColorStop { offset: 0.0, color: Color::WHITE.into() },
-                    ColorStop { offset: 1.0, color: color.opaque_hue().into() },
-                ].as_slice())
+                .with_stops(
+                    [
+                        ColorStop {
+                            offset: 0.0,
+                            color: Color::WHITE.into(),
+                        },
+                        ColorStop {
+                            offset: 1.0,
+                            color: color.opaque_hue().into(),
+                        },
+                    ]
+                    .as_slice(),
+                )
                 .into(),
             transform: Affine::IDENTITY,
         },
         Command::Fill {
             shape: rect,
             paint: Gradient::new_linear((0.0, 0.0), (0.0, PLANE_HEIGHT))
-                .with_stops([
-                    ColorStop { offset: 0.0, color: Color::TRANSPARENT.into() },
-                    ColorStop { offset: 1.0, color: Color::BLACK.into() },
-                ].as_slice())
+                .with_stops(
+                    [
+                        ColorStop {
+                            offset: 0.0,
+                            color: Color::TRANSPARENT.into(),
+                        },
+                        ColorStop {
+                            offset: 1.0,
+                            color: Color::BLACK.into(),
+                        },
+                    ]
+                    .as_slice(),
+                )
                 .into(),
             transform: Affine::IDENTITY,
         },
@@ -151,23 +168,22 @@ pub fn plane(color: Hsva) -> Drawing<Brush> {
 
 pub fn hue(color: Hsva) -> Drawing<Brush> {
     let colors: [u32; 7] = [
-        0xff0000ff, 0xffff00ff, 0x00ff00ff, 0x00ffffff, 0x0000ffff, 0xff00ffff,
-        0xff0000ff,
+        0xff0000ff, 0xffff00ff, 0x00ff00ff, 0x00ffffff, 0x0000ffff, 0xff00ffff, 0xff0000ff,
     ];
     let stops = colors
-    .into_iter()
-    .enumerate()
-    .map(|(index, rgba)| ColorStop {
-        offset: index as f32 / 6.0,
-        color: Color::from_rgba8(
-            (rgba >> 24) as u8,
-            (rgba >> 16) as u8,
-            (rgba >> 8) as u8,
-            rgba as u8,
-        )
-        .into(),
-    })
-    .collect::<Vec<_>>();
+        .into_iter()
+        .enumerate()
+        .map(|(index, rgba)| ColorStop {
+            offset: index as f32 / 6.0,
+            color: Color::from_rgba8(
+                (rgba >> 24) as u8,
+                (rgba >> 16) as u8,
+                (rgba >> 8) as u8,
+                rgba as u8,
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
     let mut commands = vec![Command::Fill {
         shape: Shape::Rect(Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT)),
         paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
@@ -176,7 +192,10 @@ pub fn hue(color: Hsva) -> Drawing<Brush> {
         transform: Affine::IDENTITY,
     }];
     let x = 1.5 + color.hue * (WIDTH - 3.0);
-    for (width, brush) in [(3.0, Brush::from(Color::BLACK)), (1.5, Brush::from(Color::WHITE))] {
+    for (width, brush) in [
+        (3.0, Brush::from(Color::BLACK)),
+        (1.5, Brush::from(Color::WHITE)),
+    ] {
         commands.push(Command::Stroke {
             shape: Shape::Line(Line::new((x, 0.0), (x, RAIL_HEIGHT))),
             style: Stroke::new(width),
@@ -190,9 +209,7 @@ pub fn hue(color: Hsva) -> Drawing<Brush> {
 pub fn alpha(color: Hsva) -> Drawing<Brush> {
     let tile = RAIL_HEIGHT / 2.0;
     let mut commands = (0..2)
-        .flat_map(|row| {
-            (0..(WIDTH / tile).ceil() as usize).map(move |column| (row, column))
-        })
+        .flat_map(|row| (0..(WIDTH / tile).ceil() as usize).map(move |column| (row, column)))
         .filter(|(row, column)| (row + column) % 2 == 0)
         .map(|(row, column)| Command::Fill {
             shape: Shape::Rect(Rect::new(
@@ -208,15 +225,27 @@ pub fn alpha(color: Hsva) -> Drawing<Brush> {
     commands.push(Command::Fill {
         shape: Shape::Rect(Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT)),
         paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
-            .with_stops([
-                ColorStop { offset: 0.0, color: Color::TRANSPARENT.into() },
-                ColorStop { offset: 1.0, color: color.opaque_color().into() },
-            ].as_slice())
+            .with_stops(
+                [
+                    ColorStop {
+                        offset: 0.0,
+                        color: Color::TRANSPARENT.into(),
+                    },
+                    ColorStop {
+                        offset: 1.0,
+                        color: color.opaque_color().into(),
+                    },
+                ]
+                .as_slice(),
+            )
             .into(),
         transform: Affine::IDENTITY,
     });
     let x = 1.5 + color.alpha * (WIDTH - 3.0);
-    for (width, brush) in [(3.0, Brush::from(Color::BLACK)), (1.5, Brush::from(Color::WHITE))] {
+    for (width, brush) in [
+        (3.0, Brush::from(Color::BLACK)),
+        (1.5, Brush::from(Color::WHITE)),
+    ] {
         commands.push(Command::Stroke {
             shape: Shape::Line(Line::new((x, 0.0), (x, RAIL_HEIGHT))),
             style: Stroke::new(width),

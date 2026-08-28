@@ -55,7 +55,12 @@ impl Canvas for VelloCanvas<'_> {
             );
     }
 
-    fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self)) {
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
         self.push_clip(&shape.into(), transform);
         content(self);
         self.pop_clip();

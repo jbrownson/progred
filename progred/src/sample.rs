@@ -76,10 +76,7 @@ pub fn at_display_partial() -> Value {
                             grap::vocabulary::EXPRESSION,
                             grap::call(
                                 Value::from(selection_capability::vocabulary::SET),
-                                [(
-                                    site::vocabulary::VALUE,
-                                    crate::selection::payload::edge(),
-                                )],
+                                [(site::vocabulary::VALUE, crate::selection::payload::edge())],
                             ),
                         ),
                     ])]),
@@ -132,7 +129,9 @@ pub fn at_display_partial() -> Value {
                                                                     0.5, 0.5, 9.0, 9.0, 2.0,
                                                                 ),
                                                                 1.0,
-                                                                Value::from(layout::vocabulary::DIM_FACE),
+                                                                Value::from(
+                                                                    layout::vocabulary::DIM_FACE,
+                                                                ),
                                                             )],
                                                         ),
                                                         spliced_text(sample_vocabulary::ROW),
@@ -301,10 +300,7 @@ pub fn sample_document() -> Document {
                 (sample_vocabulary::MATERIAL, Value::from(material)),
                 (sample_vocabulary::STYLE, Value::from(style)),
                 (sample_vocabulary::PITCH, Value::from(pitch)),
-                (
-                    sample_vocabulary::DOUBLE_PITCH,
-                    evaluation(double_pitch()),
-                ),
+                (sample_vocabulary::DOUBLE_PITCH, evaluation(double_pitch())),
                 (
                     sample_vocabulary::PROFILE,
                     evaluation(grap::call(

@@ -147,9 +147,7 @@ pub struct ProjectionTargets<'a, World, Hover> {
 }
 
 impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
-    pub fn new(
-        at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
-    ) -> Self {
+    pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>) -> Self {
         Self { at }
     }
 
@@ -334,10 +332,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 target: target.clone(),
                 value: value.clone(),
             },
-            Self::OnEvent {
-                child,
-                handler,
-            } => Self::OnEvent {
+            Self::OnEvent { child, handler } => Self::OnEvent {
                 child: child.clone(),
                 handler: handler.clone(),
             },
@@ -396,11 +391,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 bottom: *bottom,
                 child: child.clone(),
             },
-            Self::Surround {
-                left,
-                child,
-                right,
-            } => Self::Surround {
+            Self::Surround { left, child, right } => Self::Surround {
                 left: left.clone(),
                 child: child.clone(),
                 right: right.clone(),
@@ -490,9 +481,7 @@ pub struct ProjectionInput<'a, World, Hover> {
 /// can therefore try declining projections without cloning interaction
 /// targets that only the successful projection retains.
 pub type Partial<World, Hover> =
-    for<'a, 'input> fn(
-        &'input ProjectionInput<'a, World, Hover>,
-    ) -> Option<Layout<World, Hover>>;
+    for<'a, 'input> fn(&'input ProjectionInput<'a, World, Hover>) -> Option<Layout<World, Hover>>;
 
 pub fn text<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Name)
@@ -588,10 +577,7 @@ pub fn pickable<World, Hover>(
     }
 }
 
-pub fn on_event<World, Hover>(
-    child: Layout<World, Hover>,
-    handler: Value,
-) -> Layout<World, Hover> {
+pub fn on_event<World, Hover>(child: Layout<World, Hover>, handler: Value) -> Layout<World, Hover> {
     Layout::OnEvent {
         child: Box::new(child),
         handler,
@@ -758,14 +744,9 @@ pub fn record<'a, World, Hover: Clone>(
             [field.label.clone(), dim(": "), field.value.clone()],
         ));
     }
-    let rows = fields.into_iter().map(|field| {
-        hug(
-            row(0.0, [field.label, dim(":")]),
-            field.value,
-            6.0,
-            20.0,
-        )
-    });
+    let rows = fields
+        .into_iter()
+        .map(|field| hug(row(0.0, [field.label, dim(":")]), field.value, 6.0, 20.0));
     bracket(
         Delim::Brace,
         alternatives([row(0.0, flat), col(0, 2.0, rows)]),
@@ -970,14 +951,20 @@ mod tests {
         let Layout::Row { children, .. } = &forms[0] else {
             panic!("the first form is flat");
         };
-        let Layout::Row { children: first, .. } = &children[0] else {
+        let Layout::Row {
+            children: first, ..
+        } = &children[0]
+        else {
             panic!("a flat field keeps its label and value together");
         };
         assert!(matches!(
             unshared(&first[2]),
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
-        let Layout::Row { children: second, .. } = &children[2] else {
+        let Layout::Row {
+            children: second, ..
+        } = &children[2]
+        else {
             panic!("a flat field keeps its label and value together");
         };
         assert!(matches!(
@@ -990,14 +977,20 @@ mod tests {
         let Layout::Alternatives(first) = &children[0] else {
             panic!("a column field may break after its label");
         };
-        let Layout::Row { children: inline, .. } = &first[0] else {
+        let Layout::Row {
+            children: inline, ..
+        } = &first[0]
+        else {
             panic!("a field first stays inline");
         };
         assert!(matches!(
             unshared(&inline[1]),
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
-        let Layout::Col { children: broken, .. } = &first[1] else {
+        let Layout::Col {
+            children: broken, ..
+        } = &first[1]
+        else {
             panic!("a field may put its value below its label");
         };
         let Layout::Pad { child, .. } = &broken[1] else {

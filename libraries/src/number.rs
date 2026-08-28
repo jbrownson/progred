@@ -109,8 +109,7 @@ fn initial_precision(magnitude: f64, minimum: f64) -> f64 {
 
 fn vertical_decades(distance_y: f64) -> f64 {
     let distance = distance_y.abs();
-    let decades = (1.0 + (DECADE_STRETCH - 1.0) * distance / PIXELS_PER_DECADE)
-        .log(DECADE_STRETCH);
+    let decades = (1.0 + (DECADE_STRETCH - 1.0) * distance / PIXELS_PER_DECADE).log(DECADE_STRETCH);
     -distance_y.signum() * decades
 }
 

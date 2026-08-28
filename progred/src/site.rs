@@ -1,13 +1,13 @@
 //! Apply a Grap callable at a document path with GET/SET closed over
 //! that place. The path stays in Rust.
 
+use crate::App;
 #[cfg(test)]
 use crate::annotations::Annotations;
 use crate::selection::Selection;
-use crate::workspace::Root;
 #[cfg(test)]
 use crate::sources::Sources;
-use crate::App;
+use crate::workspace::Root;
 use gid::{Path, Value};
 use progred_libraries::{absent, layout, selection as selection_capability, site};
 use std::cell::RefCell;
@@ -57,12 +57,10 @@ pub fn apply_event(app: &mut App, root: Root, path: Path, function: Value, event
         selection_changed: false,
     });
     let evaluation = {
-        let call = |
-            function,
-            context: &mut grap::Context<'_>,
-            call: grap::Expression,
-            environment: &grap::Environment,
-        | {
+        let call = |function,
+                    context: &mut grap::Context<'_>,
+                    call: grap::Expression,
+                    environment: &grap::Environment| {
             event_foreign(function, context, call, environment, &staged)
         };
         let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
@@ -91,23 +89,14 @@ pub fn apply_event(app: &mut App, root: Root, path: Path, function: Value, event
         if staged.selection_changed {
             match staged.selection {
                 Some(payload) => {
-                    let mut next = Selection::from_payload(
-                        &app.sources(),
-                        path,
-                        payload,
-                    )
-                    .with_root(root.clone());
+                    let mut next = Selection::from_payload(&app.sources(), path, payload)
+                        .with_root(root.clone());
                     next.preserve_recorded(recorded);
                     app.model.selection = Some(next);
                 }
-                None
-                    if app
-                        .model
-                        .selection
-                        .as_ref()
-                        .is_some_and(|selection| {
-                            selection.root() == &root && selection.path() == path
-                        }) =>
+                None if app.model.selection.as_ref().is_some_and(|selection| {
+                    selection.root() == &root && selection.path() == path
+                }) =>
                 {
                     app.model.selection = None;
                 }
@@ -139,9 +128,7 @@ fn event_foreign(
             .clone()
             .unwrap_or_else(absent::value));
     }
-    if function == site::vocabulary::SET
-        || function == selection_capability::vocabulary::SET
-    {
+    if function == site::vocabulary::SET || function == selection_capability::vocabulary::SET {
         let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
             return Ok(context.missing_argument(site::vocabulary::VALUE));
         };
@@ -239,13 +226,7 @@ mod tests {
                 )],
             ),
         );
-        let evaluation = apply_at(
-            &here,
-            &mut annotations,
-            &function,
-            &sources,
-            &stack.foreign,
-        );
+        let evaluation = apply_at(&here, &mut annotations, &function, &sources, &stack.foreign);
         assert!(evaluation.diagnostics.is_empty());
         assert_eq!(
             annotations.field(&here, annotations::FOLD),

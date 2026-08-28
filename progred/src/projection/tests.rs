@@ -1,15 +1,15 @@
 use super::*;
 use crate::annotations::Annotations;
-use crate::selection::payload as selection_payload;
 use crate::hover::hover_secondary;
+use crate::selection::payload as selection_payload;
 use gid::Position;
 use progred_libraries::{absent, f64, name, text};
+use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerType, PointerUpdate,
 };
-use ui_events::ScrollDelta;
 
 #[test]
 fn projection_target_appends_relative_steps() {
@@ -28,11 +28,7 @@ fn projection_target_appends_relative_steps() {
         point: Rc::new(|_, _, _, _, _| false),
         commit_offer: Rc::new(|_, _| {}),
     };
-    let target = projection_target(
-        &[Step::Key(parent)],
-        &hooks,
-        vec![Step::Key(field)],
-    );
+    let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
     assert_eq!(
         target.hover,
         Hover::Value(Rc::from(vec![Step::Key(parent), Step::Key(field)]))
@@ -76,9 +72,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
         }
     }
 
-    let ambient = Projection::new([
-        ambient_probe as progred_display::Partial<(), Hover>
-    ]);
+    let ambient = Projection::new([ambient_probe as progred_display::Partial<(), Hover>]);
     let value = Value::record([]);
     let target = |_| progred_display::ProjectionTarget {
         select: Rc::new(|_: &mut ()| false),
@@ -103,23 +97,25 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
     };
 
     assert_eq!(
-        text(apply(&contextual_projection(
-            Some(&ambient),
-            Some(vec![
-                contextual_probe as progred_display::Partial<(), Hover>
-            ]),
-        )
-        .unwrap())),
+        text(apply(
+            &contextual_projection(
+                Some(&ambient),
+                Some(vec![
+                    contextual_probe as progred_display::Partial<(), Hover>
+                ]),
+            )
+            .unwrap()
+        )),
         "contextual"
     );
     assert_eq!(
-        text(apply(&contextual_projection(
-            Some(&ambient),
-            Some(vec![
-                declining_probe as progred_display::Partial<(), Hover>
-            ]),
-        )
-        .unwrap())),
+        text(apply(
+            &contextual_projection(
+                Some(&ambient),
+                Some(vec![declining_probe as progred_display::Partial<(), Hover>]),
+            )
+            .unwrap()
+        )),
         "ambient"
     );
 }
@@ -468,11 +464,7 @@ fn a_line_control_installs_its_navigation_selection() {
         crate::test_values::label("name"),
         crate::test_values::text("old"),
     )]);
-    let selected = make_projected_selection(
-        &doc,
-        &lib,
-        vec![Step::Follow, key("name")],
-    );
+    let selected = make_projected_selection(&doc, &lib, vec![Step::Follow, key("name")]);
     assert_eq!(selected.edit().map(LineEditState::text), Some("old"));
 }
 
@@ -486,14 +478,24 @@ fn edits_write_through_to_the_field() {
     let path = vec![Step::Follow, key("name")];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection);
+    write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection,
+    );
     assert_eq!(
         src(&doc, &lib).resolve(&path),
         Some(&crate::test_values::text("new"))
     );
     // A selection without an editor writes nothing.
     let mut plain = make_selection(&doc, &lib, vec![Step::Follow, key("missing")]);
-    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut plain));
+    assert!(!write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut plain
+    ));
     assert_eq!(
         src(&doc, &lib).resolve(&path),
         Some(&crate::test_values::text("new"))
@@ -514,14 +516,24 @@ fn compact_f64_values_edit_as_decimal_text() {
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("7.25");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
     );
 
     selection.edit_mut().unwrap().set_text("not a number");
-    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(!write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
@@ -551,7 +563,12 @@ fn editing_an_f64_keeps_unrelated_fields() {
     let path = vec![Step::Follow];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     let value = src(&doc, &lib).resolve(&path).unwrap();
     assert_eq!(f64::read(value), Some(8.0));
     assert_eq!(
@@ -578,7 +595,12 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
     // owning cell; the sibling keeps its position and value.
     let mut selection = make_editing_selection(&doc, &lib, element.clone());
     selection.edit_mut().unwrap().set_text("9");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     assert_eq!(
         src(&doc, &lib).resolve(&element),
         Some(&crate::test_values::text("9"))
@@ -774,20 +796,45 @@ fn write_through_opens_one_step_per_editor_life() {
     // First write opens the step; the rest of the run is silent,
     // as are no-op rewrites.
     selection.edit_mut().unwrap().set_text("ab");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     selection.edit_mut().unwrap().set_text("abc");
-    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
-    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(!write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
+    assert!(!write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
 
     // Breaking the run (a save) makes the next write a new step.
     break_edit_run(Some(&mut selection));
     selection.edit_mut().unwrap().set_text("abcd");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
 
     // A re-minted editor is a new run by construction.
     let mut fresh = make_editing_selection(&doc, &lib, vec![Step::Follow, key("name")]);
     fresh.edit_mut().unwrap().set_text("x");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut fresh));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut fresh
+    ));
 }
 
 #[test]
@@ -988,7 +1035,10 @@ fn completion_offers_follow_the_stage() {
     // constructors, and the mint.
     let value_stage = displays(false, "");
     assert!(value_stage.iter().any(|d| d == "roof"));
-    assert!(value_stage.iter().any(|d| d == "new list"), "{value_stage:?}");
+    assert!(
+        value_stage.iter().any(|d| d == "new list"),
+        "{value_stage:?}"
+    );
     assert!(value_stage.iter().any(|d| d == "new record"));
     assert!(value_stage.iter().any(|d| d == "new cell"));
 
@@ -1092,7 +1142,11 @@ fn any_valued_cell_and_any_container_collapse() {
     // Its record collapses too — layout never enters into it, so
     // inline literals toggle exactly like block forms.
     assert!(toggle_fold(&sources, &mut collapse, &[Step::Follow]));
-    assert!(crate::annotations::collapsed(&collapse, &[Step::Follow], false));
+    assert!(crate::annotations::collapsed(
+        &collapse,
+        &[Step::Follow],
+        false
+    ));
     // A valueless location declines.
     let empty = Document {
         root: None,
@@ -1268,14 +1322,29 @@ fn a_simple_name_is_an_ordinary_editable_field() {
 
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
-    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(!write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection
+    ));
 
     // Empty is an ordinary text value, not a hidden spelling of
     // field absence.
     selection.edit_mut().unwrap().set_text("");
-    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection);
+    write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection,
+    );
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some(""));
     assert_eq!(
         doc.cells
@@ -1425,7 +1494,12 @@ fn the_pending_query_writes_through_to_the_payload() {
     assert_eq!(pending.choice(), 2);
     // ...and the per-event write-through syncs it, the same point the
     // document takes its writes.
-    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut pending);
+    write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut pending,
+    );
     assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
     assert_eq!(pending.choice(), 0);
 }
@@ -1536,9 +1610,8 @@ fn a_data_event_realizes_the_apply_hook() {
         cells: Cells::new(),
     };
     let lib = Cells::new();
-    let projection: Projection<Vec<(Path, Value, Value)>> = Projection::new([
-        probe as progred_display::Partial<Vec<(Path, Value, Value)>, Hover>,
-    ]);
+    let projection: Projection<Vec<(Path, Value, Value)>> =
+        Projection::new([probe as progred_display::Partial<Vec<(Path, Value, Value)>, Hover>]);
     let foreign = grap::ForeignFunctions::default();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1613,7 +1686,10 @@ fn a_data_event_realizes_the_apply_hook() {
         panic!("one event");
     };
     assert!(path.is_empty());
-    assert_eq!(function, &Value::from(progred_libraries::layout::vocabulary::HANDLER));
+    assert_eq!(
+        function,
+        &Value::from(progred_libraries::layout::vocabulary::HANDLER)
+    );
     assert_eq!(
         event
             .as_record()

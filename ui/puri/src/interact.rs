@@ -34,10 +34,7 @@ pub fn on_primary_pointer_down_where<C: 'static, P: HasHandler<C>>(
 ) {
     p.handler().on_pointer_down(move |ctx, event| {
         is_primary_contact(event)
-            && placement.contains(Point::new(
-                event.state.position.x,
-                event.state.position.y,
-            ))
+            && placement.contains(Point::new(event.state.position.x, event.state.position.y))
             && accepts(placement, event)
             && action(ctx, placement, event)
     });
@@ -80,10 +77,15 @@ pub fn clickable<C: 'static, P: HasHandler<C>>(
     placement: Placement,
     on_click: impl Fn(&mut C) + 'static,
 ) {
-    on_primary_click(p, placement, |_| true, move |ctx| {
-        on_click(ctx);
-        true
-    })
+    on_primary_click(
+        p,
+        placement,
+        |_| true,
+        move |ctx| {
+            on_click(ctx);
+            true
+        },
+    )
 }
 
 /// The double-click specialization. Register it after [`clickable`] so
@@ -93,10 +95,15 @@ pub fn double_clickable<C: 'static, P: HasHandler<C>>(
     placement: Placement,
     on_double_click: impl Fn(&mut C) + 'static,
 ) {
-    on_primary_click(p, placement, |count| count == 2, move |ctx| {
-        on_double_click(ctx);
-        true
-    })
+    on_primary_click(
+        p,
+        placement,
+        |count| count == 2,
+        move |ctx| {
+            on_double_click(ctx);
+            true
+        },
+    )
 }
 
 #[cfg(test)]
@@ -156,11 +163,7 @@ mod tests {
             Some(clip_rect) => Placement::new(rect, clip_rect),
             None => Placement::root(rect),
         };
-        clickable(
-            &mut frame,
-            placement,
-            |sel: &mut u32| *sel = 7,
-        );
+        clickable(&mut frame, placement, |sel: &mut u32| *sel = 7);
         frame.handler
     }
 
@@ -222,9 +225,11 @@ mod tests {
         double_clickable(&mut frame, placement, |value| *value += 10);
 
         let mut value = 0;
-        assert!(frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at_count(5.0, 5.0, 2)));
+        assert!(
+            frame
+                .handler
+                .dispatch_pointer_down(&mut value, &down_at_count(5.0, 5.0, 2))
+        );
         assert_eq!(value, 10);
     }
 
@@ -244,12 +249,16 @@ mod tests {
         );
 
         let mut value = 0;
-        assert!(!frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at(4.0, 5.0)));
-        assert!(frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at(6.0, 5.0)));
+        assert!(
+            !frame
+                .handler
+                .dispatch_pointer_down(&mut value, &down_at(4.0, 5.0))
+        );
+        assert!(
+            frame
+                .handler
+                .dispatch_pointer_down(&mut value, &down_at(6.0, 5.0))
+        );
         assert_eq!(value, 7);
     }
 }

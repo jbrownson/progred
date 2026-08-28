@@ -142,10 +142,7 @@ mod tests {
 
     #[test]
     fn scrubbing_is_exact_at_the_unsigned_bounds() {
-        assert_eq!(
-            <u64 as number::Scrubbable>::from_offset(0, -100.0, 1.0),
-            0,
-        );
+        assert_eq!(<u64 as number::Scrubbable>::from_offset(0, -100.0, 1.0), 0,);
         assert_eq!(
             <u64 as number::Scrubbable>::from_offset(u64::MAX, 100.0, 1.0),
             u64::MAX,

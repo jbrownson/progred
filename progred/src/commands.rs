@@ -1,13 +1,13 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
+use crate::App;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::CLIPBOARD_FORMAT;
 use crate::completion;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
 use crate::sources;
-use crate::App;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::CLIPBOARD_FORMAT;
 use gid::{Path, Step, Value};
 use puri::edit::{LineEditState, TextClipboard};
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -38,9 +38,7 @@ impl App {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
-            Some(current)
-                if current.stage() == selection::Stage::Edge =>
-            {
+            Some(current) if current.stage() == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
                 let pane_root = matches!(
@@ -62,14 +60,9 @@ impl App {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
                     }
-                    let next = navigate::selection_after_delete(
-                        descends,
-                        Some(&root),
-                        &path,
-                    );
-                    self.model.selection = Some(
-                        selection::Selection::edge(&self.sources(), next).with_root(root),
-                    );
+                    let next = navigate::selection_after_delete(descends, Some(&root), &path);
+                    self.model.selection =
+                        Some(selection::Selection::edge(&self.sources(), next).with_root(root));
                     true
                 }
             }
@@ -158,9 +151,8 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(
-            selection::Selection::edge(&self.sources(), path).with_root(root),
-        );
+        self.model.selection =
+            Some(selection::Selection::edge(&self.sources(), path).with_root(root));
     }
 
     /// A resolved new label advances the pending edge to its value
@@ -179,9 +171,8 @@ impl App {
         let mut path = parent.clone();
         path.push(Step::Key(label));
         if self.sources().resolve(&path).is_some() {
-            self.model.selection = Some(
-                selection::Selection::edge(&self.sources(), path).with_root(root),
-            );
+            self.model.selection =
+                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
             return;
         }
         if let Some((cell, value)) = created {
@@ -336,9 +327,8 @@ impl App {
         if selection::set_value(&mut self.model.doc, &self.stack.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
-            self.model.selection = Some(
-                selection::Selection::edge(&self.sources(), path).with_root(root),
-            );
+            self.model.selection =
+                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
             true
         } else {
             false
@@ -372,9 +362,7 @@ impl App {
                     if !modifiers::command(&event.modifiers) =>
                 {
                     match &mut self.model.selection {
-                        Some(current)
-                            if current.stage() != selection::Stage::Edge =>
-                        {
+                        Some(current) if current.stage() != selection::Stage::Edge => {
                             let len = completion
                                 .as_ref()
                                 .map(|offers| offers.entries.len())
@@ -390,19 +378,13 @@ impl App {
                     }
                 }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(current)
-                        if current.stage() != selection::Stage::Edge =>
-                    {
+                    Some(current) if current.stage() != selection::Stage::Edge => {
                         let root = current.root().clone();
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
                         let query = current.edit().unwrap_or(&fallback);
-                        let action = Self::chosen_action(
-                            completion,
-                            query,
-                            current.choice(),
-                            labels,
-                        );
+                        let action =
+                            Self::chosen_action(completion, query, current.choice(), labels);
                         if labels {
                             self.commit_label(root, current.path().to_vec(), &action);
                         } else {
@@ -436,9 +418,7 @@ impl App {
                 Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(current)
-                            if current.stage() == selection::Stage::Pending =>
-                        {
+                        Some(current) if current.stage() == selection::Stage::Pending => {
                             let root = current.root().clone();
                             let back = navigate::selection_after_delete(
                                 descends,
@@ -448,16 +428,14 @@ impl App {
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
-                            self.model.selection =
-                                (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
-                                    selection::Selection::edge(&self.sources(), back)
-                                        .with_root(root)
-                                });
+                            self.model.selection = (!(back.is_empty()
+                                && self.model.doc.root.is_none()))
+                            .then(|| {
+                                selection::Selection::edge(&self.sources(), back).with_root(root)
+                            });
                             true
                         }
-                        Some(current)
-                            if current.stage() == selection::Stage::Label =>
-                        {
+                        Some(current) if current.stage() == selection::Stage::Label => {
                             let root = current.root().clone();
                             self.model.selection = Some(
                                 selection::Selection::edge(
@@ -505,17 +483,8 @@ impl App {
             return false;
         };
         match set {
-            None => selection::toggle_collapse(
-                &sources,
-                &mut view.annotations,
-                &path,
-            ),
-            Some(closed) => selection::set_collapse(
-                &sources,
-                &mut view.annotations,
-                &path,
-                closed,
-            ),
+            None => selection::toggle_collapse(&sources, &mut view.annotations, &path),
+            Some(closed) => selection::set_collapse(&sources, &mut view.annotations, &path, closed),
         }
     }
 }

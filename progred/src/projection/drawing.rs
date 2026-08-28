@@ -7,11 +7,11 @@ use crate::frame::Hovered;
 use crate::hover::{Hover, SourceTrace};
 use crate::placed::{Placed, leaf};
 use gid::{CellId, Cells, Step, Value};
+use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
+use peniko::Brush;
 use progred_libraries::{absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
-use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
-use peniko::Brush;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -141,11 +141,7 @@ impl Recorded {
         matches: impl Fn(&SourceTrace) -> bool,
     ) {
         for hit in self.hits.iter().filter(|hit| matches(&hit.source)) {
-            canvas.fill(
-                hit.shape.clone(),
-                brush.clone(),
-                outer * hit.transform,
-            );
+            canvas.fill(hit.shape.clone(), brush.clone(), outer * hit.transform);
         }
     }
 }
@@ -308,9 +304,8 @@ fn shape(
         ) else {
             return Ok(None);
         };
-        return Ok((width >= 0.0 && height >= 0.0).then(|| {
-            puri::Shape::Rect(Rect::new(x, y, x + width, y + height))
-        }));
+        return Ok((width >= 0.0 && height >= 0.0)
+            .then(|| puri::Shape::Rect(Rect::new(x, y, x + width, y + height))));
     }
     if let Some(content) = context.field(expression, layout_data::vocabulary::CIRCLE) {
         let (Some(x), Some(y), Some(radius)) = (
@@ -327,9 +322,7 @@ fn shape(
         ) else {
             return Ok(None);
         };
-        return Ok((radius >= 0.0).then(|| {
-            puri::Shape::Circle(Circle::new((x, y), radius))
-        }));
+        return Ok((radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius))));
     }
     if let Some(content) = context.field(expression, layout_data::vocabulary::PATH) {
         let content = context.eval(content, environment)?;
@@ -371,9 +364,7 @@ fn transform(
                 return Ok(None);
             };
             transform *= Affine::translate((x, y));
-        } else if let Some(angle) =
-            context.field(operation, layout_data::vocabulary::ROTATE)
-        {
+        } else if let Some(angle) = context.field(operation, layout_data::vocabulary::ROTATE) {
             let Some(angle) = number(context, angle, environment)? else {
                 return Ok(None);
             };
@@ -441,12 +432,8 @@ fn record_program(
                 Ok(unit.clone())
             }
             layout_data::vocabulary::FILL => {
-                let Some(paint) = evaluated_field(
-                    context,
-                    call,
-                    environment,
-                    layout_data::vocabulary::PAINT,
-                )?
+                let Some(paint) =
+                    evaluated_field(context, call, environment, layout_data::vocabulary::PAINT)?
                 else {
                     return Ok(context.missing_argument(layout_data::vocabulary::PAINT));
                 };
@@ -545,30 +532,19 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
     let library = cx.sources.library.clone();
     let foreign = cx.foreign.clone();
     let drawing = Rc::new(move || {
-        node.borrow_mut().drawing(
-            &program,
-            fuel,
-            &faces,
-            &input,
-            &document,
-            &library,
-            || record_program(
-                &program,
-                &document,
-                &library,
-                &foreign,
-                &faces,
-                &input,
-                fuel,
-            ),
-        )
+        node.borrow_mut()
+            .drawing(&program, fuel, &faces, &input, &document, &library, || {
+                record_program(
+                    &program, &document, &library, &foreign, &faces, &input, fuel,
+                )
+            })
     });
     let highlight = cx.styles.accent_wash.brush.clone();
     let selected_highlight = cx.styles.selection_wash.clone();
     let selected = cx.selected_trace.clone();
     leaf(extent, move |builder, placement| {
-        let outer = Affine::translate((placement.rect.x0, placement.rect.y0))
-            * Affine::scale(scale);
+        let outer =
+            Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
         let probe_drawing = drawing.clone();
         builder.claim_dynamic(placement, move |point| {
             probe_drawing().target_at(point, outer)
@@ -745,10 +721,7 @@ mod tests {
         };
 
         assert_eq!(
-            drawing.target_at(
-                Point::new(25.0, 35.0),
-                Affine::translate((20.0, 30.0)),
-            ),
+            drawing.target_at(Point::new(25.0, 35.0), Affine::translate((20.0, 30.0)),),
             Some(Hovered::Tree(Hover::Drawing(front))),
         );
     }

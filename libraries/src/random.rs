@@ -63,9 +63,7 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::BETWEEN,
-            ForeignFunction::new(|_, _, _| {
-                Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))
-            }),
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))),
         )
         .register(
             vocabulary::WITH_RANDOM,
@@ -81,8 +79,9 @@ fn functions() -> ForeignFunctions {
                 };
                 let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION)
                 else {
-                    return Ok(context
-                        .missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
+                    return Ok(
+                        context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION)
+                    );
                 };
                 context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
                     context.eval_runtime(expression, environment)

@@ -4,9 +4,9 @@
 
 use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
+use crate::identity::short_id;
 use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
-use crate::identity::short_id;
 use progred_display::{
     Delim, Face, Layout, activatable, alternatives, block_hover, bracket, col, descend, dim, faced,
     hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
@@ -53,9 +53,7 @@ pub(super) fn collapsed_layout<World: 'static>(
                 || cx.pending_edge_under(&followed).is_some();
             (!pending_inside).then_some(Delim::Paren)?
         }
-        Value::List(elements)
-            if !elements.is_empty() && cx.pending_child_of(path).is_none() =>
-        {
+        Value::List(elements) if !elements.is_empty() && cx.pending_child_of(path).is_none() => {
             Delim::Bracket
         }
         Value::Record(fields)
@@ -106,9 +104,7 @@ fn list_layout<World: 'static>(
     let writable = writable_at(&cx.sources, path);
     let children: Vec<View<World>> = items
         .iter()
-        .map(|(position, _)| {
-            shared(descend(Step::Element(position.clone()), None, None))
-        })
+        .map(|(position, _)| shared(descend(Step::Element(position.clone()), None, None)))
         .collect();
     let mut flat = Vec::new();
     for (index, _) in items.iter().enumerate() {
@@ -140,10 +136,7 @@ fn record_layout<World: 'static>(
     fields: &gid::Record,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    let mut items: Vec<(CellId, bool)> = fields
-        .iter()
-        .map(|(key, _)| (*key, true))
-        .collect();
+    let mut items: Vec<(CellId, bool)> = fields.iter().map(|(key, _)| (*key, true)).collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
         items.push((key, false));
     }
@@ -240,12 +233,7 @@ fn field_row<World: 'static>(
     child: View<World>,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    hug(
-        field_head(cx, path, key, present, hooks),
-        child,
-        6.0,
-        20.0,
-    )
+    hug(field_head(cx, path, key, present, hooks), child, 6.0, 20.0)
 }
 
 fn selectable<World: 'static>(

@@ -3,6 +3,7 @@
 /// editor frame, no window needed. `cargo test -p progred svg_bench`
 /// writes target/raw_projection.svg.
 use super::*;
+use kurbo::{BezPath, Shape as KurboShape};
 use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
@@ -10,7 +11,6 @@ use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::fmt::Write as _;
-use kurbo::{BezPath, Shape as KurboShape};
 
 type World = ();
 
@@ -30,9 +30,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
         _ => None,
     };
     let Placed {
-        descends,
-        renders,
-        ..
+        descends, renders, ..
     } = placed;
     let mut bench = Bench {
         list: DrawList::new(),
@@ -296,8 +294,7 @@ fn place_with_annotations_using(
     // widths are where accidental exponentials have surfaced twice.
     // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
-    let (root_path, root, root_projection) =
-        root.unwrap_or((&[], sources.root(), None));
+    let (root_path, root, root_projection) = root.unwrap_or((&[], sources.root(), None));
     let node = project_with_drawing_memo::<World, Bench>(
         ProjectDescription {
             sources,
@@ -332,8 +329,7 @@ fn place_with_annotations_using(
     settled.frame_elapsed = start.elapsed();
     eprintln!(
         "frame at {width:.0}px: {:.1?} (project {:.1?})",
-        settled.frame_elapsed,
-        project_elapsed,
+        settled.frame_elapsed, project_elapsed,
     );
     (settled, extent)
 }
@@ -391,11 +387,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     let value = crate::spine::get(root, &declaration.value_path);
     let projection = crate::spine::get(root, &declaration.projection_path);
     let drawing_memo = DrawingMemo::default();
-    let source = Some((
-        declaration.value_path.as_slice(),
-        value,
-        projection,
-    ));
+    let source = Some((declaration.value_path.as_slice(), value, projection));
     let (bench, extent) = place_with_annotations_using(
         &doc,
         None,
@@ -432,12 +424,16 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         source,
         &drawing_memo,
     );
-    assert!(matches!(
-        &linked.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Drawing(
-            crate::hover::SourceTrace::InCell { .. }
-        ))))
-    ), "unexpected drawing link: {:?}", linked.hit);
+    assert!(
+        matches!(
+            &linked.hit,
+            Some(Claim::Direct(Hovered::Tree(Hover::Drawing(
+                crate::hover::SourceTrace::InCell { .. }
+            ))))
+        ),
+        "unexpected drawing link: {:?}",
+        linked.hit
+    );
     let native_iterations = 16;
     let native_start = std::time::Instant::now();
     let (native, native_stats) = (1..native_iterations).fold(
@@ -507,11 +503,7 @@ fn iop_tree_profile_loop() {
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.value_path);
     let projection = crate::spine::get(root, &declaration.projection_path);
-    let source = Some((
-        declaration.value_path.as_slice(),
-        value,
-        projection,
-    ));
+    let source = Some((declaration.value_path.as_slice(), value, projection));
     let iterations: usize = std::env::var("IOP_PROFILE_ITERATIONS")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -681,10 +673,12 @@ fn sample_text_line_click_mounts_its_own_editor() {
         layouts: parley::LayoutContext::new(),
         clipboard: Clipboard::default(),
     };
-    assert!(placed
-        .handler
-        .expect("line handler")
-        .dispatch_pointer_down(&mut world, &event));
+    assert!(
+        placed
+            .handler
+            .expect("line handler")
+            .dispatch_pointer_down(&mut world, &event)
+    );
     assert_eq!(
         world.selection.as_ref().map(|selection| selection.path()),
         Some(path.as_slice())
@@ -792,10 +786,7 @@ fn custom_match_projection_uses_the_editor_fold() {
             progred_libraries::control::vocabulary::PATTERN,
             Value::from(vec![1]),
         ),
-        (
-            grap::vocabulary::EXPRESSION,
-            Value::from(vec![2]),
-        ),
+        (grap::vocabulary::EXPRESSION, Value::from(vec![2])),
     ]);
     let match_expression = grap::call(
         Value::from(progred_libraries::control::vocabulary::MATCH),
@@ -859,8 +850,7 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
 
 #[test]
 fn expression_children_are_real() {
-    let (doc, binders) =
-        crate::gid_text::parse(include_str!("../../../examples/grap-demo.gid"))
+    let (doc, binders) = crate::gid_text::parse(include_str!("../../../examples/grap-demo.gid"))
         .expect("the Grap demo parses");
     let label = binders["inert_data"];
     let position = doc
@@ -1219,9 +1209,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         bench
             .descends
             .iter()
-            .find(|descend| {
-                descend.path.as_ref() == [Step::Follow, Step::Key(key)]
-            })
+            .find(|descend| descend.path.as_ref() == [Step::Follow, Step::Key(key)])
             .expect("the cell's record field has a landmark")
     };
     let mut fields = [field(upper_key), field(lower_key)];
@@ -1246,12 +1234,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
             if path.as_ref() == upper.path.as_ref()
     ));
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
-    let (air, _) = place_with_pointer(
-        &doc,
-        None,
-        width,
-        Some(Point::new(label_x, gap_y)),
-    );
+    let (air, _) = place_with_pointer(&doc, None, width, Some(Point::new(label_x, gap_y)));
     assert!(air.hit.is_none());
 
     let cell_rect = bench
@@ -1359,7 +1342,10 @@ fn svg_bench_renders_the_placeholder_notation() {
     // slot and committed as the string — glyphs should not move.
     render(
         &empty,
-        Some(&crate::selection::pending_with_query(Vec::new(), "\"asdf\"")),
+        Some(&crate::selection::pending_with_query(
+            Vec::new(),
+            "\"asdf\"",
+        )),
         320.0,
         "raw_placeholder_typed.svg",
     );
@@ -1432,11 +1418,13 @@ fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
             let width = *expected_width.get_or_insert(rect.width());
             assert!((rect.width() - width).abs() < 1e-6);
             let bench = settle(measured::place(node, Placement::root(rect)), None);
-            let [DrawCmd::Fill {
-                shape: Shape::Path(path),
-                transform,
-                ..
-            }] = &bench.list.0[..]
+            let [
+                DrawCmd::Fill {
+                    shape: Shape::Path(path),
+                    transform,
+                    ..
+                },
+            ] = &bench.list.0[..]
             else {
                 panic!("a delimiter is one filled path");
             };
@@ -1464,15 +1452,9 @@ fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
         descent: 10.0,
     };
     let widths = [Delim::Paren, Delim::Bracket, Delim::Brace].map(|delim| {
-        tall_delim::<World, Bench>(
-            1.0,
-            delim,
-            true,
-            content,
-            Color::BLACK.into(),
-        )
-        .extent
-        .width
+        tall_delim::<World, Bench>(1.0, delim, true, content, Color::BLACK.into())
+            .extent
+            .width
     });
     assert_eq!(widths, [widths[0]; 3]);
 }

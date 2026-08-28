@@ -80,9 +80,7 @@ impl WebCanvas {
                             gradient
                                 .stops
                                 .first()
-                                .map(|stop| {
-                                    css(stop.color.to_alpha_color::<Srgb>().components)
-                                })
+                                .map(|stop| css(stop.color.to_alpha_color::<Srgb>().components))
                                 .unwrap_or_else(|| "rgba(0,0,0,0)".to_string()),
                         );
                     }
@@ -194,7 +192,12 @@ impl Canvas for WebCanvas {
         }
     }
 
-    fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self)) {
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
         self.push_clip(&shape.into(), transform);
         content(self);
         self.pop_clip();
@@ -236,9 +239,9 @@ fn path(shape: &Shape) -> Path2d {
             PathEl::QuadTo(control, point) => {
                 path.quadratic_curve_to(control.x, control.y, point.x, point.y)
             }
-            PathEl::CurveTo(first, second, point) => path.bezier_curve_to(
-                first.x, first.y, second.x, second.y, point.x, point.y,
-            ),
+            PathEl::CurveTo(first, second, point) => {
+                path.bezier_curve_to(first.x, first.y, second.x, second.y, point.x, point.y)
+            }
             PathEl::ClosePath => path.close_path(),
         }
     }
@@ -257,12 +260,8 @@ impl OutlinePen for CanvasPen<'_> {
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.0.quadratic_curve_to(
-            cx0.into(),
-            cy0.into(),
-            x.into(),
-            y.into(),
-        );
+        self.0
+            .quadratic_curve_to(cx0.into(), cy0.into(), x.into(), y.into());
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {

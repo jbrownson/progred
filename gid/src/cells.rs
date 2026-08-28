@@ -140,10 +140,7 @@ mod tests {
         let second = new_cell_id();
         let key = new_cell_id();
         cells.set_value(first, Value::from(vec![0x66, 0x33, 0x99]));
-        cells.set_value(
-            second,
-            Value::record([(key, Value::from(first))]),
-        );
+        cells.set_value(second, Value::record([(key, Value::from(first))]));
 
         let json = serde_json::to_string(&cells).unwrap();
         let loaded: Cells = serde_json::from_str(&json).unwrap();

@@ -1,9 +1,9 @@
 //! Named faces the walk picks from. The editor fills them in.
 
 use parley::style::GenericFamily;
+use peniko::{Brush, Color};
 use puri::edit::{EditStyle, LineEditPresentation};
 use puri::text::TextStyle;
-use peniko::{Brush, Color};
 
 pub struct Styles {
     pub label: TextStyle,
@@ -46,10 +46,7 @@ pub fn editor(scale: f64) -> Styles {
 }
 
 impl Styles {
-    pub fn line_presentation(
-        &self,
-        line: &progred_display::LineEdit,
-    ) -> LineEditPresentation {
+    pub fn line_presentation(&self, line: &progred_display::LineEdit) -> LineEditPresentation {
         LineEditPresentation::new(self.string.size, self.string.brush.clone())
             .with_family(line_family(line.family))
             .with_affixes(&line.prefix, &line.suffix)

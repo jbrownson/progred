@@ -14,7 +14,9 @@ use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
 use crate::{App, PendingPaint, content_viewport};
+use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
+use peniko::{Brush, Color};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
 use puri::geometry::Placement;
@@ -31,8 +33,6 @@ use std::rc::Rc;
 use ui_events::ScrollDelta;
 #[cfg(not(target_arch = "wasm32"))]
 use vello::Scene;
-use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
-use peniko::{Brush, Color};
 use winit::dpi::PhysicalPosition;
 
 pub(crate) const HOVER_REACH: f64 = 8.0;
@@ -258,10 +258,9 @@ fn scroll_offset(
         x: viewport.width.max(1.0),
         y: viewport.height.max(1.0),
     };
-    let delta = update.delta.to_pixel_delta(
-        PhysicalPosition { x: line, y: line },
-        page,
-    );
+    let delta = update
+        .delta
+        .to_pixel_delta(PhysicalPosition { x: line, y: line }, page);
     let current = Vec2::new(
         stored.x.clamp(0.0, maximum.x),
         stored.y.clamp(0.0, maximum.y),
@@ -276,14 +275,12 @@ fn scroll_offset(
             y: delta.y - (current.y - next.y) * scale,
         };
         ScrollOutcome::with_remainder(match update.delta {
-            ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(
-                (remaining.x / page.x) as f32,
-                (remaining.y / page.y) as f32,
-            ),
-            ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(
-                (remaining.x / line) as f32,
-                (remaining.y / line) as f32,
-            ),
+            ScrollDelta::PageDelta(_, _) => {
+                ScrollDelta::PageDelta((remaining.x / page.x) as f32, (remaining.y / page.y) as f32)
+            }
+            ScrollDelta::LineDelta(_, _) => {
+                ScrollDelta::LineDelta((remaining.x / line) as f32, (remaining.y / line) as f32)
+            }
             ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(remaining),
         })
     } else {
@@ -398,11 +395,7 @@ impl App {
     /// path while opening a pending), so it never fights manual
     /// scrolling. A pending's ordinary descend is its authoring row,
     /// not the out-of-flow completion card.
-    pub(crate) fn reveal_selection(
-        &mut self,
-        dispatch: &Dispatch,
-        scale: f64,
-    ) -> bool {
+    pub(crate) fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
         let reveal = self
             .model
             .selection
@@ -417,15 +410,12 @@ impl App {
                     .descends
                     .iter()
                     .find(|descend| {
-                        descend.root.as_ref() == Some(root)
-                            && descend.path.as_ref() == path
+                        descend.root.as_ref() == Some(root) && descend.path.as_ref() == path
                     })
                     .map(|descend| descend.rect)
                     .map(|rect| (root.clone(), rect))
             });
-            target.is_some_and(|(view, rect)| {
-                self.reveal_rect(dispatch, &view, rect, scale)
-            })
+            target.is_some_and(|(view, rect)| self.reveal_rect(dispatch, &view, rect, scale))
         }
     }
 
@@ -440,9 +430,7 @@ impl App {
             let sources = self.sources();
             drawing_source_target(&sources, &dispatch.descends, source)
         };
-        target.is_some_and(|(view, rect)| {
-            self.reveal_rect(dispatch, &view, rect, scale)
-        })
+        target.is_some_and(|(view, rect)| self.reveal_rect(dispatch, &view, rect, scale))
     }
 
     fn reveal_rect(
@@ -474,14 +462,7 @@ impl App {
                 pad,
                 scale,
             ),
-            reveal_vertical_scroll(
-                before.y,
-                region.maximum.y,
-                rect,
-                region.rect,
-                pad,
-                scale,
-            ),
+            reveal_vertical_scroll(before.y, region.maximum.y, rect, region.rect, pad, scale),
         );
         if let Some(view) = self.model.workspace.view_mut(view) {
             view.scroll = next;
@@ -499,9 +480,12 @@ impl App {
     pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
         let declarations = workspace::declarations(self.model.doc.root.as_ref());
         self.model.workspace.sync_declared(&declarations);
-        if self.model.selection.as_ref().is_some_and(|selection| {
-            self.model.workspace.view(selection.root()).is_none()
-        }) {
+        if self
+            .model
+            .selection
+            .as_ref()
+            .is_some_and(|selection| self.model.workspace.view(selection.root()).is_none())
+        {
             self.model.selection = None;
         }
         let view = self.view_flags();
@@ -532,10 +516,7 @@ impl App {
         let AppView { view } = app_view(description, resources);
         let placed = measured::place(
             view,
-            Placement::root(Rect::from_origin_size(
-                Point::ZERO,
-                viewport,
-            )),
+            Placement::root(Rect::from_origin_size(Point::ZERO, viewport)),
         )
         .raise_floaters();
         let hover_reach = HOVER_REACH * scale;
@@ -550,10 +531,8 @@ impl App {
             doc: &self.model.doc,
             library: &self.stack.library,
         };
-        let show_source_hover = source_hover_visible(
-            self.hover.as_ref(),
-            crate::modifiers::link(&self.modifiers),
-        );
+        let show_source_hover =
+            source_hover_visible(self.hover.as_ref(), crate::modifiers::link(&self.modifiers));
         let hovered_secondary = match &self.hover {
             Some(Hovered::Tree(_)) if !show_source_hover => None,
             Some(Hovered::Tree(hover)) => hover::hover_secondary(
@@ -561,7 +540,10 @@ impl App {
                 self.model
                     .workspace
                     .selected_or_document(
-                        self.model.selection.as_ref().map(selection::Selection::root),
+                        self.model
+                            .selection
+                            .as_ref()
+                            .map(selection::Selection::root),
                     )
                     .projection
                     == workspace::Projection::Raw,
@@ -634,15 +616,9 @@ impl App {
     /// Mint dispatch data from the final state of a transition. A
     /// silent pass supplies reveal geometry and resolves hover;
     /// scrolling to reveal changes geometry and earns one rebuild.
-    pub(crate) fn retain_dispatch(
-        &mut self,
-        scale: f64,
-        viewport: Size,
-        reveal_selection: bool,
-    ) {
+    pub(crate) fn retain_dispatch(&mut self, scale: f64, viewport: Size, reveal_selection: bool) {
         let mut frame = self.build_frame(scale, viewport);
-        let revealed_selection =
-            reveal_selection && self.reveal_selection(&frame.dispatch, scale);
+        let revealed_selection = reveal_selection && self.reveal_selection(&frame.dispatch, scale);
         let revealed_source = self.reveal_drawing_source(&frame.dispatch, scale);
         if revealed_selection || revealed_source {
             frame = self.build_frame(scale, viewport);
@@ -687,8 +663,8 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
                 }
             };
             if fresh {
-                let next = selection::Selection::edge(&app.sources(), path)
-                    .with_root(select_root.clone());
+                let next =
+                    selection::Selection::edge(&app.sources(), path).with_root(select_root.clone());
                 app.model.selection = Some(next);
             } else if let Some(line) = app
                 .model
@@ -939,20 +915,14 @@ fn project_workspace(
                 );
                 p.handler().on_pointer_down(move |app: &mut App, event| {
                     is_primary_contact(event)
-                        && hit.contains(Point::new(
-                            event.state.position.x,
-                            event.state.position.y,
-                        ))
-                        && app
-                            .model
-                            .workspace
-                            .start_resize(
-                                down_divider.clone(),
-                                Vec2::new(
-                                    event.state.position.x - clip.x0,
-                                    event.state.position.y - clip.y0,
-                                ),
-                            )
+                        && hit.contains(Point::new(event.state.position.x, event.state.position.y))
+                        && app.model.workspace.start_resize(
+                            down_divider.clone(),
+                            Vec2::new(
+                                event.state.position.x - clip.x0,
+                                event.state.position.y - clip.y0,
+                            ),
+                        )
                 });
                 p.handler().on_pointer_move(move |app: &mut App, event| {
                     app.model.workspace.resize(
@@ -1079,8 +1049,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         // it, so no raw inside-swallow may preempt them.
         let popup = placed::before(popup, move |p, placement| {
             let rect = placement.rect;
-            let headings =
-                Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
+            let headings = Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
             p.handler().on_pointer_down(move |app: &mut App, event| {
                 let point = Point::new(event.state.position.x, event.state.position.y);
                 is_primary_contact(event)
@@ -1161,9 +1130,9 @@ mod frame_tests {
     #[test]
     fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
         let code = Hovered::Tree(hover::Hover::Value(Rc::from([])));
-        let drawing = Hovered::Tree(hover::Hover::Drawing(hover::SourceTrace::Stored(
-            Rc::from([]),
-        )));
+        let drawing = Hovered::Tree(hover::Hover::Drawing(hover::SourceTrace::Stored(Rc::from(
+            [],
+        ))));
 
         assert!(source_hover_visible(Some(&code), false));
         assert!(!source_hover_visible(Some(&drawing), false));
@@ -1308,17 +1277,19 @@ mod frame_tests {
             .iter()
             .find(|region| region.root == document)
             .expect("document view");
-        assert_eq!((document_region.rect.y0, document_region.rect.y1), (0.0, 600.0));
+        assert_eq!(
+            (document_region.rect.y0, document_region.rect.y1),
+            (0.0, 600.0)
+        );
         assert_eq!(upper_region.rect.x0, lower_region.rect.x0);
         assert_eq!(upper_region.rect.x1, lower_region.rect.x1);
         assert_eq!(lower_region.rect.y0 - upper_region.rect.y1, 1.0);
-        assert!(placed
-            .descends
-            .iter()
-            .all(|descend| descend.root.is_some()));
-        assert!(placed.descends.iter().any(|descend| {
-            descend.root.as_ref() == Some(&upper) && descend.path.is_empty()
-        }));
+        assert!(placed.descends.iter().all(|descend| descend.root.is_some()));
+        assert!(
+            placed.descends.iter().any(|descend| {
+                descend.root.as_ref() == Some(&upper) && descend.path.is_empty()
+            })
+        );
     }
 
     #[test]
@@ -1327,28 +1298,16 @@ mod frame_tests {
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
         let mut placed: Placed<App, Paint> = Placed::empty();
         placed.probes.push(placed::Probe::retaining(
-            Placement::new(
-                Rect::new(0.0, 0.0, 10.0, 10.0),
-                viewport,
-            ),
+            Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
             target(0),
         ));
         placed.probes.push(placed::Probe::retaining(
-            Placement::new(
-                Rect::new(14.0, 0.0, 24.0, 10.0),
-                viewport,
-            ),
+            Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
             target(1),
         ));
         // A direct answer establishes hover.
         assert_eq!(
-            derive_hover(
-                &placed,
-                None,
-                Some(Point::new(5.0, 5.0)),
-                false,
-                8.0,
-            ),
+            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,),
             Some(target(0))
         );
         // In the gap, only the prior target's extension may retain.
@@ -1397,16 +1356,13 @@ mod frame_tests {
             Some(target(1))
         );
         assert_eq!(
-            derive_hover(
-                &placed,
-                None,
-                Some(Point::new(12.0, 5.0)),
-                false,
-                8.0,
-            ),
+            derive_hover(&placed, None, Some(Point::new(12.0, 5.0)), false, 8.0,),
             None
         );
-        assert_eq!(derive_hover(&placed, Some(target(0)), None, false, 8.0), None);
+        assert_eq!(
+            derive_hover(&placed, Some(target(0)), None, false, 8.0),
+            None
+        );
         // A pressed gesture keeps the hover it began with.
         assert_eq!(
             derive_hover(
@@ -1426,13 +1382,7 @@ mod frame_tests {
             viewport,
         )));
         assert_eq!(
-            derive_hover(
-                &placed,
-                None,
-                Some(Point::new(25.0, 5.0)),
-                false,
-                8.0,
-            ),
+            derive_hover(&placed, None, Some(Point::new(25.0, 5.0)), false, 8.0,),
             Some(Hovered::Blocked)
         );
     }
@@ -1450,13 +1400,7 @@ mod frame_tests {
         ));
 
         assert_eq!(
-            derive_hover(
-                &placed,
-                None,
-                Some(Point::new(5.0, 5.0)),
-                false,
-                8.0,
-            ),
+            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,),
             Some(target.clone())
         );
         assert_eq!(

@@ -5,9 +5,9 @@ use muda::{
 };
 use winit::event_loop::EventLoopProxy;
 
+use crate::UserEvent;
 use crate::menu::{self, Entry, Item, Kind, Platform, Selection, ShortcutKey};
 use crate::model::ViewFlags;
-use crate::UserEvent;
 
 pub struct Event(MenuEvent);
 
@@ -24,13 +24,11 @@ enum NativeItem {
 impl NativeItem {
     fn new(item: Item) -> Self {
         match item.kind {
-            Kind::Command => {
-                Self::Command(MenuItem::new(
-                    item.label,
-                    true,
-                    item.shortcut.map(accelerator),
-                ))
-            }
+            Kind::Command => Self::Command(MenuItem::new(
+                item.label,
+                true,
+                item.shortcut.map(accelerator),
+            )),
             Kind::Check => Self::Check(CheckMenuItem::new(
                 item.label,
                 true,

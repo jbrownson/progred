@@ -181,10 +181,8 @@ mod tests {
 
     #[test]
     fn source_becomes_wasm() {
-        let wasm = compile(
-            "#[unsafe(no_mangle)]\npub extern \"C\" fn answer() -> u32 { 42 }",
-        )
-        .unwrap();
+        let wasm =
+            compile("#[unsafe(no_mangle)]\npub extern \"C\" fn answer() -> u32 { 42 }").unwrap();
         assert_eq!(&wasm[..4], b"\0asm");
     }
 

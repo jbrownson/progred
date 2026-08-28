@@ -14,8 +14,6 @@ pub mod hover;
 pub mod interact;
 pub mod text;
 
-pub use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke, Vec2};
-pub use peniko::{Brush, Color, ColorStop, Gradient};
 pub use delim::{Delim, DelimStyle};
 pub use draw::{
     Canvas, Command, DrawCmd, DrawList, Drawing, Glyph, GlyphRun, Leaf, Shape, draw, replay,
@@ -30,4 +28,6 @@ pub use interact::{
     clickable, double_clickable, is_primary_contact, is_primary_contact_move, on_primary_click,
     on_primary_pointer_down, on_primary_pointer_down_where,
 };
+pub use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke, Vec2};
+pub use peniko::{Brush, Color, ColorStop, Gradient};
 pub use text::{Text, TextCache, TextCtx, TextMetrics, TextStyle, paragraph, text};

@@ -11,16 +11,16 @@ use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
 use crate::workspace::Root;
 use gid::Path;
+use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
+use peniko::{Brush, Color};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::text::TextMetrics;
-use uig::Placement;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
-use kurbo::{Affine, Point, Rect, Stroke, Vec2};
-use peniko::{Brush, Color};
+use uig::Placement;
 
 pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
 pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
@@ -84,12 +84,7 @@ impl Probe {
         (rect.width() > 0.0 && rect.height() > 0.0).then_some(rect)
     }
 
-    fn answer(
-        &self,
-        point: Point,
-        prior: Option<&Hovered>,
-        reach: f64,
-    ) -> Option<Claim<Hovered>> {
+    fn answer(&self, point: Point, prior: Option<&Hovered>, reach: f64) -> Option<Claim<Hovered>> {
         if self.placement.contains(point) {
             return Some(match &self.target {
                 ProbeTarget::Retains(target) | ProbeTarget::Exact(target) => {
@@ -152,14 +147,14 @@ pub fn dispatch_target<C>(
     root: Option<&Root>,
     target: &Hovered,
 ) -> bool {
-    actions
-        .iter()
-        .rev()
-        .any(|candidate| {
-            candidate.root.as_ref().is_none_or(|candidate| Some(candidate) == root)
-                && candidate.target == *target
-                && (candidate.action)(ctx)
-        })
+    actions.iter().rev().any(|candidate| {
+        candidate
+            .root
+            .as_ref()
+            .is_none_or(|candidate| Some(candidate) == root)
+            && candidate.target == *target
+            && (candidate.action)(ctx)
+    })
 }
 
 pub fn scrub_target(
@@ -168,7 +163,10 @@ pub fn scrub_target(
     target: &Hovered,
 ) -> Option<ScrubAction> {
     actions.iter().rev().find_map(|candidate| {
-        (candidate.root.as_ref().is_none_or(|candidate| Some(candidate) == root)
+        (candidate
+            .root
+            .as_ref()
+            .is_none_or(|candidate| Some(candidate) == root)
             && candidate.target == *target)
             .then(|| candidate.clone())
     })
@@ -396,9 +394,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: Hovered) {
         if !placement.clipped_out() {
-            self.placed
-                .probes
-                .push(Probe::retaining(placement, target));
+            self.placed.probes.push(Probe::retaining(placement, target));
         }
     }
 
@@ -417,7 +413,9 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         target_at: impl Fn(Point) -> Option<Hovered> + 'static,
     ) {
         if !placement.clipped_out() {
-            self.placed.probes.push(Probe::dynamic(placement, target_at));
+            self.placed
+                .probes
+                .push(Probe::dynamic(placement, target_at));
         }
     }
 
@@ -428,11 +426,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         }
     }
 
-    pub fn activate(
-        &mut self,
-        target: Hovered,
-        action: impl Fn(&mut C) -> bool + 'static,
-    ) {
+    pub fn activate(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
         if self.visible {
             self.placed.activations.push(TargetAction {
                 root: None,
@@ -442,11 +436,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         }
     }
 
-    pub fn pick(
-        &mut self,
-        target: Hovered,
-        action: impl Fn(&mut C) -> bool + 'static,
-    ) {
+    pub fn pick(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
         if self.visible {
             self.placed.picks.push(TargetAction {
                 root: None,
@@ -456,12 +446,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         }
     }
 
-    pub fn scrub(
-        &mut self,
-        target: Hovered,
-        path: Path,
-        handler: progred_display::ScrubHandler,
-    ) {
+    pub fn scrub(&mut self, target: Hovered, path: Path, handler: progred_display::ScrubHandler) {
         if self.visible {
             self.placed.scrubs.push(ScrubAction {
                 root: None,
@@ -500,9 +485,9 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
     ) {
         if self.visible {
             let (shape, brush) = (shape.into(), brush.into());
-            self.placed
-                .renders
-                .push(Box::new(move |cv, _| cv.stroke(shape, style, brush, transform)));
+            self.placed.renders.push(Box::new(move |cv, _| {
+                cv.stroke(shape, style, brush, transform)
+            }));
         }
     }
 
@@ -599,7 +584,9 @@ pub fn floating<C: 'static, Cv: 'static>(
     measured::around(base, move |placement, base| {
         let mut placed = base.place();
         if let Some(placement) = place(placement, extent) {
-            placed.floaters.push(Box::new(measured::place(content, placement)));
+            placed
+                .floaters
+                .push(Box::new(measured::place(content, placement)));
         }
         placed
     })
@@ -685,8 +672,7 @@ pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
                 ),
             });
         }
-        let child_rect = extent
-            .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
+        let child_rect = extent.rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
         let child_placement =
             measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
         let mut placed = inner.place_at(child_placement);
@@ -696,7 +682,9 @@ pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
                 Placed::<C, Cv>::render(renders, cv, ink)
             })
         }));
-        placed.handler = placed.handler.map(|handler| gate_starts(handler, placement));
+        placed.handler = placed
+            .handler
+            .map(|handler| gate_starts(handler, placement));
         base.over(placed)
     })
 }
@@ -758,12 +746,12 @@ pub fn metrics_extent(metrics: TextMetrics) -> Extent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use peniko::Color;
     use puri::draw::{DrawCmd, DrawList};
     use ui_events::ScrollDelta;
     use ui_events::pointer::{
         PointerButton, PointerId, PointerInfo, PointerState, PointerType, PointerUpdate,
     };
-    use peniko::Color;
 
     struct TestCanvas(DrawList);
 
@@ -958,11 +946,7 @@ mod tests {
         assert_eq!(placed.floaters.len(), 1);
 
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<(), TestCanvas>::render(
-            placed.raise_floaters().renders,
-            &mut canvas,
-            no_ink(),
-        );
+        Placed::<(), TestCanvas>::render(placed.raise_floaters().renders, &mut canvas, no_ink());
         assert!(matches!(
             &canvas.0.0[..],
             [
@@ -1132,10 +1116,15 @@ mod tests {
             },
         );
         let placed = measured::place(
-            scrolled_at(child, Vec2::ZERO, None, |log: &mut Vec<&'static str>, event| {
-                log.push("scroll");
-                ScrollOutcome::consume(event)
-            }),
+            scrolled_at(
+                child,
+                Vec2::ZERO,
+                None,
+                |log: &mut Vec<&'static str>, event| {
+                    log.push("scroll");
+                    ScrollOutcome::consume(event)
+                },
+            ),
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
         );
         let handler = placed.handler.expect("registrations");

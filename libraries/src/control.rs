@@ -9,14 +9,13 @@ use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
-    Stage,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
-use std::rc::Rc;
 use progred_display::{
     Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
     hug, row, shared,
 };
+use std::rc::Rc;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -39,8 +38,7 @@ pub mod vocabulary {
     pub const INVALID_BINDER: CellId = CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
     pub const INVALID_BINDINGS: CellId = CellId::from_u128(0x480ae287377249459a3438cb4b05229f);
     pub const INVALID_BINDING: CellId = CellId::from_u128(0x4ecae0db406e426aba1c02f2f04570ad);
-    pub const INVALID_EXPRESSIONS: CellId =
-        CellId::from_u128(0xa41a40f12691414971dbd9f788c291d6);
+    pub const INVALID_EXPRESSIONS: CellId = CellId::from_u128(0xa41a40f12691414971dbd9f788c291d6);
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -146,7 +144,10 @@ fn replace_unquotes_value(
 /// A case parsed once at prepare: its position is kept so a malformed
 /// case still declines at the moment selection reaches it.
 enum CompiledCase {
-    Case { pattern: Value, expression: Expression },
+    Case {
+        pattern: Value,
+        expression: Expression,
+    },
     Malformed,
 }
 
@@ -158,28 +159,29 @@ enum CompiledCases {
 
 fn match_prepare(context: &Context, call: Expression) -> Stage {
     let subject = context.field(call, vocabulary::VALUE);
-    let compiled = context.field(call, vocabulary::CASES).map(|cases| {
-        match context.elements(cases) {
-            None => CompiledCases::Deferred(cases),
-            Some(elements) => CompiledCases::Cases(
-                elements
-                    .iter()
-                    .map(|case| {
-                        match (
-                            context.field(*case, vocabulary::PATTERN),
-                            context.field(*case, grap_runtime::vocabulary::EXPRESSION),
-                        ) {
-                            (Some(pattern), Some(expression)) => CompiledCase::Case {
-                                pattern: context.value(pattern).clone(),
-                                expression,
-                            },
-                            _ => CompiledCase::Malformed,
-                        }
-                    })
-                    .collect(),
-            ),
-        }
-    });
+    let compiled =
+        context
+            .field(call, vocabulary::CASES)
+            .map(|cases| match context.elements(cases) {
+                None => CompiledCases::Deferred(cases),
+                Some(elements) => CompiledCases::Cases(
+                    elements
+                        .iter()
+                        .map(|case| {
+                            match (
+                                context.field(*case, vocabulary::PATTERN),
+                                context.field(*case, grap_runtime::vocabulary::EXPRESSION),
+                            ) {
+                                (Some(pattern), Some(expression)) => CompiledCase::Case {
+                                    pattern: context.value(pattern).clone(),
+                                    expression,
+                                },
+                                _ => CompiledCase::Malformed,
+                            }
+                        })
+                        .collect(),
+                ),
+            });
     Rc::new(move |context, environment| {
         let Some(subject) = subject else {
             return Ok(context.missing_runtime_argument(vocabulary::VALUE));
@@ -306,8 +308,9 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                                 Ok(Some(bindings)) => environment.push_runtime(bindings),
                                 Ok(None) => return Ok(absent::value().into()),
                                 Err(InvalidBinder) => {
-                                    return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
-                                        .into());
+                                    return Ok(
+                                        absent::with_reason(vocabulary::INVALID_BINDER).into()
+                                    );
                                 }
                             }
                         }
@@ -335,8 +338,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                         (Some(binder), None) => match binder.as_cell() {
                             Some(binder) => (Some(binder), None),
                             None => {
-                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
-                                    .into());
+                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                             }
                         },
                         (None, Some(pattern)) => (None, Some(pattern)),
@@ -352,8 +354,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                             Ok(Some(bindings)) => environment = environment.extended(bindings),
                             Ok(None) => return Ok(absent::value().into()),
                             Err(InvalidBinder) => {
-                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
-                                    .into());
+                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                             }
                         }
                     }
@@ -447,9 +448,7 @@ fn matches_runtime_pattern(
                         if matched {
                             value
                                 .field(*field)
-                                .map(|value| {
-                                    matches_runtime_pattern(pattern, &value, bindings)
-                                })
+                                .map(|value| matches_runtime_pattern(pattern, &value, bindings))
                                 .unwrap_or(Ok(false))
                         } else {
                             Ok(false)
@@ -958,8 +957,8 @@ mod tests {
     #[test]
     fn do_projects_its_expression_list_without_hiding_extra_data() {
         let expression = do_call([blob("first"), blob("second")]);
-        let Layout::Row { children, .. } = do_display(&relative_projection_input(&expression))
-            .expect("coherent do projection")
+        let Layout::Row { children, .. } =
+            do_display(&relative_projection_input(&expression)).expect("coherent do projection")
         else {
             panic!("do is its marker followed by a list")
         };
@@ -1147,10 +1146,7 @@ mod tests {
 
     #[test]
     fn lowered_match_cases_still_consume_their_evaluation_fuel() {
-        let expression = match_call(
-            blob("subject"),
-            [case_arm(blob("subject"), blob("result"))],
-        );
+        let expression = match_call(blob("subject"), [case_arm(blob("subject"), blob("result"))]);
 
         let completed = evaluate_with_fuel(&expression, 6);
         assert_eq!(completed.result, blob("result"));

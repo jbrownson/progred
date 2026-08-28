@@ -53,10 +53,7 @@ fn deep_cell<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     input.value.as_cell()?;
-    Some(bracket(
-        Delim::Paren,
-        descend(Step::Follow, None, None),
-    ))
+    Some(bracket(Delim::Paren, descend(Step::Follow, None, None)))
 }
 
 fn lambda_name<World, Hover>(
@@ -141,10 +138,7 @@ fn parameters(value: &Value) -> Option<Vec<CellId>> {
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
-fn function_parameters(
-    env: &dyn progred_display::Env,
-    function: &Value,
-) -> Option<Vec<CellId>> {
+fn function_parameters(env: &dyn progred_display::Env, function: &Value) -> Option<Vec<CellId>> {
     let mut function = function;
     let mut followed = std::collections::BTreeSet::new();
     while let Some(cell) = function.as_cell() {
@@ -188,7 +182,10 @@ pub fn call_display<World, Hover: Clone>(
             .iter()
             .filter(|(field, _)| *field != FUNCTION)
             .map(|(field, value)| (*field, value)),
-        |left, right| match (parameter_positions.get(left), parameter_positions.get(right)) {
+        |left, right| match (
+            parameter_positions.get(left),
+            parameter_positions.get(right),
+        ) {
             (Some(left), Some(right)) => left.cmp(right),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -234,18 +231,9 @@ pub fn lambda_display<World, Hover: Clone>(
             "",
         )),
     );
-    let arrow = activatable(
-        dim("→"),
-        body_target.hover,
-        body_target.select,
-    );
+    let arrow = activatable(dim("→"), body_target.hover, body_target.select);
     let head = row(3.0, [lambda, params, arrow]);
-    Some(hug(
-        head,
-        expression_at([Step::Key(BODY)], body),
-        6.0,
-        20.0,
-    ))
+    Some(hug(head, expression_at([Step::Key(BODY)], body), 6.0, 20.0))
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
@@ -265,7 +253,11 @@ pub fn evaluate_display<World, Hover: Clone>(
     let (result, fuel) = input.env.evaluate(expression);
     let expression = shared(expression_at([Step::Key(EVALUATE)], expression));
     let shaft_target = input.targets.current();
-    let shaft = shared(activatable(dim("→"), shaft_target.hover, shaft_target.select));
+    let shaft = shared(activatable(
+        dim("→"),
+        shaft_target.hover,
+        shaft_target.select,
+    ));
     let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
@@ -528,10 +520,7 @@ mod tests {
         let argument = new_cell_id();
         let layout = call_display(&input(
             &env(),
-            &grap_runtime::call(
-                Value::from(function),
-                [(argument, Value::from(vec![1]))],
-            ),
+            &grap_runtime::call(Value::from(function), [(argument, Value::from(vec![1]))]),
         ))
         .unwrap();
         let Layout::Alternatives(options) = layout else {
@@ -556,10 +545,7 @@ mod tests {
     fn a_call_argument_label_targets_its_value() {
         let function = new_cell_id();
         let argument = new_cell_id();
-        let call = grap_runtime::call(
-            Value::from(function),
-            [(argument, Value::from(vec![1]))],
-        );
+        let call = grap_runtime::call(Value::from(function), [(argument, Value::from(vec![1]))]);
         let layout = call_display(&relative_input(&env(), &call)).unwrap();
         let Layout::Alternatives(call_options) = layout else {
             panic!("call has responsive forms");
@@ -641,12 +627,7 @@ mod tests {
 
         assert_eq!(
             argument_order(&layout),
-            [
-                FIRST_PARAMETER,
-                SECOND_PARAMETER,
-                FIRST_EXTRA,
-                SECOND_EXTRA,
-            ]
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA,]
         );
     }
 
@@ -666,10 +647,7 @@ mod tests {
         );
         let layout = call_display(&input(&env(), &call)).unwrap();
 
-        assert_eq!(
-            argument_order(&layout),
-            [FIRST_PARAMETER, SECOND_PARAMETER]
-        );
+        assert_eq!(argument_order(&layout), [FIRST_PARAMETER, SECOND_PARAMETER]);
     }
 
     #[test]
@@ -683,10 +661,7 @@ mod tests {
         let Layout::Row { children, .. } = &options[0] else {
             panic!("flat lambda first");
         };
-        let Layout::Row {
-            children: head, ..
-        } = unshared(&children[0])
-        else {
+        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
         assert!(matches!(
@@ -727,10 +702,7 @@ mod tests {
     fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         let definition = name::record(
             "tree",
-            [
-                (PARAMS, Value::list([])),
-                (BODY, Value::from(vec![1])),
-            ],
+            [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
         let Layout::Alternatives(options) = layout else {
@@ -765,10 +737,7 @@ mod tests {
 
     #[test]
     fn an_anonymous_lambda_projects_an_empty_name_with_a_lambda_placeholder() {
-        let definition = Value::record([
-            (PARAMS, Value::list([])),
-            (BODY, Value::from(vec![1])),
-        ]);
+        let definition = Value::record([(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))]);
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("lambda has responsive forms");
@@ -800,10 +769,7 @@ mod tests {
     fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         let definition = name::record(
             "",
-            [
-                (PARAMS, Value::list([])),
-                (BODY, Value::from(vec![1])),
-            ],
+            [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
         let Layout::Alternatives(options) = layout else {

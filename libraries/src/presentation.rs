@@ -36,10 +36,7 @@ pub fn display<World, Hover: Clone>(
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::RENDER, "render"),
-        (vocabulary::VALUE, "value"),
-    ] {
+    for (cell, spelling) in [(vocabulary::RENDER, "render"), (vocabulary::VALUE, "value")] {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library {

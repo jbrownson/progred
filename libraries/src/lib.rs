@@ -113,18 +113,14 @@ mod tests {
         let merged = Library::merge_all([
             Library {
                 cells: left_cells,
-                functions: ForeignFunctions::default().register(
-                    SHARED_FUNCTION,
-                    ForeignFunction::new(left_function),
-                ),
+                functions: ForeignFunctions::default()
+                    .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
                 projections: vec![left_projection],
             },
             Library {
                 cells: right_cells,
-                functions: ForeignFunctions::default().register(
-                    SHARED_FUNCTION,
-                    ForeignFunction::new(right_function),
-                ),
+                functions: ForeignFunctions::default()
+                    .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
                 projections: vec![right_projection],
             },
         ]);

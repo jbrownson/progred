@@ -31,10 +31,7 @@ fn save_text(path: &Path, text: String) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-#[cfg(all(
-    any(not(target_arch = "wasm32"), test),
-    not(target_os = "macos")
-))]
+#[cfg(all(any(not(target_arch = "wasm32"), test), not(target_os = "macos")))]
 fn save_text(path: &Path, text: String) -> Result<(), String> {
     // Write-then-rename, so a crash mid-write cannot truncate the
     // previous save.

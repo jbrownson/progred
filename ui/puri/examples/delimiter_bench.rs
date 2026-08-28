@@ -78,7 +78,10 @@ impl Shaper {
                     };
                     if let Some(outline) = outlines.get(GlyphId::new(glyph.id)) {
                         outline
-                            .draw(DrawSettings::unhinted(size, LocationRef::new(&coords)), &mut pen)
+                            .draw(
+                                DrawSettings::unhinted(size, LocationRef::new(&coords)),
+                                &mut pen,
+                            )
                             .unwrap();
                     }
                     x += glyph.advance;
@@ -185,7 +188,11 @@ fn main() {
     .unwrap();
     svg.rect(Rect::new(0.0, 0.0, 1500.0, 1300.0), "#FFFFFF");
 
-    svg.caption(40.0, 40.0, "A. font glyph (blue fill) vs parametric (red fill) at stem variants, 7x");
+    svg.caption(
+        40.0,
+        40.0,
+        "A. font glyph (blue fill) vs parametric (red fill) at stem variants, 7x",
+    );
     svg.group((60.0, 160.0), 7.0, |svg| {
         for (i, (delim, open_ch, _)) in kinds.iter().enumerate() {
             let glyph = shaper.shaped(open_ch, GenericFamily::SystemUi);
@@ -237,9 +244,16 @@ fn main() {
                     Rect::new(x + bow + 2.0, y, x + bow + 26.0, y + height),
                     "#EEF0F3",
                 );
-                svg.fill(&translated(&delim::open(*delim, &style, 0.0, height), x, y), DIM);
                 svg.fill(
-                    &translated(&delim::close(*delim, &style, 0.0, height), x + bow + 28.0, y),
+                    &translated(&delim::open(*delim, &style, 0.0, height), x, y),
+                    DIM,
+                );
+                svg.fill(
+                    &translated(
+                        &delim::close(*delim, &style, 0.0, height),
+                        x + bow + 28.0,
+                        y,
+                    ),
                     DIM,
                 );
                 x += bow * 2.0 + 40.0;
@@ -261,32 +275,92 @@ fn main() {
             svg.fill(&translated(&path, *x, y), DIM);
             *x += style.bow(delim) + gap;
         };
-        let text = |svg: &mut Svg, shaper: &mut Shaper, x: &mut f64, y: f64, s: &str, family: GenericFamily, color: &str| {
+        let text = |svg: &mut Svg,
+                    shaper: &mut Shaper,
+                    x: &mut f64,
+                    y: f64,
+                    s: &str,
+                    family: GenericFamily,
+                    color: &str| {
             let shaped = shaper.shaped(s, family);
             svg.fill(&translated(&shaped.path, *x, y), color);
             *x += shaped.advance;
         };
 
         let mut x = 0.0;
-        text(svg, &mut shaper, &mut x, 0.0, "points: ", GenericFamily::SystemUi, LABEL);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            0.0,
+            "points: ",
+            GenericFamily::SystemUi,
+            LABEL,
+        );
         flat(svg, &mut x, 0.0, Delim::Bracket, true);
         flat(svg, &mut x, 0.0, Delim::Paren, true);
-        text(svg, &mut shaper, &mut x, 0.0, "origin", GenericFamily::SystemUi, NAME);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            0.0,
+            "origin",
+            GenericFamily::SystemUi,
+            NAME,
+        );
         flat(svg, &mut x, 0.0, Delim::Paren, false);
-        text(svg, &mut shaper, &mut x, 0.0, " ", GenericFamily::SystemUi, NAME);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            0.0,
+            " ",
+            GenericFamily::SystemUi,
+            NAME,
+        );
         flat(svg, &mut x, 0.0, Delim::Paren, true);
-        text(svg, &mut shaper, &mut x, 0.0, "corner", GenericFamily::SystemUi, NAME);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            0.0,
+            "corner",
+            GenericFamily::SystemUi,
+            NAME,
+        );
         flat(svg, &mut x, 0.0, Delim::Paren, false);
         flat(svg, &mut x, 0.0, Delim::Bracket, false);
 
         let (row1, row2) = (40.0, 40.0 + pitch);
         let (top, bottom) = (row1 + span.0, row2 + span.1);
         let mut x = 0.0;
-        text(svg, &mut shaper, &mut x, row1, "style: ", GenericFamily::SystemUi, LABEL);
-        svg.fill(&translated(&delim::open(Delim::Paren, &style, top, bottom), x, 0.0), DIM);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            row1,
+            "style: ",
+            GenericFamily::SystemUi,
+            LABEL,
+        );
+        svg.fill(
+            &translated(&delim::open(Delim::Paren, &style, top, bottom), x, 0.0),
+            DIM,
+        );
         x += style.bow(Delim::Paren) + gap;
-        text(svg, &mut shaper, &mut x, row1, "style ", GenericFamily::SystemUi, NAME);
-        svg.fill(&translated(&delim::open(Delim::Brace, &style, top, bottom), x, 0.0), DIM);
+        text(
+            svg,
+            &mut shaper,
+            &mut x,
+            row1,
+            "style ",
+            GenericFamily::SystemUi,
+            NAME,
+        );
+        svg.fill(
+            &translated(&delim::open(Delim::Brace, &style, top, bottom), x, 0.0),
+            DIM,
+        );
         x += style.bow(Delim::Brace) + gap;
         let body = x;
         let mut widest = x;
@@ -295,7 +369,15 @@ fn main() {
             (row2, "swatch: ", "0x663399", STRING),
         ] {
             let mut x = body;
-            text(svg, &mut shaper, &mut x, y, label, GenericFamily::SystemUi, LABEL);
+            text(
+                svg,
+                &mut shaper,
+                &mut x,
+                y,
+                label,
+                GenericFamily::SystemUi,
+                LABEL,
+            );
             if y == row1 {
                 flat(svg, &mut x, y, Delim::Paren, true);
             }
@@ -311,9 +393,15 @@ fn main() {
             widest = widest.max(x);
         }
         let mut x = widest + gap;
-        svg.fill(&translated(&delim::close(Delim::Brace, &style, top, bottom), x, 0.0), DIM);
+        svg.fill(
+            &translated(&delim::close(Delim::Brace, &style, top, bottom), x, 0.0),
+            DIM,
+        );
         x += style.bow(Delim::Brace) + gap;
-        svg.fill(&translated(&delim::close(Delim::Paren, &style, top, bottom), x, 0.0), DIM);
+        svg.fill(
+            &translated(&delim::close(Delim::Paren, &style, top, bottom), x, 0.0),
+            DIM,
+        );
     });
 
     writeln!(svg.0, "</svg>").unwrap();

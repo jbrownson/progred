@@ -38,10 +38,7 @@ pub enum Hover {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SourceTrace {
     Stored(Rc<[Step]>),
-    InCell {
-        cell: CellId,
-        path: Rc<[Step]>,
-    },
+    InCell { cell: CellId, path: Rc<[Step]> },
 }
 
 impl SourceTrace {
@@ -163,10 +160,7 @@ impl PartialEq for Secondary {
                     path: right_path,
                     relative_from: right_from,
                 },
-            ) => {
-                left_cell == right_cell
-                    && left_path[*left_from..] == right_path[*right_from..]
-            }
+            ) => left_cell == right_cell && left_path[*left_from..] == right_path[*right_from..],
             _ => false,
         }
     }
@@ -231,17 +225,8 @@ mod tests {
         let mut cells = Cells::new();
         cells.set_value(shared, contents.clone());
         cells.set_value(other, contents);
-        let root = Value::list([
-            Value::from(shared),
-            Value::from(shared),
-            Value::from(other),
-        ]);
-        let positions: Vec<_> = root
-            .as_list()
-            .expect("root list")
-            .keys()
-            .cloned()
-            .collect();
+        let root = Value::list([Value::from(shared), Value::from(shared), Value::from(other)]);
+        let positions: Vec<_> = root.as_list().expect("root list").keys().cloned().collect();
         let doc = Document {
             root: Some(root),
             cells,

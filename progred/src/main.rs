@@ -14,9 +14,9 @@ mod history;
 mod hover;
 mod identity;
 #[cfg(target_os = "macos")]
-mod macos_surface;
-#[cfg(target_os = "macos")]
 mod macos_menu;
+#[cfg(target_os = "macos")]
+mod macos_surface;
 #[cfg(target_os = "macos")]
 mod macos_window;
 mod menu;
@@ -39,7 +39,7 @@ mod test_values;
 mod text_store;
 mod workspace;
 
-use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disposition};
+use crate::frame::{Dispatch, Frame, FrameDisposition, Hovered, Paint, frame_disposition};
 use crate::model::{Model, ViewFlags};
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
@@ -50,9 +50,9 @@ use std::sync::Arc;
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
+use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType, PointerUpdate};
-use ui_events::ScrollDelta;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::util::{RenderContext, RenderSurface};
@@ -60,19 +60,19 @@ use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::{AaConfig, Renderer, RendererOptions, Scene};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 use winit::application::ApplicationHandler;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::dpi::LogicalSize;
 use winit::dpi::PhysicalPosition;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::{CursorIcon, Window, WindowId};
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
-#[cfg(target_arch = "wasm32")]
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsCast;
+use winit::window::{CursorIcon, Window, WindowId};
 
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
@@ -249,11 +249,7 @@ impl PendingScrub {
         self.dragging |= distance.hypot() >= SCRUB_DRAG_SLOP;
         self.point = point;
         self.dragging.then_some(progred_display::ScrubEvent {
-            movement_x: if was_dragging {
-                movement.x
-            } else {
-                distance.x
-            },
+            movement_x: if was_dragging { movement.x } else { distance.x },
             distance_y: distance.y,
         })
     }
@@ -377,7 +373,11 @@ pub(crate) struct App {
 }
 
 pub(crate) fn menu_height(scale: f64) -> f64 {
-    if menu::DRAWN { menu::bar_height(scale) } else { 0.0 }
+    if menu::DRAWN {
+        menu::bar_height(scale)
+    } else {
+        0.0
+    }
 }
 
 pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
@@ -454,9 +454,7 @@ fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
 /// nothing, being disposable.
 pub(crate) fn edge_path(selection: &Option<selection::Selection>) -> Option<gid::Path> {
     match selection {
-        Some(current) if current.stage() == selection::Stage::Edge => {
-            Some(current.path().to_vec())
-        }
+        Some(current) if current.stage() == selection::Stage::Edge => Some(current.path().to_vec()),
         _ => None,
     }
 }
@@ -526,38 +524,38 @@ impl ApplicationHandler<UserEvent> for App {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-        let size = window.inner_size();
-        #[cfg(target_os = "macos")]
-        let surface_future = self.context.create_render_surface(
-            macos_surface::create(&self.context.instance, &window),
-            size.width,
-            size.height,
-            wgpu::PresentMode::AutoVsync,
-        );
-        #[cfg(not(target_os = "macos"))]
-        let surface_future = self.context.create_surface(
-            window.clone(),
-            size.width,
-            size.height,
-            wgpu::PresentMode::AutoVsync,
-        );
-        let surface = pollster::block_on(surface_future).expect("Error creating surface");
+            let size = window.inner_size();
+            #[cfg(target_os = "macos")]
+            let surface_future = self.context.create_render_surface(
+                macos_surface::create(&self.context.instance, &window),
+                size.width,
+                size.height,
+                wgpu::PresentMode::AutoVsync,
+            );
+            #[cfg(not(target_os = "macos"))]
+            let surface_future = self.context.create_surface(
+                window.clone(),
+                size.width,
+                size.height,
+                wgpu::PresentMode::AutoVsync,
+            );
+            let surface = pollster::block_on(surface_future).expect("Error creating surface");
 
-        self.renderers
-            .resize_with(self.context.devices.len(), || None);
-        self.renderers[surface.dev_id].get_or_insert_with(|| {
-            Renderer::new(
-                &self.context.devices[surface.dev_id].device,
-                RendererOptions::default(),
-            )
-            .expect("Couldn't create renderer")
-        });
+            self.renderers
+                .resize_with(self.context.devices.len(), || None);
+            self.renderers[surface.dev_id].get_or_insert_with(|| {
+                Renderer::new(
+                    &self.context.devices[surface.dev_id].device,
+                    RendererOptions::default(),
+                )
+                .expect("Couldn't create renderer")
+            });
 
-        self.state = RenderState::Active {
-            surface: Box::new(surface),
-            valid_surface: true,
-            window,
-        };
+            self.state = RenderState::Active {
+                surface: Box::new(surface),
+                valid_surface: true,
+                window,
+            };
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -611,8 +609,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
 
         if let WindowEvent::ModifiersChanged(state) = &event {
-            self.modifiers =
-                ui_events_winit::keyboard::from_winit_modifier_state(state.state());
+            self.modifiers = ui_events_winit::keyboard::from_winit_modifier_state(state.state());
             let size = window.inner_size();
             self.retain_dispatch(
                 scale,
@@ -652,10 +649,7 @@ impl ApplicationHandler<UserEvent> for App {
                 && button.pointer.pointer_type == PointerType::Touch
             {
                 let size = window.inner_size();
-                self.pointer = Some(Point::new(
-                    button.state.position.x,
-                    button.state.position.y,
-                ));
+                self.pointer = Some(Point::new(button.state.position.x, button.state.position.y));
                 self.retain_dispatch(
                     scale,
                     Size::new(size.width as f64, size.height as f64),
@@ -684,10 +678,7 @@ impl ApplicationHandler<UserEvent> for App {
                 && !self.pressed
             {
                 let size = window.inner_size();
-                let position = Point::new(
-                    update.current.position.x,
-                    update.current.position.y,
-                );
+                let position = Point::new(update.current.position.x, update.current.position.y);
                 self.pointer = Some(position);
                 self.modifiers = update.current.modifiers;
                 self.pending_pointer = Some(PendingPointer {
@@ -716,11 +707,7 @@ impl ApplicationHandler<UserEvent> for App {
                             || dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
-                            || self.insert_key(
-                                &dispatch.descends,
-                                &dispatch.completion,
-                                &key_event,
-                            )
+                            || self.insert_key(&dispatch.descends, &dispatch.completion, &key_event)
                             || self.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
@@ -747,8 +734,7 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
-                        let position =
-                            Point::new(button.state.position.x, button.state.position.y);
+                        let position = Point::new(button.state.position.x, button.state.position.y);
                         self.pointer = Some(position);
                         self.pressed = true;
                         frame_input_changed = true;
@@ -779,8 +765,7 @@ impl ApplicationHandler<UserEvent> for App {
                                                 .as_ref()
                                                 .map(selection::Selection::stage),
                                             Some(
-                                                selection::Stage::Pending
-                                                    | selection::Stage::Label
+                                                selection::Stage::Pending | selection::Stage::Label
                                             )
                                         )
                                     });
@@ -790,8 +775,9 @@ impl ApplicationHandler<UserEvent> for App {
                                     event_root.as_ref(),
                                     &target,
                                 ) || match &target {
-                                    Hovered::Tree(hover::Hover::Drawing(source)) => self
-                                        .select_drawing_source(&dispatch.descends, source),
+                                    Hovered::Tree(hover::Hover::Drawing(source)) => {
+                                        self.select_drawing_source(&dispatch.descends, source)
+                                    }
                                     _ => false,
                                 };
                                 if handled && let Some(scrub) = scrub {
@@ -813,10 +799,8 @@ impl ApplicationHandler<UserEvent> for App {
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
                         // Pointer position is frame input, whether or
                         // not an event handler consumes the motion.
-                        let position = Point::new(
-                            update.current.position.x,
-                            update.current.position.y,
-                        );
+                        let position =
+                            Point::new(update.current.position.x, update.current.position.y);
                         self.pointer = Some(position);
                         frame_input_changed = true;
                         let moved = self.dispatch_point_move(&update)
@@ -842,15 +826,12 @@ impl ApplicationHandler<UserEvent> for App {
                         }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
-                        let position =
-                            Point::new(button.state.position.x, button.state.position.y);
+                        let position = Point::new(button.state.position.x, button.state.position.y);
                         self.pointer = Some(position);
                         self.pressed = false;
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_up(self, &button);
-                        handled
-                            || self.point.take().is_some()
-                            || self.scrub.take().is_some()
+                        handled || self.point.take().is_some() || self.scrub.take().is_some()
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
@@ -860,7 +841,10 @@ impl ApplicationHandler<UserEvent> for App {
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
                     }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(pointer)))) => {
+                    (
+                        None,
+                        Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(pointer))),
+                    ) => {
                         self.pointer = None;
                         self.pressed = false;
                         frame_input_changed = true;
@@ -915,7 +899,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
 
             WindowEvent::ScaleFactorChanged { .. } => {
-                    window.request_redraw();
+                window.request_redraw();
             }
 
             // The hover is the pointer RELATIVE TO CONTENT, and a
@@ -1095,12 +1079,7 @@ impl App {
             return true;
         }
         let before = self.model.doc.clone();
-        if selection::set_value(
-            &mut self.model.doc,
-            &self.stack.library,
-            &path,
-            replacement,
-        ) {
+        if selection::set_value(&mut self.model.doc, &self.stack.library, &path, replacement) {
             if self.scrub.as_ref().is_some_and(|scrub| !scrub.recorded) {
                 self.model.history.record(before, Some(path));
                 if let Some(scrub) = &mut self.scrub {
@@ -1170,12 +1149,8 @@ impl App {
                 .filter(|selection| selection.root() == &root && selection.path() == path)
                 .map(selection::Selection::recorded);
             if let Some(recorded) = recorded {
-                let mut next = selection::Selection::from_payload(
-                    &self.sources(),
-                    path,
-                    payload,
-                )
-                .with_root(root);
+                let mut next = selection::Selection::from_payload(&self.sources(), path, payload)
+                    .with_root(root);
                 next.preserve_recorded(recorded);
                 self.model.selection = Some(next);
             }
@@ -1291,7 +1266,10 @@ impl App {
             self.model
                 .workspace
                 .selected_or_document(
-                    self.model.selection.as_ref().map(selection::Selection::root),
+                    self.model
+                        .selection
+                        .as_ref()
+                        .map(selection::Selection::root),
                 )
                 .projection
                 == workspace::Projection::Raw,
@@ -1299,25 +1277,25 @@ impl App {
     }
 
     pub(crate) fn menu_availability(&self) -> menu::Availability {
-        let selected_root = self.model.selection.as_ref().map(selection::Selection::root);
+        let selected_root = self
+            .model
+            .selection
+            .as_ref()
+            .map(selection::Selection::root);
         menu::Availability {
             #[cfg(not(target_arch = "wasm32"))]
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
             open_pane: self.selected_cell_for_pane().is_some(),
-            move_up: selected_root.is_some_and(|root| {
-                self.model.workspace.can_move(root, workspace::Move::Up)
-            }),
-            move_down: selected_root.is_some_and(|root| {
-                self.model.workspace.can_move(root, workspace::Move::Down)
-            }),
-            move_left: selected_root.is_some_and(|root| {
-                self.model.workspace.can_move(root, workspace::Move::Left)
-            }),
-            move_right: selected_root.is_some_and(|root| {
-                self.model.workspace.can_move(root, workspace::Move::Right)
-            }),
+            move_up: selected_root
+                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
+            move_down: selected_root
+                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Down)),
+            move_left: selected_root
+                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Left)),
+            move_right: selected_root
+                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Right)),
         }
     }
 
@@ -1339,9 +1317,8 @@ impl App {
             return false;
         };
         let root = self.model.workspace.open_cell(side, cell, anchor.clone());
-        self.model.selection = Some(
-            selection::Selection::edge(&self.sources(), anchor).with_root(root),
-        );
+        self.model.selection =
+            Some(selection::Selection::edge(&self.sources(), anchor).with_root(root));
         true
     }
 
@@ -1477,9 +1454,8 @@ impl App {
         };
         if let Some((doc, restore)) = restored {
             self.model.doc = doc;
-            self.model.selection = restore.map(|path| {
-                selection::Selection::edge(&self.sources(), path).with_root(root)
-            });
+            self.model.selection = restore
+                .map(|path| selection::Selection::edge(&self.sources(), path).with_root(root));
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
                 let window = window.clone();
@@ -1521,11 +1497,7 @@ impl App {
         #[cfg(target_arch = "wasm32")]
         {
             let accepted = web_sys::window()
-                .and_then(|window| {
-                    window
-                        .confirm_with_message("Discard unsaved changes?")
-                        .ok()
-                })
+                .and_then(|window| window.confirm_with_message("Discard unsaved changes?").ok())
                 .unwrap_or(false);
             if accepted {
                 self.proceed(event_loop, then);
@@ -1534,28 +1506,28 @@ impl App {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-        let RenderState::Active { window, .. } = &self.state else {
-            return;
-        };
-        self.pending_discard = Some(then);
-        // rfd reports a custom button by its label; one spelling.
-        const DISCARD: &str = "Discard";
-        let sheet = rfd::AsyncMessageDialog::new()
-            .set_title("Discard unsaved changes?")
-            .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                DISCARD.to_string(),
-                "Cancel".to_string(),
-            ))
-            .set_parent(window.as_ref())
-            .show();
-        let proxy = self.proxy.clone();
-        std::thread::spawn(move || {
-            let accepted = matches!(
-                pollster::block_on(sheet),
-                rfd::MessageDialogResult::Custom(choice) if choice == DISCARD
-            );
-            let _ = proxy.send_event(UserEvent::Discard(accepted));
-        });
+            let RenderState::Active { window, .. } = &self.state else {
+                return;
+            };
+            self.pending_discard = Some(then);
+            // rfd reports a custom button by its label; one spelling.
+            const DISCARD: &str = "Discard";
+            let sheet = rfd::AsyncMessageDialog::new()
+                .set_title("Discard unsaved changes?")
+                .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                    DISCARD.to_string(),
+                    "Cancel".to_string(),
+                ))
+                .set_parent(window.as_ref())
+                .show();
+            let proxy = self.proxy.clone();
+            std::thread::spawn(move || {
+                let accepted = matches!(
+                    pollster::block_on(sheet),
+                    rfd::MessageDialogResult::Custom(choice) if choice == DISCARD
+                );
+                let _ = proxy.send_event(UserEvent::Discard(accepted));
+            });
         }
     }
 

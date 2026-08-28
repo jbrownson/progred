@@ -398,12 +398,12 @@ mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
     use crate::frame::Hovered;
     use crate::placed::{self, Placed};
+    use kurbo::{Affine, Insets, Rect, Stroke};
     use measured::{self, Extent, Measured};
+    use peniko::{Brush, Color};
     use puri::draw::Canvas;
     use puri::text::{TextCtx, TextStyle};
     use std::rc::Rc;
-    use kurbo::{Affine, Insets, Rect, Stroke};
-    use peniko::{Brush, Color};
 
     const BAR_HEIGHT: f64 = 30.0;
     const MENU_WIDTH: f64 = 230.0;
@@ -489,14 +489,10 @@ mod view {
                 }
             });
         });
-        activatable(
-            Hover::Heading(index),
-            content,
-            move |app| {
-                toggle(app, index);
-                true
-            },
-        )
+        activatable(Hover::Heading(index), content, move |app| {
+            toggle(app, index);
+            true
+        })
     }
 
     fn separator<C: 'static, Cv: Canvas + 'static>(
@@ -577,14 +573,10 @@ mod view {
             });
         });
         if enabled {
-            activatable(
-                Hover::Item(selection),
-                content,
-                move |app| {
-                    select(app, selection);
-                    true
-                },
-            )
+            activatable(Hover::Item(selection), content, move |app| {
+                select(app, selection);
+                true
+            })
         } else {
             content
         }

@@ -62,15 +62,9 @@ impl Selection {
     /// boundary used by current-site Grap capabilities: the address
     /// never enters the payload, and any line editor is only a Rust
     /// working copy of the payload's editing fields.
-    pub(crate) fn from_payload(
-        sources: &Sources,
-        path: Path,
-        payload: Value,
-    ) -> Self {
+    pub(crate) fn from_payload(sources: &Sources, path: Path, payload: Value) -> Self {
         match payload::stage(&payload) {
-            Some(stage) if stage == payload::vocabulary::PENDING => {
-                query_selection(path, payload)
-            }
+            Some(stage) if stage == payload::vocabulary::PENDING => query_selection(path, payload),
             Some(stage) if stage == payload::vocabulary::LABEL => query_selection(path, payload),
             _ => {
                 let editor = payload
@@ -253,8 +247,7 @@ fn line_editing(line: progred_display::LineEdit) -> Editor {
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
 pub fn seed_from_arrow(selection: &mut Selection, event: &KeyboardEvent) {
-    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
-    {
+    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft)) {
         selection.payload = payload::with_offsets(&selection.payload, 0, 0);
     }
 }
@@ -632,11 +625,7 @@ pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Valu
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
-pub fn toggle_collapse(
-    sources: &Sources,
-    annotations: &mut Annotations,
-    path: &[Step],
-) -> bool {
+pub fn toggle_collapse(sources: &Sources, annotations: &mut Annotations, path: &[Step]) -> bool {
     match collapse_default(sources, path) {
         Some(default) => {
             let next = !annotations::collapsed(annotations, path, default);
@@ -730,16 +719,14 @@ pub fn write_through(
             };
             let current = sources.resolve(path).cloned();
             let next = {
-                let arguments = std::iter::once((
-                    progred_libraries::line_edit::vocabulary::INPUT,
-                    text::value(&typed),
-                ))
-                .chain(current.clone().map(|current| {
-                    (
-                        progred_libraries::line_edit::vocabulary::CURRENT,
-                        current,
-                    )
-                }));
+                let arguments =
+                    std::iter::once((
+                        progred_libraries::line_edit::vocabulary::INPUT,
+                        text::value(&typed),
+                    ))
+                    .chain(current.clone().map(|current| {
+                        (progred_libraries::line_edit::vocabulary::CURRENT, current)
+                    }));
                 // `apply`, not `call` + `evaluate`: the current value
                 // is data even when it is code-shaped.
                 let evaluation = grap::apply(
@@ -786,9 +773,9 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// event boundaries.
 pub mod payload {
     use gid::{CellId, Value};
+    use kurbo::Point;
     use progred_libraries::{f64 as f64_convention, text};
     use puri::edit::LineEditState;
-    use kurbo::Point;
 
     pub mod vocabulary {
         use gid::CellId;
@@ -816,8 +803,7 @@ pub mod payload {
         pub const UPDATE: CellId = CellId::from_u128(0xcd06f18e4a72359bd6084c3f92e17ab4);
         /// The editor's in-motion text. For a pending this mirrors
         /// QUERY; for an edge it preserves text until write-through.
-        pub const EDITOR_TEXT: CellId =
-            CellId::from_u128(0x3b3544bd8a2fc3a83a08edb6766fad4a);
+        pub const EDITOR_TEXT: CellId = CellId::from_u128(0x3b3544bd8a2fc3a83a08edb6766fad4a);
         /// The in-progress drag-selection: window origin and click count.
         pub const DRAG: CellId = CellId::from_u128(0xb49c26e1075df3a8e5017d29c46b83f5);
         pub const X: CellId = CellId::from_u128(0x39e50d7ac1846f2b7a2384b06d95c1ef);
@@ -863,7 +849,11 @@ pub mod payload {
     }
 
     pub fn with_choice(payload: &Value, choice: usize) -> Value {
-        with_field(payload, vocabulary::CHOICE, f64_convention::value(choice as f64))
+        with_field(
+            payload,
+            vocabulary::CHOICE,
+            f64_convention::value(choice as f64),
+        )
     }
 
     pub fn with_offsets(payload: &Value, anchor: usize, focus: usize) -> Value {
@@ -897,7 +887,10 @@ pub mod payload {
         fields.insert(vocabulary::FOCUS, f64_convention::value(focus as f64));
         match line.preedit_parts() {
             Some((preedit, cursor)) => {
-                let mut composed = text::value(preedit).as_record().cloned().unwrap_or_default();
+                let mut composed = text::value(preedit)
+                    .as_record()
+                    .cloned()
+                    .unwrap_or_default();
                 if let Some((start, end)) = cursor {
                     composed.insert(vocabulary::START, f64_convention::value(start as f64));
                     composed.insert(vocabulary::END, f64_convention::value(end as f64));
@@ -1036,10 +1029,7 @@ pub mod payload {
         #[test]
         fn junk_reads_none() {
             assert_eq!(stage(&Value::record([])), None);
-            let junk = Value::record([(
-                vocabulary::CHOICE,
-                super::f64_convention::value(-1.5),
-            )]);
+            let junk = Value::record([(vocabulary::CHOICE, super::f64_convention::value(-1.5))]);
             assert_eq!(choice(&junk), None);
         }
     }

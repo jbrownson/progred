@@ -73,7 +73,13 @@ impl DelimStyle {
 }
 
 pub fn open(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    open_with_width(delim, style, top, bottom, style.bow_for(delim, bottom - top))
+    open_with_width(
+        delim,
+        style,
+        top,
+        bottom,
+        style.bow_for(delim, bottom - top),
+    )
 }
 
 /// The same height-sensitive stroke as [`open`], constrained to the
@@ -121,14 +127,7 @@ pub fn close_with_width(
     width: f64,
 ) -> BezPath {
     let mut path = open_with_width(delim, style, top, bottom, width);
-    path.apply_affine(Affine::new([
-        -1.0,
-        0.0,
-        0.0,
-        1.0,
-        width,
-        0.0,
-    ]));
+    path.apply_affine(Affine::new([-1.0, 0.0, 0.0, 1.0, width, 0.0]));
     path
 }
 
@@ -219,7 +218,9 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
 }
 
 fn arc(path: &mut BezPath, center: (f64, f64), radii: Vec2, start: f64, sweep: f64) {
-    path.extend(Arc::new(Point::new(center.0, center.1), radii, start, sweep, 0.0).append_iter(0.05));
+    path.extend(
+        Arc::new(Point::new(center.0, center.1), radii, start, sweep, 0.0).append_iter(0.05),
+    );
 }
 
 /// An arc mirrored vertically about its center when `sign` is

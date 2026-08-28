@@ -114,10 +114,7 @@ mod tests {
             .result
         ));
 
-        let written = Value::record([(
-            vocabulary::FOLD,
-            Value::from(vocabulary::FOLDED),
-        )]);
+        let written = Value::record([(vocabulary::FOLD, Value::from(vocabulary::FOLDED))]);
         let set = grap::evaluate(
             &grap::call(
                 Value::from(vocabulary::SET),

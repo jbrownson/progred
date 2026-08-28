@@ -86,7 +86,11 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("metadata_call", f64::value(7.0)),
     ] {
         assert_eq!(
-            evaluate(&doc, evaluated_expression(demo_entry(&doc, &binders, label)),).result,
+            evaluate(
+                &doc,
+                evaluated_expression(demo_entry(&doc, &binders, label)),
+            )
+            .result,
             expected
         );
     }

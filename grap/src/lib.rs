@@ -40,10 +40,7 @@ pub mod absent {
     }
 
     pub fn reason(value: &Value) -> Option<CellId> {
-        value
-            .as_record()?
-            .get(&ABSENT)
-            .and_then(Value::as_cell)
+        value.as_record()?.get(&ABSENT).and_then(Value::as_cell)
     }
 
     pub fn is_absent(value: &Value) -> bool {
@@ -88,10 +85,7 @@ pub struct Expression(usize);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceOrigin {
     Input(Vec<gid::Step>),
-    Cell {
-        cell: CellId,
-        path: Vec<gid::Step>,
-    },
+    Cell { cell: CellId, path: Vec<gid::Step> },
 }
 
 /// A staged foreign function's per-visit form, returned by its
@@ -125,8 +119,7 @@ impl ForeignFunction {
     }
 
     pub fn runtime(
-        call: impl Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt>
-        + 'static,
+        call: impl Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
     ) -> Self {
         Self {
             implementation: ForeignImplementation::Direct(Rc::new(call)),
@@ -295,7 +288,9 @@ impl RuntimeValue {
 
     pub fn field(&self, field: CellId) -> Option<RuntimeValue> {
         match &self.0 {
-            RuntimeValueKind::Data(value) => value.as_record()?.get(&field).cloned().map(Self::from),
+            RuntimeValueKind::Data(value) => {
+                value.as_record()?.get(&field).cloned().map(Self::from)
+            }
             RuntimeValueKind::Record(fields) => fields
                 .binary_search_by_key(&field, |(label, _)| *label)
                 .ok()
@@ -304,9 +299,8 @@ impl RuntimeValue {
             // the acceleration must not change what a value is.
             RuntimeValueKind::F64(value) => match &value.original {
                 Some(original) => original.as_record()?.get(&field).cloned().map(Self::from),
-                None => (field == crate::f64::F64).then(|| {
-                    Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))
-                }),
+                None => (field == crate::f64::F64)
+                    .then(|| Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))),
             },
             RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
@@ -447,11 +441,8 @@ impl std::hash::Hasher for FoldHasher {
 
 #[derive(Debug, Default)]
 struct CellIndexTable {
-    by_cell: std::collections::HashMap<
-        CellId,
-        CellIndex,
-        std::hash::BuildHasherDefault<FoldHasher>,
-    >,
+    by_cell:
+        std::collections::HashMap<CellId, CellIndex, std::hash::BuildHasherDefault<FoldHasher>>,
     cells: Vec<CellId>,
     /// Cells ever bound in any environment of this evaluation. Function
     /// references are typically never bound, so they skip the
@@ -588,10 +579,7 @@ impl Environment {
     /// only while another environment still shares it. Lookup, equality,
     /// and reification are the same as through [`Self::extended_runtime`];
     /// sequential binders avoid a frame allocation per binding.
-    pub fn push_runtime(
-        &mut self,
-        bindings: impl IntoIterator<Item = (CellId, RuntimeValue)>,
-    ) {
+    pub fn push_runtime(&mut self, bindings: impl IntoIterator<Item = (CellId, RuntimeValue)>) {
         let indices = self.indices.clone();
         self.push_indexed(
             bindings
@@ -891,7 +879,9 @@ enum OriginNode {
 enum Form {
     Data,
     Cell(CellIndex),
-    Call { function: Expression },
+    Call {
+        function: Expression,
+    },
     Lambda {
         parameters: LambdaParameters,
         body: Expression,
@@ -1025,15 +1015,8 @@ impl<'a> Context<'a> {
                 Form::Lambda {
                     parameters,
                     body: {
-                        let child = self.child_origin(
-                            origin,
-                            gid::Step::Key(vocabulary::BODY),
-                        );
-                        self.lower_with(
-                            fields.get(&vocabulary::BODY).unwrap(),
-                            descend_data,
-                            child,
-                        )
+                        let child = self.child_origin(origin, gid::Step::Key(vocabulary::BODY));
+                        self.lower_with(fields.get(&vocabulary::BODY).unwrap(), descend_data, child)
                     },
                 }
             }
@@ -1057,10 +1040,8 @@ impl<'a> Context<'a> {
                         elements
                             .iter()
                             .map(|(position, value)| {
-                                let child = self.child_origin(
-                                    origin,
-                                    gid::Step::Element(position.clone()),
-                                );
+                                let child =
+                                    self.child_origin(origin, gid::Step::Element(position.clone()));
                                 self.lower_with(value, true, child)
                             })
                             .collect(),
@@ -1212,9 +1193,8 @@ impl<'a> Context<'a> {
                 if let Some(cached) = &context.expressions[expression.0].data_runtime {
                     return Ok(cached.clone());
                 }
-                let value = context.lower_runtime(RuntimeValue::from_value(
-                    context.value(expression).clone(),
-                ));
+                let value = context
+                    .lower_runtime(RuntimeValue::from_value(context.value(expression).clone()));
                 context.expressions[expression.0].data_runtime = Some(value.clone());
                 Ok(value)
             }),
@@ -1270,12 +1250,7 @@ impl<'a> Context<'a> {
                     return context.eval_grap_call(closure, call, environment, Some(&plan));
                 }
                 RuntimeValueKind::Foreign(foreign) => {
-                    return context.call_foreign_staged(
-                        &foreign,
-                        call,
-                        environment,
-                        Some(&stages),
-                    );
+                    return context.call_foreign_staged(&foreign, call, environment, Some(&stages));
                 }
                 other => RuntimeValue(other),
             };
@@ -1369,7 +1344,8 @@ impl<'a> Context<'a> {
                 CellState::Ready(expression) => {
                     self.eval_resolved_cell(index, cell, expression, environment)
                 }
-                CellState::Evaluating { stack_index } => Ok(RuntimeValue::from_value(self.absent(
+                CellState::Evaluating { stack_index } => Ok(RuntimeValue::from_value(
+                    self.absent(
                         Diagnostic::CellCycle(
                             self.resolving[stack_index..]
                                 .iter()
@@ -1378,7 +1354,8 @@ impl<'a> Context<'a> {
                                 .collect(),
                         ),
                         absent::CELL_CYCLE,
-                    ))),
+                    ),
+                )),
                 CellState::Unknown => {
                     self.dependencies.insert(cell);
                     let Some(value) = (self.resolve)(cell) else {
@@ -1478,9 +1455,7 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         let value = match foreign {
             ResolvedForeign::Permanent { function, .. } => match &function.implementation {
-                ForeignImplementation::Direct(call_direct) => {
-                    call_direct(self, call, environment)
-                }
+                ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
                 ForeignImplementation::Staged(prepare) => {
                     let cached = stages.and_then(|slot| {
                         slot.borrow().as_ref().and_then(|(cached_prepare, stage)| {
@@ -1628,12 +1603,12 @@ impl<'a> Context<'a> {
                 let call = self.lower(&call);
                 self.call_foreign(&target, call, &callable.environment)
             }
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::List(_) => Ok(RuntimeValue::from_value(self.absent(
-                Diagnostic::NotCallable(callable.value.to_value()),
-                absent::NOT_CALLABLE,
-            ))),
+            RuntimeValueKind::F64(_) | RuntimeValueKind::Record(_) | RuntimeValueKind::List(_) => {
+                Ok(RuntimeValue::from_value(self.absent(
+                    Diagnostic::NotCallable(callable.value.to_value()),
+                    absent::NOT_CALLABLE,
+                )))
+            }
         }
     }
 
@@ -1701,8 +1676,7 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         let arguments_plan = plan.and_then(|slot| {
             slot.borrow().as_ref().and_then(|cached| {
-                Rc::ptr_eq(&cached.params, &closure.params)
-                    .then(|| cached.arguments.clone())
+                Rc::ptr_eq(&cached.params, &closure.params).then(|| cached.arguments.clone())
             })
         });
         let arguments_plan = match arguments_plan {
@@ -2095,8 +2069,10 @@ mod tests {
     #[test]
     fn parameters_shadow_foreign_functions() {
         let function = new_cell_id();
-        let foreign = ForeignFunctions::default()
-            .register(function, ForeignFunction::new(|_, _, _| Ok(blob("foreign"))));
+        let foreign = ForeignFunctions::default().register(
+            function,
+            ForeignFunction::new(|_, _, _| Ok(blob("foreign"))),
+        );
         let shadowed = call(
             lambda([function], Value::from(function)),
             [(function, blob("bound"))],
@@ -2657,11 +2633,10 @@ mod tests {
         let function = new_cell_id();
         let calls = std::cell::Cell::new(0);
         let functions = [function];
-        let scoped =
-            |_, _: &mut Context<'_>, _: Expression, _: &Environment| {
-                calls.set(calls.get() + 1);
-                Ok(blob("drawn"))
-            };
+        let scoped = |_, _: &mut Context<'_>, _: Expression, _: &Environment| {
+            calls.set(calls.get() + 1);
+            Ok(blob("drawn"))
+        };
         let overlay = ForeignOverlay::new(&functions, &scoped);
         let evaluation = evaluate_scoped(
             &call(Value::from(function), []),

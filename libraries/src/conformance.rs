@@ -158,7 +158,10 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
     let note = new_cell_id();
     let binder = new_cell_id();
     let subject = Value::record([
-        (f64::vocabulary::F64, Value::from(1.0f64.to_le_bytes().to_vec())),
+        (
+            f64::vocabulary::F64,
+            Value::from(1.0f64.to_le_bytes().to_vec()),
+        ),
         (note, blob("annotated")),
     ]);
     let expression = grap::call(

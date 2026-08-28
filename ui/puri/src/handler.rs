@@ -20,9 +20,9 @@
 //! (destructure it to wrap the channels) it can call, wrap with
 //! before/after behavior, transform events for, or drop.
 
+use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerUpdate};
-use ui_events::ScrollDelta;
 
 /// The part of a scroll event not accepted by this handler, plus
 /// whether accepting any part changed its context.
@@ -173,10 +173,8 @@ impl<C> Handler<C> {
         compose(&mut self.pointer_up, dispatch);
     }
 
-    pub fn on_pointer_cancel(
-        &mut self,
-        dispatch: impl Fn(&mut C, &PointerInfo) -> bool + 'static,
-    ) where
+    pub fn on_pointer_cancel(&mut self, dispatch: impl Fn(&mut C, &PointerInfo) -> bool + 'static)
+    where
         C: 'static,
     {
         compose(&mut self.pointer_cancel, dispatch);
@@ -185,8 +183,7 @@ impl<C> Handler<C> {
     pub fn on_scroll(
         &mut self,
         dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
-    )
-    where
+    ) where
         C: 'static,
     {
         compose_scroll(&mut self.scroll, dispatch);
@@ -215,11 +212,7 @@ impl<C> Handler<C> {
         (self.pointer_cancel)(ctx, event)
     }
 
-    pub fn dispatch_scroll(
-        &self,
-        ctx: &mut C,
-        event: &PointerScrollEvent,
-    ) -> ScrollOutcome {
+    pub fn dispatch_scroll(&self, ctx: &mut C, event: &PointerScrollEvent) -> ScrollOutcome {
         (self.scroll)(ctx, event)
     }
 

@@ -3,7 +3,10 @@
 use crate::{Library, f64, line_edit, name, text};
 use gid::{Cells, Step, Value};
 use grap_runtime::{ForeignFunction, ForeignFunctions};
-use progred_display::{Face, Layout, Paint, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col, descend, leaf, on_activate, on_hover, on_point, popover};
+use progred_display::{
+    Face, Layout, Paint, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col,
+    descend, leaf, on_activate, on_hover, on_point, popover,
+};
 use puri::{Affine, Brush, Color, Command, Drawing, Leaf, Rect, RoundedRect, Shape, Stroke};
 use puri_widgets::color_picker::{self, Hsva};
 use std::rc::Rc;
@@ -66,9 +69,7 @@ fn encoded(value: &Value) -> Option<Encoded> {
 pub fn read(value: &Value) -> Option<Color> {
     Some(match encoded(value)? {
         Encoded::Rgb([red, green, blue]) => Color::from_rgba8(red, green, blue, 0xff),
-        Encoded::Rgba([red, green, blue, alpha]) => {
-            Color::from_rgba8(red, green, blue, alpha)
-        }
+        Encoded::Rgba([red, green, blue, alpha]) => Color::from_rgba8(red, green, blue, alpha),
     })
 }
 
@@ -169,26 +170,28 @@ fn hsva(encoded: Encoded) -> Hsva {
     Hsva::from_rgba8(rgba)
 }
 
-fn picker<World, Hover>(
-    original: &Value,
-    encoded: Encoded,
-    hue: f64,
-) -> Layout<World, Hover> {
+fn picker<World, Hover>(original: &Value, encoded: Encoded, hue: f64) -> Layout<World, Hover> {
     let color = Hsva {
         hue,
         ..hsva(encoded)
     };
     let plane = on_point(
         picker_leaf(color_picker::plane(color)),
-        picker_update(original.clone(), color, |color, point| {
-            color.with_plane(point.x, point.y)
-        }, false),
+        picker_update(
+            original.clone(),
+            color,
+            |color, point| color.with_plane(point.x, point.y),
+            false,
+        ),
     );
     let hue = on_point(
         picker_leaf(color_picker::hue(color)),
-        picker_update(original.clone(), color, |color, point| {
-            color.with_hue(point.x)
-        }, true),
+        picker_update(
+            original.clone(),
+            color,
+            |color, point| color.with_hue(point.x),
+            true,
+        ),
     );
     col(
         0,
@@ -198,9 +201,12 @@ fn picker<World, Hover>(
             .chain(matches!(encoded, Encoded::Rgba(_)).then(|| {
                 on_point(
                     picker_leaf(color_picker::alpha(color)),
-                    picker_update(original.clone(), color, |color, point| {
-                        color.with_alpha(point.x)
-                    }, false),
+                    picker_update(
+                        original.clone(),
+                        color,
+                        |color, point| color.with_alpha(point.x),
+                        false,
+                    ),
                 )
             })),
     )
@@ -227,10 +233,7 @@ fn functions() -> ForeignFunctions {
 }
 
 fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
-    let shape = Shape::RoundedRect(RoundedRect::from_rect(
-        Rect::new(0.5, 0.5, 14.5, 14.5),
-        2.5,
-    ));
+    let shape = Shape::RoundedRect(RoundedRect::from_rect(Rect::new(0.5, 0.5, 14.5, 14.5), 2.5));
     leaf(Leaf::Drawing(Drawing {
         width: 15.0,
         ascent: 11.0,
@@ -275,18 +278,15 @@ pub fn display<World: 'static, Hover: Clone>(
         swatch(color)
     };
     let swatch = on_hover(swatch, target.hover);
-    let swatch = if input.writable && let Some(hue) = selected_hue {
+    let swatch = if input.writable
+        && let Some(hue) = selected_hue
+    {
         popover(swatch, picker(input.value, encoded, hue))
     } else {
         swatch
     };
-    let name = name::read(input.value).map(|_| {
-        descend(
-            Step::Key(name::vocabulary::NAME),
-            None,
-            None,
-        )
-    });
+    let name =
+        name::read(input.value).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
     let spelling = line_edit::layout_with_family(
         spelling(encoded),
         grap_runtime::ffi(vocabulary::UPDATE),
@@ -476,10 +476,7 @@ mod tests {
     fn a_named_color_projects_its_editable_name_and_hex() {
         let color = name::record(
             "rebeccapurple",
-            [(
-                vocabulary::RGB,
-                Value::from(vec![0x66, 0x33, 0x99]),
-            )],
+            [(vocabulary::RGB, Value::from(vec![0x66, 0x33, 0x99]))],
         );
         let target = |_| progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_: &mut ()| false),
