@@ -393,6 +393,10 @@ struct CellIndexTable {
         std::hash::BuildHasherDefault<FoldHasher>,
     >,
     cells: Vec<CellId>,
+    /// Cells ever bound in any environment of this evaluation. Function
+    /// references are typically never bound, so they skip the
+    /// environment walk that must otherwise prove absence frame by frame.
+    bound: Vec<u64>,
 }
 
 impl CellIndexTable {
@@ -413,6 +417,20 @@ impl CellIndexTable {
 
     fn index(&self, cell: CellId) -> Option<CellIndex> {
         self.by_cell.get(&cell).copied()
+    }
+
+    fn mark_bound(&mut self, index: CellIndex) {
+        let word = index.0 / 64;
+        if self.bound.len() <= word {
+            self.bound.resize(word + 1, 0);
+        }
+        self.bound[word] |= 1 << (index.0 & 63);
+    }
+
+    fn is_bound(&self, index: CellIndex) -> bool {
+        self.bound
+            .get(index.0 / 64)
+            .is_some_and(|word| word & (1 << (index.0 & 63)) != 0)
     }
 }
 
@@ -524,10 +542,21 @@ impl Environment {
 
     fn push_indexed(&mut self, bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>) {
         match &mut self.frame {
-            Some(frame) => Rc::make_mut(frame).bindings.extend(bindings),
+            Some(frame) => {
+                let frame = Rc::make_mut(frame);
+                for (index, value) in bindings {
+                    self.indices.borrow_mut().mark_bound(index);
+                    frame.bindings.push((index, value));
+                }
+            }
             None => {
                 let bindings: Vec<_> = bindings.into_iter().collect();
                 if !bindings.is_empty() {
+                    let mut table = self.indices.borrow_mut();
+                    for (index, _) in &bindings {
+                        table.mark_bound(*index);
+                    }
+                    drop(table);
                     self.frame = Some(Rc::new(EnvironmentFrame {
                         parent: None,
                         bindings,
@@ -544,6 +573,12 @@ impl Environment {
         let bindings: Vec<_> = bindings.into_iter().collect();
         if bindings.is_empty() {
             return self.clone();
+        }
+        {
+            let mut table = self.indices.borrow_mut();
+            for (index, _) in &bindings {
+                table.mark_bound(*index);
+            }
         }
         Self {
             indices: self.indices.clone(),
@@ -1144,7 +1179,9 @@ impl<'a> Context<'a> {
         index: CellIndex,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        if let Some(value) = environment.get_index(index) {
+        if self.indices.borrow().is_bound(index)
+            && let Some(value) = environment.get_index(index)
+        {
             let value = value.clone();
             return Ok(self.lower_runtime(value));
         }
