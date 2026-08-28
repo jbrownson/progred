@@ -20,6 +20,12 @@ pub(crate) fn pick(modifiers: &Modifiers) -> bool {
     link(modifiers)
 }
 
+/// Direct manipulation of a projected value uses the same nonlocal
+/// inspection mode as picking it.
+pub(crate) fn scrub(modifiers: &Modifiers) -> bool {
+    link(modifiers)
+}
+
 pub(crate) fn plain(modifiers: &Modifiers) -> bool {
     !(modifiers.ctrl() || modifiers.meta() || modifiers.alt() || modifiers.shift())
 }
@@ -38,7 +44,9 @@ mod tests {
 
         assert!(link(&platform));
         assert!(pick(&platform));
+        assert!(scrub(&platform));
         assert!(!link(&Modifiers::empty()));
         assert!(!pick(&Modifiers::empty()));
+        assert!(!scrub(&Modifiers::empty()));
     }
 }

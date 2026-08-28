@@ -195,6 +195,53 @@ struct PendingPointer {
     viewport: Size,
 }
 
+// Logical pixels. Winit does not expose the platform drag threshold;
+// replace this fallback when the input adapter can provide one.
+const SCRUB_DRAG_SLOP: f64 = 3.0;
+
+struct PendingScrub {
+    origin: Point,
+    point: Point,
+    scale: f64,
+    action: placed::ScrubAction,
+    gesture: progred_display::ScrubGesture,
+    dragging: bool,
+    recorded: bool,
+    spelling: Option<String>,
+}
+
+impl PendingScrub {
+    fn new(origin: Point, scale: f64, action: placed::ScrubAction) -> Self {
+        let gesture = (action.handler)();
+        Self {
+            origin,
+            point: origin,
+            scale,
+            action,
+            gesture,
+            dragging: false,
+            recorded: false,
+            spelling: None,
+        }
+    }
+
+    fn update(&mut self, point: Point) -> Option<progred_display::ScrubEvent> {
+        let movement = (point - self.point) / self.scale;
+        let distance = (point - self.origin) / self.scale;
+        let was_dragging = self.dragging;
+        self.dragging |= distance.hypot() >= SCRUB_DRAG_SLOP;
+        self.point = point;
+        self.dragging.then_some(progred_display::ScrubEvent {
+            movement_x: if was_dragging {
+                movement.x
+            } else {
+                distance.x
+            },
+            distance_y: distance.y,
+        })
+    }
+}
+
 impl PendingScroll {
     fn merge(&mut self, next: Self) -> Result<(), Self> {
         let merged = self.scale == next.scale
@@ -296,6 +343,10 @@ pub(crate) struct App {
     /// Pressed motion is never deferred; drag gestures receive every
     /// update delivered by the event source.
     pending_pointer: Option<PendingPointer>,
+    /// A semantic value scrub retained from its start frame. Raw
+    /// pointer input remains available to controls; this runs only as
+    /// the editor fallback after the movement threshold is crossed.
+    scrub: Option<PendingScrub>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
@@ -689,7 +740,28 @@ impl ApplicationHandler<UserEvent> for App {
                             raw
                         } else if let Some(target) = self.hover.clone() {
                             if modifiers::pick(&button.state.modifiers) {
-                                placed::dispatch_target(
+                                let scrub = modifiers::scrub(&button.state.modifiers)
+                                    .then(|| {
+                                        placed::scrub_target(
+                                            &dispatch.scrubs,
+                                            event_root.as_ref(),
+                                            &target,
+                                        )
+                                    })
+                                    .flatten()
+                                    .filter(|_| {
+                                        !matches!(
+                                            self.model
+                                                .selection
+                                                .as_ref()
+                                                .map(selection::Selection::stage),
+                                            Some(
+                                                selection::Stage::Pending
+                                                    | selection::Stage::Label
+                                            )
+                                        )
+                                    });
+                                let handled = placed::dispatch_target(
                                     &dispatch.picks,
                                     self,
                                     event_root.as_ref(),
@@ -698,7 +770,11 @@ impl ApplicationHandler<UserEvent> for App {
                                     Hovered::Tree(hover::Hover::Drawing(source)) => self
                                         .select_drawing_source(&dispatch.descends, source),
                                     _ => false,
+                                };
+                                if handled && let Some(scrub) = scrub {
+                                    self.scrub = Some(PendingScrub::new(position, scale, scrub));
                                 }
+                                handled
                             } else {
                                 placed::dispatch_target(
                                     &dispatch.activations,
@@ -720,7 +796,8 @@ impl ApplicationHandler<UserEvent> for App {
                         );
                         self.pointer = Some(position);
                         frame_input_changed = true;
-                        let moved = dispatch.handler.dispatch_pointer_move(self, &update);
+                        let moved = dispatch.handler.dispatch_pointer_move(self, &update)
+                            || self.dispatch_scrub_move(&update);
                         if moved || update.pointer.pointer_type != PointerType::Touch {
                             moved
                         } else {
@@ -746,11 +823,13 @@ impl ApplicationHandler<UserEvent> for App {
                         self.pointer = Some(position);
                         self.pressed = false;
                         frame_input_changed = true;
-                        dispatch.handler.dispatch_pointer_up(self, &button)
+                        let handled = dispatch.handler.dispatch_pointer_up(self, &button);
+                        handled || self.scrub.take().is_some()
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
                         self.pressed = false;
+                        self.scrub = None;
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
                     }
@@ -760,7 +839,8 @@ impl ApplicationHandler<UserEvent> for App {
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_cancel(self, &pointer);
                         let resize_cancelled = self.model.workspace.cancel_resize();
-                        handled || resize_cancelled
+                        let scrub_cancelled = self.scrub.take().is_some();
+                        handled || resize_cancelled || scrub_cancelled
                     }
                     _ => false,
                 };
@@ -921,6 +1001,7 @@ fn main() {
         pending_paint: None,
         pending_scroll: None,
         pending_pointer: None,
+        scrub: None,
         last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
@@ -967,6 +1048,39 @@ impl App {
                 self.refresh_title();
             }
         }
+    }
+
+    fn dispatch_scrub_move(&mut self, update: &PointerUpdate) -> bool {
+        let point = Point::new(update.current.position.x, update.current.position.y);
+        let Some(scrub) = &mut self.scrub else {
+            return false;
+        };
+        let Some(event) = scrub.update(point) else {
+            return true;
+        };
+        let path = scrub.action.path.clone();
+        let update = (scrub.gesture)(event);
+        scrub.spelling = update.spelling;
+        let replacement = update.value;
+        if self.sources().resolve(&path) == Some(&replacement) {
+            return true;
+        }
+        let before = self.model.doc.clone();
+        if selection::set_value(
+            &mut self.model.doc,
+            &self.stack.library,
+            &path,
+            replacement,
+        ) {
+            if self.scrub.as_ref().is_some_and(|scrub| !scrub.recorded) {
+                self.model.history.record(before, Some(path));
+                if let Some(scrub) = &mut self.scrub {
+                    scrub.recorded = true;
+                }
+            }
+            self.refresh_title();
+        }
+        true
     }
 
     fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
@@ -1431,6 +1545,7 @@ impl App {
             workspace: workspace::Workspace::default(),
         };
         self.hover = None;
+        self.scrub = None;
         self.doc_path = path;
         self.revealed = None;
         if let RenderState::Active { window, .. } = &self.state {

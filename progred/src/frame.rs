@@ -41,6 +41,7 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Handler<App>,
     pub(crate) activations: Vec<placed::TargetAction<App>>,
     pub(crate) picks: Vec<placed::TargetAction<App>>,
+    pub(crate) scrubs: Vec<placed::ScrubAction>,
     pub(crate) descends: Vec<navigate::Descend<App>>,
     pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
@@ -325,6 +326,13 @@ pub(crate) struct FrameDescription<'a> {
     availability: menu::Availability,
     scale: f64,
     viewport: Size,
+    scrub: Option<ScrubPresentation>,
+}
+
+struct ScrubPresentation {
+    root: workspace::Root,
+    path: gid::Path,
+    spelling: Option<String>,
 }
 
 pub(crate) struct FrameResources<'a> {
@@ -513,6 +521,13 @@ impl App {
             availability,
             scale,
             viewport,
+            scrub: self.scrub.as_ref().and_then(|scrub| {
+                Some(ScrubPresentation {
+                    root: scrub.action.root()?.clone(),
+                    path: scrub.action.path.clone(),
+                    spelling: scrub.spelling.clone(),
+                })
+            }),
         };
         let resources = FrameResources {
             fonts: &mut self.font_cx,
@@ -583,6 +598,7 @@ impl App {
             probes: _,
             activations,
             picks,
+            scrubs,
             handler,
             descends,
             view_regions,
@@ -607,6 +623,7 @@ impl App {
                 handler: handler.unwrap_or_else(Handler::new),
                 activations,
                 picks,
+                scrubs,
                 descends,
                 view_regions,
                 line: 14.0 * scale,
@@ -728,6 +745,7 @@ fn project_workspace_view(
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     view: &workspace::View,
+    scrub: Option<&ScrubPresentation>,
     drawing_memo: &projection::DrawingMemo,
     size: Size,
     scale: f64,
@@ -780,6 +798,9 @@ fn project_workspace_view(
         tcx,
         projection_hooks(view.root.clone()),
         drawing_memo,
+        scrub
+            .filter(|scrub| scrub.root == view.root)
+            .and_then(|scrub| Some((scrub.path.as_slice(), scrub.spelling.as_deref()?))),
     );
     let content = measured::pad(Insets::uniform(margin), projected);
     let maximum = Vec2::new(
@@ -828,6 +849,7 @@ fn project_workspace(
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
+    scrub: Option<&ScrubPresentation>,
     drawing_memos: &mut HashMap<Root, projection::DrawingMemo>,
     size: Size,
     scale: f64,
@@ -856,6 +878,7 @@ fn project_workspace(
             tcx,
             sources,
             view,
+            scrub,
             drawing_memo,
             rect.size(),
             scale,
@@ -947,6 +970,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         availability,
         scale,
         viewport,
+        scrub,
     } = description;
     let FrameResources {
         fonts: font_cx,
@@ -1002,6 +1026,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         &styles,
         &mut tcx,
         sources,
+        scrub.as_ref(),
         drawing_memos,
         content_viewport.size(),
         scale,

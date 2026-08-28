@@ -10,7 +10,10 @@ use grap_runtime::vocabulary::FUNCTION;
 use grap_runtime::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
-use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, row};
+use progred_display::{
+    Delim, Layout, ProjectionInput, ScrubEvent, ScrubUpdate, bracket, on_scrub, overlay_value, row,
+};
+use std::rc::Rc;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -60,13 +63,132 @@ pub fn read(value: &Value) -> Option<f64> {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let content = read(input.value)?.to_string();
-    Some(line_edit::layout(
-        content,
+    let number = read(input.value)?;
+    let line = line_edit::layout(
+        number.to_string(),
         grap_runtime::ffi(vocabulary::UPDATE),
         "",
         "",
+    );
+    if !number.is_finite() {
+        return Some(line);
+    }
+    let original = input.value.clone();
+    let target = input.targets.current();
+    Some(on_scrub(
+        line,
+        target.hover,
+        Rc::new(move || {
+            let original = original.clone();
+            let mut scrub = NumberScrub::new(number);
+            Box::new(move |event| {
+                let scrubbed = scrub.update(event);
+                ScrubUpdate {
+                    value: overlay_value(&original, value(scrubbed.value)),
+                    spelling: Some(spelling(scrubbed.value, scrubbed.precision)),
+                }
+            })
+        }),
     ))
+}
+
+struct Scrubbed {
+    value: f64,
+    precision: f64,
+}
+
+const SCRUB_PIXELS_PER_STEP: f64 = 4.0;
+const SCRUB_PIXELS_PER_DECADE: f64 = 24.0;
+const SCRUB_DECADE_STRETCH: f64 = 1.5;
+
+struct NumberScrub {
+    base: f64,
+    raw: f64,
+    displayed: f64,
+}
+
+impl NumberScrub {
+    fn new(start: f64) -> Self {
+        Self {
+            base: if start == 0.0 {
+                0.01
+            } else {
+                10.0_f64
+                    .powf(start.abs().log10().floor() - 2.0)
+                    .min(1.0)
+            },
+            raw: start,
+            displayed: start,
+        }
+    }
+
+    fn update(&mut self, event: ScrubEvent) -> Scrubbed {
+        let gain = 10.0_f64.powf(vertical_decades(event.distance_y).clamp(-16.0, 16.0));
+        let scale = self.base * gain;
+        let precision = nice_precision(scale);
+        let horizontal_scale = scale / gain.max(1.0).cbrt();
+        self.raw += event.movement_x * horizontal_scale / SCRUB_PIXELS_PER_STEP;
+        let candidate = rounded(self.raw, precision);
+        self.displayed = if event.movement_x > 0.0 {
+            self.displayed.max(candidate)
+        } else if event.movement_x < 0.0 {
+            self.displayed.min(candidate)
+        } else {
+            self.displayed
+        };
+        Scrubbed {
+            value: self.displayed,
+            precision,
+        }
+    }
+}
+
+fn vertical_decades(distance_y: f64) -> f64 {
+    let distance = distance_y.abs();
+    let decades = (1.0 + (SCRUB_DECADE_STRETCH - 1.0) * distance / SCRUB_PIXELS_PER_DECADE)
+        .log(SCRUB_DECADE_STRETCH);
+    -distance_y.signum() * decades
+}
+
+fn nice_precision(scale: f64) -> f64 {
+    if scale.is_finite() && scale > 0.0 {
+        let magnitude = 10.0_f64.powf(scale.log10().floor());
+        let normalized = scale / magnitude;
+        let coefficient = if normalized < 2.0 {
+            1.0
+        } else if normalized < 5.0 {
+            2.0
+        } else {
+            5.0
+        };
+        coefficient * magnitude
+    } else {
+        scale
+    }
+}
+
+fn rounded(value: f64, step: f64) -> f64 {
+    if value.is_finite() && step.is_finite() && step > 0.0 {
+        let snapped = (value / step).round() * step;
+        let decimal_places = (-step.log10().floor()).max(0.0);
+        let decimal_scale = 10.0_f64.powf(decimal_places);
+        if decimal_scale.is_finite() {
+            (snapped * decimal_scale).round() / decimal_scale
+        } else {
+            snapped
+        }
+    } else {
+        value
+    }
+}
+
+fn spelling(value: f64, precision: f64) -> String {
+    if precision >= 1.0 {
+        value.round().to_string()
+    } else {
+        let decimal_places = (-precision.log10()).round().clamp(0.0, 16.0) as usize;
+        format!("{value:.decimal_places$}")
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -419,6 +541,122 @@ mod tests {
                     .update(extra, Value::from(b"degrees".to_vec())),
             )
         );
+    }
+
+    #[test]
+    fn scrubbing_uses_the_sensitivitys_decimal_precision() {
+        let mut scrub = NumberScrub::new(100.0);
+
+        assert_eq!(
+            scrub
+                .update(ScrubEvent {
+                    movement_x: 4.0,
+                    distance_y: 0.0,
+                })
+                .value,
+            101.0,
+        );
+        assert_eq!(
+            NumberScrub::new(0.5)
+                .update(ScrubEvent {
+                    movement_x: 4.0,
+                    distance_y: 0.0,
+                })
+                .value,
+            0.501,
+        );
+
+        let one_decimal_place = SCRUB_PIXELS_PER_DECADE;
+        let mut scrub = NumberScrub::new(100.0);
+        assert_eq!(
+            scrub
+                .update(ScrubEvent {
+                    movement_x: 4.0,
+                    distance_y: one_decimal_place,
+                })
+                .value,
+            100.1,
+        );
+        assert_eq!(
+            scrub
+                .update(ScrubEvent {
+                    movement_x: 16.0,
+                    distance_y: -one_decimal_place,
+                })
+                .value,
+            120.0,
+        );
+    }
+
+    #[test]
+    fn rightward_motion_never_lowers_the_displayed_value() {
+        let mut scrub = NumberScrub::new(100.0);
+        let first = scrub
+            .update(ScrubEvent {
+                movement_x: 16.0,
+                distance_y: 0.0,
+            })
+            .value;
+        let scale_changed = scrub
+            .update(ScrubEvent {
+                movement_x: 0.0,
+                distance_y: -SCRUB_PIXELS_PER_DECADE,
+            })
+            .value;
+        let moved_right = scrub
+            .update(ScrubEvent {
+                movement_x: 0.1,
+                distance_y: -SCRUB_PIXELS_PER_DECADE,
+            })
+            .value;
+
+        assert_eq!(first, 104.0);
+        assert_eq!(scale_changed, first);
+        assert!(moved_right >= scale_changed);
+    }
+
+    #[test]
+    fn scrub_spelling_retains_the_active_decimal_precision() {
+        assert_eq!(spelling(100.0, 0.1), "100.0");
+        assert_eq!(spelling(100.1, 0.1), "100.1");
+        assert_eq!(spelling(100.0, 1.0), "100");
+        assert_eq!(spelling(110.0, 10.0), "110");
+    }
+
+    #[test]
+    fn a_gesture_fixes_its_scale_from_the_starting_value() {
+        assert_eq!(NumberScrub::new(0.1234838495).base, 0.001);
+        assert_eq!(NumberScrub::new(123.0).base, 1.0);
+        assert_eq!(NumberScrub::new(1234.0).base, 1.0);
+    }
+
+    #[test]
+    fn precision_uses_one_two_five_steps() {
+        assert_eq!(nice_precision(0.01), 0.01);
+        assert_eq!(nice_precision(0.02), 0.02);
+        assert_eq!(nice_precision(0.05), 0.05);
+        assert_eq!(nice_precision(0.1), 0.1);
+        assert_eq!(nice_precision(2.0), 2.0);
+        assert_eq!(nice_precision(5.0), 5.0);
+    }
+
+    #[test]
+    fn vertical_decades_spread_out_as_they_get_coarser() {
+        let close = |left: f64, right: f64| (left - right).abs() < 1e-12;
+
+        assert!(close(vertical_decades(-24.0), 1.0));
+        assert!(close(vertical_decades(-60.0), 2.0));
+        assert!(close(vertical_decades(-114.0), 3.0));
+        assert!(close(vertical_decades(60.0), -2.0));
+    }
+
+    #[test]
+    fn coarse_precision_grows_horizontal_sensitivity_sublinearly() {
+        let horizontal_scale = |gain: f64| gain / gain.max(1.0).cbrt();
+
+        assert_eq!(horizontal_scale(0.01), 0.01);
+        assert_eq!(horizontal_scale(1.0), 1.0);
+        assert!((horizontal_scale(1_000.0) - 100.0).abs() < 1e-12);
     }
 
     #[test]
