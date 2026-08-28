@@ -17,6 +17,8 @@ mod identity;
 mod macos_surface;
 #[cfg(target_os = "macos")]
 mod macos_menu;
+#[cfg(target_os = "macos")]
+mod macos_window;
 mod menu;
 mod model;
 mod modifiers;
@@ -445,7 +447,12 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_canvas(Some(canvas))
                     .with_prevent_default(true)
             };
-            Arc::new(event_loop.create_window(attributes).unwrap())
+            let window = event_loop.create_window(attributes).unwrap();
+            #[cfg(target_os = "macos")]
+            // The sole current window occupies session slot zero. A
+            // multi-window session will supply distinct persistent IDs.
+            macos_window::autosave_frame(&window, "window-0");
+            Arc::new(window)
         });
 
         #[cfg(not(target_arch = "wasm32"))]
