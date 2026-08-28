@@ -1,3 +1,10 @@
+# Deferred release-build optimizations, measured 2026-08 on the Grap
+# interpreter bench: `lto = true` + `codegen-units = 1` was ~4% until
+# interpreter-side fixes absorbed the gain (now ~0-1%), for ~2x release
+# link time — re-measure before adopting. Profile-guided optimization
+# is deliberately unset: trained on today's few examples it would
+# overfit them; set it up for shipping builds once examples diversify.
+
 [workspace]
 resolver = "3"
 members = [
