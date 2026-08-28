@@ -130,16 +130,6 @@ impl Recorded {
         source: &SourceTrace,
         brush: &Brush,
     ) {
-        self.highlight_where(canvas, outer, brush, |hit| hit.contains(source));
-    }
-
-    fn highlight_exact<C: Canvas>(
-        &self,
-        canvas: &mut C,
-        outer: Affine,
-        source: &SourceTrace,
-        brush: &Brush,
-    ) {
         self.highlight_where(canvas, outer, brush, |hit| hit == source);
     }
 
@@ -591,7 +581,7 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
                 |canvas| {
                     puri::draw::replay_at(&drawing.commands, canvas, outer);
                     if let Some(source) = &selected {
-                        drawing.highlight_exact(canvas, outer, source, &selected_highlight);
+                        drawing.highlight(canvas, outer, source, &selected_highlight);
                     }
                     if let Some(source) = ink.hovered_trace {
                         drawing.highlight(canvas, outer, source, &highlight);
@@ -764,7 +754,7 @@ mod tests {
     }
 
     #[test]
-    fn a_source_descendant_highlights_the_operation_that_contains_it() {
+    fn a_source_descendant_does_not_highlight_its_operation() {
         let cell = new_cell_id();
         let call = new_cell_id();
         let argument = new_cell_id();
@@ -793,39 +783,34 @@ mod tests {
             &Brush::from(peniko::Color::WHITE),
         );
 
-        assert_eq!(highlighted.0.len(), 1);
+        assert!(highlighted.0.is_empty());
     }
 
     #[test]
-    fn selecting_a_source_descendant_does_not_highlight_its_operation() {
+    fn an_exact_source_highlights_its_operation() {
         let cell = new_cell_id();
         let call = new_cell_id();
-        let argument = new_cell_id();
         let source = SourceTrace::InCell {
             cell,
             path: Rc::from([Step::Key(call)]),
-        };
-        let selected = SourceTrace::InCell {
-            cell,
-            path: Rc::from([Step::Key(call), Step::Key(argument)]),
         };
         let drawing = Recorded {
             commands: DrawList::new(),
             hits: vec![Hit::new(
                 puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
                 Affine::IDENTITY,
-                source,
+                source.clone(),
             )],
         };
         let mut highlighted = DrawList::new();
 
-        drawing.highlight_exact(
+        drawing.highlight(
             &mut highlighted,
             Affine::IDENTITY,
-            &selected,
+            &source,
             &Brush::from(peniko::Color::WHITE),
         );
 
-        assert!(highlighted.0.is_empty());
+        assert_eq!(highlighted.0.len(), 1);
     }
 }

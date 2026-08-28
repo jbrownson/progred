@@ -85,26 +85,6 @@ impl SourceTrace {
             },
         }
     }
-
-    pub(crate) fn contains(&self, other: &Self) -> bool {
-        fn contains(parent: &[Step], child: &[Step]) -> bool {
-            child.starts_with(parent)
-        }
-        match (self, other) {
-            (Self::Stored(parent), Self::Stored(child)) => contains(parent, child),
-            (
-                Self::InCell {
-                    cell: parent_cell,
-                    path: parent,
-                },
-                Self::InCell {
-                    cell: child_cell,
-                    path: child,
-                },
-            ) => parent_cell == child_cell && contains(parent, child),
-            _ => false,
-        }
-    }
 }
 
 /// What makes two projected locations secondary copies. Cell values
@@ -303,34 +283,5 @@ mod tests {
             secondary(&sources, vec![Step::Element(positions[0].clone())]),
             secondary(&sources, vec![Step::Element(positions[1].clone())])
         );
-    }
-
-    #[test]
-    fn source_traces_contain_descendants_only_within_the_same_source_scope() {
-        let cell = new_cell_id();
-        let other = new_cell_id();
-        let outer = new_cell_id();
-        let inner = new_cell_id();
-        let function = SourceTrace::InCell {
-            cell,
-            path: Rc::from([Step::Key(outer)]),
-        };
-        let call_part = SourceTrace::InCell {
-            cell,
-            path: Rc::from([Step::Key(outer), Step::Key(inner)]),
-        };
-        let peer = SourceTrace::InCell {
-            cell,
-            path: Rc::from([Step::Key(inner)]),
-        };
-        let other_cell = SourceTrace::InCell {
-            cell: other,
-            path: Rc::from([Step::Key(outer), Step::Key(inner)]),
-        };
-
-        assert!(function.contains(&call_part));
-        assert!(!call_part.contains(&function));
-        assert!(!function.contains(&peer));
-        assert!(!function.contains(&other_cell));
     }
 }
