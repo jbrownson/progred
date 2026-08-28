@@ -23,6 +23,11 @@ toolchain_root=$(dirname "$(dirname "$cargo_path")")
 
 mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
 
+# In a linked worktree Cargo's ancestor-directory config search also reads
+# the main checkout's .cargo/config.toml; allow that single file.
+main_git_dir=$(cd "$project_root" && /usr/bin/git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$project_root/.git")
+ancestor_cargo_config=$(dirname "$main_git_dir")/.cargo/config.toml
+
 run_sandboxed() {
     allow_network=$1
     offline=$2
@@ -53,6 +58,7 @@ run_sandboxed() {
             -D "SANDBOX_HOME=$sandbox_home" \
             -D "SANDBOX_TMP=$sandbox_tmp" \
             -D "TOOLCHAIN_ROOT=$toolchain_root" \
+            -D "ANCESTOR_CARGO_CONFIG=$ancestor_cargo_config" \
             -f "$tool_dir/cargo-sandbox.sb" \
             "$@"
 }

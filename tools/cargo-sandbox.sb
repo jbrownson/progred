@@ -24,7 +24,8 @@
     (subpath "/sbin")
     (subpath "/usr")
     (subpath (param "PROJECT_ROOT"))
-    (subpath (param "TOOLCHAIN_ROOT")))
+    (subpath (param "TOOLCHAIN_ROOT"))
+    (literal (param "ANCESTOR_CARGO_CONFIG")))
 
 ; The repository root is source-readable, but dependency build code has no
 ; reason to inspect version-control data, local agent configuration, or a
