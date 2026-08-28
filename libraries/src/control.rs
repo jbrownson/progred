@@ -858,6 +858,10 @@ mod tests {
         grap::evaluate(expression, |_| None, &functions(), 100)
     }
 
+    fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation {
+        grap::evaluate(expression, |_| None, &functions(), fuel)
+    }
+
     #[test]
     fn do_evaluates_in_order_and_returns_the_last_result() {
         let first = new_cell_id();
@@ -1082,6 +1086,25 @@ mod tests {
     }
 
     #[test]
+    fn lowered_match_cases_still_consume_their_evaluation_fuel() {
+        let expression = match_call(
+            blob("subject"),
+            [case_arm(blob("subject"), blob("result"))],
+        );
+
+        let completed = evaluate_with_fuel(&expression, 6);
+        assert_eq!(completed.result, blob("result"));
+        assert_eq!(completed.remaining_fuel, 1);
+
+        let exhausted = evaluate_with_fuel(&expression, 5);
+        assert_eq!(
+            exhausted.result,
+            grap::absent::value(grap::absent::FUEL_EXHAUSTED),
+        );
+        assert_eq!(exhausted.remaining_fuel, 0);
+    }
+
+    #[test]
     fn match_patterns_match_exact_lists_and_repeated_binders_must_agree() {
         let element = new_cell_id();
         let other = new_cell_id();
@@ -1142,6 +1165,27 @@ mod tests {
             assert_eq!(evaluation.result, blob("bound"));
             assert!(evaluation.diagnostics.is_empty());
         }
+    }
+
+    #[test]
+    fn lowered_bindings_still_consume_their_evaluation_fuel() {
+        let binder = new_cell_id();
+        let expression = bindings_call(
+            vocabulary::LET,
+            [bind_clause(binder, blob("bound"))],
+            Value::from(binder),
+        );
+
+        let completed = evaluate_with_fuel(&expression, 6);
+        assert_eq!(completed.result, blob("bound"));
+        assert_eq!(completed.remaining_fuel, 1);
+
+        let exhausted = evaluate_with_fuel(&expression, 5);
+        assert_eq!(
+            exhausted.result,
+            grap::absent::value(grap::absent::FUEL_EXHAUSTED),
+        );
+        assert_eq!(exhausted.remaining_fuel, 0);
     }
 
     #[test]
