@@ -15,7 +15,7 @@ use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, ro
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
+    pub use grap_runtime::f64::F64;
     pub const ADD: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
     pub const SUBTRACT: CellId = CellId::from_u128(0x08d1ebc7fd4ce62efec9671f73e9b645);
@@ -44,18 +44,10 @@ pub mod vocabulary {
     pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
 }
 
-pub fn value(value: f64) -> Value {
-    Value::record([(vocabulary::F64, Value::from(value.to_le_bytes().to_vec()))])
-}
-
-pub fn read(value: &Value) -> Option<f64> {
-    let fields = value.as_record()?;
-    fields
-        .get(&vocabulary::F64)
-        .and_then(Value::as_blob)
-        .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-        .map(f64::from_le_bytes)
-}
+// The convention itself lives in the evaluator, which privileges it
+// as an accelerator; this library remains its owner in vocabulary,
+// functions, and projections.
+pub use grap_runtime::f64::{read, value};
 
 impl number::Scrubbable for f64 {
     fn magnitude(self) -> f64 {
@@ -161,7 +153,6 @@ pub fn binary_display<World, Hover: Clone>(
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .with_f64_representation(read, value)
         .register(
             vocabulary::UPDATE,
             ForeignFunction::new(|context, call, environment| {
@@ -254,12 +245,12 @@ fn lerp(
     let Some(amount) = context.field(call, vocabulary::AMOUNT) else {
         return Ok(context.missing_runtime_argument(vocabulary::AMOUNT));
     };
-    let start = context.eval_f64(start, environment, read)?;
-    let end = context.eval_f64(end, environment, read)?;
-    let amount = context.eval_f64(amount, environment, read)?;
+    let start = context.eval_f64(start, environment)?;
+    let end = context.eval_f64(end, environment)?;
+    let amount = context.eval_f64(amount, environment)?;
     Ok(match (start, end, amount) {
         (Some(start), Some(end), Some(amount)) => {
-            RuntimeValue::f64(start + (end - start) * amount, value)
+            RuntimeValue::f64(start + (end - start) * amount)
         }
         (None, _, _) => absent::with_reason(vocabulary::START_NOT_F64).into(),
         (_, None, _) => absent::with_reason(vocabulary::END_NOT_F64).into(),
@@ -274,7 +265,7 @@ fn binary(
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<RuntimeValue, Halt> {
     binary_value(context, call, environment, |left, right| {
-        RuntimeValue::f64(operation(left, right), value)
+        RuntimeValue::f64(operation(left, right))
     })
 }
 
@@ -290,8 +281,8 @@ fn binary_value(
     let Some(right) = context.field(call, vocabulary::RIGHT) else {
         return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
     };
-    let left = context.eval_f64(left, environment, read)?;
-    let right = context.eval_f64(right, environment, read)?;
+    let left = context.eval_f64(left, environment)?;
+    let right = context.eval_f64(right, environment)?;
     Ok(match (left, right) {
         (Some(left), Some(right)) => operation(left, right),
         (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64).into(),
@@ -309,8 +300,8 @@ fn unary(
         return Ok(context.missing_runtime_argument(vocabulary::OPERAND));
     };
     Ok(context
-        .eval_f64(operand, environment, read)?
-        .map(|operand| RuntimeValue::f64(operation(operand), value))
+        .eval_f64(operand, environment)?
+        .map(|operand| RuntimeValue::f64(operation(operand)))
         .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }
 

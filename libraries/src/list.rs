@@ -87,7 +87,7 @@ fn functions() -> ForeignFunctions {
                 };
                 Ok(list
                     .list_len()
-                    .map(|length| RuntimeValue::f64(length as f64, f64::value))
+                    .map(|length| RuntimeValue::f64(length as f64))
                     .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST).into()))
             }),
         )
@@ -105,7 +105,7 @@ fn functions() -> ForeignFunctions {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 }
                 let Some(index) = index
-                    .as_f64(f64::read)
+                    .as_f64()
                     .filter(|index| *index >= 0.0 && index.fract() == 0.0)
                     .map(|index| index as usize)
                 else {

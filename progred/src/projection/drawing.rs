@@ -290,7 +290,7 @@ fn number(
     environment: &grap::Environment,
 ) -> Result<Option<f64>, grap::Halt> {
     Ok(context
-        .eval_f64(expression, environment, progred_libraries::f64::read)?
+        .eval_f64(expression, environment)?
         .filter(|number| number.is_finite()))
 }
 

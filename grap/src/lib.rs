@@ -51,6 +51,30 @@ pub mod absent {
     }
 }
 
+/// The f64 number convention, privileged so native numbers stay
+/// unboxed through calls, containers, and environments. Privileged
+/// knowledge is an accelerator only: the convention must remain
+/// expressible as an ordinary external library, which would evaluate
+/// correctly and merely lose the fast paths.
+pub mod f64 {
+    use gid::{CellId, Value};
+
+    pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
+
+    pub fn value(number: f64) -> Value {
+        Value::record([(F64, Value::from(number.to_le_bytes().to_vec()))])
+    }
+
+    pub fn read(value: &Value) -> Option<f64> {
+        value
+            .as_record()?
+            .get(&F64)
+            .and_then(Value::as_blob)
+            .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+            .map(f64::from_le_bytes)
+    }
+}
+
 pub const DEFAULT_FUEL: usize = 1_024;
 
 /// A source expression lowered into the current evaluation's arena.
@@ -135,10 +159,9 @@ pub struct Halt(Value);
 /// glue, and slot sizes. The known next representation, once the model
 /// settles, is a NaN-boxed word: bare f64s, cells, and small
 /// immediates inline in 8 bytes, everything else behind a pointer.
-/// Two current designs stand in the way and would need rethinking:
+/// One current design stands in the way and would need rethinking:
 /// enriched f64 records (the open representation keeps metadata beside
-/// the number, so only bare numbers can inline) and the context-free
-/// `into_value`, which forces every runtime f64 to carry its encoder.
+/// the number, so only bare numbers can inline).
 ///
 /// Deliberately deferred (2026-08): staged foreign functions and typed
 /// per-node channels capture much of the win first, leaving boxing's
@@ -189,8 +212,9 @@ enum RuntimeValueKind {
 #[derive(Clone)]
 struct RuntimeF64 {
     number: f64,
+    /// The exact source value, kept so metadata beside the number
+    /// survives pass-through unchanged.
     original: Option<Value>,
-    encode: fn(f64) -> Value,
 }
 
 /// An evaluated callable retained in its compact runtime form. This
@@ -221,11 +245,10 @@ impl RuntimeValue {
         Self(RuntimeValueKind::Data(value))
     }
 
-    pub fn f64(number: f64, encode: fn(f64) -> Value) -> Self {
+    pub fn f64(number: f64) -> Self {
         Self(RuntimeValueKind::F64(RuntimeF64 {
             number,
             original: None,
-            encode,
         }))
     }
 
@@ -252,19 +275,18 @@ impl RuntimeValue {
         Self(RuntimeValueKind::List(elements.into_iter().collect()))
     }
 
-    fn original_f64(number: f64, original: Value, encode: fn(f64) -> Value) -> Self {
+    fn original_f64(number: f64, original: Value) -> Self {
         Self(RuntimeValueKind::F64(RuntimeF64 {
             number,
             original: Some(original),
-            encode,
         }))
     }
 
-    pub fn as_f64(&self, decode: fn(&Value) -> Option<f64>) -> Option<f64> {
+    pub fn as_f64(&self) -> Option<f64> {
         match &self.0 {
             RuntimeValueKind::F64(value) => Some(value.number),
-            RuntimeValueKind::Data(value) => decode(value),
-            RuntimeValueKind::Record(_) => decode(&self.to_value()),
+            RuntimeValueKind::Data(value) => crate::f64::read(value),
+            RuntimeValueKind::Record(_) => crate::f64::read(&self.to_value()),
             RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -357,7 +379,7 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => value,
             RuntimeValueKind::F64(value) => value
                 .original
-                .unwrap_or_else(|| (value.encode)(value.number)),
+                .unwrap_or_else(|| crate::f64::value(value.number)),
             RuntimeValueKind::Record(fields) => Value::record(
                 fields
                     .iter()
@@ -389,12 +411,6 @@ impl fmt::Debug for RuntimeValue {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.to_value().fmt(formatter)
     }
-}
-
-#[derive(Clone, Copy)]
-struct F64Representation {
-    decode: fn(&Value) -> Option<f64>,
-    encode: fn(f64) -> Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -674,19 +690,9 @@ impl TryFrom<Value> for Environment {
 #[derive(Clone, Default)]
 pub struct ForeignFunctions {
     functions: Vec<(CellId, ForeignFunction)>,
-    f64: Option<F64Representation>,
 }
 
 impl ForeignFunctions {
-    pub fn with_f64_representation(
-        mut self,
-        decode: fn(&Value) -> Option<f64>,
-        encode: fn(f64) -> Value,
-    ) -> Self {
-        self.f64 = Some(F64Representation { decode, encode });
-        self
-    }
-
     pub fn register(mut self, function: CellId, definition: ForeignFunction) -> Self {
         match self
             .functions
@@ -706,15 +712,12 @@ impl ForeignFunctions {
     }
 
     pub fn merge(self, other: Self) -> Self {
-        let f64 = other.f64.or(self.f64);
-        let mut merged = other
+        other
             .functions
             .into_iter()
             .fold(self, |functions, (cell, definition)| {
                 functions.register(cell, definition)
-            });
-        merged.f64 = f64;
-        merged
+            })
     }
 
     pub fn merge_all(tables: impl IntoIterator<Item = Self>) -> Self {
@@ -813,12 +816,6 @@ pub struct Context<'a> {
     foreign: &'a ForeignFunctions,
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
-    /// How many active scopes override the f64 representation; the
-    /// lowered-data cache applies only while none do.
-    scoped_f64: usize,
-    /// The representation currently in effect, refreshed on scope
-    /// pushes and pops so value lowering avoids a scope walk.
-    active_f64: Option<F64Representation>,
     remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
     dependencies: BTreeSet<CellId>,
@@ -839,8 +836,8 @@ struct Lowered {
     form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
     elements: Option<Vec<Expression>>,
-    /// Data lowered through the base f64 representation, reused across
-    /// evaluations of the same expression while no scope overrides f64.
+    /// The lowered runtime form of a data expression, reused across
+    /// evaluations of the same node.
     data_runtime: Option<RuntimeValue>,
     /// The node generated into a host closure on first evaluation; the
     /// arena stays the authoritative representation the closure runs.
@@ -1160,11 +1157,10 @@ impl<'a> Context<'a> {
         &mut self,
         expression: Expression,
         environment: &Environment,
-        decode: fn(&Value) -> Option<f64>,
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
         match &self.expressions[expression.0].form {
-            Form::Data if self.scoped_f64 == 0 => {
+            Form::Data => {
                 if let Some(RuntimeValue(RuntimeValueKind::F64(cached))) =
                     self.expressions[expression.0].data_runtime.as_ref()
                 {
@@ -1181,7 +1177,7 @@ impl<'a> Context<'a> {
             }
             _ => {}
         }
-        Ok(self.eval_burned(expression, environment)?.as_f64(decode))
+        Ok(self.eval_burned(expression, environment)?.as_f64())
     }
 
     fn eval_burned(
@@ -1203,17 +1199,13 @@ impl<'a> Context<'a> {
     fn compile(&mut self, expression: Expression) -> Thunk {
         match self.expressions[expression.0].form.clone() {
             Form::Data => thunk(move |context, _| {
-                if context.scoped_f64 == 0 {
-                    if let Some(cached) = &context.expressions[expression.0].data_runtime {
-                        return Ok(cached.clone());
-                    }
+                if let Some(cached) = &context.expressions[expression.0].data_runtime {
+                    return Ok(cached.clone());
                 }
                 let value = context.lower_runtime(RuntimeValue::from_value(
                     context.value(expression).clone(),
                 ));
-                if context.scoped_f64 == 0 {
-                    context.expressions[expression.0].data_runtime = Some(value.clone());
-                }
+                context.expressions[expression.0].data_runtime = Some(value.clone());
                 Ok(value)
             }),
             Form::Cell(index) => {
@@ -1294,26 +1286,12 @@ impl<'a> Context<'a> {
         })
     }
 
-    fn f64_representation(&self) -> Option<F64Representation> {
-        self.foreign_scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.f64)
-            .or(self.foreign.f64)
-    }
-
     fn lower_runtime(&self, value: RuntimeValue) -> RuntimeValue {
-        match (&value.0, self.active_f64) {
-            (RuntimeValueKind::Data(source), Some(representation)) => {
-                match (representation.decode)(source) {
-                    Some(number) => RuntimeValue::original_f64(
-                        number,
-                        source.clone(),
-                        representation.encode,
-                    ),
-                    None => value,
-                }
-            }
+        match &value.0 {
+            RuntimeValueKind::Data(source) => match crate::f64::read(source) {
+                Some(number) => RuntimeValue::original_f64(number, source.clone()),
+                None => value,
+            },
             _ => value,
         }
     }
@@ -1541,14 +1519,9 @@ impl<'a> Context<'a> {
         functions: ForeignFunctions,
         run: impl FnOnce(&mut Self) -> T,
     ) -> T {
-        let overrides_f64 = functions.f64.is_some();
-        self.scoped_f64 += overrides_f64 as usize;
         self.foreign_scopes.push(functions);
-        self.active_f64 = self.f64_representation();
         let result = run(self);
         self.foreign_scopes.pop();
-        self.active_f64 = self.f64_representation();
-        self.scoped_f64 -= overrides_f64 as usize;
         result
     }
 
@@ -1826,8 +1799,6 @@ pub fn evaluate(
         foreign,
         overlay: None,
         foreign_scopes: Vec::new(),
-        scoped_f64: 0,
-        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1855,8 +1826,6 @@ pub fn evaluate_scoped<'a>(
         foreign,
         overlay: Some(overlay),
         foreign_scopes: Vec::new(),
-        scoped_f64: 0,
-        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1888,8 +1857,6 @@ pub fn apply(
         foreign,
         overlay: None,
         foreign_scopes: Vec::new(),
-        scoped_f64: 0,
-        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1918,8 +1885,6 @@ pub fn apply_scoped<'a>(
         foreign,
         overlay: Some(overlay),
         foreign_scopes: Vec::new(),
-        scoped_f64: 0,
-        active_f64: foreign.f64,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
