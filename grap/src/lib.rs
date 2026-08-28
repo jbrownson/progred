@@ -112,6 +112,13 @@ pub struct Halt(Value);
 /// enriched f64 records (the open representation keeps metadata beside
 /// the number, so only bare numbers can inline) and the context-free
 /// `into_value`, which forces every runtime f64 to carry its encoder.
+///
+/// Deliberately deferred (2026-08): staged foreign functions and typed
+/// per-node channels capture much of the win first, leaving boxing's
+/// residual too small for its footprint while the model still moves.
+/// When attempted: documents may legitimately carry non-canonical NaN
+/// bit patterns in f64 blobs, so decoding must canonicalize NaNs —
+/// never treat stray patterns as undefined behavior.
 #[derive(Clone)]
 pub struct RuntimeValue(RuntimeValueKind);
 
