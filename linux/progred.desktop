@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Progred
+Comment=Projectional editor
+Exec=progred
+Icon=progred
+Terminal=false
+Categories=Development;
+StartupWMClass=progred

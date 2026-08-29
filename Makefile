@@ -8,7 +8,7 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-native run-macos run-linux unsupported-native-platform dev dev-native build-web run-web web serve-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
+.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web run-web web serve-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
 
 help:
 	@echo "Development:"
@@ -16,6 +16,7 @@ help:
 	@echo "  make dev          Relaunch the native app after Ctrl+C (alias: dev-native)"
 	@echo "  make build-web    Build the browser app"
 	@echo "  make run-web      Build and serve the browser app on port 8080"
+	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
 
@@ -28,6 +29,9 @@ run-macos: sandbox-app
 
 run-linux:
 	@./tools/run-linux $(ARGS)
+
+install-linux:
+	@./tools/install-linux-app
 
 unsupported-native-platform:
 	@echo "native Progred is not supported on $(UNAME_S)" >&2

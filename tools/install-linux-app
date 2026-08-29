@@ -1,0 +1,44 @@
+#!/bin/sh
+
+# Build Progred and install it for the current user following the
+# freedesktop conventions: binary on PATH, desktop entry, hicolor icons.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+if [ "$(uname -s)" != Linux ]; then
+    echo "install-linux-app requires Linux" >&2
+    exit 1
+fi
+
+cargo_path=$(rustup which cargo --toolchain stable)
+
+env \
+    CARGO_NET_OFFLINE=false \
+    CARGO_TARGET_DIR="$project_root/target/native" \
+    RUSTC_WRAPPER= \
+    "$cargo_path" build --release --locked -p progred
+
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+bin_home=$HOME/.local/bin
+
+mkdir -p "$bin_home" "$data_home/applications"
+install -m 755 "$project_root/target/native/release/progred" "$bin_home/progred"
+install -m 644 "$project_root/linux/progred.desktop" "$data_home/applications/progred.desktop"
+
+for sized in "$project_root"/linux/icons/hicolor/*/apps/progred.png; do
+    size_dir=$(basename "$(dirname "$(dirname "$sized")")")
+    mkdir -p "$data_home/icons/hicolor/$size_dir/apps"
+    install -m 644 "$sized" "$data_home/icons/hicolor/$size_dir/apps/progred.png"
+done
+
+command -v update-desktop-database >/dev/null && update-desktop-database "$data_home/applications" || true
+command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$data_home/icons/hicolor" || true
+
+echo "installed $bin_home/progred"
+case :$PATH: in
+    *:"$bin_home":*) ;;
+    *) echo "note: $bin_home is not on PATH" >&2 ;;
+esac

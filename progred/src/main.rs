@@ -72,6 +72,8 @@ use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
+#[cfg(target_os = "linux")]
+use winit::platform::x11::WindowAttributesExtX11;
 use winit::window::{CursorIcon, Window, WindowId};
 
 /// Everything arriving through the event-loop proxy.
@@ -503,6 +505,11 @@ impl ApplicationHandler<UserEvent> for App {
             let attributes = Window::default_attributes().with_title(self.title());
             #[cfg(not(target_arch = "wasm32"))]
             let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
+            // The app id must match linux/progred.desktop for compositors
+            // to associate the window with the desktop entry. Wayland and
+            // X11 read the same attribute.
+            #[cfg(target_os = "linux")]
+            let attributes = attributes.with_name("progred", "progred");
             #[cfg(target_arch = "wasm32")]
             let attributes = {
                 let canvas = web_sys::window()

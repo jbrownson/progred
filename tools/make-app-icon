@@ -1,6 +1,8 @@
 #!/bin/sh
 
-# Regenerate macos/AppIcon.icns from assets/progred-icon.svg.
+# Regenerate the app icons from assets/progred-icon.svg: macos/AppIcon.icns
+# and the committed hicolor ladder under linux/icons. Runs on macOS, which
+# both supplies iconutil and renders the SVG's Menlo type correctly.
 
 set -eu
 
@@ -8,6 +10,7 @@ tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(dirname "$tool_dir")
 svg="$project_root/assets/progred-icon.svg"
 icns="$project_root/macos/AppIcon.icns"
+hicolor="$project_root/linux/icons/hicolor"
 
 if [ "$(uname -s)" != Darwin ]; then
     echo "make-app-icon requires macOS" >&2
@@ -19,6 +22,11 @@ cleanup() {
     /bin/rm -rf -- "$work"
 }
 trap cleanup EXIT HUP INT TERM
+
+render() {
+    /usr/bin/qlmanage -t -s "$2" -o "$work" "$1" >/dev/null
+    /bin/mv "$work/$(basename "$1").png" "$3"
+}
 
 # The macOS icon grid: the tile spans 824/1024 of the canvas, margins
 # transparent. Wrap the tile art (everything inside the svg element, which
@@ -37,9 +45,16 @@ for entry in 16x16:16 16x16@2x:32 32x32:32 32x32@2x:64 \
     512x512:512 512x512@2x:1024; do
     name=${entry%:*}
     size=${entry#*:}
-    /usr/bin/qlmanage -t -s "$size" -o "$work" "$work/padded.svg" >/dev/null
-    /bin/mv "$work/padded.svg.png" "$work/AppIcon.iconset/icon_$name.png"
+    render "$work/padded.svg" "$size" "$work/AppIcon.iconset/icon_$name.png"
 done
 
 /usr/bin/iconutil -c icns -o "$icns" "$work/AppIcon.iconset"
 echo "wrote $icns"
+
+# Freedesktop hicolor icons are full-bleed, in the layout install-linux-app
+# copies straight into the icon theme.
+for size in 16 32 48 64 128 256 512; do
+    /bin/mkdir -p "$hicolor/${size}x${size}/apps"
+    render "$svg" "$size" "$hicolor/${size}x${size}/apps/progred.png"
+done
+echo "wrote $hicolor"
