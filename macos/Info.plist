@@ -8,7 +8,7 @@
     <string>Progred</string>
     <key>CFBundleExecutable</key>
     <string>progred</string>
-    <key>CFBundleIconFile</key>
+    <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.progred.prototype</string>

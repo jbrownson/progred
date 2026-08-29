@@ -1,15 +1,23 @@
 #!/bin/sh
 
-# Regenerate the app icons from assets/progred-icon.svg: macos/AppIcon.icns
-# and the committed hicolor ladder under linux/icons. Runs on macOS, which
-# both supplies iconutil and renders the SVG's Menlo type correctly.
+# Regenerate the app icons from assets/progred-icon.svg.
+#
+# macOS gets the native layered icon: an Icon Composer document compiled
+# by actool into macos/Assets.car, rendered by the system with its glass
+# material. Linux gets the committed full-bleed hicolor ladder under
+# linux/icons.
+#
+# Runs on macOS with Xcode (actool), qlmanage, and a python3 with PIL on
+# PATH. qlmanage flattens SVG transparency onto white, so transparent
+# renditions are rendered over white and over black and the alpha channel
+# is recovered per pixel.
 
 set -eu
 
 tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(dirname "$tool_dir")
 svg="$project_root/assets/progred-icon.svg"
-icns="$project_root/macos/AppIcon.icns"
+car="$project_root/macos/Assets.car"
 hicolor="$project_root/linux/icons/hicolor"
 
 if [ "$(uname -s)" != Darwin ]; then
@@ -23,38 +31,102 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-render() {
-    /usr/bin/qlmanage -t -s "$2" -o "$work" "$1" >/dev/null
-    /bin/mv "$work/$(basename "$1").png" "$3"
-}
+# Split the icon art into layers: the tile rect becomes the icon fill,
+# the star and the PRO text become separate layer images.
+/usr/bin/sed -e '/rx="232"/d' -e '/<text/,/<\/text>/d' "$svg" > "$work/star.svg"
+/usr/bin/sed -e '/rx="232"/d' -e '/<polygon/,/\/>/d' "$svg" > "$work/pro.svg"
 
-# The macOS icon grid: the tile spans 824/1024 of the canvas, margins
-# transparent. Wrap the tile art (everything inside the svg element, which
-# opens on the first line and closes on the last) in that placement, then
-# rasterize the vector at every ladder size.
-{
-    printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">\n'
-    printf '<g transform="translate(100 100) scale(0.8046875)">\n'
-    /usr/bin/sed '1d;$d' "$svg"
-    printf '</g>\n</svg>\n'
-} > "$work/padded.svg"
-
-/bin/mkdir "$work/AppIcon.iconset"
-for entry in 16x16:16 16x16@2x:32 32x32:32 32x32@2x:64 \
-    128x128:128 128x128@2x:256 256x256:256 256x256@2x:512 \
-    512x512:512 512x512@2x:1024; do
-    name=${entry%:*}
-    size=${entry#*:}
-    render "$work/padded.svg" "$size" "$work/AppIcon.iconset/icon_$name.png"
+for layer in star pro; do
+    for bg in white black; do
+        {
+            printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">\n'
+            printf '<rect width="1024" height="1024" fill="%s"/>\n' "$bg"
+            /usr/bin/sed '1d;$d' "$work/$layer.svg"
+            printf '</svg>\n'
+        } > "$work/$layer-$bg.svg"
+    done
 done
 
-/usr/bin/iconutil -c icns -o "$icns" "$work/AppIcon.iconset"
-echo "wrote $icns"
+# The linux renders use the whole icon art over the backgrounds.
+for bg in white black; do
+    {
+        printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">\n'
+        printf '<rect width="1024" height="1024" fill="%s"/>\n' "$bg"
+        /usr/bin/sed '1d;$d' "$svg"
+        printf '</svg>\n'
+    } > "$work/linux-$bg.svg"
+done
 
-# Freedesktop hicolor icons are full-bleed, in the layout install-linux-app
-# copies straight into the icon theme.
+emit() {
+    /usr/bin/qlmanage -t -s "$2" -o "$work" "$work/$1.svg" >/dev/null
+    /bin/mv "$work/$1.svg.png" "$work/$1-$2.png"
+}
+
+for layer in star pro; do
+    emit "$layer-white" 1024
+    emit "$layer-black" 1024
+done
+
+for size in 16 32 48 64 128 256 512; do
+    emit linux-white "$size"
+    emit linux-black "$size"
+done
+
+python3 - "$work" <<'EOF'
+import sys
+
+from PIL import Image
+
+work = sys.argv[1]
+
+def recover(white_path, black_path, out):
+    white = Image.open(white_path).convert("RGB")
+    black = Image.open(black_path).convert("RGB")
+    result = Image.new("RGBA", white.size)
+    wp, bp, rp = white.load(), black.load(), result.load()
+    for y in range(white.size[1]):
+        for x in range(white.size[0]):
+            w = wp[x, y]
+            b = bp[x, y]
+            alpha = max(0, min(255, round(sum(255 - (w[i] - b[i]) for i in range(3)) / 3)))
+            if alpha == 0:
+                rp[x, y] = (0, 0, 0, 0)
+            else:
+                rp[x, y] = tuple(min(255, round(b[i] * 255 / alpha)) for i in range(3)) + (alpha,)
+    result.save(out)
+
+for layer in ("star", "pro"):
+    recover(f"{work}/{layer}-white-1024.png", f"{work}/{layer}-black-1024.png", f"{work}/{layer}.png")
+for size in (16, 32, 48, 64, 128, 256, 512):
+    recover(f"{work}/linux-white-{size}.png", f"{work}/linux-black-{size}.png", f"{work}/linux-{size}.png")
+EOF
+
+/bin/mkdir -p "$work/AppIcon.icon/Assets"
+/bin/cp "$work/star.png" "$work/pro.png" "$work/AppIcon.icon/Assets/"
+/bin/cat > "$work/AppIcon.icon/icon.json" <<'EOF'
+{
+  "fill" : { "solid" : "srgb:1.0,1.0,1.0,1.0" },
+  "groups" : [
+    {
+      "layers" : [
+        { "image-name" : "pro.png", "name" : "pro" },
+        { "image-name" : "star.png", "name" : "star" }
+      ]
+    }
+  ],
+  "supported-platforms" : { "squares" : "shared" }
+}
+EOF
+
+/bin/mkdir "$work/actool-out"
+/usr/bin/xcrun actool "$work/AppIcon.icon" --compile "$work/actool-out" \
+    --platform macosx --minimum-deployment-target 26.0 --app-icon AppIcon \
+    --output-partial-info-plist "$work/actool-partial.plist" > /dev/null
+/bin/cp "$work/actool-out/Assets.car" "$car"
+echo "wrote $car"
+
 for size in 16 32 48 64 128 256 512; do
     /bin/mkdir -p "$hicolor/${size}x${size}/apps"
-    render "$svg" "$size" "$hicolor/${size}x${size}/apps/progred.png"
+    /bin/cp "$work/linux-$size.png" "$hicolor/${size}x${size}/apps/progred.png"
 done
 echo "wrote $hicolor"
