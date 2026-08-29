@@ -269,26 +269,24 @@ fn evaluate_foreign(
     context: &mut Context,
     call: Expression,
     calling_environment: &Environment,
-) -> Result<Value, Halt> {
+) -> Result<grap_runtime::RuntimeValue, Halt> {
     let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
+        return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
     };
     let Some(environment) = context.field(call, grap_runtime::vocabulary::ENVIRONMENT) else {
-        return Ok(context.missing_argument(grap_runtime::vocabulary::ENVIRONMENT));
+        return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::ENVIRONMENT));
     };
     let environment = context.eval(environment, calling_environment)?;
     match context.environment(&environment) {
-        Some(environment) => context.eval(expression, &environment),
-        None => Ok(absent::with_reason(
-            grap_runtime::absent::INVALID_ENVIRONMENT,
-        )),
+        Some(environment) => context.eval_runtime(expression, &environment),
+        None => Ok(absent::with_reason(grap_runtime::absent::INVALID_ENVIRONMENT).into()),
     }
 }
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         grap_runtime::vocabulary::EVALUATE,
-        ForeignFunction::new(evaluate_foreign),
+        ForeignFunction::runtime(evaluate_foreign),
     )
 }
 

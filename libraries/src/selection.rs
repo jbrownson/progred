@@ -30,12 +30,12 @@ pub fn at(
         )
         .register(
             vocabulary::SET,
-            ForeignFunction::new(move |context, call, environment| {
+            ForeignFunction::runtime(move |context, call, environment| {
                 let Some(value) = context.field(call, vocabulary::VALUE) else {
-                    return Ok(context.missing_argument(vocabulary::VALUE));
+                    return Ok(context.missing_runtime_argument(vocabulary::VALUE));
                 };
-                let value = context.eval(value, environment)?;
-                set((!absent::is_absent(&value)).then_some(value.clone()));
+                let value = context.eval_runtime(value, environment)?;
+                set((!value.is_absent()).then(|| value.to_value()));
                 Ok(value)
             }),
         )

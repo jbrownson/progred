@@ -19,7 +19,6 @@ pub mod vocabulary {
     pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
     pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
     pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
-    pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
 }
 
 /// The editor-owned vocabulary contributed to the ordinary source
@@ -31,7 +30,6 @@ pub fn cells() -> Cells {
         (vocabulary::PANES, "panes"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
-        (vocabulary::PROJECTION, "projection"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -240,7 +238,7 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
                             .collect(),
                         projection_path: parent
                             .into_iter()
-                            .chain([Step::Key(vocabulary::PROJECTION)])
+                            .chain([Step::Key(presentation::vocabulary::PROJECTION)])
                             .collect(),
                     })
                 })
@@ -908,7 +906,10 @@ mod tests {
                             presentation::vocabulary::VALUE,
                             Value::from(CellId::from_u128(1)),
                         ),
-                        (vocabulary::PROJECTION, Value::from(CellId::from_u128(9))),
+                        (
+                            presentation::vocabulary::PROJECTION,
+                            Value::from(CellId::from_u128(9)),
+                        ),
                     ])]),
                 ),
                 (
@@ -926,7 +927,7 @@ mod tests {
         assert_eq!(declarations[1].side, Side::Right);
         assert_eq!(
             declarations[0].projection_path.last(),
-            Some(&Step::Key(vocabulary::PROJECTION))
+            Some(&Step::Key(presentation::vocabulary::PROJECTION))
         );
         assert_eq!(
             declarations[0].record_path.first(),

@@ -1120,6 +1120,37 @@ impl<'a> Context<'a> {
         self.eval_runtime(expression, environment)
     }
 
+    pub fn closure(
+        &mut self,
+        params: impl IntoIterator<Item = CellId>,
+        body: Value,
+        environment: &Environment,
+    ) -> RuntimeValue {
+        let params: Vec<_> = params.into_iter().collect();
+        let fields = [
+            (
+                vocabulary::PARAMS,
+                Value::list(params.iter().copied().map(Value::from)),
+            ),
+            (vocabulary::BODY, body.clone()),
+        ]
+        .into_iter()
+        .collect();
+        let params = params
+            .into_iter()
+            .map(|cell| Parameter {
+                cell,
+                index: cell_index(&self.indices, cell),
+            })
+            .collect();
+        RuntimeValue(RuntimeValueKind::Closure(Closure {
+            fields,
+            params,
+            body: self.lower_unattributed_source(&body),
+            environment: environment.clone(),
+        }))
+    }
+
     /// Decode a Grap environment using this evaluation's cell-index table.
     /// Environments passed back into this Context must share that table
     /// with its lowered cell references.
@@ -1295,6 +1326,10 @@ impl<'a> Context<'a> {
         } else {
             Ok(())
         }
+    }
+
+    pub fn remaining_fuel(&self) -> usize {
+        self.remaining_fuel
     }
 
     pub fn field(&self, call: Expression, label: CellId) -> Option<Expression> {

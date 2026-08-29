@@ -12,6 +12,7 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const RENDER: CellId = CellId::from_u128(0x37cda4bdea0091349e305951564fbdf1);
+    pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
     /// The single argument of a projection function.
     pub const VALUE: CellId = CellId::from_u128(0x84d3ba81fd2a52ea37478f4a868106f4);
 }
@@ -36,7 +37,11 @@ pub fn display<World, Hover: Clone>(
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
-    for (cell, spelling) in [(vocabulary::RENDER, "render"), (vocabulary::VALUE, "value")] {
+    for (cell, spelling) in [
+        (vocabulary::RENDER, "render"),
+        (vocabulary::PROJECTION, "projection"),
+        (vocabulary::VALUE, "value"),
+    ] {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library {

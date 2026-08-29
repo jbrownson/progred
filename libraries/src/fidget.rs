@@ -12,10 +12,8 @@ use fidget_engine::{
 };
 use gid::{CellId, Cells, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Face, Layout, Paint, ProjectionInput, leaf};
-use puri::{
-    Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Rect, Shape, Stroke,
-};
+use progred_display::{Layout, Paint, ProjectionInput, leaf};
+use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf};
 
 const PREVIEW_SIZE: f64 = 256.0;
 
@@ -374,24 +372,16 @@ fn drawing(preview: Preview, scale_factor: f64) -> Option<Drawing<Paint>> {
         width: PREVIEW_SIZE,
         ascent: PREVIEW_SIZE / 2.0,
         descent: PREVIEW_SIZE / 2.0,
-        commands: vec![
-            Command::Image {
-                image: ImageData {
-                    data: rgba.into(),
-                    format: ImageFormat::Rgba8,
-                    alpha_type: ImageAlphaType::Alpha,
-                    width: raster_size,
-                    height: raster_size,
-                },
-                transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
+        commands: vec![Command::Image {
+            image: ImageData {
+                data: rgba.into(),
+                format: ImageFormat::Rgba8,
+                alpha_type: ImageAlphaType::Alpha,
+                width: raster_size,
+                height: raster_size,
             },
-            Command::Stroke {
-                shape: Shape::Rect(Rect::new(0.5, 0.5, PREVIEW_SIZE - 0.5, PREVIEW_SIZE - 0.5)),
-                style: Stroke::new(1.0),
-                paint: Paint::Face(Face::Dim),
-                transform: Affine::IDENTITY,
-            },
-        ],
+            transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
+        }],
     })
 }
 
@@ -540,10 +530,8 @@ mod tests {
         let Layout::Leaf(Leaf::Drawing(drawing)) = layout else {
             panic!("preview is one drawing leaf");
         };
-        let [Command::Image { image, transform }, Command::Stroke { .. }] =
-            drawing.commands.as_slice()
-        else {
-            panic!("preview is one raster image inside one border");
+        let [Command::Image { image, transform }] = drawing.commands.as_slice() else {
+            panic!("preview drawing is one raster image");
         };
         assert_eq!((drawing.ascent, drawing.descent), (128.0, 128.0));
         assert_eq!((image.width, image.height), (512, 512));
