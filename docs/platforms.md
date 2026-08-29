@@ -27,10 +27,11 @@ incremental check on every Xcode build, so Rust changes need no separate build
 step.
 
 The native editor currently renders and accepts touch input on iPad hardware.
-The simulator reaches its first Vello frame but aborts when Vello allocates a
-transient buffer beyond the simulator Metal adapter's reported device limits;
-use hardware or the browser build until that simulator-only limit mismatch is
-resolved.
+The simulator reaches its first Vello frame, but wgpu 29 does not report
+indirect execution there and rejects Vello's indirect buffers. Use hardware or
+the browser build until the upstream
+[wgpu fix](https://github.com/gfx-rs/wgpu/pull/10189) is released rather than
+maintaining a separate simulator renderer path.
 
 `make build-ipad` and `make build-ipad-device` remain useful for unsigned CI or
 command-line builds of the simulator and device forms. They use the same Xcode
