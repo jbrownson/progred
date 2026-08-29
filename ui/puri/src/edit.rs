@@ -830,6 +830,7 @@ mod tests {
     use crate::draw::{DrawCmd, DrawList, GlyphRun, Shape};
     use crate::handler::Handler;
     use kurbo::Stroke;
+    use peniko::ImageData;
     use ui_events::keyboard::{KeyState, Modifiers};
 
     struct DrawFrame {
@@ -838,6 +839,10 @@ mod tests {
     }
 
     impl Canvas for DrawFrame {
+        fn image(&mut self, image: ImageData, transform: Affine) {
+            self.list.image(image, transform);
+        }
+
         fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
             self.list.fill(shape, brush, transform);
         }

@@ -16,7 +16,7 @@ use crate::workspace::{self, Root};
 use crate::{App, PendingPaint, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
-use peniko::{Brush, Color};
+use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
 use puri::geometry::Placement;
@@ -83,6 +83,10 @@ pub(crate) struct Paint {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Canvas for Paint {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        VelloCanvas(&mut self.scene).image(image, transform);
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         VelloCanvas(&mut self.scene).fill(shape, brush, transform);
     }
@@ -122,6 +126,10 @@ pub(crate) struct Paint {
 
 #[cfg(target_arch = "wasm32")]
 impl Canvas for Paint {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.canvas.image(image, transform);
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         self.canvas.fill(shape, brush, transform);
     }

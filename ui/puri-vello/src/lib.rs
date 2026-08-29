@@ -3,11 +3,15 @@
 use puri::draw::{Canvas, GlyphRun, Shape};
 use vello::Scene;
 use vello::kurbo::{Affine, Stroke};
-use vello::peniko::{Brush, Fill};
+use vello::peniko::{Brush, Fill, ImageData};
 
 pub struct VelloCanvas<'a>(pub &'a mut Scene);
 
 impl Canvas for VelloCanvas<'_> {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.0.draw_image(&image, transform);
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         let brush = brush.into();
         match shape.into() {

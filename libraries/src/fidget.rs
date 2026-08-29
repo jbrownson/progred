@@ -2,19 +2,27 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
-use crate::{Library, absent, f32, name};
-use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
+use crate::{Library, absent, f32, name, presentation};
+#[cfg(test)]
+use fidget_engine::shape::EzShape;
+use fidget_engine::{
+    context::Tree,
+    raster::pixel::{RenderConfig, RenderSize},
+    vm::VmShape,
+};
 use gid::{CellId, Cells, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{Face, Layout, Paint, ProjectionInput, leaf};
-use puri::{Affine, Command, Drawing, Leaf, Rect, Shape};
+use puri::{
+    Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Rect, Shape, Stroke,
+};
 
 const PREVIEW_SIZE: f64 = 256.0;
-const PREVIEW_SAMPLES: usize = 128;
 
 pub mod vocabulary {
     use gid::CellId;
 
+    pub const FIDGET: CellId = CellId::from_u128(0x5653d5cc6cf43eb2291f9943c29eeab4);
     pub const AXIS: CellId = CellId::from_u128(0xfb2b3baa73025ae4b7b2aa97d65d1643);
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
     pub const Y: CellId = CellId::from_u128(0x213e54dd15ac9c9750308f35a606f56f);
@@ -146,8 +154,9 @@ fn preview_function(
     call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
-        return Ok(context.missing_argument(vocabulary::FIELD));
+    let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
+    else {
+        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
     if tree(&field).is_none() {
         return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
@@ -336,92 +345,87 @@ fn preview(value: &Value) -> Option<Preview> {
     (preview.min_x < preview.max_x && preview.min_y < preview.max_y).then_some(preview)
 }
 
-fn drawing(preview: Preview) -> Option<Drawing<Paint>> {
-    let shape = VmShape::from(preview.tree);
-    let mut evaluator = VmShape::new_float_slice_eval();
-    let tape = shape.ez_float_slice_tape();
-    let count = PREVIEW_SAMPLES * PREVIEW_SAMPLES;
-    let mut xs = Vec::with_capacity(count);
-    let mut ys = Vec::with_capacity(count);
-    let zs = vec![preview.z; count];
-    for row in 0..PREVIEW_SAMPLES {
-        let y = preview.max_y
-            - (row as f32 + 0.5) * (preview.max_y - preview.min_y) / PREVIEW_SAMPLES as f32;
-        for column in 0..PREVIEW_SAMPLES {
-            xs.push(
-                preview.min_x
-                    + (column as f32 + 0.5) * (preview.max_x - preview.min_x)
-                        / PREVIEW_SAMPLES as f32,
-            );
-            ys.push(y);
-        }
-    }
-    let values = evaluator.eval(&tape, &xs, &ys, &zs).ok()?;
-    let pixel = PREVIEW_SIZE / PREVIEW_SAMPLES as f64;
-    let mut commands = Vec::new();
-    for row in 0..PREVIEW_SAMPLES {
-        let samples = &values[row * PREVIEW_SAMPLES..(row + 1) * PREVIEW_SAMPLES];
-        let mut start = None;
-        for (column, inside) in samples
-            .iter()
-            .map(|value| value.is_finite() && *value <= 0.0)
-            .chain([false])
-            .enumerate()
-        {
-            match (start, inside) {
-                (None, true) => start = Some(column),
-                (Some(first), false) => {
-                    commands.push(Command::Fill {
-                        shape: Shape::Rect(Rect::new(
-                            first as f64 * pixel,
-                            row as f64 * pixel,
-                            column as f64 * pixel,
-                            (row + 1) as f64 * pixel,
-                        )),
-                        paint: Paint::Face(Face::Ink),
-                        transform: Affine::IDENTITY,
-                    });
-                    start = None;
-                }
-                _ => {}
+fn drawing(preview: Preview, scale_factor: f64) -> Option<Drawing<Paint>> {
+    let raster_size = (scale_factor.is_finite() && scale_factor > 0.0).then(|| {
+        (PREVIEW_SIZE * scale_factor)
+            .round()
+            .clamp(1.0, f64::from(u32::MAX)) as u32
+    })?;
+    let half_width = (preview.max_x - preview.min_x) / 2.0;
+    let half_height = (preview.max_y - preview.min_y) / 2.0;
+    let tree = preview.tree.remap_xyz(
+        Tree::x() * half_width + (preview.min_x + preview.max_x) / 2.0,
+        Tree::y() * half_height + (preview.min_y + preview.max_y) / 2.0,
+        Tree::constant(preview.z.into()),
+    );
+    let config = RenderConfig::from_size(RenderSize::from(raster_size));
+    let image = config.run(VmShape::from(tree).try_into().ok()?)?;
+    let rgba = image
+        .iter()
+        .flat_map(|pixel| {
+            if pixel.inside() {
+                [0, 0, 0, 255]
+            } else {
+                [0, 0, 0, 0]
             }
-        }
-    }
+        })
+        .collect::<Vec<u8>>();
     Some(Drawing {
         width: PREVIEW_SIZE,
-        ascent: PREVIEW_SIZE,
-        descent: 0.0,
-        commands,
+        ascent: PREVIEW_SIZE / 2.0,
+        descent: PREVIEW_SIZE / 2.0,
+        commands: vec![
+            Command::Image {
+                image: ImageData {
+                    data: rgba.into(),
+                    format: ImageFormat::Rgba8,
+                    alpha_type: ImageAlphaType::Alpha,
+                    width: raster_size,
+                    height: raster_size,
+                },
+                transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
+            },
+            Command::Stroke {
+                shape: Shape::Rect(Rect::new(0.5, 0.5, PREVIEW_SIZE - 0.5, PREVIEW_SIZE - 0.5)),
+                style: Stroke::new(1.0),
+                paint: Paint::Face(Face::Dim),
+                transform: Affine::IDENTITY,
+            },
+        ],
     })
 }
 
 pub fn display<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    Some(leaf(Leaf::Drawing(drawing(preview(input.value)?)?)))
+    Some(leaf(Leaf::Drawing(drawing(
+        preview(input.value)?,
+        input.scale_factor,
+    )?)))
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
+        (vocabulary::FIDGET, "fidget"),
         (vocabulary::AXIS, "axis"),
-        (vocabulary::ADD, "fidget +"),
-        (vocabulary::SUBTRACT, "fidget -"),
-        (vocabulary::MULTIPLY, "fidget *"),
-        (vocabulary::DIVIDE, "fidget /"),
-        (vocabulary::MIN, "fidget min"),
-        (vocabulary::MAX, "fidget max"),
-        (vocabulary::NEGATE, "fidget negate"),
-        (vocabulary::ABS, "fidget abs"),
-        (vocabulary::SQRT, "fidget sqrt"),
-        (vocabulary::SQUARE, "fidget square"),
-        (vocabulary::CIRCLE, "fidget circle"),
-        (vocabulary::SPHERE, "fidget sphere"),
-        (vocabulary::TRANSLATE, "fidget translate"),
-        (vocabulary::UNION, "fidget union"),
-        (vocabulary::INTERSECTION, "fidget intersection"),
-        (vocabulary::DIFFERENCE, "fidget difference"),
-        (vocabulary::PREVIEW, "fidget preview"),
+        (vocabulary::ADD, "+"),
+        (vocabulary::SUBTRACT, "-"),
+        (vocabulary::MULTIPLY, "*"),
+        (vocabulary::DIVIDE, "/"),
+        (vocabulary::MIN, "min"),
+        (vocabulary::MAX, "max"),
+        (vocabulary::NEGATE, "negate"),
+        (vocabulary::ABS, "abs"),
+        (vocabulary::SQRT, "sqrt"),
+        (vocabulary::SQUARE, "square"),
+        (vocabulary::CIRCLE, "circle"),
+        (vocabulary::SPHERE, "sphere"),
+        (vocabulary::TRANSLATE, "translate"),
+        (vocabulary::UNION, "union"),
+        (vocabulary::INTERSECTION, "intersection"),
+        (vocabulary::DIFFERENCE, "difference"),
+        (vocabulary::PREVIEW, "preview"),
         (vocabulary::FIELD, "field"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
@@ -439,9 +443,9 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     for (cell, spelling) in [
-        (vocabulary::INVALID_FIELD, "invalid fidget field"),
-        (vocabulary::INVALID_BOUNDS, "invalid fidget preview bounds"),
-        (vocabulary::INVALID_RADIUS, "invalid fidget radius"),
+        (vocabulary::INVALID_FIELD, "invalid field"),
+        (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
+        (vocabulary::INVALID_RADIUS, "invalid radius"),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -512,7 +516,7 @@ mod tests {
         let expression = call(
             vocabulary::PREVIEW,
             [(
-                vocabulary::FIELD,
+                presentation::vocabulary::VALUE,
                 call(vocabulary::CIRCLE, [(vocabulary::RADIUS, f32::value(40.0))]),
             )],
         );
@@ -525,6 +529,7 @@ mod tests {
         let layout = display(&ProjectionInput {
             env: &NoEval,
             value: &value,
+            scale_factor: 2.0,
             writable: false,
             selection: None,
             state: None,
@@ -532,9 +537,20 @@ mod tests {
         })
         .expect("preview projection");
 
-        assert!(
-            matches!(layout, Layout::Leaf(Leaf::Drawing(drawing)) if !drawing.commands.is_empty())
-        );
+        let Layout::Leaf(Leaf::Drawing(drawing)) = layout else {
+            panic!("preview is one drawing leaf");
+        };
+        let [Command::Image { image, transform }, Command::Stroke { .. }] =
+            drawing.commands.as_slice()
+        else {
+            panic!("preview is one raster image inside one border");
+        };
+        assert_eq!((drawing.ascent, drawing.descent), (128.0, 128.0));
+        assert_eq!((image.width, image.height), (512, 512));
+        assert_eq!(*transform, Affine::scale(0.5));
+        let alphas = image.data.as_ref().iter().skip(3).step_by(4);
+        assert!(alphas.clone().any(|alpha| *alpha == 0));
+        assert!(alphas.clone().any(|alpha| *alpha == 255));
     }
 
     struct NoEval;

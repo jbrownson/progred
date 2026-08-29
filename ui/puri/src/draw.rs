@@ -8,7 +8,7 @@
 //! recording back into any canvas.
 
 use kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Stroke};
-use peniko::{Brush, FontData};
+use peniko::{Brush, FontData, ImageData};
 
 /// A measured Puri leaf. Text asks its consumer to shape one line;
 /// drawing programs carry their own metrics and use leaf-local logical
@@ -49,6 +49,10 @@ impl<Paint> Drawing<Paint> {
 
 #[derive(Debug, Clone)]
 pub enum Command<Paint> {
+    Image {
+        image: ImageData,
+        transform: Affine,
+    },
     Fill {
         shape: Shape,
         paint: Paint,
@@ -70,6 +74,7 @@ pub enum Command<Paint> {
 impl<Paint> Command<Paint> {
     fn map_paint<Mapped>(self, map: &impl Fn(Paint) -> Mapped) -> Command<Mapped> {
         match self {
+            Self::Image { image, transform } => Command::Image { image, transform },
             Self::Fill {
                 shape,
                 paint,
@@ -125,6 +130,7 @@ fn draw_commands<Paint, C: Canvas>(
 ) {
     for command in commands {
         match command {
+            Command::Image { image, transform } => canvas.image(image, outer * transform),
             Command::Fill {
                 shape,
                 paint,
@@ -211,6 +217,8 @@ pub struct GlyphRun {
 /// stream (puri-vello), recorders capture (`DrawList`), tests interpret
 /// however the assertion wants.
 pub trait Canvas {
+    /// Draw an image at its natural pixel size before applying `transform`.
+    fn image(&mut self, image: ImageData, transform: Affine);
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine);
     fn stroke(
         &mut self,
@@ -227,6 +235,10 @@ pub trait Canvas {
 
 #[derive(Debug, Clone)]
 pub enum DrawCmd {
+    Image {
+        image: ImageData,
+        transform: Affine,
+    },
     Fill {
         shape: Shape,
         brush: Brush,
@@ -257,6 +269,10 @@ impl DrawList {
 }
 
 impl Canvas for DrawList {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.0.push(DrawCmd::Image { image, transform });
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         self.0.push(DrawCmd::Fill {
             shape: shape.into(),
@@ -314,6 +330,7 @@ pub fn replay_at(list: &DrawList, canvas: &mut impl Canvas, outer: Affine) {
 fn replay_cmds<C: Canvas>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
     for cmd in cmds {
         match cmd {
+            DrawCmd::Image { image, transform } => canvas.image(image.clone(), outer * *transform),
             DrawCmd::Fill {
                 shape,
                 brush,
@@ -433,6 +450,30 @@ mod tests {
                     [DrawCmd::Stroke { transform, .. }]
                         if *transform == outer * Affine::translate((5.0, 0.0))
                 )
+        ));
+    }
+
+    #[test]
+    fn images_record_and_replay_with_placement() {
+        let image = ImageData {
+            data: vec![0, 0, 0, 255].into(),
+            format: peniko::ImageFormat::Rgba8,
+            alpha_type: peniko::ImageAlphaType::Alpha,
+            width: 1,
+            height: 1,
+        };
+        let mut original = DrawList::new();
+        original.image(image.clone(), Affine::scale(2.0));
+        let mut replayed = DrawList::new();
+        replay_at(&original, &mut replayed, Affine::translate((20.0, 30.0)));
+
+        assert!(matches!(
+            replayed.0.as_slice(),
+            [DrawCmd::Image {
+                image: replayed_image,
+                transform,
+            }] if replayed_image == &image
+                && *transform == Affine::translate((20.0, 30.0)) * Affine::scale(2.0)
         ));
     }
 

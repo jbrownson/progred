@@ -93,6 +93,7 @@ impl<World> Projection<World> {
         &self,
         env: &dyn progred_display::Env,
         value: &Value,
+        scale_factor: f64,
         writable: bool,
         selection: Option<&Value>,
         state: Option<&Value>,
@@ -101,6 +102,7 @@ impl<World> Projection<World> {
         let input = progred_display::ProjectionInput {
             env,
             value,
+            scale_factor,
             writable,
             selection,
             state,
@@ -2714,6 +2716,7 @@ fn present_layout<C: 'static>(
                 projection.apply(
                     &ProjectEnv { cx },
                     value,
+                    cx.styles.scale,
                     !cx.source.transient() && writable_at(&cx.sources, path),
                     selection,
                     state,

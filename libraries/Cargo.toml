@@ -9,4 +9,4 @@ grap-runtime = { package = "grap", path = "../grap" }
 progred-display = { path = "../display" }
 puri = { path = "../ui/puri" }
 puri-widgets = { path = "../ui/puri-widgets" }
-fidget-engine = { package = "fidget", version = "=0.5.0", default-features = false }
+fidget-engine = { package = "fidget", version = "=0.5.0", default-features = false, features = ["raster"] }

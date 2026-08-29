@@ -29,5 +29,5 @@ pub use interact::{
     on_primary_pointer_down, on_primary_pointer_down_where,
 };
 pub use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke, Vec2};
-pub use peniko::{Brush, Color, ColorStop, Gradient};
+pub use peniko::{Brush, Color, ColorStop, Gradient, ImageAlphaType, ImageData, ImageFormat};
 pub use text::{Text, TextCache, TextCtx, TextMetrics, TextStyle, paragraph, text};

@@ -2,43 +2,56 @@
   "binders": {
     "circle": e467941b11832c441c98488dbdc5a540,
     "difference": c621348e3c35e46e87c1994eb1a50965,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 74bfc2a4db82ecc1f6af915d46e8f68d,
+    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
+    "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "preview": 69662683bafef0d10c88d46245cb638f,
+    "projection": 873503e2e37a1722a0dd21399be9ee7f,
+    "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "radius": 64302843e07250efdb485267245c762e,
     "right": 8dfdc3487bdfbc209ffb77c74433ef04,
+    "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "translate": cc63ad1f4efa15b6f43f36b3cd11f3f6,
     "x": 671936a24eb2d9d6e47ac5915a3e38c4,
   },
-  "root": [
-    {
-      evaluate: {
-        field: {
-          left: {
-            radius: {
-              f32: 0x00008042,
-            },
-            function: circle,
-          },
-          function: difference,
-          right: {
-            field: {
-              radius: {
-                f32: 0x0000c041,
-              },
-              function: circle,
-            },
-            x: {
-              f32: 0x00009041,
-            },
-            function: translate,
-          },
+  "cells": {
+    ring: {
+      left: {
+        radius: {
+          f32: 0x00008042,
         },
-        function: preview,
+        function: circle,
+      },
+      function: difference,
+      right: {
+        field: {
+          radius: {
+            f32: 0x0000c041,
+          },
+          function: circle,
+        },
+        x: {
+          f32: 0x00009041,
+        },
+        function: translate,
       },
     },
-  ],
+  },
+  "root": {
+    fidget: [
+      ring,
+    ],
+    panes: {
+      pane_left: [
+        {
+          projection_value: ring,
+          projection: preview,
+        },
+      ],
+    },
+  },
 }

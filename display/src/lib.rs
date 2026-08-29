@@ -463,6 +463,8 @@ pub trait Env {
 pub struct ProjectionInput<'a, World, Hover> {
     pub env: &'a dyn Env,
     pub value: &'a Value,
+    /// Physical pixels per logical display unit for this projection pass.
+    pub scale_factor: f64,
     /// Whether this projected location can accept a document write.
     /// This exposes capability without exposing its host-owned path.
     pub writable: bool,

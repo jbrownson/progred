@@ -84,6 +84,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
             .apply(
                 &NoEval,
                 &value,
+                1.0,
                 true,
                 None,
                 None,
@@ -224,6 +225,7 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
         stack.projection.apply(
             &NoEval,
             value,
+            1.0,
             true,
             None,
             None,

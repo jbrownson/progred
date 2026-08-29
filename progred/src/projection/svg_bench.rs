@@ -4,6 +4,7 @@
 /// writes target/raw_projection.svg.
 use super::*;
 use kurbo::{BezPath, Shape as KurboShape};
+use peniko::ImageData;
 use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
@@ -51,6 +52,10 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
 }
 
 impl Canvas for Bench {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.list.image(image, transform);
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         self.list.fill(shape, brush, transform);
     }
@@ -145,6 +150,7 @@ fn svg_shape(shape: &Shape, transform: Affine) -> String {
 fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
     for cmd in cmds {
         match cmd {
+                DrawCmd::Image { .. } => panic!("the SVG bench does not encode raster images"),
                 DrawCmd::Fill {
                     shape,
                     brush,

@@ -5,13 +5,14 @@
 use js_sys::Array;
 use kurbo::{Affine, Cap, Join, PathEl, Shape as KurboShape, Stroke};
 use peniko::color::Srgb;
-use peniko::{Brush, GradientKind};
+use peniko::{Brush, GradientKind, ImageAlphaType, ImageData, ImageFormat};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
-use wasm_bindgen::JsValue;
-use web_sys::{CanvasGradient, CanvasRenderingContext2d, Path2d};
+use std::borrow::Cow;
+use wasm_bindgen::{Clamped, JsCast, JsValue};
+use web_sys::{CanvasGradient, CanvasRenderingContext2d, HtmlCanvasElement, Path2d};
 
 /// An immediate Canvas2D interpreter for Puri's drawing language.
 pub struct WebCanvas(pub CanvasRenderingContext2d);
@@ -134,6 +135,16 @@ impl WebCanvas {
 }
 
 impl Canvas for WebCanvas {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        if let Some(source) = image_canvas(&image) {
+            self.with_transform(transform, |canvas| {
+                let _ = canvas
+                    .0
+                    .draw_image_with_html_canvas_element(&source, 0.0, 0.0);
+            });
+        }
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         let path = path(&shape.into());
         let brush = brush.into();
@@ -202,6 +213,47 @@ impl Canvas for WebCanvas {
         content(self);
         self.pop_clip();
     }
+}
+
+fn image_canvas(image: &ImageData) -> Option<HtmlCanvasElement> {
+    let rgba = if image.format == ImageFormat::Rgba8 && image.alpha_type == ImageAlphaType::Alpha {
+        Cow::Borrowed(image.data.as_ref())
+    } else {
+        let mut rgba = image.data.as_ref().to_vec();
+        for pixel in rgba.chunks_exact_mut(4) {
+            if image.format == ImageFormat::Bgra8 {
+                pixel.swap(0, 2);
+            }
+            if image.alpha_type == ImageAlphaType::AlphaPremultiplied {
+                let alpha = u16::from(pixel[3]);
+                for channel in &mut pixel[..3] {
+                    *channel = if alpha == 0 {
+                        0
+                    } else {
+                        ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
+                    };
+                }
+            }
+        }
+        Cow::Owned(rgba)
+    };
+    let pixels = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
+        Clamped(rgba.as_ref()),
+        image.width,
+        image.height,
+    )
+    .ok()?;
+    let canvas: HtmlCanvasElement = web_sys::window()?
+        .document()?
+        .create_element("canvas")
+        .ok()?
+        .dyn_into()
+        .ok()?;
+    canvas.set_width(image.width);
+    canvas.set_height(image.height);
+    let context: CanvasRenderingContext2d = canvas.get_context("2d").ok()??.dyn_into().ok()?;
+    context.put_image_data(&pixels, 0.0, 0.0).ok()?;
+    Some(canvas)
 }
 
 enum Style {

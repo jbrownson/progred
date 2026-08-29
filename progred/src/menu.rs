@@ -28,6 +28,7 @@ pub enum Selection {
     ExampleSample,
     ExampleGrap,
     ExampleIopTree,
+    ExampleFidget,
     Undo,
     Redo,
     OpenPaneLeft,
@@ -75,6 +76,7 @@ pub enum ShortcutKey {
     Digit1,
     Digit2,
     Digit3,
+    Digit4,
     D,
     N,
     #[cfg(not(target_arch = "wasm32"))]
@@ -93,6 +95,7 @@ impl ShortcutKey {
             Self::Digit1 => "1",
             Self::Digit2 => "2",
             Self::Digit3 => "3",
+            Self::Digit4 => "4",
             Self::D => "D",
             Self::N => "N",
             #[cfg(not(target_arch = "wasm32"))]
@@ -185,6 +188,12 @@ const EXAMPLE_IOP_TREE: Item = Item {
     selection: Selection::ExampleIopTree,
     label: "Inventing on Principle Tree",
     shortcut: Some(Shortcut::plain(ShortcutKey::Digit3)),
+    kind: Kind::Command,
+};
+const EXAMPLE_FIDGET: Item = Item {
+    selection: Selection::ExampleFidget,
+    label: "Fidget",
+    shortcut: Some(Shortcut::plain(ShortcutKey::Digit4)),
     kind: Kind::Command,
 };
 const UNDO: Item = Item {
@@ -292,6 +301,7 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
                     Entry::Item(EXAMPLE_SAMPLE),
                     Entry::Item(EXAMPLE_GRAP),
                     Entry::Item(EXAMPLE_IOP_TREE),
+                    Entry::Item(EXAMPLE_FIDGET),
                 ],
             },
             Menu {
@@ -754,6 +764,10 @@ mod tests {
             shortcut(&key("3", Modifiers::CONTROL)),
             Some(Selection::ExampleIopTree)
         );
+        assert_eq!(
+            shortcut(&key("4", Modifiers::CONTROL)),
+            Some(Selection::ExampleFidget)
+        );
     }
 
     #[test]
@@ -784,7 +798,7 @@ mod tests {
         for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 18);
+            assert_eq!(items.len(), 19);
             for (index, item) in items.iter().enumerate() {
                 assert!(
                     items[index + 1..]

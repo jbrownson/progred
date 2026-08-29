@@ -100,6 +100,7 @@ pub(crate) enum Example {
     Sample,
     Grap,
     IopTree,
+    Fidget,
 }
 
 impl Example {
@@ -108,6 +109,7 @@ impl Example {
             Self::Sample => include_str!("../../examples/sample.gid"),
             Self::Grap => include_str!("../../examples/grap-demo.gid"),
             Self::IopTree => include_str!("../../examples/iop-tree.gid"),
+            Self::Fidget => include_str!("../../examples/fidget.gid"),
         }
     }
 }
@@ -1351,6 +1353,9 @@ impl App {
             }
             menu::Selection::ExampleIopTree => {
                 self.request_discard(event_loop, AfterDiscard::Example(Example::IopTree))
+            }
+            menu::Selection::ExampleFidget => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Fidget))
             }
             menu::Selection::Undo => self.step_history(true),
             menu::Selection::Redo => self.step_history(false),

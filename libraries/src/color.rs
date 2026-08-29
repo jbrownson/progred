@@ -411,6 +411,7 @@ mod tests {
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            scale_factor: 1.0,
             writable: true,
             selection: None,
             state: None,
@@ -455,6 +456,7 @@ mod tests {
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            scale_factor: 1.0,
             writable: false,
             selection: Some(&selection),
             state: None,
@@ -486,6 +488,7 @@ mod tests {
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            scale_factor: 1.0,
             writable: true,
             selection: None,
             state: None,
@@ -528,6 +531,7 @@ mod tests {
         let layout = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &color,
+            scale_factor: 1.0,
             writable: true,
             selection: Some(&selection),
             state: None,
