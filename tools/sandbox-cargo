@@ -33,7 +33,7 @@ run_sandboxed() {
     offline=$2
     allow_lock_write=$3
     shift 3
-    exec env -i \
+    env -i \
         CARGO_HOME="$cargo_home" \
         CARGO_NET_OFFLINE="$offline" \
         CARGO_TARGET_DIR="$target_dir" \
@@ -63,18 +63,49 @@ run_sandboxed() {
             "$@"
 }
 
+use_minimum_age_toolchain() {
+    cargo_path=$(rustup which cargo --toolchain nightly-2026-08-27)
+    rustc_path=$(rustup which rustc --toolchain nightly-2026-08-27)
+    rustdoc_path=$(rustup which rustdoc --toolchain nightly-2026-08-27)
+    toolchain_root=$(dirname "$(dirname "$cargo_path")")
+}
+
 if [ "${1-}" = fetch ]; then
     shift
     run_sandboxed 1 false 0 "$cargo_path" fetch --locked "$@"
+    exit
 fi
 
 if [ "${1-}" = update ]; then
     shift
-    run_sandboxed 1 false 1 "$cargo_path" update "$@"
+    use_minimum_age_toolchain
+    run_sandboxed 1 false 1 "$cargo_path" update -Z min-publish-age \
+        --config 'registry.global-min-publish-age="7 days"' "$@"
+    exit
+fi
+
+if [ "${1-}" = resolve ]; then
+    shift
+    use_minimum_age_toolchain
+    run_sandboxed 1 false 1 "$cargo_path" metadata -Z min-publish-age \
+        --config 'registry.global-min-publish-age="7 days"' \
+        --format-version 1 "$@" >/dev/null
+    exit
+fi
+
+if [ "${1-}" = audit ]; then
+    shift
+    audit_path="$cargo_home/bin/cargo-audit"
+    if [ ! -x "$audit_path" ]; then
+        run_sandboxed 1 false 0 "$cargo_path" install cargo-audit \
+            --version '=0.22.2' --locked --no-default-features --root "$cargo_home"
+    fi
+    run_sandboxed 1 false 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
+    exit
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/sandbox-cargo fetch | update | <cargo command> [arguments...]" >&2
+    echo "usage: tools/sandbox-cargo audit | fetch | update | resolve | <cargo command> [arguments...]" >&2
     exit 2
 fi
 

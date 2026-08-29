@@ -47,8 +47,30 @@ metadata ...` when that information is needed; IDE integration may need to be
 pointed at the sandbox wrapper rather than invoking Cargo directly.
 
 Use `./tools/sandbox-cargo update ...` for an intentional dependency update.
-That command enables network access and write access to `Cargo.lock` only for
-the update; subsequent compilation remains offline and source-read-only.
+That command uses the pinned `nightly-2026-08-27` Cargo solely for its
+minimum-publish-age resolver, excludes registry releases less than seven days
+old, and enables network access and write access to `Cargo.lock` only for the
+update. Install that toolchain with `rustup toolchain install
+nightly-2026-08-27 --profile minimal` if needed. Subsequent compilation remains
+on stable Cargo, offline, and source-read-only.
+Use `./tools/sandbox-cargo resolve` after declaring a new dependency when the
+existing locked versions should be preserved; it uses the same publication-age
+policy and network/lockfile boundary without compiling dependency code.
+If a dependency has no age-compatible resolution, review the exact release and
+its provenance before temporarily resolving with
+`resolver.incompatible-publish-age="allow"`. Do not put that override in the
+checked-in default: the ordinary update command should remain strict and may be
+blocked until the reviewed release ages past the threshold.
+On 2026-08-28, adding Fidget 0.5.0 required that exception for `chacha20`
+0.10.2: Fidget's `rand` requirement cannot resolve to the yanked 0.10.0 or
+0.10.1 releases. The 0.10.2 crate was checked against the signed release in the
+official RustCrypto repository; it has no build script and contains a focused
+SIMD feature-detection correction. Unrelated too-new transitive releases were
+downgraded before checking in the lockfile.
+Use `./tools/sandbox-cargo audit` to check the lockfile against the current
+RustSec advisory database. The first run installs the pinned `cargo-audit`
+version into the sandbox Cargo home; both that installation and every scan run
+inside the same filesystem and network boundary.
 
 `sandbox-fetch` downloads the locked dependency graph into a Cargo home under
 `target/sandbox`. It has network access but remains filesystem-isolated;

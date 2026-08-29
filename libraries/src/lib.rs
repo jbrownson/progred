@@ -10,7 +10,9 @@ pub mod color;
 #[cfg(test)]
 mod conformance;
 pub mod control;
+pub mod f32;
 pub mod f64;
+pub mod fidget;
 pub mod geometry;
 pub mod grap;
 pub mod layout;

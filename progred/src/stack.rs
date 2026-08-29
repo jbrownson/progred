@@ -5,8 +5,8 @@ use crate::projection::Projection;
 use crate::workspace;
 use gid::Cells;
 use progred_libraries::{
-    Library, absent, color, control, f64, geometry, grap as grap_library, layout, line_edit, list,
-    logic, name, presentation, random, selection, site, text, u64,
+    Library, absent, color, control, f32, f64, fidget, geometry, grap as grap_library, layout,
+    line_edit, list, logic, name, presentation, random, selection, site, text, u64,
 };
 
 pub struct Stack<World> {
@@ -43,7 +43,9 @@ fn libraries<World: 'static>() -> impl Iterator<Item = Library<World, Hover>> {
         absent::library(),
         color::library(),
         control::library(),
+        f32::library(),
         f64::library(),
+        fidget::library(),
         grap_library::library(),
         line_edit::library(),
         u64::library(),

@@ -809,4 +809,11 @@ mod checked_in_files {
         let reached = root_reachable_cells(&doc);
         assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
     }
+
+    #[test]
+    fn the_fidget_demo_is_a_fixed_point() {
+        let text = include_str!("../../examples/fidget.gid");
+        let (doc, binders) = parse(text).expect("the Fidget demo parses");
+        assert_eq!(print(&doc, &binders), text);
+    }
 }

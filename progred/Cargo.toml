@@ -8,7 +8,6 @@ grap = { path = "../grap" }
 progred-libraries = { path = "../libraries" }
 progred-display = { path = "../display" }
 gid = { path = "../gid" }
-im = "15"
 measured = { path = "../ui/measured" }
 puri = { path = "../ui/puri" }
 uig = { path = "../ui/uig" }
@@ -25,7 +24,7 @@ serde_json = "1.0"
 clipboard-rs = "0.3.3"
 pollster = "0.4.0"
 puri-vello = { path = "../ui/puri-vello" }
-rfd = "0.15"
+rfd = "0.17"
 vello = "0.9.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
