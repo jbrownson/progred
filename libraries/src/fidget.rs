@@ -5,15 +5,22 @@
 use crate::{Library, absent, f32, name, presentation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
+#[cfg(not(target_arch = "wasm32"))]
+use fidget_engine::wgpu::{Gpu, effects, voxel};
 use fidget_engine::{
     context::Tree,
-    raster::pixel::{RenderConfig, RenderSize},
+    raster::{
+        pixel::{RenderConfig as PixelRenderConfig, RenderSize as PixelRenderSize},
+        voxel::{GeometryPixel, RenderConfig as VoxelRenderConfig, RenderSize as VoxelRenderSize},
+    },
     vm::VmShape,
 };
 use gid::{CellId, Cells, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use progred_display::{Layout, Paint, ProjectionInput, leaf};
 use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf};
+use std::{cell::RefCell, rc::Rc};
 
 const PREVIEW_SIZE: f64 = 256.0;
 
@@ -42,6 +49,7 @@ pub mod vocabulary {
     pub const INTERSECTION: CellId = CellId::from_u128(0x737a28cb9bd1a6d28604e8a68a909932);
     pub const DIFFERENCE: CellId = CellId::from_u128(0xc621348e3c35e46e87c1994eb1a50965);
     pub const PREVIEW: CellId = CellId::from_u128(0x69662683bafef0d10c88d46245cb638f);
+    pub const PREVIEW_3D: CellId = CellId::from_u128(0x9a8142ecc3124e873dd2ad955d28fb85);
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
     pub const LEFT: CellId = CellId::from_u128(0x74bfc2a4db82ecc1f6af915d46e8f68d);
     pub const RIGHT: CellId = CellId::from_u128(0x8dfdc3487bdfbc209ffb77c74433ef04);
@@ -54,6 +62,8 @@ pub mod vocabulary {
     pub const MAX_X: CellId = CellId::from_u128(0x9ffd33d780fb0665bcf2e4ec437079e8);
     pub const MIN_Y: CellId = CellId::from_u128(0xeabfd820f82b8e25c43cb6596cfcbd8f);
     pub const MAX_Y: CellId = CellId::from_u128(0xc9e7268eb34af7bea225df94841c1c27);
+    pub const MIN_Z: CellId = CellId::from_u128(0x392a615eb91c6d64df871ec95831f89a);
+    pub const MAX_Z: CellId = CellId::from_u128(0xda0ed6603210813bf52a20df7bf27c7d);
     pub const SLICE_Z: CellId = CellId::from_u128(0xa6712918cb0f80a44738a028c48b775b);
     pub const INVALID_FIELD: CellId = CellId::from_u128(0xc26cfccc2a9fc752bf73c4359f2e9ade);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
@@ -85,6 +95,45 @@ fn evaluated(
         .field(call, field)
         .map(|expression| context.eval(expression, environment))
         .transpose()
+}
+
+fn preview_value(
+    context: &mut grap_runtime::Context,
+    call: Expression,
+    environment: &Environment,
+    marker: CellId,
+    bounds: impl IntoIterator<Item = (CellId, f32)>,
+    valid: impl Fn(&[(CellId, Value, f32)]) -> bool,
+) -> Result<Value, Halt> {
+    let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
+    else {
+        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
+    };
+    if tree(&field).is_none() {
+        return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
+    }
+    let bounds = bounds
+        .into_iter()
+        .map(|(label, default)| {
+            evaluated(context, call, environment, label).map(|value| {
+                let value = value.unwrap_or_else(|| f32::value(default));
+                f32::read(&value)
+                    .filter(|number| number.is_finite())
+                    .map(|number| (label, value, number))
+            })
+        })
+        .collect::<Result<Option<Vec<_>>, _>>()?;
+    Ok(match bounds.filter(|bounds| valid(bounds)) {
+        Some(bounds) => node(
+            marker,
+            Value::record(
+                [(vocabulary::FIELD, field)]
+                    .into_iter()
+                    .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
+            ),
+        ),
+        None => absent::with_reason(vocabulary::INVALID_BOUNDS),
+    })
 }
 
 fn unary_function(marker: CellId) -> ForeignFunction {
@@ -152,49 +201,54 @@ fn preview_function(
     call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
-    else {
-        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
-    };
-    if tree(&field).is_none() {
-        return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
-    }
-    let bounds = [
-        (vocabulary::MIN_X, -100.0),
-        (vocabulary::MAX_X, 100.0),
-        (vocabulary::MIN_Y, -100.0),
-        (vocabulary::MAX_Y, 100.0),
-        (vocabulary::SLICE_Z, 0.0),
-    ]
-    .into_iter()
-    .map(|(label, default)| {
-        evaluated(context, call, environment, label).map(|value| {
-            let value = value.unwrap_or_else(|| f32::value(default));
-            f32::read(&value)
-                .filter(|number| number.is_finite())
-                .map(|number| (label, value, number))
-        })
-    })
-    .collect::<Result<Option<Vec<_>>, _>>()?;
-    Ok(match bounds {
-        Some(bounds)
-            if matches!(
-                bounds.as_slice(),
+    preview_value(
+        context,
+        call,
+        environment,
+        vocabulary::PREVIEW,
+        [
+            (vocabulary::MIN_X, -100.0),
+            (vocabulary::MAX_X, 100.0),
+            (vocabulary::MIN_Y, -100.0),
+            (vocabulary::MAX_Y, 100.0),
+            (vocabulary::SLICE_Z, 0.0),
+        ],
+        |bounds| {
+            matches!(
+                bounds,
                 [(_, _, min_x), (_, _, max_x), (_, _, min_y), (_, _, max_y), _]
                     if min_x < max_x && min_y < max_y
-            ) =>
-        {
-            node(
-                vocabulary::PREVIEW,
-                Value::record(
-                    [(vocabulary::FIELD, field)]
-                        .into_iter()
-                        .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
-                ),
             )
-        }
-        _ => absent::with_reason(vocabulary::INVALID_BOUNDS),
-    })
+        },
+    )
+}
+
+fn preview_3d_function(
+    context: &mut grap_runtime::Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    preview_value(
+        context,
+        call,
+        environment,
+        vocabulary::PREVIEW_3D,
+        [
+            (vocabulary::MIN_X, -80.0),
+            (vocabulary::MAX_X, 80.0),
+            (vocabulary::MIN_Y, -80.0),
+            (vocabulary::MAX_Y, 80.0),
+            (vocabulary::MIN_Z, -80.0),
+            (vocabulary::MAX_Z, 80.0),
+        ],
+        |bounds| {
+            matches!(
+                bounds,
+                [(_, _, min_x), (_, _, max_x), (_, _, min_y), (_, _, max_y), (_, _, min_z), (_, _, max_z)]
+                    if min_x < max_x && min_y < max_y && min_z < max_z
+            )
+        },
+    )
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -233,6 +287,10 @@ pub fn functions() -> ForeignFunctions {
         ForeignFunction::new(translate_function),
     )
     .register(vocabulary::PREVIEW, ForeignFunction::new(preview_function))
+    .register(
+        vocabulary::PREVIEW_3D,
+        ForeignFunction::new(preview_3d_function),
+    )
 }
 
 fn one_marker(fields: &gid::Record) -> Option<CellId> {
@@ -321,7 +379,7 @@ fn tree(value: &Value) -> Option<Tree> {
     }
 }
 
-struct Preview {
+struct SlicePreview {
     tree: Tree,
     min_x: f32,
     max_x: f32,
@@ -330,9 +388,9 @@ struct Preview {
     z: f32,
 }
 
-fn preview(value: &Value) -> Option<Preview> {
+fn slice_preview(value: &Value) -> Option<SlicePreview> {
     let fields = value.as_record()?.get(&vocabulary::PREVIEW)?.as_record()?;
-    let preview = Preview {
+    let preview = SlicePreview {
         tree: tree(fields.get(&vocabulary::FIELD)?)?,
         min_x: f32::read(fields.get(&vocabulary::MIN_X)?)?,
         max_x: f32::read(fields.get(&vocabulary::MAX_X)?)?,
@@ -343,7 +401,7 @@ fn preview(value: &Value) -> Option<Preview> {
     (preview.min_x < preview.max_x && preview.min_y < preview.max_y).then_some(preview)
 }
 
-fn drawing(preview: Preview, scale_factor: f64) -> Option<Drawing<Paint>> {
+fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Paint>> {
     let raster_size = (scale_factor.is_finite() && scale_factor > 0.0).then(|| {
         (PREVIEW_SIZE * scale_factor)
             .round()
@@ -356,7 +414,7 @@ fn drawing(preview: Preview, scale_factor: f64) -> Option<Drawing<Paint>> {
         Tree::y() * half_height + (preview.min_y + preview.max_y) / 2.0,
         Tree::constant(preview.z.into()),
     );
-    let config = RenderConfig::from_size(RenderSize::from(raster_size));
+    let config = PixelRenderConfig::from_size(PixelRenderSize::from(raster_size));
     let image = config.run(VmShape::from(tree).try_into().ok()?)?;
     let rgba = image
         .iter()
@@ -385,16 +443,294 @@ fn drawing(preview: Preview, scale_factor: f64) -> Option<Drawing<Paint>> {
     })
 }
 
-pub fn display<World, Hover>(
-    input: &ProjectionInput<'_, World, Hover>,
-) -> Option<Layout<World, Hover>> {
-    Some(leaf(Leaf::Drawing(drawing(
-        preview(input.value)?,
-        input.scale_factor,
-    )?)))
+struct VolumePreview {
+    tree: Tree,
+    min: Vector3<f32>,
+    max: Vector3<f32>,
 }
 
-pub fn library<World, Hover>() -> Library<World, Hover> {
+fn volume_preview(value: &Value) -> Option<VolumePreview> {
+    let fields = value
+        .as_record()?
+        .get(&vocabulary::PREVIEW_3D)?
+        .as_record()?;
+    let preview = VolumePreview {
+        tree: tree(fields.get(&vocabulary::FIELD)?)?,
+        min: Vector3::new(
+            f32::read(fields.get(&vocabulary::MIN_X)?)?,
+            f32::read(fields.get(&vocabulary::MIN_Y)?)?,
+            f32::read(fields.get(&vocabulary::MIN_Z)?)?,
+        ),
+        max: Vector3::new(
+            f32::read(fields.get(&vocabulary::MAX_X)?)?,
+            f32::read(fields.get(&vocabulary::MAX_Y)?)?,
+            f32::read(fields.get(&vocabulary::MAX_Z)?)?,
+        ),
+    };
+    preview
+        .min
+        .iter()
+        .zip(preview.max.iter())
+        .all(|(min, max)| min < max)
+        .then_some(preview)
+}
+
+fn volume_transform(preview: &VolumePreview) -> Matrix4<f32> {
+    let center = (preview.min + preview.max) / 2.0;
+    let half = (preview.max - preview.min) / 2.0;
+    let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), 60.0_f32.to_radians());
+    let roll = Rotation3::from_axis_angle(&Vector3::z_axis(), 30.0_f32.to_radians());
+    let rotation = roll * pitch;
+    let model_to_camera = rotation.inverse();
+    let extent = [-1.0, 1.0]
+        .into_iter()
+        .flat_map(|x| {
+            [-1.0, 1.0]
+                .into_iter()
+                .flat_map(move |y| [-1.0, 1.0].into_iter().map(move |z| (x, y, z)))
+        })
+        .map(|(x, y, z)| (model_to_camera * Vector3::new(half.x * x, half.y * y, half.z * z)).abs())
+        .fold(Vector3::zeros(), |extent, corner| extent.sup(&corner));
+    let image_extent = extent.x.max(extent.y) * 1.05;
+    Translation3::from(center).to_homogeneous()
+        * rotation.to_homogeneous()
+        * Scale3::new(image_extent, image_extent, extent.z * 1.05).to_homogeneous()
+}
+
+fn cpu_volume(preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+    let config = VoxelRenderConfig {
+        world_to_model: volume_transform(preview),
+        ..VoxelRenderConfig::from_size(VoxelRenderSize::from(raster_size))
+    };
+    let shape = VmShape::from(preview.tree.clone()).try_into().ok()?;
+    let image = config.run(shape)?;
+    let light = Vector3::new(0.35, -0.45, 1.0).normalize();
+    Some(
+        image
+            .iter()
+            .flat_map(|pixel| shade_geometry(*pixel, light))
+            .collect(),
+    )
+}
+
+fn shade_geometry(pixel: GeometryPixel, light: Vector3<f32>) -> [u8; 4] {
+    if pixel.depth == 0 {
+        [0, 0, 0, 0]
+    } else {
+        let normal = Vector3::from(pixel.normal).normalize();
+        let intensity = ((0.22 + 0.78 * normal.dot(&light).max(0.0)) * 255.0) as u8;
+        [intensity, intensity, intensity, 255]
+    }
+}
+
+struct PreviewRenderer {
+    #[cfg(not(target_arch = "wasm32"))]
+    gpu: GpuState,
+}
+
+impl Default for PreviewRenderer {
+    fn default() -> Self {
+        Self {
+            #[cfg(not(target_arch = "wasm32"))]
+            gpu: GpuState::default(),
+        }
+    }
+}
+
+impl PreviewRenderer {
+    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(image) = self.gpu.render(preview, raster_size) {
+            return Some(image);
+        }
+        cpu_volume(preview, raster_size)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default)]
+enum GpuState {
+    #[default]
+    Uninitialized,
+    Available(GpuRenderer),
+    Unavailable,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl GpuState {
+    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+        if matches!(self, Self::Uninitialized) {
+            let gpu = pollster::block_on(Gpu::init());
+            *self = match gpu {
+                Ok(gpu) => Self::Available(GpuRenderer::new(gpu)),
+                Err(_) => Self::Unavailable,
+            };
+        }
+        match self {
+            Self::Available(renderer) => renderer.render(preview, raster_size),
+            Self::Uninitialized | Self::Unavailable => None,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct GpuRenderer {
+    gpu: Gpu,
+    voxel: voxel::Context,
+    effects: effects::Context,
+    buffers: Option<GpuBuffers>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl GpuRenderer {
+    fn new(gpu: Gpu) -> Self {
+        Self {
+            voxel: voxel::Context::new(&gpu),
+            effects: effects::Context::new(&gpu),
+            gpu,
+            buffers: None,
+        }
+    }
+
+    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+        let shape = self
+            .voxel
+            .shape(&VmShape::from(preview.tree.clone()))
+            .ok()?;
+        let Self {
+            gpu,
+            voxel,
+            effects,
+            buffers,
+        } = self;
+        if !matches!(buffers, Some(buffers) if buffers.raster_size == raster_size) {
+            *buffers = Some(GpuBuffers::new(gpu, voxel, effects, raster_size)?);
+        }
+        let GpuBuffers {
+            voxel: voxel_buffers,
+            merge,
+            ssao,
+            shade,
+            read,
+            ..
+        } = buffers.as_mut()?;
+        voxel
+            .submit(
+                &shape,
+                voxel_buffers,
+                None,
+                &voxel::RenderConfig {
+                    world_to_model: volume_transform(preview),
+                },
+            )
+            .ok()?;
+        effects
+            .submit_merge(&[voxel_buffers.image_storage_buffer()], true, merge)
+            .ok()?;
+        effects.submit_ssao(merge, ssao).ok()?;
+        effects
+            .submit_shade(merge, Some(ssao), shade, Some(read))
+            .ok()?;
+        Some(
+            gpu.map(read)
+                .image()
+                .take()
+                .0
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect(),
+        )
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct GpuBuffers {
+    raster_size: u32,
+    voxel: voxel::Buffers,
+    merge: effects::MergeBuffers,
+    ssao: effects::SsaoBuffers,
+    shade: effects::ShadeBuffers,
+    read: fidget_engine::wgpu::buf::ImageReadBuffer<effects::ShadedImageTag>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl GpuBuffers {
+    fn new(
+        gpu: &Gpu,
+        voxel: &voxel::Context,
+        effects: &effects::Context,
+        raster_size: u32,
+    ) -> Option<Self> {
+        let size = VoxelRenderSize::from(raster_size);
+        let voxel = voxel.buffers(size).ok()?;
+        let merge = effects.merge_buffers(size).ok()?;
+        let ssao = effects.ssao_buffers(size).ok()?;
+        let shade = effects.shade_buffers(raster_size.into()).ok()?;
+        let read = gpu.read_buffer_for(shade.output());
+        Some(Self {
+            raster_size,
+            voxel,
+            merge,
+            ssao,
+            shade,
+            read,
+        })
+    }
+}
+
+fn volume_drawing(
+    value: &Value,
+    scale_factor: f64,
+    renderer: &mut PreviewRenderer,
+) -> Option<Drawing<Paint>> {
+    let preview = volume_preview(value);
+    let raster_size = (scale_factor.is_finite() && scale_factor > 0.0).then(|| {
+        (PREVIEW_SIZE * scale_factor)
+            .round()
+            .clamp(1.0, f64::from(u32::MAX)) as u32
+    });
+    preview.zip(raster_size).and_then(|(preview, raster_size)| {
+        Some(Drawing {
+            width: PREVIEW_SIZE,
+            ascent: PREVIEW_SIZE / 2.0,
+            descent: PREVIEW_SIZE / 2.0,
+            commands: vec![Command::Image {
+                image: ImageData {
+                    data: renderer.render(&preview, raster_size)?.into(),
+                    format: ImageFormat::Rgba8,
+                    alpha_type: ImageAlphaType::Alpha,
+                    width: raster_size,
+                    height: raster_size,
+                },
+                transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
+            }],
+        })
+    })
+}
+
+fn display<World, Hover>(
+    input: &ProjectionInput<'_, World, Hover>,
+    renderer: &RefCell<PreviewRenderer>,
+) -> Option<Layout<World, Hover>> {
+    if input
+        .value
+        .as_record()
+        .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
+    {
+        Some(leaf(Leaf::Drawing(volume_drawing(
+            input.value,
+            input.scale_factor,
+            &mut renderer.borrow_mut(),
+        )?)))
+    } else {
+        Some(leaf(Leaf::Drawing(slice_drawing(
+            slice_preview(input.value)?,
+            input.scale_factor,
+        )?)))
+    }
+}
+
+pub fn library<World: 'static, Hover: 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),
@@ -416,6 +752,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::INTERSECTION, "intersection"),
         (vocabulary::DIFFERENCE, "difference"),
         (vocabulary::PREVIEW, "preview"),
+        (vocabulary::PREVIEW_3D, "preview 3d"),
         (vocabulary::FIELD, "field"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
@@ -428,6 +765,8 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::MAX_X, "maximum x"),
         (vocabulary::MIN_Y, "minimum y"),
         (vocabulary::MAX_Y, "maximum y"),
+        (vocabulary::MIN_Z, "minimum z"),
+        (vocabulary::MAX_Z, "maximum z"),
         (vocabulary::SLICE_Z, "slice z"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
@@ -449,10 +788,13 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
             name::record(spelling, [(vocabulary::AXIS, Value::from(cell))]),
         );
     }
+    let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        projections: vec![progred_display::partial(move |input| {
+            display(input, &renderer)
+        })],
     }
 }
 
@@ -516,15 +858,19 @@ mod tests {
             select_with: Rc::new(|_: &mut (), _| false),
             hover: (),
         };
-        let layout = display(&ProjectionInput {
-            env: &NoEval,
-            value: &value,
-            scale_factor: 2.0,
-            writable: false,
-            selection: None,
-            state: None,
-            targets: ProjectionTargets::new(&target),
-        })
+        let renderer = RefCell::new(PreviewRenderer::default());
+        let layout = display(
+            &ProjectionInput {
+                env: &NoEval,
+                value: &value,
+                scale_factor: 2.0,
+                writable: false,
+                selection: None,
+                state: None,
+                targets: ProjectionTargets::new(&target),
+            },
+            &renderer,
+        )
         .expect("preview projection");
 
         let Layout::Leaf(Leaf::Drawing(drawing)) = layout else {
@@ -539,6 +885,24 @@ mod tests {
         let alphas = image.data.as_ref().iter().skip(3).step_by(4);
         assert!(alphas.clone().any(|alpha| *alpha == 0));
         assert!(alphas.clone().any(|alpha| *alpha == 255));
+    }
+
+    #[test]
+    fn grap_constructs_a_three_dimensional_preview() {
+        let expression = call(
+            vocabulary::PREVIEW_3D,
+            [(
+                presentation::vocabulary::VALUE,
+                call(vocabulary::SPHERE, [(vocabulary::RADIUS, f32::value(40.0))]),
+            )],
+        );
+        let value = evaluate(&expression);
+        let preview = volume_preview(&value).expect("3D preview value");
+
+        assert_eq!(preview.min, Vector3::new(-80.0, -80.0, -80.0));
+        assert_eq!(preview.max, Vector3::new(80.0, 80.0, 80.0));
+        assert!(sample(preview.tree.clone(), 0.0, 0.0, 0.0) < 0.0);
+        assert!(sample(preview.tree, 80.0, 0.0, 0.0) > 0.0);
     }
 
     struct NoEval;

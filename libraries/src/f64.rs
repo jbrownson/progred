@@ -107,7 +107,7 @@ fn expression_precedence(value: &Value) -> Option<Precedence> {
     fields.get(&FUNCTION)?.as_cell().and_then(precedence)
 }
 
-fn operand<World, Hover: Clone>(
+fn operand<World: 'static, Hover: Clone + 'static>(
     field: CellId,
     value: &Value,
     parent: Precedence,
@@ -125,7 +125,7 @@ fn operand<World, Hover: Clone>(
     }
 }
 
-pub fn binary_display<World, Hover: Clone>(
+pub fn binary_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -295,7 +295,7 @@ fn unary(
         .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::F64, "f64"),
@@ -336,7 +336,10 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        projections: vec![binary_display::<World, Hover>, display::<World, Hover>],
+        projections: vec![
+            progred_display::partial(binary_display::<World, Hover>),
+            progred_display::partial(display::<World, Hover>),
+        ],
     }
 }
 

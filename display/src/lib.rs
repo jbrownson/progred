@@ -490,8 +490,20 @@ pub struct ProjectionInput<'a, World, Hover> {
 /// A partial borrows the shared projection input. Ordered composition
 /// can therefore try declining projections without cloning interaction
 /// targets that only the successful projection retains.
-pub type Partial<World, Hover> =
-    for<'a, 'input> fn(&'input ProjectionInput<'a, World, Hover>) -> Option<Layout<World, Hover>>;
+pub type Partial<World, Hover> = Rc<
+    dyn for<'a, 'input> Fn(
+        &'input ProjectionInput<'a, World, Hover>,
+    ) -> Option<Layout<World, Hover>>,
+>;
+
+pub fn partial<World, Hover>(
+    projection: impl for<'a, 'input> Fn(
+        &'input ProjectionInput<'a, World, Hover>,
+    ) -> Option<Layout<World, Hover>>
+    + 'static,
+) -> Partial<World, Hover> {
+    Rc::new(projection)
+}
 
 pub fn text<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Name)
@@ -913,7 +925,7 @@ mod tests {
         assert!(matches!(
             descend(
                 step.clone(),
-                Some(vec![probe as Partial<(), ()>]),
+                Some(vec![partial(probe)]),
                 None,
             ),
             Layout::Descend {
@@ -933,7 +945,7 @@ mod tests {
         assert!(matches!(
             descend(
                 step,
-                Some(vec![probe as Partial<(), ()>]),
+                Some(vec![partial(probe)]),
                 Some(text("missing")),
             ),
             Layout::Descend {

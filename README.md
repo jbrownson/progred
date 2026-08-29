@@ -61,6 +61,8 @@ Cargo commands in this repository intentionally stop at a tripwire; read
 [`docs/build-security.md`](docs/build-security.md) before changing dependencies
 or bypassing the supplied commands.
 
+Before distributing a build, review [`docs/release-checklist.md`](docs/release-checklist.md).
+
 Sample documents under `examples/` include:
 
 - `examples/sample.gid` — editor and projection examples;

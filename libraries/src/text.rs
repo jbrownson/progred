@@ -69,14 +69,14 @@ pub fn display<World, Hover: Clone>(
     ))
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        projections: vec![progred_display::partial(display::<World, Hover>)],
     }
 }
 

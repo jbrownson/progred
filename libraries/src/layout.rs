@@ -923,7 +923,7 @@ pub fn display<World: 'static, Hover: Clone>(
     decode_with(input.value, &|| input.targets.current())
 }
 
-pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),
@@ -1055,7 +1055,7 @@ pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
                 APPLY_BORDER_PROJECTION,
                 ForeignFunction::runtime(apply_border_projection),
             ),
-        projections: vec![display::<World, Hover>],
+        projections: vec![progred_display::partial(display::<World, Hover>)],
     }
 }
 

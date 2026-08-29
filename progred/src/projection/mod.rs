@@ -1180,7 +1180,7 @@ fn contextual_projection<C>(
             partials.into_iter().chain(
                 ambient
                     .into_iter()
-                    .flat_map(|projection| projection.partials.iter().copied()),
+                    .flat_map(|projection| projection.partials.iter().cloned()),
             ),
         )
     })

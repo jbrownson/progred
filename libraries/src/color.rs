@@ -302,7 +302,7 @@ pub fn display<World: 'static, Hover: Clone>(
     ))
 }
 
-pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));
@@ -313,7 +313,7 @@ pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        projections: vec![progred_display::partial(display::<World, Hover>)],
     }
 }
 

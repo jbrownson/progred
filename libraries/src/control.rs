@@ -537,7 +537,7 @@ fn matches_pattern(
 
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
-pub fn match_display<World, Hover: Clone>(
+pub fn match_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -558,14 +558,14 @@ pub fn match_display<World, Hover: Clone>(
         at_with_projection(
             [Step::Key(vocabulary::CASES)],
             cases,
-            [case_display::<World, Hover> as progred_display::Partial<World, Hover>],
+            [progred_display::partial(case_display::<World, Hover>)],
         ),
         4.0,
         20.0,
     ))
 }
 
-fn case_display<World, Hover: Clone>(
+fn case_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let (pattern, expression) = case_parts(input.value)?;
@@ -607,7 +607,7 @@ enum BindingForm {
 /// `let` and `where` are the same sequential binding call with two
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
-pub fn bindings_display<World, Hover: Clone>(
+pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -623,7 +623,7 @@ pub fn bindings_display<World, Hover: Clone>(
     let bindings = shared(at_with_projection(
         [Step::Key(vocabulary::BINDINGS)],
         bindings,
-        [binding_display::<World, Hover> as progred_display::Partial<World, Hover>],
+        [progred_display::partial(binding_display::<World, Hover>)],
     ));
     let function = shared(crate::grap::shallow_at(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
@@ -673,7 +673,7 @@ pub fn bindings_display<World, Hover: Clone>(
     }
 }
 
-fn binding_display<World, Hover: Clone>(
+fn binding_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -711,7 +711,7 @@ fn quote_marker<World, Hover: Clone>(
 /// Quote reads as a small structural marker followed by its template,
 /// rather than as a generic call with a redundant `expression` label.
 /// Decorated calls fall through so this compact form never hides data.
-pub fn quote_display<World, Hover: Clone>(
+pub fn quote_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -722,7 +722,7 @@ pub fn quote_display<World, Hover: Clone>(
     let marker = at_with_projection(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
         function,
-        [quote_marker::<World, Hover> as progred_display::Partial<World, Hover>],
+        [progred_display::partial(quote_marker::<World, Hover>)],
     );
     Some(row(
         2.0,
@@ -738,7 +738,7 @@ pub fn quote_display<World, Hover: Clone>(
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
-pub fn do_display<World, Hover: Clone>(
+pub fn do_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -756,7 +756,7 @@ pub fn do_display<World, Hover: Clone>(
     ))
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::MATCH, "match"),
@@ -788,10 +788,10 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         cells,
         functions: functions(),
         projections: vec![
-            match_display::<World, Hover>,
-            bindings_display::<World, Hover>,
-            do_display::<World, Hover>,
-            quote_display::<World, Hover>,
+            progred_display::partial(match_display::<World, Hover>),
+            progred_display::partial(bindings_display::<World, Hover>),
+            progred_display::partial(do_display::<World, Hover>),
+            progred_display::partial(quote_display::<World, Hover>),
         ],
     }
 }

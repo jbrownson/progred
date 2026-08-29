@@ -117,13 +117,13 @@ mod tests {
                 cells: left_cells,
                 functions: ForeignFunctions::default()
                     .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
-                projections: vec![left_projection],
+                projections: vec![progred_display::partial(left_projection)],
             },
             Library {
                 cells: right_cells,
                 functions: ForeignFunctions::default()
                     .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
-                projections: vec![right_projection],
+                projections: vec![progred_display::partial(right_projection)],
             },
         ]);
 

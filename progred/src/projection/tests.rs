@@ -72,7 +72,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
         }
     }
 
-    let ambient = Projection::new([ambient_probe as progred_display::Partial<(), Hover>]);
+    let ambient = Projection::new([progred_display::partial(ambient_probe)]);
     let value = Value::record([]);
     let target = |_| progred_display::ProjectionTarget {
         select: Rc::new(|_: &mut ()| false),
@@ -101,9 +101,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
         text(apply(
             &contextual_projection(
                 Some(&ambient),
-                Some(vec![
-                    contextual_probe as progred_display::Partial<(), Hover>
-                ]),
+                Some(vec![progred_display::partial(contextual_probe)]),
             )
             .unwrap()
         )),
@@ -113,7 +111,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
         text(apply(
             &contextual_projection(
                 Some(&ambient),
-                Some(vec![declining_probe as progred_display::Partial<(), Hover>]),
+                Some(vec![progred_display::partial(declining_probe)]),
             )
             .unwrap()
         )),
@@ -1417,8 +1415,7 @@ fn partials_receive_selection_and_annotations_positionally() {
         cells: Cells::new(),
     };
     let lib = Cells::new();
-    let projection: Projection<()> =
-        Projection::new([probe as progred_display::Partial<(), Hover>]);
+    let projection: Projection<()> = Projection::new([progred_display::partial(probe)]);
     let foreign = grap::ForeignFunctions::default();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1534,8 +1531,7 @@ fn a_projection_defined_as_data_realizes() {
         cells: Cells::new(),
     };
     let lib = Cells::new();
-    let projection: Projection<()> =
-        Projection::new([probe as progred_display::Partial<(), Hover>]);
+    let projection: Projection<()> = Projection::new([progred_display::partial(probe)]);
     let foreign = grap::ForeignFunctions::default();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1613,7 +1609,7 @@ fn a_data_event_realizes_the_apply_hook() {
     };
     let lib = Cells::new();
     let projection: Projection<Vec<(Path, Value, Value)>> =
-        Projection::new([probe as progred_display::Partial<Vec<(Path, Value, Value)>, Hover>]);
+        Projection::new([progred_display::partial(probe)]);
     let foreign = grap::ForeignFunctions::default();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();

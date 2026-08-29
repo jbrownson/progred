@@ -976,6 +976,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+dependencies = [
+ "getrandom 0.4.3",
+]
+
+[[package]]
 name = "fax"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -999,7 +1008,22 @@ dependencies = [
  "document-features",
  "fidget-core",
  "fidget-raster",
+ "fidget-wgpu",
  "workspace-hack",
+]
+
+[[package]]
+name = "fidget-bytecode"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e344dc4b2fb3392402210684509f15c71224b541ab5148a55798b1435ebfb7fa"
+dependencies = [
+ "fidget-core",
+ "serde",
+ "strum",
+ "thiserror 2.0.20",
+ "workspace-hack",
+ "zerocopy",
 ]
 
 [[package]]
@@ -1039,6 +1063,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "fidget-wgpu"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0c40fb374ef1426f17817bd673649fb7fc361f76f8e08000c59239ebab50fce"
+dependencies = [
+ "fidget-bytecode",
+ "fidget-core",
+ "fidget-raster",
+ "flume",
+ "heck 0.5.0",
+ "log",
+ "naga",
+ "nalgebra",
+ "static_assertions",
+ "thiserror 2.0.20",
+ "wgpu",
+ "workspace-hack",
+ "zerocopy",
+]
+
+[[package]]
 name = "field-offset"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1062,6 +1107,18 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flume"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e139bc46ca777eb5efaf62df0ab8cc5fd400866427e56c68b22e414e53bd3be"
+dependencies = [
+ "fastrand",
+ "futures-core",
+ "futures-sink",
+ "spin",
 ]
 
 [[package]]
@@ -3196,6 +3253,8 @@ dependencies = [
  "fidget",
  "gid",
  "grap",
+ "nalgebra",
+ "pollster",
  "progred-display",
  "puri",
  "puri-widgets",
@@ -3818,6 +3877,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "spin"
+version = "0.9.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
+dependencies = [
+ "lock_api",
 ]
 
 [[package]]

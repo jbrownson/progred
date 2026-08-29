@@ -403,13 +403,18 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
         source,
         &DrawingMemo::default(),
     );
-    assert!(
-        bench
-            .list
-            .0
-            .iter()
-            .any(|command| matches!(command, DrawCmd::Image { .. }))
-    );
+    let image = bench
+        .list
+        .0
+        .iter()
+        .find_map(|command| match command {
+            DrawCmd::Image { image, .. } => Some(image),
+            _ => None,
+        })
+        .expect("the Fidget projection paints an image");
+    let alphas = image.data.as_ref().iter().skip(3).step_by(4);
+    assert!(alphas.clone().any(|alpha| *alpha == 0));
+    assert!(alphas.clone().any(|alpha| *alpha == 255));
     assert!(bench.list.0.iter().any(|command| matches!(
         command,
         DrawCmd::Stroke {

@@ -83,14 +83,14 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::U64, name::record("u64", []));
     cells.set_value(vocabulary::UPDATE, name::record("u64 update", []));
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        projections: vec![progred_display::partial(display::<World, Hover>)],
     }
 }
 

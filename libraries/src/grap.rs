@@ -67,49 +67,51 @@ fn lambda_name<World, Hover>(
     ))
 }
 
-pub fn shallow_at<World, Hover: Clone>(
+pub fn shallow_at<World: 'static, Hover: Clone + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
 ) -> Layout<World, Hover> {
     at_with_projection(
         steps,
         value,
-        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+        [progred_display::partial(shallow_cell::<World, Hover>)],
     )
 }
 
 /// Project an expression subtree at a real location. Cells in that
 /// subtree are references until a nested construct explicitly enters
 /// a declaration or data subtree.
-pub(crate) fn expression_at<World, Hover: Clone>(
+pub(crate) fn expression_at<World: 'static, Hover: Clone + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
 ) -> Layout<World, Hover> {
     shallow_at(steps, value)
 }
 
-pub(crate) fn deep_at<World, Hover>(
+pub(crate) fn deep_at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
 ) -> Layout<World, Hover> {
     at_with_projection(
         steps,
         value,
-        [deep_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+        [progred_display::partial(deep_cell::<World, Hover>)],
     )
 }
 
-pub(crate) fn shallow_descend<World, Hover: Clone>(step: Step) -> Layout<World, Hover> {
+pub(crate) fn shallow_descend<World: 'static, Hover: Clone + 'static>(
+    step: Step,
+) -> Layout<World, Hover> {
     descend(
         step,
-        Some(vec![
-            shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>,
-        ]),
+        Some(vec![progred_display::partial(shallow_cell::<World, Hover>)]),
         None,
     )
 }
 
-pub(crate) fn expression_descend<World, Hover: Clone>(step: Step) -> Layout<World, Hover> {
+pub(crate) fn expression_descend<World: 'static, Hover: Clone + 'static>(
+    step: Step,
+) -> Layout<World, Hover> {
     shallow_descend(step)
 }
 
@@ -166,7 +168,7 @@ fn standard_field_order(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a cell; arguments retain Grap's contextual
 /// projection.
-pub fn call_display<World, Hover: Clone>(
+pub fn call_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -205,7 +207,7 @@ pub fn call_display<World, Hover: Clone>(
 
 /// A stored lambda exposes its parameter declarations deeply and
 /// projects its body as an expression.
-pub fn lambda_display<World, Hover: Clone>(
+pub fn lambda_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
@@ -220,9 +222,7 @@ pub fn lambda_display<World, Hover: Clone>(
     let body_target = input.targets.at([Step::Key(BODY)]);
     let lambda = descend(
         Step::Key(name::vocabulary::NAME),
-        Some(vec![
-            lambda_name::<World, Hover> as progred_display::Partial<World, Hover>,
-        ]),
+        Some(vec![progred_display::partial(lambda_name::<World, Hover>)]),
         Some(crate::line_edit::layout_with_placeholder(
             "",
             Some("λ"),
@@ -238,7 +238,7 @@ pub fn lambda_display<World, Hover: Clone>(
 
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
-pub fn ffi_display<World, Hover: Clone>(
+pub fn ffi_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let ffi = input.value.as_record()?.get(&FFI)?;
@@ -246,7 +246,7 @@ pub fn ffi_display<World, Hover: Clone>(
     Some(shallow_at([Step::Key(FFI)], ffi))
 }
 
-pub fn evaluate_display<World, Hover: Clone>(
+pub fn evaluate_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value.as_record()?.get(&EVALUATE)?;
@@ -290,7 +290,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, value) in [
         (grap_runtime::vocabulary::FUNCTION, "function"),
@@ -326,10 +326,10 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         // Projection order mirrors evaluator precedence: the explicit
         // Grap-result wrapper, calls, lambdas, then FFI values.
         projections: vec![
-            evaluate_display::<World, Hover>,
-            call_display::<World, Hover>,
-            lambda_display::<World, Hover>,
-            ffi_display::<World, Hover>,
+            progred_display::partial(evaluate_display::<World, Hover>),
+            progred_display::partial(call_display::<World, Hover>),
+            progred_display::partial(lambda_display::<World, Hover>),
+            progred_display::partial(ffi_display::<World, Hover>),
         ],
     }
 }
