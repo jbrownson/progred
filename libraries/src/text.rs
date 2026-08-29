@@ -134,6 +134,7 @@ mod tests {
         let display = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &value("hi"),
+            scale_factor: 1.0,
             writable: true,
             selection: None,
             state: None,

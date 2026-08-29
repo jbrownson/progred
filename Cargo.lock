@@ -998,6 +998,7 @@ checksum = "6214a9d3f6f2fd6cb5f119cfd3d496d9c562f0fda41c286265a6d1ca0db3d050"
 dependencies = [
  "document-features",
  "fidget-core",
+ "fidget-raster",
  "workspace-hack",
 ]
 
@@ -1019,6 +1020,22 @@ dependencies = [
  "strum",
  "thiserror 2.0.20",
  "workspace-hack",
+]
+
+[[package]]
+name = "fidget-raster"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "999c3bccf9e531bd673d11258c79c86251d99787546e54bf1596f507b3bc52ae"
+dependencies = [
+ "fidget-core",
+ "nalgebra",
+ "ordered-float",
+ "rand",
+ "rayon",
+ "thiserror 2.0.20",
+ "workspace-hack",
+ "zerocopy",
 ]
 
 [[package]]

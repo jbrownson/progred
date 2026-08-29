@@ -382,6 +382,7 @@ mod tests {
         ProjectionInput {
             env,
             value,
+            scale_factor: 1.0,
             writable: true,
             selection: None,
             state: None,
@@ -396,6 +397,7 @@ mod tests {
         ProjectionInput {
             env,
             value,
+            scale_factor: 1.0,
             writable: true,
             selection: None,
             state: None,

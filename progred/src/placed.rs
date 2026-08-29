@@ -13,7 +13,7 @@ use crate::workspace::Root;
 use gid::Path;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
-use peniko::{Brush, Color};
+use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
@@ -467,6 +467,14 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
 }
 
 impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        if self.visible {
+            self.placed
+                .renders
+                .push(Box::new(move |cv, _| cv.image(image, transform)));
+        }
+    }
+
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         if self.visible {
             let (shape, brush) = (shape.into(), brush.into());
@@ -756,6 +764,10 @@ mod tests {
     struct TestCanvas(DrawList);
 
     impl Canvas for TestCanvas {
+        fn image(&mut self, image: ImageData, transform: Affine) {
+            self.0.image(image, transform);
+        }
+
         fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
             self.0.fill(shape, brush, transform);
         }
