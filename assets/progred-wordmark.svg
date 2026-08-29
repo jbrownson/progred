@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 640">
   <!-- PRO ([{gred}]) — the sticker reads first, the delimiters spell the rest -->
-  <rect x="0" y="0" width="1600" height="640" rx="96" fill="#EFEDE6"/>
+  <rect x="0" y="0" width="1600" height="640" rx="96" fill="#FFFFFF"/>
   <text x="800" y="400" text-anchor="middle"
         font-family="Menlo, 'SF Mono', 'Courier New', monospace"
         font-size="200" font-weight="bold" fill="#1C1B1F">([{gred}])</text>
@@ -10,6 +10,6 @@
     <text x="0" y="26" text-anchor="middle"
           font-family="'Helvetica Neue', Arial, sans-serif"
           font-size="78" font-weight="900" font-style="italic"
-          letter-spacing="4" fill="#EFEDE6">PRO</text>
+          letter-spacing="4" fill="#FFFFFF">PRO</text>
   </g>
 </svg>
