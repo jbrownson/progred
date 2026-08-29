@@ -25,6 +25,7 @@ use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Lea
 use std::{cell::RefCell, rc::Rc};
 
 const PREVIEW_SIZE: f64 = 256.0;
+const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / PREVIEW_SIZE as f32;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -480,7 +481,7 @@ fn camera(state: Option<&Value>) -> Camera {
     };
     Camera {
         yaw: read(vocabulary::YAW, Camera::default().yaw),
-        pitch: read(vocabulary::PITCH, Camera::default().pitch).clamp(-89.0, 89.0),
+        pitch: read(vocabulary::PITCH, Camera::default().pitch).rem_euclid(360.0),
         zoom: read(vocabulary::ZOOM, Camera::default().zoom).clamp(0.05, 20.0),
     }
 }
@@ -511,8 +512,10 @@ fn orbit_handler(state: Option<&Value>) -> progred_display::StateDragHandler {
             with_camera(
                 state.as_ref(),
                 Camera {
-                    yaw: (initial.yaw + event.delta_x as f32 * 0.35).rem_euclid(360.0),
-                    pitch: (initial.pitch - event.delta_y as f32 * 0.35).clamp(-89.0, 89.0),
+                    yaw: (initial.yaw - event.delta_x as f32 * ORBIT_DEGREES_PER_POINT)
+                        .rem_euclid(360.0),
+                    pitch: (initial.pitch - event.delta_y as f32 * ORBIT_DEGREES_PER_POINT)
+                        .rem_euclid(360.0),
                     ..initial
                 },
             )
@@ -568,22 +571,41 @@ fn volume_preview(value: &Value) -> Option<VolumePreview> {
         .then_some(preview)
 }
 
-fn volume_transform(preview: &VolumePreview, camera: Camera) -> Matrix4<f32> {
+struct VolumeView {
+    size: VoxelRenderSize,
+    world_to_model: Matrix4<f32>,
+}
+
+fn volume_view(preview: &VolumePreview, camera: Camera, raster_size: u32) -> VolumeView {
     let center = (preview.min + preview.max) / 2.0;
     let half = (preview.max - preview.min) / 2.0;
     let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
     let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
     let rotation = yaw * pitch;
     let radius = half.norm() * 1.05;
-    Translation3::from(center).to_homogeneous()
-        * rotation.to_homogeneous()
-        * Scale3::new(radius / camera.zoom, radius / camera.zoom, radius).to_homogeneous()
+    let depth = (f64::from(raster_size) * f64::from(camera.zoom.max(1.0)))
+        .ceil()
+        .min(f64::from(u32::MAX - 63)) as u32;
+    let depth = depth.next_multiple_of(64);
+    let depth_scale = depth as f32 / raster_size as f32;
+    VolumeView {
+        size: VoxelRenderSize::new(raster_size, raster_size, depth),
+        world_to_model: Translation3::from(center).to_homogeneous()
+            * rotation.to_homogeneous()
+            * Scale3::new(
+                radius / camera.zoom,
+                radius / camera.zoom,
+                radius / depth_scale,
+            )
+            .to_homogeneous(),
+    }
 }
 
 fn cpu_volume(preview: &VolumePreview, camera: Camera, raster_size: u32) -> Option<Vec<u8>> {
+    let view = volume_view(preview, camera, raster_size);
     let config = VoxelRenderConfig {
-        world_to_model: volume_transform(preview, camera),
-        ..VoxelRenderConfig::from_size(VoxelRenderSize::from(raster_size))
+        world_to_model: view.world_to_model,
+        ..VoxelRenderConfig::from_size(view.size)
     };
     let shape = VmShape::from(preview.tree.clone()).try_into().ok()?;
     let image = config.run(shape)?;
@@ -701,8 +723,16 @@ impl GpuRenderer {
             effects,
             buffers,
         } = self;
-        if !matches!(buffers, Some(buffers) if buffers.raster_size == raster_size) {
-            *buffers = Some(GpuBuffers::new(gpu, voxel, effects, raster_size)?);
+        let view = volume_view(preview, camera, raster_size);
+        match buffers {
+            Some(buffers) if buffers.size == view.size => {}
+            Some(buffers)
+                if buffers.size.width() == view.size.width()
+                    && buffers.size.height() == view.size.height() =>
+            {
+                buffers.set_depth(voxel, effects, view.size)?;
+            }
+            _ => *buffers = Some(GpuBuffers::new(gpu, voxel, effects, view.size)?),
         }
         let GpuBuffers {
             voxel: voxel_buffers,
@@ -718,7 +748,7 @@ impl GpuRenderer {
                 voxel_buffers,
                 None,
                 &voxel::RenderConfig {
-                    world_to_model: volume_transform(preview, camera),
+                    world_to_model: view.world_to_model,
                 },
             )
             .ok()?;
@@ -743,7 +773,7 @@ impl GpuRenderer {
 
 #[cfg(not(target_arch = "wasm32"))]
 struct GpuBuffers {
-    raster_size: u32,
+    size: VoxelRenderSize,
     voxel: voxel::Buffers,
     merge: effects::MergeBuffers,
     ssao: effects::SsaoBuffers,
@@ -757,22 +787,36 @@ impl GpuBuffers {
         gpu: &Gpu,
         voxel: &voxel::Context,
         effects: &effects::Context,
-        raster_size: u32,
+        size: VoxelRenderSize,
     ) -> Option<Self> {
-        let size = VoxelRenderSize::from(raster_size);
         let voxel = voxel.buffers(size).ok()?;
         let merge = effects.merge_buffers(size).ok()?;
         let ssao = effects.ssao_buffers(size).ok()?;
-        let shade = effects.shade_buffers(raster_size.into()).ok()?;
+        let shade = effects
+            .shade_buffers(PixelRenderSize::new(size.width(), size.height()))
+            .ok()?;
         let read = gpu.read_buffer_for(shade.output());
         Some(Self {
-            raster_size,
+            size,
             voxel,
             merge,
             ssao,
             shade,
             read,
         })
+    }
+
+    fn set_depth(
+        &mut self,
+        voxel: &voxel::Context,
+        effects: &effects::Context,
+        size: VoxelRenderSize,
+    ) -> Option<()> {
+        let merge = effects.merge_buffers(size).ok()?;
+        voxel.set_buffers_image_size(&mut self.voxel, size).ok()?;
+        self.size = size;
+        self.merge = merge;
+        Some(())
     }
 }
 
@@ -1036,15 +1080,15 @@ mod tests {
         ]);
         let mut orbit = orbit_handler(Some(&state))();
         let state = orbit(progred_display::StateDragEvent {
-            delta_x: 100.0,
-            delta_y: -10.0,
+            delta_x: 128.0,
+            delta_y: -128.0,
         });
 
         assert_eq!(
             camera(Some(&state)),
             Camera {
-                yaw: 45.0,
-                pitch: 63.5,
+                yaw: 280.0,
+                pitch: 150.0,
                 zoom: 1.0,
             }
         );
@@ -1063,6 +1107,33 @@ mod tests {
         })
         .expect("vertical scroll zooms");
         assert!((camera(Some(&state)).zoom - 0.25_f32.exp()).abs() < 0.0001);
+    }
+
+    #[test]
+    fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
+        let preview = VolumePreview {
+            tree: Tree::from(0.0),
+            min: Vector3::repeat(-1.0),
+            max: Vector3::repeat(1.0),
+        };
+        let view = volume_view(
+            &preview,
+            Camera {
+                yaw: 0.0,
+                pitch: 0.0,
+                zoom: 4.0,
+            },
+            256,
+        );
+
+        assert_eq!(view.size, VoxelRenderSize::new(256, 256, 1024));
+        assert!((view.world_to_model[(0, 0)] - view.world_to_model[(2, 2)]).abs() < 0.0001);
+        let screen_to_model = view.world_to_model * view.size.screen_to_world();
+        assert!((screen_to_model[(0, 0)] - screen_to_model[(2, 2)]).abs() < 0.0001);
+        assert!(
+            (screen_to_model[(2, 3)].abs() - preview.max.z * 1.05_f32 * 3.0_f32.sqrt()).abs()
+                < 0.0001
+        );
     }
 
     #[test]
