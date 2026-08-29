@@ -8,6 +8,8 @@ mod completion;
 mod filter;
 mod frame;
 mod gid_text;
+#[cfg(target_os = "ios")]
+mod gpu;
 #[cfg(test)]
 mod grap_examples;
 mod history;
@@ -47,6 +49,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(target_os = "ios")]
+use gpu::{RenderContext, RenderSurface};
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
@@ -54,7 +58,7 @@ use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType, PointerUpdate};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "ios")))]
 use vello::util::{RenderContext, RenderSurface};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::wgpu::{self, CurrentSurfaceTexture};
