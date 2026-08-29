@@ -36,6 +36,7 @@ trap cleanup EXIT HUP INT TERM
 
 /bin/mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
 /bin/cp "$project_root/macos/Info.plist" "$stage/Contents/Info.plist"
+/bin/cp "$project_root/macos/AppIcon.icns" "$stage/Contents/Resources/AppIcon.icns"
 /usr/bin/install -m 755 "$executable" "$stage/Contents/MacOS/progred"
 
 quiet /usr/bin/codesign \
