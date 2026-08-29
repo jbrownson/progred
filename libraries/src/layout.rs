@@ -21,6 +21,8 @@ use puri::{
     RoundedRect, Shape, Stroke,
 };
 
+const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -184,18 +186,30 @@ fn border_projection(
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
     let projection = context.eval(projection, environment)?;
+    let body = grap_runtime::call(
+        Value::from(APPLY_BORDER_PROJECTION),
+        [
+            (presentation::vocabulary::PROJECTION, projection),
+            (
+                presentation::vocabulary::VALUE,
+                Value::from(presentation::vocabulary::VALUE),
+            ),
+        ],
+    );
+    Ok(context.closure([presentation::vocabulary::VALUE], body, environment))
+}
+
+fn apply_border_projection(
+    context: &mut grap_runtime::Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<grap_runtime::RuntimeValue, Halt> {
+    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
+        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
+    };
+    let projection = context.eval(projection, environment)?;
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        let body = grap_runtime::call(
-            Value::from(vocabulary::BORDER),
-            [
-                (presentation::vocabulary::PROJECTION, projection),
-                (
-                    presentation::vocabulary::VALUE,
-                    Value::from(presentation::vocabulary::VALUE),
-                ),
-            ],
-        );
-        return Ok(context.closure([presentation::vocabulary::VALUE], body, environment));
+        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
     };
     let value = context.eval(value, environment)?;
     let projected = context.apply(&projection, [(presentation::vocabulary::VALUE, value)])?;
@@ -1036,6 +1050,10 @@ pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
             .register(
                 vocabulary::BORDER,
                 ForeignFunction::runtime(border_projection),
+            )
+            .register(
+                APPLY_BORDER_PROJECTION,
+                ForeignFunction::runtime(apply_border_projection),
             ),
         projections: vec![display::<World, Hover>],
     }
@@ -1072,15 +1090,26 @@ mod tests {
     fn border_composes_with_an_ordinary_projection() {
         let library = library::<(), ()>();
         let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
-        let composed = grap_runtime::call(
-            Value::from(vocabulary::BORDER),
-            [(
-                presentation::vocabulary::PROJECTION,
-                Value::from(vocabulary::DRAWING),
-            )],
+        let composition = grap_runtime::evaluate(
+            &grap_runtime::call(
+                Value::from(vocabulary::BORDER),
+                [(
+                    presentation::vocabulary::PROJECTION,
+                    Value::from(vocabulary::DRAWING),
+                )],
+            ),
+            |cell| library.cells.value(cell).cloned(),
+            &library.functions,
+            20,
+        );
+        assert!(
+            composition
+                .result
+                .as_record()
+                .is_some_and(|fields| fields.contains_key(&grap_runtime::vocabulary::CLOSURE))
         );
         let evaluation = grap_runtime::apply(
-            &composed,
+            &composition.result,
             [(presentation::vocabulary::VALUE, configuration.clone())],
             |cell| library.cells.value(cell).cloned(),
             &library.functions,
