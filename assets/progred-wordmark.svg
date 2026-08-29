@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 640">
+  <!-- PRO ([{gred}]) — the sticker reads first, the delimiters spell the rest -->
+  <rect x="0" y="0" width="1600" height="640" rx="96" fill="#EFEDE6"/>
+  <text x="800" y="400" text-anchor="middle"
+        font-family="Menlo, 'SF Mono', 'Courier New', monospace"
+        font-size="200" font-weight="bold">
+    <tspan fill="#1C1B1F" fill-opacity="0.38">(</tspan><tspan fill="#1C1B1F" fill-opacity="0.58">[</tspan><tspan fill="#1C1B1F" fill-opacity="0.80">{</tspan><tspan fill="#1C1B1F">gred</tspan><tspan fill="#1C1B1F" fill-opacity="0.80">}</tspan><tspan fill="#1C1B1F" fill-opacity="0.58">]</tspan><tspan fill="#1C1B1F" fill-opacity="0.38">)</tspan>
+  </text>
+  <g transform="translate(268 172) rotate(-14)">
+    <polygon points="0,-158 29,-108 79,-137 79,-79 137,-79 108,-29 158,0 108,29 137,79 79,79 79,137 29,108 0,158 -29,108 -79,137 -79,79 -137,79 -108,29 -158,0 -108,-29 -137,-79 -79,-79 -79,-137 -29,-108"
+             fill="#A6432E"/>
+    <text x="0" y="26" text-anchor="middle"
+          font-family="'Helvetica Neue', Arial, sans-serif"
+          font-size="78" font-weight="900" font-style="italic"
+          letter-spacing="4" fill="#EFEDE6">PRO</text>
+  </g>
+</svg>
