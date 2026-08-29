@@ -1,5 +1,6 @@
 {
   "binders": {
+    "border": a4edf70410d16734683d9f2de0bb0080,
     "circle": e467941b11832c441c98488dbdc5a540,
     "difference": c621348e3c35e46e87c1994eb1a50965,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
@@ -49,7 +50,10 @@
       pane_left: [
         {
           projection_value: ring,
-          projection: preview,
+          projection: {
+            function: border,
+            projection: preview,
+          },
         },
       ],
     },

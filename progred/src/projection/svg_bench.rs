@@ -382,6 +382,45 @@ fn svg_bench_renders_the_sample_projection() {
 }
 
 #[test]
+fn fidget_pane_projects_an_image_inside_the_standard_border() {
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/fidget.gid"))
+        .expect("the Fidget demo parses");
+    let declaration = crate::workspace::declarations(doc.root.as_ref())
+        .into_iter()
+        .next()
+        .expect("the preview is declared as a pane");
+    let root = doc.root.as_ref().unwrap();
+    let value = crate::spine::get(root, &declaration.value_path);
+    let projection = crate::spine::get(root, &declaration.projection_path);
+    let source = Some((declaration.value_path.as_slice(), value, projection));
+    let (bench, _) = place_with_annotations_using(
+        &doc,
+        None,
+        &Annotations::default(),
+        1400.0,
+        None,
+        None,
+        source,
+        &DrawingMemo::default(),
+    );
+    assert!(
+        bench
+            .list
+            .0
+            .iter()
+            .any(|command| matches!(command, DrawCmd::Image { .. }))
+    );
+    assert!(bench.list.0.iter().any(|command| matches!(
+        command,
+        DrawCmd::Stroke {
+            shape: Shape::Rect(_),
+            style,
+            ..
+        } if style.width == 1.0
+    )));
+}
+
+#[test]
 fn iop_tree_projects_through_grap_into_puri_ink() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
         .expect("the IoP tree demo parses");

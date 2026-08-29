@@ -246,6 +246,11 @@ pub enum Layout<World, Hover> {
         bottom: f64,
         child: Box<Layout<World, Hover>>,
     },
+    /// Paint the standard projection border over the child's settled
+    /// bounds without changing its extent or interaction behavior.
+    Border {
+        child: Box<Layout<World, Hover>>,
+    },
     /// Measure `child`, then give `left` and `right` the side
     /// columns: flat advance by the child's height. Layout does not
     /// paint them. Growth is typographic overhang.
@@ -389,6 +394,9 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 top: *top,
                 right: *right,
                 bottom: *bottom,
+                child: child.clone(),
+            },
+            Self::Border { child } => Self::Border {
                 child: child.clone(),
             },
             Self::Surround { left, child, right } => Self::Surround {
@@ -680,6 +688,12 @@ pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World
         top: 0.0,
         right: 0.0,
         bottom: 0.0,
+        child: Box::new(child),
+    }
+}
+
+pub fn border<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover> {
+    Layout::Border {
         child: Box::new(child),
     }
 }

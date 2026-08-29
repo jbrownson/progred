@@ -1023,6 +1023,14 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 ),
             )
         }
+        progred_display::Layout::Border { child } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            let scale = cx.styles.scale;
+            let brush = cx.styles.dim.brush.clone();
+            ChoiceLayout::map(inner, 0.0, move |inner| bordered(scale, brush, inner))
+        }
         progred_display::Layout::Surround { left, child, right } => {
             let gap = 2.0 * scale;
             let reserved = side_advance(scale, &left) + side_advance(scale, &right) + 2.0 * gap;
@@ -1945,6 +1953,23 @@ fn frame_leaf<C: 'static, Cv: Canvas + 'static>(
             brush,
             Affine::IDENTITY,
         );
+    })
+}
+
+fn bordered<C: 'static, Cv: Canvas + 'static>(
+    scale: f64,
+    brush: Brush,
+    child: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    measured::around(child, move |placement, inner| {
+        let mut placed = inner.place();
+        if !placement.clipped_out() {
+            let rect = placement.rect.inset(-0.5 * scale);
+            placed.renders.push(Box::new(move |cv, _| {
+                cv.stroke(rect, Stroke::new(scale), brush, Affine::IDENTITY)
+            }));
+        }
+        placed
     })
 }
 

@@ -13,7 +13,7 @@ use gid::{CellId, Step, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
-    alternatives, block_hover, bracket, descend, leaf, on_activate, on_event, on_hover,
+    alternatives, block_hover, border, bracket, descend, leaf, on_activate, on_event, on_hover,
     overlay as layout_overlay, pickable, slot,
 };
 use puri::{
@@ -28,6 +28,7 @@ pub mod vocabulary {
     pub const ROW: CellId = CellId::from_u128(0x1af52c96e380b7d40c9e1f6a2d5b83e7);
     pub const COL: CellId = CellId::from_u128(0x9d04b6e1783f2ca5f17d09c4e6a2358b);
     pub const PAD: CellId = CellId::from_u128(0x4e8a17d0952cb6f3a30c5e92b7d1f648);
+    pub const BORDER: CellId = CellId::from_u128(0xa4edf70410d16734683d9f2de0bb0080);
     pub const OVERLAY: CellId = CellId::from_u128(0x95de46726d377f70f4f8b6f88893aa52);
     pub const BRACKET: CellId = CellId::from_u128(0xc71e0f4b2d8a6395e6b34a08d15c97f2);
     pub const ALTERNATIVES: CellId = CellId::from_u128(0x62d9b3f0a47e158c37b60d2c81f5e94a);
@@ -170,6 +171,35 @@ fn drawing_projection(
         return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
     Ok(node(vocabulary::DRAWING, context.eval(value, environment)?))
+}
+
+/// Turn an ordinary projection into one whose projected result is
+/// redispatched inside the standard border layout.
+fn border_projection(
+    context: &mut grap_runtime::Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<grap_runtime::RuntimeValue, Halt> {
+    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
+        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
+    };
+    let projection = context.eval(projection, environment)?;
+    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
+        let body = grap_runtime::call(
+            Value::from(vocabulary::BORDER),
+            [
+                (presentation::vocabulary::PROJECTION, projection),
+                (
+                    presentation::vocabulary::VALUE,
+                    Value::from(presentation::vocabulary::VALUE),
+                ),
+            ],
+        );
+        return Ok(context.closure([presentation::vocabulary::VALUE], body, environment));
+    };
+    let value = context.eval(value, environment)?;
+    let projected = context.apply(&projection, [(presentation::vocabulary::VALUE, value)])?;
+    Ok(bordered(transient(projected, context.remaining_fuel())).into())
 }
 
 fn number(value: f64) -> Value {
@@ -455,6 +485,10 @@ pub fn on(child: Value, handler: Value) -> Value {
     )
 }
 
+pub fn bordered(child: Value) -> Value {
+    node(vocabulary::BORDER, child)
+}
+
 /// Decode a layout value into the display language, attaching the
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
@@ -508,6 +542,9 @@ fn decode_with<World: 'static, Hover: Clone>(
             bottom: read_number(content.get(&vocabulary::BOTTOM)?)?,
             child: Box::new(decode_with(content.get(&vocabulary::CHILD)?, target)?),
         });
+    }
+    if let Some(content) = fields.get(&vocabulary::BORDER) {
+        return Some(border(decode_with(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::BRACKET) {
         let content = content.as_record()?;
@@ -878,6 +915,7 @@ pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::ROW, "row"),
         (vocabulary::COL, "col"),
         (vocabulary::PAD, "pad"),
+        (vocabulary::BORDER, "border"),
         (vocabulary::OVERLAY, "overlay"),
         (vocabulary::BRACKET, "bracket"),
         (vocabulary::ALTERNATIVES, "alternatives"),
@@ -990,10 +1028,15 @@ pub fn library<World: 'static, Hover: Clone>() -> Library<World, Hover> {
     }
     Library {
         cells,
-        functions: ForeignFunctions::default().register(
-            vocabulary::DRAWING,
-            ForeignFunction::new(drawing_projection),
-        ),
+        functions: ForeignFunctions::default()
+            .register(
+                vocabulary::DRAWING,
+                ForeignFunction::new(drawing_projection),
+            )
+            .register(
+                vocabulary::BORDER,
+                ForeignFunction::runtime(border_projection),
+            ),
         projections: vec![display::<World, Hover>],
     }
 }
@@ -1023,6 +1066,49 @@ mod tests {
             evaluation.result,
             Value::record([(vocabulary::DRAWING, configuration)])
         );
+    }
+
+    #[test]
+    fn border_composes_with_an_ordinary_projection() {
+        let library = library::<(), ()>();
+        let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
+        let composed = grap_runtime::call(
+            Value::from(vocabulary::BORDER),
+            [(
+                presentation::vocabulary::PROJECTION,
+                Value::from(vocabulary::DRAWING),
+            )],
+        );
+        let evaluation = grap_runtime::apply(
+            &composed,
+            [(presentation::vocabulary::VALUE, configuration.clone())],
+            |cell| library.cells.value(cell).cloned(),
+            &library.functions,
+            50,
+        );
+        let Some(Layout::Border { child }) = decoded(&evaluation.result) else {
+            panic!(
+                "the composed projection returns a border: {:?}",
+                evaluation.result
+            );
+        };
+        assert!(matches!(
+            child.as_ref(),
+            Layout::Transient { value, .. }
+                if value == &Value::record([(vocabulary::DRAWING, configuration)])
+        ));
+    }
+
+    #[test]
+    fn border_wraps_any_decoded_layout() {
+        let value = bordered(text_leaf("inside", vocabulary::NAME_FACE));
+        let Some(Layout::Border { child }) = decoded(&value) else {
+            panic!("border decodes");
+        };
+        assert!(matches!(
+            child.as_ref(),
+            Layout::Leaf(Leaf::Text { text, .. }) if text == "inside"
+        ));
     }
 
     #[test]
