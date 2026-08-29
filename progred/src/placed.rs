@@ -133,6 +133,23 @@ impl ScrubAction {
     }
 }
 
+/// A projection-local state drag attached to the same identity hover
+/// resolves. Unlike a scrub, its result updates view annotations and
+/// never document data.
+#[derive(Clone)]
+pub struct StateDragAction {
+    root: Option<Root>,
+    target: Hovered,
+    pub path: Path,
+    pub handler: progred_display::StateDragHandler,
+}
+
+impl StateDragAction {
+    pub fn root(&self) -> Option<&Root> {
+        self.root.as_ref()
+    }
+}
+
 /// A nested scroll container's settled geometry, retained so
 /// selection reveal can update the same view state as pointer scroll.
 pub struct ViewRegion {
@@ -172,6 +189,21 @@ pub fn scrub_target(
     })
 }
 
+pub fn state_drag_target(
+    actions: &[StateDragAction],
+    root: Option<&Root>,
+    target: &Hovered,
+) -> Option<StateDragAction> {
+    actions.iter().rev().find_map(|candidate| {
+        (candidate
+            .root
+            .as_ref()
+            .is_none_or(|candidate| Some(candidate) == root)
+            && candidate.target == *target)
+            .then(|| candidate.clone())
+    })
+}
+
 /// What ink may condition on: the frame's RESOLVED hover, decided
 /// from this same pass's geometry before any render runs.
 #[derive(Clone, Copy)]
@@ -192,6 +224,7 @@ pub struct Placed<C, Cv> {
     pub activations: Vec<TargetAction<C>>,
     pub picks: Vec<TargetAction<C>>,
     pub scrubs: Vec<ScrubAction>,
+    pub state_drags: Vec<StateDragAction>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C>>,
@@ -229,6 +262,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             activations: Vec::new(),
             picks: Vec::new(),
             scrubs: Vec::new(),
+            state_drags: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -244,6 +278,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
         append(&mut self.activations, above.activations);
         append(&mut self.picks, above.picks);
         append(&mut self.scrubs, above.scrubs);
+        append(&mut self.state_drags, above.state_drags);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -276,6 +311,9 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         }
         for scrub in &mut self.scrubs {
             scrub.root = Some(root.clone());
+        }
+        for drag in &mut self.state_drags {
+            drag.root = Some(root.clone());
         }
         for floater in &mut self.floaters {
             floater.root_navigation(root);
@@ -449,6 +487,22 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     pub fn scrub(&mut self, target: Hovered, path: Path, handler: progred_display::ScrubHandler) {
         if self.visible {
             self.placed.scrubs.push(ScrubAction {
+                root: None,
+                target,
+                path,
+                handler,
+            });
+        }
+    }
+
+    pub fn state_drag(
+        &mut self,
+        target: Hovered,
+        path: Path,
+        handler: progred_display::StateDragHandler,
+    ) {
+        if self.visible {
+            self.placed.state_drags.push(StateDragAction {
                 root: None,
                 target,
                 path,

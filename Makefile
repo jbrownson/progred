@@ -8,7 +8,7 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web run-web web serve-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
+.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web run-web web serve-web build-ipad build-ipad-device sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
 
 help:
 	@echo "Development:"
@@ -16,6 +16,8 @@ help:
 	@echo "  make dev          Relaunch the native app after Ctrl+C (alias: dev-native)"
 	@echo "  make build-web    Build the browser app"
 	@echo "  make run-web      Build and serve the browser app on port 8080"
+	@echo "  make build-ipad   Build the native iPad app for Apple Silicon Simulator"
+	@echo "  make build-ipad-device  Build the unsigned native iPad app for a device"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
@@ -59,6 +61,12 @@ run-web: build-web
 web: build-web
 
 serve-web: run-web
+
+build-ipad:
+	@./tools/build-ipad simulator
+
+build-ipad-device:
+	@./tools/build-ipad device
 
 sandbox-fetch:
 	./tools/sandbox-cargo fetch

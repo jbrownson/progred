@@ -927,6 +927,29 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 }
             })
         }
+        progred_display::Layout::OnStateDrag {
+            child,
+            target,
+            handler,
+        } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            let path = path.to_vec();
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                realize_state_drag(path, target, handler, inner)
+            })
+        }
+        progred_display::Layout::OnStateScroll { child, handler } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            let path = path.to_vec();
+            let update_state = hooks.update_state.clone();
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                realize_state_scroll(path, handler, update_state, scale, inner)
+            })
+        }
         progred_display::Layout::OnPoint { child, handler } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
@@ -1329,6 +1352,52 @@ fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
+fn realize_state_drag<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    target: Hover,
+    handler: progred_display::StateDragHandler,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    before(inner, move |p, _| {
+        p.state_drag(Hovered::Tree(target), path, handler);
+    })
+}
+
+fn realize_state_scroll<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    handler: progred_display::StateScrollHandler,
+    update_state: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
+    scale: f64,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    before(inner, move |p, placement| {
+        p.handler().on_scroll(move |world, event| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            if !placement.contains(point) {
+                return ScrollOutcome::pass(event);
+            }
+            let (delta_x, delta_y) = match event.delta {
+                ScrollDelta::PageDelta(x, y) => (
+                    f64::from(x) * placement.rect.width() / scale,
+                    f64::from(y) * placement.rect.height() / scale,
+                ),
+                ScrollDelta::LineDelta(x, y) => (f64::from(x) * 40.0, f64::from(y) * 40.0),
+                ScrollDelta::PixelDelta(delta) => (delta.x / scale, delta.y / scale),
+            };
+            match handler(progred_display::StateScrollEvent { delta_x, delta_y }) {
+                Some(state) => {
+                    if update_state(world, path.clone(), state) {
+                        ScrollOutcome::consume(event)
+                    } else {
+                        ScrollOutcome::pass(event)
+                    }
+                }
+                None => ScrollOutcome::pass(event),
+            }
+        });
+    })
+}
+
 fn realize_point<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     handler: progred_display::PointHandler,
@@ -1705,6 +1774,9 @@ pub struct Hooks<C> {
     /// first pointer event then uses `edit` below for caret placement.
     pub start_edit: Rc<dyn Fn(&mut C, Path, progred_display::LineEdit)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
+    /// Replace the annotation value at one projection site. The
+    /// concrete view root remains host-owned and closed over here.
+    pub update_state: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
@@ -2479,6 +2551,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         }),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
+        update_state: hooks.update_state.clone(),
         edit: Rc::new(|_| None),
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),

@@ -1,26 +1,41 @@
-# Deferred Platform Work
+# Platform Work
 
-Progred currently has a native macOS shell and a browser shell. Additional
-ports are deliberately deferred until focused product work has advanced; they
-are useful bounded projects for lower-energy development time.
+Progred has native macOS and iPad shells plus a browser shell. The native
+shells enter the same Rust application; platform projects package it rather
+than reimplementing the editor.
 
 ## iPad
 
-The browser build is the shortest iPad loop: serve it from the development Mac
-and open the Mac's LAN address in Safari. A native version is also plausible:
-winit supplies the UIKit event loop and touch input, while wgpu supplies Metal.
-The initial native target should embed built-in examples rather than solve file
-management.
+The browser build remains the shortest iPad loop: serve it from the development
+Mac and open the Mac's LAN address in Safari. The native host builds Progred as
+an `aarch64-apple-ios` static library; a minimal Xcode application calls its
+exported entry point, after which Winit owns the UIKit lifecycle and WGPU/Vello
+renders through Metal.
 
-A native port would need:
+Install the Rust targets once:
 
-- a small Xcode host calling Progred built as an `aarch64-apple-ios` static
-  library;
-- desktop-only dependency gates for clipboard, dialogs, menus, and launch
-  behavior;
-- a UIKit text-input bridge, because winit currently supplies touch but not
-  iOS keyboard events; and
-- a `make run-ipad` path that signs, installs, and launches on a paired iPad.
+```sh
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+```
+
+Open `ios/Progred.xcodeproj`, select an Apple development team and a simulator
+or paired iPad, then use Xcode's ordinary Run button. Its first build phase
+builds the Rust static library for the selected SDK through the repository's
+Seatbelt wrapper; Xcode then compiles the tiny Objective-C entry point, links,
+signs, installs, and launches the application. Cargo still performs its normal
+incremental check on every Xcode build, so Rust changes need no separate build
+step.
+
+`make build-ipad` and `make build-ipad-device` remain useful for unsigned CI or
+command-line builds of the simulator and device forms. They use the same Xcode
+build phase and therefore the same sandboxed Rust build.
+
+The first host deliberately embeds the existing examples instead of adding
+file management. Its clipboard is in-memory. Touch, Pencil-as-touch, and
+indirect pointer events arrive through Winit; hardware-keyboard support awaits
+testing, while the software keyboard still requires a UIKit text-input bridge.
+Until a native discard prompt exists, switching documents in an edited iPad
+session discards the in-memory document directly.
 
 After initial pairing and enabling Developer Mode, Xcode can deploy development
 builds to an iPad over the local network. Rebuilding and refreshing the browser

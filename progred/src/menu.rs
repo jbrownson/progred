@@ -18,11 +18,11 @@ pub enum Platform {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Selection {
     New,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Open,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Save,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     SaveAs,
     Quit,
     ExampleSample,
@@ -79,12 +79,12 @@ pub enum ShortcutKey {
     Digit4,
     D,
     N,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     O,
     P,
     Q,
     R,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     S,
     Z,
 }
@@ -98,12 +98,12 @@ impl ShortcutKey {
             Self::Digit4 => "4",
             Self::D => "D",
             Self::N => "N",
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::O => "O",
             Self::P => "P",
             Self::Q => "Q",
             Self::R => "R",
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::S => "S",
             Self::Z => "Z",
         }
@@ -145,21 +145,21 @@ const NEW: Item = Item {
     shortcut: Some(Shortcut::plain(ShortcutKey::N)),
     kind: Kind::Command,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const OPEN: Item = Item {
     selection: Selection::Open,
     label: "Open…",
     shortcut: Some(Shortcut::plain(ShortcutKey::O)),
     kind: Kind::Command,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const SAVE: Item = Item {
     selection: Selection::Save,
     label: "Save",
     shortcut: Some(Shortcut::plain(ShortcutKey::S)),
     kind: Kind::Command,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const SAVE_AS: Item = Item {
     selection: Selection::SaveAs,
     label: "Save As…",
@@ -265,18 +265,18 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
         },
         ..QUIT
     };
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     let file_entries = vec![Entry::Item(NEW)];
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let mut file_entries = vec![Entry::Item(NEW)];
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     file_entries.extend([
         Entry::Item(OPEN),
         Entry::Separator,
         Entry::Item(SAVE),
         Entry::Item(SAVE_AS),
     ]);
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     file_entries.extend(
         (platform == Platform::Drawn)
             .then_some([Entry::Separator, Entry::Item(quit)])
@@ -358,7 +358,7 @@ impl State {
 
 #[derive(Clone, Copy)]
 pub struct Availability {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub save: bool,
     pub undo: bool,
     pub redo: bool,
@@ -372,7 +372,7 @@ pub struct Availability {
 impl Availability {
     pub fn enabled(self, selection: Selection) -> bool {
         match selection {
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Selection::Save => self.save,
             Selection::Undo => self.undo,
             Selection::Redo => self.redo,

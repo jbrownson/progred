@@ -320,7 +320,7 @@ impl LineEditState {
         presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
-        clipboard: &mut dyn TextClipboard,
+        _clipboard: &mut dyn TextClipboard,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || self.is_composing() {
@@ -361,16 +361,16 @@ impl LineEditState {
                     let selected = drv.editor.selected_text().map(str::to_owned);
                     match (c.to_lowercase().as_str(), selected) {
                         ("c", Some(text)) => {
-                            clipboard.set_text(&text);
+                            _clipboard.set_text(&text);
                             true
                         }
                         ("x", Some(text)) => {
-                            clipboard.set_text(&text);
+                            _clipboard.set_text(&text);
                             drv.delete_selection();
                             true
                         }
                         ("v", _) => {
-                            if let Some(text) = clipboard.get_text() {
+                            if let Some(text) = _clipboard.get_text() {
                                 drv.insert_or_replace_selection(&text);
                             }
                             true

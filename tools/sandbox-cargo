@@ -11,14 +11,28 @@ sandbox_tmp="$build_root/tmp"
 target_dir="$build_root/build"
 user_name=$(id -un)
 
+rustup_path=$(command -v rustup 2>/dev/null || true)
+if [ -z "$rustup_path" ]; then
+    for candidate in "$HOME/.cargo/bin/rustup" /opt/homebrew/bin/rustup /usr/local/bin/rustup; do
+        if [ -x "$candidate" ]; then
+            rustup_path=$candidate
+            break
+        fi
+    done
+fi
+if [ -z "$rustup_path" ]; then
+    echo "rustup was not found; install it or add it to PATH" >&2
+    exit 1
+fi
+
 if [ "$(uname -s)" != Darwin ]; then
     echo "sandbox-cargo currently requires macOS sandbox-exec" >&2
     exit 1
 fi
 
-cargo_path=$(rustup which cargo --toolchain stable)
-rustc_path=$(rustup which rustc --toolchain stable)
-rustdoc_path=$(rustup which rustdoc --toolchain stable)
+cargo_path=$("$rustup_path" which cargo --toolchain stable)
+rustc_path=$("$rustup_path" which rustc --toolchain stable)
+rustdoc_path=$("$rustup_path" which rustdoc --toolchain stable)
 toolchain_root=$(dirname "$(dirname "$cargo_path")")
 
 mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
@@ -64,9 +78,9 @@ run_sandboxed() {
 }
 
 use_minimum_age_toolchain() {
-    cargo_path=$(rustup which cargo --toolchain nightly-2026-08-27)
-    rustc_path=$(rustup which rustc --toolchain nightly-2026-08-27)
-    rustdoc_path=$(rustup which rustdoc --toolchain nightly-2026-08-27)
+    cargo_path=$("$rustup_path" which cargo --toolchain nightly-2026-08-27)
+    rustc_path=$("$rustup_path" which rustc --toolchain nightly-2026-08-27)
+    rustdoc_path=$("$rustup_path" which rustdoc --toolchain nightly-2026-08-27)
     toolchain_root=$(dirname "$(dirname "$cargo_path")")
 }
 

@@ -18,7 +18,9 @@ use fidget_engine::{
 use gid::{CellId, Cells, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
-use progred_display::{Layout, Paint, ProjectionInput, leaf};
+use progred_display::{
+    Layout, Paint, ProjectionInput, activatable, leaf, on_state_drag, on_state_scroll,
+};
 use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf};
 use std::{cell::RefCell, rc::Rc};
 
@@ -65,6 +67,10 @@ pub mod vocabulary {
     pub const MIN_Z: CellId = CellId::from_u128(0x392a615eb91c6d64df871ec95831f89a);
     pub const MAX_Z: CellId = CellId::from_u128(0xda0ed6603210813bf52a20df7bf27c7d);
     pub const SLICE_Z: CellId = CellId::from_u128(0xa6712918cb0f80a44738a028c48b775b);
+    pub const CAMERA: CellId = CellId::from_u128(0x78ba6e0120ecefc68469e7b67cf1f4af);
+    pub const YAW: CellId = CellId::from_u128(0x6f226da2238a736c2f9ee38b40204f77);
+    pub const PITCH: CellId = CellId::from_u128(0x9872a30927160707b693ffe1e6019fd9);
+    pub const ZOOM: CellId = CellId::from_u128(0x745f4518cc847a4e7457e3426d010754);
     pub const INVALID_FIELD: CellId = CellId::from_u128(0xc26cfccc2a9fc752bf73c4359f2e9ade);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
     pub const INVALID_RADIUS: CellId = CellId::from_u128(0x36d2e0bdde4467b9b30e318578bbd79f);
@@ -443,6 +449,93 @@ fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Pai
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Camera {
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            yaw: 30.0,
+            pitch: 60.0,
+            zoom: 1.0,
+        }
+    }
+}
+
+fn camera(state: Option<&Value>) -> Camera {
+    let fields = state
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::CAMERA))
+        .and_then(Value::as_record);
+    let read = |field, default| {
+        fields
+            .and_then(|fields| fields.get(&field))
+            .and_then(f32::read)
+            .filter(|value| value.is_finite())
+            .unwrap_or(default)
+    };
+    Camera {
+        yaw: read(vocabulary::YAW, Camera::default().yaw),
+        pitch: read(vocabulary::PITCH, Camera::default().pitch).clamp(-89.0, 89.0),
+        zoom: read(vocabulary::ZOOM, Camera::default().zoom).clamp(0.05, 20.0),
+    }
+}
+
+fn with_camera(state: Option<&Value>, camera: Camera) -> Value {
+    let mut state = state
+        .and_then(Value::as_record)
+        .cloned()
+        .unwrap_or_default();
+    let mut fields = state
+        .get(&vocabulary::CAMERA)
+        .and_then(Value::as_record)
+        .cloned()
+        .unwrap_or_default();
+    fields.insert(vocabulary::YAW, f32::value(camera.yaw));
+    fields.insert(vocabulary::PITCH, f32::value(camera.pitch));
+    fields.insert(vocabulary::ZOOM, f32::value(camera.zoom));
+    state.insert(vocabulary::CAMERA, Value::Record(fields));
+    Value::Record(state)
+}
+
+fn orbit_handler(state: Option<&Value>) -> progred_display::StateDragHandler {
+    let state = state.cloned();
+    let initial = camera(state.as_ref());
+    Rc::new(move || {
+        let state = state.clone();
+        Box::new(move |event| {
+            with_camera(
+                state.as_ref(),
+                Camera {
+                    yaw: (initial.yaw + event.delta_x as f32 * 0.35).rem_euclid(360.0),
+                    pitch: (initial.pitch - event.delta_y as f32 * 0.35).clamp(-89.0, 89.0),
+                    ..initial
+                },
+            )
+        })
+    })
+}
+
+fn zoom_handler(state: Option<&Value>) -> progred_display::StateScrollHandler {
+    let state = state.cloned();
+    let initial = camera(state.as_ref());
+    Rc::new(move |event| {
+        (event.delta_y != 0.0).then(|| {
+            with_camera(
+                state.as_ref(),
+                Camera {
+                    zoom: (initial.zoom * (event.delta_y as f32 * 0.0025).exp()).clamp(0.05, 20.0),
+                    ..initial
+                },
+            )
+        })
+    })
+}
+
 struct VolumePreview {
     tree: Tree,
     min: Vector3<f32>,
@@ -475,31 +568,21 @@ fn volume_preview(value: &Value) -> Option<VolumePreview> {
         .then_some(preview)
 }
 
-fn volume_transform(preview: &VolumePreview) -> Matrix4<f32> {
+fn volume_transform(preview: &VolumePreview, camera: Camera) -> Matrix4<f32> {
     let center = (preview.min + preview.max) / 2.0;
     let half = (preview.max - preview.min) / 2.0;
-    let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), 60.0_f32.to_radians());
-    let roll = Rotation3::from_axis_angle(&Vector3::z_axis(), 30.0_f32.to_radians());
-    let rotation = roll * pitch;
-    let model_to_camera = rotation.inverse();
-    let extent = [-1.0, 1.0]
-        .into_iter()
-        .flat_map(|x| {
-            [-1.0, 1.0]
-                .into_iter()
-                .flat_map(move |y| [-1.0, 1.0].into_iter().map(move |z| (x, y, z)))
-        })
-        .map(|(x, y, z)| (model_to_camera * Vector3::new(half.x * x, half.y * y, half.z * z)).abs())
-        .fold(Vector3::zeros(), |extent, corner| extent.sup(&corner));
-    let image_extent = extent.x.max(extent.y) * 1.05;
+    let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
+    let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
+    let rotation = yaw * pitch;
+    let radius = half.norm() * 1.05;
     Translation3::from(center).to_homogeneous()
         * rotation.to_homogeneous()
-        * Scale3::new(image_extent, image_extent, extent.z * 1.05).to_homogeneous()
+        * Scale3::new(radius / camera.zoom, radius / camera.zoom, radius).to_homogeneous()
 }
 
-fn cpu_volume(preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+fn cpu_volume(preview: &VolumePreview, camera: Camera, raster_size: u32) -> Option<Vec<u8>> {
     let config = VoxelRenderConfig {
-        world_to_model: volume_transform(preview),
+        world_to_model: volume_transform(preview, camera),
         ..VoxelRenderConfig::from_size(VoxelRenderSize::from(raster_size))
     };
     let shape = VmShape::from(preview.tree.clone()).try_into().ok()?;
@@ -538,12 +621,17 @@ impl Default for PreviewRenderer {
 }
 
 impl PreviewRenderer {
-    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+    fn render(
+        &mut self,
+        preview: &VolumePreview,
+        camera: Camera,
+        raster_size: u32,
+    ) -> Option<Vec<u8>> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(preview, raster_size) {
+        if let Some(image) = self.gpu.render(preview, camera, raster_size) {
             return Some(image);
         }
-        cpu_volume(preview, raster_size)
+        cpu_volume(preview, camera, raster_size)
     }
 }
 
@@ -558,7 +646,12 @@ enum GpuState {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl GpuState {
-    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+    fn render(
+        &mut self,
+        preview: &VolumePreview,
+        camera: Camera,
+        raster_size: u32,
+    ) -> Option<Vec<u8>> {
         if matches!(self, Self::Uninitialized) {
             let gpu = pollster::block_on(Gpu::init());
             *self = match gpu {
@@ -567,7 +660,7 @@ impl GpuState {
             };
         }
         match self {
-            Self::Available(renderer) => renderer.render(preview, raster_size),
+            Self::Available(renderer) => renderer.render(preview, camera, raster_size),
             Self::Uninitialized | Self::Unavailable => None,
         }
     }
@@ -592,7 +685,12 @@ impl GpuRenderer {
         }
     }
 
-    fn render(&mut self, preview: &VolumePreview, raster_size: u32) -> Option<Vec<u8>> {
+    fn render(
+        &mut self,
+        preview: &VolumePreview,
+        camera: Camera,
+        raster_size: u32,
+    ) -> Option<Vec<u8>> {
         let shape = self
             .voxel
             .shape(&VmShape::from(preview.tree.clone()))
@@ -620,7 +718,7 @@ impl GpuRenderer {
                 voxel_buffers,
                 None,
                 &voxel::RenderConfig {
-                    world_to_model: volume_transform(preview),
+                    world_to_model: volume_transform(preview, camera),
                 },
             )
             .ok()?;
@@ -680,6 +778,7 @@ impl GpuBuffers {
 
 fn volume_drawing(
     value: &Value,
+    camera: Camera,
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
 ) -> Option<Drawing<Paint>> {
@@ -696,7 +795,7 @@ fn volume_drawing(
             descent: PREVIEW_SIZE / 2.0,
             commands: vec![Command::Image {
                 image: ImageData {
-                    data: renderer.render(&preview, raster_size)?.into(),
+                    data: renderer.render(&preview, camera, raster_size)?.into(),
                     format: ImageFormat::Rgba8,
                     alpha_type: ImageAlphaType::Alpha,
                     width: raster_size,
@@ -708,7 +807,7 @@ fn volume_drawing(
     })
 }
 
-fn display<World, Hover>(
+fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<World, Hover>> {
@@ -717,11 +816,23 @@ fn display<World, Hover>(
         .as_record()
         .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
     {
-        Some(leaf(Leaf::Drawing(volume_drawing(
+        let camera = camera(input.state);
+        let drawing = leaf(Leaf::Drawing(volume_drawing(
             input.value,
+            camera,
             input.scale_factor,
             &mut renderer.borrow_mut(),
-        )?)))
+        )?));
+        let target = input.targets.current();
+        let hover = target.hover;
+        Some(on_state_scroll(
+            on_state_drag(
+                activatable(drawing, hover.clone(), target.select),
+                hover,
+                orbit_handler(input.state),
+            ),
+            zoom_handler(input.state),
+        ))
     } else {
         Some(leaf(Leaf::Drawing(slice_drawing(
             slice_preview(input.value)?,
@@ -730,7 +841,7 @@ fn display<World, Hover>(
     }
 }
 
-pub fn library<World: 'static, Hover: 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),
@@ -768,6 +879,10 @@ pub fn library<World: 'static, Hover: 'static>() -> Library<World, Hover> {
         (vocabulary::MIN_Z, "minimum z"),
         (vocabulary::MAX_Z, "maximum z"),
         (vocabulary::SLICE_Z, "slice z"),
+        (vocabulary::CAMERA, "camera"),
+        (vocabulary::YAW, "yaw"),
+        (vocabulary::PITCH, "pitch"),
+        (vocabulary::ZOOM, "zoom"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -903,6 +1018,62 @@ mod tests {
         assert_eq!(preview.max, Vector3::new(80.0, 80.0, 80.0));
         assert!(sample(preview.tree.clone(), 0.0, 0.0, 0.0) < 0.0);
         assert!(sample(preview.tree, 80.0, 0.0, 0.0) > 0.0);
+    }
+
+    #[test]
+    fn camera_gestures_update_open_projection_state() {
+        let other_state = CellId::from_u128(1);
+        let other_camera = CellId::from_u128(2);
+        let state = Value::record([
+            (other_state, Value::from(b"state".to_vec())),
+            (
+                vocabulary::CAMERA,
+                Value::record([
+                    (other_camera, Value::from(b"camera".to_vec())),
+                    (vocabulary::YAW, f32::value(10.0)),
+                ]),
+            ),
+        ]);
+        let mut orbit = orbit_handler(Some(&state))();
+        let state = orbit(progred_display::StateDragEvent {
+            delta_x: 100.0,
+            delta_y: -10.0,
+        });
+
+        assert_eq!(
+            camera(Some(&state)),
+            Camera {
+                yaw: 45.0,
+                pitch: 63.5,
+                zoom: 1.0,
+            }
+        );
+        let fields = state.as_record().expect("annotation record");
+        assert!(fields.contains_key(&other_state));
+        assert!(
+            fields
+                .get(&vocabulary::CAMERA)
+                .and_then(Value::as_record)
+                .is_some_and(|camera| camera.contains_key(&other_camera))
+        );
+
+        let state = zoom_handler(Some(&state))(progred_display::StateScrollEvent {
+            delta_x: 0.0,
+            delta_y: 100.0,
+        })
+        .expect("vertical scroll zooms");
+        assert!((camera(Some(&state)).zoom - 0.25_f32.exp()).abs() < 0.0001);
+    }
+
+    #[test]
+    fn horizontal_scroll_declines_camera_zoom() {
+        assert!(
+            zoom_handler(None)(progred_display::StateScrollEvent {
+                delta_x: 10.0,
+                delta_y: 0.0,
+            })
+            .is_none()
+        );
     }
 
     struct NoEval;

@@ -109,6 +109,28 @@ pub struct ScrubUpdate {
 pub type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
 pub type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
 
+/// Displacement from the start of a host-recognized drag, in logical
+/// display units. The host owns the click/drag threshold and pointer
+/// capture; the projection owns the resulting per-site state.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StateDragEvent {
+    pub delta_x: f64,
+    pub delta_y: f64,
+}
+
+pub type StateDragGesture = Box<dyn FnMut(StateDragEvent) -> Value>;
+pub type StateDragHandler = Rc<dyn Fn() -> StateDragGesture>;
+
+/// Scroll displacement over a projection-local control, normalized to
+/// logical pixels by the host. Returning `None` declines the event.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StateScrollEvent {
+    pub delta_x: f64,
+    pub delta_y: f64,
+}
+
+pub type StateScrollHandler = Rc<dyn Fn(StateScrollEvent) -> Option<Value>>;
+
 /// A position inside a continuous two-dimensional control, normalized
 /// to its settled rectangle. The host owns pointer capture and writes
 /// the returned value through the projected location.
@@ -209,6 +231,19 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         target: Hover,
         handler: ScrubHandler,
+    },
+    /// A drag whose result replaces this projection site's annotation
+    /// value rather than document data.
+    OnStateDrag {
+        child: Box<Layout<World, Hover>>,
+        target: Hover,
+        handler: StateDragHandler,
+    },
+    /// A scroll whose result replaces this projection site's annotation
+    /// value. Unlike a document scroll container, it may decline.
+    OnStateScroll {
+        child: Box<Layout<World, Hover>>,
+        handler: StateScrollHandler,
     },
     OnPoint {
         child: Box<Layout<World, Hover>>,
@@ -348,6 +383,19 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             } => Self::OnScrub {
                 child: child.clone(),
                 target: target.clone(),
+                handler: handler.clone(),
+            },
+            Self::OnStateDrag {
+                child,
+                target,
+                handler,
+            } => Self::OnStateDrag {
+                child: child.clone(),
+                target: target.clone(),
+                handler: handler.clone(),
+            },
+            Self::OnStateScroll { child, handler } => Self::OnStateScroll {
+                child: child.clone(),
                 handler: handler.clone(),
             },
             Self::OnPoint { child, handler } => Self::OnPoint {
@@ -614,6 +662,28 @@ pub fn on_scrub<World, Hover>(
     Layout::OnScrub {
         child: Box::new(child),
         target,
+        handler,
+    }
+}
+
+pub fn on_state_drag<World, Hover>(
+    child: Layout<World, Hover>,
+    target: Hover,
+    handler: StateDragHandler,
+) -> Layout<World, Hover> {
+    Layout::OnStateDrag {
+        child: Box::new(child),
+        target,
+        handler,
+    }
+}
+
+pub fn on_state_scroll<World, Hover>(
+    child: Layout<World, Hover>,
+    handler: StateScrollHandler,
+) -> Layout<World, Hover> {
+    Layout::OnStateScroll {
+        child: Box::new(child),
         handler,
     }
 }

@@ -286,6 +286,7 @@ fn place_with_annotations_using(
         select_payload: Rc::new(|_, _, _| {}),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
+        update_state: Rc::new(|_, _, _| false),
         edit: Rc::new(|_| None),
         pick: Rc::new(|_, _| false),
         insert: Rc::new(|_, _| {}),
@@ -673,6 +674,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 ));
             }),
             toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
             // A selection transition must consume the click even if
             // retained dispatch cannot recover an edit context for
             // the optional caret-placement follow-up.
@@ -772,6 +774,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|world: &mut ClickWorld| {
                 let ClickWorld {
                     selection,

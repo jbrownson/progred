@@ -10,13 +10,13 @@ pub fn load(path: &Path) -> Result<(Document, Binders), String> {
     gid_text::parse(&text)
 }
 
-#[cfg(any(not(target_arch = "wasm32"), test))]
+#[cfg(any(test, target_os = "macos", target_os = "linux"))]
 pub fn save(path: &Path, doc: &Document, binders: &Binders) -> Result<(), String> {
     let text = gid_text::print(doc, binders);
     save_text(path, text)
 }
 
-#[cfg(all(any(not(target_arch = "wasm32"), test), target_os = "macos"))]
+#[cfg(target_os = "macos")]
 fn save_text(path: &Path, text: String) -> Result<(), String> {
     use objc2_foundation::{NSData, NSDataWritingOptions, NSString, NSURL};
 
@@ -31,7 +31,7 @@ fn save_text(path: &Path, text: String) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-#[cfg(all(any(not(target_arch = "wasm32"), test), not(target_os = "macos")))]
+#[cfg(any(target_os = "linux", all(test, not(target_os = "macos"))))]
 fn save_text(path: &Path, text: String) -> Result<(), String> {
     // Write-then-rename, so a crash mid-write cannot truncate the
     // previous save.

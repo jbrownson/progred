@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+mode=${1-simulator}
+
+case "$mode" in
+    simulator)
+        sdk=iphonesimulator
+        ;;
+    device)
+        sdk=iphoneos
+        ;;
+    *)
+        echo "usage: tools/build-ipad [simulator|device]" >&2
+        exit 2
+        ;;
+esac
+
+/usr/bin/xcodebuild \
+    -project "$project_root/ios/Progred.xcodeproj" \
+    -target Progred \
+    -configuration Release \
+    -sdk "$sdk" \
+    -arch arm64 \
+    SYMROOT="$project_root/target/ios/xcode/Build/Products" \
+    OBJROOT="$project_root/target/ios/xcode/Build/Intermediates.noindex" \
+    CODE_SIGNING_ALLOWED=NO \
+    build

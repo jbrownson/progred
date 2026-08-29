@@ -1,7 +1,7 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::App;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::CLIPBOARD_FORMAT;
 use crate::completion;
 use crate::modifiers;
@@ -221,7 +221,7 @@ impl App {
             return false;
         };
         let (text, structural) = selection::to_clipboard(&value);
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         return clipboard_rs::ClipboardContext::new()
             .and_then(|cb| {
                 use clipboard_rs::Clipboard;
@@ -240,7 +240,7 @@ impl App {
                 }
             })
             .is_ok();
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
         {
             self.text_clipboard.text = Some(text);
             self.text_clipboard.structure = structural.then_some(value);
@@ -250,7 +250,7 @@ impl App {
 
     /// The private format's payload, when the clipboard carries one.
     pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             use clipboard_rs::Clipboard;
             let bytes = clipboard_rs::ClipboardContext::new()
@@ -258,7 +258,7 @@ impl App {
                 .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
             return selection::from_structure(&bytes);
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
         self.text_clipboard.structure.clone()
     }
 

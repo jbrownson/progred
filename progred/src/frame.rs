@@ -42,6 +42,7 @@ pub(crate) struct Dispatch {
     pub(crate) activations: Vec<placed::TargetAction<App>>,
     pub(crate) picks: Vec<placed::TargetAction<App>>,
     pub(crate) scrubs: Vec<placed::ScrubAction>,
+    pub(crate) state_drags: Vec<placed::StateDragAction>,
     pub(crate) descends: Vec<navigate::Descend<App>>,
     pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
@@ -584,6 +585,7 @@ impl App {
             activations,
             picks,
             scrubs,
+            state_drags,
             handler,
             descends,
             view_regions,
@@ -610,6 +612,7 @@ impl App {
                 activations,
                 picks,
                 scrubs,
+                state_drags,
                 descends,
                 view_regions,
                 line: 14.0 * scale,
@@ -656,7 +659,8 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
     let toggle_root = root.clone();
     let insert_root = root.clone();
     let apply_root = root.clone();
-    let point_root = root;
+    let point_root = root.clone();
+    let state_root = root;
     projection::Hooks {
         // The host's ordinary structural selection transition.
         // Editable text handles its coordinate-sensitive pointer
@@ -707,6 +711,17 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
                 &mut view.annotations,
                 &path,
             );
+        }),
+        update_state: Rc::new(move |app: &mut App, path, state| {
+            let Some(view) = app.model.workspace.view_mut(&state_root) else {
+                return false;
+            };
+            if view.annotations.at(&path) == Some(&state) {
+                false
+            } else {
+                view.annotations.set(&path, Some(state));
+                true
+            }
         }),
         edit: Rc::new(edit_ctx),
         pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),

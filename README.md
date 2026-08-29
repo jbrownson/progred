@@ -49,12 +49,13 @@ that bundle. Other useful commands are:
 make sandbox-check
 make sandbox-test
 make serve-web
+make build-ipad
 ```
 
 The browser build is served at `http://localhost:8080`; another device on the
 same network can use this machine's LAN address. Built-in documents are
-available from the Examples menu. Deferred native iPad and spatial visionOS
-work is recorded in [`docs/platforms.md`](docs/platforms.md).
+available from the Examples menu. The native iPad host and deferred spatial
+visionOS work are documented in [`docs/platforms.md`](docs/platforms.md).
 
 Cargo build scripts and procedural macros execute dependency code. Ordinary
 Cargo commands in this repository intentionally stop at a tripwire; read
