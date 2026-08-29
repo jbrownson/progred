@@ -2,7 +2,7 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
-use crate::{Library, absent, f32, name};
+use crate::{Library, absent, f32, name, presentation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 use fidget_engine::{
@@ -22,6 +22,7 @@ const PREVIEW_SIZE: f64 = 256.0;
 pub mod vocabulary {
     use gid::CellId;
 
+    pub const FIDGET: CellId = CellId::from_u128(0x5653d5cc6cf43eb2291f9943c29eeab4);
     pub const AXIS: CellId = CellId::from_u128(0xfb2b3baa73025ae4b7b2aa97d65d1643);
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
     pub const Y: CellId = CellId::from_u128(0x213e54dd15ac9c9750308f35a606f56f);
@@ -153,8 +154,9 @@ fn preview_function(
     call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
-        return Ok(context.missing_argument(vocabulary::FIELD));
+    let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
+    else {
+        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
     if tree(&field).is_none() {
         return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
@@ -405,24 +407,25 @@ pub fn display<World, Hover>(
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
+        (vocabulary::FIDGET, "fidget"),
         (vocabulary::AXIS, "axis"),
-        (vocabulary::ADD, "fidget +"),
-        (vocabulary::SUBTRACT, "fidget -"),
-        (vocabulary::MULTIPLY, "fidget *"),
-        (vocabulary::DIVIDE, "fidget /"),
-        (vocabulary::MIN, "fidget min"),
-        (vocabulary::MAX, "fidget max"),
-        (vocabulary::NEGATE, "fidget negate"),
-        (vocabulary::ABS, "fidget abs"),
-        (vocabulary::SQRT, "fidget sqrt"),
-        (vocabulary::SQUARE, "fidget square"),
-        (vocabulary::CIRCLE, "fidget circle"),
-        (vocabulary::SPHERE, "fidget sphere"),
-        (vocabulary::TRANSLATE, "fidget translate"),
-        (vocabulary::UNION, "fidget union"),
-        (vocabulary::INTERSECTION, "fidget intersection"),
-        (vocabulary::DIFFERENCE, "fidget difference"),
-        (vocabulary::PREVIEW, "fidget preview"),
+        (vocabulary::ADD, "+"),
+        (vocabulary::SUBTRACT, "-"),
+        (vocabulary::MULTIPLY, "*"),
+        (vocabulary::DIVIDE, "/"),
+        (vocabulary::MIN, "min"),
+        (vocabulary::MAX, "max"),
+        (vocabulary::NEGATE, "negate"),
+        (vocabulary::ABS, "abs"),
+        (vocabulary::SQRT, "sqrt"),
+        (vocabulary::SQUARE, "square"),
+        (vocabulary::CIRCLE, "circle"),
+        (vocabulary::SPHERE, "sphere"),
+        (vocabulary::TRANSLATE, "translate"),
+        (vocabulary::UNION, "union"),
+        (vocabulary::INTERSECTION, "intersection"),
+        (vocabulary::DIFFERENCE, "difference"),
+        (vocabulary::PREVIEW, "preview"),
         (vocabulary::FIELD, "field"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
@@ -440,9 +443,9 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     for (cell, spelling) in [
-        (vocabulary::INVALID_FIELD, "invalid fidget field"),
-        (vocabulary::INVALID_BOUNDS, "invalid fidget preview bounds"),
-        (vocabulary::INVALID_RADIUS, "invalid fidget radius"),
+        (vocabulary::INVALID_FIELD, "invalid field"),
+        (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
+        (vocabulary::INVALID_RADIUS, "invalid radius"),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -513,7 +516,7 @@ mod tests {
         let expression = call(
             vocabulary::PREVIEW,
             [(
-                vocabulary::FIELD,
+                presentation::vocabulary::VALUE,
                 call(vocabulary::CIRCLE, [(vocabulary::RADIUS, f32::value(40.0))]),
             )],
         );
