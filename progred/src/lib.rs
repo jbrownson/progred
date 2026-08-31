@@ -653,6 +653,9 @@ impl ApplicationHandler<UserEvent> for App {
     ) {
         if let WindowEvent::Focused(true) = &event {
             self.focused = Some(window_id);
+            if let Some(index) = self.editor_index(window_id) {
+                self.sync_menus(index);
+            }
         }
         let Some(index) = self.editor_index(window_id) else {
             return;
@@ -2048,7 +2051,11 @@ impl App {
     /// Renders the current model to the surface, from `RedrawRequested`.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn redraw(&mut self, index: usize) {
-        self.sync_menus(index);
+        // The menu bar mirrors the focused window's editor only; an
+        // unfocused window's redraw must not relabel it.
+        if self.focused_index() == Some(index) {
+            self.sync_menus(index);
+        }
         let App {
             editors,
             context,
@@ -2173,7 +2180,9 @@ impl App {
     /// only this final interpreter differs.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn redraw(&mut self, index: usize) {
-        self.sync_menus(index);
+        if self.focused_index() == Some(index) {
+            self.sync_menus(index);
+        }
         let editor = &mut self.editors[index];
         let RenderState::Active {
             canvas,
