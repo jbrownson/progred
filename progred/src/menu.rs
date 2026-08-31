@@ -2,89 +2,15 @@
 //! per editor. It emits [`command::Command`]s; the native macOS menu
 //! is its own separate system in `native_menu`.
 
-use crate::command::{AppCommand, Command, DocCommand, Example};
+use crate::command::{self, AppCommand, Command, DocCommand, Example};
 use ui_events::keyboard::{Key, KeyboardEvent};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    Command,
-    Check,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Shortcut {
-    pub key: ShortcutKey,
-    pub shift: bool,
-}
-
-impl Shortcut {
-    const fn plain(key: ShortcutKey) -> Self {
-        Self { key, shift: false }
-    }
-
-    const fn shifted(key: ShortcutKey) -> Self {
-        Self { key, shift: true }
-    }
-
-    fn drawn_label(self) -> String {
-        format!(
-            "Ctrl+{}{}",
-            if self.shift { "Shift+" } else { "" },
-            self.key.label()
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShortcutKey {
-    Digit1,
-    Digit2,
-    Digit3,
-    Digit4,
-    D,
-    N,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    O,
-    P,
-    Q,
-    R,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    S,
-    Z,
-}
-
-impl ShortcutKey {
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Digit1 => "1",
-            Self::Digit2 => "2",
-            Self::Digit3 => "3",
-            Self::Digit4 => "4",
-            Self::D => "D",
-            Self::N => "N",
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Self::O => "O",
-            Self::P => "P",
-            Self::Q => "Q",
-            Self::R => "R",
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Self::S => "S",
-            Self::Z => "Z",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Item {
-    pub command: Command,
-    pub label: &'static str,
-    pub shortcut: Option<Shortcut>,
-    pub kind: Kind,
-}
-
+/// The drawn bar's structure: which commands, in which menus, in
+/// which order. Labels, keys, and toggle-ness come from the shared
+/// [`command::spec`] catalog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entry {
-    Item(Item),
+    Command(Command),
     Separator,
 }
 
@@ -93,183 +19,75 @@ pub struct Menu {
     pub entries: Vec<Entry>,
 }
 
-pub fn items(menus: &[Menu]) -> impl Iterator<Item = Item> + '_ {
+pub fn commands(menus: &[Menu]) -> impl Iterator<Item = Command> + '_ {
     menus.iter().flat_map(|menu| {
         menu.entries.iter().filter_map(|entry| match entry {
-            Entry::Item(item) => Some(*item),
+            Entry::Command(command) => Some(*command),
             Entry::Separator => None,
         })
     })
 }
 
-const NEW: Item = Item {
-    command: Command::App(AppCommand::New),
-    label: "New",
-    shortcut: Some(Shortcut::plain(ShortcutKey::N)),
-    kind: Kind::Command,
-};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-const OPEN: Item = Item {
-    command: Command::App(AppCommand::Open),
-    label: "Open…",
-    shortcut: Some(Shortcut::plain(ShortcutKey::O)),
-    kind: Kind::Command,
-};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-const SAVE: Item = Item {
-    command: Command::Doc(DocCommand::Save),
-    label: "Save",
-    shortcut: Some(Shortcut::plain(ShortcutKey::S)),
-    kind: Kind::Command,
-};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-const SAVE_AS: Item = Item {
-    command: Command::Doc(DocCommand::SaveAs),
-    label: "Save As…",
-    shortcut: Some(Shortcut::shifted(ShortcutKey::S)),
-    kind: Kind::Command,
-};
-#[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
-const QUIT: Item = Item {
-    command: Command::App(AppCommand::Quit),
-    label: "Quit",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Q)),
-    kind: Kind::Command,
-};
-const EXAMPLE_SAMPLE: Item = Item {
-    command: Command::App(AppCommand::Example(Example::Sample)),
-    label: "Sample",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Digit1)),
-    kind: Kind::Command,
-};
-const EXAMPLE_GRAP: Item = Item {
-    command: Command::App(AppCommand::Example(Example::Grap)),
-    label: "Grap Demo",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Digit2)),
-    kind: Kind::Command,
-};
-const EXAMPLE_IOP_TREE: Item = Item {
-    command: Command::App(AppCommand::Example(Example::IopTree)),
-    label: "Inventing on Principle Tree",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Digit3)),
-    kind: Kind::Command,
-};
-const EXAMPLE_FIDGET: Item = Item {
-    command: Command::App(AppCommand::Example(Example::Fidget)),
-    label: "Fidget",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Digit4)),
-    kind: Kind::Command,
-};
-const UNDO: Item = Item {
-    command: Command::Doc(DocCommand::Undo),
-    label: "Undo",
-    shortcut: Some(Shortcut::plain(ShortcutKey::Z)),
-    kind: Kind::Command,
-};
-const REDO: Item = Item {
-    command: Command::Doc(DocCommand::Redo),
-    label: "Redo",
-    shortcut: Some(Shortcut::shifted(ShortcutKey::Z)),
-    kind: Kind::Command,
-};
-const OPEN_PANE_LEFT: Item = Item {
-    command: Command::Doc(DocCommand::OpenPaneLeft),
-    label: "Open Cell on Left",
-    shortcut: Some(Shortcut::plain(ShortcutKey::P)),
-    kind: Kind::Command,
-};
-const OPEN_PANE_RIGHT: Item = Item {
-    command: Command::Doc(DocCommand::OpenPaneRight),
-    label: "Open Cell on Right",
-    shortcut: Some(Shortcut::shifted(ShortcutKey::P)),
-    kind: Kind::Command,
-};
-const MOVE_PANE_UP: Item = Item {
-    command: Command::Doc(DocCommand::MovePaneUp),
-    label: "Move Pane Up",
-    shortcut: None,
-    kind: Kind::Command,
-};
-const MOVE_PANE_DOWN: Item = Item {
-    command: Command::Doc(DocCommand::MovePaneDown),
-    label: "Move Pane Down",
-    shortcut: None,
-    kind: Kind::Command,
-};
-const MOVE_PANE_LEFT: Item = Item {
-    command: Command::Doc(DocCommand::MovePaneLeft),
-    label: "Move Pane Left",
-    shortcut: None,
-    kind: Kind::Command,
-};
-const MOVE_PANE_RIGHT: Item = Item {
-    command: Command::Doc(DocCommand::MovePaneRight),
-    label: "Move Pane Right",
-    shortcut: None,
-    kind: Kind::Command,
-};
-const RAW: Item = Item {
-    command: Command::Doc(DocCommand::Raw),
-    label: "Raw",
-    shortcut: Some(Shortcut::plain(ShortcutKey::R)),
-    kind: Kind::Check,
-};
-const DEBUG_GEOMETRY: Item = Item {
-    command: Command::Doc(DocCommand::DebugGeometry),
-    label: "Debug Geometry",
-    shortcut: Some(Shortcut::plain(ShortcutKey::D)),
-    kind: Kind::Check,
-};
+/// The drawn shortcut spelling: the drawn system's modifier is Ctrl.
+fn drawn_label(shortcut: command::Shortcut) -> String {
+    format!(
+        "Ctrl+{}{}",
+        if shortcut.shift { "Shift+" } else { "" },
+        shortcut.key.label()
+    )
+}
+
 pub fn definition() -> Vec<Menu> {
+    use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    let file_entries = vec![Entry::Item(NEW)];
+    let file_entries = vec![Entry::Command(C::App(A::New))];
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let file_entries = vec![
-        Entry::Item(NEW),
-        Entry::Item(OPEN),
+        Entry::Command(C::App(A::New)),
+        Entry::Command(C::App(A::Open)),
         Entry::Separator,
-        Entry::Item(SAVE),
-        Entry::Item(SAVE_AS),
+        Entry::Command(C::Doc(D::Save)),
+        Entry::Command(C::Doc(D::SaveAs)),
         Entry::Separator,
-        Entry::Item(QUIT),
+        Entry::Command(C::App(A::Quit)),
     ];
-    let file = Menu {
-        label: "File",
-        entries: file_entries,
-    };
-    [file]
-        .into_iter()
-        .chain([
-            Menu {
-                label: "Examples",
-                entries: vec![
-                    Entry::Item(EXAMPLE_SAMPLE),
-                    Entry::Item(EXAMPLE_GRAP),
-                    Entry::Item(EXAMPLE_IOP_TREE),
-                    Entry::Item(EXAMPLE_FIDGET),
-                ],
-            },
-            Menu {
-                label: "Edit",
-                entries: vec![Entry::Item(UNDO), Entry::Item(REDO)],
-            },
-            Menu {
-                label: "View",
-                entries: vec![
-                    Entry::Item(OPEN_PANE_LEFT),
-                    Entry::Item(OPEN_PANE_RIGHT),
-                    Entry::Separator,
-                    Entry::Item(MOVE_PANE_UP),
-                    Entry::Item(MOVE_PANE_DOWN),
-                    Entry::Item(MOVE_PANE_LEFT),
-                    Entry::Item(MOVE_PANE_RIGHT),
-                    Entry::Separator,
-                    Entry::Item(RAW),
-                    Entry::Item(DEBUG_GEOMETRY),
-                ],
-            },
-        ])
-        .collect()
+    vec![
+        Menu {
+            label: "File",
+            entries: file_entries,
+        },
+        Menu {
+            label: "Examples",
+            entries: vec![
+                Entry::Command(C::App(A::Example(E::Sample))),
+                Entry::Command(C::App(A::Example(E::Grap))),
+                Entry::Command(C::App(A::Example(E::IopTree))),
+                Entry::Command(C::App(A::Example(E::Fidget))),
+            ],
+        },
+        Menu {
+            label: "Edit",
+            entries: vec![
+                Entry::Command(C::Doc(D::Undo)),
+                Entry::Command(C::Doc(D::Redo)),
+            ],
+        },
+        Menu {
+            label: "View",
+            entries: vec![
+                Entry::Command(C::Doc(D::OpenPaneLeft)),
+                Entry::Command(C::Doc(D::OpenPaneRight)),
+                Entry::Separator,
+                Entry::Command(C::Doc(D::MovePaneUp)),
+                Entry::Command(C::Doc(D::MovePaneDown)),
+                Entry::Command(C::Doc(D::MovePaneLeft)),
+                Entry::Command(C::Doc(D::MovePaneRight)),
+                Entry::Separator,
+                Entry::Command(C::Doc(D::Raw)),
+                Entry::Command(C::Doc(D::DebugGeometry)),
+            ],
+        },
+    ]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -307,21 +125,19 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
         return None;
     }
     match &event.key {
-        Key::Character(key) => items(&definition())
-            .find(|item| {
-                item.shortcut.is_some_and(|shortcut| {
-                    shortcut.shift == modifiers.shift()
-                        && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
-                })
+        Key::Character(key) => commands(&definition()).find(|command| {
+            command::spec(*command).shortcut.is_some_and(|shortcut| {
+                shortcut.shift == modifiers.shift()
+                    && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
             })
-            .map(|item| item.command),
+        }),
         _ => None,
     }
 }
 
 mod view {
-    use super::{Entry, Hover, Item, Kind, State, definition};
-    use crate::command::{Availability, Command, DocCommand};
+    use super::{Entry, Hover, State, definition, drawn_label};
+    use crate::command::{Availability, Command, DocCommand, Spec, spec};
     use crate::frame::Hovered;
     use crate::placed::{self, Placed};
     use kurbo::{Affine, Insets, Rect, Stroke};
@@ -450,14 +266,14 @@ mod view {
     fn item<C: 'static, Cv: Canvas + 'static>(
         tcx: &mut TextCtx,
         styles: &Styles,
-        item: Item,
+        command: Command,
+        spec: Spec,
         checked: bool,
         enabled: bool,
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Command)>,
     ) -> Measured<Placed<C, Cv>> {
-        let command = item.command;
         let style = if enabled {
             &styles.text
         } else {
@@ -470,15 +286,12 @@ mod view {
         };
         let label = crate::render::text(
             tcx,
-            &format!("{}  {}", if checked { "✓" } else { " " }, item.label),
+            &format!("{}  {}", if checked { "✓" } else { " " }, spec.label),
             style,
         );
         let shortcut = crate::render::text(
             tcx,
-            &item
-                .shortcut
-                .map(|shortcut| shortcut.drawn_label())
-                .unwrap_or_default(),
+            &spec.shortcut.map(drawn_label).unwrap_or_default(),
             shortcut_style,
         );
         let gap =
@@ -522,21 +335,27 @@ mod view {
             .copied()
             .map(|entry| match entry {
                 Entry::Separator => separator(description.scale, width),
-                Entry::Item(menu_item) => item(
-                    tcx,
-                    styles,
-                    menu_item,
-                    menu_item.kind == Kind::Check
-                        && match menu_item.command {
-                            Command::Doc(DocCommand::Raw) => description.raw,
-                            Command::Doc(DocCommand::DebugGeometry) => description.debug_geometry,
-                            _ => false,
-                        },
-                    description.availability.enabled(menu_item.command),
-                    description.scale,
-                    width,
-                    select.clone(),
-                ),
+                Entry::Command(command) => {
+                    let spec = spec(command);
+                    item(
+                        tcx,
+                        styles,
+                        command,
+                        spec,
+                        spec.toggle
+                            && match command {
+                                Command::Doc(DocCommand::Raw) => description.raw,
+                                Command::Doc(DocCommand::DebugGeometry) => {
+                                    description.debug_geometry
+                                }
+                                _ => false,
+                            },
+                        description.availability.enabled(command),
+                        description.scale,
+                        width,
+                        select.clone(),
+                    )
+                }
             })
             .collect();
         placed::before(
@@ -706,14 +525,10 @@ mod tests {
     #[test]
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition();
-        let items = items(&definition).collect::<Vec<_>>();
-        assert_eq!(items.len(), 19);
-        for (index, item) in items.iter().enumerate() {
-            assert!(
-                items[index + 1..]
-                    .iter()
-                    .all(|other| item.command != other.command)
-            );
+        let commands = commands(&definition).collect::<Vec<_>>();
+        assert_eq!(commands.len(), 19);
+        for (index, command) in commands.iter().enumerate() {
+            assert!(commands[index + 1..].iter().all(|other| command != other));
         }
     }
 
@@ -727,29 +542,25 @@ mod tests {
         assert_eq!(
             definition[0].entries,
             vec![
-                Entry::Item(NEW),
-                Entry::Item(OPEN),
+                Entry::Command(Command::App(AppCommand::New)),
+                Entry::Command(Command::App(AppCommand::Open)),
                 Entry::Separator,
-                Entry::Item(SAVE),
-                Entry::Item(SAVE_AS),
+                Entry::Command(Command::Doc(DocCommand::Save)),
+                Entry::Command(Command::Doc(DocCommand::SaveAs)),
                 Entry::Separator,
-                Entry::Item(QUIT),
+                Entry::Command(Command::App(AppCommand::Quit)),
             ]
         );
     }
 
     #[test]
-    fn drawn_shortcuts_are_unique() {
+    fn catalog_shortcuts_are_unique_across_the_drawn_tree() {
         let definition = definition();
-        let items = items(&definition).collect::<Vec<_>>();
-        for (index, item) in items.iter().enumerate() {
-            if let Some(shortcut) = item.shortcut {
-                assert!(
-                    items[index + 1..]
-                        .iter()
-                        .all(|other| other.shortcut != Some(shortcut))
-                );
-            }
+        let shortcuts = commands(&definition)
+            .filter_map(|command| command::spec(command).shortcut)
+            .collect::<Vec<_>>();
+        for (index, shortcut) in shortcuts.iter().enumerate() {
+            assert!(shortcuts[index + 1..].iter().all(|other| shortcut != other));
         }
     }
 }
