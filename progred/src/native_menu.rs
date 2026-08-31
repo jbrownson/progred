@@ -8,6 +8,8 @@ use muda::{
     CheckMenuItem, IsMenuItem, Menu as MudaMenu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
     Submenu,
 };
+use objc2_app_kit::NSApplication;
+use objc2_foundation::{MainThreadMarker, NSString};
 use winit::event_loop::EventLoopProxy;
 
 use crate::UserEvent;
@@ -157,8 +159,8 @@ fn accelerator(shortcut: command::Shortcut) -> Accelerator {
 pub struct Menu {
     root: MudaMenu,
     items: Vec<(Command, NativeItem)>,
-    /// AppKit maintains the open-window list here once installed.
-    windows: Option<Submenu>,
+    /// The section AppKit maintains the open-window list in.
+    windows_label: Option<&'static str>,
 }
 
 enum NativeItem {
@@ -206,7 +208,7 @@ impl NativeItem {
 impl Menu {
     pub fn new() -> Self {
         let mut items = Vec::new();
-        let mut windows = None;
+        let mut windows_label = None;
         let root = MudaMenu::new();
         for section in definition() {
             let submenu = Submenu::new(section.label, true);
@@ -247,23 +249,32 @@ impl Menu {
             }
             root.append(&submenu).expect("menu section");
             if section.windows_menu {
-                windows = Some(submenu);
+                windows_label = Some(section.label);
             }
         }
         Self {
             root,
             items,
-            windows,
+            windows_label,
         }
     }
 
     pub fn install(&self) {
         self.root.init_for_nsapp();
-        // After the menubar exists, so AppKit tracks windows in the
-        // NSMenu actually displayed.
-        if let Some(windows) = &self.windows {
-            windows.set_as_windows_menu_for_nsapp();
-        }
+        // muda materializes a distinct NSMenu per attachment, so the
+        // windows menu must be the instance the installed menubar
+        // actually displays — found by title — or AppKit maintains
+        // the window list in a menu nobody sees.
+        let Some(label) = self.windows_label else {
+            return;
+        };
+        let mtm = MainThreadMarker::new().expect("menus install on the main thread");
+        let app = NSApplication::sharedApplication(mtm);
+        let displayed = app
+            .mainMenu()
+            .and_then(|main| main.itemWithTitle(&NSString::from_str(label)))
+            .and_then(|item| item.submenu());
+        app.setWindowsMenu(displayed.as_deref());
     }
 
     pub fn command(&self, event: &Event) -> Option<Command> {
