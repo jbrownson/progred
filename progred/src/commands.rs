@@ -1,8 +1,8 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
-use crate::App;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::CLIPBOARD_FORMAT;
+use crate::Editor;
 use crate::completion;
 use crate::modifiers;
 use crate::navigate;
@@ -12,7 +12,7 @@ use gid::{Path, Step, Value};
 use puri::edit::{LineEditState, TextClipboard};
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
-impl App {
+impl Editor {
     /// Backspace or Delete removes the selected edge — a focused atom
     /// editor claims the keys while it has text and declines on an
     /// empty buffer, so emptying a string then backspacing again
@@ -20,7 +20,7 @@ impl App {
     /// the previous, else the parent.
     pub(crate) fn delete_key(
         &mut self,
-        descends: &[navigate::Descend<App>],
+        descends: &[navigate::Descend<Editor>],
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -34,7 +34,7 @@ impl App {
 
     /// Deletes the selected edge and lands the selection on a
     /// survivor — Backspace/Delete's action, and cut's second half.
-    pub(crate) fn delete_selected_edge(&mut self, descends: &[navigate::Descend<App>]) -> bool {
+    pub(crate) fn delete_selected_edge(&mut self, descends: &[navigate::Descend<Editor>]) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -191,7 +191,7 @@ impl App {
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn clipboard_key(
         &mut self,
-        descends: &[navigate::Descend<App>],
+        descends: &[navigate::Descend<Editor>],
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || !modifiers::command(&event.modifiers) {
@@ -350,7 +350,7 @@ impl App {
     /// anchor instead, keeping the keyboard flow.
     pub(crate) fn insert_key(
         &mut self,
-        descends: &[navigate::Descend<App>],
+        descends: &[navigate::Descend<Editor>],
         completion: &Option<completion::Offers>,
         event: &KeyboardEvent,
     ) -> bool {

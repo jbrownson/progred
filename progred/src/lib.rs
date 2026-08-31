@@ -321,11 +321,29 @@ impl PendingScroll {
     }
 }
 
+/// Process-wide state: the GPU, the shared caches, and the editors.
 pub(crate) struct App {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) context: RenderContext,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) renderers: Vec<Option<Renderer>>,
+    /// Editor configuration shared by every document loaded into the
+    /// app: library cells, Rust functions, and composed projection.
+    /// Each editor holds its own (cheap) clone, so a window can later
+    /// filter or extend its libraries independently; this master copy
+    /// seeds new editors.
+    #[allow(dead_code)]
+    pub(crate) stack: stack::Stack<Editor>,
+    #[cfg(target_os = "macos")]
+    pub(crate) native_menu: macos_menu::Menu,
+    pub(crate) editor: Editor,
+}
+
+/// One window editing one document: its own CellId universe, model,
+/// history, interaction state, and measurement caches (the font
+/// context is a cheap clone over shared font data). The dispatch
+/// world type.
+pub(crate) struct Editor {
     pub(crate) state: RenderState,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) scene: Scene,
@@ -334,9 +352,7 @@ pub(crate) struct App {
     pub(crate) text_clipboard: SystemTextClipboard,
     pub(crate) text_cache: puri::text::TextCache,
     pub(crate) drawing_memos: HashMap<workspace::Root, projection::DrawingMemo>,
-    /// Editor configuration shared by every document loaded into the
-    /// app: library cells, Rust functions, and composed projection.
-    pub(crate) stack: stack::Stack<App>,
+    pub(crate) stack: stack::Stack<Editor>,
     pub(crate) model: Model,
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
@@ -345,8 +361,6 @@ pub(crate) struct App {
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
     pub(crate) text_binders: gid_text::Binders,
-    #[cfg(target_os = "macos")]
-    pub(crate) native_menu: macos_menu::Menu,
     pub(crate) menu: menu::State,
     /// Last pointer position, for anchoring pinch zoom.
     pub(crate) cursor: Point,
@@ -406,7 +420,7 @@ pub(crate) struct App {
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
-    pub(crate) last_descends: Vec<navigate::Descend<App>>,
+    pub(crate) last_descends: Vec<navigate::Descend<Editor>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
@@ -507,10 +521,13 @@ pub(crate) fn text_dialog() -> rfd::FileDialog {
 
 impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
-        if self.flush_pending_continuous()
-            && let RenderState::Active { window, .. } = &self.state
         {
-            window.request_redraw();
+            let editor = &mut self.editor;
+            if editor.flush_pending_continuous()
+                && let RenderState::Active { window, .. } = &editor.state
+            {
+                window.request_redraw();
+            }
         }
         match event {
             #[cfg(target_os = "macos")]
@@ -522,7 +539,7 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard(accepted) => {
-                let pending = self.pending_discard.take();
+                let pending = self.editor.pending_discard.take();
                 if accepted && let Some(then) = pending {
                     self.proceed(event_loop, then);
                 }
@@ -536,12 +553,12 @@ impl ApplicationHandler<UserEvent> for App {
         #[cfg(target_os = "macos")]
         self.native_menu.install();
 
-        let RenderState::Suspended(cached_window) = &mut self.state else {
+        let RenderState::Suspended(cached_window) = &mut self.editor.state else {
             return;
         };
 
         let window = cached_window.take().unwrap_or_else(|| {
-            let attributes = Window::default_attributes().with_title(self.title());
+            let attributes = Window::default_attributes().with_title(self.editor.title());
             #[cfg(not(target_arch = "wasm32"))]
             let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
             // The app id must match linux/progred.desktop for compositors
@@ -597,7 +614,7 @@ impl ApplicationHandler<UserEvent> for App {
                 .expect("Couldn't create renderer")
             });
 
-            self.state = RenderState::Active {
+            self.editor.state = RenderState::Active {
                 surface: Box::new(surface),
                 valid_surface: true,
                 window,
@@ -613,22 +630,23 @@ impl ApplicationHandler<UserEvent> for App {
                 .expect("Canvas2D context")
                 .dyn_into::<CanvasRenderingContext2d>()
                 .expect("CanvasRenderingContext2D");
-            self.state = RenderState::Active {
+            self.editor.state = RenderState::Active {
                 canvas,
                 context,
                 window,
             };
         }
 
-        if let RenderState::Active { window, .. } = &self.state {
+        if let RenderState::Active { window, .. } = &self.editor.state {
             window.request_redraw();
         }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
-        self.flush_pending_continuous();
-        if let RenderState::Active { window, .. } = &self.state {
-            self.state = RenderState::Suspended(Some(window.clone()));
+        let editor = &mut self.editor;
+        editor.flush_pending_continuous();
+        if let RenderState::Active { window, .. } = &editor.state {
+            editor.state = RenderState::Suspended(Some(window.clone()));
         }
     }
 
@@ -638,7 +656,8 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let window = match &self.state {
+        let editor = &mut self.editor;
+        let window = match &editor.state {
             RenderState::Active { window, .. } if window.id() == window_id => window.clone(),
             _ => return,
         };
@@ -650,18 +669,19 @@ impl ApplicationHandler<UserEvent> for App {
         // that needs the intervening samples can receive them through
         // `PointerUpdate::coalesced` without forcing intermediate
         // projection/layout passes.
-        let continuous_pointer = matches!(&event, WindowEvent::CursorMoved { .. }) && !self.pressed;
+        let continuous_pointer =
+            matches!(&event, WindowEvent::CursorMoved { .. }) && !editor.pressed;
         if !matches!(&event, WindowEvent::MouseWheel { .. })
             && !continuous_pointer
-            && self.flush_pending_continuous()
+            && editor.flush_pending_continuous()
         {
             window.request_redraw();
         }
 
         if let WindowEvent::ModifiersChanged(state) = &event {
-            self.modifiers = ui_events_winit::keyboard::from_winit_modifier_state(state.state());
+            editor.modifiers = ui_events_winit::keyboard::from_winit_modifier_state(state.state());
             let size = window.inner_size();
-            self.retain_dispatch(
+            editor.retain_dispatch(
                 scale,
                 Size::new(size.width as f64, size.height as f64),
                 false,
@@ -685,12 +705,12 @@ impl ApplicationHandler<UserEvent> for App {
                 }),
                 _ => None,
             };
-            let translation = self.reducer.reduce(scale, &event);
-            let previous_cursor = self.cursor;
+            let translation = editor.reducer.reduce(scale, &event);
+            let previous_cursor = editor.cursor;
             if let Some(WindowEventTranslation::Pointer(pointer)) = &translation
                 && let Some(position) = pointer_position(pointer)
             {
-                self.cursor = position;
+                editor.cursor = position;
             }
             // Touch has no preceding hover motion. Mint once at the
             // contact point before dispatch so the ordinary activate
@@ -699,8 +719,8 @@ impl ApplicationHandler<UserEvent> for App {
                 && button.pointer.pointer_type == PointerType::Touch
             {
                 let size = window.inner_size();
-                self.pointer = Some(Point::new(button.state.position.x, button.state.position.y));
-                self.retain_dispatch(
+                editor.pointer = Some(Point::new(button.state.position.x, button.state.position.y));
+                editor.retain_dispatch(
                     scale,
                     Size::new(size.width as f64, size.height as f64),
                     false,
@@ -719,32 +739,32 @@ impl ApplicationHandler<UserEvent> for App {
                     scale,
                     viewport: Size::new(size.width as f64, size.height as f64),
                 };
-                if let Some(pending) = self.queue_scroll(next) {
-                    self.dispatch_scroll_batch(pending);
+                if let Some(pending) = editor.queue_scroll(next) {
+                    editor.dispatch_scroll_batch(pending);
                 }
                 window.request_redraw();
             } else if let Some(WindowEventTranslation::Pointer(PointerEvent::Move(update))) =
                 &translation
-                && !self.pressed
+                && !editor.pressed
             {
                 let size = window.inner_size();
                 let position = Point::new(update.current.position.x, update.current.position.y);
-                self.pointer = Some(position);
-                self.modifiers = update.current.modifiers;
-                self.pending_pointer = Some(PendingPointer {
+                editor.pointer = Some(position);
+                editor.modifiers = update.current.modifiers;
+                editor.pending_pointer = Some(PendingPointer {
                     event: update.clone(),
                     scale,
                     viewport: Size::new(size.width as f64, size.height as f64),
                 });
                 window.request_redraw();
             } else if (ime.is_some() || translation.is_some())
-                && let Some(dispatch) = self.dispatch.take()
+                && let Some(dispatch) = editor.dispatch.take()
             {
                 let size = window.inner_size();
                 let viewport = size.height as f64;
                 let mut frame_input_changed = false;
                 let handled = match (ime, translation) {
-                    (Some(ime), _) => dispatch.handler.dispatch_ime(self, &ime),
+                    (Some(ime), _) => dispatch.handler.dispatch_ime(editor, &ime),
                     // An open Linux menu owns the keyboard; otherwise
                     // its shared shortcuts are application commands.
                     // Remaining keys reach the editor first, except
@@ -752,30 +772,35 @@ impl ApplicationHandler<UserEvent> for App {
                     // query must never eat Value JSON — then fall
                     // through to the structural commands.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
-                        self.menu_key(&key_event)
-                            || self.pending_paste_key(&key_event)
-                            || dispatch.handler.dispatch_key(self, &key_event)
-                            || self.clipboard_key(&dispatch.descends, &key_event)
-                            || self.delete_key(&dispatch.descends, &key_event)
-                            || self.insert_key(&dispatch.descends, &dispatch.completion, &key_event)
-                            || self.collapse_key(&key_event)
+                        editor.menu_key(&key_event)
+                            || editor.pending_paste_key(&key_event)
+                            || dispatch.handler.dispatch_key(editor, &key_event)
+                            || editor.clipboard_key(&dispatch.descends, &key_event)
+                            || editor.delete_key(&dispatch.descends, &key_event)
+                            || editor.insert_key(
+                                &dispatch.descends,
+                                &dispatch.completion,
+                                &key_event,
+                            )
+                            || editor.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
                                 Some(
-                                    self.model
+                                    editor
+                                        .model
                                         .selection
                                         .as_ref()
                                         .map(selection::Selection::root)
-                                        .unwrap_or_else(|| self.model.workspace.document_root()),
+                                        .unwrap_or_else(|| editor.model.workspace.document_root()),
                                 ),
-                                self.model.selection.as_ref(),
+                                editor.model.selection.as_ref(),
                                 dispatch.line,
                                 &key_event,
                             ) {
                                 Some(target) => {
                                     let select = target.select.clone();
-                                    select(self);
-                                    if let Some(selection) = &mut self.model.selection {
+                                    select(editor);
+                                    if let Some(selection) = &mut editor.model.selection {
                                         selection::seed_from_arrow(selection, &key_event);
                                     }
                                     true
@@ -785,9 +810,9 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
                         let position = Point::new(button.state.position.x, button.state.position.y);
-                        self.pointer = Some(position);
-                        self.pressed = true;
-                        self.state_drag = None;
+                        editor.pointer = Some(position);
+                        editor.pressed = true;
+                        editor.state_drag = None;
                         frame_input_changed = true;
                         let event_root = dispatch
                             .view_regions
@@ -795,10 +820,10 @@ impl ApplicationHandler<UserEvent> for App {
                             .rev()
                             .find(|region| region.rect.contains(position))
                             .map(|region| region.root.clone());
-                        let raw = dispatch.handler.dispatch_pointer_down(self, &button);
+                        let raw = dispatch.handler.dispatch_pointer_down(editor, &button);
                         if raw || !puri::interact::is_primary_contact(&button) {
                             raw
-                        } else if let Some(target) = self.hover.clone() {
+                        } else if let Some(target) = editor.hover.clone() {
                             if modifiers::pick(&button.state.modifiers) {
                                 let scrub = modifiers::scrub(&button.state.modifiers)
                                     .then(|| {
@@ -811,7 +836,8 @@ impl ApplicationHandler<UserEvent> for App {
                                     .flatten()
                                     .filter(|_| {
                                         !matches!(
-                                            self.model
+                                            editor
+                                                .model
                                                 .selection
                                                 .as_ref()
                                                 .map(selection::Selection::stage),
@@ -822,17 +848,17 @@ impl ApplicationHandler<UserEvent> for App {
                                     });
                                 let handled = placed::dispatch_target(
                                     &dispatch.picks,
-                                    self,
+                                    editor,
                                     event_root.as_ref(),
                                     &target,
                                 ) || match &target {
                                     Hovered::Tree(hover::Hover::Drawing(source)) => {
-                                        self.select_drawing_source(&dispatch.descends, source)
+                                        editor.select_drawing_source(&dispatch.descends, source)
                                     }
                                     _ => false,
                                 };
                                 if handled && let Some(scrub) = scrub {
-                                    self.scrub = Some(PendingScrub::new(position, scale, scrub));
+                                    editor.scrub = Some(PendingScrub::new(position, scale, scrub));
                                 }
                                 handled
                             } else {
@@ -843,12 +869,12 @@ impl ApplicationHandler<UserEvent> for App {
                                 );
                                 let handled = placed::dispatch_target(
                                     &dispatch.activations,
-                                    self,
+                                    editor,
                                     event_root.as_ref(),
                                     &target,
                                 );
                                 if let Some(state_drag) = state_drag {
-                                    self.state_drag =
+                                    editor.state_drag =
                                         Some(PendingStateDrag::new(position, scale, state_drag));
                                     true
                                 } else {
@@ -856,7 +882,7 @@ impl ApplicationHandler<UserEvent> for App {
                                 }
                             }
                         } else {
-                            self.model.selection.take().is_some()
+                            editor.model.selection.take().is_some()
                         }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
@@ -864,12 +890,12 @@ impl ApplicationHandler<UserEvent> for App {
                         // not an event handler consumes the motion.
                         let position =
                             Point::new(update.current.position.x, update.current.position.y);
-                        self.pointer = Some(position);
+                        editor.pointer = Some(position);
                         frame_input_changed = true;
-                        let moved = self.dispatch_point_move(&update)
-                            || dispatch.handler.dispatch_pointer_move(self, &update)
-                            || self.dispatch_state_drag_move(&update)
-                            || self.dispatch_scrub_move(&update);
+                        let moved = editor.dispatch_point_move(&update)
+                            || dispatch.handler.dispatch_pointer_move(editor, &update)
+                            || editor.dispatch_state_drag_move(&update)
+                            || editor.dispatch_scrub_move(&update);
                         if moved || update.pointer.pointer_type != PointerType::Touch {
                             moved
                         } else {
@@ -886,41 +912,41 @@ impl ApplicationHandler<UserEvent> for App {
                                 )),
                                 state: update.current.clone(),
                             };
-                            dispatch.handler.dispatch_scroll(self, &scroll).handled()
+                            dispatch.handler.dispatch_scroll(editor, &scroll).handled()
                         }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         let position = Point::new(button.state.position.x, button.state.position.y);
-                        self.pointer = Some(position);
-                        self.pressed = false;
+                        editor.pointer = Some(position);
+                        editor.pressed = false;
                         frame_input_changed = true;
-                        let handled = dispatch.handler.dispatch_pointer_up(self, &button);
+                        let handled = dispatch.handler.dispatch_pointer_up(editor, &button);
                         handled
-                            || self.point.take().is_some()
-                            || self.state_drag.take().is_some()
-                            || self.scrub.take().is_some()
+                            || editor.point.take().is_some()
+                            || editor.state_drag.take().is_some()
+                            || editor.scrub.take().is_some()
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
-                        self.pointer = None;
-                        self.pressed = false;
-                        self.point = None;
-                        self.state_drag = None;
-                        self.scrub = None;
+                        editor.pointer = None;
+                        editor.pressed = false;
+                        editor.point = None;
+                        editor.state_drag = None;
+                        editor.scrub = None;
                         frame_input_changed = true;
-                        self.model.workspace.cancel_resize()
+                        editor.model.workspace.cancel_resize()
                     }
                     (
                         None,
                         Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(pointer))),
                     ) => {
-                        self.pointer = None;
-                        self.pressed = false;
+                        editor.pointer = None;
+                        editor.pressed = false;
                         frame_input_changed = true;
-                        let handled = dispatch.handler.dispatch_pointer_cancel(self, &pointer);
-                        let resize_cancelled = self.model.workspace.cancel_resize();
-                        let point_cancelled = self.point.take().is_some();
-                        let state_drag_cancelled = self.state_drag.take().is_some();
-                        let scrub_cancelled = self.scrub.take().is_some();
+                        let handled = dispatch.handler.dispatch_pointer_cancel(editor, &pointer);
+                        let resize_cancelled = editor.model.workspace.cancel_resize();
+                        let point_cancelled = editor.point.take().is_some();
+                        let state_drag_cancelled = editor.state_drag.take().is_some();
+                        let scrub_cancelled = editor.scrub.take().is_some();
                         handled
                             || resize_cancelled
                             || point_cancelled
@@ -930,12 +956,12 @@ impl ApplicationHandler<UserEvent> for App {
                     _ => false,
                 };
                 if handled {
-                    self.finish_handled_event();
+                    editor.finish_handled_event();
                 }
                 match frame_disposition(handled, frame_input_changed) {
-                    FrameDisposition::Retain => self.dispatch = Some(dispatch),
+                    FrameDisposition::Retain => editor.dispatch = Some(dispatch),
                     FrameDisposition::Remint { reveal_selection } => {
-                        self.retain_dispatch(
+                        editor.retain_dispatch(
                             scale,
                             Size::new(size.width as f64, viewport),
                             reveal_selection,
@@ -958,7 +984,7 @@ impl ApplicationHandler<UserEvent> for App {
                     surface,
                     valid_surface,
                     ..
-                } = &mut self.state
+                } = &mut self.editor.state
                 {
                     if valid {
                         self.context
@@ -982,14 +1008,15 @@ impl ApplicationHandler<UserEvent> for App {
             // say where the pointer now sits). The honest state is
             // unknown until the next move.
             WindowEvent::Moved(_) => {
-                let changed = self.pointer.take().is_some() || self.hover.is_some();
-                let window = match &self.state {
+                let editor = &mut self.editor;
+                let changed = editor.pointer.take().is_some() || editor.hover.is_some();
+                let window = match &editor.state {
                     RenderState::Active { window, .. } => Some(window.clone()),
                     _ => None,
                 };
                 if changed && let Some(window) = window {
                     let size = window.inner_size();
-                    self.retain_dispatch(
+                    editor.retain_dispatch(
                         window.scale_factor(),
                         Size::new(size.width as f64, size.height as f64),
                         false,
@@ -1045,54 +1072,58 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     macos_menu::route_events(proxy.clone());
 
+    let stack = stack::load();
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
         #[cfg(not(target_arch = "wasm32"))]
         context: RenderContext::new(),
         #[cfg(not(target_arch = "wasm32"))]
         renderers: vec![],
-        state: RenderState::Suspended(None),
-        #[cfg(not(target_arch = "wasm32"))]
-        scene: Scene::new(),
-        font_cx: font_context(),
-        layout_cx: LayoutContext::new(),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        text_clipboard: SystemTextClipboard,
-        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-        text_clipboard: SystemTextClipboard::default(),
-        text_cache: puri::text::TextCache::default(),
-        drawing_memos: HashMap::new(),
-        stack: stack::load(),
-        model: Model {
-            doc,
-            selection: None,
-            history: history::History::default(),
-            view: ViewFlags::default(),
-            workspace: workspace::Workspace::default(),
-        },
-        doc_path,
-        text_binders: binders,
+        stack: stack.clone(),
         #[cfg(target_os = "macos")]
         native_menu,
-        menu: menu::State::default(),
-        cursor: Point::ZERO,
-        cursor_icon: CursorIcon::Default,
-        pointer: None,
-        hover: None,
-        modifiers: Modifiers::empty(),
-        pressed: false,
-        revealed: None,
-        dispatch: None,
-        pending_paint: None,
-        pending_scroll: None,
-        pending_pointer: None,
-        scrub: None,
-        state_drag: None,
-        point: None,
-        last_descends: Vec::new(),
-        reducer: WindowEventReducer::default(),
-        proxy,
-        pending_discard: None,
+        editor: Editor {
+            state: RenderState::Suspended(None),
+            #[cfg(not(target_arch = "wasm32"))]
+            scene: Scene::new(),
+            font_cx: font_context(),
+            layout_cx: LayoutContext::new(),
+            text_cache: puri::text::TextCache::default(),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            text_clipboard: SystemTextClipboard,
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+            text_clipboard: SystemTextClipboard::default(),
+            drawing_memos: HashMap::new(),
+            stack,
+            model: Model {
+                doc,
+                selection: None,
+                history: history::History::default(),
+                view: ViewFlags::default(),
+                workspace: workspace::Workspace::default(),
+            },
+            doc_path,
+            text_binders: binders,
+            menu: menu::State::default(),
+            cursor: Point::ZERO,
+            cursor_icon: CursorIcon::Default,
+            pointer: None,
+            hover: None,
+            modifiers: Modifiers::empty(),
+            pressed: false,
+            revealed: None,
+            dispatch: None,
+            pending_paint: None,
+            pending_scroll: None,
+            pending_pointer: None,
+            scrub: None,
+            state_drag: None,
+            point: None,
+            last_descends: Vec::new(),
+            reducer: WindowEventReducer::default(),
+            proxy,
+            pending_discard: None,
+        },
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1109,7 +1140,7 @@ pub extern "C" fn progred_start() {
     run();
 }
 
-impl App {
+impl Editor {
     fn queue_scroll(&mut self, next: PendingScroll) -> Option<PendingScroll> {
         match self.pending_scroll.take() {
             None => {
@@ -1354,27 +1385,6 @@ impl App {
         }
     }
 
-    /// Menu enablement follows the model: gray what can't act. Save
-    /// stays live for untitled documents — it defers to the save
-    /// panel, per platform convention.
-    pub(crate) fn sync_menus(&self) {
-        #[cfg(target_os = "macos")]
-        self.native_menu.sync(
-            self.menu_availability(),
-            self.model.view,
-            self.model
-                .workspace
-                .selected_or_document(
-                    self.model
-                        .selection
-                        .as_ref()
-                        .map(selection::Selection::root),
-                )
-                .projection
-                == workspace::Projection::Raw,
-        );
-    }
-
     pub(crate) fn menu_availability(&self) -> menu::Availability {
         let selected_root = self
             .model
@@ -1419,92 +1429,6 @@ impl App {
         self.model.selection =
             Some(selection::Selection::edge(&self.sources(), anchor).with_root(root));
         true
-    }
-
-    pub(crate) fn handle_menu_selection(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        selection: menu::Selection,
-    ) {
-        match selection {
-            menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::Save => self.menu_save(false),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::SaveAs => self.menu_save(true),
-            menu::Selection::Quit => self.request_discard(event_loop, AfterDiscard::Quit),
-            menu::Selection::ExampleSample => {
-                self.request_discard(event_loop, AfterDiscard::Example(Example::Sample))
-            }
-            menu::Selection::ExampleGrap => {
-                self.request_discard(event_loop, AfterDiscard::Example(Example::Grap))
-            }
-            menu::Selection::ExampleIopTree => {
-                self.request_discard(event_loop, AfterDiscard::Example(Example::IopTree))
-            }
-            menu::Selection::ExampleFidget => {
-                self.request_discard(event_loop, AfterDiscard::Example(Example::Fidget))
-            }
-            menu::Selection::Undo => self.step_history(true),
-            menu::Selection::Redo => self.step_history(false),
-            menu::Selection::OpenPaneLeft => {
-                self.open_selected_in_pane(workspace::Side::Left);
-            }
-            menu::Selection::OpenPaneRight => {
-                self.open_selected_in_pane(workspace::Side::Right);
-            }
-            menu::Selection::MovePaneUp
-            | menu::Selection::MovePaneDown
-            | menu::Selection::MovePaneLeft
-            | menu::Selection::MovePaneRight => {
-                let direction = match selection {
-                    menu::Selection::MovePaneUp => workspace::Move::Up,
-                    menu::Selection::MovePaneDown => workspace::Move::Down,
-                    menu::Selection::MovePaneLeft => workspace::Move::Left,
-                    menu::Selection::MovePaneRight => workspace::Move::Right,
-                    _ => unreachable!(),
-                };
-                if let Some(root) = self
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned()
-                {
-                    self.model.workspace.move_pane(&root, direction);
-                }
-            }
-            menu::Selection::Raw => {
-                let selected = self
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned();
-                self.model.workspace.toggle_projection(selected.as_ref());
-            }
-            menu::Selection::DebugGeometry => {
-                self.model.view.debug_geometry = !self.model.view.debug_geometry
-            }
-        }
-        if matches!(
-            selection,
-            menu::Selection::OpenPaneLeft
-                | menu::Selection::OpenPaneRight
-                | menu::Selection::MovePaneUp
-                | menu::Selection::MovePaneDown
-                | menu::Selection::MovePaneLeft
-                | menu::Selection::MovePaneRight
-                | menu::Selection::Raw
-                | menu::Selection::DebugGeometry
-        ) {
-            self.pending_paint = None;
-            if let RenderState::Active { window, .. } = &self.state {
-                window.request_redraw();
-            }
-        }
     }
 
     pub(crate) fn choose_menu(&mut self, selection: menu::Selection) {
@@ -1570,98 +1494,6 @@ impl App {
                 );
                 window.request_redraw();
             }
-        }
-    }
-
-    /// Unsaved changes gate for the document-replacing commands.
-    /// Parented to the window, the dialog is a real NSAlert sheet;
-    /// parentless, rfd falls back to a CFUserNotification panel that
-    /// arrives unfocused (a click to focus, then a click to answer)
-    /// and warns on the console.
-    /// Gate an action on unsaved changes: a clean document proceeds
-    /// immediately; a dirty one presents the standard window sheet
-    /// and continues through a [`UserEvent::Discard`] when it
-    /// resolves. Async is the one rfd path that presents natively on
-    /// macOS (begin-sheet with a completion; the sync API falls back
-    /// to CFUserNotification parentless and a sheet-plus-modal-loop
-    /// double-present parented). The sheet's completion lands on the
-    /// main run loop, so the answer is awaited on a throwaway thread
-    /// and routed back through the proxy — blocking here would
-    /// deadlock the loop the sheet needs.
-    pub(crate) fn request_discard(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
-        if !self.model.history.dirty() {
-            self.proceed(event_loop, then);
-            return;
-        }
-        if self.pending_discard.is_some() {
-            return;
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let accepted = web_sys::window()
-                .and_then(|window| window.confirm_with_message("Discard unsaved changes?").ok())
-                .unwrap_or(false);
-            if accepted {
-                self.proceed(event_loop, then);
-            }
-            return;
-        }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        {
-            let RenderState::Active { window, .. } = &self.state else {
-                return;
-            };
-            self.pending_discard = Some(then);
-            // rfd reports a custom button by its label; one spelling.
-            const DISCARD: &str = "Discard";
-            let sheet = rfd::AsyncMessageDialog::new()
-                .set_title("Discard unsaved changes?")
-                .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                    DISCARD.to_string(),
-                    "Cancel".to_string(),
-                ))
-                .set_parent(window.as_ref())
-                .show();
-            let proxy = self.proxy.clone();
-            std::thread::spawn(move || {
-                let accepted = matches!(
-                    pollster::block_on(sheet),
-                    rfd::MessageDialogResult::Custom(choice) if choice == DISCARD
-                );
-                let _ = proxy.send_event(UserEvent::Discard(accepted));
-            });
-        }
-        #[cfg(target_os = "ios")]
-        self.proceed(event_loop, then);
-    }
-
-    /// The action a confirmed (or unneeded) discard proceeds to.
-    pub(crate) fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
-        match then {
-            AfterDiscard::New => self.adopt_model(
-                gid::Document {
-                    root: None,
-                    cells: gid::Cells::new(),
-                },
-                None,
-                gid_text::Binders::new(),
-            ),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            AfterDiscard::Open => {
-                if let Some(path) = text_dialog().pick_file() {
-                    match text_store::load(&path) {
-                        Ok((doc, binders)) => self.adopt_model(doc, Some(path), binders),
-                        Err(error) => {
-                            eprintln!("failed to open {}: {error}", path.display());
-                        }
-                    }
-                }
-            }
-            AfterDiscard::Quit => event_loop.exit(),
-            AfterDiscard::Example(example) => match gid_text::parse(example.source()) {
-                Ok((doc, binders)) => self.adopt_model(doc, None, binders),
-                Err(error) => panic!("built-in example failed to parse: {error}"),
-            },
         }
     }
 
@@ -1746,18 +1578,231 @@ impl App {
             window.request_redraw();
         }
     }
+}
 
-    /// Scroll-to-reveal, computed from the freshly retained dispatch
-    /// pass BEFORE anything draws, so the reveal lands in the next
+impl App {
+    /// Menu enablement follows the model: gray what can't act. Save
+    /// stays live for untitled documents — it defers to the save
+    /// panel, per platform convention.
+    pub(crate) fn sync_menus(&self) {
+        #[cfg(target_os = "macos")]
+        self.native_menu.sync(
+            self.editor.menu_availability(),
+            self.editor.model.view,
+            self.editor
+                .model
+                .workspace
+                .selected_or_document(
+                    self.editor
+                        .model
+                        .selection
+                        .as_ref()
+                        .map(selection::Selection::root),
+                )
+                .projection
+                == workspace::Projection::Raw,
+        );
+    }
+
+    pub(crate) fn handle_menu_selection(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        selection: menu::Selection,
+    ) {
+        match selection {
+            menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            menu::Selection::Save => self.editor.menu_save(false),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            menu::Selection::SaveAs => self.editor.menu_save(true),
+            menu::Selection::Quit => self.request_discard(event_loop, AfterDiscard::Quit),
+            menu::Selection::ExampleSample => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Sample))
+            }
+            menu::Selection::ExampleGrap => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Grap))
+            }
+            menu::Selection::ExampleIopTree => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::IopTree))
+            }
+            menu::Selection::ExampleFidget => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Fidget))
+            }
+            menu::Selection::Undo => self.editor.step_history(true),
+            menu::Selection::Redo => self.editor.step_history(false),
+            menu::Selection::OpenPaneLeft => {
+                self.editor.open_selected_in_pane(workspace::Side::Left);
+            }
+            menu::Selection::OpenPaneRight => {
+                self.editor.open_selected_in_pane(workspace::Side::Right);
+            }
+            menu::Selection::MovePaneUp
+            | menu::Selection::MovePaneDown
+            | menu::Selection::MovePaneLeft
+            | menu::Selection::MovePaneRight => {
+                let direction = match selection {
+                    menu::Selection::MovePaneUp => workspace::Move::Up,
+                    menu::Selection::MovePaneDown => workspace::Move::Down,
+                    menu::Selection::MovePaneLeft => workspace::Move::Left,
+                    menu::Selection::MovePaneRight => workspace::Move::Right,
+                    _ => unreachable!(),
+                };
+                if let Some(root) = self
+                    .editor
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned()
+                {
+                    self.editor.model.workspace.move_pane(&root, direction);
+                }
+            }
+            menu::Selection::Raw => {
+                let selected = self
+                    .editor
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned();
+                self.editor
+                    .model
+                    .workspace
+                    .toggle_projection(selected.as_ref());
+            }
+            menu::Selection::DebugGeometry => {
+                self.editor.model.view.debug_geometry = !self.editor.model.view.debug_geometry
+            }
+        }
+        if matches!(
+            selection,
+            menu::Selection::OpenPaneLeft
+                | menu::Selection::OpenPaneRight
+                | menu::Selection::MovePaneUp
+                | menu::Selection::MovePaneDown
+                | menu::Selection::MovePaneLeft
+                | menu::Selection::MovePaneRight
+                | menu::Selection::Raw
+                | menu::Selection::DebugGeometry
+        ) {
+            self.editor.pending_paint = None;
+            if let RenderState::Active { window, .. } = &self.editor.state {
+                window.request_redraw();
+            }
+        }
+    }
+
+    /// Unsaved changes gate for the document-replacing commands.
+    /// Parented to the window, the dialog is a real NSAlert sheet;
+    /// parentless, rfd falls back to a CFUserNotification panel that
+    /// arrives unfocused (a click to focus, then a click to answer)
+    /// and warns on the console.
+    /// Gate an action on unsaved changes: a clean document proceeds
+    /// immediately; a dirty one presents the standard window sheet
+    /// and continues through a [`UserEvent::Discard`] when it
+    /// resolves. Async is the one rfd path that presents natively on
+    /// macOS (begin-sheet with a completion; the sync API falls back
+    /// to CFUserNotification parentless and a sheet-plus-modal-loop
+    /// double-present parented). The sheet's completion lands on the
+    /// main run loop, so the answer is awaited on a throwaway thread
+    /// and routed back through the proxy — blocking here would
+    /// deadlock the loop the sheet needs.
+    pub(crate) fn request_discard(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
+        if !self.editor.model.history.dirty() {
+            self.proceed(event_loop, then);
+            return;
+        }
+        if self.editor.pending_discard.is_some() {
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let accepted = web_sys::window()
+                .and_then(|window| window.confirm_with_message("Discard unsaved changes?").ok())
+                .unwrap_or(false);
+            if accepted {
+                self.proceed(event_loop, then);
+            }
+            return;
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            let RenderState::Active { window, .. } = &self.editor.state else {
+                return;
+            };
+            self.editor.pending_discard = Some(then);
+            // rfd reports a custom button by its label; one spelling.
+            const DISCARD: &str = "Discard";
+            let sheet = rfd::AsyncMessageDialog::new()
+                .set_title("Discard unsaved changes?")
+                .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                    DISCARD.to_string(),
+                    "Cancel".to_string(),
+                ))
+                .set_parent(window.as_ref())
+                .show();
+            let proxy = self.editor.proxy.clone();
+            std::thread::spawn(move || {
+                let accepted = matches!(
+                    pollster::block_on(sheet),
+                    rfd::MessageDialogResult::Custom(choice) if choice == DISCARD
+                );
+                let _ = proxy.send_event(UserEvent::Discard(accepted));
+            });
+        }
+        #[cfg(target_os = "ios")]
+        self.proceed(event_loop, then);
+    }
+
+    /// The action a confirmed (or unneeded) discard proceeds to.
+    pub(crate) fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
+        let editor = &mut self.editor;
+        match then {
+            AfterDiscard::New => editor.adopt_model(
+                gid::Document {
+                    root: None,
+                    cells: gid::Cells::new(),
+                },
+                None,
+                gid_text::Binders::new(),
+            ),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            AfterDiscard::Open => {
+                if let Some(path) = text_dialog().pick_file() {
+                    match text_store::load(&path) {
+                        Ok((doc, binders)) => editor.adopt_model(doc, Some(path), binders),
+                        Err(error) => {
+                            eprintln!("failed to open {}: {error}", path.display());
+                        }
+                    }
+                }
+            }
+            AfterDiscard::Quit => event_loop.exit(),
+            AfterDiscard::Example(example) => match gid_text::parse(example.source()) {
+                Ok((doc, binders)) => editor.adopt_model(doc, None, binders),
+                Err(error) => panic!("built-in example failed to parse: {error}"),
+            },
+        }
+    }
 
     /// Renders the current model to the surface, from `RedrawRequested`.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn redraw(&mut self) {
+        self.sync_menus();
+        let App {
+            editor,
+            context,
+            renderers,
+            ..
+        } = &mut *self;
         let RenderState::Active {
             surface,
             valid_surface: true,
             window,
-        } = &self.state
+        } = &editor.state
         else {
             return;
         };
@@ -1766,10 +1811,9 @@ impl App {
         let width = surface.config.width;
         let height = surface.config.height;
 
-        self.sync_menus();
         let viewport = Size::new(width as f64, height as f64);
-        self.scene.reset();
-        let pending = self
+        editor.scene.reset();
+        let pending = editor
             .pending_paint
             .take()
             .filter(|pending| pending.scale == scale && pending.viewport == viewport);
@@ -1786,39 +1830,39 @@ impl App {
                     renders,
                     hovered_secondary,
                     hovered_trace,
-                } = self.build_frame(scale, viewport);
-                self.last_descends = dispatch.descends.clone();
-                self.dispatch = Some(dispatch);
+                } = editor.build_frame(scale, viewport);
+                editor.last_descends = dispatch.descends.clone();
+                editor.dispatch = Some(dispatch);
                 (renders, hovered_secondary, hovered_trace)
             }
         };
-        self.sync_cursor(&window);
+        editor.sync_cursor(&window);
         let ink = placed::Ink {
-            hovered: self.hover.as_ref(),
+            hovered: editor.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
             hovered_trace: hovered_trace.as_ref(),
-            debug_geometry: self.model.view.debug_geometry,
+            debug_geometry: editor.model.view.debug_geometry,
         };
         let mut paint = Paint {
-            scene: std::mem::replace(&mut self.scene, Scene::new()),
+            scene: std::mem::replace(&mut editor.scene, Scene::new()),
         };
         for render in renders {
             render(&mut paint, ink);
         }
-        self.scene = paint.scene;
+        editor.scene = paint.scene;
 
-        let RenderState::Active { surface, .. } = &mut self.state else {
+        let RenderState::Active { surface, .. } = &mut editor.state else {
             return;
         };
-        let device_handle = &self.context.devices[surface.dev_id];
+        let device_handle = &context.devices[surface.dev_id];
 
-        self.renderers[surface.dev_id]
+        renderers[surface.dev_id]
             .as_mut()
             .unwrap()
             .render_to_texture(
                 &device_handle.device,
                 &device_handle.queue,
-                &self.scene,
+                &editor.scene,
                 &surface.target_view,
                 &vello::RenderParams {
                     base_color: Color::new([0.965, 0.965, 0.972, 1.0]),
@@ -1832,7 +1876,7 @@ impl App {
         let surface_texture = match surface.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
             CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
-                self.context.configure_surface(surface);
+                context.configure_surface(surface);
                 window.request_redraw();
                 return;
             }
@@ -1871,11 +1915,13 @@ impl App {
     /// only this final interpreter differs.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn redraw(&mut self) {
+        self.sync_menus();
+        let editor = &mut self.editor;
         let RenderState::Active {
             canvas,
             context,
             window,
-        } = &self.state
+        } = &editor.state
         else {
             return;
         };
@@ -1896,9 +1942,8 @@ impl App {
             canvas.set_height(height);
         }
 
-        self.sync_menus();
         let viewport = Size::new(width as f64, height as f64);
-        let pending = self
+        let pending = editor
             .pending_paint
             .take()
             .filter(|pending| pending.scale == scale && pending.viewport == viewport);
@@ -1915,18 +1960,18 @@ impl App {
                     renders,
                     hovered_secondary,
                     hovered_trace,
-                } = self.build_frame(scale, viewport);
-                self.last_descends = dispatch.descends.clone();
-                self.dispatch = Some(dispatch);
+                } = editor.build_frame(scale, viewport);
+                editor.last_descends = dispatch.descends.clone();
+                editor.dispatch = Some(dispatch);
                 (renders, hovered_secondary, hovered_trace)
             }
         };
-        self.sync_cursor(&window);
+        editor.sync_cursor(&window);
         let ink = placed::Ink {
-            hovered: self.hover.as_ref(),
+            hovered: editor.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
             hovered_trace: hovered_trace.as_ref(),
-            debug_geometry: self.model.view.debug_geometry,
+            debug_geometry: editor.model.view.debug_geometry,
         };
         let mut paint = Paint {
             canvas: puri_web::WebCanvas(context),

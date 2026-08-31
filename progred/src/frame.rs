@@ -13,7 +13,7 @@ use crate::selection;
 use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
-use crate::{App, PendingPaint, content_viewport};
+use crate::{Editor, PendingPaint, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::{Brush, Color, ImageData};
@@ -38,12 +38,12 @@ use winit::dpi::PhysicalPosition;
 pub(crate) const HOVER_REACH: f64 = 8.0;
 
 pub(crate) struct Dispatch {
-    pub(crate) handler: Handler<App>,
-    pub(crate) activations: Vec<placed::TargetAction<App>>,
-    pub(crate) picks: Vec<placed::TargetAction<App>>,
+    pub(crate) handler: Handler<Editor>,
+    pub(crate) activations: Vec<placed::TargetAction<Editor>>,
+    pub(crate) picks: Vec<placed::TargetAction<Editor>>,
     pub(crate) scrubs: Vec<placed::ScrubAction>,
     pub(crate) state_drags: Vec<placed::StateDragAction>,
-    pub(crate) descends: Vec<navigate::Descend<App>>,
+    pub(crate) descends: Vec<navigate::Descend<Editor>>,
     pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
@@ -326,7 +326,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 
 pub(crate) struct FrameDescription<'a> {
     model: &'a Model,
-    stack: &'a stack::Stack<App>,
+    stack: &'a stack::Stack<Editor>,
     view: ViewFlags,
     menu: menu::State,
     availability: menu::Availability,
@@ -351,10 +351,10 @@ pub(crate) struct FrameResources<'a> {
 /// The frame as one measured value, plus the scroll maxima its
 /// measurement settled.
 struct AppView {
-    view: measured::Measured<Placed<App, Paint>>,
+    view: measured::Measured<Placed<Editor, Paint>>,
 }
 
-impl App {
+impl Editor {
     pub(crate) fn scroll_view(
         &mut self,
         root: Root,
@@ -389,7 +389,7 @@ impl App {
 
     pub(crate) fn select_drawing_source(
         &mut self,
-        descends: &[navigate::Descend<App>],
+        descends: &[navigate::Descend<Editor>],
         source: &hover::SourceTrace,
     ) -> bool {
         let select = drawing_source_descend(&self.sources(), descends, source)
@@ -652,7 +652,7 @@ impl App {
     }
 }
 
-fn projection_hooks(root: Root) -> projection::Hooks<App> {
+fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
     let select_root = root.clone();
     let edit_root = root.clone();
     let payload_root = root.clone();
@@ -665,7 +665,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
         // The host's ordinary structural selection transition.
         // Editable text handles its coordinate-sensitive pointer
         // transition through the stock control's raw handler.
-        select: Rc::new(move |app: &mut App, path| {
+        select: Rc::new(move |app: &mut Editor, path| {
             let fresh = match app.model.selection.as_ref() {
                 None => true,
                 Some(current) => {
@@ -687,19 +687,19 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
                 line.cursor_to_end();
             }
         }),
-        select_payload: Rc::new(move |app: &mut App, path, payload| {
+        select_payload: Rc::new(move |app: &mut Editor, path, payload| {
             app.model.selection = Some(
                 selection::Selection::from_payload(&app.sources(), path, payload)
                     .with_root(payload_root.clone()),
             );
         }),
-        start_edit: Rc::new(move |app: &mut App, path, line| {
+        start_edit: Rc::new(move |app: &mut Editor, path, line| {
             app.model.selection = Some(
                 selection::Selection::from_line(&app.sources(), path, line)
                     .with_root(edit_root.clone()),
             );
         }),
-        toggle: Rc::new(move |app: &mut App, path| {
+        toggle: Rc::new(move |app: &mut Editor, path| {
             let Some(view) = app.model.workspace.view_mut(&toggle_root) else {
                 return;
             };
@@ -712,7 +712,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
                 &path,
             );
         }),
-        update_state: Rc::new(move |app: &mut App, path, state| {
+        update_state: Rc::new(move |app: &mut Editor, path, state| {
             let Some(view) = app.model.workspace.view_mut(&state_root) else {
                 return false;
             };
@@ -724,13 +724,13 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
             }
         }),
         edit: Rc::new(edit_ctx),
-        pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-        insert: Rc::new(move |app: &mut App, path| {
+        pick: Rc::new(|app: &mut Editor, id| app.pick_identity(id)),
+        insert: Rc::new(move |app: &mut Editor, path| {
             if let Some(pending) = selection::pending_after(&app.sources(), &path) {
                 app.model.selection = Some(pending.with_root(insert_root.clone()));
             }
         }),
-        delete: Rc::new(|app: &mut App| {
+        delete: Rc::new(|app: &mut Editor| {
             let descends = app.last_descends.clone();
             app.delete_selected_edge(&descends)
         }),
@@ -740,25 +740,27 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
         point: Rc::new(move |app, path, placement, handler, point| {
             app.start_point(point_root.clone(), path, placement, handler, point)
         }),
-        commit_offer: Rc::new(|app: &mut App, action| match app.model.selection.take() {
-            Some(current) => match current.stage() {
-                selection::Stage::Pending => {
-                    app.commit_value(current.root().clone(), current.path().to_vec(), action);
-                }
-                selection::Stage::Label => {
-                    app.commit_label(current.root().clone(), current.path().to_vec(), action);
-                }
-                selection::Stage::Edge => app.model.selection = Some(current),
+        commit_offer: Rc::new(
+            |app: &mut Editor, action| match app.model.selection.take() {
+                Some(current) => match current.stage() {
+                    selection::Stage::Pending => {
+                        app.commit_value(current.root().clone(), current.path().to_vec(), action);
+                    }
+                    selection::Stage::Label => {
+                        app.commit_label(current.root().clone(), current.path().to_vec(), action);
+                    }
+                    selection::Stage::Edge => app.model.selection = Some(current),
+                },
+                selection => app.model.selection = selection,
             },
-            selection => app.model.selection = selection,
-        }),
+        ),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
-    stack: &stack::Stack<App>,
+    stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
@@ -767,7 +769,7 @@ fn project_workspace_view(
     drawing_memo: &projection::DrawingMemo,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<App, Paint>> {
+) -> measured::Measured<Placed<Editor, Paint>> {
     let margin = 12.0 * scale;
     let body_width = (size.width - 2.0 * margin).max(0.0);
     let cell_root;
@@ -835,7 +837,7 @@ fn project_workspace_view(
         content,
         offset,
         Some((root.clone(), scale)),
-        move |app: &mut App, update| {
+        move |app: &mut Editor, update| {
             app.scroll_view(
                 scroll_root.clone(),
                 update,
@@ -863,7 +865,7 @@ fn project_workspace_view(
 #[allow(clippy::too_many_arguments)]
 fn project_workspace(
     model: &Model,
-    stack: &stack::Stack<App>,
+    stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
@@ -871,7 +873,7 @@ fn project_workspace(
     drawing_memos: &mut HashMap<Root, projection::DrawingMemo>,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<App, Paint>> {
+) -> measured::Measured<Placed<Editor, Paint>> {
     drawing_memos.retain(|root, _| model.workspace.view(root).is_some());
     let geometry = model.workspace.geometry(size, scale);
     let mut body = placed::leaf(
@@ -936,7 +938,7 @@ fn project_workspace(
                     Placement::new(hit, placement.clip_rect),
                     Hovered::Divider(hover_divider),
                 );
-                p.handler().on_pointer_down(move |app: &mut App, event| {
+                p.handler().on_pointer_down(move |app: &mut Editor, event| {
                     is_primary_contact(event)
                         && hit.contains(Point::new(event.state.position.x, event.state.position.y))
                         && app.model.workspace.start_resize(
@@ -947,7 +949,7 @@ fn project_workspace(
                             ),
                         )
                 });
-                p.handler().on_pointer_move(move |app: &mut App, event| {
+                p.handler().on_pointer_move(move |app: &mut Editor, event| {
                     app.model.workspace.resize(
                         &move_divider,
                         Vec2::new(
@@ -957,7 +959,7 @@ fn project_workspace(
                         size,
                     )
                 });
-                p.handler().on_pointer_up(move |app: &mut App, _| {
+                p.handler().on_pointer_up(move |app: &mut Editor, _| {
                     app.model.workspace.finish_resize(&up_divider)
                 });
             },
@@ -1018,8 +1020,8 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 width: viewport_width,
             },
             menu::Hooks {
-                toggle: Rc::new(|app: &mut App, section| app.menu.toggle(section)),
-                select: Rc::new(|app: &mut App, selection| app.choose_menu(selection)),
+                toggle: Rc::new(|app: &mut Editor, section| app.menu.toggle(section)),
+                select: Rc::new(|app: &mut Editor, selection| app.choose_menu(selection)),
             },
         )
     });
@@ -1073,14 +1075,14 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         let popup = placed::before(popup, move |p, placement| {
             let rect = placement.rect;
             let headings = Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
-            p.handler().on_pointer_down(move |app: &mut App, event| {
+            p.handler().on_pointer_down(move |app: &mut Editor, event| {
                 let point = Point::new(event.state.position.x, event.state.position.y);
                 is_primary_contact(event)
                     && !headings.contains(point)
                     && !rect.contains(point)
                     && app.menu.close()
             });
-            p.handler().on_scroll(move |_: &mut App, event| {
+            p.handler().on_scroll(move |_: &mut Editor, event| {
                 if rect.contains(Point::new(event.state.position.x, event.state.position.y)) {
                     ScrollOutcome::consume(event)
                 } else {
@@ -1101,8 +1103,8 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
 /// Dispatch-time access to the selection's editor. Retained-frame
 /// dispatch can outlive the editor by a frame — deselect, then a move
 /// in the same gesture — so absence declines rather than panics.
-pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
-    let App {
+pub(crate) fn edit_ctx(app: &mut Editor) -> Option<EditCtx<'_>> {
+    let Editor {
         model,
         font_cx,
         layout_cx,
@@ -1208,7 +1210,7 @@ mod frame_tests {
         let library = Cells::new();
         let root = workspace::Root::document();
         let rect = Rect::new(10.0, 20.0, 30.0, 40.0);
-        let descends = [navigate::Descend::<App> {
+        let descends = [navigate::Descend::<Editor> {
             root: Some(root.clone()),
             path: Rc::from([Step::Follow, Step::Key(call)]),
             rect,
@@ -1253,7 +1255,7 @@ mod frame_tests {
         let lower = model
             .workspace
             .open_cell(workspace::Side::Left, cell, Vec::new());
-        let stack = crate::stack::load::<App>();
+        let stack = crate::stack::load::<Editor>();
         let styles = crate::styles::editor(1.0);
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
@@ -1319,7 +1321,7 @@ mod frame_tests {
     fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
-        let mut placed: Placed<App, Paint> = Placed::empty();
+        let mut placed: Placed<Editor, Paint> = Placed::empty();
         placed.probes.push(placed::Probe::retaining(
             Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
             target(0),
@@ -1413,7 +1415,7 @@ mod frame_tests {
     #[test]
     fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
         let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
-        let mut placed: Placed<App, Paint> = Placed::empty();
+        let mut placed: Placed<Editor, Paint> = Placed::empty();
         placed.probes.push(placed::Probe::exact(
             Placement::new(
                 Rect::new(0.0, 0.0, 10.0, 10.0),

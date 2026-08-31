@@ -1,7 +1,7 @@
 //! Apply a Grap callable at a document path with GET/SET closed over
 //! that place. The path stays in Rust.
 
-use crate::App;
+use crate::Editor;
 #[cfg(test)]
 use crate::annotations::Annotations;
 use crate::selection::Selection;
@@ -31,7 +31,13 @@ const EVENT_FUNCTIONS: [gid::CellId; 4] = [
 /// Apply one event handler with its get/set functions bound to this
 /// projection site. An absent or diagnostic result declines without
 /// committing any pending annotation or selection change.
-pub fn apply_event(app: &mut App, root: Root, path: Path, function: Value, event: Value) -> bool {
+pub fn apply_event(
+    app: &mut Editor,
+    root: Root,
+    path: Path,
+    function: Value,
+    event: Value,
+) -> bool {
     let recorded = app
         .model
         .selection
