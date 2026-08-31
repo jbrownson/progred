@@ -3,6 +3,7 @@
 //! streams into vello.
 
 mod annotations;
+mod command;
 mod commands;
 mod completion;
 mod filter;
@@ -42,6 +43,7 @@ mod test_values;
 mod text_store;
 mod workspace;
 
+use crate::command::{AppCommand, Command, DocCommand};
 use crate::frame::{Dispatch, Frame, FrameDisposition, Hovered, Paint, frame_disposition};
 use crate::model::{Model, ViewFlags};
 use kurbo::{Point, Rect, Size};
@@ -85,7 +87,7 @@ use winit::window::{CursorIcon, Window, WindowId};
 pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
     MacMenu(macos_menu::Event),
-    Menu(menu::Selection),
+    Command(Command),
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Discard {
         window: WindowId,
@@ -104,26 +106,7 @@ pub(crate) enum AfterDiscard {
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     Quit,
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    Example(Example),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum Example {
-    Sample,
-    Grap,
-    IopTree,
-    Fidget,
-}
-
-impl Example {
-    fn source(self) -> &'static str {
-        match self {
-            Self::Sample => include_str!("../../examples/sample.gid"),
-            Self::Grap => include_str!("../../examples/grap-demo.gid"),
-            Self::IopTree => include_str!("../../examples/iop-tree.gid"),
-            Self::Fidget => include_str!("../../examples/fidget.gid"),
-        }
-    }
+    Example(command::Example),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -350,6 +333,8 @@ pub(crate) struct App {
     pub(crate) native_menu: macos_menu::Menu,
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    /// New windows draw the in-window menu system.
+    pub(crate) drawn_menu: bool,
     pub(crate) editors: Vec<Editor>,
     /// The window whose editor application-level commands target.
     pub(crate) focused: Option<WindowId>,
@@ -372,6 +357,8 @@ pub(crate) enum QuitState {
 /// context is a cheap clone over shared font data). The dispatch
 /// world type.
 pub(crate) struct Editor {
+    /// This window draws its own menu bar (the drawn menu system).
+    pub(crate) drawn_menu: bool,
     pub(crate) state: RenderState,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) scene: Scene,
@@ -456,24 +443,25 @@ pub(crate) struct Editor {
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
 
-pub(crate) fn menu_height(scale: f64) -> f64 {
-    if menu::DRAWN {
+pub(crate) fn menu_height(drawn_menu: bool, scale: f64) -> f64 {
+    if drawn_menu {
         menu::bar_height(scale)
     } else {
         0.0
     }
 }
 
-pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
+pub(crate) fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> Rect {
     Rect::new(
         0.0,
-        menu_height(scale).min(viewport.height),
+        menu_height(drawn_menu, scale).min(viewport.height),
         viewport.width,
         viewport.height,
     )
 }
 
 fn new_editor(
+    drawn_menu: bool,
     stack: stack::Stack<Editor>,
     font_cx: FontContext,
     doc: gid::Document,
@@ -482,6 +470,7 @@ fn new_editor(
     proxy: winit::event_loop::EventLoopProxy<UserEvent>,
 ) -> Editor {
     Editor {
+        drawn_menu,
         state: RenderState::Suspended(None),
         #[cfg(not(target_arch = "wasm32"))]
         scene: Scene::new(),
@@ -612,11 +601,11 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             #[cfg(target_os = "macos")]
             UserEvent::MacMenu(event) => {
-                if let Some(selection) = self.native_menu.selection(&event) {
-                    self.handle_menu_selection(event_loop, selection);
+                if let Some(command) = self.native_menu.command(&event) {
+                    self.run_command(event_loop, command);
                 }
             }
-            UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
+            UserEvent::Command(command) => self.run_command(event_loop, command),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard { window, accepted } => {
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -710,6 +699,7 @@ impl App {
         binders: gid_text::Binders,
     ) {
         self.editors.push(new_editor(
+            self.drawn_menu,
             self.stack.clone(),
             self.fonts.clone(),
             doc,
@@ -736,8 +726,11 @@ impl App {
             }
             // The resident menu bar grays every document command.
             #[cfg(target_os = "macos")]
-            self.native_menu
-                .sync(menu::Availability::disabled(), ViewFlags::default(), false);
+            self.native_menu.sync(
+                command::Availability::disabled(),
+                ViewFlags::default(),
+                false,
+            );
         }
     }
 
@@ -1310,6 +1303,10 @@ pub fn run() {
 
     let stack = stack::load();
     let fonts = font_context();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    let drawn_menu = platform::DRAWN_MENU;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
         #[cfg(not(target_arch = "wasm32"))]
@@ -1321,10 +1318,13 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         native_menu,
         proxy: proxy.clone(),
+        drawn_menu,
         focused: None,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         quit: QuitState::Idle,
-        editors: vec![new_editor(stack, fonts, doc, doc_path, binders, proxy)],
+        editors: vec![new_editor(
+            drawn_menu, stack, fonts, doc, doc_path, binders, proxy,
+        )],
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1593,13 +1593,13 @@ impl Editor {
         }
     }
 
-    pub(crate) fn menu_availability(&self) -> menu::Availability {
+    pub(crate) fn menu_availability(&self) -> command::Availability {
         let selected_root = self
             .model
             .selection
             .as_ref()
             .map(selection::Selection::root);
-        menu::Availability {
+        command::Availability {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
@@ -1639,15 +1639,88 @@ impl Editor {
         true
     }
 
-    pub(crate) fn choose_menu(&mut self, selection: menu::Selection) {
+    pub(crate) fn choose_menu(&mut self, command: Command) {
         self.menu.close();
-        let _ = self.proxy.send_event(UserEvent::Menu(selection));
+        match command {
+            Command::Doc(command) => self.run_doc_command(command),
+            Command::App(_) => {
+                let _ = self.proxy.send_event(UserEvent::Command(command));
+            }
+        }
+    }
+
+    /// A document command against this editor, including the redraw
+    /// its view changes require.
+    pub(crate) fn run_doc_command(&mut self, command: DocCommand) {
+        match command {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::Save => self.menu_save(false),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::SaveAs => self.menu_save(true),
+            DocCommand::Undo => self.step_history(true),
+            DocCommand::Redo => self.step_history(false),
+            DocCommand::OpenPaneLeft => {
+                self.open_selected_in_pane(workspace::Side::Left);
+            }
+            DocCommand::OpenPaneRight => {
+                self.open_selected_in_pane(workspace::Side::Right);
+            }
+            DocCommand::MovePaneUp
+            | DocCommand::MovePaneDown
+            | DocCommand::MovePaneLeft
+            | DocCommand::MovePaneRight => {
+                let direction = match command {
+                    DocCommand::MovePaneUp => workspace::Move::Up,
+                    DocCommand::MovePaneDown => workspace::Move::Down,
+                    DocCommand::MovePaneLeft => workspace::Move::Left,
+                    DocCommand::MovePaneRight => workspace::Move::Right,
+                    _ => unreachable!(),
+                };
+                if let Some(root) = self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned()
+                {
+                    self.model.workspace.move_pane(&root, direction);
+                }
+            }
+            DocCommand::Raw => {
+                let selected = self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned();
+                self.model.workspace.toggle_projection(selected.as_ref());
+            }
+            DocCommand::DebugGeometry => {
+                self.model.view.debug_geometry = !self.model.view.debug_geometry
+            }
+        }
+        if matches!(
+            command,
+            DocCommand::OpenPaneLeft
+                | DocCommand::OpenPaneRight
+                | DocCommand::MovePaneUp
+                | DocCommand::MovePaneDown
+                | DocCommand::MovePaneLeft
+                | DocCommand::MovePaneRight
+                | DocCommand::Raw
+                | DocCommand::DebugGeometry
+        ) {
+            self.pending_paint = None;
+            if let RenderState::Active { window, .. } = &self.state {
+                window.request_redraw();
+            }
+        }
     }
 
     pub(crate) fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
         // The native menu owns its own shortcuts; only the drawn
         // menu routes keys here.
-        if !menu::DRAWN {
+        if !self.drawn_menu {
             return false;
         }
         let open = self.menu.open().is_some();
@@ -1659,9 +1732,9 @@ impl Editor {
             self.menu.close()
         } else {
             menu::shortcut(event)
-                .filter(|selection| self.menu_availability().enabled(*selection))
-                .is_some_and(|selection| {
-                    self.choose_menu(selection);
+                .filter(|command| self.menu_availability().enabled(*command))
+                .is_some_and(|command| {
+                    self.choose_menu(command);
                     true
                 })
                 || self.menu.captures_key(event)
@@ -1818,29 +1891,36 @@ impl App {
         let _ = index;
     }
 
-    /// Application commands act without a window (New, Open, the
-    /// examples each open their own; Quit drains the list); document
-    /// commands act on the focused window's editor.
-    pub(crate) fn handle_menu_selection(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        selection: menu::Selection,
-    ) {
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        match selection {
-            menu::Selection::New => {
-                self.open_editor(
-                    event_loop,
-                    gid::Document {
-                        root: None,
-                        cells: gid::Cells::new(),
-                    },
-                    None,
-                    gid_text::Binders::new(),
-                );
-                return;
+    /// Application commands need no window; document commands act on
+    /// the focused window's editor (the native menu's routing — the
+    /// drawn menu dispatches document commands to its own editor
+    /// directly).
+    pub(crate) fn run_command(&mut self, event_loop: &ActiveEventLoop, command: Command) {
+        match command {
+            Command::App(command) => self.run_app_command(event_loop, command),
+            Command::Doc(command) => {
+                if let Some(index) = self.focused_index() {
+                    self.editors[index].run_doc_command(command);
+                }
             }
-            menu::Selection::Open => {
+        }
+    }
+
+    /// Every document lives in its own window: New, Open, and the
+    /// examples each open one; Quit drains them.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn run_app_command(&mut self, event_loop: &ActiveEventLoop, command: AppCommand) {
+        match command {
+            AppCommand::New => self.open_editor(
+                event_loop,
+                gid::Document {
+                    root: None,
+                    cells: gid::Cells::new(),
+                },
+                None,
+                gid_text::Binders::new(),
+            ),
+            AppCommand::Open => {
                 if let Some(path) = text_dialog().pick_file() {
                     match text_store::load(&path) {
                         Ok((doc, binders)) => {
@@ -1851,129 +1931,27 @@ impl App {
                         }
                     }
                 }
-                return;
             }
-            menu::Selection::Quit => {
-                self.begin_quit(event_loop);
-                return;
-            }
-            menu::Selection::ExampleSample
-            | menu::Selection::ExampleGrap
-            | menu::Selection::ExampleIopTree
-            | menu::Selection::ExampleFidget => {
-                let example = match selection {
-                    menu::Selection::ExampleSample => Example::Sample,
-                    menu::Selection::ExampleGrap => Example::Grap,
-                    menu::Selection::ExampleIopTree => Example::IopTree,
-                    menu::Selection::ExampleFidget => Example::Fidget,
-                    _ => unreachable!(),
-                };
-                match gid_text::parse(example.source()) {
-                    Ok((doc, binders)) => self.open_editor(event_loop, doc, None, binders),
-                    Err(error) => panic!("built-in example failed to parse: {error}"),
-                }
-                return;
-            }
-            _ => {}
+            AppCommand::Quit => self.begin_quit(event_loop),
+            AppCommand::Example(example) => match gid_text::parse(example.source()) {
+                Ok((doc, binders)) => self.open_editor(event_loop, doc, None, binders),
+                Err(error) => panic!("built-in example failed to parse: {error}"),
+            },
         }
+    }
+
+    /// One canvas: replace the document in place, gated on unsaved
+    /// changes.
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    fn run_app_command(&mut self, event_loop: &ActiveEventLoop, command: AppCommand) {
         let Some(index) = self.focused_index() else {
             return;
         };
-        match selection {
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::New => self.request_discard(event_loop, index, AfterDiscard::New),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::New | menu::Selection::Open | menu::Selection::Quit => {}
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::Save => self.editors[index].menu_save(false),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::SaveAs => self.editors[index].menu_save(true),
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::Quit => self.request_discard(event_loop, index, AfterDiscard::Quit),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::ExampleSample
-            | menu::Selection::ExampleGrap
-            | menu::Selection::ExampleIopTree
-            | menu::Selection::ExampleFidget => {}
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::ExampleSample => {
-                self.request_discard(event_loop, index, AfterDiscard::Example(Example::Sample))
-            }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::ExampleGrap => {
-                self.request_discard(event_loop, index, AfterDiscard::Example(Example::Grap))
-            }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::ExampleIopTree => {
-                self.request_discard(event_loop, index, AfterDiscard::Example(Example::IopTree))
-            }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            menu::Selection::ExampleFidget => {
-                self.request_discard(event_loop, index, AfterDiscard::Example(Example::Fidget))
-            }
-            menu::Selection::Undo => self.editors[index].step_history(true),
-            menu::Selection::Redo => self.editors[index].step_history(false),
-            menu::Selection::OpenPaneLeft => {
-                self.editors[index].open_selected_in_pane(workspace::Side::Left);
-            }
-            menu::Selection::OpenPaneRight => {
-                self.editors[index].open_selected_in_pane(workspace::Side::Right);
-            }
-            menu::Selection::MovePaneUp
-            | menu::Selection::MovePaneDown
-            | menu::Selection::MovePaneLeft
-            | menu::Selection::MovePaneRight => {
-                let direction = match selection {
-                    menu::Selection::MovePaneUp => workspace::Move::Up,
-                    menu::Selection::MovePaneDown => workspace::Move::Down,
-                    menu::Selection::MovePaneLeft => workspace::Move::Left,
-                    menu::Selection::MovePaneRight => workspace::Move::Right,
-                    _ => unreachable!(),
-                };
-                if let Some(root) = self.editors[index]
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned()
-                {
-                    self.editors[index]
-                        .model
-                        .workspace
-                        .move_pane(&root, direction);
-                }
-            }
-            menu::Selection::Raw => {
-                let selected = self.editors[index]
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned();
-                self.editors[index]
-                    .model
-                    .workspace
-                    .toggle_projection(selected.as_ref());
-            }
-            menu::Selection::DebugGeometry => {
-                self.editors[index].model.view.debug_geometry =
-                    !self.editors[index].model.view.debug_geometry
-            }
-        }
-        if matches!(
-            selection,
-            menu::Selection::OpenPaneLeft
-                | menu::Selection::OpenPaneRight
-                | menu::Selection::MovePaneUp
-                | menu::Selection::MovePaneDown
-                | menu::Selection::MovePaneLeft
-                | menu::Selection::MovePaneRight
-                | menu::Selection::Raw
-                | menu::Selection::DebugGeometry
-        ) {
-            self.editors[index].pending_paint = None;
-            if let RenderState::Active { window, .. } = &self.editors[index].state {
-                window.request_redraw();
+        match command {
+            AppCommand::New => self.request_discard(event_loop, index, AfterDiscard::New),
+            AppCommand::Quit => self.request_discard(event_loop, index, AfterDiscard::Quit),
+            AppCommand::Example(example) => {
+                self.request_discard(event_loop, index, AfterDiscard::Example(example))
             }
         }
     }

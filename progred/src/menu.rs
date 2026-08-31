@@ -1,45 +1,9 @@
-//! Platform-neutral menu state and selections, plus the Progred-drawn
-//! view for platforms without a native application menu.
+//! The Progred-drawn menu system: an in-window bar and popups, one
+//! per editor. It emits [`command::Command`]s; the native macOS menu
+//! is its own separate system in `macos_menu`.
 
+use crate::command::{AppCommand, Command, DocCommand, Example};
 use ui_events::keyboard::{Key, KeyboardEvent};
-
-/// The one platform switch: the app draws its own menu bar and popups
-/// wherever there is no native application menu; macOS speaks to its
-/// own through `macos_menu`.
-pub const DRAWN: bool = cfg!(not(target_os = "macos"));
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Platform {
-    Drawn,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    MacOs,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Selection {
-    New,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    Open,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    Save,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    SaveAs,
-    Quit,
-    ExampleSample,
-    ExampleGrap,
-    ExampleIopTree,
-    ExampleFidget,
-    Undo,
-    Redo,
-    OpenPaneLeft,
-    OpenPaneRight,
-    MovePaneUp,
-    MovePaneDown,
-    MovePaneLeft,
-    MovePaneRight,
-    Raw,
-    DebugGeometry,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -112,7 +76,7 @@ impl ShortcutKey {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Item {
-    pub selection: Selection,
+    pub command: Command,
     pub label: &'static str,
     pub shortcut: Option<Shortcut>,
     pub kind: Kind,
@@ -122,7 +86,6 @@ pub struct Item {
 pub enum Entry {
     Item(Item),
     Separator,
-    About,
 }
 
 pub struct Menu {
@@ -134,167 +97,149 @@ pub fn items(menus: &[Menu]) -> impl Iterator<Item = Item> + '_ {
     menus.iter().flat_map(|menu| {
         menu.entries.iter().filter_map(|entry| match entry {
             Entry::Item(item) => Some(*item),
-            Entry::Separator | Entry::About => None,
+            Entry::Separator => None,
         })
     })
 }
 
 const NEW: Item = Item {
-    selection: Selection::New,
+    command: Command::App(AppCommand::New),
     label: "New",
     shortcut: Some(Shortcut::plain(ShortcutKey::N)),
     kind: Kind::Command,
 };
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const OPEN: Item = Item {
-    selection: Selection::Open,
+    command: Command::App(AppCommand::Open),
     label: "Open…",
     shortcut: Some(Shortcut::plain(ShortcutKey::O)),
     kind: Kind::Command,
 };
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const SAVE: Item = Item {
-    selection: Selection::Save,
+    command: Command::Doc(DocCommand::Save),
     label: "Save",
     shortcut: Some(Shortcut::plain(ShortcutKey::S)),
     kind: Kind::Command,
 };
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const SAVE_AS: Item = Item {
-    selection: Selection::SaveAs,
+    command: Command::Doc(DocCommand::SaveAs),
     label: "Save As…",
     shortcut: Some(Shortcut::shifted(ShortcutKey::S)),
     kind: Kind::Command,
 };
+#[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
 const QUIT: Item = Item {
-    selection: Selection::Quit,
+    command: Command::App(AppCommand::Quit),
     label: "Quit",
     shortcut: Some(Shortcut::plain(ShortcutKey::Q)),
     kind: Kind::Command,
 };
 const EXAMPLE_SAMPLE: Item = Item {
-    selection: Selection::ExampleSample,
+    command: Command::App(AppCommand::Example(Example::Sample)),
     label: "Sample",
     shortcut: Some(Shortcut::plain(ShortcutKey::Digit1)),
     kind: Kind::Command,
 };
 const EXAMPLE_GRAP: Item = Item {
-    selection: Selection::ExampleGrap,
+    command: Command::App(AppCommand::Example(Example::Grap)),
     label: "Grap Demo",
     shortcut: Some(Shortcut::plain(ShortcutKey::Digit2)),
     kind: Kind::Command,
 };
 const EXAMPLE_IOP_TREE: Item = Item {
-    selection: Selection::ExampleIopTree,
+    command: Command::App(AppCommand::Example(Example::IopTree)),
     label: "Inventing on Principle Tree",
     shortcut: Some(Shortcut::plain(ShortcutKey::Digit3)),
     kind: Kind::Command,
 };
 const EXAMPLE_FIDGET: Item = Item {
-    selection: Selection::ExampleFidget,
+    command: Command::App(AppCommand::Example(Example::Fidget)),
     label: "Fidget",
     shortcut: Some(Shortcut::plain(ShortcutKey::Digit4)),
     kind: Kind::Command,
 };
 const UNDO: Item = Item {
-    selection: Selection::Undo,
+    command: Command::Doc(DocCommand::Undo),
     label: "Undo",
     shortcut: Some(Shortcut::plain(ShortcutKey::Z)),
     kind: Kind::Command,
 };
 const REDO: Item = Item {
-    selection: Selection::Redo,
+    command: Command::Doc(DocCommand::Redo),
     label: "Redo",
     shortcut: Some(Shortcut::shifted(ShortcutKey::Z)),
     kind: Kind::Command,
 };
 const OPEN_PANE_LEFT: Item = Item {
-    selection: Selection::OpenPaneLeft,
+    command: Command::Doc(DocCommand::OpenPaneLeft),
     label: "Open Cell on Left",
     shortcut: Some(Shortcut::plain(ShortcutKey::P)),
     kind: Kind::Command,
 };
 const OPEN_PANE_RIGHT: Item = Item {
-    selection: Selection::OpenPaneRight,
+    command: Command::Doc(DocCommand::OpenPaneRight),
     label: "Open Cell on Right",
     shortcut: Some(Shortcut::shifted(ShortcutKey::P)),
     kind: Kind::Command,
 };
 const MOVE_PANE_UP: Item = Item {
-    selection: Selection::MovePaneUp,
+    command: Command::Doc(DocCommand::MovePaneUp),
     label: "Move Pane Up",
     shortcut: None,
     kind: Kind::Command,
 };
 const MOVE_PANE_DOWN: Item = Item {
-    selection: Selection::MovePaneDown,
+    command: Command::Doc(DocCommand::MovePaneDown),
     label: "Move Pane Down",
     shortcut: None,
     kind: Kind::Command,
 };
 const MOVE_PANE_LEFT: Item = Item {
-    selection: Selection::MovePaneLeft,
+    command: Command::Doc(DocCommand::MovePaneLeft),
     label: "Move Pane Left",
     shortcut: None,
     kind: Kind::Command,
 };
 const MOVE_PANE_RIGHT: Item = Item {
-    selection: Selection::MovePaneRight,
+    command: Command::Doc(DocCommand::MovePaneRight),
     label: "Move Pane Right",
     shortcut: None,
     kind: Kind::Command,
 };
 const RAW: Item = Item {
-    selection: Selection::Raw,
+    command: Command::Doc(DocCommand::Raw),
     label: "Raw",
     shortcut: Some(Shortcut::plain(ShortcutKey::R)),
     kind: Kind::Check,
 };
 const DEBUG_GEOMETRY: Item = Item {
-    selection: Selection::DebugGeometry,
+    command: Command::Doc(DocCommand::DebugGeometry),
     label: "Debug Geometry",
     shortcut: Some(Shortcut::plain(ShortcutKey::D)),
     kind: Kind::Check,
 };
-pub fn definition(platform: Platform) -> Vec<Menu> {
-    let quit = Item {
-        label: if platform == Platform::MacOs {
-            "Quit Progred"
-        } else {
-            QUIT.label
-        },
-        ..QUIT
-    };
+pub fn definition() -> Vec<Menu> {
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     let file_entries = vec![Entry::Item(NEW)];
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let mut file_entries = vec![Entry::Item(NEW)];
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    file_entries.extend([
+    let file_entries = vec![
+        Entry::Item(NEW),
         Entry::Item(OPEN),
         Entry::Separator,
         Entry::Item(SAVE),
         Entry::Item(SAVE_AS),
-    ]);
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    file_entries.extend(
-        (platform == Platform::Drawn)
-            .then_some([Entry::Separator, Entry::Item(quit)])
-            .into_iter()
-            .flatten(),
-    );
+        Entry::Separator,
+        Entry::Item(QUIT),
+    ];
     let file = Menu {
         label: "File",
         entries: file_entries,
     };
-    (platform == Platform::MacOs)
-        .then(|| Menu {
-            label: "Progred",
-            entries: vec![Entry::About, Entry::Separator, Entry::Item(quit)],
-        })
+    [file]
         .into_iter()
         .chain([
-            file,
             Menu {
                 label: "Examples",
                 entries: vec![
@@ -330,7 +275,7 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hover {
     Heading(usize),
-    Item(Selection),
+    Item(Command),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -356,71 +301,27 @@ impl State {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Availability {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub save: bool,
-    pub undo: bool,
-    pub redo: bool,
-    pub open_pane: bool,
-    pub move_up: bool,
-    pub move_down: bool,
-    pub move_left: bool,
-    pub move_right: bool,
-}
-
-impl Availability {
-    /// Nothing document-scoped can act — the windowless menu bar.
-    #[cfg(target_os = "macos")]
-    pub fn disabled() -> Self {
-        Self {
-            save: false,
-            undo: false,
-            redo: false,
-            open_pane: false,
-            move_up: false,
-            move_down: false,
-            move_left: false,
-            move_right: false,
-        }
-    }
-
-    pub fn enabled(self, selection: Selection) -> bool {
-        match selection {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Selection::Save => self.save,
-            Selection::Undo => self.undo,
-            Selection::Redo => self.redo,
-            Selection::OpenPaneLeft | Selection::OpenPaneRight => self.open_pane,
-            Selection::MovePaneUp => self.move_up,
-            Selection::MovePaneDown => self.move_down,
-            Selection::MovePaneLeft => self.move_left,
-            Selection::MovePaneRight => self.move_right,
-            _ => true,
-        }
-    }
-}
-
-pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
+pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
     let modifiers = &event.modifiers;
     if !event.state.is_down() || !modifiers.ctrl() || modifiers.meta() || modifiers.alt() {
         return None;
     }
     match &event.key {
-        Key::Character(key) => items(&definition(Platform::Drawn))
+        Key::Character(key) => items(&definition())
             .find(|item| {
                 item.shortcut.is_some_and(|shortcut| {
                     shortcut.shift == modifiers.shift()
                         && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
                 })
             })
-            .map(|item| item.selection),
+            .map(|item| item.command),
         _ => None,
     }
 }
 
 mod view {
-    use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
+    use super::{Entry, Hover, Item, Kind, State, definition};
+    use crate::command::{Availability, Command, DocCommand};
     use crate::frame::Hovered;
     use crate::placed::{self, Placed};
     use kurbo::{Affine, Insets, Rect, Stroke};
@@ -435,7 +336,7 @@ mod view {
 
     pub struct Hooks<C> {
         pub toggle: Rc<dyn Fn(&mut C, usize)>,
-        pub select: Rc<dyn Fn(&mut C, Selection)>,
+        pub select: Rc<dyn Fn(&mut C, Command)>,
     }
 
     pub struct Description {
@@ -554,9 +455,9 @@ mod view {
         enabled: bool,
         scale: f64,
         width: f64,
-        select: Rc<dyn Fn(&mut C, Selection)>,
+        select: Rc<dyn Fn(&mut C, Command)>,
     ) -> Measured<Placed<C, Cv>> {
-        let selection = item.selection;
+        let command = item.command;
         let style = if enabled {
             &styles.text
         } else {
@@ -590,7 +491,7 @@ mod view {
             p.ink(move |cv: &mut Cv, ink| {
                 let hovered = matches!(
                     ink.hovered,
-                    Some(Hovered::Menu(Hover::Item(s))) if *s == selection
+                    Some(Hovered::Menu(Hover::Item(c))) if *c == command
                 );
                 if enabled && hovered {
                     cv.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
@@ -598,8 +499,8 @@ mod view {
             });
         });
         if enabled {
-            activatable(Hover::Item(selection), content, move |app| {
-                select(app, selection);
+            activatable(Hover::Item(command), content, move |app| {
+                select(app, command);
                 true
             })
         } else {
@@ -612,7 +513,7 @@ mod view {
         styles: &Styles,
         description: &Description,
         menu_entries: &[Entry],
-        select: Rc<dyn Fn(&mut C, Selection)>,
+        select: Rc<dyn Fn(&mut C, Command)>,
     ) -> Measured<Placed<C, Cv>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
@@ -626,17 +527,16 @@ mod view {
                     styles,
                     menu_item,
                     menu_item.kind == Kind::Check
-                        && match menu_item.selection {
-                            Selection::Raw => description.raw,
-                            Selection::DebugGeometry => description.debug_geometry,
+                        && match menu_item.command {
+                            Command::Doc(DocCommand::Raw) => description.raw,
+                            Command::Doc(DocCommand::DebugGeometry) => description.debug_geometry,
                             _ => false,
                         },
-                    description.availability.enabled(menu_item.selection),
+                    description.availability.enabled(menu_item.command),
                     description.scale,
                     width,
                     select.clone(),
                 ),
-                Entry::About => unreachable!("About is only in the macOS application menu"),
             })
             .collect();
         placed::before(
@@ -665,7 +565,7 @@ mod view {
         hooks: Hooks<C>,
     ) -> View<Placed<C, Cv>> {
         let styles = styles();
-        let definition = definition(Platform::Drawn);
+        let definition = definition();
         let mut x = 0.0;
         let mut popup_x = 0.0;
         let headings = definition
@@ -749,14 +649,14 @@ mod tests {
     }
 
     #[test]
-    fn shortcuts_are_linux_application_commands() {
+    fn shortcuts_are_drawn_application_commands() {
         assert_eq!(
             shortcut(&key("s", Modifiers::CONTROL)),
-            Some(Selection::Save)
+            Some(Command::Doc(DocCommand::Save))
         );
         assert_eq!(
             shortcut(&key("S", Modifiers::CONTROL | Modifiers::SHIFT)),
-            Some(Selection::SaveAs)
+            Some(Command::Doc(DocCommand::SaveAs))
         );
         assert_eq!(shortcut(&key("s", Modifiers::META)), None);
         assert_eq!(
@@ -767,22 +667,17 @@ mod tests {
 
     #[test]
     fn number_shortcuts_open_examples_in_menu_order() {
-        assert_eq!(
-            shortcut(&key("1", Modifiers::CONTROL)),
-            Some(Selection::ExampleSample)
-        );
-        assert_eq!(
-            shortcut(&key("2", Modifiers::CONTROL)),
-            Some(Selection::ExampleGrap)
-        );
-        assert_eq!(
-            shortcut(&key("3", Modifiers::CONTROL)),
-            Some(Selection::ExampleIopTree)
-        );
-        assert_eq!(
-            shortcut(&key("4", Modifiers::CONTROL)),
-            Some(Selection::ExampleFidget)
-        );
+        for (digit, example) in [
+            ("1", Example::Sample),
+            ("2", Example::Grap),
+            ("3", Example::IopTree),
+            ("4", Example::Fidget),
+        ] {
+            assert_eq!(
+                shortcut(&key(digit, Modifiers::CONTROL)),
+                Some(Command::App(AppCommand::Example(example)))
+            );
+        }
     }
 
     #[test]
@@ -809,46 +704,28 @@ mod tests {
     }
 
     #[test]
-    fn the_shared_tree_lists_every_selection_once() {
-        for platform in [Platform::Drawn, Platform::MacOs] {
-            let definition = definition(platform);
-            let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 19);
-            for (index, item) in items.iter().enumerate() {
-                assert!(
-                    items[index + 1..]
-                        .iter()
-                        .all(|other| item.selection != other.selection)
-                );
-            }
+    fn the_drawn_tree_lists_every_command_once() {
+        let definition = definition();
+        let items = items(&definition).collect::<Vec<_>>();
+        assert_eq!(items.len(), 19);
+        for (index, item) in items.iter().enumerate() {
+            assert!(
+                items[index + 1..]
+                    .iter()
+                    .all(|other| item.command != other.command)
+            );
         }
     }
 
     #[test]
-    fn platform_trees_place_quit_where_each_platform_expects_it() {
-        let macos = definition(Platform::MacOs);
+    fn the_file_menu_carries_the_application_lifecycle() {
+        let definition = definition();
         assert_eq!(
-            macos.iter().map(|menu| menu.label).collect::<Vec<_>>(),
-            vec!["Progred", "File", "Examples", "Edit", "View"]
-        );
-        assert_eq!(
-            macos[0].entries,
-            vec![
-                Entry::About,
-                Entry::Separator,
-                Entry::Item(Item {
-                    label: "Quit Progred",
-                    ..QUIT
-                }),
-            ]
-        );
-        let linux = definition(Platform::Drawn);
-        assert_eq!(
-            linux.iter().map(|menu| menu.label).collect::<Vec<_>>(),
+            definition.iter().map(|menu| menu.label).collect::<Vec<_>>(),
             vec!["File", "Examples", "Edit", "View"]
         );
         assert_eq!(
-            linux[0].entries,
+            definition[0].entries,
             vec![
                 Entry::Item(NEW),
                 Entry::Item(OPEN),
@@ -862,8 +739,8 @@ mod tests {
     }
 
     #[test]
-    fn shared_shortcuts_are_unique() {
-        let definition = definition(Platform::Drawn);
+    fn drawn_shortcuts_are_unique() {
+        let definition = definition();
         let items = items(&definition).collect::<Vec<_>>();
         for (index, item) in items.iter().enumerate() {
             if let Some(shortcut) = item.shortcut {

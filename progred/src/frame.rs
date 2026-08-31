@@ -325,11 +325,12 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 }
 
 pub(crate) struct FrameDescription<'a> {
+    drawn_menu: bool,
     model: &'a Model,
     stack: &'a stack::Stack<Editor>,
     view: ViewFlags,
     menu: menu::State,
-    availability: menu::Availability,
+    availability: crate::command::Availability,
     scale: f64,
     viewport: Size,
     scrub: Option<ScrubPresentation>,
@@ -501,6 +502,7 @@ impl Editor {
         let debug_geometry = view.debug_geometry;
         let availability = self.menu_availability();
         let description = FrameDescription {
+            drawn_menu: self.drawn_menu,
             model: &self.model,
             stack: &self.stack,
             view,
@@ -977,6 +979,7 @@ fn project_workspace(
 
 fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) -> AppView {
     let FrameDescription {
+        drawn_menu,
         model,
         stack,
         view: flags,
@@ -1004,7 +1007,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         cache: text_cache,
     };
     let styles = crate::styles::editor(scale);
-    let application_menu = menu::DRAWN.then(|| {
+    let application_menu = drawn_menu.then(|| {
         menu::view(
             &mut tcx,
             menu::Description {
@@ -1029,7 +1032,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         Some(menu) => (Some(menu.bar), menu.popup, menu.heading_width),
         None => (None, None, 0.0),
     };
-    let content_viewport = content_viewport(viewport, scale);
+    let content_viewport = content_viewport(drawn_menu, viewport, scale);
     let sources = sources::Sources {
         doc: &model.doc,
         library: &stack.library,

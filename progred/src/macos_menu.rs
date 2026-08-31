@@ -1,3 +1,7 @@
+//! The native macOS menu system: one application-wide menu bar built
+//! with muda, emitting [`command::Command`]s routed to the focused
+//! window. Fully separate from the drawn in-window menu system.
+
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{
     CheckMenuItem, IsMenuItem, Menu as MudaMenu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
@@ -6,14 +10,160 @@ use muda::{
 use winit::event_loop::EventLoopProxy;
 
 use crate::UserEvent;
-use crate::menu::{self, Entry, Item, Kind, Platform, Selection, ShortcutKey};
+use crate::command::{AppCommand, Availability, Command, DocCommand, Example};
 use crate::model::ViewFlags;
 
 pub struct Event(MenuEvent);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Command,
+    Check,
+}
+
+#[derive(Clone, Copy)]
+struct Item {
+    command: Command,
+    label: &'static str,
+    accelerator: Option<(Code, bool)>,
+    kind: Kind,
+}
+
+impl Item {
+    const fn command(command: Command, label: &'static str, code: Code) -> Self {
+        Self {
+            command,
+            label,
+            accelerator: Some((code, false)),
+            kind: Kind::Command,
+        }
+    }
+
+    const fn shifted(command: Command, label: &'static str, code: Code) -> Self {
+        Self {
+            command,
+            label,
+            accelerator: Some((code, true)),
+            kind: Kind::Command,
+        }
+    }
+
+    const fn plain(command: Command, label: &'static str) -> Self {
+        Self {
+            command,
+            label,
+            accelerator: None,
+            kind: Kind::Command,
+        }
+    }
+
+    const fn check(command: Command, label: &'static str, code: Code) -> Self {
+        Self {
+            command,
+            label,
+            accelerator: Some((code, false)),
+            kind: Kind::Check,
+        }
+    }
+}
+
+enum Entry {
+    Item(Item),
+    Separator,
+    About,
+}
+
+struct Section {
+    label: &'static str,
+    entries: Vec<Entry>,
+}
+
+fn definition() -> Vec<Section> {
+    use {AppCommand as A, Command as C, DocCommand as D};
+    vec![
+        Section {
+            label: "Progred",
+            entries: vec![
+                Entry::About,
+                Entry::Separator,
+                Entry::Item(Item::command(C::App(A::Quit), "Quit Progred", Code::KeyQ)),
+            ],
+        },
+        Section {
+            label: "File",
+            entries: vec![
+                Entry::Item(Item::command(C::App(A::New), "New", Code::KeyN)),
+                Entry::Item(Item::command(C::App(A::Open), "Open…", Code::KeyO)),
+                Entry::Separator,
+                Entry::Item(Item::command(C::Doc(D::Save), "Save", Code::KeyS)),
+                Entry::Item(Item::shifted(C::Doc(D::SaveAs), "Save As…", Code::KeyS)),
+            ],
+        },
+        Section {
+            label: "Examples",
+            entries: vec![
+                Entry::Item(Item::command(
+                    C::App(A::Example(Example::Sample)),
+                    "Sample",
+                    Code::Digit1,
+                )),
+                Entry::Item(Item::command(
+                    C::App(A::Example(Example::Grap)),
+                    "Grap Demo",
+                    Code::Digit2,
+                )),
+                Entry::Item(Item::command(
+                    C::App(A::Example(Example::IopTree)),
+                    "Inventing on Principle Tree",
+                    Code::Digit3,
+                )),
+                Entry::Item(Item::command(
+                    C::App(A::Example(Example::Fidget)),
+                    "Fidget",
+                    Code::Digit4,
+                )),
+            ],
+        },
+        Section {
+            label: "Edit",
+            entries: vec![
+                Entry::Item(Item::command(C::Doc(D::Undo), "Undo", Code::KeyZ)),
+                Entry::Item(Item::shifted(C::Doc(D::Redo), "Redo", Code::KeyZ)),
+            ],
+        },
+        Section {
+            label: "View",
+            entries: vec![
+                Entry::Item(Item::command(
+                    C::Doc(D::OpenPaneLeft),
+                    "Open Cell on Left",
+                    Code::KeyP,
+                )),
+                Entry::Item(Item::shifted(
+                    C::Doc(D::OpenPaneRight),
+                    "Open Cell on Right",
+                    Code::KeyP,
+                )),
+                Entry::Separator,
+                Entry::Item(Item::plain(C::Doc(D::MovePaneUp), "Move Pane Up")),
+                Entry::Item(Item::plain(C::Doc(D::MovePaneDown), "Move Pane Down")),
+                Entry::Item(Item::plain(C::Doc(D::MovePaneLeft), "Move Pane Left")),
+                Entry::Item(Item::plain(C::Doc(D::MovePaneRight), "Move Pane Right")),
+                Entry::Separator,
+                Entry::Item(Item::check(C::Doc(D::Raw), "Raw", Code::KeyR)),
+                Entry::Item(Item::check(
+                    C::Doc(D::DebugGeometry),
+                    "Debug Geometry",
+                    Code::KeyD,
+                )),
+            ],
+        },
+    ]
+}
+
 pub struct Menu {
     root: MudaMenu,
-    items: Vec<(Selection, NativeItem)>,
+    items: Vec<(Command, NativeItem)>,
 }
 
 enum NativeItem {
@@ -23,18 +173,19 @@ enum NativeItem {
 
 impl NativeItem {
     fn new(item: Item) -> Self {
+        let accelerator = item.accelerator.map(|(code, shift)| {
+            Accelerator::new(
+                Some(if shift {
+                    Modifiers::META | Modifiers::SHIFT
+                } else {
+                    Modifiers::META
+                }),
+                code,
+            )
+        });
         match item.kind {
-            Kind::Command => Self::Command(MenuItem::new(
-                item.label,
-                true,
-                item.shortcut.map(accelerator),
-            )),
-            Kind::Check => Self::Check(CheckMenuItem::new(
-                item.label,
-                true,
-                false,
-                item.shortcut.map(accelerator),
-            )),
+            Kind::Command => Self::Command(MenuItem::new(item.label, true, accelerator)),
+            Kind::Check => Self::Check(CheckMenuItem::new(item.label, true, false, accelerator)),
         }
     }
 
@@ -63,66 +214,30 @@ impl NativeItem {
     }
 }
 
-fn accelerator(shortcut: menu::Shortcut) -> Accelerator {
-    Accelerator::new(
-        Some(if shortcut.shift {
-            Modifiers::META | Modifiers::SHIFT
-        } else {
-            Modifiers::META
-        }),
-        match shortcut.key {
-            ShortcutKey::Digit1 => Code::Digit1,
-            ShortcutKey::Digit2 => Code::Digit2,
-            ShortcutKey::Digit3 => Code::Digit3,
-            ShortcutKey::Digit4 => Code::Digit4,
-            ShortcutKey::D => Code::KeyD,
-            ShortcutKey::N => Code::KeyN,
-            ShortcutKey::O => Code::KeyO,
-            ShortcutKey::P => Code::KeyP,
-            ShortcutKey::Q => Code::KeyQ,
-            ShortcutKey::R => Code::KeyR,
-            ShortcutKey::S => Code::KeyS,
-            ShortcutKey::Z => Code::KeyZ,
-        },
-    )
-}
-
-fn item(items: &[(Selection, NativeItem)], selection: Selection) -> &NativeItem {
-    &items
-        .iter()
-        .find(|(candidate, _)| *candidate == selection)
-        .expect("shared menu item")
-        .1
-}
-
-fn section_menu(menu: &menu::Menu, items: &[(Selection, NativeItem)]) -> Submenu {
-    let submenu = Submenu::new(menu.label, true);
-    for entry in &menu.entries {
-        match entry {
-            Entry::Item(selection) => submenu
-                .append(item(items, selection.selection).as_menu_item())
-                .expect("menu item"),
-            Entry::Separator => submenu
-                .append(&PredefinedMenuItem::separator())
-                .expect("menu separator"),
-            Entry::About => submenu
-                .append(&PredefinedMenuItem::about(None, None))
-                .expect("about item"),
-        }
-    }
-    submenu
-}
-
 impl Menu {
     pub fn new() -> Self {
-        let definition = menu::definition(Platform::MacOs);
-        let items = menu::items(&definition)
-            .map(|item| (item.selection, NativeItem::new(item)))
-            .collect::<Vec<_>>();
+        let mut items = Vec::new();
         let root = MudaMenu::new();
-        for menu in &definition {
-            root.append(&section_menu(menu, &items))
-                .expect("menu section");
+        for section in definition() {
+            let submenu = Submenu::new(section.label, true);
+            for entry in section.entries {
+                match entry {
+                    Entry::Item(item) => {
+                        let native = NativeItem::new(item);
+                        submenu
+                            .append(native.as_menu_item())
+                            .expect("native menu item");
+                        items.push((item.command, native));
+                    }
+                    Entry::Separator => submenu
+                        .append(&PredefinedMenuItem::separator())
+                        .expect("menu separator"),
+                    Entry::About => submenu
+                        .append(&PredefinedMenuItem::about(None, None))
+                        .expect("about item"),
+                }
+            }
+            root.append(&submenu).expect("menu section");
         }
         Self { root, items }
     }
@@ -131,19 +246,19 @@ impl Menu {
         self.root.init_for_nsapp();
     }
 
-    pub fn selection(&self, event: &Event) -> Option<Selection> {
+    pub fn command(&self, event: &Event) -> Option<Command> {
         self.items
             .iter()
             .find(|(_, item)| item.id() == event.0.id())
-            .map(|(selection, _)| *selection)
+            .map(|(command, _)| *command)
     }
 
-    pub fn sync(&self, availability: menu::Availability, view: ViewFlags, raw: bool) {
-        for (selection, item) in &self.items {
-            item.set_enabled(availability.enabled(*selection));
-            item.set_checked(match selection {
-                Selection::Raw => raw,
-                Selection::DebugGeometry => view.debug_geometry,
+    pub fn sync(&self, availability: Availability, view: ViewFlags, raw: bool) {
+        for (command, item) in &self.items {
+            item.set_enabled(availability.enabled(*command));
+            item.set_checked(match command {
+                Command::Doc(DocCommand::Raw) => raw,
+                Command::Doc(DocCommand::DebugGeometry) => view.debug_geometry,
                 _ => false,
             });
         }
