@@ -17,14 +17,14 @@ mod history;
 mod hover;
 mod identity;
 #[cfg(target_os = "macos")]
-mod macos_menu;
-#[cfg(target_os = "macos")]
 mod macos_surface;
 #[cfg(target_os = "macos")]
 mod macos_window;
 mod menu;
 mod model;
 mod modifiers;
+#[cfg(target_os = "macos")]
+mod native_menu;
 mod navigate;
 mod placed;
 mod platform;
@@ -86,7 +86,7 @@ use winit::window::{CursorIcon, Window, WindowId};
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
-    MacMenu(macos_menu::Event),
+    NativeMenu(native_menu::Event),
     Command(Command),
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Discard {
@@ -330,7 +330,7 @@ pub(crate) struct App {
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) fonts: FontContext,
     #[cfg(target_os = "macos")]
-    pub(crate) native_menu: macos_menu::Menu,
+    pub(crate) native_menu: native_menu::Menu,
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
@@ -600,7 +600,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
         match event {
             #[cfg(target_os = "macos")]
-            UserEvent::MacMenu(event) => {
+            UserEvent::NativeMenu(event) => {
                 if let Some(command) = self.native_menu.command(&event) {
                     self.run_command(event_loop, command);
                 }
@@ -1297,9 +1297,9 @@ pub fn run() {
     let event_loop = builder.build().expect("Couldn't create event loop");
     let proxy = event_loop.create_proxy();
     #[cfg(target_os = "macos")]
-    let native_menu = macos_menu::Menu::new();
+    let native_menu = native_menu::Menu::new();
     #[cfg(target_os = "macos")]
-    macos_menu::route_events(proxy.clone());
+    native_menu::route_events(proxy.clone());
 
     let stack = stack::load();
     let fonts = font_context();

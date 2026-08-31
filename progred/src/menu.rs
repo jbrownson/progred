@@ -1,6 +1,6 @@
 //! The Progred-drawn menu system: an in-window bar and popups, one
 //! per editor. It emits [`command::Command`]s; the native macOS menu
-//! is its own separate system in `macos_menu`.
+//! is its own separate system in `native_menu`.
 
 use crate::command::{AppCommand, Command, DocCommand, Example};
 use ui_events::keyboard::{Key, KeyboardEvent};

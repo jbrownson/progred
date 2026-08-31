@@ -1,6 +1,7 @@
-//! The native macOS menu system: one application-wide menu bar built
-//! with muda, emitting [`command::Command`]s routed to the focused
-//! window. Fully separate from the drawn in-window menu system.
+//! The native menu system: one application-wide menu bar built with
+//! muda, emitting [`command::Command`]s routed to the focused window.
+//! Fully separate from the drawn in-window menu system. Only enabled
+//! on macOS today, but muda itself also speaks Windows and GTK.
 
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{
@@ -267,6 +268,58 @@ impl Menu {
 
 pub fn route_events(proxy: EventLoopProxy<UserEvent>) {
     MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::MacMenu(Event(event)));
+        let _ = proxy.send_event(UserEvent::NativeMenu(Event(event)));
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn items(sections: &[Section]) -> Vec<Item> {
+        sections
+            .iter()
+            .flat_map(|section| {
+                section.entries.iter().filter_map(|entry| match entry {
+                    Entry::Item(item) => Some(*item),
+                    Entry::Separator | Entry::About => None,
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_native_tree_lists_every_command_once() {
+        let definition = definition();
+        assert_eq!(
+            definition
+                .iter()
+                .map(|section| section.label)
+                .collect::<Vec<_>>(),
+            vec!["Progred", "File", "Examples", "Edit", "View"]
+        );
+        let items = items(&definition);
+        assert_eq!(items.len(), 19);
+        for (index, item) in items.iter().enumerate() {
+            assert!(
+                items[index + 1..]
+                    .iter()
+                    .all(|other| item.command != other.command)
+            );
+        }
+    }
+
+    #[test]
+    fn native_accelerators_are_unique() {
+        let items = items(&definition());
+        for (index, item) in items.iter().enumerate() {
+            if let Some(accelerator) = item.accelerator {
+                assert!(
+                    items[index + 1..]
+                        .iter()
+                        .all(|other| other.accelerator != Some(accelerator))
+                );
+            }
+        }
+    }
 }
