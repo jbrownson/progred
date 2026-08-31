@@ -370,6 +370,21 @@ pub struct Availability {
 }
 
 impl Availability {
+    /// Nothing document-scoped can act — the windowless menu bar.
+    #[cfg(target_os = "macos")]
+    pub fn disabled() -> Self {
+        Self {
+            save: false,
+            undo: false,
+            redo: false,
+            open_pane: false,
+            move_up: false,
+            move_down: false,
+            move_left: false,
+            move_right: false,
+        }
+    }
+
     pub fn enabled(self, selection: Selection) -> bool {
         match selection {
             #[cfg(any(target_os = "macos", target_os = "linux"))]

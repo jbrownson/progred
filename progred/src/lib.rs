@@ -342,6 +342,10 @@ pub(crate) struct App {
     /// seeds new editors.
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) stack: stack::Stack<Editor>,
+    /// The font database master; editors hold cheap clones over the
+    /// same shared font data.
+    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    pub(crate) fonts: FontContext,
     #[cfg(target_os = "macos")]
     pub(crate) native_menu: macos_menu::Menu,
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
@@ -349,10 +353,18 @@ pub(crate) struct App {
     pub(crate) editors: Vec<Editor>,
     /// The window whose editor application-level commands target.
     pub(crate) focused: Option<WindowId>,
-    /// Quit closes windows front of the list first, one discard sheet
-    /// at a time; a declined sheet abandons the rest.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(crate) quitting: bool,
+    pub(crate) quit: QuitState,
+}
+
+/// Quit reviews windows one at a time, focused first, each through its
+/// discard sheet. Only declining a sheet the chain itself presented
+/// abandons the quit.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum QuitState {
+    Idle,
+    Draining { awaiting: Option<WindowId> },
 }
 
 /// One window editing one document: its own CellId universe, model,
@@ -608,8 +620,16 @@ impl ApplicationHandler<UserEvent> for App {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard { window, accepted } => {
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
-                if !accepted {
-                    self.quitting = false;
+                if self.quit
+                    == (QuitState::Draining {
+                        awaiting: Some(window),
+                    })
+                {
+                    self.quit = if accepted {
+                        QuitState::Draining { awaiting: None }
+                    } else {
+                        QuitState::Idle
+                    };
                 }
                 let Some(index) = self.editor_index(window) else {
                     return;
@@ -689,14 +709,9 @@ impl App {
         path: Option<PathBuf>,
         binders: gid_text::Binders,
     ) {
-        let font_cx = self
-            .editors
-            .first()
-            .map(|editor| editor.font_cx.clone())
-            .unwrap_or_else(font_context);
         self.editors.push(new_editor(
             self.stack.clone(),
-            font_cx,
+            self.fonts.clone(),
             doc,
             path,
             binders,
@@ -715,14 +730,20 @@ impl App {
             self.focused = None;
         }
         drop(closed);
-        if self.editors.is_empty() && !self.quitting && platform::QUITS_ON_LAST_CLOSE {
-            event_loop.exit();
+        if self.editors.is_empty() {
+            if platform::QUITS_ON_LAST_CLOSE && self.quit == QuitState::Idle {
+                event_loop.exit();
+            }
+            // The resident menu bar grays every document command.
+            #[cfg(target_os = "macos")]
+            self.native_menu
+                .sync(menu::Availability::disabled(), ViewFlags::default(), false);
         }
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn begin_quit(&mut self, event_loop: &ActiveEventLoop) {
-        self.quitting = true;
+        self.quit = QuitState::Draining { awaiting: None };
         self.advance_quit(event_loop);
     }
 
@@ -731,16 +752,23 @@ impl App {
     /// again. An empty list ends the process.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn advance_quit(&mut self, event_loop: &ActiveEventLoop) {
-        while self.quitting {
+        while self.quit == (QuitState::Draining { awaiting: None }) {
             if self.editors.is_empty() {
                 event_loop.exit();
                 return;
             }
-            if self.editors[0].model.history.dirty() {
-                self.request_discard(event_loop, 0, AfterDiscard::CloseWindow);
+            let index = self.focused_index().unwrap_or(0);
+            if self.editors[index].model.history.dirty() {
+                if let RenderState::Active { window, .. } = &self.editors[index].state {
+                    window.focus_window();
+                    self.quit = QuitState::Draining {
+                        awaiting: Some(window.id()),
+                    };
+                }
+                self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
                 return;
             }
-            self.close_editor(event_loop, 0);
+            self.close_editor(event_loop, index);
         }
     }
 
@@ -780,9 +808,21 @@ impl App {
                     .with_prevent_default(true)
             };
             let window = event_loop.create_window(attributes).unwrap();
-            // Frames restore by creation-order slot across sessions.
+            // A document's window remembers its frame by path;
+            // untitled windows fall back to creation-order slots.
             #[cfg(target_os = "macos")]
-            macos_window::autosave_frame(&window, &format!("window-{index}"));
+            {
+                let slot = match &editor.doc_path {
+                    Some(path) => {
+                        use std::hash::{Hash, Hasher};
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        path.hash(&mut hasher);
+                        format!("doc-{:016x}", hasher.finish())
+                    }
+                    None => format!("window-{index}"),
+                };
+                macos_window::autosave_frame(&window, &slot);
+            }
             Arc::new(window)
         });
 
@@ -1269,6 +1309,7 @@ pub fn run() {
     macos_menu::route_events(proxy.clone());
 
     let stack = stack::load();
+    let fonts = font_context();
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
         #[cfg(not(target_arch = "wasm32"))]
@@ -1276,20 +1317,14 @@ pub fn run() {
         #[cfg(not(target_arch = "wasm32"))]
         renderers: vec![],
         stack: stack.clone(),
+        fonts: fonts.clone(),
         #[cfg(target_os = "macos")]
         native_menu,
         proxy: proxy.clone(),
         focused: None,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        quitting: false,
-        editors: vec![new_editor(
-            stack,
-            font_context(),
-            doc,
-            doc_path,
-            binders,
-            proxy,
-        )],
+        quit: QuitState::Idle,
+        editors: vec![new_editor(stack, fonts, doc, doc_path, binders, proxy)],
     };
 
     #[cfg(not(target_arch = "wasm32"))]
