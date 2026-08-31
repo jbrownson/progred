@@ -340,6 +340,11 @@ pub(crate) struct App {
     pub(crate) focused: Option<WindowId>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) quit: QuitState,
+    /// Frame-autosave slots for untitled (and duplicate-path) windows
+    /// never repeat within a session, so no two windows claim one
+    /// AppKit autosave name.
+    #[cfg(target_os = "macos")]
+    pub(crate) next_window_slot: usize,
 }
 
 /// Quit reviews windows one at a time, focused first, each through its
@@ -762,6 +767,30 @@ impl App {
     }
 
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
+        // A document path names its window's autosave frame, but AppKit
+        // lets only one live window own a name: a second window on the
+        // same path takes a session-unique slot instead, as untitled
+        // windows always do.
+        #[cfg(target_os = "macos")]
+        let autosave = {
+            let path = &self.editors[index].doc_path;
+            let unique = path.is_some()
+                && self
+                    .editors
+                    .iter()
+                    .enumerate()
+                    .all(|(other, editor)| other == index || &editor.doc_path != path);
+            if unique {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                path.hash(&mut hasher);
+                format!("doc-{:016x}", hasher.finish())
+            } else {
+                let slot = self.next_window_slot;
+                self.next_window_slot += 1;
+                format!("window-{slot}")
+            }
+        };
         #[cfg(not(target_arch = "wasm32"))]
         let App {
             editors,
@@ -797,21 +826,8 @@ impl App {
                     .with_prevent_default(true)
             };
             let window = event_loop.create_window(attributes).unwrap();
-            // A document's window remembers its frame by path;
-            // untitled windows fall back to creation-order slots.
             #[cfg(target_os = "macos")]
-            {
-                let slot = match &editor.doc_path {
-                    Some(path) => {
-                        use std::hash::{Hash, Hasher};
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        path.hash(&mut hasher);
-                        format!("doc-{:016x}", hasher.finish())
-                    }
-                    None => format!("window-{index}"),
-                };
-                macos_window::autosave_frame(&window, &slot);
-            }
+            macos_window::autosave_frame(&window, &autosave);
             Arc::new(window)
         });
 
@@ -1318,6 +1334,8 @@ pub fn run() {
         focused: None,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         quit: QuitState::Idle,
+        #[cfg(target_os = "macos")]
+        next_window_slot: 0,
         editors: vec![new_editor(
             drawn_menu, stack, fonts, doc, doc_path, binders, proxy,
         )],
@@ -1712,19 +1730,9 @@ impl Editor {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
         }
-        // Execution only invalidates; the caller owns frame
-        // scheduling — the drawn dispatch through its disposition, the
-        // native path in `run_command`.
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        let visual = !matches!(command, DocCommand::Save | DocCommand::SaveAs);
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        let visual = true;
-        if visual {
-            self.pending_paint = None;
-            if let RenderState::Active { window, .. } = &self.state {
-                window.request_redraw();
-            }
-        }
+        // Execution only mutates; the caller owns frame scheduling —
+        // the drawn dispatch through its disposition, the native path
+        // in `run_command`.
     }
 
     pub(crate) fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
