@@ -46,6 +46,7 @@ pub fn definition() -> Vec<Menu> {
         Entry::Command(C::App(A::New)),
         Entry::Command(C::App(A::Open)),
         Entry::Separator,
+        Entry::Command(C::App(A::Close)),
         Entry::Command(C::Doc(D::Save)),
         Entry::Command(C::Doc(D::SaveAs)),
         Entry::Separator,
@@ -99,6 +100,9 @@ pub enum Hover {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct State {
     open: Option<usize>,
+    /// Keyboard cursor: position among the open menu's command
+    /// entries.
+    cursor: Option<usize>,
 }
 
 impl State {
@@ -106,16 +110,105 @@ impl State {
         self.open
     }
 
+    pub fn cursor(&self) -> Option<usize> {
+        self.cursor
+    }
+
     pub fn toggle(&mut self, menu: usize) {
         self.open = (self.open != Some(menu)).then_some(menu);
+        self.cursor = None;
     }
 
     pub fn close(&mut self) -> bool {
+        self.cursor = None;
         self.open.take().is_some()
     }
 
     pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
         self.open.is_some() && event.state.is_down()
+    }
+}
+
+pub enum Navigation {
+    Pass,
+    Handled,
+    Activate(Command),
+}
+
+/// Keyboard navigation inside an open drawn menu: vertical arrows walk
+/// the enabled items, horizontal arrows switch menus, Enter or Space
+/// activates the cursored item. Escape remains the caller's close.
+pub fn navigate(
+    state: &mut State,
+    menus: &[Menu],
+    availability: command::Availability,
+    event: &KeyboardEvent,
+) -> Navigation {
+    use ui_events::keyboard::NamedKey;
+    let Some(open) = state.open else {
+        return Navigation::Pass;
+    };
+    if !event.state.is_down() {
+        return Navigation::Pass;
+    }
+    let items = menus
+        .get(open)
+        .map(|menu| {
+            menu.entries
+                .iter()
+                .filter_map(|entry| match entry {
+                    Entry::Command(command) => Some((*command, availability.enabled(*command))),
+                    Entry::Separator => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let step = |from: Option<usize>, delta: isize| -> Option<usize> {
+        if items.iter().all(|(_, enabled)| !enabled) {
+            return None;
+        }
+        let len = items.len() as isize;
+        let mut at = match from {
+            Some(at) => at as isize + delta,
+            None if delta > 0 => 0,
+            None => len - 1,
+        };
+        loop {
+            at = at.rem_euclid(len);
+            if items[at as usize].1 {
+                return Some(at as usize);
+            }
+            at += delta;
+        }
+    };
+    match &event.key {
+        Key::Named(NamedKey::ArrowDown) => {
+            state.cursor = step(state.cursor, 1);
+            Navigation::Handled
+        }
+        Key::Named(NamedKey::ArrowUp) => {
+            state.cursor = step(state.cursor, -1);
+            Navigation::Handled
+        }
+        Key::Named(NamedKey::ArrowLeft) if !menus.is_empty() => {
+            state.open = Some((open + menus.len() - 1) % menus.len());
+            state.cursor = None;
+            Navigation::Handled
+        }
+        Key::Named(NamedKey::ArrowRight) if !menus.is_empty() => {
+            state.open = Some((open + 1) % menus.len());
+            state.cursor = None;
+            Navigation::Handled
+        }
+        Key::Named(NamedKey::Enter) => match state.cursor.and_then(|at| items.get(at)) {
+            Some((command, true)) => Navigation::Activate(*command),
+            _ => Navigation::Handled,
+        },
+        Key::Character(c) if c.as_str() == " " => match state.cursor.and_then(|at| items.get(at)) {
+            Some((command, true)) => Navigation::Activate(*command),
+            _ => Navigation::Handled,
+        },
+        _ => Navigation::Pass,
     }
 }
 
@@ -269,6 +362,7 @@ mod view {
         spec: Spec,
         checked: bool,
         enabled: bool,
+        cursored: bool,
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Command)>,
@@ -305,7 +399,7 @@ mod view {
                     ink.hovered,
                     Some(Hovered::Menu(Hover::Item(c))) if *c == command
                 );
-                if enabled && hovered {
+                if enabled && (hovered || cursored) {
                     cv.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
                 }
             });
@@ -329,6 +423,7 @@ mod view {
     ) -> Measured<Placed<C, Cv>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
+        let mut command_index = 0;
         let entries = menu_entries
             .iter()
             .copied()
@@ -336,6 +431,8 @@ mod view {
                 Entry::Separator => separator(description.scale, width),
                 Entry::Command(command) => {
                     let spec = spec(command);
+                    let cursored = description.state.cursor() == Some(command_index);
+                    command_index += 1;
                     item(
                         tcx,
                         styles,
@@ -343,6 +440,7 @@ mod view {
                         spec,
                         spec.toggle && description.toggles.checked(command),
                         description.availability.enabled(command),
+                        cursored,
                         description.scale,
                         width,
                         select.clone(),
@@ -448,7 +546,7 @@ pub use view::{Description, Hooks, bar_height, view};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ui_events::keyboard::{KeyState, Modifiers};
+    use ui_events::keyboard::{KeyState, Modifiers, NamedKey};
 
     fn key(key: &str, modifiers: Modifiers) -> KeyboardEvent {
         KeyboardEvent {
@@ -491,6 +589,104 @@ mod tests {
         }
     }
 
+    fn named(key: NamedKey) -> KeyboardEvent {
+        KeyboardEvent {
+            key: Key::Named(key),
+            state: KeyState::Down,
+            ..Default::default()
+        }
+    }
+
+    fn all_enabled() -> crate::command::Availability {
+        crate::command::Availability {
+            save: true,
+            undo: true,
+            redo: true,
+            open_pane: true,
+            move_up: true,
+            move_down: true,
+            move_left: true,
+            move_right: true,
+        }
+    }
+
+    #[test]
+    fn arrows_walk_enabled_items_and_wrap() {
+        let menus = definition();
+        let mut availability = all_enabled();
+        availability.undo = false;
+        // Edit is [Undo, Redo]; with Undo disabled the cursor lands on
+        // Redo from either direction and wraps in place.
+        let mut state = State::default();
+        let edit = menus
+            .iter()
+            .position(|menu| menu.label == "Edit")
+            .expect("edit menu");
+        state.toggle(edit);
+        assert!(matches!(
+            navigate(
+                &mut state,
+                &menus,
+                availability,
+                &named(NamedKey::ArrowDown)
+            ),
+            Navigation::Handled
+        ));
+        assert_eq!(state.cursor(), Some(1));
+        assert!(matches!(
+            navigate(
+                &mut state,
+                &menus,
+                availability,
+                &named(NamedKey::ArrowDown)
+            ),
+            Navigation::Handled
+        ));
+        assert_eq!(state.cursor(), Some(1));
+        assert!(matches!(
+            navigate(&mut state, &menus, availability, &named(NamedKey::Enter)),
+            Navigation::Activate(Command::Doc(DocCommand::Redo))
+        ));
+    }
+
+    #[test]
+    fn horizontal_arrows_switch_menus_and_reset_the_cursor() {
+        let menus = definition();
+        let mut state = State::default();
+        state.toggle(0);
+        assert!(matches!(
+            navigate(
+                &mut state,
+                &menus,
+                all_enabled(),
+                &named(NamedKey::ArrowDown)
+            ),
+            Navigation::Handled
+        ));
+        assert!(state.cursor().is_some());
+        assert!(matches!(
+            navigate(
+                &mut state,
+                &menus,
+                all_enabled(),
+                &named(NamedKey::ArrowRight)
+            ),
+            Navigation::Handled
+        ));
+        assert_eq!(state.open(), Some(1));
+        assert_eq!(state.cursor(), None);
+        assert!(matches!(
+            navigate(
+                &mut state,
+                &menus,
+                all_enabled(),
+                &named(NamedKey::ArrowLeft)
+            ),
+            Navigation::Handled
+        ));
+        assert_eq!(state.open(), Some(0));
+    }
+
     #[test]
     fn menu_sections_toggle_and_switch() {
         let mut state = State::default();
@@ -518,7 +714,7 @@ mod tests {
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition();
         let commands = commands(&definition).collect::<Vec<_>>();
-        assert_eq!(commands.len(), 19);
+        assert_eq!(commands.len(), 20);
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }
@@ -537,6 +733,7 @@ mod tests {
                 Entry::Command(Command::App(AppCommand::New)),
                 Entry::Command(Command::App(AppCommand::Open)),
                 Entry::Separator,
+                Entry::Command(Command::App(AppCommand::Close)),
                 Entry::Command(Command::Doc(DocCommand::Save)),
                 Entry::Command(Command::Doc(DocCommand::SaveAs)),
                 Entry::Separator,

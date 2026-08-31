@@ -1741,22 +1741,29 @@ impl Editor {
         if !self.drawn_menu {
             return false;
         }
-        let open = self.menu.open().is_some();
-        if open
-            && event.state.is_down()
-            && modifiers::plain(&event.modifiers)
-            && matches!(event.key, Key::Named(NamedKey::Escape))
-        {
-            self.menu.close()
-        } else {
-            menu::shortcut(event)
-                .filter(|command| self.menu_availability().enabled(*command))
-                .is_some_and(|command| {
+        if self.menu.open().is_some() {
+            if event.state.is_down()
+                && modifiers::plain(&event.modifiers)
+                && matches!(event.key, Key::Named(NamedKey::Escape))
+            {
+                return self.menu.close();
+            }
+            let availability = self.menu_availability();
+            return match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
+                menu::Navigation::Activate(command) => {
                     self.choose_menu(command);
                     true
-                })
-                || self.menu.captures_key(event)
+                }
+                menu::Navigation::Handled => true,
+                menu::Navigation::Pass => self.menu.captures_key(event),
+            };
         }
+        menu::shortcut(event)
+            .filter(|command| self.menu_availability().enabled(*command))
+            .is_some_and(|command| {
+                self.choose_menu(command);
+                true
+            })
     }
 
     /// Undo or redo one step, restoring the snapshot's document and
@@ -1936,6 +1943,11 @@ impl App {
                             eprintln!("failed to open {}: {error}", path.display());
                         }
                     }
+                }
+            }
+            AppCommand::Close => {
+                if let Some(index) = self.focused_index() {
+                    self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
                 }
             }
             AppCommand::Quit => self.begin_quit(event_loop),

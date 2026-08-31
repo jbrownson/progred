@@ -48,6 +48,7 @@ fn definition() -> Vec<Section> {
                 Entry::Command(C::App(A::New)),
                 Entry::Command(C::App(A::Open)),
                 Entry::Separator,
+                Entry::Command(C::App(A::Close)),
                 Entry::Command(C::Doc(D::Save)),
                 Entry::Command(C::Doc(D::SaveAs)),
             ],
@@ -107,6 +108,7 @@ fn accelerator(shortcut: command::Shortcut) -> Accelerator {
             ShortcutKey::Q => Code::KeyQ,
             ShortcutKey::R => Code::KeyR,
             ShortcutKey::S => Code::KeyS,
+            ShortcutKey::W => Code::KeyW,
             ShortcutKey::Z => Code::KeyZ,
         },
     )
@@ -209,6 +211,7 @@ impl Menu {
     pub fn sync(&self, doc: Option<(Availability, Toggles)>) {
         for (command, item) in &self.items {
             item.set_enabled(match command {
+                Command::App(AppCommand::Close) => doc.is_some(),
                 Command::App(_) => true,
                 Command::Doc(command) => {
                     doc.is_some_and(|(availability, _)| availability.doc_enabled(*command))
@@ -252,7 +255,7 @@ mod tests {
             vec!["Progred", "File", "Examples", "Edit", "View"]
         );
         let commands = commands(&definition);
-        assert_eq!(commands.len(), 19);
+        assert_eq!(commands.len(), 20);
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }

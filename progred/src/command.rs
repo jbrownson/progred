@@ -9,6 +9,9 @@ pub enum AppCommand {
     New,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Open,
+    /// Close the focused window.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    Close,
     Quit,
     Example(Example),
 }
@@ -91,6 +94,8 @@ pub enum ShortcutKey {
     R,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     S,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    W,
     Z,
 }
 
@@ -110,6 +115,8 @@ impl ShortcutKey {
             Self::R => "R",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::S => "S",
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Self::W => "W",
             Self::Z => "Z",
         }
     }
@@ -140,6 +147,8 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::New) => item("New", Some(Shortcut::plain(ShortcutKey::N))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Open) => item("Open…", Some(Shortcut::plain(ShortcutKey::O))),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Command::App(AppCommand::Close) => item("Close", Some(Shortcut::plain(ShortcutKey::W))),
         Command::App(AppCommand::Quit) => item("Quit", Some(Shortcut::plain(ShortcutKey::Q))),
         Command::App(AppCommand::Example(Example::Sample)) => {
             item("Sample", Some(Shortcut::plain(ShortcutKey::Digit1)))
