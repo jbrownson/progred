@@ -726,11 +726,7 @@ impl App {
             }
             // The resident menu bar grays every document command.
             #[cfg(target_os = "macos")]
-            self.native_menu.sync(
-                command::Availability::disabled(),
-                ViewFlags::default(),
-                false,
-            );
+            self.native_menu.sync(None);
         }
     }
 
@@ -1593,6 +1589,23 @@ impl Editor {
         }
     }
 
+    pub(crate) fn menu_toggles(&self) -> command::Toggles {
+        command::Toggles {
+            raw: self
+                .model
+                .workspace
+                .selected_or_document(
+                    self.model
+                        .selection
+                        .as_ref()
+                        .map(selection::Selection::root),
+                )
+                .projection
+                == workspace::Projection::Raw,
+            debug_geometry: self.model.view.debug_geometry,
+        }
+    }
+
     pub(crate) fn menu_availability(&self) -> command::Availability {
         let selected_root = self
             .model
@@ -1699,17 +1712,14 @@ impl Editor {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
         }
-        if matches!(
-            command,
-            DocCommand::OpenPaneLeft
-                | DocCommand::OpenPaneRight
-                | DocCommand::MovePaneUp
-                | DocCommand::MovePaneDown
-                | DocCommand::MovePaneLeft
-                | DocCommand::MovePaneRight
-                | DocCommand::Raw
-                | DocCommand::DebugGeometry
-        ) {
+        // Execution only invalidates; the caller owns frame
+        // scheduling — the drawn dispatch through its disposition, the
+        // native path in `run_command`.
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let visual = !matches!(command, DocCommand::Save | DocCommand::SaveAs);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let visual = true;
+        if visual {
             self.pending_paint = None;
             if let RenderState::Active { window, .. } = &self.state {
                 window.request_redraw();
@@ -1764,17 +1774,6 @@ impl Editor {
             self.model.selection = restore
                 .map(|path| selection::Selection::edge(&self.sources(), path).with_root(root));
             self.refresh_title();
-            if let RenderState::Active { window, .. } = &self.state {
-                let window = window.clone();
-                let size = window.inner_size();
-                let scale = window.scale_factor();
-                self.retain_dispatch(
-                    scale,
-                    Size::new(size.width as f64, size.height as f64),
-                    true,
-                );
-                window.request_redraw();
-            }
         }
     }
 
@@ -1870,22 +1869,8 @@ impl App {
         #[cfg(target_os = "macos")]
         {
             let editor = &self.editors[index];
-            self.native_menu.sync(
-                editor.menu_availability(),
-                editor.model.view,
-                editor
-                    .model
-                    .workspace
-                    .selected_or_document(
-                        editor
-                            .model
-                            .selection
-                            .as_ref()
-                            .map(selection::Selection::root),
-                    )
-                    .projection
-                    == workspace::Projection::Raw,
-            );
+            self.native_menu
+                .sync(Some((editor.menu_availability(), editor.menu_toggles())));
         }
         #[cfg(not(target_os = "macos"))]
         let _ = index;
@@ -1900,7 +1885,20 @@ impl App {
             Command::App(command) => self.run_app_command(event_loop, command),
             Command::Doc(command) => {
                 if let Some(index) = self.focused_index() {
-                    self.editors[index].run_doc_command(command);
+                    let editor = &mut self.editors[index];
+                    editor.run_doc_command(command);
+                    // The native path's frame scheduling, mirroring
+                    // the drawn dispatch's handled-event remint.
+                    if let RenderState::Active { window, .. } = &editor.state {
+                        let window = window.clone();
+                        let size = window.inner_size();
+                        editor.retain_dispatch(
+                            window.scale_factor(),
+                            Size::new(size.width as f64, size.height as f64),
+                            true,
+                        );
+                        window.request_redraw();
+                    }
                 }
             }
         }

@@ -328,9 +328,9 @@ pub(crate) struct FrameDescription<'a> {
     drawn_menu: bool,
     model: &'a Model,
     stack: &'a stack::Stack<Editor>,
-    view: ViewFlags,
     menu: menu::State,
     availability: crate::command::Availability,
+    toggles: crate::command::Toggles,
     scale: f64,
     viewport: Size,
     scrub: Option<ScrubPresentation>,
@@ -503,9 +503,9 @@ impl Editor {
         let availability = self.menu_availability();
         let description = FrameDescription {
             drawn_menu: self.drawn_menu,
+            toggles: self.menu_toggles(),
             model: &self.model,
             stack: &self.stack,
-            view,
             menu: self.menu,
             availability,
             scale,
@@ -980,9 +980,9 @@ fn project_workspace(
 fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) -> AppView {
     let FrameDescription {
         drawn_menu,
+        toggles,
         model,
         stack,
-        view: flags,
         menu,
         availability,
         scale,
@@ -1013,12 +1013,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             menu::Description {
                 state: menu,
                 availability,
-                raw: model
-                    .workspace
-                    .selected_or_document(model.selection.as_ref().map(selection::Selection::root))
-                    .projection
-                    == workspace::Projection::Raw,
-                debug_geometry: flags.debug_geometry,
+                toggles,
                 scale,
                 width: viewport_width,
             },

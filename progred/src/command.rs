@@ -196,21 +196,6 @@ pub struct Availability {
 }
 
 impl Availability {
-    /// Nothing document-scoped can act — the windowless menu bar.
-    #[cfg(target_os = "macos")]
-    pub fn disabled() -> Self {
-        Self {
-            save: false,
-            undo: false,
-            redo: false,
-            open_pane: false,
-            move_up: false,
-            move_down: false,
-            move_left: false,
-            move_right: false,
-        }
-    }
-
     pub fn doc_enabled(self, command: DocCommand) -> bool {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -232,6 +217,24 @@ impl Availability {
         match command {
             Command::App(_) => true,
             Command::Doc(command) => self.doc_enabled(command),
+        }
+    }
+}
+
+/// Which toggle commands are on for the target editor. Frontends only
+/// display this answer.
+#[derive(Clone, Copy, Default)]
+pub struct Toggles {
+    pub raw: bool,
+    pub debug_geometry: bool,
+}
+
+impl Toggles {
+    pub fn checked(self, command: Command) -> bool {
+        match command {
+            Command::Doc(DocCommand::Raw) => self.raw,
+            Command::Doc(DocCommand::DebugGeometry) => self.debug_geometry,
+            _ => false,
         }
     }
 }

@@ -137,7 +137,7 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
 
 mod view {
     use super::{Entry, Hover, State, definition, drawn_label};
-    use crate::command::{Availability, Command, DocCommand, Spec, spec};
+    use crate::command::{Availability, Command, Spec, Toggles, spec};
     use crate::frame::Hovered;
     use crate::placed::{self, Placed};
     use kurbo::{Affine, Insets, Rect, Stroke};
@@ -158,8 +158,7 @@ mod view {
     pub struct Description {
         pub state: State,
         pub availability: Availability,
-        pub raw: bool,
-        pub debug_geometry: bool,
+        pub toggles: Toggles,
         pub scale: f64,
         pub width: f64,
     }
@@ -342,14 +341,7 @@ mod view {
                         styles,
                         command,
                         spec,
-                        spec.toggle
-                            && match command {
-                                Command::Doc(DocCommand::Raw) => description.raw,
-                                Command::Doc(DocCommand::DebugGeometry) => {
-                                    description.debug_geometry
-                                }
-                                _ => false,
-                            },
+                        spec.toggle && description.toggles.checked(command),
                         description.availability.enabled(command),
                         description.scale,
                         width,

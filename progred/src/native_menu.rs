@@ -11,8 +11,7 @@ use muda::{
 use winit::event_loop::EventLoopProxy;
 
 use crate::UserEvent;
-use crate::command::{self, AppCommand, Availability, Command, DocCommand, Example};
-use crate::model::ViewFlags;
+use crate::command::{self, AppCommand, Availability, Command, DocCommand, Example, Toggles};
 
 pub struct Event(MenuEvent);
 
@@ -205,14 +204,17 @@ impl Menu {
             .map(|(command, _)| *command)
     }
 
-    pub fn sync(&self, availability: Availability, view: ViewFlags, raw: bool) {
+    /// `None` is the windowless state: every document command grays,
+    /// application commands stay live.
+    pub fn sync(&self, doc: Option<(Availability, Toggles)>) {
         for (command, item) in &self.items {
-            item.set_enabled(availability.enabled(*command));
-            item.set_checked(match command {
-                Command::Doc(DocCommand::Raw) => raw,
-                Command::Doc(DocCommand::DebugGeometry) => view.debug_geometry,
-                _ => false,
+            item.set_enabled(match command {
+                Command::App(_) => true,
+                Command::Doc(command) => {
+                    doc.is_some_and(|(availability, _)| availability.doc_enabled(*command))
+                }
             });
+            item.set_checked(doc.is_some_and(|(_, toggles)| toggles.checked(*command)));
         }
     }
 }
