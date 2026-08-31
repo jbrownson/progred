@@ -340,11 +340,10 @@ pub(crate) struct App {
     pub(crate) focused: Option<WindowId>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) quit: QuitState,
-    /// Frame-autosave slots for untitled (and duplicate-path) windows
-    /// never repeat within a session, so no two windows claim one
-    /// AppKit autosave name.
+    /// AppKit's running cascade origin for windows without a saved
+    /// frame.
     #[cfg(target_os = "macos")]
-    pub(crate) next_window_slot: usize,
+    pub(crate) cascade: macos_window::CascadePoint,
 }
 
 /// Quit reviews windows one at a time, focused first, each through its
@@ -769,8 +768,8 @@ impl App {
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
         // A document path names its window's autosave frame, but AppKit
         // lets only one live window own a name: a second window on the
-        // same path takes a session-unique slot instead, as untitled
-        // windows always do.
+        // same path goes nameless — always freshly cascaded — as
+        // untitled windows do.
         #[cfg(target_os = "macos")]
         let autosave = {
             let path = &self.editors[index].doc_path;
@@ -780,18 +779,22 @@ impl App {
                     .iter()
                     .enumerate()
                     .all(|(other, editor)| other == index || &editor.doc_path != path);
-            if unique {
+            unique.then(|| {
                 use std::hash::{Hash, Hasher};
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 path.hash(&mut hasher);
                 format!("doc-{:016x}", hasher.finish())
-            } else {
-                let slot = self.next_window_slot;
-                self.next_window_slot += 1;
-                format!("window-{slot}")
-            }
+            })
         };
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(target_os = "macos")]
+        let App {
+            editors,
+            context,
+            renderers,
+            cascade,
+            ..
+        } = &mut *self;
+        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
         let App {
             editors,
             context,
@@ -827,7 +830,7 @@ impl App {
             };
             let window = event_loop.create_window(attributes).unwrap();
             #[cfg(target_os = "macos")]
-            macos_window::autosave_frame(&window, &autosave);
+            macos_window::place_and_autosave_frame(&window, autosave.as_deref(), cascade);
             Arc::new(window)
         });
 
@@ -1335,7 +1338,7 @@ pub fn run() {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         quit: QuitState::Idle,
         #[cfg(target_os = "macos")]
-        next_window_slot: 0,
+        cascade: macos_window::initial_cascade(),
         editors: vec![new_editor(
             drawn_menu, stack, fonts, doc, doc_path, binders, proxy,
         )],
