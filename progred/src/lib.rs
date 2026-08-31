@@ -830,7 +830,10 @@ impl App {
             };
             let window = event_loop.create_window(attributes).unwrap();
             #[cfg(target_os = "macos")]
-            macos_window::place_and_autosave_frame(&window, autosave.as_deref(), cascade);
+            {
+                macos_window::place_and_autosave_frame(&window, autosave.as_deref(), cascade);
+                macos_window::set_represented(&window, editor.doc_path.as_deref());
+            }
             Arc::new(window)
         });
 
@@ -1585,20 +1588,40 @@ impl Editor {
     }
 
     pub(crate) fn title(&self) -> String {
-        let dirty = if self.model.history.dirty() {
-            " •"
-        } else {
-            ""
+        // The macOS convention: the display name alone — the dirty
+        // state is the close button's dot, the location the proxy
+        // icon.
+        #[cfg(target_os = "macos")]
+        return match &self.doc_path {
+            Some(path) => path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string()),
+            None => "Untitled".to_string(),
         };
-        match &self.doc_path {
-            Some(path) => format!("Progred — {}{dirty}", path.display()),
-            None => format!("Progred — untitled{dirty}"),
+        #[cfg(not(target_os = "macos"))]
+        {
+            let dirty = if self.model.history.dirty() {
+                " •"
+            } else {
+                ""
+            };
+            match &self.doc_path {
+                Some(path) => format!("Progred — {}{dirty}", path.display()),
+                None => format!("Progred — untitled{dirty}"),
+            }
         }
     }
 
     pub(crate) fn refresh_title(&self) {
         if let RenderState::Active { window, .. } = &self.state {
             window.set_title(&self.title());
+            #[cfg(target_os = "macos")]
+            {
+                use winit::platform::macos::WindowExtMacOS;
+                window.set_document_edited(self.model.history.dirty());
+                macos_window::set_represented(window, self.doc_path.as_deref());
+            }
         }
     }
 
@@ -1872,8 +1895,8 @@ impl Editor {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
         self.doc_path = Some(path);
+        self.refresh_title();
         if let RenderState::Active { window, .. } = &self.state {
-            window.set_title(&self.title());
             window.request_redraw();
         }
     }

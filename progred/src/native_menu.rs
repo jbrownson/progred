@@ -23,28 +23,56 @@ enum Entry {
     Command(Command),
     Labeled(Command, &'static str),
     Separator,
+    /// An AppKit-implemented item: standard behavior, standard
+    /// validation, no routing through us.
+    Native(Native),
+}
+
+#[derive(Clone, Copy)]
+enum Native {
     About,
+    Services,
+    Hide,
+    HideOthers,
+    ShowAll,
+    Minimize,
+    Zoom,
+    Fullscreen,
+    BringAllToFront,
 }
 
 struct Section {
     label: &'static str,
     entries: Vec<Entry>,
+    /// AppKit maintains the open-window list at this menu's tail.
+    windows_menu: bool,
 }
 
 fn definition() -> Vec<Section> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
+    let section = |label, entries| Section {
+        label,
+        entries,
+        windows_menu: false,
+    };
     vec![
-        Section {
-            label: "Progred",
-            entries: vec![
-                Entry::About,
+        section(
+            "Progred",
+            vec![
+                Entry::Native(Native::About),
+                Entry::Separator,
+                Entry::Native(Native::Services),
+                Entry::Separator,
+                Entry::Native(Native::Hide),
+                Entry::Native(Native::HideOthers),
+                Entry::Native(Native::ShowAll),
                 Entry::Separator,
                 Entry::Labeled(C::App(A::Quit), "Quit Progred"),
             ],
-        },
-        Section {
-            label: "File",
-            entries: vec![
+        ),
+        section(
+            "File",
+            vec![
                 Entry::Command(C::App(A::New)),
                 Entry::Command(C::App(A::Open)),
                 Entry::Separator,
@@ -52,26 +80,26 @@ fn definition() -> Vec<Section> {
                 Entry::Command(C::Doc(D::Save)),
                 Entry::Command(C::Doc(D::SaveAs)),
             ],
-        },
-        Section {
-            label: "Examples",
-            entries: vec![
+        ),
+        section(
+            "Examples",
+            vec![
                 Entry::Command(C::App(A::Example(E::Sample))),
                 Entry::Command(C::App(A::Example(E::Grap))),
                 Entry::Command(C::App(A::Example(E::IopTree))),
                 Entry::Command(C::App(A::Example(E::Fidget))),
             ],
-        },
-        Section {
-            label: "Edit",
-            entries: vec![
+        ),
+        section(
+            "Edit",
+            vec![
                 Entry::Command(C::Doc(D::Undo)),
                 Entry::Command(C::Doc(D::Redo)),
             ],
-        },
-        Section {
-            label: "View",
-            entries: vec![
+        ),
+        section(
+            "View",
+            vec![
                 Entry::Command(C::Doc(D::OpenPaneLeft)),
                 Entry::Command(C::Doc(D::OpenPaneRight)),
                 Entry::Separator,
@@ -82,7 +110,19 @@ fn definition() -> Vec<Section> {
                 Entry::Separator,
                 Entry::Command(C::Doc(D::Raw)),
                 Entry::Command(C::Doc(D::DebugGeometry)),
+                Entry::Separator,
+                Entry::Native(Native::Fullscreen),
             ],
+        ),
+        Section {
+            label: "Window",
+            entries: vec![
+                Entry::Native(Native::Minimize),
+                Entry::Native(Native::Zoom),
+                Entry::Separator,
+                Entry::Native(Native::BringAllToFront),
+            ],
+            windows_menu: true,
         },
     ]
 }
@@ -177,10 +217,22 @@ impl Menu {
                             .expect("menu separator");
                         continue;
                     }
-                    Entry::About => {
+                    Entry::Native(native) => {
                         submenu
-                            .append(&PredefinedMenuItem::about(None, None))
-                            .expect("about item");
+                            .append(&match native {
+                                Native::About => PredefinedMenuItem::about(None, None),
+                                Native::Services => PredefinedMenuItem::services(None),
+                                Native::Hide => PredefinedMenuItem::hide(None),
+                                Native::HideOthers => PredefinedMenuItem::hide_others(None),
+                                Native::ShowAll => PredefinedMenuItem::show_all(None),
+                                Native::Minimize => PredefinedMenuItem::minimize(None),
+                                Native::Zoom => PredefinedMenuItem::maximize(None),
+                                Native::Fullscreen => PredefinedMenuItem::fullscreen(None),
+                                Native::BringAllToFront => {
+                                    PredefinedMenuItem::bring_all_to_front(None)
+                                }
+                            })
+                            .expect("predefined item");
                         continue;
                     }
                 };
@@ -189,6 +241,9 @@ impl Menu {
                     .append(native.as_menu_item())
                     .expect("native menu item");
                 items.push((command, native));
+            }
+            if section.windows_menu {
+                submenu.set_as_windows_menu_for_nsapp();
             }
             root.append(&submenu).expect("menu section");
         }
@@ -238,7 +293,7 @@ mod tests {
             .flat_map(|section| {
                 section.entries.iter().filter_map(|entry| match entry {
                     Entry::Command(command) | Entry::Labeled(command, _) => Some(*command),
-                    Entry::Separator | Entry::About => None,
+                    Entry::Separator | Entry::Native(_) => None,
                 })
             })
             .collect()
@@ -252,7 +307,7 @@ mod tests {
                 .iter()
                 .map(|section| section.label)
                 .collect::<Vec<_>>(),
-            vec!["Progred", "File", "Examples", "Edit", "View"]
+            vec!["Progred", "File", "Examples", "Edit", "View", "Window"]
         );
         let commands = commands(&definition);
         assert_eq!(commands.len(), 20);
