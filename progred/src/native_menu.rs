@@ -157,6 +157,8 @@ fn accelerator(shortcut: command::Shortcut) -> Accelerator {
 pub struct Menu {
     root: MudaMenu,
     items: Vec<(Command, NativeItem)>,
+    /// AppKit maintains the open-window list here once installed.
+    windows: Option<Submenu>,
 }
 
 enum NativeItem {
@@ -204,6 +206,7 @@ impl NativeItem {
 impl Menu {
     pub fn new() -> Self {
         let mut items = Vec::new();
+        let mut windows = None;
         let root = MudaMenu::new();
         for section in definition() {
             let submenu = Submenu::new(section.label, true);
@@ -242,16 +245,25 @@ impl Menu {
                     .expect("native menu item");
                 items.push((command, native));
             }
-            if section.windows_menu {
-                submenu.set_as_windows_menu_for_nsapp();
-            }
             root.append(&submenu).expect("menu section");
+            if section.windows_menu {
+                windows = Some(submenu);
+            }
         }
-        Self { root, items }
+        Self {
+            root,
+            items,
+            windows,
+        }
     }
 
     pub fn install(&self) {
         self.root.init_for_nsapp();
+        // After the menubar exists, so AppKit tracks windows in the
+        // NSMenu actually displayed.
+        if let Some(windows) = &self.windows {
+            windows.set_as_windows_menu_for_nsapp();
+        }
     }
 
     pub fn command(&self, event: &Event) -> Option<Command> {
