@@ -26,6 +26,7 @@ mod model;
 mod modifiers;
 mod navigate;
 mod placed;
+mod platform;
 mod projection;
 mod render;
 #[cfg(test)]
@@ -92,13 +93,17 @@ pub(crate) enum UserEvent {
     },
 }
 
-/// The action a discard confirmation gates. One at a time: requests
-/// while a sheet is up are dropped.
+/// The action a discard confirmation gates. One at a time per window:
+/// requests while its sheet is up are dropped.
 pub(crate) enum AfterDiscard {
-    New,
+    /// Close this window; while quitting, the chain then advances.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    Open,
+    CloseWindow,
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    New,
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     Quit,
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     Example(Example),
 }
 
@@ -335,13 +340,19 @@ pub(crate) struct App {
     /// Each editor holds its own (cheap) clone, so a window can later
     /// filter or extend its libraries independently; this master copy
     /// seeds new editors.
-    #[allow(dead_code)]
+    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) stack: stack::Stack<Editor>,
     #[cfg(target_os = "macos")]
     pub(crate) native_menu: macos_menu::Menu,
+    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     pub(crate) editors: Vec<Editor>,
     /// The window whose editor application-level commands target.
     pub(crate) focused: Option<WindowId>,
+    /// Quit closes windows front of the list first, one discard sheet
+    /// at a time; a declined sheet abandons the rest.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) quitting: bool,
 }
 
 /// One window editing one document: its own CellId universe, model,
@@ -428,6 +439,7 @@ pub(crate) struct Editor {
     pub(crate) last_descends: Vec<navigate::Descend<Editor>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
+    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
@@ -447,6 +459,58 @@ pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
         viewport.width,
         viewport.height,
     )
+}
+
+fn new_editor(
+    stack: stack::Stack<Editor>,
+    font_cx: FontContext,
+    doc: gid::Document,
+    doc_path: Option<PathBuf>,
+    text_binders: gid_text::Binders,
+    proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+) -> Editor {
+    Editor {
+        state: RenderState::Suspended(None),
+        #[cfg(not(target_arch = "wasm32"))]
+        scene: Scene::new(),
+        font_cx,
+        layout_cx: LayoutContext::new(),
+        text_cache: puri::text::TextCache::default(),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        text_clipboard: SystemTextClipboard,
+        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+        text_clipboard: SystemTextClipboard::default(),
+        drawing_memos: HashMap::new(),
+        stack,
+        model: Model {
+            doc,
+            selection: None,
+            history: history::History::default(),
+            view: ViewFlags::default(),
+            workspace: workspace::Workspace::default(),
+        },
+        doc_path,
+        text_binders,
+        menu: menu::State::default(),
+        cursor: Point::ZERO,
+        cursor_icon: CursorIcon::Default,
+        pointer: None,
+        hover: None,
+        modifiers: Modifiers::empty(),
+        pressed: false,
+        revealed: None,
+        dispatch: None,
+        pending_paint: None,
+        pending_scroll: None,
+        pending_pointer: None,
+        scrub: None,
+        state_drag: None,
+        point: None,
+        last_descends: Vec::new(),
+        reducer: WindowEventReducer::default(),
+        proxy,
+        pending_discard: None,
+    }
 }
 
 fn font_context() -> FontContext {
@@ -543,6 +607,10 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard { window, accepted } => {
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                if !accepted {
+                    self.quitting = false;
+                }
                 let Some(index) = self.editor_index(window) else {
                     return;
                 };
@@ -606,6 +674,71 @@ impl App {
         self.focused
             .and_then(|id| self.editor_index(id))
             .or_else(|| (!self.editors.is_empty()).then_some(0))
+    }
+
+    /// Opens a document in its own new window — every document lives
+    /// in exactly one window.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn open_editor(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        doc: gid::Document,
+        path: Option<PathBuf>,
+        binders: gid_text::Binders,
+    ) {
+        let font_cx = self
+            .editors
+            .first()
+            .map(|editor| editor.font_cx.clone())
+            .unwrap_or_else(font_context);
+        self.editors.push(new_editor(
+            self.stack.clone(),
+            font_cx,
+            doc,
+            path,
+            binders,
+            self.proxy.clone(),
+        ));
+        self.resume_editor(event_loop, self.editors.len() - 1);
+    }
+
+    /// Removes one window. The surface and window close on drop. The
+    /// last close quits where that is the platform convention, and
+    /// always quits while the quit chain is draining.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn close_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
+        let closed = self.editors.remove(index);
+        if closed.window_id().is_some() && closed.window_id() == self.focused {
+            self.focused = None;
+        }
+        drop(closed);
+        if self.editors.is_empty() && !self.quitting && platform::QUITS_ON_LAST_CLOSE {
+            event_loop.exit();
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn begin_quit(&mut self, event_loop: &ActiveEventLoop) {
+        self.quitting = true;
+        self.advance_quit(event_loop);
+    }
+
+    /// Closes clean windows until one needs its discard sheet; the
+    /// answer re-enters through [`UserEvent::Discard`] and advances
+    /// again. An empty list ends the process.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn advance_quit(&mut self, event_loop: &ActiveEventLoop) {
+        while self.quitting {
+            if self.editors.is_empty() {
+                event_loop.exit();
+                return;
+            }
+            if self.editors[0].model.history.dirty() {
+                self.request_discard(event_loop, 0, AfterDiscard::CloseWindow);
+                return;
+            }
+            self.close_editor(event_loop, 0);
+        }
     }
 
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
@@ -1031,6 +1164,9 @@ impl App {
 
         match event {
             WindowEvent::CloseRequested => {
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
+                #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
                 self.request_discard(event_loop, index, AfterDiscard::Quit);
             }
 
@@ -1139,49 +1275,18 @@ pub fn run() {
         stack: stack.clone(),
         #[cfg(target_os = "macos")]
         native_menu,
+        proxy: proxy.clone(),
         focused: None,
-        editors: vec![Editor {
-            state: RenderState::Suspended(None),
-            #[cfg(not(target_arch = "wasm32"))]
-            scene: Scene::new(),
-            font_cx: font_context(),
-            layout_cx: LayoutContext::new(),
-            text_cache: puri::text::TextCache::default(),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            text_clipboard: SystemTextClipboard,
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            text_clipboard: SystemTextClipboard::default(),
-            drawing_memos: HashMap::new(),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        quitting: false,
+        editors: vec![new_editor(
             stack,
-            model: Model {
-                doc,
-                selection: None,
-                history: history::History::default(),
-                view: ViewFlags::default(),
-                workspace: workspace::Workspace::default(),
-            },
+            font_context(),
+            doc,
             doc_path,
-            text_binders: binders,
-            menu: menu::State::default(),
-            cursor: Point::ZERO,
-            cursor_icon: CursorIcon::Default,
-            pointer: None,
-            hover: None,
-            modifiers: Modifiers::empty(),
-            pressed: false,
-            revealed: None,
-            dispatch: None,
-            pending_paint: None,
-            pending_scroll: None,
-            pending_pointer: None,
-            scrub: None,
-            state_drag: None,
-            point: None,
-            last_descends: Vec::new(),
-            reducer: WindowEventReducer::default(),
+            binders,
             proxy,
-            pending_discard: None,
-        }],
+        )],
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1602,6 +1707,7 @@ impl Editor {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
+    #[cfg_attr(not(any(target_arch = "wasm32", target_os = "ios")), allow(dead_code))]
     pub(crate) fn adopt_model(
         &mut self,
         doc: gid::Document,
@@ -1674,32 +1780,96 @@ impl App {
         let _ = index;
     }
 
+    /// Application commands act without a window (New, Open, the
+    /// examples each open their own; Quit drains the list); document
+    /// commands act on the focused window's editor.
     pub(crate) fn handle_menu_selection(
         &mut self,
         event_loop: &ActiveEventLoop,
         selection: menu::Selection,
     ) {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        match selection {
+            menu::Selection::New => {
+                self.open_editor(
+                    event_loop,
+                    gid::Document {
+                        root: None,
+                        cells: gid::Cells::new(),
+                    },
+                    None,
+                    gid_text::Binders::new(),
+                );
+                return;
+            }
+            menu::Selection::Open => {
+                if let Some(path) = text_dialog().pick_file() {
+                    match text_store::load(&path) {
+                        Ok((doc, binders)) => {
+                            self.open_editor(event_loop, doc, Some(path), binders)
+                        }
+                        Err(error) => {
+                            eprintln!("failed to open {}: {error}", path.display());
+                        }
+                    }
+                }
+                return;
+            }
+            menu::Selection::Quit => {
+                self.begin_quit(event_loop);
+                return;
+            }
+            menu::Selection::ExampleSample
+            | menu::Selection::ExampleGrap
+            | menu::Selection::ExampleIopTree
+            | menu::Selection::ExampleFidget => {
+                let example = match selection {
+                    menu::Selection::ExampleSample => Example::Sample,
+                    menu::Selection::ExampleGrap => Example::Grap,
+                    menu::Selection::ExampleIopTree => Example::IopTree,
+                    menu::Selection::ExampleFidget => Example::Fidget,
+                    _ => unreachable!(),
+                };
+                match gid_text::parse(example.source()) {
+                    Ok((doc, binders)) => self.open_editor(event_loop, doc, None, binders),
+                    Err(error) => panic!("built-in example failed to parse: {error}"),
+                }
+                return;
+            }
+            _ => {}
+        }
         let Some(index) = self.focused_index() else {
             return;
         };
         match selection {
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::New => self.request_discard(event_loop, index, AfterDiscard::New),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            menu::Selection::Open => self.request_discard(event_loop, index, AfterDiscard::Open),
+            menu::Selection::New | menu::Selection::Open | menu::Selection::Quit => {}
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             menu::Selection::Save => self.editors[index].menu_save(false),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             menu::Selection::SaveAs => self.editors[index].menu_save(true),
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::Quit => self.request_discard(event_loop, index, AfterDiscard::Quit),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            menu::Selection::ExampleSample
+            | menu::Selection::ExampleGrap
+            | menu::Selection::ExampleIopTree
+            | menu::Selection::ExampleFidget => {}
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::ExampleSample => {
                 self.request_discard(event_loop, index, AfterDiscard::Example(Example::Sample))
             }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::ExampleGrap => {
                 self.request_discard(event_loop, index, AfterDiscard::Example(Example::Grap))
             }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::ExampleIopTree => {
                 self.request_discard(event_loop, index, AfterDiscard::Example(Example::IopTree))
             }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             menu::Selection::ExampleFidget => {
                 self.request_discard(event_loop, index, AfterDiscard::Example(Example::Fidget))
             }
@@ -1843,15 +2013,21 @@ impl App {
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
+    #[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(unused_variables))]
     pub(crate) fn proceed(
         &mut self,
         event_loop: &ActiveEventLoop,
         index: usize,
         then: AfterDiscard,
     ) {
-        let editor = &mut self.editors[index];
         match then {
-            AfterDiscard::New => editor.adopt_model(
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            AfterDiscard::CloseWindow => {
+                self.close_editor(event_loop, index);
+                self.advance_quit(event_loop);
+            }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+            AfterDiscard::New => self.editors[index].adopt_model(
                 gid::Document {
                     root: None,
                     cells: gid::Cells::new(),
@@ -1859,20 +2035,11 @@ impl App {
                 None,
                 gid_text::Binders::new(),
             ),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            AfterDiscard::Open => {
-                if let Some(path) = text_dialog().pick_file() {
-                    match text_store::load(&path) {
-                        Ok((doc, binders)) => editor.adopt_model(doc, Some(path), binders),
-                        Err(error) => {
-                            eprintln!("failed to open {}: {error}", path.display());
-                        }
-                    }
-                }
-            }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             AfterDiscard::Quit => event_loop.exit(),
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             AfterDiscard::Example(example) => match gid_text::parse(example.source()) {
-                Ok((doc, binders)) => editor.adopt_model(doc, None, binders),
+                Ok((doc, binders)) => self.editors[index].adopt_model(doc, None, binders),
                 Err(error) => panic!("built-in example failed to parse: {error}"),
             },
         }
