@@ -187,7 +187,7 @@ impl Editor {
     /// Structural copy/paste, the shell's fallback: a focused text
     /// editor's own clipboard handling wins by dispatch order, so
     /// these fire on structural selections. Deliberately
-    /// NOT menu items — muda accelerators intercept ahead of key
+    /// NOT menu items — native menu accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn clipboard_key(
         &mut self,

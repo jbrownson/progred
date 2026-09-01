@@ -1,21 +1,57 @@
-//! The native menu system: one application-wide menu bar built with
-//! muda, emitting [`command::Command`]s routed to the focused window.
-//! Fully separate from the drawn in-window menu system. Only enabled
-//! on macOS today, but muda itself also speaks Windows and GTK.
+//! The native macOS menu bar: one application-wide AppKit menu tree
+//! emitting [`command::Command`]s routed to the focused window.
+//! Fully separate from the drawn in-window menu system.
 
-use muda::accelerator::{Accelerator, Code, Modifiers};
-use muda::{
-    CheckMenuItem, IsMenuItem, Menu as MudaMenu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
-    Submenu,
+use objc2::rc::Retained;
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
+use objc2_app_kit::{
+    NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSEventModifierFlags, NSMenu,
+    NSMenuItem,
 };
-use objc2_app_kit::NSApplication;
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSString};
 use winit::event_loop::EventLoopProxy;
 
 use crate::UserEvent;
 use crate::command::{self, AppCommand, Availability, Command, DocCommand, Example, Toggles};
 
-pub struct Event(MenuEvent);
+pub struct Event(usize);
+
+struct MenuTargetIvars {
+    proxy: EventLoopProxy<UserEvent>,
+}
+
+define_class!(
+    // SAFETY: NSObject has no subclassing requirements and MenuTarget
+    // does not implement Drop.
+    #[unsafe(super = NSObject)]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = MenuTargetIvars]
+    struct MenuTarget;
+
+    impl MenuTarget {
+        // SAFETY: This is the action installed on our NSMenuItems.
+        #[unsafe(method(performProgredCommand:))]
+        fn perform_command(&self, sender: &NSMenuItem) {
+            let index = sender.tag();
+            if index >= 0 {
+                let _ = self
+                    .ivars()
+                    .proxy
+                    .send_event(UserEvent::NativeMenu(Event(index as usize)));
+            }
+        }
+    }
+
+    // SAFETY: NSObjectProtocol has no safety requirements.
+    unsafe impl NSObjectProtocol for MenuTarget {}
+);
+
+impl MenuTarget {
+    fn new(mtm: MainThreadMarker, proxy: EventLoopProxy<UserEvent>) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(MenuTargetIvars { proxy });
+        unsafe { msg_send![super(this), init] }
+    }
+}
 
 /// The native bar's structure: which commands, where, in what order.
 /// Labels, keys, and toggle-ness come from the shared
@@ -25,8 +61,7 @@ enum Entry {
     Command(Command),
     Labeled(Command, &'static str),
     Separator,
-    /// An AppKit-implemented item: standard behavior, standard
-    /// validation, no routing through us.
+    /// An AppKit-implemented item routed through the responder chain.
     Native(Native),
 }
 
@@ -129,181 +164,242 @@ fn definition() -> Vec<Section> {
     ]
 }
 
-/// The native modifier convention is Command.
-fn accelerator(shortcut: command::Shortcut) -> Accelerator {
-    use command::ShortcutKey;
-    Accelerator::new(
-        Some(if shortcut.shift {
-            Modifiers::META | Modifiers::SHIFT
-        } else {
-            Modifiers::META
-        }),
-        match shortcut.key {
-            ShortcutKey::Digit1 => Code::Digit1,
-            ShortcutKey::Digit2 => Code::Digit2,
-            ShortcutKey::Digit3 => Code::Digit3,
-            ShortcutKey::Digit4 => Code::Digit4,
-            ShortcutKey::D => Code::KeyD,
-            ShortcutKey::N => Code::KeyN,
-            ShortcutKey::O => Code::KeyO,
-            ShortcutKey::P => Code::KeyP,
-            ShortcutKey::Q => Code::KeyQ,
-            ShortcutKey::R => Code::KeyR,
-            ShortcutKey::S => Code::KeyS,
-            ShortcutKey::W => Code::KeyW,
-            ShortcutKey::Z => Code::KeyZ,
-        },
+fn item(
+    mtm: MainThreadMarker,
+    title: &str,
+    action: Option<objc2::runtime::Sel>,
+    key: &str,
+    modifiers: NSEventModifierFlags,
+) -> Retained<NSMenuItem> {
+    let item = unsafe {
+        NSMenuItem::initWithTitle_action_keyEquivalent(
+            mtm.alloc(),
+            &NSString::from_str(title),
+            action,
+            &NSString::from_str(key),
+        )
+    };
+    item.setKeyEquivalentModifierMask(modifiers);
+    item.setEnabled(true);
+    item
+}
+
+fn shortcut(shortcut: command::Shortcut) -> (String, NSEventModifierFlags) {
+    (
+        shortcut.key.label().to_ascii_lowercase(),
+        NSEventModifierFlags::Command
+            | if shortcut.shift {
+                NSEventModifierFlags::Shift
+            } else {
+                NSEventModifierFlags::empty()
+            },
     )
 }
 
+fn add_command(
+    mtm: MainThreadMarker,
+    menu: &NSMenu,
+    target: &MenuTarget,
+    items: &mut Vec<(Command, Retained<NSMenuItem>)>,
+    command: Command,
+    label: Option<&str>,
+) {
+    let spec = command::spec(command);
+    let (key, modifiers) = spec
+        .shortcut
+        .map(shortcut)
+        .unwrap_or_else(|| (String::new(), NSEventModifierFlags::empty()));
+    let native = item(
+        mtm,
+        label.unwrap_or(spec.label),
+        Some(sel!(performProgredCommand:)),
+        &key,
+        modifiers,
+    );
+    native.setTag(items.len() as isize);
+    unsafe { native.setTarget(Some(target)) };
+    menu.addItem(&native);
+    items.push((command, native));
+}
+
+fn native_item(
+    mtm: MainThreadMarker,
+    native: Native,
+) -> (Retained<NSMenuItem>, Option<Retained<NSMenu>>) {
+    let plain = NSEventModifierFlags::empty();
+    match native {
+        Native::About => (
+            item(
+                mtm,
+                "About Progred",
+                Some(sel!(orderFrontStandardAboutPanel:)),
+                "",
+                plain,
+            ),
+            None,
+        ),
+        Native::Services => {
+            let services = NSMenu::new(mtm);
+            let item = item(mtm, "Services", None, "", plain);
+            item.setSubmenu(Some(&services));
+            (item, Some(services))
+        }
+        Native::Hide => (
+            item(
+                mtm,
+                "Hide Progred",
+                Some(sel!(hide:)),
+                "h",
+                NSEventModifierFlags::Command,
+            ),
+            None,
+        ),
+        Native::HideOthers => (
+            item(
+                mtm,
+                "Hide Others",
+                Some(sel!(hideOtherApplications:)),
+                "h",
+                NSEventModifierFlags::Command | NSEventModifierFlags::Option,
+            ),
+            None,
+        ),
+        Native::ShowAll => (
+            item(
+                mtm,
+                "Show All",
+                Some(sel!(unhideAllApplications:)),
+                "",
+                plain,
+            ),
+            None,
+        ),
+        Native::Minimize => (
+            item(
+                mtm,
+                "Minimize",
+                Some(sel!(performMiniaturize:)),
+                "m",
+                NSEventModifierFlags::Command,
+            ),
+            None,
+        ),
+        Native::Zoom => (item(mtm, "Zoom", Some(sel!(performZoom:)), "", plain), None),
+        Native::Fullscreen => (
+            item(
+                mtm,
+                "Enter Full Screen",
+                Some(sel!(toggleFullScreen:)),
+                "f",
+                NSEventModifierFlags::Command | NSEventModifierFlags::Control,
+            ),
+            None,
+        ),
+        Native::BringAllToFront => (
+            item(
+                mtm,
+                "Bring All to Front",
+                Some(sel!(arrangeInFront:)),
+                "",
+                plain,
+            ),
+            None,
+        ),
+    }
+}
+
 pub struct Menu {
-    root: MudaMenu,
-    items: Vec<(Command, NativeItem)>,
-    /// The section AppKit maintains the open-window list in.
-    windows_label: Option<&'static str>,
-}
-
-enum NativeItem {
-    Command(MenuItem),
-    Check(CheckMenuItem),
-}
-
-impl NativeItem {
-    fn new(command: Command, label: Option<&'static str>) -> Self {
-        let spec = command::spec(command);
-        let label = label.unwrap_or(spec.label);
-        let accelerator = spec.shortcut.map(accelerator);
-        if spec.toggle {
-            Self::Check(CheckMenuItem::new(label, true, false, accelerator))
-        } else {
-            Self::Command(MenuItem::new(label, true, accelerator))
-        }
-    }
-
-    fn as_menu_item(&self) -> &dyn IsMenuItem {
-        match self {
-            Self::Command(item) => item,
-            Self::Check(item) => item,
-        }
-    }
-
-    fn id(&self) -> &MenuId {
-        self.as_menu_item().id()
-    }
-
-    fn set_enabled(&self, enabled: bool) {
-        match self {
-            Self::Command(item) => item.set_enabled(enabled),
-            Self::Check(item) => item.set_enabled(enabled),
-        }
-    }
-
-    fn set_checked(&self, checked: bool) {
-        if let Self::Check(item) = self {
-            item.set_checked(checked);
-        }
-    }
+    root: Retained<NSMenu>,
+    items: Vec<(Command, Retained<NSMenuItem>)>,
+    windows: Retained<NSMenu>,
+    services: Retained<NSMenu>,
+    /// NSMenuItem's target is weak, so the menu adapter owns the bridge.
+    _target: Retained<MenuTarget>,
 }
 
 impl Menu {
-    pub fn new() -> Self {
+    pub fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
+        let mtm = MainThreadMarker::new().expect("menus are created on the main thread");
+        let target = MenuTarget::new(mtm, proxy);
+        let root = NSMenu::new(mtm);
+        root.setAutoenablesItems(false);
         let mut items = Vec::new();
-        let mut windows_label = None;
-        let root = MudaMenu::new();
+        let mut windows = None;
+        let mut services = None;
+
         for section in definition() {
-            let submenu = Submenu::new(section.label, true);
+            let submenu = NSMenu::new(mtm);
+            submenu.setTitle(&NSString::from_str(section.label));
+            submenu.setAutoenablesItems(false);
+
             for entry in section.entries {
-                let (command, label) = match entry {
-                    Entry::Command(command) => (command, None),
-                    Entry::Labeled(command, label) => (command, Some(label)),
-                    Entry::Separator => {
-                        submenu
-                            .append(&PredefinedMenuItem::separator())
-                            .expect("menu separator");
-                        continue;
+                match entry {
+                    Entry::Command(command) => {
+                        add_command(mtm, &submenu, &target, &mut items, command, None)
                     }
+                    Entry::Labeled(command, label) => {
+                        add_command(mtm, &submenu, &target, &mut items, command, Some(label))
+                    }
+                    Entry::Separator => submenu.addItem(&NSMenuItem::separatorItem(mtm)),
                     Entry::Native(native) => {
-                        submenu
-                            .append(&match native {
-                                Native::About => PredefinedMenuItem::about(None, None),
-                                Native::Services => PredefinedMenuItem::services(None),
-                                Native::Hide => PredefinedMenuItem::hide(None),
-                                Native::HideOthers => PredefinedMenuItem::hide_others(None),
-                                Native::ShowAll => PredefinedMenuItem::show_all(None),
-                                Native::Minimize => PredefinedMenuItem::minimize(None),
-                                Native::Zoom => PredefinedMenuItem::maximize(None),
-                                Native::Fullscreen => PredefinedMenuItem::fullscreen(None),
-                                Native::BringAllToFront => {
-                                    PredefinedMenuItem::bring_all_to_front(None)
-                                }
-                            })
-                            .expect("predefined item");
-                        continue;
+                        let (item, service_menu) = native_item(mtm, native);
+                        services = services.or(service_menu);
+                        submenu.addItem(&item);
                     }
-                };
-                let native = NativeItem::new(command, label);
-                submenu
-                    .append(native.as_menu_item())
-                    .expect("native menu item");
-                items.push((command, native));
+                }
             }
-            root.append(&submenu).expect("menu section");
+
+            let section_item = item(mtm, section.label, None, "", NSEventModifierFlags::empty());
+            section_item.setSubmenu(Some(&submenu));
+            root.addItem(&section_item);
             if section.windows_menu {
-                windows_label = Some(section.label);
+                windows = Some(submenu);
             }
         }
+
         Self {
             root,
             items,
-            windows_label,
+            windows: windows.expect("native menu has a Window section"),
+            services: services.expect("native menu has a Services item"),
+            _target: target,
         }
     }
 
     pub fn install(&self) {
-        self.root.init_for_nsapp();
-        // muda materializes a distinct NSMenu per attachment, so the
-        // windows menu must be the instance the installed menubar
-        // actually displays — found by title — or AppKit maintains
-        // the window list in a menu nobody sees.
-        let Some(label) = self.windows_label else {
-            return;
-        };
         let mtm = MainThreadMarker::new().expect("menus install on the main thread");
         let app = NSApplication::sharedApplication(mtm);
-        let displayed = app
-            .mainMenu()
-            .and_then(|main| main.itemWithTitle(&NSString::from_str(label)))
-            .and_then(|item| item.submenu());
-        app.setWindowsMenu(displayed.as_deref());
+        app.setMainMenu(Some(&self.root));
+        app.setWindowsMenu(Some(&self.windows));
+        app.setServicesMenu(Some(&self.services));
     }
 
     pub fn command(&self, event: &Event) -> Option<Command> {
-        self.items
-            .iter()
-            .find(|(_, item)| item.id() == event.0.id())
-            .map(|(command, _)| *command)
+        self.items.get(event.0).map(|(command, _)| *command)
     }
 
     /// `None` is the windowless state: every document command grays,
     /// application commands stay live.
     pub fn sync(&self, doc: Option<(Availability, Toggles)>) {
         for (command, item) in &self.items {
-            item.set_enabled(match command {
+            item.setEnabled(match command {
                 Command::App(AppCommand::Close) => doc.is_some(),
                 Command::App(_) => true,
                 Command::Doc(command) => {
                     doc.is_some_and(|(availability, _)| availability.doc_enabled(*command))
                 }
             });
-            item.set_checked(doc.is_some_and(|(_, toggles)| toggles.checked(*command)));
+            if command::spec(*command).toggle {
+                item.setState(
+                    if doc.is_some_and(|(_, toggles)| toggles.checked(*command)) {
+                        NSControlStateValueOn
+                    } else {
+                        NSControlStateValueOff
+                    },
+                );
+            }
         }
     }
-}
-
-pub fn route_events(proxy: EventLoopProxy<UserEvent>) {
-    MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::NativeMenu(Event(event)));
-    }));
 }
 
 #[cfg(test)]

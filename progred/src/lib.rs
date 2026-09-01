@@ -1325,9 +1325,7 @@ pub fn run() {
     let event_loop = builder.build().expect("Couldn't create event loop");
     let proxy = event_loop.create_proxy();
     #[cfg(target_os = "macos")]
-    let native_menu = native_menu::Menu::new();
-    #[cfg(target_os = "macos")]
-    native_menu::route_events(proxy.clone());
+    let native_menu = native_menu::Menu::new(proxy.clone());
 
     let stack = stack::load();
     let fonts = font_context();
