@@ -41,10 +41,19 @@ pub(crate) fn set_represented(window: &Window, path: Option<&Path>) {
 pub(crate) fn set_autosave_name(window: &Window, name: Option<&str>) {
     with_appkit_window(window, |appkit_window| {
         let name = name.map(NSString::from_str).unwrap_or_default();
-        if appkit_window.setFrameAutosaveName(&name) && !name.is_empty() {
-            // The frame as it stands at adoption; AppKit only writes
-            // on its own for changes made after the name is set.
-            appkit_window.saveFrameUsingName(&name);
+        if appkit_window.setFrameAutosaveName(&name) {
+            if !name.is_empty() {
+                // The frame as it stands at adoption; AppKit only
+                // writes on its own for changes made after the name
+                // is set.
+                appkit_window.saveFrameUsingName(&name);
+            }
+        } else {
+            // Rejected — another live window owns the name. AppKit
+            // keeps the previous name in that case, which would go on
+            // saving this window's frames under a document it no
+            // longer shows; nameless is the honest state.
+            appkit_window.setFrameAutosaveName(&NSString::new());
         }
     });
 }
