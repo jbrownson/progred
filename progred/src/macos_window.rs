@@ -36,62 +36,60 @@ pub(crate) fn set_represented(window: &Window, path: Option<&Path>) {
     });
 }
 
-/// Adopts (or drops) the frame-autosave name of a live window — the
-/// Save As path, where a nameless window gains its document identity.
-pub(crate) fn set_autosave_name(window: &Window, name: Option<&str>) {
-    with_appkit_window(window, |appkit_window| {
-        let name = name.map(NSString::from_str).unwrap_or_default();
-        if appkit_window.setFrameAutosaveName(&name) {
-            if !name.is_empty() {
-                // The frame as it stands at adoption; AppKit only
-                // writes on its own for changes made after the name
-                // is set.
-                appkit_window.saveFrameUsingName(&name);
-            }
+/// Claims the first free autosave name for the window's document —
+/// doc:{path}, then doc:{path}:2, :3, … — so the standard continuous
+/// autosave machinery applies with its uniqueness rule satisfied by
+/// numbering rather than administered. Which window holds which
+/// number, and thus which saved geometry a reopen inherits, is
+/// deliberately unspecified.
+fn claim_name(appkit_window: &NSWindow, path: &Path) -> objc2::rc::Retained<NSString> {
+    let mut n = 1usize;
+    loop {
+        let candidate = if n == 1 {
+            format!("doc:{}", path.display())
         } else {
-            // Rejected — another live window owns the name. AppKit
-            // keeps the previous name in that case, which would go on
-            // saving this window's frames under a document it no
-            // longer shows; nameless is the honest state.
-            appkit_window.setFrameAutosaveName(&NSString::new());
+            format!("doc:{}:{n}", path.display())
+        };
+        let candidate = NSString::from_str(&candidate);
+        if appkit_window.setFrameAutosaveName(&candidate) {
+            return candidate;
         }
-    });
-}
-
-/// A live window's top-left in AppKit screen coordinates — the seed
-/// for cascading a duplicate off its sibling.
-pub(crate) fn top_left(window: &Window) -> CascadePoint {
-    let mut point = NSPoint::new(0.0, 0.0);
-    with_appkit_window(window, |appkit_window| {
-        let frame = appkit_window.frame();
-        point = NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height);
-    });
-    point
+        n += 1;
+    }
 }
 
 /// Places one new window the way AppKit's document machinery does:
-/// a named window's saved frame when one exists, else cascaded by
-/// AppKit itself — from `seed` (a sibling's top-left) when given, else
-/// the running cascade. A name persists future moves and resizes;
-/// unclaimed windows stay nameless and always fresh.
+/// the claimed name's saved frame when one exists, else cascaded from
+/// the previous window by AppKit itself; continuous autosave persists
+/// the frame from then on. Untitled windows stay nameless and always
+/// fresh.
 pub(crate) fn place_and_autosave_frame(
     window: &Window,
-    name: Option<&str>,
-    seed: Option<CascadePoint>,
+    path: Option<&Path>,
     cascade: &mut CascadePoint,
 ) {
     with_appkit_window(window, |appkit_window| {
-        let name = name.map(NSString::from_str);
-        let restored = name
-            .as_deref()
-            .is_some_and(|name| appkit_window.setFrameUsingName(name));
+        let restored = path
+            .map(|path| claim_name(appkit_window, path))
+            .is_some_and(|name| appkit_window.setFrameUsingName(&name));
         if !restored {
-            *cascade = appkit_window.cascadeTopLeftFromPoint(seed.unwrap_or(*cascade));
+            *cascade = appkit_window.cascadeTopLeftFromPoint(*cascade);
         }
-        if let Some(name) = &name {
-            // The claims map guarantees uniqueness; a refusal would be
-            // a bookkeeping bug, answered by staying nameless.
-            let _ = appkit_window.setFrameAutosaveName(name);
+    });
+}
+
+/// Save As: the window's document changed, so its autosave identity
+/// follows — a fresh numbered claim for the new path (never yanking
+/// the window to that name's old frame; the current frame snapshots
+/// as the name's new one).
+pub(crate) fn rename_document_frame(window: &Window, path: Option<&Path>) {
+    with_appkit_window(window, |appkit_window| match path {
+        Some(path) => {
+            let name = claim_name(appkit_window, path);
+            appkit_window.saveFrameUsingName(&name);
+        }
+        None => {
+            appkit_window.setFrameAutosaveName(&NSString::new());
         }
     });
 }

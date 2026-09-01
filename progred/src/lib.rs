@@ -344,11 +344,6 @@ pub(crate) struct App {
     /// frame.
     #[cfg(target_os = "macos")]
     pub(crate) cascade: macos_window::CascadePoint,
-    /// Frame ownership, explicitly: the one live window whose frame a
-    /// document's saved default follows. Paths are canonical; AppKit
-    /// autosave names strictly mirror this map.
-    #[cfg(target_os = "macos")]
-    pub(crate) claims: HashMap<PathBuf, WindowId>,
 }
 
 /// Quit reviews windows one at a time, focused first, each through its
@@ -450,13 +445,6 @@ pub(crate) struct Editor {
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     pub(crate) pending_discard: Option<AfterDiscard>,
-}
-
-/// The frame-autosave key is the document's canonical path itself:
-/// stable across sessions and toolchains, readable in defaults.
-#[cfg(target_os = "macos")]
-fn autosave_name(path: &std::path::Path) -> String {
-    format!("doc:{}", path.display())
 }
 
 /// One canonical spelling per document, so every identity — frame
@@ -743,11 +731,7 @@ impl App {
         if closed.window_id().is_some() && closed.window_id() == self.focused {
             self.focused = None;
         }
-        #[cfg(target_os = "macos")]
-        let closed_id = closed.window_id();
         drop(closed);
-        #[cfg(target_os = "macos")]
-        self.succeed_claims(closed_id);
         if self.editors.is_empty() {
             if platform::QUITS_ON_LAST_CLOSE && self.quit == QuitState::Idle {
                 event_loop.exit();
@@ -789,97 +773,13 @@ impl App {
         }
     }
 
-    /// The live owner of a path's frame claim, if any.
-    #[cfg(target_os = "macos")]
-    fn claimant(&self, path: &std::path::Path) -> Option<WindowId> {
-        let owner = *self.claims.get(path)?;
-        self.editors
-            .iter()
-            .any(|editor| editor.window_id() == Some(owner))
-            .then_some(owner)
-    }
-
-    /// Re-settles the acting editor's claim after a save changed its
-    /// path: stale claims release, an unclaimed path is claimed (the
-    /// frame snapshots from here on), a path claimed elsewhere leaves
-    /// this window nameless.
-    #[cfg(target_os = "macos")]
-    fn resettle_claim(&mut self, index: usize) {
-        let Some(window_id) = self.editors[index].window_id() else {
-            return;
-        };
-        let path = self.editors[index].doc_path.clone();
-        self.claims.retain(|claimed, owner| {
-            *owner != window_id || Some(claimed.as_path()) == path.as_deref()
-        });
-        let Some(window) = self.editors[index].window() else {
-            return;
-        };
-        match &path {
-            Some(path) => match self.claimant(path) {
-                None => {
-                    macos_window::set_autosave_name(&window, Some(&autosave_name(path)));
-                    self.claims.insert(path.clone(), window_id);
-                }
-                Some(owner) if owner != window_id => {
-                    macos_window::set_autosave_name(&window, None);
-                }
-                Some(_) => {}
-            },
-            None => macos_window::set_autosave_name(&window, None),
-        }
-    }
-
-    /// A closing window releases its claims; a live duplicate of the
-    /// freed document inherits, its frame remembered from its current
-    /// position onward.
-    #[cfg(target_os = "macos")]
-    fn succeed_claims(&mut self, closed: Option<WindowId>) {
-        self.claims.retain(|_, owner| Some(*owner) != closed);
-        for index in 0..self.editors.len() {
-            let Some(path) = self.editors[index].doc_path.clone() else {
-                continue;
-            };
-            if self.claimant(&path).is_none()
-                && let Some(window_id) = self.editors[index].window_id()
-                && let Some(window) = self.editors[index].window()
-            {
-                macos_window::set_autosave_name(&window, Some(&autosave_name(&path)));
-                self.claims.insert(path, window_id);
-            }
-        }
-    }
-
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
-        // An unclaimed document path is claimed by its new window,
-        // which restores the path's saved frame. A path already
-        // claimed by a live window leaves the newcomer unclaimed,
-        // cascading off its sibling.
-        #[cfg(target_os = "macos")]
-        let (autosave, sibling) = {
-            match self.editors[index].doc_path.clone() {
-                Some(path) => match self.claimant(&path) {
-                    Some(owner) => {
-                        let seed = self
-                            .editors
-                            .iter()
-                            .find(|editor| editor.window_id() == Some(owner))
-                            .and_then(Editor::window)
-                            .map(|window| macos_window::top_left(&window));
-                        (None, seed)
-                    }
-                    None => (Some(autosave_name(&path)), None),
-                },
-                None => (None, None),
-            }
-        };
         #[cfg(target_os = "macos")]
         let App {
             editors,
             context,
             renderers,
             cascade,
-            claims,
             ..
         } = &mut *self;
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
@@ -921,16 +821,10 @@ impl App {
             {
                 macos_window::place_and_autosave_frame(
                     &window,
-                    autosave.as_deref(),
-                    sibling,
+                    editor.doc_path.as_deref(),
                     cascade,
                 );
                 macos_window::set_represented(&window, editor.doc_path.as_deref());
-                if autosave.is_some()
-                    && let Some(path) = &editor.doc_path
-                {
-                    claims.insert(path.clone(), window.id());
-                }
             }
             Arc::new(window)
         });
@@ -1438,8 +1332,6 @@ pub fn run() {
         quit: QuitState::Idle,
         #[cfg(target_os = "macos")]
         cascade: macos_window::initial_cascade(),
-        #[cfg(target_os = "macos")]
-        claims: HashMap::new(),
         editors: vec![new_editor(
             drawn_menu, stack, fonts, doc, doc_path, binders, proxy,
         )],
@@ -1805,13 +1697,6 @@ impl Editor {
     pub(crate) fn choose_menu(&mut self, command: Command) {
         self.menu.close();
         match command {
-            // Saving can change which window owns a document's frame
-            // claim — app-level bookkeeping — so it routes like an
-            // application command.
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Command::Doc(DocCommand::Save | DocCommand::SaveAs) => {
-                let _ = self.proxy.send_event(UserEvent::Command(command));
-            }
             Command::Doc(command) => self.run_doc_command(command),
             Command::App(_) => {
                 let _ = self.proxy.send_event(UserEvent::Command(command));
@@ -2009,9 +1894,9 @@ impl Editor {
     pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
         self.doc_path = Some(path);
         self.refresh_title();
-        // Frame-claim bookkeeping follows in the app's resettle — the
-        // claims map, not this window, decides ownership.
         if let RenderState::Active { window, .. } = &self.state {
+            #[cfg(target_os = "macos")]
+            macos_window::rename_document_frame(window, self.doc_path.as_deref());
             window.request_redraw();
         }
     }
@@ -2043,11 +1928,6 @@ impl App {
                 if let Some(index) = self.focused_index() {
                     let editor = &mut self.editors[index];
                     editor.run_doc_command(command);
-                    #[cfg(target_os = "macos")]
-                    if matches!(command, DocCommand::Save | DocCommand::SaveAs) {
-                        self.resettle_claim(index);
-                    }
-                    let editor = &mut self.editors[index];
                     // The native path's frame scheduling, mirroring
                     // the drawn dispatch's handled-event remint.
                     if let RenderState::Active { window, .. } = &editor.state {
