@@ -58,13 +58,26 @@ pub(crate) fn set_autosave_name(window: &Window, name: Option<&str>) {
     });
 }
 
+/// A live window's top-left in AppKit screen coordinates — the seed
+/// for cascading a duplicate off its sibling.
+pub(crate) fn top_left(window: &Window) -> CascadePoint {
+    let mut point = NSPoint::new(0.0, 0.0);
+    with_appkit_window(window, |appkit_window| {
+        let frame = appkit_window.frame();
+        point = NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height);
+    });
+    point
+}
+
 /// Places one new window the way AppKit's document machinery does:
-/// a named window's saved frame when one exists, else cascaded from
-/// the previous window by AppKit itself. A name persists future moves
-/// and resizes; untitled windows stay nameless and always fresh.
+/// a named window's saved frame when one exists, else cascaded by
+/// AppKit itself — from `seed` (a sibling's top-left) when given, else
+/// the running cascade. A name persists future moves and resizes;
+/// unclaimed windows stay nameless and always fresh.
 pub(crate) fn place_and_autosave_frame(
     window: &Window,
     name: Option<&str>,
+    seed: Option<CascadePoint>,
     cascade: &mut CascadePoint,
 ) {
     with_appkit_window(window, |appkit_window| {
@@ -73,11 +86,11 @@ pub(crate) fn place_and_autosave_frame(
             .as_deref()
             .is_some_and(|name| appkit_window.setFrameUsingName(name));
         if !restored {
-            *cascade = appkit_window.cascadeTopLeftFromPoint(*cascade);
+            *cascade = appkit_window.cascadeTopLeftFromPoint(seed.unwrap_or(*cascade));
         }
         if let Some(name) = &name {
-            // False means another live window owns the name; this one
-            // simply stays unremembered.
+            // The claims map guarantees uniqueness; a refusal would be
+            // a bookkeeping bug, answered by staying nameless.
             let _ = appkit_window.setFrameAutosaveName(name);
         }
     });
