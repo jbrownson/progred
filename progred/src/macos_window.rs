@@ -36,6 +36,15 @@ pub(crate) fn set_represented(window: &Window, path: Option<&Path>) {
     });
 }
 
+/// Adopts (or drops) the frame-autosave name of a live window — the
+/// Save As path, where a nameless window gains its document identity.
+pub(crate) fn set_autosave_name(window: &Window, name: Option<&str>) {
+    with_appkit_window(window, |appkit_window| {
+        let name = name.map(NSString::from_str).unwrap_or_default();
+        let _ = appkit_window.setFrameAutosaveName(&name);
+    });
+}
+
 /// Places one new window the way AppKit's document machinery does:
 /// a named window's saved frame when one exists, else cascaded from
 /// the previous window by AppKit itself. A name persists future moves
@@ -54,10 +63,9 @@ pub(crate) fn place_and_autosave_frame(
             *cascade = appkit_window.cascadeTopLeftFromPoint(*cascade);
         }
         if let Some(name) = &name {
-            assert!(
-                appkit_window.setFrameAutosaveName(name),
-                "unique AppKit window frame autosave name"
-            );
+            // False means another live window owns the name; this one
+            // simply stays unremembered.
+            let _ = appkit_window.setFrameAutosaveName(name);
         }
     });
 }

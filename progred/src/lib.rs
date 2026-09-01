@@ -447,6 +447,21 @@ pub(crate) struct Editor {
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
 
+/// The frame-autosave key is the document's canonical path itself:
+/// stable across sessions and toolchains, readable in defaults.
+#[cfg(target_os = "macos")]
+fn autosave_name(path: &std::path::Path) -> String {
+    format!("doc:{}", path.display())
+}
+
+/// One canonical spelling per document, so every identity — frame
+/// memory, the duplicate-window rule — agrees regardless of how the
+/// path was written.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn canonical(path: PathBuf) -> PathBuf {
+    path.canonicalize().unwrap_or(path)
+}
+
 pub(crate) fn menu_height(drawn_menu: bool, scale: f64) -> f64 {
     if drawn_menu {
         menu::bar_height(scale)
@@ -779,12 +794,7 @@ impl App {
                     .iter()
                     .enumerate()
                     .all(|(other, editor)| other == index || &editor.doc_path != path);
-            unique.then(|| {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                path.hash(&mut hasher);
-                format!("doc-{:016x}", hasher.finish())
-            })
+            unique.then(|| path.as_deref().map(autosave_name)).flatten()
         };
         #[cfg(target_os = "macos")]
         let App {
@@ -1283,7 +1293,7 @@ pub fn run() {
     console_error_panic_hook::set_once();
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let doc_path = std::env::args().nth(1).map(PathBuf::from);
+    let doc_path = std::env::args().nth(1).map(PathBuf::from).map(canonical);
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     let doc_path: Option<PathBuf> = None;
     // A given-but-missing path is a new document there; no path is
@@ -1843,7 +1853,7 @@ impl Editor {
                     // A run must not straddle the save mark, or edits
                     // after it would coalesce into a pre-save step.
                     selection::break_edit_run(self.model.selection.as_mut());
-                    self.adopt_doc_path(path);
+                    self.adopt_doc_path(canonical(path));
                 }
                 Err(error) => {
                     eprintln!("failed to save {}: {error}", path.display());
@@ -1897,6 +1907,13 @@ impl Editor {
         self.doc_path = Some(path);
         self.refresh_title();
         if let RenderState::Active { window, .. } = &self.state {
+            // The window takes on its document's frame identity; a
+            // duplicate of an open document quietly stays nameless.
+            #[cfg(target_os = "macos")]
+            macos_window::set_autosave_name(
+                window,
+                self.doc_path.as_deref().map(autosave_name).as_deref(),
+            );
             window.request_redraw();
         }
     }
@@ -1960,7 +1977,7 @@ impl App {
                 gid_text::Binders::new(),
             ),
             AppCommand::Open => {
-                if let Some(path) = text_dialog().pick_file() {
+                if let Some(path) = text_dialog().pick_file().map(canonical) {
                     match text_store::load(&path) {
                         Ok((doc, binders)) => {
                             self.open_editor(event_loop, doc, Some(path), binders)
