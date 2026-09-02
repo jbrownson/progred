@@ -1,7 +1,6 @@
 {
   "binders": {
     "a_value": 2f18db9829ab562571641b9b6e25b9b2,
-    "add": 201af445eb7e2c270bb5ead10b781fc1,
     "add_result": 1b49f9da65e4093654db337e6e0c477a,
     "b_value": 9194b2ed0a54573b7cb33495cc930043,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
@@ -48,6 +47,7 @@
     "scale_and_add_expression": 3e54f01b50f5abbfc3895327881a404d,
     "scale_parameter": a205c013d36ef3f8fa047295793e61b4,
     "scale_value": 222efe84b66ed6181846198960a9f317,
+    "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "type_absent": add1c43228ee478194bd066b83608685,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
@@ -147,7 +147,7 @@
       ],
       body: {
         right: y_parameter,
-        function: add,
+        function: sum,
         left: {
           right: scale_parameter,
           function: multiply,
@@ -201,7 +201,7 @@
       add_result: {
         evaluate: {
           right: b_value,
-          function: add,
+          function: sum,
           left: a_value,
         },
       },
@@ -213,7 +213,7 @@
           function: multiply,
           left: {
             right: b_value,
-            function: add,
+            function: sum,
             left: a_value,
           },
         },
@@ -225,7 +225,7 @@
           function: evaluate,
           expression: {
             right: b_value,
-            function: add,
+            function: sum,
             left: a_value,
           },
           environment: {},
@@ -298,7 +298,7 @@
       metadata_call: {
         evaluate: {
           right: b_value,
-          function: add,
+          function: sum,
           left: a_value,
           note: "extra fields remain visible and do not prevent evaluation",
         },
@@ -309,7 +309,7 @@
         evaluate: {
           contains_call: {
             right: b_value,
-            function: add,
+            function: sum,
             left: a_value,
           },
           note: "this record is data, so its call-shaped child remains data",
@@ -320,7 +320,7 @@
       type_absent: {
         evaluate: {
           right: b_value,
-          function: add,
+          function: sum,
           left: "three",
         },
       },
@@ -328,7 +328,7 @@
     {
       missing_argument: {
         evaluate: {
-          function: add,
+          function: sum,
           left: a_value,
         },
       },

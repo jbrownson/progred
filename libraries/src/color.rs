@@ -2,6 +2,8 @@
 
 use crate::{Library, f64, line_edit, name, text};
 use gid::{Cells, Step, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{
     Face, Layout, Paint, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col,
@@ -310,11 +312,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     cells.set_value(vocabulary::PICKER, name::record("color picker", []));
     cells.set_value(vocabulary::HUE, name::record("hue", []));
     named::insert(&mut cells);
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-    }
+    Library::named(
+        "color",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]
@@ -360,7 +362,7 @@ mod tests {
                 .update(extra, Value::from(b"metadata".to_vec())),
         );
         let update = |input: &str| {
-            grap_runtime::evaluate(
+            crate::test_evaluate(
                 &grap_runtime::call(
                     grap_runtime::ffi(vocabulary::UPDATE),
                     [

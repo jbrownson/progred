@@ -4,6 +4,8 @@
 
 use crate::{Library, absent, f64, name};
 use gid::Cells;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
 #[cfg(test)]
 use gid::Value;
 use grap_runtime::{
@@ -244,11 +246,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
-    Library {
-        cells,
-        functions: functions(),
-        ..Library::default()
-    }
+    Library::named(
+        "list",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -287,7 +289,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            grap::evaluate(&at, |_| None, &functions, 30).result,
+            crate::test_evaluate(&at, |_| None, &functions, 30).result,
             Value::from(b"b".to_vec())
         );
     }
@@ -320,7 +322,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            grap::evaluate(&iterated, |_| None, &functions, 30).result,
+            crate::test_evaluate(&iterated, |_| None, &functions, 30).result,
             Value::from(vec![2]),
         );
         assert_eq!(calls.get(), 4);

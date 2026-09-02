@@ -119,7 +119,6 @@ struct Cx<'a> {
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
     raw: bool,
-    foreign: &'a grap::ForeignFunctions,
     annotations: &'a Annotations,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
@@ -166,12 +165,7 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         } else {
             grap::DEFAULT_FUEL
         };
-        let evaluation = grap::evaluate(
-            expression,
-            |cell| self.cx.sources.value(cell).cloned(),
-            self.cx.foreign,
-            fuel,
-        );
+        let evaluation = evaluate(self.cx, expression, fuel);
         self.cx.fuel.set(evaluation.remaining_fuel);
         (evaluation.result, evaluation.remaining_fuel)
     }
@@ -182,23 +176,41 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         } else {
             fuel
         };
-        let evaluation = grap::evaluate(
-            expression,
-            |cell| self.cx.sources.value(cell).cloned(),
-            self.cx.foreign,
-            fuel,
-        );
+        let evaluation = evaluate(self.cx, expression, fuel);
         self.cx.fuel.set(evaluation.remaining_fuel);
         (evaluation.result, evaluation.remaining_fuel)
     }
 
-    fn name(&self, cell: CellId) -> Option<&str> {
-        self.cx.name(cell)
+    fn names(&self, cell: CellId) -> Vec<&str> {
+        if self.cx.raw {
+            Vec::new()
+        } else {
+            self.cx.sources.names(cell).collect()
+        }
     }
 
-    fn cell_value(&self, cell: CellId) -> Option<&Value> {
-        self.cx.sources.value(cell)
+    fn cell_definitions(&self, cell: CellId) -> Vec<progred_display::CellDefinition<'_>> {
+        self.cx
+            .sources
+            .definitions(cell)
+            .map(|definition| match definition.definition {
+                progred_libraries::DefinitionRef::Value(value) => {
+                    progred_display::CellDefinition::Value(definition.source, value)
+                }
+                progred_libraries::DefinitionRef::ForeignFunction(_) => {
+                    progred_display::CellDefinition::Foreign
+                }
+            })
+            .collect()
     }
+}
+
+fn resolved_definitions(cx: &Cx<'_>, cell: CellId) -> Vec<grap::Definition> {
+    cx.sources.grap_definitions(cell)
+}
+
+fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
+    grap::evaluate(expression, |cell| resolved_definitions(cx, cell), fuel)
 }
 
 #[derive(Clone, Copy)]
@@ -1173,8 +1185,8 @@ fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     let mut path = path.to_vec();
     let mut follow_ancestors = ancestors.clone();
     for step in &steps {
-        if *step == Step::Follow {
-            if let Some(cell) = cx.sources.resolve(&path).and_then(Value::as_cell) {
+        if matches!(step, Step::Follow(_)) {
+            if let Some(cell) = cx.sources.resolve_path(&path).and_then(Value::as_cell) {
                 follow_ancestors.cells.insert(cell);
                 follow_ancestors.enclosing = Some((cell, path.len() + 1));
             }
@@ -1836,8 +1848,10 @@ fn projection_target<C: 'static>(
 impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
-    fn name(&self, cell: CellId) -> Option<&str> {
-        (!self.raw).then(|| self.sources.name(cell)).flatten()
+    fn names(&self, cell: CellId) -> Option<String> {
+        (!self.raw)
+            .then(|| self.sources.display_names(cell))
+            .flatten()
     }
 
     /// Whether `path` carries the primary highlight. A label-stage
@@ -2245,7 +2259,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
     match selection? {
         current if current.stage() == Stage::Edge => {
             let path: SharedPath = Rc::from(current.path());
-            Secondary::from_path(sources, path.clone(), sources.resolve(path.as_ref())?)
+            Secondary::from_path(sources, path.clone(), sources.resolve_path(path.as_ref())?)
         }
         _ => None,
     }
@@ -2273,7 +2287,6 @@ pub struct ProjectDescription<'a, World> {
     /// conventional `value` argument; an absent result falls through.
     pub root_projection: Option<&'a Value>,
     pub projection: Option<&'a Projection<World>>,
-    pub foreign: &'a grap::ForeignFunctions,
 }
 
 fn projection_is_absent(value: &Value) -> bool {
@@ -2309,12 +2322,10 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         width,
         root_projection,
         projection,
-        foreign,
     } = description;
     let cx = Cx {
         sources,
         raw,
-        foreign,
         annotations,
         styles,
         selection,
@@ -2331,20 +2342,20 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
     let mut traversal = Traversal::default();
-    if matches!(root_path.last(), Some(Step::Follow))
+    if matches!(root_path.last(), Some(Step::Follow(_)))
         && let Some(cell) = sources
-            .resolve(&root_path[..root_path.len() - 1])
+            .resolve_path(&root_path[..root_path.len() - 1])
             .and_then(Value::as_cell)
     {
         traversal.cells.insert(cell);
         traversal.enclosing = Some((cell, root_path.len()));
     }
     let projected = root_projection.zip(root).map(|(function, root)| {
+        let arguments = [(presentation::vocabulary::VALUE, root.clone())];
         grap::apply(
             function,
-            [(presentation::vocabulary::VALUE, root.clone())],
-            |cell| sources.value(cell).cloned(),
-            foreign,
+            arguments,
+            |cell| resolved_definitions(&cx, cell),
             grap::DEFAULT_FUEL,
         )
     });
@@ -2470,9 +2481,7 @@ fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Colo
     };
     let external = cx.sources.external(cell);
     let parent_external = last_follow(path)
-        .and_then(|index| cx.sources.resolve(&path[..index]))
-        .and_then(Value::as_cell)
-        .is_some_and(|cell| cx.sources.external(cell));
+        .is_some_and(|index| matches!(path[index], Step::Follow(gid::Resolution::Library(_))));
     if external == parent_external {
         return None;
     }
@@ -2563,7 +2572,6 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     let result_cx = Cx {
         sources: cx.sources,
         raw: false,
-        foreign: cx.foreign,
         annotations: cx.annotations,
         styles: cx.styles,
         selection: None,
@@ -2610,7 +2618,7 @@ fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
     path.push(step.clone());
     let contextual_projection = contextual_projection(projection, contextual_partials);
     let child_projection = contextual_projection.as_ref().or(projection);
-    if step == Step::Follow
+    if matches!(step, Step::Follow(_))
         && let Some(parent) = parent
     {
         let mut ancestors = ancestors.clone();
@@ -2662,7 +2670,7 @@ fn prepare_location<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
-    match location.value(|cell| cx.sources.value(cell)) {
+    match location.value(|cell, resolution| cx.sources.value(cell, resolution)) {
         Some(value) => prepare_present_value(
             cx,
             present_projection,

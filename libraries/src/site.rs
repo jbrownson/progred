@@ -4,6 +4,8 @@
 
 use crate::{Library, absent, name};
 use gid::Value;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xab8d8d4b75ef3526d258d2689f95daba);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
@@ -64,10 +66,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "site",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -105,7 +108,7 @@ mod tests {
         let (stored, site) = store();
         let foreign = control::functions().merge(site);
         assert!(absent::is_absent(
-            &grap::evaluate(
+            &crate::test_evaluate(
                 &grap::call(Value::from(vocabulary::GET), []),
                 |_| None,
                 &foreign,
@@ -115,7 +118,7 @@ mod tests {
         ));
 
         let written = Value::record([(vocabulary::FOLD, Value::from(vocabulary::FOLDED))]);
-        let set = grap::evaluate(
+        let set = crate::test_evaluate(
             &grap::call(
                 Value::from(vocabulary::SET),
                 [(vocabulary::VALUE, quote(written.clone()))],
@@ -127,7 +130,7 @@ mod tests {
         assert!(set.diagnostics.is_empty());
         assert_eq!(&*stored.borrow(), &Some(written.clone()));
         assert_eq!(
-            grap::evaluate(
+            crate::test_evaluate(
                 &grap::call(Value::from(vocabulary::GET), []),
                 |_| None,
                 &foreign,
@@ -137,7 +140,7 @@ mod tests {
             written
         );
 
-        let cleared = grap::evaluate(
+        let cleared = crate::test_evaluate(
             &grap::call(
                 Value::from(vocabulary::SET),
                 [(vocabulary::VALUE, absent::value())],
@@ -154,10 +157,10 @@ mod tests {
     fn without_an_overlay_they_are_not_callable() {
         let library = library::<(), ()>();
         assert_eq!(
-            grap::evaluate(
+            crate::test_evaluate(
                 &grap::call(Value::from(vocabulary::GET), []),
-                |cell| library.cells.value(cell).cloned(),
-                &library.functions,
+                |cell| library.value(cell).cloned(),
+                &library.functions(),
                 10,
             )
             .result,

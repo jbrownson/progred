@@ -138,7 +138,7 @@ struct Stop {
 
 pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
     match path {
-        [owner @ .., Step::Follow, Step::Key(label)] if *label == name::vocabulary::NAME => {
+        [owner @ .., Step::Follow(_), Step::Key(label)] if *label == name::vocabulary::NAME => {
             Some(owner)
         }
         _ => None,

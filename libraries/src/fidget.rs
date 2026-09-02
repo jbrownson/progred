@@ -16,6 +16,8 @@ use fidget_engine::{
     vm::VmShape,
 };
 use gid::{CellId, Cells, Value};
+
+pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use progred_display::{
@@ -35,7 +37,7 @@ pub mod vocabulary {
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
     pub const Y: CellId = CellId::from_u128(0x213e54dd15ac9c9750308f35a606f56f);
     pub const Z: CellId = CellId::from_u128(0xc93e6bb743a9d90f85f8cdea3aabf5c1);
-    pub const ADD: CellId = CellId::from_u128(0x208bf7b0ee1a002c66c86b34cf9eff3d);
+    pub const SUM: CellId = CellId::from_u128(0x208bf7b0ee1a002c66c86b34cf9eff3d);
     pub const SUBTRACT: CellId = CellId::from_u128(0x90e22494757f01a2ddf9bea409c186ae);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd2b341855e79890fc79bb562b109fcaf);
     pub const DIVIDE: CellId = CellId::from_u128(0xf9b35090433ceb932fb6da18d0dcc9bf);
@@ -260,7 +262,7 @@ fn preview_3d_function(
 
 pub fn functions() -> ForeignFunctions {
     [
-        (vocabulary::ADD, binary_function(vocabulary::ADD)),
+        (vocabulary::SUM, binary_function(vocabulary::SUM)),
         (vocabulary::SUBTRACT, binary_function(vocabulary::SUBTRACT)),
         (vocabulary::MULTIPLY, binary_function(vocabulary::MULTIPLY)),
         (vocabulary::DIVIDE, binary_function(vocabulary::DIVIDE)),
@@ -303,7 +305,7 @@ pub fn functions() -> ForeignFunctions {
 fn one_marker(fields: &gid::Record) -> Option<CellId> {
     let markers = [
         vocabulary::AXIS,
-        vocabulary::ADD,
+        vocabulary::SUM,
         vocabulary::SUBTRACT,
         vocabulary::MULTIPLY,
         vocabulary::DIVIDE,
@@ -373,7 +375,7 @@ fn tree(value: &Value) -> Option<Tree> {
             let left = tree(fields.get(&vocabulary::LEFT)?)?;
             let right = tree(fields.get(&vocabulary::RIGHT)?)?;
             match marker {
-                vocabulary::ADD => Some(left + right),
+                vocabulary::SUM => Some(left + right),
                 vocabulary::SUBTRACT => Some(left - right),
                 vocabulary::MULTIPLY => Some(left * right),
                 vocabulary::DIVIDE => Some(left / right),
@@ -890,7 +892,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),
         (vocabulary::AXIS, "axis"),
-        (vocabulary::ADD, "+"),
+        (vocabulary::SUM, "+"),
         (vocabulary::SUBTRACT, "-"),
         (vocabulary::MULTIPLY, "*"),
         (vocabulary::DIVIDE, "/"),
@@ -948,13 +950,13 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         );
     }
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![progred_display::partial(move |input| {
+    Library::named(
+        "fidget",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![progred_display::partial(move |input| {
             display(input, &renderer)
         })],
-    }
+    )
 }
 
 #[cfg(test)]
@@ -969,10 +971,10 @@ mod tests {
 
     fn evaluate(expression: &Value) -> Value {
         let library = library::<(), ()>();
-        grap_runtime::evaluate(
+        crate::test_evaluate(
             expression,
-            |cell| library.cells.value(cell).cloned(),
-            &library.functions,
+            |cell| library.value(cell).cloned(),
+            &library.functions(),
             200,
         )
         .result

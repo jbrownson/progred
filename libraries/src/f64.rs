@@ -4,6 +4,8 @@
 
 use crate::{Library, absent, line_edit, logic, name, number};
 use gid::{CellId, Cells, Step, Value};
+
+pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::vocabulary::FUNCTION;
@@ -16,7 +18,7 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub use grap_runtime::f64::F64;
-    pub const ADD: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
+    pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
     pub const SUBTRACT: CellId = CellId::from_u128(0x08d1ebc7fd4ce62efec9671f73e9b645);
     pub const DIVIDE: CellId = CellId::from_u128(0xb08dd4c44eeea43ab3c7593ddeedd742);
@@ -92,7 +94,7 @@ enum Precedence {
 
 fn precedence(function: CellId) -> Option<Precedence> {
     match function {
-        vocabulary::ADD | vocabulary::SUBTRACT => Some(Precedence::Sum),
+        vocabulary::SUM | vocabulary::SUBTRACT => Some(Precedence::Sum),
         vocabulary::MULTIPLY | vocabulary::DIVIDE => Some(Precedence::Product),
         vocabulary::LESS | vocabulary::EQUAL => Some(Precedence::Comparison),
         _ => None,
@@ -163,7 +165,7 @@ pub fn functions() -> ForeignFunctions {
             }),
         )
         .register(
-            vocabulary::ADD,
+            vocabulary::SUM,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left + right)
             }),
@@ -300,7 +302,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     for (cell, name) in [
         (vocabulary::F64, "f64"),
         (vocabulary::UPDATE, "f64 update"),
-        (vocabulary::ADD, "+"),
+        (vocabulary::SUM, "+"),
         (vocabulary::MULTIPLY, "*"),
         (vocabulary::SUBTRACT, "-"),
         (vocabulary::DIVIDE, "/"),
@@ -333,14 +335,14 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         vocabulary::PI,
         overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
     );
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![
+    Library::named(
+        "f64",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![
             progred_display::partial(binary_display::<World, Hover>),
             progred_display::partial(display::<World, Hover>),
         ],
-    }
+    )
 }
 
 #[cfg(test)]
@@ -398,7 +400,7 @@ mod tests {
         );
         assert_eq!(read(&with_extra), Some(2.5));
         let update = |input: &str| {
-            grap::evaluate(
+            crate::test_evaluate(
                 &grap::call(
                     grap::ffi(vocabulary::UPDATE),
                     [
@@ -429,10 +431,10 @@ mod tests {
 
     #[test]
     fn rust_supplies_arithmetic_to_grap() {
-        let add = call(vocabulary::ADD, value(2.0), value(3.0));
-        let multiply = call(vocabulary::MULTIPLY, add, value(4.0));
+        let sum = call(vocabulary::SUM, value(2.0), value(3.0));
+        let multiply = call(vocabulary::MULTIPLY, sum, value(4.0));
         assert_eq!(
-            grap::evaluate(&multiply, |_| None, &functions(), 20).result,
+            crate::test_evaluate(&multiply, |_| None, &functions(), 20).result,
             value(20.0)
         );
     }
@@ -448,7 +450,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            grap::evaluate(&expression, |_| None, &functions(), 20).result,
+            crate::test_evaluate(&expression, |_| None, &functions(), 20).result,
             value(12.5)
         );
     }
@@ -470,7 +472,7 @@ mod tests {
         );
 
         assert_eq!(
-            grap::evaluate(&expression, |_| None, &functions(), 20).result,
+            crate::test_evaluate(&expression, |_| None, &functions(), 20).result,
             enriched
         );
     }
@@ -478,7 +480,7 @@ mod tests {
     #[test]
     fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
-        let sum = call(vocabulary::ADD, value(1.0), product);
+        let sum = call(vocabulary::SUM, value(1.0), product);
         let layout = binary_display(&projection_input(&sum)).unwrap();
         let Layout::Row { children, .. } = layout else {
             panic!("binary notation is a row");
@@ -508,7 +510,7 @@ mod tests {
 
         let product = call(
             vocabulary::MULTIPLY,
-            call(vocabulary::ADD, value(1.0), value(2.0)),
+            call(vocabulary::SUM, value(1.0), value(2.0)),
             value(3.0),
         );
         let layout = binary_display(&projection_input(&product)).unwrap();
@@ -522,7 +524,7 @@ mod tests {
     fn binary_notation_declines_calls_with_unshown_fields() {
         let extra = new_cell_id();
         let call = grap::call(
-            Value::from(vocabulary::ADD),
+            Value::from(vocabulary::SUM),
             [
                 (vocabulary::LEFT, value(1.0)),
                 (vocabulary::RIGHT, value(2.0)),
@@ -534,14 +536,14 @@ mod tests {
 
     #[test]
     fn type_absences_are_library_values() {
-        let left = call(vocabulary::ADD, Value::from(b"two".to_vec()), value(3.0));
-        let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
+        let left = call(vocabulary::SUM, Value::from(b"two".to_vec()), value(3.0));
+        let right = call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
-            grap::evaluate(&left, |_| None, &functions(), 10).result,
+            crate::test_evaluate(&left, |_| None, &functions(), 10).result,
             absent::with_reason(vocabulary::LEFT_NOT_F64)
         );
         assert_eq!(
-            grap::evaluate(&right, |_| None, &functions(), 10).result,
+            crate::test_evaluate(&right, |_| None, &functions(), 10).result,
             absent::with_reason(vocabulary::RIGHT_NOT_F64)
         );
     }
@@ -550,31 +552,27 @@ mod tests {
     fn library_names_are_ordinary_facts_for_random_identities() {
         let library = library::<(), ()>();
         assert_eq!(
-            library.cells.value(vocabulary::F64).and_then(name::read),
+            library.value(vocabulary::F64).and_then(name::read),
             Some("f64")
         );
         assert_eq!(
-            library.cells.value(vocabulary::ADD).and_then(name::read),
+            library.value(vocabulary::SUM).and_then(name::read),
             Some("+")
         );
         assert_eq!(
-            library.cells.value(vocabulary::PI).and_then(name::read),
+            library.value(vocabulary::PI).and_then(name::read),
             Some("π")
         );
         assert_eq!(
-            library.cells.value(vocabulary::PI).and_then(read),
+            library.value(vocabulary::PI).and_then(read),
             Some(std::f64::consts::PI)
         );
         assert_eq!(
-            library
-                .cells
-                .value(vocabulary::LEFT_NOT_F64)
-                .and_then(name::read),
+            library.value(vocabulary::LEFT_NOT_F64).and_then(name::read),
             Some("left is not f64")
         );
         assert_eq!(
             library
-                .cells
                 .value(vocabulary::RIGHT_NOT_F64)
                 .and_then(name::read),
             Some("right is not f64")
@@ -587,6 +585,6 @@ mod tests {
             absent::reason(&absent::with_reason(vocabulary::RIGHT_NOT_F64)),
             Some(vocabulary::RIGHT_NOT_F64)
         );
-        assert!(library.cells.value(vocabulary::ADD).is_some());
+        assert!(library.value(vocabulary::SUM).is_some());
     }
 }

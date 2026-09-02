@@ -1491,12 +1491,11 @@ impl Editor {
     }
 
     fn finish_handled_event(&mut self) {
-        let library = &self.stack.library;
-        let foreign = &self.stack.foreign;
+        let libraries = &self.stack.libraries;
         let model = &mut self.model;
         if let Some(selection) = &mut model.selection {
             let before = model.doc.clone();
-            if selection::write_through(&mut model.doc, library, foreign, selection) {
+            if selection::write_through(&mut model.doc, libraries, selection) {
                 let path = selection.path().to_vec();
                 model.history.record(before, Some(path));
                 self.refresh_title();
@@ -1516,11 +1515,16 @@ impl Editor {
         let update = (scrub.gesture)(event);
         scrub.spelling = update.spelling;
         let replacement = update.value;
-        if self.sources().resolve(&path) == Some(&replacement) {
+        if self.sources().resolve_path(&path) == Some(&replacement) {
             return true;
         }
         let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.stack.library, &path, replacement) {
+        if selection::set_value(
+            &mut self.model.doc,
+            &self.stack.libraries,
+            &path,
+            replacement,
+        ) {
             if self.scrub.as_ref().is_some_and(|scrub| !scrub.recorded) {
                 self.model.history.record(before, Some(path));
                 if let Some(scrub) = &mut self.scrub {
@@ -1584,11 +1588,11 @@ impl Editor {
         let root = active.root.clone();
         let path = active.path.clone();
         let update = active.update(point);
-        if self.sources().resolve(&path) != Some(&update.value) {
+        if self.sources().resolve_path(&path) != Some(&update.value) {
             let before = self.model.doc.clone();
             if selection::set_value(
                 &mut self.model.doc,
-                &self.stack.library,
+                &self.stack.libraries,
                 &path,
                 update.value,
             ) {
@@ -1685,7 +1689,7 @@ impl Editor {
     pub(crate) fn sources(&self) -> sources::Sources<'_> {
         sources::Sources {
             doc: &self.model.doc,
-            library: &self.stack.library,
+            libraries: &self.stack.libraries,
         }
     }
 
@@ -1779,12 +1783,12 @@ impl Editor {
         let current = self.model.selection.as_ref()?;
         let path = current.path();
         let sources = self.sources();
-        if let Some(cell) = sources.resolve(path).and_then(gid::Value::as_cell) {
+        if let Some(cell) = sources.resolve_path(path).and_then(gid::Value::as_cell) {
             return Some((cell, path.to_vec()));
         }
         let follow = selection::last_follow(path)?;
         let anchor = path[..follow].to_vec();
-        let cell = sources.resolve(&anchor)?.as_cell()?;
+        let cell = sources.resolve_path(&anchor)?.as_cell()?;
         Some((cell, anchor))
     }
 

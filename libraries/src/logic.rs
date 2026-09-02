@@ -4,6 +4,8 @@
 use crate::{Library, name};
 use gid::{Cells, Value};
 
+pub const ID: gid::CellId = gid::CellId::from_u128(0xf76a2ef341541a5c955fc23094e2df52);
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -24,8 +26,9 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     for (cell, spelling) in [(vocabulary::TRUE, "true"), (vocabulary::FALSE, "false")] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "logic",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }

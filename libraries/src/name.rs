@@ -4,6 +4,8 @@
 use crate::{Library, text};
 use gid::{CellId, Cells, Value};
 
+pub const ID: CellId = CellId::from_u128(0x3209ad5d23a0c8513f6bd76324a5cf60);
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -28,10 +30,11 @@ pub fn read(value: &Value) -> Option<&str> {
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "name",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -61,9 +64,6 @@ mod tests {
     #[test]
     fn the_name_relation_describes_itself_without_core_support() {
         let library = library::<(), ()>();
-        assert_eq!(
-            library.cells.value(vocabulary::NAME).and_then(read),
-            Some("name")
-        );
+        assert_eq!(library.value(vocabulary::NAME).and_then(read), Some("name"));
     }
 }

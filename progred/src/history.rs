@@ -111,17 +111,20 @@ mod tests {
     }
 
     fn x_of(doc: &Document) -> Value {
-        let lib = Cells::new();
-        crate::sources::Sources { doc, library: &lib }
-            .resolve(&[Step::Follow, x()])
-            .unwrap()
-            .clone()
+        let libraries = progred_libraries::Libraries::default();
+        crate::sources::Sources {
+            doc,
+            libraries: &libraries,
+        }
+        .resolve_path(&[Step::Follow(gid::Resolution::Document), x()])
+        .unwrap()
+        .clone()
     }
 
     #[test]
     fn undo_and_redo_roundtrip_with_selection() {
         let mut history = History::default();
-        let path = vec![Step::Follow, x()];
+        let path = vec![Step::Follow(gid::Resolution::Document), x()];
         history.record(doc("1"), Some(path.clone()));
 
         let (back, selection) = history.undo(doc("2"), None).unwrap();
@@ -136,7 +139,7 @@ mod tests {
     #[test]
     fn recording_clears_redo() {
         let mut history = History::default();
-        let x = vec![Step::Follow, x()];
+        let x = vec![Step::Follow(gid::Resolution::Document), x()];
         history.record(doc("1"), Some(x.clone()));
         let (back, _) = history.undo(doc("1.5"), Some(x.clone())).unwrap();
         history.record(back, Some(x));
@@ -147,7 +150,7 @@ mod tests {
     fn dirty_is_position_relative_to_the_save_mark() {
         let mut history = History::default();
         assert!(!history.dirty());
-        let x = vec![Step::Follow, x()];
+        let x = vec![Step::Follow(gid::Resolution::Document), x()];
         history.record(doc("1"), Some(x.clone()));
         assert!(history.dirty());
 

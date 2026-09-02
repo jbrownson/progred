@@ -10,6 +10,8 @@
 
 use crate::{Library, line_edit, name};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{Layout, ProjectionInput, overlay_value};
 
@@ -73,11 +75,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-    }
+    Library::named(
+        "text",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]
@@ -99,7 +101,7 @@ mod tests {
                 .update(extra, Value::from(vec![1])),
         );
         assert_eq!(read(&enriched), Some("hello"));
-        let written = grap_runtime::evaluate(
+        let written = crate::test_evaluate(
             &grap_runtime::call(
                 grap_runtime::ffi(vocabulary::UPDATE),
                 [
@@ -161,7 +163,7 @@ mod tests {
     fn the_library_owns_its_vocabulary_and_projection() {
         let library = library::<(), ()>();
         assert_eq!(
-            library.cells.value(vocabulary::UTF8).and_then(name::read),
+            library.value(vocabulary::UTF8).and_then(name::read),
             Some("utf8")
         );
         assert_eq!(library.projections.len(), 1);

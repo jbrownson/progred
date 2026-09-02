@@ -1,7 +1,6 @@
 {
   "binders": {
     "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
-    "add": 201af445eb7e2c270bb5ead10b781fc1,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
@@ -123,6 +122,7 @@
     "step": 569e33fee165d346791e05c0e9cfea8e,
     "stops": 5d4211d5e7184a41fe1ffaa2cd5865c9,
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
+    "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "tip_distance": 3087b52f1e61ecc77b2768d8dced0d7c,
     "tip_x": c0c24024572a578694cb666c24b533ba,
     "tip_y": d843ffc3a66afaa9d8b21bd7597e6007,
@@ -327,7 +327,7 @@
                         {
                           value: {
                             right: x_jitter,
-                            function: add,
+                            function: sum,
                             left: {
                               end: x1,
                               start: x0,
@@ -340,7 +340,7 @@
                         {
                           value: {
                             right: y_jitter,
-                            function: add,
+                            function: sum,
                             left: {
                               end: y1,
                               start: y0,
@@ -370,7 +370,7 @@
                             right: {
                               f64: 0x000000000000f03f,
                             },
-                            function: add,
+                            function: sum,
                             left: blossom_index,
                           },
                           bind: next_blossom,
@@ -413,7 +413,7 @@
                                         right: {
                                           f64: 0x000000000000f03f,
                                         },
-                                        function: add,
+                                        function: sum,
                                         left: segment_index,
                                       },
                                     },
@@ -733,7 +733,7 @@
                           function: multiply,
                           left: tip_distance,
                         },
-                        function: add,
+                        function: sum,
                         left: x,
                       },
                       bind: tip_x,
@@ -748,7 +748,7 @@
                           function: multiply,
                           left: tip_distance,
                         },
-                        function: add,
+                        function: sum,
                         left: y,
                       },
                       bind: tip_y,
@@ -758,7 +758,7 @@
                         right: {
                           f64: 0x000000000000f03f,
                         },
-                        function: add,
+                        function: sum,
                         left: depth,
                       },
                       bind: child_depth,
@@ -821,7 +821,7 @@
                                       function: multiply,
                                       left: turn_left,
                                     },
-                                    function: add,
+                                    function: sum,
                                     left: angle,
                                   },
                                   bind: left_angle,
@@ -833,7 +833,7 @@
                                       function: multiply,
                                       left: turn_right,
                                     },
-                                    function: add,
+                                    function: sum,
                                     left: angle,
                                   },
                                   bind: right_angle,
@@ -926,7 +926,7 @@
                                             function: multiply,
                                             left: turn_left,
                                           },
-                                          function: add,
+                                          function: sum,
                                           left: angle,
                                         },
                                         bind: left_angle,
@@ -1243,7 +1243,7 @@
                             {
                               value: {
                                 right: dx,
-                                function: add,
+                                function: sum,
                                 left: x,
                               },
                               bind: next_x,
@@ -1251,7 +1251,7 @@
                             {
                               value: {
                                 right: dy,
-                                function: add,
+                                function: sum,
                                 left: y,
                               },
                               bind: next_y,

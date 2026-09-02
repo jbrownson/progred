@@ -11,7 +11,9 @@ The logical model currently consists of:
 - values made from cell references, blobs, lists, and records;
 - a direct cell-identity-to-value table, where an absent entry is a bare cell;
 - documents containing one optional root value and their cell table;
-- stable list positions and traversal steps used while manipulating a document.
+- stable list positions and traversal steps used while manipulating a document;
+- stable resolution sources: a cell may have one value in the document and one
+  in each loaded library, and a `Follow` step names which source it crosses.
 
 Names, UTF-8 text, numbers, Grap, and CAD concepts are open
 conventions or libraries embedded in GID values. They are not primitive

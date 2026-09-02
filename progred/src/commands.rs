@@ -55,7 +55,7 @@ impl Editor {
                 // intact) already covers the deletion.
                 let covered = current.recorded();
                 let before = self.model.doc.clone();
-                selection::delete_edge(&mut self.model.doc, &self.stack.library, &path) && {
+                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &path) && {
                     if !covered {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
@@ -147,7 +147,7 @@ impl Editor {
         action: &completion::EntryAction,
     ) {
         let before = self.model.doc.clone();
-        if completion::commit_pending(&mut self.model.doc, &self.stack.library, &path, action) {
+        if completion::commit_pending(&mut self.model.doc, &self.stack.libraries, &path, action) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
@@ -170,7 +170,7 @@ impl Editor {
         };
         let mut path = parent.clone();
         path.push(Step::Key(label));
-        if self.sources().resolve(&path).is_some() {
+        if self.sources().resolve_path(&path).is_some() {
             self.model.selection =
                 Some(selection::Selection::edge(&self.sources(), path).with_root(root));
             return;
@@ -214,7 +214,7 @@ impl Editor {
     pub(crate) fn copy_selection(&mut self) -> bool {
         let sources = self.sources();
         let value = match &self.model.selection {
-            Some(selection) => sources.resolve(selection.path()).cloned(),
+            Some(selection) => sources.resolve_path(selection.path()).cloned(),
             None => None,
         };
         let Some(value) = value else {
@@ -320,11 +320,11 @@ impl Editor {
         let path = current.path().to_vec();
         // Idempotent pastes stay off the undo stack, as write_through
         // keeps no-op rewrites off it.
-        if self.sources().resolve(&path) == Some(&value) {
+        if self.sources().resolve_path(&path) == Some(&value) {
             return true;
         }
         let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.stack.library, &path, value) {
+        if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
             self.model.selection =
@@ -477,7 +477,7 @@ impl Editor {
         let root = current.root().clone();
         let sources = sources::Sources {
             doc: &self.model.doc,
-            library: &self.stack.library,
+            libraries: &self.stack.libraries,
         };
         let Some(view) = self.model.workspace.view_mut(&root) else {
             return false;

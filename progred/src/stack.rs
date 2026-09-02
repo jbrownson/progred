@@ -3,60 +3,55 @@
 use crate::hover::Hover;
 use crate::projection::Projection;
 use crate::workspace;
-use gid::Cells;
 use progred_libraries::{
-    Library, absent, color, control, f32, f64, fidget, geometry, grap as grap_library, layout,
-    line_edit, list, logic, name, presentation, random, selection, site, text, u64,
+    Libraries, Library, absent, color, control, f32, f64, fidget, geometry, grap as grap_library,
+    layout, line_edit, list, logic, name, presentation, random, selection, site, text, u64,
 };
 
 pub struct Stack<World> {
-    pub library: Cells,
-    pub foreign: grap::ForeignFunctions,
+    pub libraries: Libraries,
     pub projection: Projection<World>,
 }
 
 impl<World> Clone for Stack<World> {
     fn clone(&self) -> Self {
         Self {
-            library: self.library.clone(),
-            foreign: self.foreign.clone(),
+            libraries: self.libraries.clone(),
             projection: self.projection.clone(),
         }
     }
 }
 
 pub fn load<World: 'static>() -> Stack<World> {
-    let library = Library::merge_all(libraries());
-    let foreign = library.functions.clone();
-    let projection = Projection::new(library.projections);
+    let (libraries, projections) = Libraries::from_contributions(contributions());
     Stack {
-        library: library.cells.merged(workspace::cells()),
-        foreign,
-        projection,
+        libraries,
+        projection: Projection::new(projections),
     }
 }
 
-fn libraries<World: 'static>() -> impl Iterator<Item = Library<World, Hover>> {
+fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library<World, Hover>)> {
     [
-        name::library(),
-        text::library(),
-        absent::library(),
-        color::library(),
-        control::library(),
-        f32::library(),
-        f64::library(),
-        fidget::library(),
-        grap_library::library(),
-        line_edit::library(),
-        u64::library(),
-        logic::library(),
-        list::library(),
-        random::library(),
-        presentation::library(),
-        layout::library(),
-        selection::library(),
-        site::library(),
-        geometry::library(),
+        (name::ID, name::library()),
+        (text::ID, text::library()),
+        (absent::ID, absent::library()),
+        (color::ID, color::library()),
+        (control::ID, control::library()),
+        (f32::ID, f32::library()),
+        (f64::ID, f64::library()),
+        (fidget::ID, fidget::library()),
+        (grap_library::ID, grap_library::library()),
+        (line_edit::ID, line_edit::library()),
+        (u64::ID, u64::library()),
+        (logic::ID, logic::library()),
+        (list::ID, list::library()),
+        (random::ID, random::library()),
+        (presentation::ID, presentation::library()),
+        (layout::ID, layout::library()),
+        (selection::ID, selection::library()),
+        (site::ID, site::library()),
+        (geometry::ID, geometry::library()),
+        (workspace::ID, workspace::library()),
     ]
     .into_iter()
 }

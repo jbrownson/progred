@@ -14,7 +14,7 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
         control::functions(),
         f64::functions(),
-        list::library::<(), ()>().functions,
+        list::library::<(), ()>().functions(),
     ])
 }
 
@@ -23,7 +23,7 @@ fn blob(text: &str) -> Value {
 }
 
 fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation {
-    grap::evaluate(expression, |_| None, &functions(), fuel)
+    crate::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
 fn evaluate_resolving(
@@ -31,7 +31,7 @@ fn evaluate_resolving(
     resolve: impl Fn(CellId) -> Option<Value>,
     fuel: usize,
 ) -> grap::Evaluation {
-    grap::evaluate(expression, resolve, &functions(), fuel)
+    crate::test_evaluate(expression, resolve, &functions(), fuel)
 }
 
 /// call(1) + lambda(1) + argument(1) + body cell, bound(1) = 4.
@@ -50,8 +50,8 @@ fn a_lambda_call_burns_its_call_function_argument_and_body() {
 #[test]
 fn shadowing_a_foreign_function_burns_like_any_binding() {
     let expression = grap::call(
-        grap::lambda([f64::vocabulary::ADD], Value::from(f64::vocabulary::ADD)),
-        [(f64::vocabulary::ADD, blob("bound"))],
+        grap::lambda([f64::vocabulary::SUM], Value::from(f64::vocabulary::SUM)),
+        [(f64::vocabulary::SUM, blob("bound"))],
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result, blob("bound"));
@@ -124,7 +124,16 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
         ],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, crate::absent::value());
+    assert_eq!(
+        evaluation.result,
+        Value::record([
+            (
+                crate::absent::vocabulary::ABSENT,
+                Value::from(control::vocabulary::PATTERN_MISMATCH),
+            ),
+            (control::vocabulary::PATTERN, blob("other")),
+        ]),
+    );
     assert!(evaluation.diagnostics.is_empty());
     assert_eq!(evaluation.remaining_fuel, 6);
 }
@@ -252,7 +261,7 @@ fn clause_lists_behind_cells_agree_with_literal_clauses() {
 #[test]
 fn arithmetic_burns_its_call_function_and_operands() {
     let expression = grap::call(
-        Value::from(f64::vocabulary::ADD),
+        Value::from(f64::vocabulary::SUM),
         [
             (f64::vocabulary::LEFT, f64::value(1.0)),
             (f64::vocabulary::RIGHT, f64::value(2.0)),

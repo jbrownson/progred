@@ -10,6 +10,8 @@
 //!
 use crate::{Library, color, f64 as f64_convention, name, presentation, text};
 use gid::{CellId, Step, Value};
+
+pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
@@ -155,6 +157,7 @@ pub mod vocabulary {
     /// A walk step following the value's link — the one step that is
     /// not a field key.
     pub const FOLLOW: CellId = CellId::from_u128(0xdc27a94e6b105f83b0562f8ea19d34c7);
+    pub const DOCUMENT: CellId = CellId::from_u128(0x1dcf7dbaaf1ff3416fce048ea8993c7b);
 }
 
 fn node(key: CellId, content: Value) -> Value {
@@ -282,10 +285,17 @@ pub fn descend_key(key: CellId) -> Value {
     )
 }
 
-pub fn descend_follow() -> Value {
+pub fn descend_follow(resolution: gid::Resolution) -> Value {
+    let source = match resolution {
+        gid::Resolution::Document => vocabulary::DOCUMENT,
+        gid::Resolution::Library(library) => library,
+    };
     node(
         vocabulary::DESCEND,
-        Value::record([(vocabulary::STEP, Value::Cell(vocabulary::FOLLOW))]),
+        Value::record([(
+            vocabulary::STEP,
+            Value::record([(vocabulary::FOLLOW, Value::Cell(source))]),
+        )]),
     )
 }
 
@@ -909,12 +919,18 @@ fn read_point(value: &Value) -> Option<Point> {
 /// A walk step: the FOLLOW marker, or a field key's cell. List
 /// positions have no data form yet; element walks stay Rust.
 fn read_step(value: &Value) -> Option<Step> {
-    let cell = value.as_cell()?;
-    Some(if cell == vocabulary::FOLLOW {
-        Step::Follow
-    } else {
-        Step::Key(cell)
-    })
+    match value {
+        Value::Cell(cell) => Some(Step::Key(*cell)),
+        Value::Record(fields) => {
+            let source = fields.get(&vocabulary::FOLLOW)?.as_cell()?;
+            Some(Step::Follow(if source == vocabulary::DOCUMENT {
+                gid::Resolution::Document
+            } else {
+                gid::Resolution::Library(source)
+            }))
+        }
+        Value::Blob(_) | Value::List(_) => None,
+    }
 }
 
 pub fn display<World: 'static, Hover: Clone>(
@@ -1037,26 +1053,30 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::SQUARE, "square"),
         (vocabulary::CURLY, "curly"),
         (vocabulary::FOLLOW, "follow"),
+        (vocabulary::DOCUMENT, "document"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library {
-        cells,
-        functions: ForeignFunctions::default()
-            .register(
-                vocabulary::DRAWING,
-                ForeignFunction::new(drawing_projection),
-            )
-            .register(
-                vocabulary::BORDER,
-                ForeignFunction::runtime(border_projection),
-            )
-            .register(
-                APPLY_BORDER_PROJECTION,
-                ForeignFunction::runtime(apply_border_projection),
-            ),
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-    }
+    Library::named(
+        "layout",
+        crate::Definitions::from_parts(
+            cells,
+            ForeignFunctions::default()
+                .register(
+                    vocabulary::DRAWING,
+                    ForeignFunction::new(drawing_projection),
+                )
+                .register(
+                    vocabulary::BORDER,
+                    ForeignFunction::runtime(border_projection),
+                )
+                .register(
+                    APPLY_BORDER_PROJECTION,
+                    ForeignFunction::runtime(apply_border_projection),
+                ),
+        ),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]
@@ -1073,11 +1093,11 @@ mod tests {
     fn drawing_is_an_ordinary_projection_function() {
         let library = library::<(), ()>();
         let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
-        let evaluation = grap_runtime::apply(
+        let evaluation = crate::test_apply(
             &Value::from(vocabulary::DRAWING),
             [(presentation::vocabulary::VALUE, configuration.clone())],
-            |cell| library.cells.value(cell).cloned(),
-            &library.functions,
+            |cell| library.value(cell).cloned(),
+            &library.functions(),
             20,
         );
         assert_eq!(
@@ -1090,7 +1110,7 @@ mod tests {
     fn border_composes_with_an_ordinary_projection() {
         let library = library::<(), ()>();
         let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
-        let composition = grap_runtime::evaluate(
+        let composition = crate::test_evaluate(
             &grap_runtime::call(
                 Value::from(vocabulary::BORDER),
                 [(
@@ -1098,8 +1118,8 @@ mod tests {
                     Value::from(vocabulary::DRAWING),
                 )],
             ),
-            |cell| library.cells.value(cell).cloned(),
-            &library.functions,
+            |cell| library.value(cell).cloned(),
+            &library.functions(),
             20,
         );
         assert!(
@@ -1108,11 +1128,11 @@ mod tests {
                 .as_record()
                 .is_some_and(|fields| fields.contains_key(&grap_runtime::vocabulary::CLOSURE))
         );
-        let evaluation = grap_runtime::apply(
+        let evaluation = crate::test_apply(
             &composition.result,
             [(presentation::vocabulary::VALUE, configuration.clone())],
-            |cell| library.cells.value(cell).cloned(),
-            &library.functions,
+            |cell| library.value(cell).cloned(),
+            &library.functions(),
             50,
         );
         let Some(Layout::Border { child }) = decoded(&evaluation.result) else {
@@ -1155,7 +1175,10 @@ mod tests {
                 col(
                     0,
                     2.0,
-                    [descend_follow(), text_leaf("…", vocabulary::DIM_FACE)],
+                    [
+                        descend_follow(gid::Resolution::Document),
+                        text_leaf("…", vocabulary::DIM_FACE),
+                    ],
                 ),
             ),
         ]);
@@ -1204,7 +1227,7 @@ mod tests {
         assert!(matches!(
             &children[0],
             Layout::Descend {
-                step: Step::Follow,
+                step: Step::Follow(gid::Resolution::Document),
                 ..
             }
         ));

@@ -4,6 +4,8 @@
 
 use crate::{Library, absent, name};
 use gid::Value;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xbd9a8ecaa53276087806022499c6a61e);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
@@ -49,10 +51,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "selection",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -75,7 +78,7 @@ mod tests {
             },
         );
         let next = Value::record([]);
-        let result = grap_runtime::evaluate(
+        let result = crate::test_evaluate(
             &grap_runtime::call(
                 Value::from(vocabulary::SET),
                 [(vocabulary::VALUE, next.clone())],
@@ -92,10 +95,10 @@ mod tests {
     fn the_vocabulary_alone_grants_no_selection_access() {
         let library = library::<(), ()>();
         assert_eq!(
-            grap_runtime::evaluate(
+            crate::test_evaluate(
                 &grap_runtime::call(Value::from(vocabulary::GET), []),
-                |cell| library.cells.value(cell).cloned(),
-                &library.functions,
+                |cell| library.value(cell).cloned(),
+                &library.functions(),
                 10,
             )
             .result,

@@ -6,6 +6,8 @@
 
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
+
+pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{
@@ -39,6 +41,7 @@ pub mod vocabulary {
     pub const INVALID_BINDINGS: CellId = CellId::from_u128(0x480ae287377249459a3438cb4b05229f);
     pub const INVALID_BINDING: CellId = CellId::from_u128(0x4ecae0db406e426aba1c02f2f04570ad);
     pub const INVALID_EXPRESSIONS: CellId = CellId::from_u128(0xa41a40f12691414971dbd9f788c291d6);
+    pub const PATTERN_MISMATCH: CellId = CellId::from_u128(0xc44d3f1a71dea754a02bc14561a143b7);
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -196,6 +199,7 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                 // list expression; burn its fuel so the stage stays
                 // burn-invisible.
                 context.burn()?;
+                let mut absents = Vec::new();
                 for case in cases {
                     let CompiledCase::Case {
                         pattern,
@@ -211,13 +215,13 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                                 &environment.extended_runtime(bindings),
                             );
                         }
-                        Ok(None) => {}
+                        Ok(None) => absents.push(pattern_mismatch(pattern)),
                         Err(InvalidBinder) => {
                             return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                         }
                     }
                 }
-                Ok(absent::value().into())
+                Ok(absent::from_causes(absents).into())
             }
             CompiledCases::Deferred(cases) => {
                 let cases_value = context.eval(*cases, environment)?;
@@ -226,7 +230,7 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                         expression,
                         bindings,
                     } => context.eval_value_runtime(expression, &environment.extended(bindings)),
-                    Selection::NoMatch => Ok(absent::value().into()),
+                    Selection::NoMatch(absents) => Ok(absent::from_causes(absents).into()),
                     Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
                 }
             }
@@ -370,7 +374,7 @@ enum Selection<'a> {
         expression: &'a Value,
         bindings: Vec<(CellId, Value)>,
     },
-    NoMatch,
+    NoMatch(Vec<Value>),
     Invalid(CellId),
 }
 
@@ -378,6 +382,7 @@ fn select<'a>(value: &Value, cases: &'a Value) -> Selection<'a> {
     let Some(cases) = cases.as_list() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
+    let mut absents = Vec::new();
     for case in cases.values() {
         let Some(fields) = case.as_record() else {
             return Selection::Invalid(vocabulary::INVALID_CASE);
@@ -395,13 +400,23 @@ fn select<'a>(value: &Value, cases: &'a Value) -> Selection<'a> {
                     bindings,
                 };
             }
-            Ok(None) => {}
+            Ok(None) => absents.push(pattern_mismatch(pattern)),
             Err(InvalidBinder) => {
                 return Selection::Invalid(vocabulary::INVALID_BINDER);
             }
         }
     }
-    Selection::NoMatch
+    Selection::NoMatch(absents)
+}
+
+fn pattern_mismatch(pattern: &Value) -> Value {
+    Value::record([
+        (
+            absent::vocabulary::ABSENT,
+            Value::from(vocabulary::PATTERN_MISMATCH),
+        ),
+        (vocabulary::PATTERN, pattern.clone()),
+    ])
 }
 
 struct InvalidBinder;
@@ -781,19 +796,20 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::INVALID_BINDINGS, "invalid bindings"),
         (vocabulary::INVALID_BINDING, "invalid binding"),
         (vocabulary::INVALID_EXPRESSIONS, "invalid expressions"),
+        (vocabulary::PATTERN_MISMATCH, "pattern mismatch"),
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![
+    Library::named(
+        "control",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![
             progred_display::partial(match_display::<World, Hover>),
             progred_display::partial(bindings_display::<World, Hover>),
             progred_display::partial(do_display::<World, Hover>),
             progred_display::partial(quote_display::<World, Hover>),
         ],
-    }
+    )
 }
 
 #[cfg(test)]
@@ -916,11 +932,11 @@ mod tests {
     }
 
     fn evaluate(expression: &Value) -> grap::Evaluation {
-        grap::evaluate(expression, |_| None, &functions(), 100)
+        crate::test_evaluate(expression, |_| None, &functions(), 100)
     }
 
     fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation {
-        grap::evaluate(expression, |_| None, &functions(), fuel)
+        crate::test_evaluate(expression, |_| None, &functions(), fuel)
     }
 
     #[test]
@@ -949,7 +965,7 @@ mod tests {
             grap::call(Value::from(first), []),
             grap::call(Value::from(second), []),
         ]);
-        let result = grap::evaluate(&expression, |_| None, &functions, 100).result;
+        let result = crate::test_evaluate(&expression, |_| None, &functions, 100).result;
 
         assert_eq!(&*calls.borrow(), &[first, second]);
         assert_eq!(result, blob("second"));
@@ -1093,7 +1109,7 @@ mod tests {
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, inner);
         assert!(evaluation.diagnostics.is_empty());
-        assert!(evaluation.dependencies.is_empty());
+        assert_eq!(evaluation.dependencies, [vocabulary::QUOTE].into());
     }
 
     #[test]
@@ -1140,8 +1156,14 @@ mod tests {
                 case_arm(blob("second"), blob("second result")),
             ],
         );
-        let evaluation = grap::evaluate(&expression, |_| None, &foreign, 100);
-        assert_eq!(evaluation.result, absent::value());
+        let evaluation = crate::test_evaluate(&expression, |_| None, &foreign, 100);
+        assert_eq!(
+            evaluation.result,
+            absent::from_causes([
+                pattern_mismatch(&blob("first")),
+                pattern_mismatch(&blob("second")),
+            ]),
+        );
         assert!(evaluation.diagnostics.is_empty());
         assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
     }
@@ -1188,7 +1210,10 @@ mod tests {
                 blob("matched"),
             )],
         );
-        assert_eq!(evaluate(&too_short).result, absent::value());
+        assert_eq!(
+            evaluate(&too_short).result,
+            pattern_mismatch(&Value::list([binding(element), binding(other),])),
+        );
     }
 
     #[test]
@@ -1525,18 +1550,15 @@ mod tests {
         let library = library::<(), ()>();
         assert_eq!(library.projections.len(), 4);
         assert_eq!(
-            library.cells.value(vocabulary::QUOTE).and_then(name::read),
+            library.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")
         );
         assert_eq!(
-            library
-                .cells
-                .value(vocabulary::UNQUOTE)
-                .and_then(name::read),
+            library.value(vocabulary::UNQUOTE).and_then(name::read),
             Some("unquote")
         );
         assert_eq!(
-            library.cells.value(vocabulary::DO).and_then(name::read),
+            library.value(vocabulary::DO).and_then(name::read),
             Some("do")
         );
         for cell in [
@@ -1547,7 +1569,7 @@ mod tests {
             vocabulary::INVALID_BINDING,
             vocabulary::INVALID_EXPRESSIONS,
         ] {
-            assert!(name::read(library.cells.value(cell).unwrap()).is_some());
+            assert!(name::read(library.value(cell).unwrap()).is_some());
             assert_eq!(absent::reason(&absent::with_reason(cell)), Some(cell));
         }
     }

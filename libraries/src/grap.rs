@@ -4,6 +4,8 @@
 
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
+
+pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
@@ -25,9 +27,9 @@ fn short_id(cell: CellId) -> String {
 }
 
 fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
-    match env.name(cell) {
-        Some(name) => (name.to_owned(), Face::Name),
-        None => (short_id(cell), Face::Id),
+    match env.names(cell) {
+        names if !names.is_empty() => (names.join(" / "), Face::Name),
+        _ => (short_id(cell), Face::Id),
     }
 }
 
@@ -52,8 +54,15 @@ fn shallow_cell<World, Hover: Clone>(
 fn deep_cell<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    input.value.as_cell()?;
-    Some(bracket(Delim::Paren, descend(Step::Follow, None, None)))
+    let cell = input.value.as_cell()?;
+    let definitions = input.env.cell_definitions(cell);
+    let [progred_display::CellDefinition::Value(resolution, _)] = definitions.as_slice() else {
+        return None;
+    };
+    Some(bracket(
+        Delim::Paren,
+        descend(Step::Follow(*resolution), None, None),
+    ))
 }
 
 fn lambda_name<World, Hover>(
@@ -116,9 +125,9 @@ pub(crate) fn expression_descend<World: 'static, Hover: Clone + 'static>(
 }
 
 fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
-    match env.name(field) {
-        Some(name) => (name.to_owned(), Face::Label),
-        None => (short_id(field), Face::Id),
+    match env.names(field) {
+        names if !names.is_empty() => (names.join(" / "), Face::Label),
+        _ => (short_id(field), Face::Id),
     }
 }
 
@@ -147,7 +156,11 @@ fn function_parameters(env: &dyn progred_display::Env, function: &Value) -> Opti
         if !followed.insert(cell) {
             return None;
         }
-        function = env.cell_value(cell)?;
+        let definitions = env.cell_definitions(cell);
+        let [progred_display::CellDefinition::Value(_, definition)] = definitions.as_slice() else {
+            return None;
+        };
+        function = definition;
     }
     parameters(function)
 }
@@ -157,11 +170,13 @@ fn standard_field_order(
     left: &CellId,
     right: &CellId,
 ) -> std::cmp::Ordering {
-    match (env.name(*left), env.name(*right)) {
-        (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => left.cmp(right),
+    match (env.names(*left), env.names(*right)) {
+        (left_names, right_names) if !left_names.is_empty() && !right_names.is_empty() => {
+            left_names.cmp(&right_names).then(left.cmp(right))
+        }
+        (left_names, _) if !left_names.is_empty() => std::cmp::Ordering::Less,
+        (_, right_names) if !right_names.is_empty() => std::cmp::Ordering::Greater,
+        _ => left.cmp(right),
     }
 }
 
@@ -320,18 +335,18 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     ] {
         cells.set_value(cell, absent::named_reason(value));
     }
-    Library {
-        cells,
-        functions: functions(),
+    Library::named(
+        "grap",
+        crate::Definitions::from_parts(cells, functions()),
         // Projection order mirrors evaluator precedence: the explicit
         // Grap-result wrapper, calls, lambdas, then FFI values.
-        projections: vec![
+        vec![
             progred_display::partial(evaluate_display::<World, Hover>),
             progred_display::partial(call_display::<World, Hover>),
             progred_display::partial(lambda_display::<World, Hover>),
             progred_display::partial(ffi_display::<World, Hover>),
         ],
-    }
+    )
 }
 
 #[cfg(test)]
@@ -603,8 +618,14 @@ mod tests {
                 (Value::record([]), 0)
             }
 
-            fn cell_value(&self, cell: CellId) -> Option<&Value> {
-                (cell == FUNCTION_CELL).then_some(&self.definition)
+            fn cell_definitions(&self, cell: CellId) -> Vec<progred_display::CellDefinition<'_>> {
+                (cell == FUNCTION_CELL)
+                    .then_some(progred_display::CellDefinition::Value(
+                        gid::Resolution::Document,
+                        &self.definition,
+                    ))
+                    .into_iter()
+                    .collect()
             }
         }
 
@@ -806,14 +827,12 @@ mod tests {
         let library = library::<(), ()>();
         assert_eq!(
             library
-                .cells
                 .value(grap_runtime::vocabulary::FUNCTION)
                 .and_then(name::read),
             Some("function")
         );
         assert_eq!(
             library
-                .cells
                 .value(grap_runtime::absent::MISSING_CELL)
                 .and_then(name::read),
             Some("missing cell")
@@ -829,7 +848,7 @@ mod tests {
             grap_runtime::lambda([input], Value::from(input)),
             [(input, Value::from(b"evaluated".to_vec()))],
         );
-        let evaluation = grap_runtime::evaluate(
+        let evaluation = crate::test_evaluate(
             &grap_runtime::call(
                 Value::from(grap_runtime::vocabulary::EVALUATE),
                 [
@@ -838,7 +857,7 @@ mod tests {
                 ],
             ),
             |_| None,
-            &library.functions,
+            &library.functions(),
             40,
         );
         assert_eq!(evaluation.result, Value::from(b"evaluated".to_vec()));

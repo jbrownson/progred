@@ -5,7 +5,7 @@
 use super::*;
 use kurbo::{BezPath, Shape as KurboShape};
 use peniko::ImageData;
-use progred_libraries::{name, text};
+use progred_libraries::{Libraries, name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
@@ -269,7 +269,7 @@ fn place_with_annotations_using(
     let stack = crate::stack::load::<World>();
     let sources = Sources {
         doc,
-        library: &stack.library,
+        libraries: &stack.libraries,
     };
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -315,7 +315,6 @@ fn place_with_annotations_using(
             width: width - 48.0,
             root_projection,
             projection: Some(&stack.projection),
-            foreign: &stack.foreign,
         },
         &mut tcx,
         hooks,
@@ -580,13 +579,42 @@ fn iop_tree_profile_loop() {
     );
 }
 
+/// Profiling loop for the editable IoP source rather than its canvas pane.
+/// This is the library/name/projection lookup canary.
+#[test]
+#[ignore]
+fn iop_tree_source_profile_loop() {
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
+        .expect("the IoP tree demo parses");
+    let iterations = 30;
+    let drawing_memo = DrawingMemo::default();
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        let (bench, _) = place_with_annotations_using(
+            &doc,
+            None,
+            &Annotations::default(),
+            1400.0,
+            None,
+            None,
+            None,
+            &drawing_memo,
+        );
+        std::hint::black_box(&bench.list);
+    }
+    eprintln!(
+        "IoP source profile: {iterations} frames, {:.1?} each",
+        start.elapsed() / iterations,
+    );
+}
+
 #[test]
 fn sample_text_line_claims_its_own_hover() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/sample.gid"))
         .expect("the sample parses");
     let path = vec![
         Step::Key(sample_vocabulary::STYLE),
-        Step::Follow,
+        Step::Follow(gid::Resolution::Document),
         Step::Key(sample_vocabulary::COLOR),
     ];
     let (bench, _) = place(&doc, None, 900.0);
@@ -620,7 +648,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
 
     struct ClickWorld {
         doc: Document,
-        library: Cells,
+        libraries: Libraries,
         selection: Option<Selection>,
         applied: Option<Path>,
         fonts: parley::FontContext,
@@ -645,7 +673,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         ProjectDescription {
             sources: Sources {
                 doc: &doc,
-                library: &stack.library,
+                libraries: &stack.libraries,
             },
             root: doc.root.as_ref(),
             root_path: &[],
@@ -657,7 +685,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
             root_projection: None,
             projection: Some(&stack.projection),
-            foreign: &stack.foreign,
         },
         &mut tcx,
         Hooks {
@@ -667,7 +694,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 world.selection = Some(Selection::from_line(
                     &Sources {
                         doc: &world.doc,
-                        library: &world.library,
+                        libraries: &world.libraries,
                     },
                     path,
                     line,
@@ -692,7 +719,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     );
     let path = vec![
         Step::Key(sample_vocabulary::STYLE),
-        Step::Follow,
+        Step::Follow(gid::Resolution::Document),
         Step::Key(sample_vocabulary::COLOR),
     ];
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
@@ -718,7 +745,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let mut world = ClickWorld {
         doc: doc.clone(),
-        library: stack.library.clone(),
+        libraries: stack.libraries.clone(),
         selection: None,
         applied: None,
         fonts: parley::FontContext::new(),
@@ -754,7 +781,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         ProjectDescription {
             sources: Sources {
                 doc: &world.doc,
-                library: &world.library,
+                libraries: &world.libraries,
             },
             root: world.doc.root.as_ref(),
             root_path: &[],
@@ -766,7 +793,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
             root_projection: None,
             projection: Some(&stack.projection),
-            foreign: &stack.foreign,
         },
         &mut frame_tcx,
         Hooks {
@@ -1046,10 +1072,10 @@ fn key(s: &str) -> Step {
 fn placement_claims_the_hover_innermost_last() {
     let doc = sample_document();
     let (bench, _) = place(&doc, None, 560.0);
-    let library = crate::stack::load::<()>().library;
+    let library = crate::stack::load::<()>().libraries;
     let sources = Sources {
         doc: &doc,
-        library: &library,
+        libraries: &library,
     };
     // Over a string leaf every containing claim reports in
     // placement order. The innermost reports last — the string
@@ -1060,7 +1086,7 @@ fn placement_claims_the_hover_innermost_last() {
         .iter()
         .find(|descend| {
             sources
-                .resolve(&descend.path)
+                .resolve_path(&descend.path)
                 .is_some_and(|value| text::read(value).is_some())
                 && projected_name_owner(&descend.path).is_none()
         })
@@ -1262,7 +1288,9 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         bench
             .descends
             .iter()
-            .find(|descend| descend.path.as_ref() == [Step::Follow, Step::Key(key)])
+            .find(|descend| {
+                descend.path.as_ref() == [Step::Follow(gid::Resolution::Document), Step::Key(key)]
+            })
             .expect("the cell's record field has a landmark")
     };
     let mut fields = [field(upper_key), field(lower_key)];
@@ -1421,7 +1449,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     let sel = Selection::edge(
         &Sources {
             doc: &empty_string,
-            library: &stack.library,
+            libraries: &stack.libraries,
         },
         Vec::new(),
     );
@@ -1436,11 +1464,11 @@ fn svg_bench_renders_the_placeholder_notation() {
 #[test]
 fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
-    let library = crate::stack::load::<()>().library;
+    let library = crate::stack::load::<()>().libraries;
     let edge = pending_edge(
         &Sources {
             doc: &doc,
-            library: &library,
+            libraries: &library,
         },
         vec![Step::Key(crate::test_values::label("shape"))],
     )

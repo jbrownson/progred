@@ -4,6 +4,8 @@
 
 use crate::{Library, name};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x26b5394bf7beb5dce00140f9e03bc465);
 use progred_display::{Layout, LineEdit, TextFamily, line_edit};
 
 pub mod vocabulary {
@@ -72,10 +74,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CURRENT, name::record("current", []));
     cells.set_value(vocabulary::INPUT, name::record("input", []));
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "line edit",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[cfg(test)]

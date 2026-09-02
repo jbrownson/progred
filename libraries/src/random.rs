@@ -2,6 +2,8 @@
 
 use crate::{Library, absent, f64, name, u64};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 use grap_runtime::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
@@ -108,11 +110,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
-    Library {
-        cells,
-        functions: functions(),
-        ..Library::default()
-    }
+    Library::named(
+        "random",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -135,7 +137,7 @@ mod tests {
             )),
             seed.map(|seed| (vocabulary::SEED, seed)),
         ];
-        grap::evaluate(
+        crate::test_evaluate(
             &grap::call(
                 Value::from(vocabulary::WITH_RANDOM),
                 arguments.into_iter().flatten(),
@@ -197,7 +199,7 @@ mod tests {
                 ),
             ],
         );
-        let evaluate = || grap::evaluate(&expression, |_| None, &functions, 60).result;
+        let evaluate = || crate::test_evaluate(&expression, |_| None, &functions, 60).result;
         let result = evaluate();
 
         assert!(result.as_list().is_some_and(|values| {
@@ -212,7 +214,7 @@ mod tests {
 
     #[test]
     fn sampling_outside_a_scope_returns_a_stable_absent() {
-        let result = grap::evaluate(
+        let result = crate::test_evaluate(
             &grap::call(
                 Value::from(vocabulary::BETWEEN),
                 [

@@ -12,7 +12,7 @@ pub fn get<'a>(value: &'a Value, spine: &[Step]) -> Option<&'a Value> {
     spine.iter().try_fold(value, |value, step| match step {
         Step::Key(label) => value.as_record()?.get(label),
         Step::Element(position) => value.as_list()?.get(position),
-        Step::Follow => None,
+        Step::Follow(_) => None,
     })
 }
 
@@ -41,7 +41,7 @@ pub fn set(current: Option<&Value>, spine: &[Step], leaf: Value) -> Option<Value
             let rebuilt = set(child, rest, leaf)?;
             Some(Value::List(elements.update(position.clone(), rebuilt)))
         }
-        Some((Step::Follow, _)) => None,
+        Some((Step::Follow(_), _)) => None,
     }
 }
 
@@ -73,7 +73,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
             let rebuilt = without(elements.get(position)?, rest)?;
             Some(Value::List(elements.update(position.clone(), rebuilt)))
         }
-        Some((Step::Follow, _)) => None,
+        Some((Step::Follow(_), _)) => None,
     }
 }
 
@@ -141,7 +141,10 @@ mod tests {
         );
         assert_eq!(get(&value, &[key("missing")]), None);
         assert_eq!(get(&value, &[key("name"), key("deeper")]), None);
-        assert_eq!(get(&value, &[Step::Follow]), None);
+        assert_eq!(
+            get(&value, &[Step::Follow(gid::Resolution::Document)]),
+            None
+        );
     }
 
     #[test]
@@ -192,7 +195,14 @@ mod tests {
         // caller's boundary.
         assert!(set(Some(&value), &[key("missing"), key("x")], blob("v")).is_none());
         assert!(set(Some(&value), &[key("name"), key("x")], blob("v")).is_none());
-        assert!(set(Some(&value), &[Step::Follow], blob("v")).is_none());
+        assert!(
+            set(
+                Some(&value),
+                &[Step::Follow(gid::Resolution::Document)],
+                blob("v")
+            )
+            .is_none()
+        );
         assert!(set(None, &[key("x")], blob("v")).is_none());
         // An empty spine authors the value whole — a bare cell's
         // first value, the root's replacement.
@@ -225,7 +235,7 @@ mod tests {
 
         assert!(without(&value, &[]).is_none());
         assert!(without(&value, &[key("missing")]).is_none());
-        assert!(without(&value, &[Step::Follow]).is_none());
+        assert!(without(&value, &[Step::Follow(gid::Resolution::Document)]).is_none());
     }
 
     #[test]

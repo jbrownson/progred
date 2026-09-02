@@ -7,11 +7,13 @@
 use crate::annotations::Annotations;
 use gid::{CellId, Cells, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
-use progred_libraries::{name, presentation};
+use progred_libraries::{Library, name, presentation};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
+
+pub const ID: CellId = CellId::from_u128(0x7c295d8a64d3e257dc2c3932e43def74);
 
 pub mod vocabulary {
     use gid::CellId;
@@ -24,7 +26,7 @@ pub mod vocabulary {
 /// The editor-owned vocabulary contributed to the ordinary source
 /// environment. Pane behavior remains root-sensitive host behavior;
 /// these cells only give its document fields readable names.
-pub fn cells() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::PANES, "panes"),
@@ -33,7 +35,11 @@ pub fn cells() -> Cells {
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    cells
+    Library::named(
+        "workspace",
+        progred_libraries::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

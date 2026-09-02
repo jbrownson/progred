@@ -10,7 +10,7 @@ use gid::{CellId, Cells, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
-use progred_libraries::{absent, layout as layout_data};
+use progred_libraries::{DefinitionRef, Libraries, absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -78,7 +78,7 @@ struct Recording {
     faces: Faces,
     input: SourceTrace,
     document: Cells,
-    library: Cells,
+    libraries: Libraries,
     dependencies: BTreeSet<CellId>,
     drawing: Rc<Recorded>,
 }
@@ -200,15 +200,15 @@ impl Node {
         faces: &Faces,
         input: &SourceTrace,
         document: &Cells,
-        library: &Cells,
+        libraries: &Libraries,
         record: impl FnOnce() -> (Recorded, BTreeSet<CellId>),
     ) -> Rc<Recorded> {
         match self.recording.take() {
             Some(mut recording)
-                if recording.valid(program, fuel, faces, input, document, library) =>
+                if recording.valid(program, fuel, faces, input, document, libraries) =>
             {
                 recording.document = document.clone();
-                recording.library = library.clone();
+                recording.libraries = libraries.clone();
                 let drawing = recording.drawing.clone();
                 self.recording = Some(recording);
                 drawing
@@ -222,7 +222,7 @@ impl Node {
                     faces: faces.clone(),
                     input: input.clone(),
                     document: document.clone(),
-                    library: library.clone(),
+                    libraries: libraries.clone(),
                     dependencies,
                     drawing: drawing.clone(),
                 });
@@ -240,22 +240,22 @@ impl Recording {
         faces: &Faces,
         input: &SourceTrace,
         document: &Cells,
-        library: &Cells,
+        libraries: &Libraries,
     ) -> bool {
         self.program == *program
             && self.fuel == fuel
             && self.faces == *faces
             && self.input == *input
-            && ((self.document.ptr_eq(document) && self.library.ptr_eq(library))
+            && ((self.document.ptr_eq(document) && self.libraries.ptr_eq(libraries))
                 || self.dependencies.iter().all(|cell| {
-                    resolved(&self.document, &self.library, *cell)
-                        == resolved(document, library, *cell)
+                    resolved(&self.document, &self.libraries, *cell)
+                        == resolved(document, libraries, *cell)
                 }))
     }
 }
 
-fn resolved<'a>(document: &'a Cells, library: &'a Cells, cell: CellId) -> Option<&'a Value> {
-    document.value(cell).or_else(|| library.value(cell))
+fn resolved<'a>(document: &'a Cells, libraries: &'a Libraries, cell: CellId) -> Option<&'a Value> {
+    document.value(cell).or_else(|| libraries.first_value(cell))
 }
 
 fn evaluated_field(
@@ -379,8 +379,7 @@ fn transform(
 fn record_program(
     program: &Value,
     document: &Cells,
-    library: &Cells,
-    foreign: &grap::ForeignFunctions,
+    libraries: &Libraries,
     faces: &Faces,
     input: &SourceTrace,
     fuel: usize,
@@ -478,18 +477,28 @@ fn record_program(
         }
     };
     let overlay = grap::ForeignOverlay::new(&functions, &draw);
-    let evaluation = grap::evaluate_scoped(
-        program,
-        |cell| {
-            document
-                .value(cell)
-                .or_else(|| library.value(cell))
-                .cloned()
-        },
-        foreign,
-        &overlay,
-        fuel,
-    );
+    let evaluation =
+        grap::evaluate_scoped(
+            program,
+            |cell| {
+                document
+                    .value(cell)
+                    .cloned()
+                    .map(grap::Definition::Value)
+                    .into_iter()
+                    .chain(libraries.definitions(cell).map(
+                        |definition| match definition.definition {
+                            DefinitionRef::ForeignFunction(function) => {
+                                grap::Definition::ForeignFunction(function.clone())
+                            }
+                            DefinitionRef::Value(value) => grap::Definition::Value(value.clone()),
+                        },
+                    ))
+                    .collect()
+            },
+            &overlay,
+            fuel,
+        );
     debug_assert!(
         evaluation.diagnostics.is_empty(),
         "drawing program diagnostics: {:?}",
@@ -529,15 +538,17 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
             .collect::<Rc<[Step]>>(),
     );
     let document = cx.sources.doc.cells.clone();
-    let library = cx.sources.library.clone();
-    let foreign = cx.foreign.clone();
+    let libraries = cx.sources.libraries.clone();
     let drawing = Rc::new(move || {
-        node.borrow_mut()
-            .drawing(&program, fuel, &faces, &input, &document, &library, || {
-                record_program(
-                    &program, &document, &library, &foreign, &faces, &input, fuel,
-                )
-            })
+        node.borrow_mut().drawing(
+            &program,
+            fuel,
+            &faces,
+            &input,
+            &document,
+            &libraries,
+            || record_program(&program, &document, &libraries, &faces, &input, fuel),
+        )
     });
     let highlight = cx.styles.accent_wash.brush.clone();
     let selected_highlight = cx.styles.selection_wash.clone();
@@ -579,7 +590,7 @@ mod tests {
         program: &Value,
         faces: &Faces,
         document: &Cells,
-        library: &Cells,
+        libraries: &Libraries,
         dependency: CellId,
         recordings: &Cell<usize>,
     ) -> Rc<Recorded> {
@@ -589,7 +600,7 @@ mod tests {
             faces,
             &SourceTrace::Stored(Rc::from([])),
             document,
-            library,
+            libraries,
             || {
                 recordings.set(recordings.get() + 1);
                 (
@@ -618,7 +629,7 @@ mod tests {
             accent_wash: brush.clone(),
             ink: brush,
         };
-        let library = Cells::new();
+        let libraries = Libraries::default();
         let mut document = Cells::new();
         document.set_value(dependency, Value::from(vec![2]));
         let recordings = Cell::new(0);
@@ -629,7 +640,7 @@ mod tests {
             &program,
             &faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );
@@ -638,7 +649,7 @@ mod tests {
             &program,
             &faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );
@@ -651,7 +662,7 @@ mod tests {
             &program,
             &faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );
@@ -664,7 +675,7 @@ mod tests {
             &program,
             &faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );
@@ -680,7 +691,7 @@ mod tests {
             &program,
             &changed_faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );
@@ -692,7 +703,7 @@ mod tests {
             &Value::from(vec![5]),
             &changed_faces,
             &document,
-            &library,
+            &libraries,
             dependency,
             &recordings,
         );

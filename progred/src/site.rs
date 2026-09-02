@@ -72,13 +72,12 @@ pub fn apply_event(
         let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
         let sources = crate::sources::Sources {
             doc: &app.model.doc,
-            library: &app.stack.library,
+            libraries: &app.stack.libraries,
         };
         grap::apply_scoped(
             &function,
             [(layout::vocabulary::EVENT, event)],
-            |cell| sources.value(cell).cloned(),
-            &app.stack.foreign,
+            |cell| sources.grap_definitions(cell),
             &overlay,
             grap::DEFAULT_FUEL,
         )
@@ -160,7 +159,6 @@ fn apply_at(
     annotations: &mut Annotations,
     function: &Value,
     sources: &Sources<'_>,
-    foreign: &grap::ForeignFunctions,
 ) -> grap::Evaluation {
     let store = Rc::new(RefCell::new(std::mem::take(annotations)));
     let evaluation = {
@@ -179,8 +177,14 @@ fn apply_at(
         grap::apply(
             function,
             [],
-            |cell| sources.value(cell).cloned(),
-            &foreign.clone().merge(site),
+            |cell| {
+                site.get(cell)
+                    .cloned()
+                    .map(grap::Definition::ForeignFunction)
+                    .into_iter()
+                    .chain(sources.grap_definitions(cell))
+                    .collect()
+            },
             grap::DEFAULT_FUEL,
         )
     };
@@ -214,10 +218,10 @@ mod tests {
         };
         let sources = Sources {
             doc: &doc,
-            library: &stack.library,
+            libraries: &stack.libraries,
         };
         let mut annotations = Annotations::default();
-        let here = vec![Step::Follow];
+        let here = vec![Step::Follow(gid::Resolution::Document)];
         let elsewhere = Vec::new();
         let function = grap::lambda(
             [],
@@ -232,7 +236,7 @@ mod tests {
                 )],
             ),
         );
-        let evaluation = apply_at(&here, &mut annotations, &function, &sources, &stack.foreign);
+        let evaluation = apply_at(&here, &mut annotations, &function, &sources);
         assert!(evaluation.diagnostics.is_empty());
         assert_eq!(
             annotations.field(&here, annotations::FOLD),

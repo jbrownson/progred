@@ -4,10 +4,14 @@
 use crate::{Library, name};
 use gid::{CellId, Cells, Value};
 
+pub const ID: CellId = CellId::from_u128(0x873c68ac371dbbb98a4f198546d60241);
+
 pub mod vocabulary {
     use gid::CellId;
 
     pub const ABSENT: CellId = grap_runtime::absent::ABSENT;
+    pub const CAUSES: CellId = grap_runtime::absent::CAUSES;
+    pub const NO_ALTERNATIVE: CellId = grap_runtime::absent::NO_ALTERNATIVE;
     pub const UNSPECIFIED: CellId = CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
 }
 
@@ -27,6 +31,10 @@ pub fn is_absent(value: &Value) -> bool {
     grap_runtime::absent::is_absent(value)
 }
 
+pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
+    grap_runtime::absent::from_causes(causes)
+}
+
 pub fn named_reason(value: impl Into<String>) -> Value {
     name::record(value, [])
 }
@@ -34,11 +42,17 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
+    cells.set_value(vocabulary::CAUSES, name::record("causes", []));
+    cells.set_value(
+        vocabulary::NO_ALTERNATIVE,
+        named_reason("no applicable alternative"),
+    );
     cells.set_value(vocabulary::UNSPECIFIED, named_reason("unspecified absence"));
-    Library {
-        cells,
-        ..Library::default()
-    }
+    Library::named(
+        "absent",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -66,5 +80,21 @@ mod tests {
             vocabulary::ABSENT,
             Value::from(vec![1]),
         )])));
+    }
+
+    #[test]
+    fn multiple_causes_form_an_ordered_absence_while_one_remains_itself() {
+        let first = with_reason(new_cell_id());
+        let second = with_reason(new_cell_id());
+
+        assert_eq!(from_causes([first.clone()]), first);
+        let combined = from_causes([first.clone(), second.clone()]);
+        assert_eq!(reason(&combined), Some(vocabulary::NO_ALTERNATIVE));
+        assert_eq!(
+            combined
+                .as_record()
+                .and_then(|fields| fields.get(&vocabulary::CAUSES)),
+            Some(&Value::list([first, second])),
+        );
     }
 }

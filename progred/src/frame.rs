@@ -540,7 +540,7 @@ impl Editor {
         );
         let sources = sources::Sources {
             doc: &self.model.doc,
-            library: &self.stack.library,
+            libraries: &self.stack.libraries,
         };
         let show_source_hover =
             source_hover_visible(self.hover.as_ref(), crate::modifiers::link(&self.modifiers));
@@ -708,7 +708,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             selection::toggle_collapse(
                 &sources::Sources {
                     doc: &app.model.doc,
-                    library: &app.stack.library,
+                    libraries: &app.stack.libraries,
                 },
                 &mut view.annotations,
                 &path,
@@ -794,8 +794,8 @@ fn project_workspace_view(
             projection_path,
         } => {
             root_path = value_path.clone();
-            root_projection = sources.resolve(projection_path);
-            sources.resolve(value_path)
+            root_projection = sources.resolve_path(projection_path);
+            sources.resolve_path(value_path)
         }
     };
     let raw = view.projection == workspace::Projection::Raw;
@@ -815,7 +815,6 @@ fn project_workspace_view(
             width: body_width,
             root_projection: if raw { None } else { root_projection },
             projection: (!raw).then_some(&stack.projection),
-            foreign: &stack.foreign,
         },
         tcx,
         projection_hooks(view.root.clone()),
@@ -1030,7 +1029,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
     let content_viewport = content_viewport(drawn_menu, viewport, scale);
     let sources = sources::Sources {
         doc: &model.doc,
-        library: &stack.library,
+        libraries: &stack.libraries,
     };
     let body = project_workspace(
         model,
@@ -1205,12 +1204,12 @@ mod frame_tests {
             root: Some(Value::Cell(cell)),
             cells,
         };
-        let library = Cells::new();
+        let libraries = progred_libraries::Libraries::default();
         let root = workspace::Root::document();
         let rect = Rect::new(10.0, 20.0, 30.0, 40.0);
         let descends = [navigate::Descend::<Editor> {
             root: Some(root.clone()),
-            path: Rc::from([Step::Follow, Step::Key(call)]),
+            path: Rc::from([Step::Follow(gid::Resolution::Document), Step::Key(call)]),
             rect,
             select: Rc::new(|_| true),
         }];
@@ -1219,7 +1218,7 @@ mod frame_tests {
             drawing_source_target(
                 &sources::Sources {
                     doc: &doc,
-                    library: &library,
+                    libraries: &libraries,
                 },
                 &descends,
                 &hover::SourceTrace::InCell {
@@ -1274,7 +1273,7 @@ mod frame_tests {
                 &mut tcx,
                 sources::Sources {
                     doc: &model.doc,
-                    library: &stack.library,
+                    libraries: &stack.libraries,
                 },
                 None,
                 &mut drawing_memos,

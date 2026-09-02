@@ -34,9 +34,10 @@ structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
 partial is a function that checks its own preconditions. Each built-in
-library module exports one `Library` value containing its cells, foreign
-functions, and ordered partial projections; `stack::load` folds those
-values and builds one reusable
+library module exports one `Library` value containing a sorted map from
+cell identities to ordered GID-value or Rust-function definitions, plus
+ordered partial projections. `stack::load` retains those library boundaries
+and builds one reusable
 projection — text, f64, and the `evaluate` value partial — above the structural fallback. Raw is that
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
@@ -282,12 +283,15 @@ to have document paths.
 Evaluating a cell is transparent:
 
 1. A lexical binding with that cell identity wins.
-2. A cell registered by a library as a foreign function evaluates to
-   `{ffi: cell}` without document resolution. When that value reaches
-   function position, the registry supplies its parameter shape and host
-   implementation; the GID value does not duplicate either.
-3. Otherwise the cell is resolved through the caller's document-over-
-   library source and its value is evaluated.
+2. Otherwise the host returns the ordered definitions contributed by the
+   document and loaded libraries.
+3. One value definition evaluates normally; one foreign definition evaluates
+   to `{ffi: cell}`. A plural result stays the cell identity rather than
+   silently selecting a candidate. When that identity reaches function
+   position, Grap prepares and tries its definitions lazily in order until one
+   returns a non-absent result. If every attempted definition returns absent,
+   one failure remains unchanged and multiple failures become the ordered
+   causes of a `no applicable alternative` absent.
 
 This is one dependency made honest, not a special reference/value
 mode stored on cells. A parameter may have a name or even a document
@@ -333,10 +337,11 @@ record containing `{bind: binder-cell}` captures the corresponding
 subject value; another occurrence of that binder must capture an equal
 value. The first matching case extends the calling environment
 with its captures and evaluates its expression. If none match, `match`
-returns an ordinary absent without a diagnostic. A final binder pattern
-is the uniform catch-all when one is wanted. An absent returned by the
-selected expression is still its result and does not fall through to
-another case.
+returns the ordered pattern-mismatch absents produced by the cases it tried;
+multiple mismatches use the same `no applicable alternative` composition as
+function dispatch. A final binder pattern is the uniform catch-all when one is
+wanted. An absent returned by the selected expression is still its result and
+does not fall through to another case.
 `match` destructures the evaluator's runtime values directly; it does not
 create a hidden graph binding or make patterns depend on an enclosing match.
 
@@ -395,9 +400,22 @@ It knows no names, projection, geometry, UI, file, or Linebender concepts.
 The `progred-libraries` package contains one module per
 built-in conceptual library: Grap, name, text, absent, control,
 f64, and geometry. Each module exports its complete `Library` value.
-`Library` is the product of the cells, foreign-function table, and
-ordered-partial-list monoids. The editor folds those values once into
-its loaded `Stack`; a later foreign table overrides a shared cell.
+Libraries are externally keyed by stable random cell identities in one
+insertion-ordered unique map. A library itself carries ordinary GID metadata
+(currently a name), a compact sorted `CellId -> [Definition]` map, and an
+ordered partial list. One source contributes at most one GID value for an
+identity but may contribute several Rust foreign implementations. A direct Grap call tries the document value,
+then every library definition in load order. Non-callable metadata is skipped,
+an absent result falls through, and the first non-absent result wins. Failed
+definitions are prepared only as reached and, if all fail, their absents are
+retained as ordered causes rather than selecting the last one. Scoped
+capabilities still override this chain. A stored `Follow` path names its stable
+source—`Document` or a particular library identity—rather than an index into
+the loaded order. Display names, completion, and Grap dispatch consume the
+plural view. Loaded libraries are read-only.
+Ordered host partial projections remain a separate bootstrap contribution for
+now; moving projection dispatch onto ordinary Grap calls is a later step, not a
+hidden second definition resolver.
 
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it

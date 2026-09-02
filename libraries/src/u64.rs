@@ -2,6 +2,8 @@
 
 use crate::{Library, line_edit, name, number};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{Layout, ProjectionInput, overlay_value};
 
@@ -87,11 +89,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     let mut cells = Cells::new();
     cells.set_value(vocabulary::U64, name::record("u64", []));
     cells.set_value(vocabulary::UPDATE, name::record("u64 update", []));
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-    }
+    Library::named(
+        "u64",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]
@@ -111,7 +113,7 @@ mod tests {
                 .update(extra, Value::from(b"metadata".to_vec())),
         );
         let update = |input: &str| {
-            grap::evaluate(
+            crate::test_evaluate(
                 &grap::call(
                     grap::ffi(vocabulary::UPDATE),
                     [

@@ -6,8 +6,8 @@ use crate::annotations::{self, Annotations};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
-use gid::{Cells, Document, Path, Position, Step, Value, position};
-use progred_libraries::{absent, f64 as f64_convention, text};
+use gid::{CellId, Document, Path, Position, Resolution, Step, Value, position};
+use progred_libraries::{Libraries, absent, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -100,10 +100,12 @@ impl Selection {
     pub fn edge(sources: &Sources, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
-            Some((Step::Follow, parent)) => sources
-                .resolve(parent)
+            Some((Step::Follow(resolution), parent)) => sources
+                .resolve_path(parent)
                 .and_then(Value::as_cell)
-                .is_some_and(|cell| sources.value(cell).is_none() && sources.writable(cell)),
+                .is_some_and(|cell| {
+                    sources.value(cell, resolution).is_none() && sources.writable(cell, resolution)
+                }),
             _ => false,
         };
         if empty_slot {
@@ -256,7 +258,8 @@ pub fn seed_from_arrow(selection: &mut Selection, event: &KeyboardEvent) {
 /// every write below it lands through. The link before it names the
 /// owning cell; everything after it is a value spine.
 pub(crate) fn last_follow(path: &[Step]) -> Option<usize> {
-    path.iter().rposition(|step| matches!(step, Step::Follow))
+    path.iter()
+        .rposition(|step| matches!(step, Step::Follow(_)))
 }
 
 /// Whether a write at `path` can land: the owning cell — the one the
@@ -265,10 +268,13 @@ pub(crate) fn last_follow(path: &[Step]) -> Option<usize> {
 /// writable.
 pub(crate) fn writable_at(sources: &Sources, path: &[Step]) -> bool {
     match last_follow(path) {
-        Some(index) => sources
-            .resolve(&path[..index])
-            .and_then(Value::as_cell)
-            .is_some_and(|cell| sources.writable(cell)),
+        Some(index) => match path[index] {
+            Step::Follow(resolution) => sources
+                .resolve_path(&path[..index])
+                .and_then(Value::as_cell)
+                .is_some_and(|cell| sources.writable(cell, &resolution)),
+            Step::Key(_) | Step::Element(_) => false,
+        },
         None => true,
     }
 }
@@ -279,19 +285,19 @@ pub(crate) fn writable_at(sources: &Sources, path: &[Step]) -> bool {
 /// removes the cell's own value: bare again, the symmetric partner
 /// of authoring a value into one. The empty path empties the
 /// document's root; paths that no longer resolve decline.
-pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
+pub fn delete_edge(doc: &mut Document, libraries: &Libraries, path: &[Step]) -> bool {
     match path.split_last() {
         None => doc.root.take().is_some(),
-        Some((Step::Follow, parent)) => {
+        Some((Step::Follow(resolution), parent)) => {
             let cell = {
                 let sources = Sources {
                     doc: &*doc,
-                    library,
+                    libraries,
                 };
                 sources
-                    .resolve(parent)
+                    .resolve_path(parent)
                     .and_then(Value::as_cell)
-                    .filter(|cell| sources.writable(*cell))
+                    .filter(|cell| sources.writable(*cell, resolution))
                     .filter(|cell| doc.cells.value(*cell).is_some())
             };
             match cell {
@@ -306,17 +312,23 @@ pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
             let write = {
                 let sources = Sources {
                     doc: &*doc,
-                    library,
+                    libraries,
                 };
                 match last_follow(path) {
-                    Some(index) => sources
-                        .resolve(&path[..index])
-                        .and_then(Value::as_cell)
-                        .filter(|cell| sources.writable(*cell))
-                        .and_then(|cell| {
-                            spine::without(sources.value(cell)?, &path[index + 1..])
+                    Some(index) => match path[index] {
+                        Step::Follow(resolution) => sources
+                            .resolve_path(&path[..index])
+                            .and_then(Value::as_cell)
+                            .filter(|cell| sources.writable(*cell, &resolution))
+                            .and_then(|cell| {
+                                spine::without(
+                                    sources.value(cell, &resolution)?,
+                                    &path[index + 1..],
+                                )
                                 .map(|rebuilt| (Some(cell), rebuilt))
-                        }),
+                            }),
+                        Step::Key(_) | Step::Element(_) => None,
+                    },
                     None => sources
                         .root()
                         .and_then(|root| spine::without(root, path))
@@ -381,17 +393,23 @@ fn query_selection(path: Path, payload: Value) -> Selection {
 /// value, normalized through Follow so the pending lands where the
 /// field will live. Only records take fields, by type. EXTERNAL
 /// cells — the library the authority — decline: a lone document
-/// value would shadow the library's whole statement (per-cell
-/// fallback), silently de-naming the conventions. A document that
-/// owns the cell (a fork, copy/paste's job) authors freely.
+/// value would introduce a new document definition. A document that
+/// already owns the traversed path authors freely.
+fn sole_value<'a>(sources: &Sources<'a>, cell: CellId) -> Option<crate::sources::LocatedValue<'a>> {
+    let mut values = sources.values(cell);
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
+}
+
 pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
-    let value = sources.resolve(&parent)?;
+    let value = sources.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
         Value::Cell(cell) => {
-            sources.value(*cell)?.as_record()?;
+            let value = sole_value(sources, *cell)?;
+            value.value.as_record()?;
             let mut followed = parent;
-            followed.push(Step::Follow);
+            followed.push(Step::Follow(value.source));
             followed
         }
         Value::Blob(_) | Value::List(_) => return None,
@@ -403,11 +421,13 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
 pub fn pending_follow(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    let cell = sources.resolve(path)?.as_cell()?;
-    sources.value(cell).is_none().then_some(())?;
-    sources.writable(cell).then_some(())?;
+    let cell = sources.resolve_path(path)?.as_cell()?;
+    sources.values(cell).next().is_none().then_some(())?;
+    sources
+        .writable(cell, &Resolution::Document)
+        .then_some(())?;
     let mut followed = path.to_vec();
-    followed.push(Step::Follow);
+    followed.push(Step::Follow(Resolution::Document));
     Some(pending_value(followed))
 }
 
@@ -419,7 +439,7 @@ fn pending_beside(sources: &Sources, path: &[Step], after: bool) -> Option<Selec
     let Step::Element(position) = step else {
         return None;
     };
-    let elements = sources.resolve(parent_path)?.as_list()?;
+    let elements = sources.resolve_path(parent_path)?.as_list()?;
     // Stated, not incidental: a list under an external cell takes no
     // minted siblings (the write would decline anyway, but a pending
     // that opens and cannot commit is an affordance lie).
@@ -449,13 +469,14 @@ pub fn pending_before(sources: &Sources, path: &[Step]) -> Option<Selection> {
 /// prepended at the front. Only lists take elements, by type, and
 /// the owning cell must be writable, as in [`pending_edge`].
 fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Selection> {
-    let value = sources.resolve(path)?;
+    let value = sources.resolve_path(path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
         Value::Cell(cell) => {
-            let elements = sources.value(*cell)?.as_list()?;
+            let value = sole_value(sources, *cell)?;
+            let elements = value.value.as_list()?;
             let mut followed = path.to_vec();
-            followed.push(Step::Follow);
+            followed.push(Step::Follow(value.source));
             (followed, elements)
         }
         Value::Blob(_) | Value::Record(_) => return None,
@@ -591,21 +612,24 @@ pub fn from_structure(bytes: &[u8]) -> Option<Value> {
 /// Follow names the owning, authority-gated cell; the steps below it
 /// are a value spine, rebuilt around the new leaf through the lens.
 /// A bare cell takes its first value through the empty spine.
-pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Value) -> bool {
+pub fn set_value(doc: &mut Document, libraries: &Libraries, path: &[Step], value: Value) -> bool {
     let write = {
         let sources = Sources {
             doc: &*doc,
-            library,
+            libraries,
         };
         match last_follow(path) {
-            Some(index) => sources
-                .resolve(&path[..index])
-                .and_then(Value::as_cell)
-                .filter(|cell| sources.writable(*cell))
-                .and_then(|cell| {
-                    spine::set(sources.value(cell), &path[index + 1..], value)
-                        .map(|rebuilt| (Some(cell), rebuilt))
-                }),
+            Some(index) => match path[index] {
+                Step::Follow(resolution) => sources
+                    .resolve_path(&path[..index])
+                    .and_then(Value::as_cell)
+                    .filter(|cell| sources.writable(*cell, &resolution))
+                    .and_then(|cell| {
+                        spine::set(sources.value(cell, &resolution), &path[index + 1..], value)
+                            .map(|rebuilt| (Some(cell), rebuilt))
+                    }),
+                Step::Key(_) | Step::Element(_) => None,
+            },
             None => spine::set(sources.root(), path, value).map(|rebuilt| (None, rebuilt)),
         }
     };
@@ -657,11 +681,11 @@ pub fn set_collapse(
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
 pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
-    let value = sources.resolve(path)?;
+    let value = sources.resolve_path(path)?;
     let in_cycle = value.as_cell().is_some_and(|cell| {
         (0..path.len())
-            .filter(|end| path[*end] == Step::Follow)
-            .filter_map(|end| sources.resolve(&path[..end]).and_then(Value::as_cell))
+            .filter(|end| matches!(path[*end], Step::Follow(_)))
+            .filter_map(|end| sources.resolve_path(&path[..end]).and_then(Value::as_cell))
             .any(|ancestor| ancestor == cell)
     });
     collapse_default_for_value(sources, value, in_cycle)
@@ -678,7 +702,7 @@ pub(crate) fn collapse_default_for_value(
     Some(value)
         .filter(|value| text::read(value).is_none() && f64_convention::read(value).is_none())
         .filter(|value| match value {
-            Value::Cell(cell) => sources.value(*cell).is_some(),
+            Value::Cell(cell) => sources.values(*cell).next().is_some(),
             Value::Blob(_) => false,
             Value::List(elements) => !elements.is_empty(),
             Value::Record(fields) => !fields.is_empty(),
@@ -696,12 +720,7 @@ pub(crate) fn collapse_default_for_value(
 /// boundary. Returns whether this write OPENED an undo step: true
 /// exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
-pub fn write_through(
-    doc: &mut Document,
-    library: &Cells,
-    foreign: &grap::ForeignFunctions,
-    selection: &mut Selection,
-) -> bool {
+pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut Selection) -> bool {
     selection.sync_payload();
     let Selection { path, editor, .. } = selection;
     let Some(editor) = editor else {
@@ -715,9 +734,9 @@ pub fn write_through(
         let (current, next) = {
             let sources = Sources {
                 doc: &*doc,
-                library,
+                libraries,
             };
-            let current = sources.resolve(path).cloned();
+            let current = sources.resolve_path(path).cloned();
             let next = {
                 let arguments =
                     std::iter::once((
@@ -732,8 +751,7 @@ pub fn write_through(
                 let evaluation = grap::apply(
                     &update,
                     arguments,
-                    |cell| sources.value(cell).cloned(),
-                    foreign,
+                    |cell| sources.grap_definitions(cell),
                     grap::DEFAULT_FUEL,
                 );
                 // Any diagnostic or a tagged absent result
@@ -744,7 +762,7 @@ pub fn write_through(
             (current, next)
         };
         match next {
-            Some(next) => current.as_ref() != Some(&next) && set_value(doc, library, path, next),
+            Some(next) => current.as_ref() != Some(&next) && set_value(doc, libraries, path, next),
             None => false,
         }
     };

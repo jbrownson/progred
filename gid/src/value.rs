@@ -407,14 +407,20 @@ impl fmt::Display for Value {
 }
 
 /// A projection path step: into a record field, into a list element,
-/// or through a link to the cell's current value. A step that no
+/// or through a link to one of the cell's resolved values. A step that no
 /// longer resolves is the stale-path class the editor already
 /// tolerates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Resolution {
+    Document,
+    Library(CellId),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Step {
     Key(CellId),
     Element(Position),
-    Follow,
+    Follow(Resolution),
 }
 
 #[derive(Serialize, Deserialize)]

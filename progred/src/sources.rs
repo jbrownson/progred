@@ -1,27 +1,82 @@
-//! The reading context: a document read over its library. Mutation
-//! targets the document and gates on cell authority; presentation and
-//! resolution read through both sides. Fallback is per cell value:
-//! the document's value wins whole, otherwise the library answers.
+//! The reading context: a document followed by an ordered set of
+//! libraries. Resolution exposes every contributed definition with
+//! its source. A stored Follow step names the stable source of the
+//! value definition it crosses into.
 
-use gid::{CellId, Cells, Document, Step, Value};
-use progred_libraries::name;
+use gid::{CellId, Document, Resolution, Step, Value};
+use progred_libraries::{DefinitionRef, Libraries, name};
+
+pub type DefinitionSource = Resolution;
+
+#[derive(Clone, Copy)]
+pub struct LocatedDefinition<'a> {
+    pub source: DefinitionSource,
+    pub definition: DefinitionRef<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub struct LocatedValue<'a> {
+    pub source: DefinitionSource,
+    pub value: &'a Value,
+}
 
 #[derive(Clone, Copy)]
 pub struct Sources<'a> {
     pub doc: &'a Document,
-    pub library: &'a Cells,
+    pub libraries: &'a Libraries,
 }
 
 impl<'a> Sources<'a> {
-    pub fn value(&self, cell: CellId) -> Option<&'a Value> {
+    pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
+        self.values(cell)
+            .find(|value| &value.source == resolution)
+            .map(|value| value.value)
+    }
+
+    pub fn names(&self, cell: CellId) -> impl Iterator<Item = &'a str> {
+        self.values(cell)
+            .filter_map(|value| name::read(value.value))
+    }
+
+    pub fn display_names(&self, cell: CellId) -> Option<String> {
+        let names: Vec<_> = self.names(cell).collect();
+        (!names.is_empty()).then(|| names.join(" / "))
+    }
+
+    pub fn library_name(&self, library: CellId) -> Option<&'a str> {
+        self.libraries.metadata(library).and_then(name::read)
+    }
+
+    pub fn definitions(&self, cell: CellId) -> impl Iterator<Item = LocatedDefinition<'a>> {
         self.doc
             .cells
             .value(cell)
-            .or_else(|| self.library.value(cell))
+            .map(|value| (DefinitionSource::Document, DefinitionRef::Value(value)))
+            .into_iter()
+            .chain(self.libraries.definitions(cell).map(|definition| {
+                (
+                    DefinitionSource::Library(definition.library),
+                    definition.definition,
+                )
+            }))
+            .map(|(source, definition)| LocatedDefinition { source, definition })
     }
 
-    pub fn name(&self, cell: CellId) -> Option<&'a str> {
-        self.value(cell).and_then(name::read)
+    pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
+        self.definitions(cell)
+            .filter_map(|resolved| match resolved.definition {
+                DefinitionRef::Value(value) => Some(LocatedValue {
+                    source: resolved.source,
+                    value,
+                }),
+                DefinitionRef::ForeignFunction(_) => None,
+            })
+    }
+
+    pub fn grap_definitions(&self, cell: CellId) -> Vec<grap::Definition> {
+        self.definitions(cell)
+            .map(|resolved| resolved.definition.cloned())
+            .collect()
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -31,44 +86,77 @@ impl<'a> Sources<'a> {
     /// The value at `path`, following links and descending through
     /// ordinary record and list structure. Writes gate separately on
     /// the cell owning the path's last Follow.
-    pub fn resolve(&self, path: &[Step]) -> Option<&'a Value> {
+    pub fn resolve_path(&self, path: &[Step]) -> Option<&'a Value> {
         path.iter()
             .try_fold(self.root()?, |value, step| match step {
-                Step::Follow => self.value(value.as_cell()?),
+                Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
                 Step::Key(label) => value.as_record()?.get(label),
                 Step::Element(position) => value.as_list()?.get(position),
             })
     }
 
-    pub fn cells(&self) -> impl Iterator<Item = &'a CellId> {
-        self.doc.cells.cells().chain(self.library.cells())
+    pub fn cells(&self) -> impl Iterator<Item = CellId> + '_ {
+        let mut seen = Vec::new();
+        self.doc
+            .cells
+            .cells()
+            .copied()
+            .chain(self.libraries.cell_ids())
+            .filter(move |cell| {
+                if seen.contains(cell) {
+                    false
+                } else {
+                    seen.push(*cell);
+                    true
+                }
+            })
     }
 
     /// The library is authoritative only when it supplies the value
     /// and the document does not. A bare cell remains writable.
     pub fn external(&self, cell: CellId) -> bool {
-        self.doc.cells.value(cell).is_none() && self.library.value(cell).is_some()
+        self.doc.cells.value(cell).is_none() && self.libraries.values(cell).next().is_some()
     }
 
-    pub fn writable(&self, cell: CellId) -> bool {
-        !self.external(cell)
+    pub fn writable(&self, cell: CellId, resolution: &Resolution) -> bool {
+        matches!(resolution, Resolution::Document)
+            && self
+                .values(cell)
+                .find(|value| &value.source == resolution)
+                .is_none_or(|value| matches!(value.source, Resolution::Document))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gid::new_cell_id;
+    use gid::{Cells, new_cell_id};
+
+    fn libraries(id: CellId, cells: Cells) -> Libraries {
+        Libraries::from_contributions([(
+            id,
+            progred_libraries::Library::<(), ()>::named(
+                "test",
+                progred_libraries::Definitions::from_parts(
+                    cells,
+                    grap::ForeignFunctions::default(),
+                ),
+                vec![],
+            ),
+        )])
+        .0
+    }
 
     fn doc_of(cells: Cells) -> Document {
         Document { root: None, cells }
     }
 
     #[test]
-    fn the_document_shadows_the_library_per_cell() {
+    fn values_are_resolved_by_their_stable_sources() {
         let cell = new_cell_id();
-        let mut library = Cells::new();
-        library.set_value(
+        let library_id = new_cell_id();
+        let mut library_cells = Cells::new();
+        library_cells.set_value(
             cell,
             Value::record([
                 name::field("lib-name"),
@@ -78,28 +166,124 @@ mod tests {
                 ),
             ]),
         );
+        let libraries = libraries(library_id, library_cells);
 
         let doc = doc_of(Cells::new());
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
-        assert_eq!(sources.value(cell).and_then(name::read), Some("lib-name"));
+        assert_eq!(
+            sources
+                .value(cell, &Resolution::Library(library_id))
+                .and_then(name::read),
+            Some("lib-name")
+        );
 
         let mut cells = Cells::new();
         cells.set_value(cell, name::record("mine", []));
         let doc = doc_of(cells);
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
-        assert_eq!(sources.value(cell).and_then(name::read), Some("mine"));
         assert_eq!(
             sources
-                .value(cell)
+                .value(cell, &Resolution::Document)
+                .and_then(name::read),
+            Some("mine")
+        );
+        assert_eq!(
+            sources.names(cell).collect::<Vec<_>>(),
+            ["mine", "lib-name"]
+        );
+        assert_eq!(
+            sources
+                .value(cell, &Resolution::Document)
                 .and_then(Value::as_record)
                 .and_then(|fields| fields.get(&crate::test_values::label("a"))),
             None
+        );
+    }
+
+    #[test]
+    fn plural_lookup_keeps_document_first_and_names_library_origins() {
+        let cell = new_cell_id();
+        let library_id = new_cell_id();
+        let mut document_cells = Cells::new();
+        document_cells.set_value(cell, name::record("document", []));
+        let mut library_cells = Cells::new();
+        library_cells.set_value(cell, name::record("library", []));
+        let libraries = libraries(library_id, library_cells);
+        let doc = doc_of(document_cells);
+        let sources = Sources {
+            doc: &doc,
+            libraries: &libraries,
+        };
+
+        assert_eq!(
+            sources
+                .definitions(cell)
+                .map(|definition| definition.source)
+                .collect::<Vec<_>>(),
+            [
+                DefinitionSource::Document,
+                DefinitionSource::Library(library_id)
+            ]
+        );
+        assert_eq!(sources.library_name(library_id), Some("test"));
+    }
+
+    #[test]
+    fn follow_names_a_library_source_not_its_load_order() {
+        let cell = new_cell_id();
+        let left_id = new_cell_id();
+        let right_id = new_cell_id();
+        let library = |name| {
+            let mut cells = Cells::new();
+            cells.set_value(cell, crate::test_values::text(name));
+            progred_libraries::Library::<(), ()>::named(
+                name,
+                progred_libraries::Definitions::from_parts(
+                    cells,
+                    grap::ForeignFunctions::default(),
+                ),
+                vec![],
+            )
+        };
+        let doc = Document {
+            root: Some(Value::from(cell)),
+            cells: Cells::new(),
+        };
+        let left_then_right = Libraries::from_contributions([
+            (left_id, library("left")),
+            (right_id, library("right")),
+        ])
+        .0;
+        let right_then_left = Libraries::from_contributions([
+            (right_id, library("right")),
+            (left_id, library("left")),
+        ])
+        .0;
+        let path = [Step::Follow(Resolution::Library(right_id))];
+
+        assert_eq!(
+            Sources {
+                doc: &doc,
+                libraries: &left_then_right,
+            }
+            .resolve_path(&path)
+            .and_then(progred_libraries::text::read),
+            Some("right")
+        );
+        assert_eq!(
+            Sources {
+                doc: &doc,
+                libraries: &right_then_left,
+            }
+            .resolve_path(&path)
+            .and_then(progred_libraries::text::read),
+            Some("right")
         );
     }
 
@@ -108,30 +292,38 @@ mod tests {
         let lib_cell = new_cell_id();
         let doc_cell = new_cell_id();
         let bare = new_cell_id();
-        let mut library = Cells::new();
-        library.set_value(lib_cell, crate::test_values::text("lib"));
+        let mut library_cells = Cells::new();
+        library_cells.set_value(lib_cell, crate::test_values::text("lib"));
+        let libraries = libraries(new_cell_id(), library_cells);
         let mut cells = Cells::new();
         cells.set_value(doc_cell, crate::test_values::text("doc"));
 
         let doc = doc_of(cells.clone());
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
         assert!(sources.external(lib_cell));
-        assert!(!sources.writable(lib_cell));
+        assert!(!sources.writable(
+            lib_cell,
+            &Resolution::Library(libraries.iter().next().unwrap().0)
+        ));
         assert!(!sources.external(doc_cell));
         assert!(!sources.external(bare));
-        assert!(sources.writable(bare));
+        assert!(sources.writable(bare, &Resolution::Document));
 
         cells.set_value(lib_cell, crate::test_values::text("mine"));
         let doc = doc_of(cells);
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
         assert!(!sources.external(lib_cell));
-        assert!(sources.writable(lib_cell));
+        assert!(sources.writable(lib_cell, &Resolution::Document));
+        assert!(!sources.writable(
+            lib_cell,
+            &Resolution::Library(libraries.iter().next().unwrap().0)
+        ));
     }
 
     #[test]
@@ -158,20 +350,26 @@ mod tests {
             root: Some(Value::from(root)),
             cells,
         };
-        let library = Cells::new();
+        let libraries = Libraries::default();
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
 
-        assert_eq!(sources.resolve(&[]), Some(&Value::from(root)));
+        assert_eq!(sources.resolve_path(&[]), Some(&Value::from(root)));
         assert_eq!(
-            sources.resolve(&[Step::Follow, Step::Key(name::vocabulary::NAME),]),
+            sources.resolve_path(&[
+                Step::Follow(Resolution::Document),
+                Step::Key(name::vocabulary::NAME),
+            ]),
             Some(&crate::test_values::text("scene"))
         );
-        let items = [Step::Follow, Step::Key(crate::test_values::label("items"))];
+        let items = [
+            Step::Follow(Resolution::Document),
+            Step::Key(crate::test_values::label("items")),
+        ];
         let positions: Vec<_> = sources
-            .resolve(&items)
+            .resolve_path(&items)
             .unwrap()
             .as_list()
             .unwrap()
@@ -179,13 +377,13 @@ mod tests {
             .cloned()
             .collect();
         let deep = [
-            Step::Follow,
+            Step::Follow(Resolution::Document),
             Step::Key(crate::test_values::label("items")),
             Step::Element(positions[1].clone()),
             Step::Key(crate::test_values::label("x")),
         ];
         assert_eq!(
-            sources.resolve(&deep),
+            sources.resolve_path(&deep),
             Some(&crate::test_values::text("deep"))
         );
 
@@ -195,14 +393,17 @@ mod tests {
         };
         let bare_sources = Sources {
             doc: &bare_doc,
-            library: &library,
+            libraries: &libraries,
         };
-        assert!(bare_sources.resolve(&[]).is_some());
-        assert_eq!(bare_sources.resolve(&[Step::Follow]), None);
+        assert!(bare_sources.resolve_path(&[]).is_some());
+        assert_eq!(
+            bare_sources.resolve_path(&[Step::Follow(Resolution::Document)]),
+            None
+        );
         let gone = gid::position::between(Some(&positions[1]), None).unwrap();
         assert_eq!(
-            sources.resolve(&[
-                Step::Follow,
+            sources.resolve_path(&[
+                Step::Follow(Resolution::Document),
                 Step::Key(crate::test_values::label("items")),
                 Step::Element(gone),
             ]),

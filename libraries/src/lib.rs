@@ -4,6 +4,7 @@
 use gid::Cells;
 use grap_runtime::ForeignFunctions;
 use progred_display::Partial;
+use std::rc::Rc;
 
 pub mod absent;
 pub mod color;
@@ -28,27 +29,259 @@ pub mod site;
 pub mod text;
 pub mod u64;
 
+#[cfg(test)]
+pub(crate) fn test_evaluate(
+    expression: &gid::Value,
+    resolve: impl Fn(gid::CellId) -> Option<gid::Value>,
+    foreign: &ForeignFunctions,
+    fuel: usize,
+) -> grap_runtime::Evaluation {
+    grap_runtime::evaluate(
+        expression,
+        |cell| {
+            foreign
+                .get(cell)
+                .cloned()
+                .map(grap_runtime::Definition::ForeignFunction)
+                .into_iter()
+                .chain(resolve(cell).map(grap_runtime::Definition::Value))
+                .collect()
+        },
+        fuel,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn test_apply(
+    function: &gid::Value,
+    arguments: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
+    resolve: impl Fn(gid::CellId) -> Option<gid::Value>,
+    foreign: &ForeignFunctions,
+    fuel: usize,
+) -> grap_runtime::Evaluation {
+    grap_runtime::apply(
+        function,
+        arguments,
+        |cell| {
+            foreign
+                .get(cell)
+                .cloned()
+                .map(grap_runtime::Definition::ForeignFunction)
+                .into_iter()
+                .chain(resolve(cell).map(grap_runtime::Definition::Value))
+                .collect()
+        },
+        fuel,
+    )
+}
+
+#[derive(Clone, Copy)]
+pub enum DefinitionRef<'a> {
+    ForeignFunction(&'a grap_runtime::ForeignFunction),
+    Value(&'a gid::Value),
+}
+
+impl DefinitionRef<'_> {
+    pub fn cloned(self) -> grap_runtime::Definition {
+        match self {
+            Self::ForeignFunction(function) => {
+                grap_runtime::Definition::ForeignFunction(function.clone())
+            }
+            Self::Value(value) => grap_runtime::Definition::Value(value.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct LocatedDefinition<'a> {
+    pub library: gid::CellId,
+    pub definition: DefinitionRef<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub struct LocatedValue<'a> {
+    pub library: gid::CellId,
+    pub value: &'a gid::Value,
+}
+
+#[derive(Clone, Default)]
+pub struct Definitions {
+    entries: Vec<(gid::CellId, Vec<grap_runtime::Definition>)>,
+}
+
+impl Definitions {
+    pub fn from_parts(cells: Cells, functions: ForeignFunctions) -> Self {
+        functions
+            .iter()
+            .map(|(cell, function)| {
+                (
+                    cell,
+                    grap_runtime::Definition::ForeignFunction(function.clone()),
+                )
+            })
+            .chain(
+                cells
+                    .iter()
+                    .map(|(cell, value)| (*cell, grap_runtime::Definition::Value(value.clone()))),
+            )
+            .fold(Self::default(), |mut definitions, (cell, definition)| {
+                definitions.insert(cell, definition);
+                definitions
+            })
+    }
+
+    pub fn insert(&mut self, cell: gid::CellId, definition: grap_runtime::Definition) {
+        match self.entries.binary_search_by_key(&cell, |(cell, _)| *cell) {
+            Ok(index) => match definition {
+                grap_runtime::Definition::Value(value) => {
+                    match self.entries[index]
+                        .1
+                        .iter_mut()
+                        .find(|definition| matches!(definition, grap_runtime::Definition::Value(_)))
+                    {
+                        Some(definition) => *definition = grap_runtime::Definition::Value(value),
+                        None => self.entries[index]
+                            .1
+                            .push(grap_runtime::Definition::Value(value)),
+                    }
+                }
+                grap_runtime::Definition::ForeignFunction(function) => self.entries[index]
+                    .1
+                    .push(grap_runtime::Definition::ForeignFunction(function)),
+            },
+            Err(index) => self.entries.insert(index, (cell, vec![definition])),
+        }
+    }
+
+    pub fn get(&self, cell: gid::CellId) -> &[grap_runtime::Definition] {
+        self.entries
+            .binary_search_by_key(&cell, |(cell, _)| *cell)
+            .ok()
+            .map(|index| self.entries[index].1.as_slice())
+            .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
+        self.get(cell)
+            .iter()
+            .find_map(|definition| match definition {
+                grap_runtime::Definition::Value(value) => Some(value),
+                grap_runtime::Definition::ForeignFunction(_) => None,
+            })
+    }
+
+    #[cfg(test)]
+    pub fn values(&self) -> impl Iterator<Item = (gid::CellId, &gid::Value)> {
+        self.entries.iter().flat_map(|(cell, definitions)| {
+            definitions
+                .iter()
+                .filter_map(|definition| match definition {
+                    grap_runtime::Definition::Value(value) => Some((*cell, value)),
+                    grap_runtime::Definition::ForeignFunction(_) => None,
+                })
+        })
+    }
+
+    #[cfg(test)]
+    pub fn merge(mut self, other: Self) -> Self {
+        for (cell, definitions) in other.entries {
+            for definition in definitions {
+                self.insert(cell, definition);
+            }
+        }
+        self
+    }
+
+    #[cfg(test)]
+    pub fn functions(&self) -> ForeignFunctions {
+        self.entries
+            .iter()
+            .flat_map(|(cell, definitions)| {
+                definitions
+                    .iter()
+                    .filter_map(|definition| match definition {
+                        grap_runtime::Definition::ForeignFunction(function) => {
+                            Some((*cell, function))
+                        }
+                        grap_runtime::Definition::Value(_) => None,
+                    })
+            })
+            .fold(
+                ForeignFunctions::default(),
+                |functions, (cell, function)| {
+                    if functions.get(cell).is_some() {
+                        functions
+                    } else {
+                        functions.register(cell, function.clone())
+                    }
+                },
+            )
+    }
+}
+
 pub struct Library<World, Hover> {
-    pub cells: Cells,
-    pub functions: ForeignFunctions,
+    pub metadata: gid::Value,
+    pub definitions: Definitions,
     pub projections: Vec<Partial<World, Hover>>,
+}
+
+impl<World, Hover> Clone for Library<World, Hover> {
+    fn clone(&self) -> Self {
+        Self {
+            metadata: self.metadata.clone(),
+            definitions: self.definitions.clone(),
+            projections: self.projections.clone(),
+        }
+    }
 }
 
 impl<World, Hover> Default for Library<World, Hover> {
     fn default() -> Self {
         Self {
-            cells: Cells::new(),
-            functions: ForeignFunctions::default(),
+            metadata: gid::Value::record([]),
+            definitions: Definitions::default(),
             projections: Vec::new(),
         }
     }
 }
 
 impl<World, Hover> Library<World, Hover> {
+    pub fn new(
+        metadata: gid::Value,
+        definitions: Definitions,
+        projections: Vec<Partial<World, Hover>>,
+    ) -> Self {
+        Self {
+            metadata,
+            definitions,
+            projections,
+        }
+    }
+
+    pub fn named(
+        name: impl Into<String>,
+        definitions: Definitions,
+        projections: Vec<Partial<World, Hover>>,
+    ) -> Self {
+        Self::new(crate::name::record(name, []), definitions, projections)
+    }
+
+    #[cfg(test)]
+    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
+        self.definitions.value(cell)
+    }
+
+    #[cfg(test)]
+    pub fn functions(&self) -> ForeignFunctions {
+        self.definitions.functions()
+    }
+
+    #[cfg(test)]
     pub fn merge(self, other: Self) -> Self {
         Self {
-            cells: self.cells.merged(other.cells),
-            functions: self.functions.merge(other.functions),
+            metadata: self.metadata,
+            definitions: self.definitions.merge(other.definitions),
             projections: self
                 .projections
                 .into_iter()
@@ -57,8 +290,131 @@ impl<World, Hover> Library<World, Hover> {
         }
     }
 
+    #[cfg(test)]
     pub fn merge_all(libraries: impl IntoIterator<Item = Self>) -> Self {
-        libraries.into_iter().fold(Self::default(), Self::merge)
+        let mut libraries = libraries.into_iter();
+        libraries
+            .next()
+            .map(|first| libraries.fold(first, Self::merge))
+            .unwrap_or_default()
+    }
+}
+
+/// The ordered loaded-library set. A library identity is unique for
+/// now; insertion replaces that identity in place. Each library is an
+/// ordered multimap from cell identity to contributed definitions.
+#[derive(Clone, Default)]
+pub struct Libraries {
+    entries: Rc<Vec<(gid::CellId, gid::Value, Definitions)>>,
+}
+
+impl Libraries {
+    pub fn from_contributions<World, Hover>(
+        entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
+    ) -> (Self, Vec<Partial<World, Hover>>) {
+        entries.into_iter().fold(
+            (Self::default(), Vec::new()),
+            |(mut libraries, mut projections), (id, library)| {
+                libraries.insert(id, library.metadata, library.definitions);
+                projections.extend(library.projections);
+                (libraries, projections)
+            },
+        )
+    }
+
+    pub fn insert(
+        &mut self,
+        id: gid::CellId,
+        metadata: gid::Value,
+        definitions: Definitions,
+    ) -> Option<(gid::Value, Definitions)> {
+        let entries = Rc::make_mut(&mut self.entries);
+        match entries
+            .iter()
+            .position(|(candidate, _, _)| *candidate == id)
+        {
+            Some(index) => {
+                let entry = &mut entries[index];
+                Some((
+                    std::mem::replace(&mut entry.1, metadata),
+                    std::mem::replace(&mut entry.2, definitions),
+                ))
+            }
+            None => {
+                entries.push((id, metadata, definitions));
+                None
+            }
+        }
+    }
+
+    pub fn get(&self, id: gid::CellId) -> Option<&Definitions> {
+        self.entries
+            .iter()
+            .find(|(candidate, _, _)| *candidate == id)
+            .map(|(_, _, definitions)| definitions)
+    }
+
+    pub fn metadata(&self, id: gid::CellId) -> Option<&gid::Value> {
+        self.entries
+            .iter()
+            .find(|(candidate, _, _)| *candidate == id)
+            .map(|(_, metadata, _)| metadata)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
+        self.entries
+            .iter()
+            .map(|(id, _, definitions)| (*id, definitions))
+    }
+
+    pub fn definitions(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedDefinition<'_>> {
+        self.entries
+            .iter()
+            .flat_map(move |(library_id, _, definitions)| {
+                definitions
+                    .get(cell)
+                    .iter()
+                    .map(|definition| LocatedDefinition {
+                        library: *library_id,
+                        definition: match definition {
+                            grap_runtime::Definition::ForeignFunction(function) => {
+                                DefinitionRef::ForeignFunction(function)
+                            }
+                            grap_runtime::Definition::Value(value) => DefinitionRef::Value(value),
+                        },
+                    })
+            })
+    }
+
+    pub fn values(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedValue<'_>> {
+        self.entries
+            .iter()
+            .flat_map(move |(library, _, definitions)| {
+                definitions
+                    .get(cell)
+                    .iter()
+                    .filter_map(|definition| match definition {
+                        grap_runtime::Definition::Value(value) => Some(LocatedValue {
+                            library: *library,
+                            value,
+                        }),
+                        grap_runtime::Definition::ForeignFunction(_) => None,
+                    })
+            })
+    }
+
+    pub fn first_value(&self, cell: gid::CellId) -> Option<&gid::Value> {
+        self.values(cell).next().map(|definition| definition.value)
+    }
+
+    pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
+        self.entries
+            .iter()
+            .flat_map(|(_, _, definitions)| definitions.entries.iter().map(|(cell, _)| *cell))
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.entries, &other.entries)
     }
 }
 
@@ -73,6 +429,8 @@ mod tests {
 
     const SHARED_CELL: CellId = CellId::from_u128(1);
     const SHARED_FUNCTION: CellId = CellId::from_u128(2);
+    const LEFT_LIBRARY: CellId = CellId::from_u128(3);
+    const RIGHT_LIBRARY: CellId = CellId::from_u128(4);
 
     fn left_function(
         _: &mut grap_runtime::Context,
@@ -107,39 +465,46 @@ mod tests {
     }
 
     #[test]
-    fn library_is_the_product_of_its_three_monoids() {
+    fn library_definitions_and_projections_compose_in_order() {
         let mut left_cells = Cells::new();
         left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
         let merged = Library::merge_all([
-            Library {
-                cells: left_cells,
-                functions: ForeignFunctions::default()
-                    .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
-                projections: vec![progred_display::partial(left_projection)],
-            },
-            Library {
-                cells: right_cells,
-                functions: ForeignFunctions::default()
-                    .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
-                projections: vec![progred_display::partial(right_projection)],
-            },
+            Library::named(
+                "left",
+                Definitions::from_parts(
+                    left_cells,
+                    ForeignFunctions::default()
+                        .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                ),
+                vec![progred_display::partial(left_projection)],
+            ),
+            Library::named(
+                "right",
+                Definitions::from_parts(
+                    right_cells,
+                    ForeignFunctions::default()
+                        .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
+                ),
+                vec![progred_display::partial(right_projection)],
+            ),
         ]);
 
         assert_eq!(
-            merged.cells.value(SHARED_CELL),
-            Some(&Value::from(b"left".to_vec()))
+            merged.value(SHARED_CELL),
+            Some(&Value::from(b"right".to_vec()))
         );
+        assert_eq!(merged.definitions.get(SHARED_CELL).len(), 1);
+        assert_eq!(crate::name::read(&merged.metadata), Some("left"));
         assert_eq!(
             grap_runtime::evaluate(
                 &grap_runtime::call(Value::from(SHARED_FUNCTION), []),
-                |_| None,
-                &merged.functions,
+                |cell| merged.definitions.get(cell).to_vec(),
                 10,
             )
             .result,
-            Value::from(b"right".to_vec())
+            Value::from(b"left".to_vec())
         );
         let value = Value::record([]);
         assert_eq!(
@@ -169,6 +534,64 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
             ["left", "right"]
+        );
+    }
+
+    #[test]
+    fn libraries_are_an_ordered_unique_map_without_hashing() {
+        let mut left_cells = Cells::new();
+        left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
+        let left = Library::<(), ()>::named(
+            "left",
+            Definitions::from_parts(
+                left_cells,
+                ForeignFunctions::default()
+                    .register(SHARED_CELL, ForeignFunction::new(left_function)),
+            ),
+            vec![],
+        );
+        let mut right_cells = Cells::new();
+        right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
+        let right = Library::<(), ()>::named(
+            "right",
+            Definitions::from_parts(right_cells, ForeignFunctions::default()),
+            vec![],
+        );
+        let (mut libraries, _) =
+            Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
+        let replacement = Definitions::default();
+
+        assert!(libraries.get(LEFT_LIBRARY).is_some());
+        assert_eq!(
+            libraries.metadata(LEFT_LIBRARY).and_then(crate::name::read),
+            Some("left")
+        );
+        assert_eq!(
+            libraries
+                .definitions(SHARED_CELL)
+                .map(|definition| definition.library)
+                .collect::<Vec<_>>(),
+            [LEFT_LIBRARY, LEFT_LIBRARY, RIGHT_LIBRARY]
+        );
+        assert_eq!(
+            libraries
+                .values(SHARED_CELL)
+                .map(|definition| definition.library)
+                .collect::<Vec<_>>(),
+            [LEFT_LIBRARY, RIGHT_LIBRARY]
+        );
+        assert!(
+            libraries
+                .insert(
+                    LEFT_LIBRARY,
+                    crate::name::record("replacement", []),
+                    replacement
+                )
+                .is_some()
+        );
+        assert_eq!(
+            libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),
+            [LEFT_LIBRARY, RIGHT_LIBRARY]
         );
     }
 }

@@ -4,6 +4,8 @@
 
 use crate::{Library, line_edit, name, number};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xf8daecede6e48de724408cfb0e3090f8);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{Layout, ProjectionInput, overlay_value};
 
@@ -95,11 +97,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     let mut cells = Cells::new();
     cells.set_value(vocabulary::F32, name::record("f32", []));
     cells.set_value(vocabulary::UPDATE, name::record("f32 update", []));
-    Library {
-        cells,
-        functions: functions(),
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-    }
+    Library::named(
+        "f32",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]
@@ -125,7 +127,7 @@ mod tests {
 
     #[test]
     fn spelling_round_trips_through_the_update_function() {
-        let updated = grap_runtime::evaluate(
+        let updated = crate::test_evaluate(
             &grap_runtime::call(
                 grap_runtime::ffi(vocabulary::UPDATE),
                 [(line_edit::vocabulary::INPUT, crate::text::value("3.5"))],

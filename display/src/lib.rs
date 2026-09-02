@@ -5,7 +5,7 @@
 //! over the caller's `World`; Grap handlers are data carried by
 //! [`Layout::OnEvent`], not a central enum of editor actions.
 
-use gid::{CellId, Step, Value};
+use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
 use puri::{Affine, Command, Drawing, Leaf, RoundedRect, Shape, Stroke};
 use std::cmp::Ordering;
@@ -495,18 +495,24 @@ pub trait Env {
         self.evaluate(expression)
     }
 
-    /// Conventional human name for a cell, when this host has one.
-    /// A projection remains responsible for its unnamed fallback.
-    fn name(&self, _cell: CellId) -> Option<&str> {
-        None
+    /// Conventional human names for a cell. A projection remains
+    /// responsible for displaying multiple names and for its unnamed
+    /// fallback.
+    fn names(&self, _cell: CellId) -> Vec<&str> {
+        Vec::new()
     }
 
-    /// The stored value of a cell, without evaluating it. Contextual
-    /// projections may inspect definitions to choose a presentation;
-    /// absent and computed values remain opaque.
-    fn cell_value(&self, _cell: CellId) -> Option<&Value> {
-        None
+    /// The cell's definitions, without evaluating them. Contextual
+    /// projections may inspect an unambiguous value definition to
+    /// choose a presentation without hiding foreign alternatives.
+    fn cell_definitions(&self, _cell: CellId) -> Vec<CellDefinition<'_>> {
+        Vec::new()
     }
+}
+
+pub enum CellDefinition<'a> {
+    Value(Resolution, &'a Value),
+    Foreign,
 }
 
 /// Everything a partial projection receives for one value. The

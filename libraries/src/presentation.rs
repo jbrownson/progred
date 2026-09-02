@@ -6,6 +6,8 @@
 
 use crate::{Library, f64, layout, name};
 use gid::Cells;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3c13de);
 use progred_display::{Layout, ProjectionInput, transient};
 
 pub mod vocabulary {
@@ -44,11 +46,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library {
-        cells,
-        projections: vec![progred_display::partial(display::<World, Hover>)],
-        ..Library::default()
-    }
+    Library::named(
+        "presentation",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![progred_display::partial(display::<World, Hover>)],
+    )
 }
 
 #[cfg(test)]

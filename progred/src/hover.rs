@@ -44,10 +44,10 @@ pub(crate) enum SourceTrace {
 impl SourceTrace {
     pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>) -> Self {
         path.iter()
-            .rposition(|step| *step == Step::Follow)
+            .rposition(|step| matches!(step, Step::Follow(_)))
             .and_then(|follow| {
                 sources
-                    .resolve(&path[..follow])
+                    .resolve_path(&path[..follow])
                     .and_then(Value::as_cell)
                     .map(|cell| Self::InCell {
                         cell,
@@ -133,10 +133,10 @@ impl Secondary {
     pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>, value: &Value) -> Option<Self> {
         let enclosing = path
             .iter()
-            .rposition(|step| *step == Step::Follow)
+            .rposition(|step| matches!(step, Step::Follow(_)))
             .and_then(|follow| {
                 sources
-                    .resolve(&path[..follow])
+                    .resolve_path(&path[..follow])
                     .and_then(Value::as_cell)
                     .map(|cell| (cell, follow + 1))
             });
@@ -178,7 +178,9 @@ pub(crate) fn hover_secondary(
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
-        Hover::Value(path) => Secondary::from_path(sources, path.clone(), sources.resolve(path)?),
+        Hover::Value(path) => {
+            Secondary::from_path(sources, path.clone(), sources.resolve_path(path)?)
+        }
         Hover::Drawing(source) => Some(Secondary::from_trace(source)),
         Hover::Entry(index) => {
             let current = selection?;
@@ -205,7 +207,7 @@ mod tests {
 
     fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
         let path: Rc<[Step]> = Rc::from(path);
-        Secondary::from_path(sources, path.clone(), sources.resolve(path.as_ref())?)
+        Secondary::from_path(sources, path.clone(), sources.resolve_path(path.as_ref())?)
     }
 
     #[test]
@@ -231,15 +233,15 @@ mod tests {
             root: Some(root),
             cells,
         };
-        let library = Cells::new();
+        let libraries = progred_libraries::Libraries::default();
         let sources = Sources {
             doc: &doc,
-            library: &library,
+            libraries: &libraries,
         };
         let nested = |position| {
             vec![
                 Step::Element(position),
-                Step::Follow,
+                Step::Follow(gid::Resolution::Document),
                 Step::Key(outer),
                 Step::Key(inner),
             ]
@@ -255,7 +257,7 @@ mod tests {
                 &sources,
                 vec![
                     Step::Element(positions[1].clone()),
-                    Step::Follow,
+                    Step::Follow(gid::Resolution::Document),
                     Step::Key(peer),
                 ],
             )

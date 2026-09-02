@@ -6,7 +6,8 @@ use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::selection::writable_at;
-use gid::{CellId, Step, Value, hex_string};
+use crate::sources::DefinitionSource;
+use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
     Delim, Face, Layout, activatable, alternatives, block_hover, bracket, col, descend, dim, faced,
     hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
@@ -23,7 +24,7 @@ pub fn of<World: 'static>(
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
-        Value::Cell(_) => cell_layout(),
+        Value::Cell(cell) => cell_layout(cx, path, *cell),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
         Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
@@ -46,11 +47,13 @@ pub(super) fn collapsed_layout<World: 'static>(
     hooks: &Hooks<World>,
 ) -> Option<View<World>> {
     let delim = match value {
-        Value::Cell(cell) if cx.sources.value(*cell).is_some() => {
-            let mut followed = path.to_vec();
-            followed.push(Step::Follow);
-            let pending_inside = cx.pending_child_of(&followed).is_some()
-                || cx.pending_edge_under(&followed).is_some();
+        Value::Cell(cell) if cx.sources.values(*cell).next().is_some() => {
+            let pending_inside = cx.sources.values(*cell).any(|value| {
+                let mut followed = path.to_vec();
+                followed.push(Step::Follow(value.source));
+                cx.pending_child_of(&followed).is_some()
+                    || cx.pending_edge_under(&followed).is_some()
+            });
             (!pending_inside).then_some(Delim::Paren)?
         }
         Value::List(elements) if !elements.is_empty() && cx.pending_child_of(path).is_none() => {
@@ -74,8 +77,56 @@ pub(super) fn collapsed_layout<World: 'static>(
     ))
 }
 
-fn cell_layout<World>() -> View<World> {
-    bracket(Delim::Paren, descend(Step::Follow, None, None))
+fn cell_layout<World: 'static>(cx: &Cx, _path: &[Step], cell: CellId) -> View<World> {
+    let definitions: Vec<_> = cx.sources.definitions(cell).collect();
+    match definitions.as_slice() {
+        [] => {
+            return bracket(
+                Delim::Paren,
+                descend(Step::Follow(Resolution::Document), None, None),
+            );
+        }
+        [
+            crate::sources::LocatedDefinition {
+                definition: progred_libraries::DefinitionRef::Value(_),
+                source,
+                ..
+            },
+        ] => {
+            return bracket(Delim::Paren, descend(Step::Follow(*source), None, None));
+        }
+        [
+            crate::sources::LocatedDefinition {
+                definition: progred_libraries::DefinitionRef::ForeignFunction(_),
+                ..
+            },
+        ] => return bracket(Delim::Paren, dim("foreign function")),
+        _ => {}
+    }
+    bracket(
+        Delim::Paren,
+        col(
+            0,
+            4.0,
+            definitions.into_iter().map(|resolved| {
+                let source = match resolved.source {
+                    DefinitionSource::Document => "document".to_string(),
+                    DefinitionSource::Library(library) => cx
+                        .sources
+                        .library_name(library)
+                        .map(|name| format!("library {name}"))
+                        .unwrap_or_else(|| format!("library {}", short_id(library))),
+                };
+                let definition = match resolved.definition {
+                    progred_libraries::DefinitionRef::Value(_) => {
+                        descend(Step::Follow(resolved.source), None, None)
+                    }
+                    progred_libraries::DefinitionRef::ForeignFunction(_) => dim("foreign function"),
+                };
+                row(6.0, [dim(format!("{source}:")), definition])
+            }),
+        ),
+    )
 }
 
 fn list_layout<World: 'static>(
@@ -141,7 +192,7 @@ fn record_layout<World: 'static>(
         items.push((key, false));
     }
     items.sort_by(
-        |(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
+        |(left, _), (right, _)| match (cx.names(*left), cx.names(*right)) {
             (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -218,8 +269,8 @@ fn field_head<World: 'static>(
 }
 
 fn field_label<World>(cx: &Cx, key: CellId) -> View<World> {
-    let (spelling, face) = match cx.name(key) {
-        Some(name) => (name.to_string(), Face::Label),
+    let (spelling, face) = match cx.names(key) {
+        Some(names) => (names, Face::Label),
         None => (short_id(key), Face::Id),
     };
     faced(spelling, face)

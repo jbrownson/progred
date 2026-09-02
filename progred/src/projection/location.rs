@@ -1,6 +1,6 @@
 //! Unresolved projection locations and GID-step lookup.
 
-use gid::{CellId, Step, Value};
+use gid::{CellId, Resolution, Step, Value};
 #[cfg(test)]
 use progred_libraries::f64;
 
@@ -13,13 +13,16 @@ pub enum Location<'a> {
 }
 
 impl Location<'_> {
-    pub fn value<'a>(&'a self, resolve: impl Fn(CellId) -> Option<&'a Value>) -> Option<&'a Value> {
+    pub fn value<'a>(
+        &'a self,
+        resolve: impl Fn(CellId, &Resolution) -> Option<&'a Value>,
+    ) -> Option<&'a Value> {
         match self {
             Self::Root(value) => *value,
             Self::Child { parent, step } => match step {
                 Step::Key(label) => parent.as_record()?.get(label),
                 Step::Element(position) => parent.as_list()?.get(position),
-                Step::Follow => resolve(parent.as_cell()?),
+                Step::Follow(resolution) => resolve(parent.as_cell()?, resolution),
             },
         }
     }
@@ -39,7 +42,7 @@ mod tests {
                 parent: &value,
                 step: Step::Key(child),
             }
-            .value(|_| None),
+            .value(|_, _| None),
             Some(&expected),
         );
     }
@@ -53,7 +56,7 @@ mod tests {
                 parent: &record,
                 step: Step::Key(missing),
             }
-            .value(|_| None),
+            .value(|_, _| None),
             None,
         );
 
@@ -63,9 +66,11 @@ mod tests {
         assert_eq!(
             Location::Child {
                 parent: &link,
-                step: Step::Follow,
+                step: Step::Follow(Resolution::Document),
             }
-            .value(|requested| (requested == cell).then_some(&resolved)),
+            .value(|requested, resolution| {
+                (requested == cell && *resolution == Resolution::Document).then_some(&resolved)
+            }),
             Some(&resolved),
         );
     }

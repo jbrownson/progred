@@ -14,10 +14,14 @@ fn evaluated_expression(value: &Value) -> &Value {
 }
 
 fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
+    let stack = crate::stack::load::<()>();
+    let sources = crate::sources::Sources {
+        doc,
+        libraries: &stack.libraries,
+    };
     grap::evaluate(
         expression,
-        |cell| doc.cells.value(cell).cloned(),
-        &crate::stack::load::<()>().foreign,
+        |cell| sources.grap_definitions(cell),
         grap::DEFAULT_FUEL,
     )
 }
@@ -49,9 +53,14 @@ fn the_sample_contains_a_projectable_grap_computation() {
     assert_eq!(evaluation.result, geometry::value(40.0));
     assert_eq!(
         evaluation.dependencies,
-        [binders["double"], binders["pitch_value"]]
-            .into_iter()
-            .collect()
+        [
+            binders["double"],
+            binders["pitch_value"],
+            binders["multiply"],
+            binders["circle"],
+        ]
+        .into_iter()
+        .collect()
     );
 }
 

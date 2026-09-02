@@ -91,7 +91,7 @@ display language's data form — one marker key per node, strings on
 the text convention and numbers on f64, interaction as attach-points
 for the PROVIDED intents (selectable/pickable/hoverable/hover block;
 arbitrary world-callbacks stay a Rust-partial privilege), walk steps
-as key cells plus a FOLLOW marker — and that is the WHOLE step
+as key cells plus a FOLLOW record naming `document` or a library identity — and that is the WHOLE step
 vocabulary by design: element walks stay with the structural
 fallback (positions are session-only and "cannot occur in data";
 record conventions never descend by element, and computed list
@@ -134,8 +134,9 @@ selection discovers the stock line description through the
 Rust projection. Generic Grap event handlers remain part of the layout
 data form, but documents do not currently install projections or other
 library contributions.
-Known seam, deliberate: an FFI registry target still evaluates its call fields
-itself, keeping the code-shaped edge `apply` removes for closures.
+Resolved 2026-09-01: cells now expose ordered plural definitions, each either a
+GID value or a Rust foreign function. Direct calls use the same dispatch for
+both forms, so there is no separate permanent FFI registry path.
 Next candidates: view flags as presence and editor APIs for label/query.
 
 
@@ -366,8 +367,10 @@ the sketch, with these calls made in conversation:
   Eq/Hash/serialization all read it — and label order is the raw
   row order anyway.
 - Paths gained a third step: `Step::Follow`, the identity crossing.
-  `[]` is the link at the root, `[Follow]` the value its cell holds,
-  `[Follow, Key(f)]` a field inside. Forced by cells holding
+  It now carries the stable resolution source after cells became plural:
+  `Follow(Document)` or `Follow(Library(id))`, never a stack ordinal.
+  `[]` is the link at the root, `[Follow(Document)]` the value its document
+  source holds, and `[Follow(Document), Key(f)]` a field inside. Forced by cells holding
   non-records: with links followed silently, a cell holding a string
   gives one path two meanings — the link (select, replace, delete
   the reference) and the string (mount the editor) — and the write

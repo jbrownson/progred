@@ -3,6 +3,8 @@
 
 use crate::{Library, absent, f64, name};
 use gid::{Cells, Value};
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0xac27c33e44d2df4f3d1753bcebd2cfe5);
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{ForeignFunction, ForeignFunctions};
@@ -56,11 +58,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         vocabulary::INVALID_RADIUS,
         absent::named_reason("invalid radius"),
     );
-    Library {
-        cells,
-        functions: functions(),
-        ..Library::default()
-    }
+    Library::named(
+        "geometry",
+        crate::Definitions::from_parts(cells, functions()),
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -76,7 +78,7 @@ mod tests {
             [(vocabulary::RADIUS, f64::value(20.0))],
         );
         assert_eq!(
-            grap::evaluate(&expression, |_| None, &foreign, 10).result,
+            crate::test_evaluate(&expression, |_| None, &foreign, 10).result,
             value(20.0)
         );
         assert_eq!(read(&value(20.0)), Some(20.0));
@@ -106,7 +108,7 @@ mod tests {
             Value::from(vocabulary::CIRCLE),
             [(vocabulary::RADIUS, f64::value(-1.0))],
         );
-        let evaluation = grap::evaluate(&expression, |_| None, &foreign, 10);
+        let evaluation = crate::test_evaluate(&expression, |_| None, &foreign, 10);
         assert_eq!(
             evaluation.result,
             absent::with_reason(vocabulary::INVALID_RADIUS)

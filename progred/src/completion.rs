@@ -4,8 +4,8 @@ use crate::filter;
 use crate::identity::short_id;
 use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
-use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
-use progred_libraries::{name, text};
+use gid::{CellId, Document, Step, Value, new_cell_id};
+use progred_libraries::{Libraries, name, text};
 
 /// A completion offer on a pending. The display styles itself by the
 /// action's kind at draw time.
@@ -113,19 +113,26 @@ pub(crate) fn completion_entries(
     // and it leaves.
     let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
-        .map(|cell| match (!raw).then(|| sources.name(cell)).flatten() {
-            Some(name) => (
-                (
-                    name.to_string(),
-                    true,
-                    EntryAction::Value(Value::from(cell)),
-                ),
-                sources.external(cell),
-            ),
-            None => (
-                (short_id(cell), false, EntryAction::Value(Value::from(cell))),
-                sources.external(cell),
-            ),
+        .flat_map(|cell| {
+            let names: Vec<_> = (!raw)
+                .then(|| sources.names(cell).map(str::to_string).collect())
+                .unwrap_or_default();
+            if names.is_empty() {
+                vec![(
+                    (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+                    sources.external(cell),
+                )]
+            } else {
+                names
+                    .into_iter()
+                    .map(|name| {
+                        (
+                            (name, true, EntryAction::Value(Value::from(cell))),
+                            sources.external(cell),
+                        )
+                    })
+                    .collect()
+            }
         })
         .partition(|(_, external)| !*external);
     let strip_origin = |((display, named, action), _)| (display, named, action);
@@ -216,9 +223,9 @@ fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
 fn document_cells(sources: &Sources) -> Vec<CellId> {
     let mut cells = Vec::new();
     for cell in sources.cells() {
-        cells.push(*cell);
-        if let Some(value) = sources.value(*cell) {
-            value_cells(value, &mut cells);
+        cells.push(cell);
+        for value in sources.values(cell) {
+            value_cells(value.value, &mut cells);
         }
     }
     if let Some(root) = sources.root() {
@@ -262,9 +269,9 @@ pub fn resolve_label(action: &EntryAction) -> Option<(CellId, Option<(CellId, Va
 /// value and writes it.
 pub fn commit_pending(
     doc: &mut Document,
-    library: &Cells,
+    libraries: &Libraries,
     path: &[Step],
     action: &EntryAction,
 ) -> bool {
-    resolve_entry(action).is_some_and(|value| set_value(doc, library, path, value))
+    resolve_entry(action).is_some_and(|value| set_value(doc, libraries, path, value))
 }
