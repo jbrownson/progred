@@ -253,7 +253,7 @@ fn drawing_source_target<World>(
         .and_then(|descend| descend.root.clone().map(|root| (root, descend.rect)))
 }
 
-fn scroll_offset(
+pub(crate) fn scroll_offset(
     stored: Vec2,
     update: &ui_events::pointer::PointerScrollEvent,
     scale: f64,
@@ -662,6 +662,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
     let insert_root = root.clone();
     let apply_root = root.clone();
     let point_root = root.clone();
+    let completion_root = root.clone();
     let state_root = root;
     projection::Hooks {
         // The host's ordinary structural selection transition.
@@ -756,6 +757,14 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
                 selection => app.model.selection = selection,
             },
         ),
+        set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice| {
+            if let Some(selection) = app.model.selection.as_mut()
+                && selection.root() == &completion_root
+                && selection.stage() != selection::Stage::Edge
+            {
+                selection.set_completion_view(scroll, choice);
+            }
+        }),
     }
 }
 
@@ -777,6 +786,8 @@ fn project_workspace_view(
     let cell_root;
     let root_path;
     let root_projection;
+    let root_completions = matches!(view.root.target(), workspace::Target::Document)
+        .then_some(&stack.root_completions);
     let root = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
@@ -815,6 +826,7 @@ fn project_workspace_view(
             width: body_width,
             root_projection: if raw { None } else { root_projection },
             projection: (!raw).then_some(&stack.projection),
+            root_completions: (!raw).then_some(root_completions).flatten(),
         },
         tcx,
         projection_hooks(view.root.clone()),

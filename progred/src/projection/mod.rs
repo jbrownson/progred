@@ -2,9 +2,9 @@
 //! retain source provenance, and fall back to total structural display.
 
 use crate::annotations::Annotations;
-use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries};
+use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries_with};
 #[cfg(test)]
-use crate::completion::{resolve_entry, resolve_label};
+use crate::completion::{completion_entries, resolve_entry, resolve_label};
 use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
@@ -36,7 +36,7 @@ pub(crate) use drawing::Memo as DrawingMemo;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use gid::{Cells, Document, new_cell_id};
-use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
+use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Size, Stroke, Vec2};
 use location::Location;
 use peniko::{Brush, Color};
 use puri::delim::{self, Delim, DelimStyle};
@@ -140,6 +140,9 @@ struct Traversal {
     cells: HashSet<CellId>,
     /// The nearest followed cell and the start of its relative path.
     enclosing: Option<(CellId, usize)>,
+    /// The nearest projection-supplied vocabulary. This is frame-local
+    /// description data, not retained editor state.
+    completions: Option<progred_display::CompletionProvider>,
 }
 
 #[derive(Clone, Copy)]
@@ -871,6 +874,13 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 Some(query) => label_query(cx, tcx, query, hooks),
                 None => render::text(tcx, "…", &cx.styles.dim),
             })
+        }
+        progred_display::Layout::WithCompletions { child, provider } => {
+            let mut scoped = ancestors.clone();
+            scoped.completions = Some(provider);
+            prepare(
+                cx, projection, tcx, path, &scoped, hooks, value, *child, build,
+            )
         }
         progred_display::Layout::LineEdit(mut line) => {
             if let Some((scrub_path, spelling)) = cx.scrub_spelling
@@ -1809,6 +1819,8 @@ pub struct Hooks<C> {
     pub point: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
+    /// Retain the completion offset and choice in the pending selection.
+    pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize)>,
 }
 
 fn select_handler<C: 'static>(
@@ -2287,6 +2299,10 @@ pub struct ProjectDescription<'a, World> {
     /// conventional `value` argument; an absent result falls through.
     pub root_projection: Option<&'a Value>,
     pub projection: Option<&'a Projection<World>>,
+    /// Suggestions contributed for an empty document root. Once a
+    /// projection starts, a nearer `WithCompletions` scope may replace
+    /// these for its subtree.
+    pub root_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
 fn projection_is_absent(value: &Value) -> bool {
@@ -2322,6 +2338,7 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         width,
         root_projection,
         projection,
+        root_completions,
     } = description;
     let cx = Cx {
         sources,
@@ -2342,6 +2359,7 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
     let mut traversal = Traversal::default();
+    traversal.completions = root_completions.cloned();
     if matches!(root_path.last(), Some(Step::Follow(_)))
         && let Some(cell) = sources
             .resolve_path(&root_path[..root_path.len() - 1])
@@ -2568,6 +2586,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         apply: hooks.apply.clone(),
         point: hooks.point.clone(),
         commit_offer: hooks.commit_offer.clone(),
+        set_completion_view: hooks.set_completion_view.clone(),
     };
     let result_cx = Cx {
         sources: cx.sources,
@@ -2692,7 +2711,13 @@ fn prepare_location<C: 'static, Cv: Canvas + 'static>(
                 layout,
                 build,
             ),
-            None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), hooks)),
+            None => ChoiceLayout::fixed(pending_view(
+                cx,
+                tcx,
+                path.to_vec(),
+                ancestors.completions.as_ref(),
+                hooks,
+            )),
         },
     }
 }
@@ -2868,13 +2893,14 @@ fn pending_view<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
+    completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let engaged = cx
         .selection
         .filter(|current| current.stage() == Stage::Pending && current.path() == path.as_slice())
         .and_then(Selection::edit);
-    let content = placeholder(cx, tcx, engaged, false, hooks);
+    let content = placeholder(cx, tcx, engaged, false, completions, hooks);
     // Engaged, the generic ring IS the slot's chrome: it draws
     // [`highlight_rect`] over the same frame the cold box strokes,
     // and the same ring survives the commit around the same glyphs —
@@ -2894,10 +2920,11 @@ fn placeholder<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     engaged: Option<&LineEditState>,
     labels: bool,
+    completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, query, labels, hooks),
+        Some(query) => query_content(cx, tcx, query, labels, completions, hooks),
         None => placeholder_box(tcx, cx.styles),
     }
 }
@@ -2910,10 +2937,11 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     query: &LineEditState,
     labels: bool,
+    completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     // The card and keyboard commit must answer from one list.
-    let entries = completion_entries(&cx.sources, cx.raw, labels, query.text());
+    let entries = completion_entries_with(&cx.sources, cx.raw, labels, query.text(), completions);
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
@@ -2968,9 +2996,20 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     });
     let commit_offer = hooks.commit_offer.clone();
     let choice = cx.selection.map(Selection::choice).unwrap_or(0);
-    let card = completion_card(tcx, cx.styles, &entries, choice, move |world, action| {
-        commit_offer(world, action)
-    });
+    let scroll = cx
+        .selection
+        .map(Selection::completion_scroll)
+        .unwrap_or(0.0);
+    let set_completion_view = hooks.set_completion_view.clone();
+    let card = completion_card(
+        tcx,
+        cx.styles,
+        &entries,
+        choice,
+        scroll,
+        move |world, action| commit_offer(world, action),
+        move |world, scroll, choice| set_completion_view(world, scroll, choice),
+    );
     placed::popover(trigger, card, 4.0 * scale)
 }
 
@@ -2984,7 +3023,9 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     entries: &[Entry],
     choice: usize,
+    scroll: f64,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
+    set_view: impl Fn(&mut C, f64, usize) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
     let choice = choice.min(entries.len().saturating_sub(1));
@@ -3076,7 +3117,66 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
             })
         })
         .collect();
-    let card = pad(Insets::uniform(4.0 * scale), col(0, 2.0 * scale, rows));
+    let gap = 2.0 * scale;
+    let row_spans = completion_row_spans(&rows, gap, scale);
+    let content = col(0, gap, rows);
+    let viewport_height = completion_viewport_height(&row_spans);
+    let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
+    let scroll = scroll.clamp(0.0, maximum);
+    let viewport_extent = Extent {
+        width: content.extent.width,
+        ascent: content.extent.ascent.min(viewport_height * scale),
+        descent: (viewport_height * scale - content.extent.ascent).max(0.0),
+    };
+    let set_view = Rc::new(set_view);
+    let scroll_view = set_view.clone();
+    let scrolled = placed::scrolled_at(
+        content,
+        Vec2::new(0.0, scroll * scale),
+        None,
+        move |world, event| {
+            let (next, outcome) = crate::frame::scroll_offset(
+                Vec2::new(0.0, scroll),
+                event,
+                scale,
+                Size::new(viewport_extent.width, viewport_extent.height()),
+                Vec2::new(0.0, maximum),
+            );
+            if next.y != scroll {
+                scroll_view(world, next.y, choice);
+            }
+            outcome
+        },
+    );
+    let viewport = measured::overlay(
+        leaf(viewport_extent, |_, _| {}),
+        scrolled,
+        move |placement, _, _| Some(placement),
+    );
+    let card = pad(Insets::uniform(4.0 * scale), viewport);
+    let count = entries.len();
+    let card = on_key(card, move |world, event| {
+        if event.state.is_down() && !crate::modifiers::command(&event.modifiers) {
+            match event.key {
+                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown)) => {
+                    let next = match direction {
+                        NamedKey::ArrowUp => choice.saturating_sub(1),
+                        _ => choice.saturating_add(1).min(count.saturating_sub(1)),
+                    };
+                    set_view(
+                        world,
+                        reveal_completion(scroll, next, &row_spans, viewport_height)
+                            .clamp(0.0, maximum),
+                        next,
+                    );
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    });
     before(card, move |p, placement| {
         let rect = placement.rect;
         let shape = RoundedRect::from_rect(rect, 6.0 * scale);
@@ -3089,6 +3189,44 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         );
         hover_block(p, placement);
     })
+}
+
+fn completion_row_spans<C, Cv>(
+    rows: &[Measured<Placed<C, Cv>>],
+    gap: f64,
+    scale: f64,
+) -> Vec<(f64, f64)> {
+    rows.iter()
+        .scan(0.0, |top, row| {
+            let span = (*top, *top + row.extent.height() / scale);
+            *top = span.1 + gap / scale;
+            Some(span)
+        })
+        .collect()
+}
+
+fn completion_viewport_height(spans: &[(f64, f64)]) -> f64 {
+    const VISIBLE_ROWS: usize = 8;
+    spans
+        .get(
+            VISIBLE_ROWS
+                .saturating_sub(1)
+                .min(spans.len().saturating_sub(1)),
+        )
+        .map_or(0.0, |(_, bottom)| *bottom)
+}
+
+fn reveal_completion(
+    scroll: f64,
+    choice: usize,
+    spans: &[(f64, f64)],
+    viewport_height: f64,
+) -> f64 {
+    match spans.get(choice) {
+        Some((top, _)) if *top < scroll => *top,
+        Some((_, bottom)) if *bottom > scroll + viewport_height => *bottom - viewport_height,
+        _ => scroll,
+    }
 }
 
 /// Entry text with the query's matched spans in bold — the fuzzy
@@ -3164,7 +3302,7 @@ fn label_query<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, Some(query), true, hooks);
+    let content = placeholder(cx, tcx, Some(query), true, None, hooks);
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(scale, p, rect);
     });

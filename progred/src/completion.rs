@@ -4,7 +4,8 @@ use crate::filter;
 use crate::identity::short_id;
 use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
-use gid::{CellId, Document, Step, Value, new_cell_id};
+use gid::{CellId, Document, Resolution, Step, Value, new_cell_id};
+use progred_display::CompletionProvider;
 use progred_libraries::{Libraries, name, text};
 
 /// A completion offer on a pending. The display styles itself by the
@@ -59,6 +60,16 @@ pub(crate) fn completion_entries(
     raw: bool,
     labels: bool,
     query: &str,
+) -> Vec<Entry> {
+    completion_entries_with(sources, raw, labels, query, None)
+}
+
+pub(crate) fn completion_entries_with(
+    sources: &Sources,
+    raw: bool,
+    labels: bool,
+    query: &str,
+    contextual: Option<&CompletionProvider>,
 ) -> Vec<Entry> {
     let trimmed = query.trim();
     let quoted = trimmed.trim_start().starts_with('"');
@@ -115,27 +126,52 @@ pub(crate) fn completion_entries(
         .into_iter()
         .flat_map(|cell| {
             let names: Vec<_> = (!raw)
-                .then(|| sources.names(cell).map(str::to_string).collect())
+                .then(|| {
+                    sources
+                        .values(cell)
+                        .filter_map(|value| {
+                            name::read(value.value).map(|name| (name.to_string(), value.source))
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             if names.is_empty() {
+                let sources_for_cell: Vec<_> = sources
+                    .definitions(cell)
+                    .map(|definition| source_name(sources, definition.source))
+                    .collect();
                 vec![(
-                    (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+                    (
+                        short_id(cell),
+                        false,
+                        EntryAction::Value(Value::from(cell)),
+                        (!sources_for_cell.is_empty()).then(|| sources_for_cell.join(" / ")),
+                    ),
                     sources.external(cell),
                 )]
             } else {
                 names
                     .into_iter()
-                    .map(|name| {
+                    .map(|(name, source)| {
                         (
-                            (name, true, EntryAction::Value(Value::from(cell))),
-                            sources.external(cell),
+                            (
+                                name,
+                                true,
+                                EntryAction::Value(Value::from(cell)),
+                                Some(format!(
+                                    "{} · {}",
+                                    source_name(sources, source),
+                                    short_id(cell)
+                                )),
+                            ),
+                            !matches!(source, Resolution::Document),
                         )
                     })
                     .collect()
             }
         })
         .partition(|(_, external)| !*external);
-    let strip_origin = |((display, named, action), _)| (display, named, action);
+    let strip_origin = |((display, named, action, detail), _)| (display, named, action, detail);
     let mut local: Vec<_> = local.into_iter().map(strip_origin).collect();
     let mut external: Vec<_> = external.into_iter().map(strip_origin).collect();
     local.sort_by(|a, b| a.0.cmp(&b.0));
@@ -144,30 +180,29 @@ pub(crate) fn completion_entries(
     // Constructors follow the current document on an empty query;
     // library vocabulary follows them. A non-empty query still ranks
     // all three groups by the ordinary matching tiers.
-    references_pool.push(("new cell".to_string(), true, EntryAction::NewCell));
+    references_pool.push(("new cell".to_string(), true, EntryAction::NewCell, None));
     if !labels {
-        references_pool.push(("new list".to_string(), true, EntryAction::NewList));
-        references_pool.push(("new record".to_string(), true, EntryAction::NewRecord));
+        references_pool.push(("new list".to_string(), true, EntryAction::NewList, None));
+        references_pool.push(("new record".to_string(), true, EntryAction::NewRecord, None));
     }
     references_pool.extend(external);
-    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _, _)| key, query)
+    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _, _, _)| key, query)
         .into_iter()
-        .take(8)
         .map(|ranked| {
             // A DEMOTED reference ranks after the typed atom: fuzzy,
             // or an unnamed cell's bare id — ids are for reading,
             // names are for reaching (want it reachable? name it).
             let fuzzy = ranked.fuzzy();
             let matches = ranked.matches;
-            let (display, named, action) = ranked.item;
+            let (display, named, action, origin) = ranked.item;
             let demoted = fuzzy || !named;
-            let detail = match &action {
+            let detail = origin.or_else(|| match &action {
                 EntryAction::Value(value) => value
                     .as_cell()
                     .map(short_id)
                     .filter(|detail| *detail != display),
                 _ => None,
-            };
+            });
             let entry = Entry {
                 display,
                 detail,
@@ -179,6 +214,9 @@ pub(crate) fn completion_entries(
         })
         .collect();
     let mut entries = Vec::new();
+    if !labels && let Some(contextual) = contextual {
+        entries.extend(contextual_entries(contextual, query));
+    }
     if atom_leads {
         entries.push(atom_entry);
         entries.extend(text_entry);
@@ -191,6 +229,55 @@ pub(crate) fn completion_entries(
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
     entries
+}
+
+fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
+    match source {
+        Resolution::Document => "document".to_string(),
+        Resolution::Library(library) => sources
+            .library_name(library)
+            .map(str::to_string)
+            .unwrap_or_else(|| short_id(library)),
+    }
+}
+
+fn contextual_entries(provider: &CompletionProvider, query: &str) -> Vec<Entry> {
+    let completions = provider(query);
+    let keys: Vec<_> = completions
+        .iter()
+        .enumerate()
+        .flat_map(|(index, completion)| {
+            std::iter::once((index, completion.display.clone(), true)).chain(
+                (!query.is_empty())
+                    .then_some(completion.aliases.iter())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(move |alias| (index, alias, false)),
+            )
+        })
+        .collect();
+    let mut seen = vec![false; completions.len()];
+    filter::rank(keys, |(_, key, _)| key, query)
+        .into_iter()
+        .filter_map(|ranked| {
+            let (index, _, display_matched) = ranked.item;
+            if std::mem::replace(&mut seen[index], true) {
+                None
+            } else {
+                let completion = &completions[index];
+                Some(Entry {
+                    display: completion.display.clone(),
+                    detail: completion.detail.clone(),
+                    matches: display_matched
+                        .then_some(ranked.matches)
+                        .unwrap_or_default(),
+                    id: false,
+                    action: EntryAction::Value(completion.value.clone()),
+                })
+            }
+        })
+        .collect()
 }
 
 /// The cells a value links, walked structurally — lists and records

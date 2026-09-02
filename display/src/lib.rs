@@ -149,6 +149,43 @@ pub struct PointUpdate {
 
 pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
 
+/// One value a projection suggests at pending locations in its
+/// subtree. The host owns filtering and presentation; the projection
+/// owns the contextual vocabulary and the value ultimately inserted.
+#[derive(Clone)]
+pub struct Completion {
+    pub display: String,
+    pub aliases: Vec<String>,
+    pub detail: Option<String>,
+    pub value: Value,
+}
+
+impl Completion {
+    pub fn new(display: impl Into<String>, value: Value) -> Self {
+        Self {
+            display: display.into(),
+            aliases: Vec::new(),
+            detail: None,
+            value,
+        }
+    }
+
+    pub fn with_aliases(mut self, aliases: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.aliases = aliases.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+}
+
+/// Called only for an engaged pending. Passing the live query lets a
+/// provider generate a large or computed vocabulary lazily; the host
+/// still ranks the returned display names and aliases consistently.
+pub type CompletionProvider = Rc<dyn Fn(&str) -> Vec<Completion>>;
+
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
 /// libraries never receive its absolute document path.
@@ -199,6 +236,13 @@ pub enum Layout<World, Hover> {
     /// layout composition debt, not a drawing primitive disguised as
     /// one.
     Query,
+    /// Supply contextual completion values to pending queries beneath
+    /// `child`. Nested scopes replace the outer provider; the universal
+    /// cell/value vocabulary remains available as a fallback.
+    WithCompletions {
+        child: Box<Layout<World, Hover>>,
+        provider: CompletionProvider,
+    },
     LineEdit(LineEdit),
     OnClick {
         child: Box<Layout<World, Hover>>,
@@ -349,6 +393,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 program: program.clone(),
             },
             Self::Query => Self::Query,
+            Self::WithCompletions { child, provider } => Self::WithCompletions {
+                child: child.clone(),
+                provider: provider.clone(),
+            },
             Self::LineEdit(line) => Self::LineEdit(line.clone()),
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
@@ -584,6 +632,16 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
 
 pub fn query<World, Hover>() -> Layout<World, Hover> {
     Layout::Query
+}
+
+pub fn with_completions<World, Hover>(
+    child: Layout<World, Hover>,
+    provider: CompletionProvider,
+) -> Layout<World, Hover> {
+    Layout::WithCompletions {
+        child: Box::new(child),
+        provider,
+    }
 }
 
 pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {

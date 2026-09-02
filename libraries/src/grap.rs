@@ -347,6 +347,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             progred_display::partial(ffi_display::<World, Hover>),
         ],
     )
+    .with_root_completions([progred_display::Completion::new(
+        "grap",
+        Value::record([(vocabulary::GRAP, Value::list([]))]),
+    )
+    .with_detail("grap library")])
 }
 
 #[cfg(test)]

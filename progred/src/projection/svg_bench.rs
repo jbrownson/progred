@@ -294,6 +294,7 @@ fn place_with_annotations_using(
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         commit_offer: Rc::new(|_, _| {}),
+        set_completion_view: Rc::new(|_, _, _| {}),
     };
     // Timed as the frame perf canary: projection is reported
     // separately, while the total also includes placement, hover,
@@ -315,6 +316,7 @@ fn place_with_annotations_using(
             width: width - 48.0,
             root_projection,
             projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
         },
         &mut tcx,
         hooks,
@@ -685,6 +687,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
             root_projection: None,
             projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
         },
         &mut tcx,
         Hooks {
@@ -715,6 +718,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _| {}),
         },
     );
     let path = vec![
@@ -793,6 +797,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
             root_projection: None,
             projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
         },
         &mut frame_tcx,
         Hooks {
@@ -822,6 +827,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _| {}),
         },
     );
     let active = measured::place(active, Placement::root(rect));
@@ -1369,7 +1375,9 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             &crate::styles::editor(1.0),
             &entries,
             0,
+            0.0,
             |_, _| {},
+            |_, _, _| {},
         );
         let extent = card.extent;
         let placed = measured::place_top_left(card, Point::ZERO);
@@ -1392,6 +1400,94 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         .collect();
     assert!(winners.contains(&Hover::Entry(0)));
     assert!(winners.contains(&Hover::Entry(1)));
+}
+
+#[test]
+fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
+    use ui_events::pointer::{PointerId, PointerInfo, PointerState};
+
+    let entries: Vec<_> = (0..20)
+        .map(|index| Entry {
+            display: format!("entry {index}"),
+            detail: None,
+            matches: Vec::new(),
+            id: false,
+            action: EntryAction::NewList,
+        })
+        .collect();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let mut frame = |(scroll, choice)| {
+        measured::place_top_left(
+            completion_card::<(f64, usize), Bench>(
+                &mut tcx,
+                &styles,
+                &entries,
+                choice,
+                scroll,
+                |_, _| {},
+                |state, scroll, choice| *state = (scroll, choice),
+            ),
+            Point::ZERO,
+        )
+    };
+    let mut state = (0.0, 0);
+    let pointer = PointerInfo {
+        pointer_id: Some(PointerId::PRIMARY),
+        persistent_device_id: None,
+        pointer_type: PointerType::Mouse,
+    };
+    let mut pointer_state = PointerState::default();
+    pointer_state.position.x = 10.0;
+    pointer_state.position.y = 10.0;
+    let scroll = PointerScrollEvent {
+        pointer,
+        state: pointer_state,
+        delta: ScrollDelta::LineDelta(0.0, -5.0),
+    };
+    assert!(
+        frame(state)
+            .handler
+            .unwrap()
+            .dispatch_scroll(&mut state, &scroll)
+            .handled()
+    );
+    assert_eq!(state, (200.0, 0));
+    let press = |key| KeyboardEvent {
+        key: Key::Named(key),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    for key in [NamedKey::ArrowDown, NamedKey::ArrowUp] {
+        assert!(
+            frame(state)
+                .handler
+                .unwrap()
+                .dispatch_key(&mut state, &press(key))
+        );
+    }
+    assert_eq!(state, (0.0, 0));
+    for _ in 0..12 {
+        frame(state)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    }
+    let offset = state.0;
+    assert!(offset > 0.0);
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
+    assert_eq!(state, (offset, 11));
 }
 
 #[test]

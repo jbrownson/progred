@@ -957,6 +957,12 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             display(input, &renderer)
         })],
     )
+    .with_root_completions([progred_display::Completion::new(
+        "fidget",
+        Value::record([(vocabulary::FIDGET, Value::list([]))]),
+    )
+    .with_aliases(["sdf"])
+    .with_detail("fidget library")])
 }
 
 #[cfg(test)]

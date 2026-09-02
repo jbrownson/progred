@@ -356,27 +356,6 @@ impl Editor {
     ) -> bool {
         event.state.is_down()
             && match &event.key {
-                // While pending, plain vertical arrows drive completion
-                // choice; chorded arrows stay structure keys.
-                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                    if !modifiers::command(&event.modifiers) =>
-                {
-                    match &mut self.model.selection {
-                        Some(current) if current.stage() != selection::Stage::Edge => {
-                            let len = completion
-                                .as_ref()
-                                .map(|offers| offers.entries.len())
-                                .unwrap_or(0);
-                            let choice = current.choice();
-                            current.set_choice(match direction {
-                                NamedKey::ArrowUp => choice.saturating_sub(1),
-                                _ => (choice + 1).min(len.saturating_sub(1)),
-                            });
-                            true
-                        }
-                        _ => false,
-                    }
-                }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
                     Some(current) if current.stage() != selection::Stage::Edge => {
                         let root = current.root().clone();

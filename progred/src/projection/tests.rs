@@ -3,7 +3,7 @@ use crate::annotations::Annotations;
 use crate::hover::hover_secondary;
 use crate::selection::payload as selection_payload;
 use gid::Position;
-use progred_libraries::{Libraries, absent, f64, name, text};
+use progred_libraries::{Libraries, absent, f64, fidget, name, text};
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
@@ -28,6 +28,7 @@ fn projection_target_appends_relative_steps() {
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         commit_offer: Rc::new(|_, _| {}),
+        set_completion_view: Rc::new(|_, _, _| {}),
     };
     let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
     assert_eq!(
@@ -196,6 +197,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             width: 500.0,
             root_projection: None,
             projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
         },
         &mut tcx,
         Hooks {
@@ -211,6 +213,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _| {}),
         },
     );
     let height = measured.extent.height().max(1.0);
@@ -1164,6 +1167,10 @@ fn completion_offers_follow_the_stage() {
     // The value stage offers the string, references, the value
     // constructors, and the mint.
     let value_stage = displays(false, "");
+    assert!(
+        value_stage.len() > 8,
+        "the full ranked set remains navigable"
+    );
     assert!(value_stage.iter().any(|d| d == "roof"));
     assert!(
         value_stage.iter().any(|d| d == "new list"),
@@ -1221,6 +1228,57 @@ fn completion_offers_follow_the_stage() {
         .position(|e| matches!(&e.action, EntryAction::Value(v) if v.as_cell() == Some(unnamed)))
         .unwrap();
     assert!(atom < reference);
+}
+
+#[test]
+fn contextual_completion_uses_aliases_and_library_sources_remain_visible() {
+    let stack = crate::stack::load::<()>();
+    let doc = Document {
+        root: None,
+        cells: gid::Cells::new(),
+    };
+    let sources = src(&doc, &stack.libraries);
+    let entries = crate::completion::completion_entries_with(
+        &sources,
+        false,
+        false,
+        "sdf",
+        Some(&stack.root_completions),
+    );
+    assert!(matches!(
+        entries.first(),
+        Some(Entry {
+            display,
+            action: EntryAction::Value(value),
+            ..
+        }) if display == "fidget"
+            && value.as_record().is_some_and(|fields| {
+                fields.contains_key(&fidget::vocabulary::FIDGET)
+            })
+    ));
+
+    let entries = completion_entries(&sources, false, false, "fidget");
+    assert!(entries.iter().any(|entry| {
+        matches!(
+            &entry.action,
+            EntryAction::Value(value)
+                if value.as_cell() == Some(fidget::vocabulary::FIDGET)
+        ) && entry
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.starts_with("fidget · "))
+    }));
+}
+
+#[test]
+fn completion_view_reveals_keyboard_choices() {
+    let spans: Vec<(f64, f64)> = (0..20)
+        .map(|index| (index as f64 * 12.0, index as f64 * 12.0 + 10.0))
+        .collect();
+    let viewport = 94.0;
+    assert_eq!(reveal_completion(0.0, 7, &spans, viewport), 0.0);
+    assert_eq!(reveal_completion(0.0, 8, &spans, viewport), 12.0);
+    assert_eq!(reveal_completion(144.0, 0, &spans, viewport), 0.0);
 }
 
 #[test]
@@ -1607,6 +1665,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 width: 500.0,
                 root_projection: None,
                 projection: Some(&projection),
+                root_completions: None,
             },
             &mut tcx,
             Hooks::<()> {
@@ -1622,6 +1681,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 apply: Rc::new(|_, _, _, _| false),
                 point: Rc::new(|_, _, _, _, _| false),
                 commit_offer: Rc::new(|_, _| {}),
+                set_completion_view: Rc::new(|_, _, _| {}),
             },
         )
         .extent
@@ -1646,7 +1706,7 @@ fn the_pending_query_writes_through_to_the_payload() {
     };
     let lib = core_libraries();
     let mut pending = crate::selection::pending_with_query(Vec::new(), "");
-    pending.set_choice(2);
+    pending.set_completion_view(0.0, 2);
     pending
         .edit_mut()
         .unwrap()
@@ -1717,6 +1777,7 @@ fn a_projection_defined_as_data_realizes() {
             width: 500.0,
             root_projection: None,
             projection: Some(&projection),
+            root_completions: None,
         },
         &mut tcx,
         Hooks::<()> {
@@ -1732,6 +1793,7 @@ fn a_projection_defined_as_data_realizes() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);
@@ -1794,6 +1856,7 @@ fn a_data_event_realizes_the_apply_hook() {
             width: 500.0,
             root_projection: None,
             projection: Some(&projection),
+            root_completions: None,
         },
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {
@@ -1812,6 +1875,7 @@ fn a_data_event_realizes_the_apply_hook() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);
