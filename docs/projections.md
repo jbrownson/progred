@@ -557,9 +557,8 @@ epoch interruption. The compiler service invokes an explicitly chosen
 rustup toolchain in a per-call temporary directory and returns
 structured rustc diagnostics.
 
-That code, the f64 guest, and their tests are retained together in the
-`experiments/rust-wasm-projection` crate. They are useful evidence for a
-future foreign-language boundary and remain covered by the workspace
-tests without appearing to be part of the active architecture. The app
-contains neither the compiler and host nor a Wasmtime dependency, and
-the active projection does not load the guest.
+The experiment was removed on 2026-09-04; its compiler, host, guest,
+and tests remain in Git history. Grap now supplies the active language
+and projection model. Future foreign-language support, including wasm,
+should be defined through ordinary Grap libraries when a concrete use
+requires it.

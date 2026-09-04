@@ -14,7 +14,6 @@ members = [
     "display",
     "grap",
     "libraries",
-    "experiments/rust-wasm-projection",
     "progred",
     "ui/measured",
     "ui/puri",
