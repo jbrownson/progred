@@ -2903,8 +2903,9 @@ Deferred behind projections.
   contribute empty-root templates and document-root field identities
   separately, and neither leaks into descendants. The placed frame retains
   the exact visible offers so hover and commit address the same list.
-- Pending insertion fallback remains unresolved (2026-09-04): structural
-  records and the general Grap call projection expose pending fields, but
+- Pending insertion visibility is deferred to a dedicated design pass
+  (2026-09-04): structural records and the general Grap call projection
+  expose pending fields, but
   specialized projections such as quote, infix, match, and lambda may hide
   them. A simple option is for those projections to decline while an
   unsupported insertion is active, exposing the general form. Another is

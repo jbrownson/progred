@@ -875,7 +875,14 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             fuel,
             program,
         } => ChoiceLayout::fixed(drawing::program_leaf(
-            cx, path, width, ascent, descent, fuel, program,
+            cx,
+            path,
+            width,
+            ascent,
+            descent,
+            fuel,
+            program,
+            hooks.select_source.clone(),
         )),
         progred_display::Layout::Completion { kind, provider } => ChoiceLayout::fixed(match kind {
             progred_display::CompletionKind::Value => {
@@ -945,9 +952,10 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             );
             let path = path.to_vec();
             let writable = !cx.source.transient() && writable_at(&cx.sources, &path);
+            let start = hooks.scrub.clone();
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 if writable {
-                    realize_scrub(path, target, handler, inner)
+                    realize_scrub(path, target, handler, start, scale, inner)
                 } else {
                     inner
                 }
@@ -1373,10 +1381,15 @@ fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     target: Hover,
     handler: progred_display::ScrubHandler,
+    start: Rc<dyn Fn(&mut C, Path, progred_display::ScrubHandler, Point, f64) -> bool>,
+    scale: f64,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, _| {
-        p.scrub(Hovered::Tree(target), path, handler);
+    before(inner, move |p, placement| {
+        p.pick_with(Hovered::Tree(target), move |world, event| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            placement.contains(point) && start(world, path.clone(), handler.clone(), point, scale)
+        });
     })
 }
 
@@ -1808,6 +1821,8 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
 /// the remaining host-owned editor state and measurement caches.
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path)>,
+    /// Select a visible occurrence of a drawing's structural source.
+    pub select_source: Rc<dyn Fn(&mut C, &SourceTrace)>,
     pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
     /// Mount the stock editor described by a Rust projection. Its
     /// first pointer event then uses `edit` below for caret placement.
@@ -1836,6 +1851,8 @@ pub struct Hooks<C> {
     pub point: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
     /// Begin a projection state drag in this hook's owning view.
     pub state_drag: Rc<dyn Fn(&mut C, Path, progred_display::StateDragHandler, Point, f64)>,
+    /// Select and begin a value scrub, declining while a pending is active.
+    pub scrub: Rc<dyn Fn(&mut C, Path, progred_display::ScrubHandler, Point, f64) -> bool>,
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
     /// Retain the completion offset and choice in the pending selection.
@@ -2561,6 +2578,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     let payload_origin = origin.clone();
     let result_hooks = Hooks {
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
+        select_source: hooks.select_source.clone(),
         select_payload: Rc::new(move |ctx, _, payload| {
             select_payload(ctx, payload_origin.clone(), payload)
         }),
@@ -2574,6 +2592,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         apply: hooks.apply.clone(),
         point: hooks.point.clone(),
         state_drag: hooks.state_drag.clone(),
+        scrub: hooks.scrub.clone(),
         commit_offer: hooks.commit_offer.clone(),
         set_completion_view: hooks.set_completion_view.clone(),
     };

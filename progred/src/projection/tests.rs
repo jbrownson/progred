@@ -28,6 +28,8 @@ fn projection_target_appends_relative_steps() {
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         state_drag: Rc::new(|_, _, _, _, _| {}),
+        scrub: Rc::new(|_, _, _, _, _| false),
+        select_source: Rc::new(|_, _| {}),
         commit_offer: Rc::new(|_, _| {}),
         set_completion_view: Rc::new(|_, _, _, _| {}),
     };
@@ -214,6 +216,8 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1365,6 +1369,8 @@ fn projected_completion_entries_with(
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1928,6 +1934,8 @@ fn partials_receive_selection_and_annotations_positionally() {
                 apply: Rc::new(|_, _, _, _| false),
                 point: Rc::new(|_, _, _, _, _| false),
                 state_drag: Rc::new(|_, _, _, _, _| {}),
+                scrub: Rc::new(|_, _, _, _, _| false),
+                select_source: Rc::new(|_, _| {}),
                 commit_offer: Rc::new(|_, _| {}),
                 set_completion_view: Rc::new(|_, _, _, _| {}),
             },
@@ -2042,6 +2050,8 @@ fn a_projection_defined_as_data_realizes() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -2068,7 +2078,6 @@ fn a_projection_defined_as_data_realizes() {
         },
         &mut pointer,
     ));
-    assert!(pointer.targeted);
 }
 
 #[test]
@@ -2143,6 +2152,8 @@ fn a_data_event_realizes_the_apply_hook() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },

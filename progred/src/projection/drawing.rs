@@ -375,6 +375,7 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
     descent: f64,
     fuel: usize,
     program: Value,
+    select_source: Rc<dyn Fn(&mut C, &SourceTrace)>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = cx.styles.scale;
     let extent = Extent {
@@ -414,8 +415,14 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
         builder.claim_dynamic(placement, move |point| {
             probe_drawing.target_at(point, outer)
         });
-        builder.pick_dynamic(placement, |_, target| {
-            matches!(target, Hovered::Tree(Hover::Drawing(_)))
+        builder.pick_dynamic(placement, move |world, target| {
+            if let Hovered::Tree(Hover::Drawing(source)) = target {
+                select_source(world, source);
+                // The painted hit owns the pick even without a visible source occurrence.
+                true
+            } else {
+                false
+            }
         });
         builder.ink(move |canvas: &mut Cv, ink| {
             canvas.clip(

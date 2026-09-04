@@ -39,7 +39,6 @@ pub(crate) const HOVER_REACH: f64 = 8.0;
 pub(crate) struct Dispatch {
     pub(crate) handler: Handler<Editor, placed::PointerContext>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
-    pub(crate) scrubs: Vec<placed::ScrubAction>,
     pub(crate) descends: Vec<navigate::Descend<Editor>>,
     pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
@@ -383,14 +382,12 @@ impl Editor {
         outcome
     }
 
-    pub(crate) fn select_drawing_source(
-        &mut self,
-        descends: &[navigate::Descend<Editor>],
-        source: &hover::SourceTrace,
-    ) -> bool {
-        let select = drawing_source_descend(&self.sources(), descends, source)
+    pub(crate) fn select_drawing_source(&mut self, source: &hover::SourceTrace) {
+        let select = drawing_source_descend(&self.sources(), &self.last_descends, source)
             .map(|descend| descend.select.clone());
-        select.is_some_and(|select| select(self))
+        if let Some(select) = select {
+            select(self);
+        }
     }
 
     /// Scroll-to-reveal, computed from the freshly retained dispatch
@@ -505,12 +502,10 @@ impl Editor {
             availability,
             scale,
             viewport,
-            scrub: self.scrub.as_ref().and_then(|scrub| {
-                Some(ScrubPresentation {
-                    root: scrub.action.root()?.clone(),
-                    path: scrub.action.path.clone(),
-                    spelling: scrub.spelling.clone(),
-                })
+            scrub: self.scrub.as_ref().map(|scrub| ScrubPresentation {
+                root: scrub.root.clone(),
+                path: scrub.path.clone(),
+                spelling: scrub.spelling.clone(),
             }),
         };
         let resources = FrameResources {
@@ -567,7 +562,6 @@ impl Editor {
             .unwrap_or_default();
         let Placed {
             probes: _,
-            scrubs,
             handler,
             descends,
             view_regions,
@@ -592,7 +586,6 @@ impl Editor {
             dispatch: Dispatch {
                 handler: handler.unwrap_or_else(Handler::new),
                 pointer_root,
-                scrubs,
                 descends,
                 view_regions,
                 line: 14.0 * scale,
@@ -642,33 +635,33 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
     let point_root = root.clone();
     let completion_root = root.clone();
     let drag_root = root.clone();
+    let scrub_root = root.clone();
     let state_root = root;
-    projection::Hooks {
-        // The host's ordinary structural selection transition.
-        // Editable text handles its coordinate-sensitive pointer
-        // transition through the stock control's raw handler.
-        select: Rc::new(move |app: &mut Editor, path| {
-            let fresh = match app.model.selection.as_ref() {
-                None => true,
-                Some(current) => {
-                    current.root() != &select_root
-                        || current.stage() == selection::Stage::Label
-                        || current.path() != path
-                }
-            };
-            if fresh {
-                let next =
-                    selection::Selection::edge(&app.sources(), path).with_root(select_root.clone());
-                app.model.selection = Some(next);
-            } else if let Some(line) = app
-                .model
-                .selection
-                .as_mut()
-                .and_then(selection::Selection::edit_mut)
-            {
-                line.cursor_to_end();
+    let select: Rc<dyn Fn(&mut Editor, gid::Path)> = Rc::new(move |app, path| {
+        let fresh = match app.model.selection.as_ref() {
+            None => true,
+            Some(current) => {
+                current.root() != &select_root
+                    || current.stage() == selection::Stage::Label
+                    || current.path() != path
             }
-        }),
+        };
+        if fresh {
+            let next =
+                selection::Selection::edge(&app.sources(), path).with_root(select_root.clone());
+            app.model.selection = Some(next);
+        } else if let Some(line) = app
+            .model
+            .selection
+            .as_mut()
+            .and_then(selection::Selection::edit_mut)
+        {
+            line.cursor_to_end();
+        }
+    });
+    projection::Hooks {
+        select: select.clone(),
+        select_source: Rc::new(Editor::select_drawing_source),
         select_payload: Rc::new(move |app: &mut Editor, path, payload| {
             app.model.selection = Some(
                 selection::Selection::from_payload(&app.sources(), path, payload)
@@ -727,6 +720,26 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
                 path,
                 handler,
             ));
+        }),
+        scrub: Rc::new(move |app, path, handler, point, scale| {
+            if app.model.selection.as_ref().is_some_and(|selection| {
+                matches!(
+                    selection.stage(),
+                    selection::Stage::Pending | selection::Stage::Label
+                )
+            }) {
+                false
+            } else {
+                select(app, path.clone());
+                app.scrub = Some(crate::PendingScrub::new(
+                    point,
+                    scale,
+                    scrub_root.clone(),
+                    path,
+                    handler,
+                ));
+                true
+            }
         }),
         point: Rc::new(move |app, path, placement, handler, point| {
             app.start_point(point_root.clone(), path, placement, handler, point)

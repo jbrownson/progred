@@ -201,7 +201,8 @@ struct PendingScrub {
     origin: Point,
     point: Point,
     scale: f64,
-    action: placed::ScrubAction,
+    root: workspace::Root,
+    path: gid::Path,
     gesture: progred_display::ScrubGesture,
     dragging: bool,
     recorded: bool,
@@ -235,13 +236,20 @@ impl PendingPoint {
 }
 
 impl PendingScrub {
-    fn new(origin: Point, scale: f64, action: placed::ScrubAction) -> Self {
-        let gesture = (action.handler)();
+    fn new(
+        origin: Point,
+        scale: f64,
+        root: workspace::Root,
+        path: gid::Path,
+        handler: progred_display::ScrubHandler,
+    ) -> Self {
+        let gesture = handler();
         Self {
             origin,
             point: origin,
             scale,
-            action,
+            root,
+            path,
             gesture,
             dragging: false,
             recorded: false,
@@ -1059,45 +1067,11 @@ impl App {
                             dispatch.pointer_root.clone(),
                             editor.hover.clone(),
                         );
-                        let pick = modifiers::pick(&button.state.modifiers);
-                        let scrub = (pick && modifiers::scrub(&button.state.modifiers))
-                            .then(|| {
-                                pointer.hovered.as_ref().and_then(|target| {
-                                    placed::scrub_target(
-                                        &dispatch.scrubs,
-                                        pointer.root.as_ref(),
-                                        target,
-                                    )
-                                })
-                            })
-                            .flatten()
-                            .filter(|_| {
-                                !matches!(
-                                    editor
-                                        .model
-                                        .selection
-                                        .as_ref()
-                                        .map(selection::Selection::stage),
-                                    Some(selection::Stage::Pending | selection::Stage::Label)
-                                )
-                            });
                         let handled = dispatch.handler.dispatch_pointer_down_with(
                             editor,
                             &button,
                             &mut pointer,
                         );
-                        if pointer.targeted
-                            && pick
-                            && let Some(Hovered::Tree(hover::Hover::Drawing(source))) =
-                                &pointer.hovered
-                        {
-                            editor.select_drawing_source(&dispatch.descends, source);
-                        }
-                        if pointer.targeted
-                            && let Some(scrub) = scrub
-                        {
-                            editor.scrub = Some(PendingScrub::new(position, scale, scrub));
-                        }
                         handled
                             || (puri::interact::is_primary_contact(&button)
                                 && pointer.hovered.is_none()
@@ -1385,7 +1359,7 @@ impl Editor {
         let Some(event) = scrub.update(point) else {
             return true;
         };
-        let path = scrub.action.path.clone();
+        let path = scrub.path.clone();
         let update = (scrub.gesture)(event);
         scrub.spelling = update.spelling;
         let replacement = update.value;

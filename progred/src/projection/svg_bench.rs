@@ -271,6 +271,8 @@ fn place_with_annotations(
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         state_drag: Rc::new(|_, _, _, _, _| {}),
+        scrub: Rc::new(|_, _, _, _, _| false),
+        select_source: Rc::new(|_, _| {}),
         commit_offer: Rc::new(|_, _| {}),
         set_completion_view: Rc::new(|_, _, _, _| {}),
     };
@@ -739,6 +741,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -851,6 +855,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1760,6 +1766,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1827,7 +1835,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         &event,
         &mut pointer
     ));
-    assert!(pointer.targeted);
     assert!(world.selection.is_none());
     assert_eq!(world.applied, Some(Vec::new()));
 }
@@ -2011,10 +2018,145 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
     }
 }
 
+#[test]
+fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry() {
+    use ui_events::keyboard::Modifiers;
+    use ui_events::pointer::{
+        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+    };
+
+    struct World {
+        pending: bool,
+        log: Vec<&'static str>,
+        scrub: Option<crate::PendingScrub>,
+    }
+
+    let path = vec![Step::Key(new_cell_id())];
+    let target = Hover::Value(Rc::from(path.clone()));
+    let root = crate::workspace::Root::document();
+    let value = f64_convention::value(12.0);
+    let extent = Extent {
+        width: 20.0,
+        ascent: 0.0,
+        descent: 20.0,
+    };
+    for (pending, covered, raw, x, pick, owns_view, expected) in [
+        (false, false, false, 5.0, true, true, Some("scrub")),
+        (true, false, false, 5.0, true, true, Some("pending pick")),
+        (false, true, false, 5.0, true, true, None),
+        (false, false, true, 5.0, true, true, Some("raw")),
+        (false, false, false, 15.0, true, true, None),
+        (false, false, false, 5.0, false, true, None),
+        (false, false, false, 5.0, true, false, None),
+    ] {
+        let captured_root = root.clone();
+        let scrub = realize_scrub(
+            path.clone(),
+            target.clone(),
+            Rc::new(|| {
+                Box::new(|_| progred_display::ScrubUpdate {
+                    value: f64_convention::value(13.0),
+                    spelling: Some("13".into()),
+                })
+            }),
+            Rc::new(move |world: &mut World, path, handler, point, scale| {
+                if world.pending {
+                    false
+                } else {
+                    world.log.push("scrub");
+                    world.scrub = Some(crate::PendingScrub::new(
+                        point,
+                        scale,
+                        captured_root.clone(),
+                        path,
+                        handler,
+                    ));
+                    true
+                }
+            }),
+            2.0,
+            leaf::<World, Bench>(extent, move |p, _| {
+                p.handler().on_pointer_down(move |world, _| {
+                    if raw {
+                        world.log.push("raw");
+                    }
+                    raw
+                });
+            }),
+        );
+        let picked = value.clone();
+        let node = realize_pick_with(
+            target.clone(),
+            value.clone(),
+            Rc::new(move |world: &mut World, value| {
+                assert_eq!(value, picked);
+                if world.pending {
+                    world.log.push("pending pick");
+                }
+                world.pending
+            }),
+            scrub,
+        );
+        let placement = Placement::new(
+            Rect::new(0.0, 0.0, 20.0, 20.0),
+            Rect::new(0.0, 0.0, 10.0, 20.0),
+        );
+        let mut placed = measured::place(placed::in_view(node, root.clone()), placement);
+        if covered {
+            placed = measured::Output::over(
+                placed,
+                measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement),
+            );
+        }
+        let mut state = PointerState::default();
+        state.position.x = x;
+        state.position.y = 5.0;
+        state.modifiers = if pick {
+            Modifiers::META | Modifiers::CONTROL
+        } else {
+            Modifiers::empty()
+        };
+        let event = PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state,
+        };
+        let mut pointer = placed::PointerContext::new(
+            owns_view.then(|| root.clone()),
+            Some(Hovered::Tree(target.clone())),
+        );
+        let mut world = World {
+            pending,
+            log: Vec::new(),
+            scrub: None,
+        };
+        assert_eq!(
+            placed
+                .handler
+                .unwrap()
+                .dispatch_pointer_down_with(&mut world, &event, &mut pointer),
+            covered || expected.is_some(),
+        );
+        assert_eq!(world.log, expected.into_iter().collect::<Vec<_>>());
+        assert_eq!(world.scrub.is_some(), expected == Some("scrub"));
+        if let Some(scrub) = world.scrub {
+            assert_eq!(scrub.path, path);
+            assert_eq!(scrub.root, root);
+            assert_eq!(scrub.origin, Point::new(5.0, 5.0));
+            assert_eq!(scrub.scale, 2.0);
+        }
+    }
+}
+
 fn drawing_frame(
     doc: &Document,
     libraries: &Libraries,
     shape_function: CellId,
+    select_source: Rc<dyn Fn(&mut (), &SourceTrace)>,
 ) -> Measured<Placed<(), Bench>> {
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -2051,6 +2193,7 @@ fn drawing_frame(
                 ),
             ],
         ),
+        select_source,
     )
 }
 
@@ -2080,8 +2223,15 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
     };
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     for expected in 1..=2 {
+        let selected = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let picked = selected.clone();
         let placed = measured::place(
-            drawing_frame(&doc, &libraries, shape_function),
+            drawing_frame(
+                &doc,
+                &libraries,
+                shape_function,
+                Rc::new(move |_, source| picked.borrow_mut().push(source.clone())),
+            ),
             Placement::root(bounds),
         );
         assert_eq!(calls.get(), expected - 1);
@@ -2092,11 +2242,39 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             ));
         }
         assert_eq!(calls.get(), expected);
+        assert!(selected.borrow().is_empty());
+        let source = SourceTrace::Stored(Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]));
+        let target = Hovered::Tree(Hover::Drawing(source.clone()));
+        assert_eq!(
+            placed.probe(Point::new(5.0, 5.0), None, 0.0),
+            Some(Claim::Direct(target.clone()))
+        );
+        let mut pointer = placed::PointerContext::new(None, Some(target));
+        let mut state = ui_events::pointer::PointerState::default();
+        state.position.x = 5.0;
+        state.position.y = 5.0;
+        state.modifiers =
+            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
+        let event = ui_events::pointer::PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: ui_events::pointer::PointerInfo {
+                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: ui_events::pointer::PointerType::Mouse,
+            },
+            state,
+        };
+        assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+            &mut (),
+            &event,
+            &mut pointer,
+        ));
+        assert_eq!(*selected.borrow(), [source]);
         settle(placed, Some(Point::new(5.0, 5.0)));
         assert_eq!(calls.get(), expected);
     }
     let clipped = measured::place(
-        drawing_frame(&doc, &libraries, shape_function),
+        drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _| {})),
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
     );
     settle(clipped, Some(Point::new(5.0, 5.0)));
@@ -2145,7 +2323,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         (Libraries::default(), vec![]),
     ] {
         let placed = measured::place(
-            drawing_frame(&doc, &libraries, shape_function),
+            drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _| {})),
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
         );
         let drawing = settle(placed, None);

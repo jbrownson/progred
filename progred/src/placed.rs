@@ -10,7 +10,6 @@ use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
 use crate::workspace::Root;
-use gid::Path;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
 use peniko::{Brush, Color, ImageData};
@@ -111,14 +110,11 @@ impl Probe {
 }
 
 /// The settled target is an explicit dispatch input, never an input to
-/// description or placement. `targeted` reports whether an activation or
-/// pick accepted. Number scrubbing and drawing-source picking still use
-/// this output after dispatch.
+/// description or placement. Accepted handlers perform their own actions.
 #[derive(Default)]
 pub struct PointerContext {
     pub root: Option<Root>,
     pub hovered: Option<Hovered>,
-    pub targeted: bool,
     outside_view: bool,
 }
 
@@ -136,44 +132,12 @@ impl PointerContext {
     }
 }
 
-/// A semantic scrub attached to one projected value. The shell
-/// recognizes the gesture and retains this start-frame mapping for
-/// its duration, so reminting cannot move the scrub's origin.
-#[derive(Clone)]
-pub struct ScrubAction {
-    root: Option<Root>,
-    target: Hovered,
-    pub path: Path,
-    pub handler: progred_display::ScrubHandler,
-}
-
-impl ScrubAction {
-    pub fn root(&self) -> Option<&Root> {
-        self.root.as_ref()
-    }
-}
-
 /// A nested scroll container's settled geometry, retained so
 /// selection reveal can update the same view state as pointer scroll.
 pub struct ViewRegion {
     pub root: Root,
     pub rect: Rect,
     pub maximum: Vec2,
-}
-
-pub fn scrub_target(
-    actions: &[ScrubAction],
-    root: Option<&Root>,
-    target: &Hovered,
-) -> Option<ScrubAction> {
-    actions.iter().rev().find_map(|candidate| {
-        (candidate
-            .root
-            .as_ref()
-            .is_none_or(|candidate| Some(candidate) == root)
-            && candidate.target == *target)
-            .then(|| candidate.clone())
-    })
 }
 
 /// What ink may condition on: the frame's RESOLVED hover, decided
@@ -193,7 +157,6 @@ pub struct Ink<'a> {
 
 pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
-    pub scrubs: Vec<ScrubAction>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, PointerContext>>,
@@ -228,7 +191,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
     fn empty() -> Self {
         Self {
             probes: Vec::new(),
-            scrubs: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -241,7 +203,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
 
     fn over(mut self, above: Self) -> Self {
         append(&mut self.probes, above.probes);
-        append(&mut self.scrubs, above.scrubs);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -282,9 +243,6 @@ impl<C: 'static, Cv> Placed<C, Cv> {
                 pointer.outside_view = outside;
                 handled
             });
-        }
-        for scrub in &mut self.scrubs {
-            scrub.root = Some(root.clone());
         }
         for floater in &mut self.floaters {
             floater.root_navigation(root);
@@ -461,7 +419,15 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     }
 
     pub fn pick(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
-        self.target_action(target, true, move |ctx, _| action(ctx));
+        self.pick_with(target, move |ctx, _| action(ctx));
+    }
+
+    pub fn pick_with(
+        &mut self,
+        target: Hovered,
+        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+    ) {
+        self.target_action(target, true, action);
     }
 
     pub fn activate_with(
@@ -481,12 +447,10 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         if self.visible {
             self.handler()
                 .on_pointer_down_with(move |ctx, event, pointer| {
-                    let handled = puri::interact::is_primary_contact(event)
+                    puri::interact::is_primary_contact(event)
                         && crate::modifiers::pick(&event.state.modifiers) == pick
                         && pointer.matches(&target)
-                        && action(ctx, event);
-                    pointer.targeted |= handled;
-                    handled
+                        && action(ctx, event)
                 });
         }
     }
@@ -499,7 +463,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         if self.visible {
             self.handler()
                 .on_pointer_down_with(move |ctx, event, pointer| {
-                    let handled = puri::interact::is_primary_contact(event)
+                    puri::interact::is_primary_contact(event)
                         && crate::modifiers::pick(&event.state.modifiers)
                         && !pointer.outside_view
                         && placement
@@ -507,21 +471,8 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
                         && pointer
                             .hovered
                             .as_ref()
-                            .is_some_and(|target| action(ctx, target));
-                    pointer.targeted |= handled;
-                    handled
+                            .is_some_and(|target| action(ctx, target))
                 });
-        }
-    }
-
-    pub fn scrub(&mut self, target: Hovered, path: Path, handler: progred_display::ScrubHandler) {
-        if self.visible {
-            self.placed.scrubs.push(ScrubAction {
-                root: None,
-                target,
-                path,
-                handler,
-            });
         }
     }
 
@@ -953,7 +904,6 @@ mod tests {
             &mut pointer
         ));
         assert_eq!(log, ["raw above declined", "activation"]);
-        assert!(pointer.targeted);
     }
 
     #[test]
@@ -1322,7 +1272,6 @@ mod tests {
                 &event,
                 &mut pointer
             ));
-            assert!(pointer.targeted);
             assert_eq!(log, ["popup"]);
         }
     }
@@ -1355,10 +1304,8 @@ mod tests {
         let handler = placed.handler.unwrap();
         let mut count = 0;
         assert!(!handler.dispatch_pointer_down_with(&mut count, &down_at(20.0, 5.0), &mut pointer));
-        assert!(!pointer.targeted);
         assert_eq!(count, 0);
         assert!(handler.dispatch_pointer_down_with(&mut count, &down_at(5.0, 5.0), &mut pointer));
-        assert!(pointer.targeted);
         assert_eq!(count, 1);
     }
     #[test]
@@ -1401,7 +1348,6 @@ mod tests {
                 &event,
                 &mut pointer
             ));
-            assert_eq!(pointer.targeted, !covered);
             assert_eq!(count, usize::from(!covered));
         }
     }
