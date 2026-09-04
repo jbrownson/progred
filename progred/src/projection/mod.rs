@@ -138,8 +138,8 @@ struct Cx<'a> {
 struct Traversal {
     /// Cells crossed by `Follow`, used to stop projection cycles.
     cells: HashSet<CellId>,
-    /// The nearest followed cell and the start of its relative path.
-    enclosing: Option<(CellId, usize)>,
+    /// The nearest followed definition and the start of its relative path.
+    enclosing: Option<(CellId, gid::Resolution, usize)>,
 }
 
 #[derive(Clone, Copy)]
@@ -221,7 +221,7 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
     }
 }
 
-fn resolved_definitions(cx: &Cx<'_>, cell: CellId) -> Vec<grap::Definition> {
+fn resolved_definitions(cx: &Cx<'_>, cell: CellId) -> Vec<(gid::Resolution, grap::Definition)> {
     cx.sources.grap_definitions(cell)
 }
 
@@ -1205,10 +1205,10 @@ fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     let mut path = path.to_vec();
     let mut follow_ancestors = ancestors.clone();
     for step in &steps {
-        if matches!(step, Step::Follow(_)) {
+        if let Step::Follow(source) = step {
             if let Some(cell) = cx.sources.resolve_path(&path).and_then(Value::as_cell) {
                 follow_ancestors.cells.insert(cell);
-                follow_ancestors.enclosing = Some((cell, path.len() + 1));
+                follow_ancestors.enclosing = Some((cell, *source, path.len() + 1));
             }
         }
         path.push(step.clone());
@@ -2364,13 +2364,13 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
     let mut traversal = Traversal::default();
-    if matches!(root_path.last(), Some(Step::Follow(_)))
+    if let Some(Step::Follow(source)) = root_path.last()
         && let Some(cell) = sources
             .resolve_path(&root_path[..root_path.len() - 1])
             .and_then(Value::as_cell)
     {
         traversal.cells.insert(cell);
-        traversal.enclosing = Some((cell, root_path.len()));
+        traversal.enclosing = Some((cell, *source, root_path.len()));
     }
     let layout = match root {
         None if root_completions.is_some() => ChoiceLayout::fixed(pending_view(
@@ -2628,13 +2628,13 @@ fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
     path.push(step.clone());
     let contextual_projection = contextual_projection(projection, contextual_partials);
     let child_projection = contextual_projection.as_ref().or(projection);
-    if matches!(step, Step::Follow(_))
+    if let Step::Follow(source) = &step
         && let Some(parent) = parent
     {
         let mut ancestors = ancestors.clone();
         if let Some(cell) = parent.as_cell() {
             ancestors.cells.insert(cell);
-            ancestors.enclosing = Some((cell, path.len()));
+            ancestors.enclosing = Some((cell, *source, path.len()));
         }
         prepare_location(
             cx,

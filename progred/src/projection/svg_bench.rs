@@ -323,6 +323,60 @@ fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, E
     place_with_pointer(doc, selection, width, None)
 }
 
+#[test]
+fn secondary_marks_only_the_same_definition_in_other_occurrences() {
+    let stack = crate::stack::load::<World>();
+    let cell = name::vocabulary::NAME;
+    let mut cells = Cells::new();
+    cells.set_value(cell, stack.libraries.first_value(cell).unwrap().clone());
+    let root = Value::list([Value::from(cell), Value::from(cell)]);
+    let positions: Vec<_> = root.as_list().unwrap().keys().cloned().collect();
+    let doc = Document {
+        root: Some(root),
+        cells,
+    };
+    let path = |index: usize, source| {
+        vec![
+            Step::Element(positions[index].clone()),
+            Step::Follow(source),
+            Step::Key(name::vocabulary::NAME),
+        ]
+    };
+    let sources = Sources {
+        doc: &doc,
+        libraries: &stack.libraries,
+    };
+    for source in [
+        gid::Resolution::Document,
+        gid::Resolution::Library(name::ID),
+    ] {
+        let selected = Selection::edge(&sources, path(0, source));
+        let (bench, _) = place(&doc, Some(&selected), 900.0);
+        let target = bench
+            .descends
+            .iter()
+            .find(|descend| descend.path.as_ref() == path(1, source))
+            .unwrap();
+        let marks: Vec<_> = bench
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::RoundedRect(rect),
+                    brush,
+                    ..
+                } if *brush == Brush::from(Color::new([0.0, 0.48, 1.0, 0.10])) => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            marks,
+            vec![RoundedRect::from_rect(target.rect.inset(3.0), 5.0)]
+        );
+    }
+}
+
 fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
     let (bench, extent) = place(doc, selection, width);
     let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);

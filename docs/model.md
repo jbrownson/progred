@@ -47,12 +47,20 @@ identity, the source of one definition (`Document` or a stable library ID),
 and a transient view root. A cell may have several definitions, so a cell ID
 alone cannot identify the source of a drawing.
 
+Document paths retain the route to an occurrence. Source tracing normalizes
+that route to the nearest followed cell, its definition source, and the
+remaining structural steps. Grap carries the host-supplied definition source
+through lowering into drawing origins; secondary marks inside a definition
+use that same source distinction. Both kinds of address are interpreted in
+their caller's document-and-library context. References to the cell itself
+still match by cell identity.
+
 The next identity review should specify what survives list moves, deletion and
-undo, source replacement, and library loading or reordering. In particular,
-source tracing currently drops definition provenance. List positions are
-session-local occurrence addresses and are not content identity. Tests should
-cover these transitions across editing and source highlighting. Resolve the
-identity model before adding invalidation machinery.
+undo, and source replacement. Library source addresses survive loading or
+reordering; dispatch still tries definitions in the current order. List
+positions are session-local occurrence addresses and are not content identity.
+Tests should cover these transitions across editing and source highlighting.
+Resolve the identity model before adding invalidation machinery.
 
 The canvas-command memo was removed on 2026-09-04. Its validation compared
 one value per cell while evaluation could observe an ordered set of value and

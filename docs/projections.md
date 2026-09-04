@@ -413,6 +413,14 @@ capabilities still override this chain. A stored `Follow` path names its stable
 source—`Document` or a particular library identity—rather than an index into
 the loaded order. Display names, completion, and Grap dispatch consume the
 plural view. Loaded libraries are read-only.
+
+The host supplies each Grap definition with that same stable source. Lowered
+expression origins preserve the cell, source, and structural path within the
+definition, so drawing selection and highlighting distinguish definitions of
+one cell even when their paths and contents are equal. These origins remain
+relative to the caller's resolution context; they are not global addresses or
+execution histories.
+
 Ordered host partial projections remain a separate bootstrap contribution for
 now; moving projection dispatch onto ordinary Grap calls is a later step, not a
 hidden second definition resolver.

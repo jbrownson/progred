@@ -1176,39 +1176,67 @@ mod frame_tests {
     }
 
     #[test]
-    fn a_drawing_source_finds_the_projected_occurrence_inside_its_cell() {
+    fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         let cell = CellId::from_u128(1);
         let call = CellId::from_u128(2);
+        let library_id = CellId::from_u128(3);
         let mut cells = Cells::new();
         cells.set_value(cell, Value::record([(call, Value::from(vec![1]))]));
         let doc = Document {
             root: Some(Value::Cell(cell)),
             cells,
         };
-        let libraries = progred_libraries::Libraries::default();
-        let root = workspace::Root::document();
-        let rect = Rect::new(10.0, 20.0, 30.0, 40.0);
-        let descends = [navigate::Descend::<Editor> {
-            root: Some(root.clone()),
-            path: Rc::from([Step::Follow(gid::Resolution::Document), Step::Key(call)]),
-            rect,
-            select: Rc::new(|_| true),
-        }];
-
-        assert_eq!(
-            drawing_source_target(
-                &sources::Sources {
-                    doc: &doc,
-                    libraries: &libraries,
-                },
-                &descends,
-                &hover::SourceTrace::InCell {
-                    cell,
-                    path: Rc::from([Step::Key(call)]),
-                },
+        let libraries = progred_libraries::Libraries::from_contributions([(
+            library_id,
+            progred_libraries::Library::<(), ()>::named(
+                "source",
+                progred_libraries::Definitions::from_parts(
+                    doc.cells.clone(),
+                    grap::ForeignFunctions::default(),
+                ),
+                vec![],
             ),
-            Some((root, rect)),
+        )])
+        .0;
+        let sources = sources::Sources {
+            doc: &doc,
+            libraries: &libraries,
+        };
+        let root = workspace::Root::document();
+        let targets = [
+            (gid::Resolution::Document, Rect::new(10.0, 20.0, 30.0, 40.0)),
+            (
+                gid::Resolution::Library(library_id),
+                Rect::new(10.0, 50.0, 30.0, 70.0),
+            ),
+        ];
+        let descends = targets.map(
+            |(source, rect)| navigate::Descend::<Option<gid::Resolution>> {
+                root: Some(root.clone()),
+                path: Rc::from([Step::Follow(source), Step::Key(call)]),
+                rect,
+                select: Rc::new(move |selected| {
+                    *selected = Some(source);
+                    true
+                }),
+            },
         );
+        for (source, rect) in targets {
+            let trace = hover::SourceTrace::InCell {
+                cell,
+                source,
+                path: Rc::from([Step::Key(call)]),
+            };
+            assert_eq!(
+                drawing_source_target(&sources, &descends, &trace),
+                Some((root.clone(), rect))
+            );
+            let mut selected = None;
+            assert!((drawing_source_descend(&sources, &descends, &trace)
+                .unwrap()
+                .select)(&mut selected));
+            assert_eq!(selected, Some(source));
+        }
     }
 
     #[test]

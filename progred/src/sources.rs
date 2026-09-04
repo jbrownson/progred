@@ -73,9 +73,9 @@ impl<'a> Sources<'a> {
             })
     }
 
-    pub fn grap_definitions(&self, cell: CellId) -> Vec<grap::Definition> {
+    pub fn grap_definitions(&self, cell: CellId) -> Vec<(Resolution, grap::Definition)> {
         self.definitions(cell)
-            .map(|resolved| resolved.definition.cloned())
+            .map(|resolved| (resolved.source, resolved.definition.cloned()))
             .collect()
     }
 
@@ -141,6 +141,79 @@ mod tests {
 
     fn doc_of(cells: Cells) -> Document {
         Document { root: None, cells }
+    }
+
+    #[test]
+    fn grap_origins_follow_the_definition_that_executes_after_fallthrough() {
+        let function = new_cell_id();
+        let probe = new_cell_id();
+        let result = new_cell_id();
+        let library_ids = [new_cell_id(), new_cell_id()];
+        let definition =
+            |value| grap::lambda([], grap::call(Value::from(probe), [(result, value)]));
+        let mut cells = Cells::new();
+        cells.set_value(function, definition(progred_libraries::absent::value()));
+        let doc = doc_of(cells);
+        for order in [library_ids, [library_ids[1], library_ids[0]]] {
+            let libraries = Libraries::from_contributions(order.map(|id| {
+                let mut cells = Cells::new();
+                cells.set_value(function, definition(Value::from(id)));
+                (
+                    id,
+                    progred_libraries::Library::<(), ()>::named(
+                        "source",
+                        progred_libraries::Definitions::from_parts(
+                            cells,
+                            grap::ForeignFunctions::default(),
+                        ),
+                        vec![],
+                    ),
+                )
+            }))
+            .0;
+            let sources = Sources {
+                doc: &doc,
+                libraries: &libraries,
+            };
+            for host_apply in [false, true] {
+                let origins = std::cell::RefCell::new(Vec::new());
+                let functions = [probe];
+                let observe = |_, context: &mut grap::Context<'_>, call, _: &grap::Environment| {
+                    origins
+                        .borrow_mut()
+                        .push(context.source_origin(call).unwrap());
+                    Ok(context.value(context.field(call, result).unwrap()).clone())
+                };
+                let overlay = grap::ForeignOverlay::new(&functions, &observe);
+                let evaluation = if host_apply {
+                    grap::apply_scoped(
+                        &Value::from(function),
+                        [],
+                        |cell| sources.grap_definitions(cell),
+                        &overlay,
+                        100,
+                    )
+                } else {
+                    grap::evaluate_scoped(
+                        &grap::call(Value::from(function), []),
+                        |cell| sources.grap_definitions(cell),
+                        &overlay,
+                        100,
+                    )
+                };
+                assert_eq!(evaluation.result, Value::from(order[0]));
+                assert_eq!(
+                    origins.into_inner(),
+                    [Resolution::Document, Resolution::Library(order[0])].map(|source| {
+                        grap::SourceOrigin::Cell {
+                            cell: function,
+                            source,
+                            path: vec![Step::Key(grap::vocabulary::BODY)],
+                        }
+                    })
+                );
+            }
+        }
     }
 
     #[test]

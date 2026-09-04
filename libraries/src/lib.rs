@@ -45,6 +45,7 @@ pub(crate) fn test_evaluate(
                 .map(grap_runtime::Definition::ForeignFunction)
                 .into_iter()
                 .chain(resolve(cell).map(grap_runtime::Definition::Value))
+                .map(|definition| (gid::Resolution::Document, definition))
                 .collect()
         },
         fuel,
@@ -69,6 +70,7 @@ pub(crate) fn test_apply(
                 .map(grap_runtime::Definition::ForeignFunction)
                 .into_iter()
                 .chain(resolve(cell).map(grap_runtime::Definition::Value))
+                .map(|definition| (gid::Resolution::Document, definition))
                 .collect()
         },
         fuel,
@@ -551,7 +553,13 @@ mod tests {
         assert_eq!(
             grap_runtime::evaluate(
                 &grap_runtime::call(Value::from(SHARED_FUNCTION), []),
-                |cell| merged.definitions.get(cell).to_vec(),
+                |cell| merged
+                    .definitions
+                    .get(cell)
+                    .iter()
+                    .cloned()
+                    .map(|definition| (gid::Resolution::Document, definition))
+                    .collect(),
                 10,
             )
             .result,

@@ -5,11 +5,11 @@ use super::Cx;
 use crate::frame::Hovered;
 use crate::hover::{Hover, SourceTrace};
 use crate::placed::{Placed, leaf};
-use gid::{CellId, Cells, Step, Value};
+use gid::{CellId, Cells, Resolution, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
-use progred_libraries::{DefinitionRef, Libraries, absent, layout as layout_data};
+use progred_libraries::{Libraries, absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
@@ -362,17 +362,14 @@ fn record_program(
                 .value(cell)
                 .cloned()
                 .map(grap::Definition::Value)
+                .map(|definition| (Resolution::Document, definition))
                 .into_iter()
-                .chain(
-                    libraries
-                        .definitions(cell)
-                        .map(|definition| match definition.definition {
-                            DefinitionRef::ForeignFunction(function) => {
-                                grap::Definition::ForeignFunction(function.clone())
-                            }
-                            DefinitionRef::Value(value) => grap::Definition::Value(value.clone()),
-                        }),
-                )
+                .chain(libraries.definitions(cell).map(|definition| {
+                    (
+                        Resolution::Library(definition.library),
+                        definition.definition.cloned(),
+                    )
+                }))
                 .collect()
         },
         &overlay,
@@ -447,6 +444,92 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
 mod tests {
     use super::*;
     use gid::new_cell_id;
+
+    #[test]
+    fn recorded_hits_keep_the_executing_library_definition() {
+        let function = new_cell_id();
+        let library_ids = [new_cell_id(), new_cell_id()];
+        let mut cells = Cells::new();
+        cells.set_value(function, grap::lambda([], absent::value()));
+        let doc = gid::Document {
+            root: Some(Value::from(function)),
+            cells,
+        };
+        let definition = grap::lambda(
+            [],
+            grap::call(
+                Value::from(layout_data::vocabulary::FILL),
+                [
+                    (
+                        layout_data::vocabulary::SHAPE,
+                        layout_data::rect(0.0, 0.0, 10.0, 10.0),
+                    ),
+                    (
+                        layout_data::vocabulary::PAINT,
+                        progred_libraries::color::value(peniko::Color::BLACK),
+                    ),
+                ],
+            ),
+        );
+        for order in [library_ids, [library_ids[1], library_ids[0]]] {
+            let libraries = Libraries::from_contributions(order.map(|id| {
+                let mut cells = Cells::new();
+                cells.set_value(function, definition.clone());
+                (
+                    id,
+                    progred_libraries::Library::<(), ()>::named(
+                        "drawing",
+                        progred_libraries::Definitions::from_parts(
+                            cells,
+                            grap::ForeignFunctions::default(),
+                        ),
+                        vec![],
+                    ),
+                )
+            }))
+            .0;
+            let sources = crate::sources::Sources {
+                doc: &doc,
+                libraries: &libraries,
+            };
+            let drawing = record_program(
+                &grap::call(Value::from(function), []),
+                &doc.cells,
+                &libraries,
+                &Faces::new(&crate::styles::editor(1.0)),
+                &SourceTrace::Stored(Rc::from([])),
+                100,
+            );
+            assert_eq!(drawing.hits.len(), 1);
+            let selected = SourceTrace::from_path(
+                &sources,
+                Rc::from([
+                    Step::Follow(Resolution::Library(order[0])),
+                    Step::Key(grap::vocabulary::BODY),
+                ]),
+            );
+            assert_eq!(
+                drawing.target_at(Point::new(5.0, 5.0), Affine::IDENTITY),
+                Some(Hovered::Tree(Hover::Drawing(selected)))
+            );
+            let other = SourceTrace::from_path(
+                &sources,
+                Rc::from([
+                    Step::Follow(Resolution::Library(order[1])),
+                    Step::Key(grap::vocabulary::BODY),
+                ]),
+            );
+            let mut highlight = DrawList::new();
+            drawing.highlight(
+                &mut highlight,
+                Affine::IDENTITY,
+                &other,
+                &Brush::from(peniko::Color::WHITE),
+            );
+            assert!(highlight.0.is_empty());
+        }
+    }
+
     #[test]
     fn recorded_hits_use_paint_order_and_the_current_placement() {
         let back = SourceTrace::Stored(Rc::from([Step::Key(new_cell_id())]));
@@ -480,10 +563,12 @@ mod tests {
         let argument = new_cell_id();
         let source = SourceTrace::InCell {
             cell,
+            source: Resolution::Document,
             path: Rc::from([Step::Key(call)]),
         };
         let hovered = SourceTrace::InCell {
             cell,
+            source: Resolution::Document,
             path: Rc::from([Step::Key(call), Step::Key(argument)]),
         };
         let drawing = Recorded {
@@ -512,6 +597,7 @@ mod tests {
         let call = new_cell_id();
         let source = SourceTrace::InCell {
             cell,
+            source: Resolution::Document,
             path: Rc::from([Step::Key(call)]),
         };
         let drawing = Recorded {

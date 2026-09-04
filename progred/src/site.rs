@@ -194,6 +194,7 @@ fn apply_at(
                 site.get(cell)
                     .cloned()
                     .map(grap::Definition::ForeignFunction)
+                    .map(|definition| (gid::Resolution::Document, definition))
                     .into_iter()
                     .chain(sources.grap_definitions(cell))
                     .collect()

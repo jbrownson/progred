@@ -3,7 +3,7 @@
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
-use gid::{CellId, Record, Value};
+use gid::{CellId, Record, Resolution, Value};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -105,7 +105,11 @@ pub struct Expression(usize);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceOrigin {
     Input(Vec<gid::Step>),
-    Cell { cell: CellId, path: Vec<gid::Step> },
+    Cell {
+        cell: CellId,
+        source: Resolution,
+        path: Vec<gid::Step>,
+    },
 }
 
 /// A staged foreign function's per-visit form, returned by its
@@ -810,7 +814,7 @@ pub struct Evaluation {
 }
 
 pub struct Context<'a> {
-    definitions: &'a dyn Fn(CellId) -> Vec<Definition>,
+    definitions: &'a dyn Fn(CellId) -> Vec<(Resolution, Definition)>,
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
@@ -866,7 +870,8 @@ struct PreparedDefinition {
 enum PreparedDefinitionKind {
     Foreign(ForeignFunction),
     Value {
-        source: Value,
+        source: Resolution,
+        value: Value,
         expression: RefCell<Option<Expression>>,
     },
 }
@@ -876,7 +881,7 @@ struct OriginId(usize);
 
 enum OriginRoot {
     Input,
-    Cell(CellId),
+    Cell { cell: CellId, source: Resolution },
 }
 
 enum OriginNode {
@@ -1085,9 +1090,13 @@ impl<'a> Context<'a> {
                     path.reverse();
                     return Some(SourceOrigin::Input(path));
                 }
-                OriginNode::Root(OriginRoot::Cell(cell)) => {
+                OriginNode::Root(OriginRoot::Cell { cell, source }) => {
                     path.reverse();
-                    return Some(SourceOrigin::Cell { cell: *cell, path });
+                    return Some(SourceOrigin::Cell {
+                        cell: *cell,
+                        source: *source,
+                        path,
+                    });
                 }
                 OriginNode::Child { parent, step } => {
                     path.push(step.clone());
@@ -1328,13 +1337,14 @@ impl<'a> Context<'a> {
                 self.dependencies.insert(cell);
                 let definitions: Rc<[PreparedDefinition]> = (self.definitions)(cell)
                     .into_iter()
-                    .map(|definition| PreparedDefinition {
+                    .map(|(source, definition)| PreparedDefinition {
                         kind: match definition {
                             Definition::ForeignFunction(function) => {
                                 PreparedDefinitionKind::Foreign(function)
                             }
-                            Definition::Value(source) => PreparedDefinitionKind::Value {
+                            Definition::Value(value) => PreparedDefinitionKind::Value {
                                 source,
+                                value,
                                 expression: RefCell::new(None),
                             },
                         },
@@ -1359,12 +1369,22 @@ impl<'a> Context<'a> {
                     environment,
                     Some(&definition.stages),
                 )),
-                PreparedDefinitionKind::Value { source, expression } => {
+                PreparedDefinitionKind::Value {
+                    source,
+                    value,
+                    expression,
+                } => {
                     let cached = *expression.borrow();
                     let expression = match cached {
                         Some(expression) => expression,
                         None => {
-                            let lowered = self.lower_source(source, OriginRoot::Cell(cell));
+                            let lowered = self.lower_source(
+                                value,
+                                OriginRoot::Cell {
+                                    cell,
+                                    source: *source,
+                                },
+                            );
                             *expression.borrow_mut() = Some(lowered);
                             lowered
                         }
@@ -1546,13 +1566,13 @@ impl<'a> Context<'a> {
                     absent::CELL,
                     Value::from(cell),
                 ))),
-                [Definition::ForeignFunction(function)] => Ok(RuntimeValue(
+                [(_, Definition::ForeignFunction(function))] => Ok(RuntimeValue(
                     RuntimeValueKind::Foreign(ResolvedForeign::Permanent {
                         cell,
                         function: function.clone(),
                     }),
                 )),
-                [Definition::Value(value)] => {
+                [(source, Definition::Value(value))] => {
                     while self.cell_states.len() <= index.0 {
                         self.cell_states.push(CellState::Unknown);
                     }
@@ -1574,7 +1594,13 @@ impl<'a> Context<'a> {
                             )))
                         }
                         CellState::Unknown => {
-                            let expression = self.lower_source(value, OriginRoot::Cell(cell));
+                            let expression = self.lower_source(
+                                value,
+                                OriginRoot::Cell {
+                                    cell,
+                                    source: *source,
+                                },
+                            );
                             self.cell_states[index.0] = CellState::Ready(expression);
                             self.eval_resolved_cell(index, cell, expression, environment)
                         }
@@ -1866,7 +1892,7 @@ impl<'a> Context<'a> {
         self.dependencies.insert(cell);
         let definitions = (self.definitions)(cell);
         let mut absents = Vec::new();
-        for definition in definitions.iter() {
+        for (source, definition) in definitions.iter() {
             let result = match definition {
                 Definition::ForeignFunction(function) => {
                     let call = self.lower(&call(
@@ -1885,7 +1911,13 @@ impl<'a> Context<'a> {
                     ))
                 }
                 Definition::Value(value) => {
-                    let expression = self.lower_source(value, OriginRoot::Cell(cell));
+                    let expression = self.lower_source(
+                        value,
+                        OriginRoot::Cell {
+                            cell,
+                            source: *source,
+                        },
+                    );
                     let callable = self.eval_definition(cell, expression, environment)?;
                     if callable.is_absent() {
                         Some(Ok(callable))
@@ -2082,7 +2114,7 @@ pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)
 }
 
 fn context<'a>(
-    definitions: &'a dyn Fn(CellId) -> Vec<Definition>,
+    definitions: &'a dyn Fn(CellId) -> Vec<(Resolution, Definition)>,
     overlay: Option<&'a ForeignOverlay<'a>>,
     fuel: usize,
 ) -> Context<'a> {
@@ -2100,9 +2132,11 @@ fn context<'a>(
     }
 }
 
+/// The host supplies each definition with its stable source in the current
+/// resolution context. Source origins preserve it independently of load order.
 pub fn evaluate(
     expression: &Value,
-    definitions: impl Fn(CellId) -> Vec<Definition>,
+    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     fuel: usize,
 ) -> Evaluation {
     context(&definitions, None, fuel).run(expression)
@@ -2112,7 +2146,7 @@ pub fn evaluate(
 /// this synchronous evaluation.
 pub fn evaluate_scoped<'a>(
     expression: &Value,
-    definitions: impl Fn(CellId) -> Vec<Definition>,
+    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     overlay: &'a ForeignOverlay<'a>,
     fuel: usize,
 ) -> Evaluation {
@@ -2128,7 +2162,7 @@ pub fn evaluate_scoped<'a>(
 pub fn apply(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
-    definitions: impl Fn(CellId) -> Vec<Definition>,
+    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     fuel: usize,
 ) -> Evaluation {
     context(&definitions, None, fuel)
@@ -2140,7 +2174,7 @@ pub fn apply(
 pub fn apply_scoped<'a>(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
-    definitions: impl Fn(CellId) -> Vec<Definition>,
+    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     overlay: &'a ForeignOverlay<'a>,
     fuel: usize,
 ) -> Evaluation {
@@ -2157,7 +2191,7 @@ mod tests {
     fn definitions_from_parts<'a>(
         resolve: impl Fn(CellId) -> Option<Value> + 'a,
         foreign: &'a ForeignFunctions,
-    ) -> impl Fn(CellId) -> Vec<Definition> + 'a {
+    ) -> impl Fn(CellId) -> Vec<(Resolution, Definition)> + 'a {
         move |cell| {
             foreign
                 .get(cell)
@@ -2165,6 +2199,7 @@ mod tests {
                 .map(Definition::ForeignFunction)
                 .into_iter()
                 .chain(resolve(cell).map(Definition::Value))
+                .map(|definition| (Resolution::Document, definition))
                 .collect()
         }
     }
@@ -2196,20 +2231,30 @@ mod tests {
     #[test]
     fn direct_cell_calls_try_ordered_definitions_until_one_is_present() {
         let function = new_cell_id();
+        let library = Resolution::Library(new_cell_id());
         let expression = call(Value::from(function), []);
         let evaluation = super::evaluate(
             &expression,
             |cell| {
                 assert_eq!(cell, function);
                 vec![
-                    Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                        Ok(absent::value(new_cell_id()))
-                    })),
-                    Definition::Value(Value::record([])),
-                    Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
-                    Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                        Ok(Value::from(b"too late".to_vec()))
-                    })),
+                    (
+                        Resolution::Document,
+                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                            Ok(absent::value(new_cell_id()))
+                        })),
+                    ),
+                    (Resolution::Document, Definition::Value(Value::record([]))),
+                    (
+                        library,
+                        Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                    ),
+                    (
+                        library,
+                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                            Ok(Value::from(b"too late".to_vec()))
+                        })),
+                    ),
                 ]
             },
             20,
@@ -2223,14 +2268,18 @@ mod tests {
     #[test]
     fn an_all_absent_dispatch_keeps_each_failure_with_its_details() {
         let function = new_cell_id();
+        let library = Resolution::Library(new_cell_id());
         let first_missing = new_cell_id();
         let second_missing = new_cell_id();
         let evaluation = super::evaluate(
             &call(Value::from(function), []),
             |cell| match cell {
                 cell if cell == function => vec![
-                    Definition::Value(Value::from(first_missing)),
-                    Definition::Value(Value::from(second_missing)),
+                    (
+                        Resolution::Document,
+                        Definition::Value(Value::from(first_missing)),
+                    ),
+                    (library, Definition::Value(Value::from(second_missing))),
                 ],
                 cell if cell == first_missing || cell == second_missing => Vec::new(),
                 _ => unreachable!(),
@@ -2255,10 +2304,16 @@ mod tests {
             [],
             |_| {
                 vec![
-                    Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                        Ok(absent::value(new_cell_id()))
-                    })),
-                    Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                    (
+                        Resolution::Document,
+                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                            Ok(absent::value(new_cell_id()))
+                        })),
+                    ),
+                    (
+                        Resolution::Document,
+                        Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                    ),
                 ]
             },
             20,
@@ -3071,9 +3126,43 @@ mod tests {
             *source.borrow(),
             Some(SourceOrigin::Cell {
                 cell: function,
+                source: Resolution::Document,
                 path: vec![gid::Step::Key(vocabulary::BODY)],
             }),
         );
+    }
+
+    #[test]
+    fn a_single_value_definition_retains_its_resolution_source() {
+        let cell = new_cell_id();
+        let foreign = new_cell_id();
+        let functions = [foreign];
+        for source in [Resolution::Document, Resolution::Library(new_cell_id())] {
+            let origin = RefCell::new(None);
+            let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
+                *origin.borrow_mut() = context.source_origin(call);
+                Ok(blob("drawn"))
+            };
+            let overlay = ForeignOverlay::new(&functions, &scoped);
+            let evaluation = super::evaluate_scoped(
+                &Value::from(cell),
+                |queried| {
+                    assert_eq!(queried, cell);
+                    vec![(source, Definition::Value(call(Value::from(foreign), [])))]
+                },
+                &overlay,
+                20,
+            );
+            assert_eq!(evaluation.result, blob("drawn"));
+            assert_eq!(
+                origin.into_inner(),
+                Some(SourceOrigin::Cell {
+                    cell,
+                    source,
+                    path: vec![]
+                })
+            );
+        }
     }
 
     #[test]

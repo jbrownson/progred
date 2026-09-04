@@ -3,7 +3,7 @@
 
 use crate::completion::{EntryAction, Offers};
 use crate::sources::Sources;
-use gid::{CellId, Step, Value};
+use gid::{CellId, Resolution, Step, Value};
 use std::rc::Rc;
 
 /// What the pointer rests on: the address a later editor action will
@@ -34,26 +34,41 @@ pub enum Hover {
 }
 
 /// A structural source location used by execution-linked display.
-/// Cell-relative routes survive multiple projections of the same cell;
+/// Definition-relative routes survive multiple projections of the same definition;
 /// stored routes identify an ordinary document occurrence.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SourceTrace {
     Stored(Rc<[Step]>),
-    InCell { cell: CellId, path: Rc<[Step]> },
+    InCell {
+        cell: CellId,
+        source: Resolution,
+        path: Rc<[Step]>,
+    },
+}
+
+fn enclosing_definition(sources: &Sources, path: &[Step]) -> Option<(CellId, Resolution, usize)> {
+    path.iter()
+        .enumerate()
+        .rev()
+        .find_map(|(index, step)| match step {
+            Step::Follow(source) => Some((index, *source)),
+            _ => None,
+        })
+        .and_then(|(index, source)| {
+            sources
+                .resolve_path(&path[..index])
+                .and_then(Value::as_cell)
+                .map(|cell| (cell, source, index + 1))
+        })
 }
 
 impl SourceTrace {
     pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>) -> Self {
-        path.iter()
-            .rposition(|step| matches!(step, Step::Follow(_)))
-            .and_then(|follow| {
-                sources
-                    .resolve_path(&path[..follow])
-                    .and_then(Value::as_cell)
-                    .map(|cell| Self::InCell {
-                        cell,
-                        path: Rc::from(&path[follow + 1..]),
-                    })
+        enclosing_definition(sources, &path)
+            .map(|(cell, source, relative_from)| Self::InCell {
+                cell,
+                source,
+                path: Rc::from(&path[relative_from..]),
             })
             .unwrap_or(Self::Stored(path))
     }
@@ -67,8 +82,9 @@ impl SourceTrace {
         };
         match self {
             Self::Stored(path) => Self::Stored(append(path)),
-            Self::InCell { cell, path } => Self::InCell {
+            Self::InCell { cell, source, path } => Self::InCell {
                 cell: *cell,
+                source: *source,
                 path: append(path),
             },
         }
@@ -77,8 +93,9 @@ impl SourceTrace {
     pub(crate) fn from_grap(origin: grap::SourceOrigin, input: &Self) -> Self {
         match origin {
             grap::SourceOrigin::Input(path) => input.descendant(&path),
-            grap::SourceOrigin::Cell { cell, path } => Self::InCell {
+            grap::SourceOrigin::Cell { cell, source, path } => Self::InCell {
                 cell,
+                source,
                 path: path.into(),
             },
         }
@@ -87,13 +104,14 @@ impl SourceTrace {
 
 /// What makes two projected locations secondary copies. Cell values
 /// match wherever that cell is referenced. Other values match only
-/// at the same path inside the same nearest enclosing cell.
+/// at the same path inside the same nearest enclosing definition.
 #[derive(Clone, Debug)]
 pub(crate) enum Secondary {
     Cell(CellId),
     Stored(Rc<[Step]>),
     InCell {
         cell: CellId,
+        source: Resolution,
         path: Rc<[Step]>,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
@@ -105,13 +123,14 @@ impl Secondary {
     pub(crate) fn from_context(
         path: Rc<[Step]>,
         value: &Value,
-        enclosing: Option<(CellId, usize)>,
+        enclosing: Option<(CellId, Resolution, usize)>,
     ) -> Option<Self> {
         match value.as_cell() {
             Some(cell) => Some(Self::Cell(cell)),
             None => Some(match enclosing {
-                Some((cell, relative_from)) => Self::InCell {
+                Some((cell, source, relative_from)) => Self::InCell {
                     cell,
+                    source,
                     path,
                     relative_from,
                 },
@@ -123,8 +142,9 @@ impl Secondary {
     pub(crate) fn from_trace(trace: &SourceTrace) -> Self {
         match trace {
             SourceTrace::Stored(path) => Self::Stored(path.clone()),
-            SourceTrace::InCell { cell, path } => Self::InCell {
+            SourceTrace::InCell { cell, source, path } => Self::InCell {
                 cell: *cell,
+                source: *source,
                 path: path.clone(),
                 relative_from: 0,
             },
@@ -132,15 +152,7 @@ impl Secondary {
     }
 
     pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>, value: &Value) -> Option<Self> {
-        let enclosing = path
-            .iter()
-            .rposition(|step| matches!(step, Step::Follow(_)))
-            .and_then(|follow| {
-                sources
-                    .resolve_path(&path[..follow])
-                    .and_then(Value::as_cell)
-                    .map(|cell| (cell, follow + 1))
-            });
+        let enclosing = enclosing_definition(sources, &path);
         Self::from_context(path, value, enclosing)
     }
 }
@@ -153,15 +165,21 @@ impl PartialEq for Secondary {
             (
                 Self::InCell {
                     cell: left_cell,
+                    source: left_source,
                     path: left_path,
                     relative_from: left_from,
                 },
                 Self::InCell {
                     cell: right_cell,
+                    source: right_source,
                     path: right_path,
                     relative_from: right_from,
                 },
-            ) => left_cell == right_cell && left_path[*left_from..] == right_path[*right_from..],
+            ) => {
+                left_cell == right_cell
+                    && left_source == right_source
+                    && left_path[*left_from..] == right_path[*right_from..]
+            }
             _ => false,
         }
     }
@@ -197,6 +215,100 @@ mod tests {
     fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
         let path: Rc<[Step]> = Rc::from(path);
         Secondary::from_path(sources, path.clone(), sources.resolve_path(path.as_ref())?)
+    }
+
+    #[test]
+    fn definitions_have_distinct_source_traces_and_secondary_marks() {
+        let cell = new_cell_id();
+        let field = new_cell_id();
+        let library_ids = [new_cell_id(), new_cell_id()];
+        let mut cells = Cells::new();
+        cells.set_value(cell, Value::record([(field, Value::from(vec![1]))]));
+        let root = Value::list([Value::from(cell), Value::from(cell)]);
+        let positions: Vec<_> = root.as_list().unwrap().keys().cloned().collect();
+        let doc = Document {
+            root: Some(root),
+            cells,
+        };
+        let libraries = |order: [CellId; 2]| {
+            progred_libraries::Libraries::from_contributions(order.map(|id| {
+                (
+                    id,
+                    progred_libraries::Library::<(), ()>::named(
+                        "source",
+                        progred_libraries::Definitions::from_parts(
+                            doc.cells.clone(),
+                            grap::ForeignFunctions::default(),
+                        ),
+                        vec![],
+                    ),
+                )
+            }))
+            .0
+        };
+        let path = |position: usize, resolution| {
+            vec![
+                Step::Element(positions[position].clone()),
+                Step::Follow(resolution),
+                Step::Key(field),
+            ]
+        };
+        let definitions = [
+            gid::Resolution::Document,
+            gid::Resolution::Library(library_ids[0]),
+            gid::Resolution::Library(library_ids[1]),
+        ];
+        let first = libraries(library_ids);
+        let reordered = libraries([library_ids[1], library_ids[0]]);
+        let original = Sources {
+            doc: &doc,
+            libraries: &first,
+        };
+        for libraries in [&first, &reordered] {
+            let sources = Sources {
+                doc: &doc,
+                libraries,
+            };
+            for left in definitions {
+                let left_path = path(0, left);
+                let trace = SourceTrace::from_path(&sources, left_path.clone().into());
+                let input = SourceTrace::from_path(&sources, Rc::from(&left_path[..2]));
+                assert_eq!(
+                    trace,
+                    SourceTrace::from_grap(
+                        grap::SourceOrigin::Input(vec![Step::Key(field)]),
+                        &input
+                    )
+                );
+                assert_eq!(
+                    Some(Secondary::from_trace(&trace)),
+                    secondary(&sources, left_path.clone())
+                );
+                assert_eq!(
+                    trace,
+                    SourceTrace::from_path(&original, left_path.clone().into())
+                );
+                for right in definitions {
+                    let right_path = path(1, right);
+                    assert_eq!(
+                        sources.resolve_path(&left_path),
+                        sources.resolve_path(&right_path)
+                    );
+                    assert_eq!(
+                        trace == SourceTrace::from_path(&sources, right_path.clone().into()),
+                        left == right,
+                    );
+                    assert_eq!(
+                        secondary(&sources, left_path.clone()) == secondary(&sources, right_path),
+                        left == right,
+                    );
+                }
+            }
+            assert_eq!(
+                secondary(&sources, vec![Step::Element(positions[0].clone())]),
+                secondary(&sources, vec![Step::Element(positions[1].clone())]),
+            );
+        }
     }
 
     #[test]
