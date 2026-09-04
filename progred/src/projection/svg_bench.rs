@@ -294,7 +294,7 @@ fn place_with_annotations_using(
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         commit_offer: Rc::new(|_, _| {}),
-        set_completion_view: Rc::new(|_, _, _| {}),
+        set_completion_view: Rc::new(|_, _, _, _| {}),
     };
     // Timed as the frame perf canary: projection is reported
     // separately, while the total also includes placement, hover,
@@ -718,7 +718,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
-            set_completion_view: Rc::new(|_, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
     let path = vec![
@@ -827,7 +827,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
-            set_completion_view: Rc::new(|_, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
     let active = measured::place(active, Placement::root(rect));
@@ -1376,8 +1376,9 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             &entries,
             0,
             0.0,
+            false,
             |_, _| {},
-            |_, _, _| {},
+            |_, _, _, _| {},
         );
         let extent = card.extent;
         let placed = measured::place_top_left(card, Point::ZERO);
@@ -1400,6 +1401,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         .collect();
     assert!(winners.contains(&Hover::Entry(0)));
     assert!(winners.contains(&Hover::Entry(1)));
+    assert!(winners.contains(&Hover::MoreCompletions));
 }
 
 #[test]
@@ -1425,21 +1427,22 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut frame = |(scroll, choice)| {
+    let mut frame = |(scroll, choice, everything)| {
         measured::place_top_left(
-            completion_card::<(f64, usize), Bench>(
+            completion_card::<(f64, usize, bool), Bench>(
                 &mut tcx,
                 &styles,
                 &entries,
                 choice,
                 scroll,
+                everything,
                 |_, _| {},
-                |state, scroll, choice| *state = (scroll, choice),
+                |state, scroll, choice, everything| *state = (scroll, choice, everything),
             ),
             Point::ZERO,
         )
     };
-    let mut state = (0.0, 0);
+    let mut state = (0.0, 0, false);
     let pointer = PointerInfo {
         pointer_id: Some(PointerId::PRIMARY),
         persistent_device_id: None,
@@ -1460,7 +1463,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .dispatch_scroll(&mut state, &scroll)
             .handled()
     );
-    assert_eq!(state, (200.0, 0));
+    assert_eq!(state, (200.0, 0, false));
     let press = |key| KeyboardEvent {
         key: Key::Named(key),
         state: KeyState::Down,
@@ -1474,7 +1477,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
                 .dispatch_key(&mut state, &press(key))
         );
     }
-    assert_eq!(state, (0.0, 0));
+    assert_eq!(state, (0.0, 0, false));
     for _ in 0..12 {
         frame(state)
             .handler
@@ -1487,7 +1490,19 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
-    assert_eq!(state, (offset, 11));
+    assert_eq!(state, (offset, 11, false));
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::Tab));
+    assert_eq!(state, (0.0, 0, true));
+    assert!(
+        !frame(state)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Tab))
+    );
+    assert_eq!(state, (0.0, 0, true));
 }
 
 #[test]

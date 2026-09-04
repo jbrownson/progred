@@ -49,28 +49,34 @@ pub trait HasCompletion {
     fn completion(&mut self) -> &mut Option<Offers>;
 }
 
-/// The universal completion layer for `query`: the inferred value,
-/// references to everything named (document and orphans alike, ranked
-/// by the fuzzy tiers), and a fresh bare cell. The label stage
-/// (`labels`) offers cell references plus a freshly minted cell named
-/// by the query — no blobs, and "new list"/"new record" stay value
-/// offers.
+#[cfg(test)]
 pub(crate) fn completion_entries(
     sources: &Sources,
     raw: bool,
     labels: bool,
     query: &str,
 ) -> Vec<Entry> {
-    completion_entries_with(sources, raw, labels, query, None)
+    completion_entries_with(sources, raw, labels, query, None, true)
 }
 
+/// Contextual offers alone in the narrow view, or the universal
+/// layer plus contextual offers when widened. The universal layer
+/// contains the inferred value, named references, and constructors.
+/// Label completion remains universal and only offers valid labels.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     raw: bool,
     labels: bool,
     query: &str,
     contextual: Option<&CompletionProvider>,
+    everything: bool,
 ) -> Vec<Entry> {
+    if !labels
+        && !everything
+        && let Some(contextual) = contextual
+    {
+        return contextual_entries(contextual, query);
+    }
     let trimmed = query.trim();
     let quoted = trimmed.trim_start().starts_with('"');
     let blob = (!labels).then(|| parse_blob(trimmed)).flatten();

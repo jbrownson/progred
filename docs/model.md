@@ -1394,11 +1394,10 @@ HOVER STORES ADDRESSES, NEVER VALUES. `Hover::Entry` had
 snapshotted the entry's value at claim time, so typing under a
 parked pointer kept marking the OLD entry (hover "A", type "B",
 the document's "A" stayed marked). Now `Entry(usize)` is bare and
-`hover_value` re-derives from the LIVE completion offers each
-frame — recomputing the entries for the open pending, the price
-of never marking a snapshot — so the marks follow the query as it
-is typed, and every variant re-derives what it displays the same
-way paths always did. The audit that followed found one sibling
+the hover reads the exact LIVE completion offers retained by the
+placed frame — never reconstructing a potentially different
+contextual list from selection state — so the marks follow the query
+as it is typed. The audit that followed found one sibling
 (a dead LABEL kept marking its ghost — now a dead address answers
 nothing, gated on resolve like Value always was) and then closed
 the whole class: THE POINTER REPLAYS AT EVERY MINT. The pointer
@@ -2844,6 +2843,14 @@ continuity across identity changes (the Haskell spot-transfer).
 Deferred behind projections.
 
 - Bootstrap: projection-owned completion, no schema required.
+- Contextual completion is the ordinary list (2026-09-04): when a
+  projection supplies offers, the popup initially shows only those
+  offers. A trailing `…` affordance or Tab widens it with the universal
+  layer and then disappears; changing the query returns to the focused
+  list. A site without a provider uses
+  the universal list directly. Root offers belong only to an empty
+  document root, not its descendants. The placed frame retains the exact
+  visible offers so hover and commit address the same list.
 - Layered like rendering (2026-07-06): a projection contributes
   parameterized offers where it knows something, over a universal
   substrate layer available at every site — atoms by inference (text

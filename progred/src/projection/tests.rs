@@ -28,7 +28,7 @@ fn projection_target_appends_relative_steps() {
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
         commit_offer: Rc::new(|_, _| {}),
-        set_completion_view: Rc::new(|_, _, _| {}),
+        set_completion_view: Rc::new(|_, _, _, _| {}),
     };
     let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
     assert_eq!(
@@ -213,7 +213,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
-            set_completion_view: Rc::new(|_, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
     let height = measured.extent.height().max(1.0);
@@ -1231,7 +1231,7 @@ fn completion_offers_follow_the_stage() {
 }
 
 #[test]
-fn contextual_completion_uses_aliases_and_library_sources_remain_visible() {
+fn contextual_completion_starts_narrow_and_everything_widens_it() {
     let stack = crate::stack::load::<()>();
     let doc = Document {
         root: None,
@@ -1244,6 +1244,7 @@ fn contextual_completion_uses_aliases_and_library_sources_remain_visible() {
         false,
         "sdf",
         Some(&stack.root_completions),
+        false,
     );
     assert!(matches!(
         entries.first(),
@@ -1256,6 +1257,23 @@ fn contextual_completion_uses_aliases_and_library_sources_remain_visible() {
                 fields.contains_key(&fidget::vocabulary::FIDGET)
             })
     ));
+    assert_eq!(entries.len(), 1);
+
+    let widened = crate::completion::completion_entries_with(
+        &sources,
+        false,
+        false,
+        "sdf",
+        Some(&stack.root_completions),
+        true,
+    );
+    assert!(widened.len() > entries.len());
+    assert!(widened.iter().any(|entry| {
+        matches!(
+            &entry.action,
+            EntryAction::Value(value) if text::read(value) == Some("sdf")
+        )
+    }));
 
     let entries = completion_entries(&sources, false, false, "fidget");
     assert!(entries.iter().any(|entry| {
@@ -1268,6 +1286,94 @@ fn contextual_completion_uses_aliases_and_library_sources_remain_visible() {
             .as_deref()
             .is_some_and(|detail| detail.starts_with("fidget · "))
     }));
+}
+
+fn projected_completion_entries(doc: &Document, selection: &Selection) -> Vec<Entry> {
+    let stack = crate::stack::load::<()>();
+    let styles = crate::styles::editor(1.0);
+    let annotations = Annotations::default();
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let measured = project::<(), crate::frame::Paint>(
+        ProjectDescription {
+            sources: src(doc, &stack.libraries),
+            root: doc.root.as_ref(),
+            root_path: &[],
+            selection: Some(selection),
+            source_selection: Some(selection),
+            annotations: &annotations,
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+            root_projection: None,
+            projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
+        },
+        &mut tcx,
+        Hooks {
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        },
+    );
+    let extent = measured.extent;
+    measured::place(
+        measured,
+        Placement::root(Rect::from_origin_size(Point::ZERO, extent.size())),
+    )
+    .completion
+    .expect("the selected pending emits its offers")
+    .entries
+}
+
+#[test]
+fn root_completions_do_not_leak_into_nested_pending_values() {
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let root_entries = projected_completion_entries(
+        &empty,
+        &crate::selection::pending_with_query(Vec::new(), ""),
+    );
+    assert!(!root_entries.is_empty());
+    assert!(
+        root_entries
+            .iter()
+            .all(|entry| !matches!(entry.action, EntryAction::NewList))
+    );
+
+    let position = gid::position::between(None, None).unwrap();
+    let nested = Document {
+        root: Some(Value::list([])),
+        cells: Cells::new(),
+    };
+    let nested_entries = projected_completion_entries(
+        &nested,
+        &crate::selection::pending_with_query(vec![Step::Element(position)], ""),
+    );
+    assert!(
+        nested_entries
+            .iter()
+            .any(|entry| matches!(entry.action, EntryAction::NewList))
+    );
 }
 
 #[test]
@@ -1372,26 +1478,34 @@ fn minting_seeds_bare_and_named_cells() {
 }
 
 #[test]
-fn entry_hover_marks_follow_the_live_query() {
-    // The reported bug: hover an entry, keep the mouse still,
-    // type — the mark must follow what the entry NOW is, not
-    // what it was when the pointer arrived.
+fn entry_hover_marks_follow_the_visible_offers() {
     let doc = sample_document();
     let lib = crate::stack::load::<()>().libraries;
     let sources = src(&doc, &lib);
-    let pending = |text: &str| crate::selection::pending_with_query(Vec::new(), text);
-    // A quoted query leads with its typed atom, but marks mean
-    // IDENTITY: an equal text value is a copy, not the same cell,
-    // so string entries mark nothing.
+    let cell = new_cell_id();
+    let offers = |value| Offers {
+        entries: vec![Entry {
+            display: "offer".to_string(),
+            detail: None,
+            matches: vec![],
+            id: false,
+            action: EntryAction::Value(value),
+        }],
+    };
+
     assert_eq!(
-        hover_secondary(&sources, false, Some(&pending("\"a\"")), &Hover::Entry(0)),
+        hover_secondary(&sources, Some(&offers(Value::from(cell))), &Hover::Entry(0)),
+        Some(Secondary::Cell(cell))
+    );
+    assert_eq!(
+        hover_secondary(
+            &sources,
+            Some(&offers(crate::test_values::text("offer"))),
+            &Hover::Entry(0)
+        ),
         None
     );
-    // A closed pending answers nothing.
-    assert_eq!(
-        hover_secondary(&sources, false, None, &Hover::Entry(0)),
-        None
-    );
+    assert_eq!(hover_secondary(&sources, None, &Hover::Entry(0)), None);
 }
 
 #[test]
@@ -1681,7 +1795,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 apply: Rc::new(|_, _, _, _| false),
                 point: Rc::new(|_, _, _, _, _| false),
                 commit_offer: Rc::new(|_, _| {}),
-                set_completion_view: Rc::new(|_, _, _| {}),
+                set_completion_view: Rc::new(|_, _, _, _| {}),
             },
         )
         .extent
@@ -1706,7 +1820,7 @@ fn the_pending_query_writes_through_to_the_payload() {
     };
     let lib = core_libraries();
     let mut pending = crate::selection::pending_with_query(Vec::new(), "");
-    pending.set_completion_view(0.0, 2);
+    pending.set_completion_view(0.0, 2, false);
     pending
         .edit_mut()
         .unwrap()
@@ -1793,7 +1907,7 @@ fn a_projection_defined_as_data_realizes() {
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
-            set_completion_view: Rc::new(|_, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);
@@ -1875,7 +1989,7 @@ fn a_data_event_realizes_the_apply_hook() {
             }),
             point: Rc::new(|_, _, _, _, _| false),
             commit_offer: Rc::new(|_, _| {}),
-            set_completion_view: Rc::new(|_, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
     assert!(measured.extent.width > 0.0);

@@ -546,21 +546,9 @@ impl Editor {
             source_hover_visible(self.hover.as_ref(), crate::modifiers::link(&self.modifiers));
         let hovered_secondary = match &self.hover {
             Some(Hovered::Tree(_)) if !show_source_hover => None,
-            Some(Hovered::Tree(hover)) => hover::hover_secondary(
-                &sources,
-                self.model
-                    .workspace
-                    .selected_or_document(
-                        self.model
-                            .selection
-                            .as_ref()
-                            .map(selection::Selection::root),
-                    )
-                    .projection
-                    == workspace::Projection::Raw,
-                self.model.selection.as_ref(),
-                hover,
-            ),
+            Some(Hovered::Tree(hover)) => {
+                hover::hover_secondary(&sources, placed.completion.as_ref(), hover)
+            }
             Some(Hovered::Menu(_)) => None,
             Some(Hovered::Divider(_)) => None,
             Some(Hovered::Blocked) => None,
@@ -757,12 +745,12 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
                 selection => app.model.selection = selection,
             },
         ),
-        set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice| {
+        set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice, everything| {
             if let Some(selection) = app.model.selection.as_mut()
                 && selection.root() == &completion_root
                 && selection.stage() != selection::Stage::Edge
             {
-                selection.set_completion_view(scroll, choice);
+                selection.set_completion_view(scroll, choice, everything);
             }
         }),
     }

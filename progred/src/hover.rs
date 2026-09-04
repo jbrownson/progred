@@ -1,8 +1,7 @@
 //! Pointer hover: the tree hover's identity and the value it refers
 //! to for secondary marks.
 
-use crate::completion::{EntryAction, completion_entries};
-use crate::selection::Selection;
+use crate::completion::{EntryAction, Offers};
 use crate::sources::Sources;
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
@@ -30,6 +29,8 @@ pub enum Hover {
     /// typing under a parked pointer re-answers instead of marking a
     /// snapshot.
     Entry(usize),
+    /// The completion card's one-way widening affordance.
+    MoreCompletions,
 }
 
 /// A structural source location used by execution-linked display.
@@ -168,13 +169,11 @@ impl PartialEq for Secondary {
 
 impl Eq for Secondary {}
 
-/// The secondary target a hover refers to. An `Entry` hover
-/// re-derives from the live completion offers of the open pending
-/// (recomputed here — the price of never marking a snapshot).
+/// The secondary target a hover refers to. An `Entry` hover reads the
+/// exact completion offers emitted by the current frame.
 pub(crate) fn hover_secondary(
     sources: &Sources,
-    raw: bool,
-    selection: Option<&Selection>,
+    completion: Option<&Offers>,
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
@@ -182,21 +181,11 @@ pub(crate) fn hover_secondary(
             Secondary::from_path(sources, path.clone(), sources.resolve_path(path)?)
         }
         Hover::Drawing(source) => Some(Secondary::from_trace(source)),
-        Hover::Entry(index) => {
-            let current = selection?;
-            let labels = match current.stage() {
-                crate::selection::Stage::Pending => false,
-                crate::selection::Stage::Label => true,
-                crate::selection::Stage::Edge => return None,
-            };
-            let query = current.edit()?;
-            let entries = completion_entries(sources, raw, labels, query.text());
-            match &entries.get(*index)?.action {
-                EntryAction::Value(value) => value.as_cell().map(Secondary::Cell),
-                _ => None,
-            }
-        }
-        Hover::Toggle(_) | Hover::Insert(_) => None,
+        Hover::Entry(index) => match &completion?.entries.get(*index)?.action {
+            EntryAction::Value(value) => value.as_cell().map(Secondary::Cell),
+            _ => None,
+        },
+        Hover::Toggle(_) | Hover::Insert(_) | Hover::MoreCompletions => None,
     }
 }
 

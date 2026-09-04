@@ -1820,7 +1820,7 @@ pub struct Hooks<C> {
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
     /// Retain the completion offset and choice in the pending selection.
-    pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize)>,
+    pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize, bool)>,
 }
 
 fn select_handler<C: 'static>(
@@ -2299,9 +2299,7 @@ pub struct ProjectDescription<'a, World> {
     /// conventional `value` argument; an absent result falls through.
     pub root_projection: Option<&'a Value>,
     pub projection: Option<&'a Projection<World>>,
-    /// Suggestions contributed for an empty document root. Once a
-    /// projection starts, a nearer `WithCompletions` scope may replace
-    /// these for its subtree.
+    /// Suggestions contributed for an empty document root.
     pub root_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
@@ -2359,7 +2357,6 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
     let mut traversal = Traversal::default();
-    traversal.completions = root_completions.cloned();
     if matches!(root_path.last(), Some(Step::Follow(_)))
         && let Some(cell) = sources
             .resolve_path(&root_path[..root_path.len() - 1])
@@ -2377,30 +2374,34 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
             grap::DEFAULT_FUEL,
         )
     });
-    let layout = match projected.filter(|evaluation| !projection_is_absent(&evaluation.result)) {
-        Some(evaluation) => prepare_transient_root(
-            &cx,
-            projection,
-            tcx,
-            root_path,
-            evaluation.result,
-            evaluation.remaining_fuel,
-            &hooks,
-            &mut build,
-        ),
-        None => prepare_location(
-            &cx,
-            projection,
-            tcx,
-            root_path,
-            &traversal,
-            Location::Root(root),
-            projection,
-            None,
-            &hooks,
-            &mut build,
-        ),
-    };
+    let layout =
+        match projected.filter(|evaluation| !projection_is_absent(&evaluation.result)) {
+            Some(evaluation) => prepare_transient_root(
+                &cx,
+                projection,
+                tcx,
+                root_path,
+                evaluation.result,
+                evaluation.remaining_fuel,
+                &hooks,
+                &mut build,
+            ),
+            None if root.is_none() && root_completions.is_some() => ChoiceLayout::fixed(
+                pending_view(&cx, tcx, root_path.to_vec(), root_completions, &hooks),
+            ),
+            None => prepare_location(
+                &cx,
+                projection,
+                tcx,
+                root_path,
+                &traversal,
+                Location::Root(root),
+                projection,
+                None,
+                &hooks,
+                &mut build,
+            ),
+        };
     let resolved = resolve_choices(
         ChoiceGraph {
             root: layout,
@@ -2941,7 +2942,17 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     // The card and keyboard commit must answer from one list.
-    let entries = completion_entries_with(&cx.sources, cx.raw, labels, query.text(), completions);
+    let can_show_everything = !labels && completions.is_some();
+    let everything =
+        !can_show_everything || cx.selection.is_some_and(Selection::completion_everything);
+    let entries = completion_entries_with(
+        &cx.sources,
+        cx.raw,
+        labels,
+        query.text(),
+        completions,
+        everything,
+    );
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
@@ -3007,8 +3018,11 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         &entries,
         choice,
         scroll,
+        everything,
         move |world, action| commit_offer(world, action),
-        move |world, scroll, choice| set_completion_view(world, scroll, choice),
+        move |world, scroll, choice, everything| {
+            set_completion_view(world, scroll, choice, everything)
+        },
     );
     placed::popover(trigger, card, 4.0 * scale)
 }
@@ -3024,8 +3038,9 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     entries: &[Entry],
     choice: usize,
     scroll: f64,
+    everything: bool,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
-    set_view: impl Fn(&mut C, f64, usize) + 'static,
+    set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
     let choice = choice.min(entries.len().saturating_sub(1));
@@ -3061,7 +3076,12 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
                     .map_or(0.0, |detail| 8.0 * scale + detail.extent.width)
         })
         .collect();
-    let max_width = widths.iter().copied().fold(0.0, f64::max);
+    let more_label = (!everything).then(|| text::<C, Cv>(tcx, "…", &styles.dim));
+    let max_width = widths
+        .iter()
+        .copied()
+        .chain(more_label.iter().map(|label| label.extent.width))
+        .fold(0.0, f64::max);
     let rows: Vec<Measured<Placed<C, Cv>>> = cells
         .into_iter()
         .zip(widths)
@@ -3143,7 +3163,7 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
                 Vec2::new(0.0, maximum),
             );
             if next.y != scroll {
-                scroll_view(world, next.y, choice);
+                scroll_view(world, next.y, choice, everything);
             }
             outcome
         },
@@ -3153,7 +3173,49 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         scrolled,
         move |placement, _, _| Some(placement),
     );
-    let card = pad(Insets::uniform(4.0 * scale), viewport);
+    let more = more_label.map(|label| {
+        let width = label.extent.width;
+        let more = pad(
+            Insets::new(
+                8.0 * scale,
+                3.0 * scale,
+                8.0 * scale + (max_width - width),
+                3.0 * scale,
+            ),
+            label,
+        );
+        let set_view = set_view.clone();
+        before(more, move |p, placement| {
+            let target = Hovered::Tree(Hover::MoreCompletions);
+            let mine = Hover::MoreCompletions;
+            p.ink(move |cv, ink| {
+                let hovered = tree_hovered(ink) == Some(&mine);
+                if hovered {
+                    cv.fill(
+                        RoundedRect::from_rect(placement.rect, 4.0 * scale),
+                        Color::new([0.0, 0.48, 1.0, 0.08]),
+                        Affine::IDENTITY,
+                    );
+                }
+            });
+            hover_claim(p, placement, Hover::MoreCompletions);
+            let activate = set_view.clone();
+            p.activate(target.clone(), move |world| {
+                activate(world, 0.0, 0, true);
+                true
+            });
+            p.pick(target, move |world| {
+                set_view(world, 0.0, 0, true);
+                true
+            });
+        })
+    });
+    let card = col(
+        0,
+        2.0 * scale,
+        std::iter::once(viewport).chain(more).collect(),
+    );
+    let card = pad(Insets::uniform(4.0 * scale), card);
     let count = entries.len();
     let card = on_key(card, move |world, event| {
         if event.state.is_down() && !crate::modifiers::command(&event.modifiers) {
@@ -3168,7 +3230,12 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
                         reveal_completion(scroll, next, &row_spans, viewport_height)
                             .clamp(0.0, maximum),
                         next,
+                        everything,
                     );
+                    true
+                }
+                Key::Named(NamedKey::Tab) if !everything => {
+                    set_view(world, 0.0, 0, true);
                     true
                 }
                 _ => false,

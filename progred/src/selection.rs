@@ -166,8 +166,12 @@ impl Selection {
         payload::completion_scroll(&self.payload).unwrap_or(0.0)
     }
 
-    pub fn set_completion_view(&mut self, scroll: f64, choice: usize) {
-        self.payload = payload::with_completion_view(&self.payload, scroll, choice);
+    pub fn completion_everything(&self) -> bool {
+        payload::completion_everything(&self.payload)
+    }
+
+    pub fn set_completion_view(&mut self, scroll: f64, choice: usize, everything: bool) {
+        self.payload = payload::with_completion_view(&self.payload, scroll, choice, everything);
     }
 
     /// Whether the mounted editor's write-through run has recorded
@@ -796,7 +800,7 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 pub mod payload {
     use gid::{CellId, Value};
     use kurbo::Point;
-    use progred_libraries::{f64 as f64_convention, text};
+    use progred_libraries::{f64 as f64_convention, logic, text};
     use puri::edit::LineEditState;
 
     pub mod vocabulary {
@@ -806,6 +810,8 @@ pub mod payload {
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
+        pub const COMPLETION_EVERYTHING: CellId =
+            CellId::from_u128(0xedfa139b72d468afe1d926e811477456);
 
         /// A value's edge is selected; editing state, if any, is tier-2.
         pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
@@ -872,16 +878,30 @@ pub mod payload {
             .filter(|scroll| scroll.is_finite() && *scroll >= 0.0)
     }
 
+    pub fn completion_everything(payload: &Value) -> bool {
+        payload
+            .as_record()
+            .and_then(|fields| fields.get(&vocabulary::COMPLETION_EVERYTHING))
+            .and_then(Value::as_cell)
+            == Some(logic::vocabulary::TRUE)
+    }
+
     pub fn with_update(payload: &Value, update: &Value) -> Value {
         with_field(payload, vocabulary::UPDATE, update.clone())
     }
 
-    pub fn with_completion_view(payload: &Value, scroll: f64, choice: usize) -> Value {
+    pub fn with_completion_view(
+        payload: &Value,
+        scroll: f64,
+        choice: usize,
+        everything: bool,
+    ) -> Value {
         let fields = payload.as_record().cloned().unwrap_or_default();
         Value::Record(
             fields
                 .update(vocabulary::COMPLETION_SCROLL, f64_convention::value(scroll))
-                .update(vocabulary::CHOICE, f64_convention::value(choice as f64)),
+                .update(vocabulary::CHOICE, f64_convention::value(choice as f64))
+                .update(vocabulary::COMPLETION_EVERYTHING, logic::value(everything)),
         )
     }
 
@@ -909,6 +929,7 @@ pub mod payload {
             if query(payload) != Some(line.text()) {
                 fields.insert(vocabulary::CHOICE, f64_convention::value(0.0));
                 fields.insert(vocabulary::COMPLETION_SCROLL, f64_convention::value(0.0));
+                fields.insert(vocabulary::COMPLETION_EVERYTHING, logic::value(false));
             }
             fields.insert(vocabulary::QUERY, text::value(line.text()));
         }
@@ -1041,21 +1062,23 @@ pub mod payload {
         #[test]
         fn changing_an_owned_query_resets_its_completion_choice() {
             let changed = with_editor(
-                &with_completion_view(&pending("old", 2), 24.0, 2),
+                &with_completion_view(&pending("old", 2), 24.0, 2, true),
                 &LineEditState::from_parts("new", 3, 3, None, None),
                 true,
             );
             assert_eq!(query(&changed), Some("new"));
             assert_eq!(choice(&changed), Some(0));
             assert_eq!(completion_scroll(&changed), Some(0.0));
+            assert!(!completion_everything(&changed));
 
             let unchanged = with_editor(
-                &with_completion_view(&pending("same", 2), 24.0, 2),
+                &with_completion_view(&pending("same", 2), 24.0, 2, true),
                 &LineEditState::from_parts("same", 4, 4, None, None),
                 true,
             );
             assert_eq!(choice(&unchanged), Some(2));
             assert_eq!(completion_scroll(&unchanged), Some(24.0));
+            assert!(completion_everything(&unchanged));
         }
 
         #[test]
