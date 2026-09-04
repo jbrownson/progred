@@ -33,16 +33,56 @@ fn save_text(path: &Path, text: String) -> Result<(), String> {
 
 #[cfg(any(target_os = "linux", all(test, not(target_os = "macos"))))]
 fn save_text(path: &Path, text: String) -> Result<(), String> {
-    // Write-then-rename, so a crash mid-write cannot truncate the
-    // previous save.
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, text).map_err(|error| error.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|error| error.to_string())
+    replace_text(path, &text).map_err(|error| error.to_string())
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn replace_text(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let parent = path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let temporary = parent.join(format!(".progred-{}.tmp", gid::new_cell_id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = (|| {
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, path)?;
+        std::fs::File::open(parent)?.sync_all()
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replacement_preserves_siblings_and_cleans_up_failed_saves() {
+        let directory = std::env::temp_dir().join(format!("progred-store-{}", gid::new_cell_id()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("document.gid");
+        let sibling = directory.join("document.tmp");
+        std::fs::write(&path, "old").unwrap();
+        std::fs::write(&sibling, "unrelated").unwrap();
+
+        replace_text(&path, "new").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(&sibling).unwrap(), "unrelated");
+        let blocked = directory.join("blocked");
+        std::fs::create_dir(&blocked).unwrap();
+        assert!(replace_text(&blocked, "cannot replace a directory").is_err());
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 3);
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
 
     #[test]
     fn documents_round_trip_through_disk() {
