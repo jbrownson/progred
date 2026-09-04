@@ -2896,10 +2896,11 @@ Deferred behind projections.
   not construct offers. Grap parameter offers are likewise prepared only
   during field insertion, not for every projected call. This is ordinary
   demand-driven work, not a cross-frame memo. The popup initially shows
-  only contextual offers. A trailing `…` affordance or Tab widens it with
-  the universal layer and
-  then disappears; changing the query returns to the focused list. A site
-  without a provider uses the universal list directly. Libraries
+  only contextual offers. The trailing `…` row participates in arrow-key
+  selection and scrolling; its click or Enter action widens the list with
+  the universal layer instead of committing a value. Tab also widens it.
+  The row then disappears; changing the query returns to the focused list.
+  A site without a provider uses the universal list directly. Libraries
   contribute empty-root templates and document-root field identities
   separately, and neither leaks into descendants. The placed frame retains
   the exact visible offers so hover and commit address the same list.

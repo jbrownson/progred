@@ -173,8 +173,8 @@ impl Selection {
         }
     }
 
-    /// Which completion entry commits; clamped against the frame's
-    /// recomputed entries at use.
+    /// The chosen completion row, including the expansion affordance;
+    /// clamped against the current card at use.
     pub fn choice(&self) -> usize {
         if self.query_changed() {
             0

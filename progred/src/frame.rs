@@ -2,7 +2,6 @@
 //! Ink stays latent in the returned frame; rendering it is the
 //! caller's choice, so a silent mint never draws.
 
-use crate::completion;
 use crate::hover;
 use crate::menu;
 use crate::model::{Model, ViewFlags};
@@ -44,7 +43,6 @@ pub(crate) struct Dispatch {
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
-    pub(crate) completion: Option<completion::Offers>,
 }
 
 /// One minted frame: the dispatch the shell retains, and the ink the
@@ -566,7 +564,7 @@ impl Editor {
             descends,
             view_regions,
             landmark_select,
-            completion,
+            completion: _,
             floaters: _,
             mut renders,
         } = placed;
@@ -589,7 +587,6 @@ impl Editor {
                 descends,
                 view_regions,
                 line: 14.0 * scale,
-                completion,
             },
             renders,
             hovered_secondary,

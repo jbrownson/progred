@@ -9,7 +9,7 @@ use crate::navigate;
 use crate::selection;
 use crate::sources;
 use gid::{Path, Step, Value};
-use puri::edit::{LineEditState, TextClipboard};
+use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
@@ -60,27 +60,6 @@ impl Editor {
             }
             _ => false,
         }
-    }
-
-    /// The chosen entry's action — from the frame's offers, else the
-    /// query's inferred atom.
-    pub(crate) fn chosen_action(
-        completion: &Option<completion::Offers>,
-        query: &LineEditState,
-        choice: usize,
-        labels: bool,
-    ) -> completion::EntryAction {
-        completion
-            .as_ref()
-            .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
-            .map(|entry| entry.action.clone())
-            .unwrap_or_else(|| {
-                if labels {
-                    completion::EntryAction::NewLabel(query.text().to_string())
-                } else {
-                    completion::EntryAction::Value(selection::resolve_query(query.text()))
-                }
-            })
     }
 
     /// Commits a pointed-at value into the open pending — the
@@ -327,7 +306,8 @@ impl Editor {
         }
     }
 
-    /// Enter advances a pending stage or begins one (the chains live
+    /// After completion handlers decline, Enter commits the query
+    /// directly or begins a pending stage (the chains live
     /// in raw). Plain Enter is a new peer BESIDE the selection: a
     /// sibling element in a list (Shift+Enter before), a new field on
     /// the parent record otherwise; the root has nothing beside it
@@ -343,7 +323,6 @@ impl Editor {
     pub(crate) fn insert_key(
         &mut self,
         descends: &[navigate::Descend<Editor>],
-        completion: &Option<completion::Offers>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -354,8 +333,11 @@ impl Editor {
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
                         let query = current.edit().unwrap_or(&fallback);
-                        let action =
-                            Self::chosen_action(completion, query, current.choice(), labels);
+                        let action = if labels {
+                            completion::EntryAction::NewLabel(query.text().to_string())
+                        } else {
+                            completion::EntryAction::Value(selection::resolve_query(query.text()))
+                        };
                         if labels {
                             self.commit_label(root, current.path().to_vec(), &action);
                         } else {

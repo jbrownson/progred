@@ -3043,11 +3043,9 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     placed::popover(trigger, card, 4.0 * scale)
 }
 
-/// The drawn completion card: entry rows under the pending anchor,
-/// the chosen one highlighted, styled by what each entry commits.
-/// Its floater is raised after the body, so its handlers win: clicking
-/// a row commits it, and the card swallows every other click so
-/// nothing lands on content underneath.
+/// Completion offers and expansion share row navigation. Each row's
+/// callback handles both clicks and Enter. The raised card swallows
+/// other clicks so nothing lands on content underneath.
 pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
@@ -3059,7 +3057,6 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
-    let choice = choice.min(entries.len().saturating_sub(1));
     let matches = entries
         .iter()
         .map(|entry| {
@@ -3104,7 +3101,15 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
             hovered: Color::new([0.0, 0.48, 1.0, 0.08]),
         },
     );
-    let rows = widget
+    let set_view = Rc::new(set_view);
+    let expand: progred_display::ActionHandler<C> = {
+        let set_view = set_view.clone();
+        Rc::new(move |world| {
+            set_view(world, 0.0, 0, true);
+            true
+        })
+    };
+    let items = widget
         .rows
         .into_iter()
         .zip(entries)
@@ -3112,10 +3117,26 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         .map(|(index, (row, entry))| {
             let action = entry.action.clone();
             let commit = commit.clone();
-            completion_row(row, Hover::Entry(index), index == choice, move |world| {
+            let activate: progred_display::ActionHandler<C> = Rc::new(move |world| {
                 commit(world, &action);
                 true
-            })
+            });
+            (row, Hover::Entry(index), activate)
+        })
+        .chain(
+            widget
+                .more
+                .map(|row| (row, Hover::MoreCompletions, expand.clone())),
+        )
+        .collect::<Vec<_>>();
+    let count = items.len();
+    let choice = choice.min(count.saturating_sub(1));
+    let activate = items.get(choice).map(|(_, _, activate)| activate.clone());
+    let rows = items
+        .into_iter()
+        .enumerate()
+        .map(|(index, (row, hover, activate))| {
+            completion_row(row, hover, index == choice, move |world| activate(world))
         })
         .collect::<Vec<_>>();
     let gap = 2.0 * scale;
@@ -3129,7 +3150,6 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         ascent: content.extent.ascent.min(viewport_height * scale),
         descent: (viewport_height * scale - content.extent.ascent).max(0.0),
     };
-    let set_view = Rc::new(set_view);
     let scroll_view = set_view.clone();
     let scrolled = placed::scrolled_at(
         content,
@@ -3154,24 +3174,16 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         scrolled,
         move |placement, _, _| Some(placement),
     );
-    let more = widget.more.map(|row| {
-        let set_view = set_view.clone();
-        completion_row(row, Hover::MoreCompletions, false, move |world| {
-            set_view(world, 0.0, 0, true);
-            true
-        })
-    });
-    let card = col(
-        0,
-        2.0 * scale,
-        std::iter::once(viewport).chain(more).collect(),
-    );
-    let card = pad(Insets::uniform(4.0 * scale), card);
-    let count = entries.len();
+    let card = pad(Insets::uniform(4.0 * scale), viewport);
     let card = on_key(card, move |world, event| {
-        if event.state.is_down() && !crate::modifiers::command(&event.modifiers) {
+        if event.state.is_down() {
             match event.key {
-                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown)) => {
+                Key::Named(NamedKey::Enter) => {
+                    activate.as_ref().is_some_and(|activate| activate(world))
+                }
+                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
+                    if !crate::modifiers::command(&event.modifiers) =>
+                {
                     let next = match direction {
                         NamedKey::ArrowUp => choice.saturating_sub(1),
                         _ => choice.saturating_add(1).min(count.saturating_sub(1)),
@@ -3185,9 +3197,10 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
                     );
                     true
                 }
-                Key::Named(NamedKey::Tab) if !everything => {
-                    set_view(world, 0.0, 0, true);
-                    true
+                Key::Named(NamedKey::Tab)
+                    if !everything && !crate::modifiers::command(&event.modifiers) =>
+                {
+                    expand(world)
                 }
                 _ => false,
             }

@@ -1461,7 +1461,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
     let (padding, extent) = place_card(Point::new(1.0, 1.0));
     assert_eq!(padding.hit, Some(Claim::Occludes));
     // Scanning down the card crosses both rows, each claiming its
-    // index — an address into the live entries, never a snapshot.
+    // index — an address into the frame's exact visible offers.
     let winners: Vec<Hover> = (0..extent.height() as usize)
         .filter_map(|y| {
             let (bench, _) = place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
@@ -1576,6 +1576,33 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
     assert_eq!(state, (offset, 11, false));
+    for _ in 11..=entries.len() {
+        frame(state)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    }
+    assert_eq!(state.1, entries.len());
+    let bottom = frame(state);
+    assert!((0..200).any(|y| {
+        bottom.probe(Point::new(10.0, y as f64), None, 0.0)
+            == Some(Claim::Direct(Hovered::Tree(Hover::MoreCompletions)))
+    }));
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
+    assert_eq!(state.1, entries.len() - 1);
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::Enter));
+    assert_eq!(state, (0.0, 0, true));
+    state.2 = false;
     frame(state)
         .handler
         .unwrap()
@@ -1588,6 +1615,123 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .dispatch_key(&mut state, &press(NamedKey::Tab))
     );
     assert_eq!(state, (0.0, 0, true));
+}
+
+#[test]
+fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
+    #[derive(Default)]
+    struct State {
+        view: (f64, usize, bool),
+        committed: Option<EntryAction>,
+    }
+
+    let entries = [Entry {
+        display: "new list".into(),
+        detail: None,
+        matches: Vec::new(),
+        id: false,
+        action: EntryAction::NewList,
+    }];
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let mut frame = |state: &State, entries: &[Entry]| {
+        measured::place_top_left(
+            completion_card::<State, Bench>(
+                &mut tcx,
+                &styles,
+                entries,
+                state.view.1,
+                state.view.0,
+                state.view.2,
+                |state, action| state.committed = Some(action.clone()),
+                |state, scroll, choice, everything| state.view = (scroll, choice, everything),
+            ),
+            Point::ZERO,
+        )
+    };
+    let press = |key| KeyboardEvent {
+        key: Key::Named(key),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    let mut state = State::default();
+    assert!(
+        frame(&state, &entries)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
+    assert!(matches!(state.committed.take(), Some(EntryAction::NewList)));
+    assert!(!state.view.2);
+    frame(&state, &entries)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    assert_eq!(state.view.1, 1);
+    assert!(
+        frame(&state, &entries)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
+    assert_eq!(state.view, (0.0, 0, true));
+    assert!(state.committed.is_none());
+    frame(&state, &entries)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    assert_eq!(state.view.1, 0);
+
+    state.view = (0.0, 0, false);
+    let placed = frame(&state, &entries);
+    let target = Hovered::Tree(Hover::MoreCompletions);
+    let point = (0..100)
+        .map(|y| Point::new(10.0, y as f64))
+        .find(|point| placed.probe(*point, None, 0.0) == Some(Claim::Direct(target.clone())))
+        .expect("expansion row is visible");
+    let mut pointer_state = ui_events::pointer::PointerState::default();
+    pointer_state.position.x = point.x;
+    pointer_state.position.y = point.y;
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: ui_events::pointer::PointerInfo {
+            pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: pointer_state,
+    };
+    assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+        &mut state,
+        &event,
+        &mut placed::PointerContext::new(None, Some(target)),
+    ));
+    assert_eq!(state.view, (0.0, 0, true));
+    assert!(state.committed.is_none());
+
+    state.view = (0.0, 0, false);
+    assert!(
+        frame(&state, &[])
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
+    assert_eq!(state.view, (0.0, 0, true));
+    assert!(state.committed.is_none());
+    assert!(
+        !frame(&state, &[])
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
 }
 
 #[test]

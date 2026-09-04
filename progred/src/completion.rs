@@ -38,8 +38,8 @@ pub enum EntryAction {
 }
 
 /// The completion offers a pending row emits during placement. The
-/// card itself is an ordinary floater; this semantic copy keeps
-/// keyboard choice and the visible rows on exactly the same list.
+/// card's callbacks own activation; this copy attributes hovered
+/// offers to their document sources.
 pub struct Offers {
     pub entries: Vec<Entry>,
 }

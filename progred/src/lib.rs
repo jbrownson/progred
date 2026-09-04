@@ -1026,11 +1026,7 @@ impl App {
                             || dispatch.handler.dispatch_key(editor, &key_event)
                             || editor.clipboard_key(&dispatch.descends, &key_event)
                             || editor.delete_key(&dispatch.descends, &key_event)
-                            || editor.insert_key(
-                                &dispatch.descends,
-                                &dispatch.completion,
-                                &key_event,
-                            )
+                            || editor.insert_key(&dispatch.descends, &key_event)
                             || editor.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
