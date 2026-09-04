@@ -48,7 +48,6 @@ use crate::frame::{Dispatch, Frame, FrameDisposition, Hovered, Paint, frame_disp
 use crate::model::{Model, ViewFlags};
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -378,7 +377,6 @@ pub(crate) struct Editor {
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: SystemTextClipboard,
     pub(crate) text_cache: puri::text::TextCache,
-    pub(crate) drawing_memos: HashMap<workspace::Root, projection::DrawingMemo>,
     pub(crate) stack: stack::Stack<Editor>,
     pub(crate) model: Model,
     /// Where the document lives; `None` is untitled until the first
@@ -501,7 +499,6 @@ fn new_editor(
         text_clipboard: SystemTextClipboard,
         #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
         text_clipboard: SystemTextClipboard::default(),
-        drawing_memos: HashMap::new(),
         stack,
         model: Model {
             doc,

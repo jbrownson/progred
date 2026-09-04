@@ -144,11 +144,11 @@ Caching:
 
 - No hidden framework caches. Ordinary projection, layout, hover, and
   rendering recompute every frame.
-- The two approved cross-frame exceptions are explicit and
-  caller-owned: text shaping memoizes its pure inputs, and Progred's
-  canvas projection records commands with the cells its Grap
-  evaluation read. No other subsystem predicts whether a changed
-  input matters. Every changed frame input remints and presents a
+- The only approved cross-frame computation memo is explicit,
+  caller-owned text shaping. Each visible canvas program records once
+  per frame, sharing its commands and source hits between hover and paint.
+  No other subsystem predicts whether a changed input matters.
+  Every changed frame input remints and presents a
   whole frame; if that becomes too slow, the next step is one general
   dependency-tracked invalidation system.
 - The pending frame handed from an event to the following redraw is

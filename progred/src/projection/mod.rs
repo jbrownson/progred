@@ -31,7 +31,6 @@ mod drawing;
 #[cfg(test)]
 mod iop_tree_native;
 mod location;
-pub(crate) use drawing::Memo as DrawingMemo;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use gid::{Cells, Document, new_cell_id};
@@ -132,7 +131,6 @@ struct Cx<'a> {
     selected_trace: Option<SourceTrace>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
-    drawing_memo: &'a DrawingMemo,
     root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
@@ -2312,6 +2310,7 @@ pub struct ProjectDescription<'a, World> {
     pub root_path: &'a [Step],
     /// Selection belonging to this editable view.
     pub selection: Option<&'a Selection>,
+    pub scrub_spelling: Option<(&'a [Step], &'a str)>,
     /// Selection from any view, used only to link generated output
     /// back to its structural source.
     pub source_selection: Option<&'a Selection>,
@@ -2326,28 +2325,17 @@ pub struct ProjectDescription<'a, World> {
     pub root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
-#[cfg(test)]
-pub fn project<C: 'static, Cv: Canvas + 'static>(
+pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
     description: ProjectDescription<'_, C>,
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    project_with_drawing_memo(description, tcx, hooks, &DrawingMemo::default(), None)
-}
-
-pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
-    description: ProjectDescription<'_, C>,
-    tcx: &mut TextCtx,
-    hooks: Hooks<C>,
-    drawing_memo: &DrawingMemo,
-    scrub_spelling: Option<(&[Step], &str)>,
-) -> Measured<Placed<C, Cv>> {
-    drawing_memo.begin();
     let ProjectDescription {
         sources,
         root,
         root_path,
         selection,
+        scrub_spelling,
         source_selection,
         annotations,
         raw,
@@ -2366,7 +2354,6 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         scrub_spelling,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
-        drawing_memo,
         root_field_completions,
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
@@ -2406,16 +2393,14 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
             &mut build,
         ),
     };
-    let resolved = resolve_choices(
+    resolve_choices(
         ChoiceGraph {
             root: layout,
             shared: build.shared,
             choice_count: build.next_choice,
         },
         width,
-    );
-    drawing_memo.finish();
-    resolved
+    )
 }
 
 /// Marks `child` as the projection of `path` WITHOUT claiming any
@@ -2605,7 +2590,6 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         selected_trace: cx.selected_trace.clone(),
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
-        drawing_memo: cx.drawing_memo,
         root_field_completions: None,
     };
     prepare_location(

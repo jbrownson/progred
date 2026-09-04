@@ -45,16 +45,25 @@ wrapper, and Raw exposes its complete structure.
 Keep these identities distinct: an occurrence's structural path, a cell's
 identity, the source of one definition (`Document` or a stable library ID),
 and a transient view root. A cell may have several definitions, so a cell ID
-alone cannot identify the source of a drawing or the value observed by a memo.
+alone cannot identify the source of a drawing.
 
 The next identity review should specify what survives list moves, deletion and
 undo, source replacement, and library loading or reordering. In particular,
-source tracing currently drops definition provenance, and canvas-memo
-validation must observe changes to every relevant definition, including
-plural results. List positions are session-local occurrence addresses and are
-not content identity. Tests should cover these transitions across editing,
-source highlighting, and the explicit canvas memo. Resolve the identity model
-before adding invalidation machinery; no additional caches are implied.
+source tracing currently drops definition provenance. List positions are
+session-local occurrence addresses and are not content identity. Tests should
+cover these transitions across editing and source highlighting. Resolve the
+identity model before adding invalidation machinery.
+
+The canvas-command memo was removed on 2026-09-04. Its validation compared
+one value per cell while evaluation could observe an ordered set of value and
+foreign definitions. Canvas programs now record once per visible frame, shared
+by hit-testing and painting. A release-mode headless comparison on the IoP
+tree measured a median 25.5 ms with a fresh recording versus 0.84 ms with reuse
+over 20 alternating pairs; this large drawing's slowdown is accepted during
+the prototype in exchange for removing the special invalidation mechanism.
+These are CPU frame-construction timings, not presentation frame rates.
+Any future general dependency system must observe the actual lookup results,
+including an empty definition set and changes to the order of alternatives.
 
 ## UI State As Data (Direction, 2026-08-19)
 

@@ -243,29 +243,6 @@ fn place_with_annotations(
     viewport: Option<Rect>,
     root: Option<(&[Step], Option<&Value>)>,
 ) -> (Bench, Extent) {
-    place_with_annotations_using(
-        doc,
-        selection,
-        annotations,
-        width,
-        pointer,
-        viewport,
-        root,
-        &DrawingMemo::default(),
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn place_with_annotations_using(
-    doc: &Document,
-    selection: Option<&Selection>,
-    annotations: &Annotations,
-    width: f64,
-    pointer: Option<Point>,
-    viewport: Option<Rect>,
-    root: Option<(&[Step], Option<&Value>)>,
-    drawing_memo: &DrawingMemo,
-) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
     let sources = Sources {
         doc,
@@ -304,12 +281,13 @@ fn place_with_annotations_using(
     // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
     let (root_path, root) = root.unwrap_or((&[], sources.root()));
-    let node = project_with_drawing_memo::<World, Bench>(
+    let node = project::<World, Bench>(
         ProjectDescription {
             sources,
             root,
             root_path,
             selection,
+            scrub_spelling: None,
             source_selection: selection,
             annotations,
             raw: false,
@@ -321,8 +299,6 @@ fn place_with_annotations_using(
         },
         &mut tcx,
         hooks,
-        drawing_memo,
-        None,
     );
     let project_elapsed = start.elapsed();
     let extent = node.extent;
@@ -395,7 +371,7 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.path);
     let source = Some((declaration.path.as_slice(), value));
-    let (bench, _) = place_with_annotations_using(
+    let (bench, _) = place_with_annotations(
         &doc,
         None,
         &Annotations::default(),
@@ -403,7 +379,6 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
         None,
         None,
         source,
-        &DrawingMemo::default(),
     );
     let image = bench
         .list
@@ -437,9 +412,8 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         .expect("the picture is declared as a pane");
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.path);
-    let drawing_memo = DrawingMemo::default();
     let source = Some((declaration.path.as_slice(), value));
-    let (bench, extent) = place_with_annotations_using(
+    let (bench, extent) = place_with_annotations(
         &doc,
         None,
         &Annotations::default(),
@@ -447,9 +421,8 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         None,
         None,
         source,
-        &drawing_memo,
     );
-    let (reused, _) = place_with_annotations_using(
+    let (rebuilt, _) = place_with_annotations(
         &doc,
         None,
         &Annotations::default(),
@@ -457,15 +430,14 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         None,
         None,
         source,
-        &drawing_memo,
     );
-    eprintln!("IoP tree reused frame: {:.1?}", reused.frame_elapsed);
-    assert_eq!(reused.list.0.len(), bench.list.0.len());
+    eprintln!("IoP tree rebuilt frame: {:.1?}", rebuilt.frame_elapsed);
+    assert_eq!(rebuilt.list.0.len(), bench.list.0.len());
     let outer = match bench.list.0.first() {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
         _ => panic!("the scene starts with the sky fill"),
     };
-    let (linked, _) = place_with_annotations_using(
+    let (linked, _) = place_with_annotations(
         &doc,
         None,
         &Annotations::default(),
@@ -473,7 +445,6 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         Some(outer * Point::new(10.0, 10.0)),
         None,
         source,
-        &drawing_memo,
     );
     assert!(
         matches!(
@@ -539,8 +510,8 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     );
 }
 
-/// Profiling loop: re-record the IoP tree drawing from a cold memo
-/// each iteration so a sampler sees mostly interpreter time.
+/// Profiling loop: record the IoP tree drawing each frame so a sampler
+/// sees mostly interpreter time.
 /// `cargo test --release -p progred iop_tree_profile_loop -- --ignored`
 #[test]
 #[ignore]
@@ -560,8 +531,7 @@ fn iop_tree_profile_loop() {
         .unwrap_or(30);
     let start = std::time::Instant::now();
     for _ in 0..iterations {
-        let drawing_memo = DrawingMemo::default();
-        let (bench, _) = place_with_annotations_using(
+        let (bench, _) = place_with_annotations(
             &doc,
             None,
             &Annotations::default(),
@@ -569,12 +539,11 @@ fn iop_tree_profile_loop() {
             None,
             None,
             source,
-            &drawing_memo,
         );
         std::hint::black_box(&bench.list);
     }
     eprintln!(
-        "IoP profile: {iterations} cold frames, {:.1?} each",
+        "IoP profile: {iterations} frames, {:.1?} each",
         start.elapsed() / iterations as u32,
     );
 }
@@ -587,10 +556,9 @@ fn iop_tree_source_profile_loop() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
         .expect("the IoP tree demo parses");
     let iterations = 30;
-    let drawing_memo = DrawingMemo::default();
     let start = std::time::Instant::now();
     for _ in 0..iterations {
-        let (bench, _) = place_with_annotations_using(
+        let (bench, _) = place_with_annotations(
             &doc,
             None,
             &Annotations::default(),
@@ -598,7 +566,6 @@ fn iop_tree_source_profile_loop() {
             None,
             None,
             None,
-            &drawing_memo,
         );
         std::hint::black_box(&bench.list);
     }
@@ -678,6 +645,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root: doc.root.as_ref(),
             root_path: &[],
             selection: None,
+            scrub_spelling: None,
             source_selection: None,
             annotations: &Annotations::default(),
             raw: false,
@@ -790,6 +758,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root: world.doc.root.as_ref(),
             root_path: &[],
             selection: world.selection.as_ref(),
+            scrub_spelling: None,
             source_selection: world.selection.as_ref(),
             annotations: &Annotations::default(),
             raw: false,
@@ -1697,6 +1666,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             root: doc.root.as_ref(),
             root_path: &[],
             selection: None,
+            scrub_spelling: None,
             source_selection: None,
             annotations: &Annotations::default(),
             raw: false,
@@ -1984,5 +1954,159 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             expected
         );
         assert_eq!(starts, usize::from(expected));
+    }
+}
+
+fn drawing_frame(
+    doc: &Document,
+    libraries: &Libraries,
+    shape_function: CellId,
+) -> Measured<Placed<(), Bench>> {
+    let styles = crate::styles::editor(1.0);
+    let annotations = Annotations::default();
+    let cx = Cx {
+        sources: Sources { doc, libraries },
+        raw: false,
+        annotations: &annotations,
+        styles: &styles,
+        selection: None,
+        scrub_spelling: None,
+        secondary: None,
+        selected_trace: None,
+        source: Source::Stored,
+        fuel: std::cell::Cell::new(100),
+        root_field_completions: None,
+    };
+    drawing::program_leaf(
+        &cx,
+        &[],
+        40.0,
+        0.0,
+        40.0,
+        100,
+        grap::call(
+            Value::from(layout_data::vocabulary::FILL),
+            [
+                (
+                    layout_data::vocabulary::SHAPE,
+                    grap::call(Value::from(shape_function), []),
+                ),
+                (
+                    layout_data::vocabulary::PAINT,
+                    progred_libraries::color::value(Color::BLACK),
+                ),
+            ],
+        ),
+    )
+}
+
+#[test]
+fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
+    let shape_function = new_cell_id();
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    let library = progred_libraries::Library::<(), ()>::named(
+        "shape",
+        progred_libraries::Definitions::from_parts(
+            Cells::new(),
+            grap::ForeignFunctions::default().register(
+                shape_function,
+                grap::ForeignFunction::new(move |_, _, _| {
+                    count.set(count.get() + 1);
+                    Ok(layout_data::rect(0.0, 0.0, 10.0, 10.0))
+                }),
+            ),
+        ),
+        vec![],
+    );
+    let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
+    for expected in 1..=2 {
+        let placed = measured::place(
+            drawing_frame(&doc, &libraries, shape_function),
+            Placement::root(bounds),
+        );
+        assert_eq!(calls.get(), expected - 1);
+        for _ in 0..2 {
+            assert!(matches!(
+                placed.probe(Point::new(5.0, 5.0), None, 0.0),
+                Some(Claim::Direct(_))
+            ));
+        }
+        assert_eq!(calls.get(), expected);
+        settle(placed, Some(Point::new(5.0, 5.0)));
+        assert_eq!(calls.get(), expected);
+    }
+    let clipped = measured::place(
+        drawing_frame(&doc, &libraries, shape_function),
+        Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
+    );
+    settle(clipped, Some(Point::new(5.0, 5.0)));
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
+    let shape_function = new_cell_id();
+    let library_id = new_cell_id();
+    let library = |width| {
+        let mut cells = Cells::new();
+        cells.set_value(shape_function, name::record("shape", []));
+        Libraries::from_contributions([(
+            library_id,
+            progred_libraries::Library::<(), ()>::named(
+                "shape",
+                progred_libraries::Definitions::from_parts(
+                    cells,
+                    grap::ForeignFunctions::default().register(
+                        shape_function,
+                        grap::ForeignFunction::new(move |_, _, _| {
+                            Ok(layout_data::rect(0.0, 0.0, width, 10.0))
+                        }),
+                    ),
+                ),
+                vec![],
+            ),
+        )])
+        .0
+    };
+    let before = library(10.0);
+    let after = library(20.0);
+    assert_eq!(
+        before.first_value(shape_function),
+        after.first_value(shape_function)
+    );
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    for (libraries, expected) in [
+        (Libraries::default(), vec![]),
+        (before, vec![10.0]),
+        (after, vec![20.0]),
+        (Libraries::default(), vec![]),
+    ] {
+        let placed = measured::place(
+            drawing_frame(&doc, &libraries, shape_function),
+            Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
+        );
+        let drawing = settle(placed, None);
+        let widths: Vec<_> = drawing
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::Rect(rect),
+                    ..
+                } => Some(rect.width()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(widths, expected);
     }
 }
