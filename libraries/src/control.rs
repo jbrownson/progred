@@ -208,7 +208,7 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                     else {
                         return Ok(absent::with_reason(vocabulary::INVALID_CASE).into());
                     };
-                    match destructure_runtime(pattern, &value) {
+                    match destructure(pattern, &value) {
                         Ok(Some(bindings)) => {
                             return context.eval_runtime(
                                 *expression,
@@ -225,11 +225,12 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
             }
             CompiledCases::Deferred(cases) => {
                 let cases_value = context.eval(*cases, environment)?;
-                match select(&value.to_value(), &cases_value) {
+                match select(&value, &cases_value) {
                     Selection::Expression {
                         expression,
                         bindings,
-                    } => context.eval_value_runtime(expression, &environment.extended(bindings)),
+                    } => context
+                        .eval_value_runtime(expression, &environment.extended_runtime(bindings)),
                     Selection::NoMatch(absents) => Ok(absent::from_causes(absents).into()),
                     Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
                 }
@@ -308,7 +309,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                         }
                         CompiledBinding::Pattern { pattern, value } => {
                             let value = context.eval_runtime(*value, &environment)?;
-                            match destructure_runtime(pattern, &value) {
+                            match destructure(pattern, &value) {
                                 Ok(Some(bindings)) => environment.push_runtime(bindings),
                                 Ok(None) => return Ok(absent::value().into()),
                                 Err(InvalidBinder) => {
@@ -350,12 +351,12 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                             return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
                         }
                     };
-                    let value = context.eval_value(value, &environment)?;
+                    let value = context.eval_value_runtime(value, &environment)?;
                     if let Some(binder) = binder {
-                        environment = environment.extended([(binder, value)]);
+                        environment.push_runtime([(binder, value)]);
                     } else if let Some(pattern) = pattern {
                         match destructure(pattern, &value) {
-                            Ok(Some(bindings)) => environment = environment.extended(bindings),
+                            Ok(Some(bindings)) => environment.push_runtime(bindings),
                             Ok(None) => return Ok(absent::value().into()),
                             Err(InvalidBinder) => {
                                 return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
@@ -372,13 +373,13 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
 enum Selection<'a> {
     Expression {
         expression: &'a Value,
-        bindings: Vec<(CellId, Value)>,
+        bindings: Vec<(CellId, RuntimeValue)>,
     },
     NoMatch(Vec<Value>),
     Invalid(CellId),
 }
 
-fn select<'a>(value: &Value, cases: &'a Value) -> Selection<'a> {
+fn select<'a>(value: &RuntimeValue, cases: &'a Value) -> Selection<'a> {
     let Some(cases) = cases.as_list() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
@@ -423,22 +424,13 @@ struct InvalidBinder;
 
 fn destructure(
     pattern: &Value,
-    value: &Value,
-) -> Result<Option<Vec<(CellId, Value)>>, InvalidBinder> {
+    value: &RuntimeValue,
+) -> Result<Option<Vec<(CellId, RuntimeValue)>>, InvalidBinder> {
     let mut bindings = Vec::new();
     matches_pattern(pattern, value, &mut bindings).map(|matched| matched.then_some(bindings))
 }
 
-fn destructure_runtime(
-    pattern: &Value,
-    value: &RuntimeValue,
-) -> Result<Option<Vec<(CellId, RuntimeValue)>>, InvalidBinder> {
-    let mut bindings = Vec::new();
-    matches_runtime_pattern(pattern, value, &mut bindings)
-        .map(|matched| matched.then_some(bindings))
-}
-
-fn matches_runtime_pattern(
+fn matches_pattern(
     pattern: &Value,
     value: &RuntimeValue,
     bindings: &mut Vec<(CellId, RuntimeValue)>,
@@ -463,7 +455,7 @@ fn matches_runtime_pattern(
                         if matched {
                             value
                                 .field(*field)
-                                .map(|value| matches_runtime_pattern(pattern, &value, bindings))
+                                .map(|value| matches_pattern(pattern, &value, bindings))
                                 .unwrap_or(Ok(false))
                         } else {
                             Ok(false)
@@ -486,7 +478,7 @@ fn matches_runtime_pattern(
                 .try_fold(true, |matched, (index, pattern)| {
                     if matched {
                         match value.list_get(index) {
-                            Some(value) => matches_runtime_pattern(pattern, &value, bindings),
+                            Some(value) => matches_pattern(pattern, &value, bindings),
                             None => Ok(false),
                         }
                     } else {
@@ -495,58 +487,6 @@ fn matches_runtime_pattern(
                 })
         }
         Value::Cell(_) | Value::Blob(_) => Ok(value.to_value() == *pattern),
-    }
-}
-
-fn matches_pattern(
-    pattern: &Value,
-    value: &Value,
-    bindings: &mut Vec<(CellId, Value)>,
-) -> Result<bool, InvalidBinder> {
-    match pattern {
-        Value::Record(pattern_fields) => {
-            if let Some(binder) = pattern_fields.get(&vocabulary::BIND) {
-                match binder.as_cell() {
-                    Some(binder) => match bindings.iter().find(|(bound, _)| *bound == binder) {
-                        Some((_, bound)) => Ok(bound == value),
-                        None => {
-                            bindings.push((binder, value.clone()));
-                            Ok(true)
-                        }
-                    },
-                    None => Err(InvalidBinder),
-                }
-            } else if let Some(value_fields) = value.as_record() {
-                pattern_fields
-                    .iter()
-                    .try_fold(true, |matched, (field, pattern)| {
-                        if matched {
-                            match value_fields.get(field) {
-                                Some(value) => matches_pattern(pattern, value, bindings),
-                                None => Ok(false),
-                            }
-                        } else {
-                            Ok(false)
-                        }
-                    })
-            } else {
-                Ok(false)
-            }
-        }
-        Value::List(pattern_values) => match value.as_list() {
-            Some(values) if pattern_values.len() == values.len() => pattern_values
-                .values()
-                .zip(values.values())
-                .try_fold(true, |matched, (pattern, value)| {
-                    if matched {
-                        matches_pattern(pattern, value, bindings)
-                    } else {
-                        Ok(false)
-                    }
-                }),
-            _ => Ok(false),
-        },
-        Value::Cell(_) | Value::Blob(_) => Ok(pattern == value),
     }
 }
 
@@ -1298,6 +1238,137 @@ mod tests {
             blob("never"),
         );
         assert_eq!(evaluate(&unmatched).result, absent::value());
+    }
+
+    #[test]
+    fn referenced_patterns_preserve_lowered_captures_and_fuel() {
+        let field = new_cell_id();
+        let binder = new_cell_id();
+        let subject_cell = new_cell_id();
+        let clauses_cell = new_cell_id();
+        let subject = RuntimeValue::record([
+            (
+                field,
+                RuntimeValue::list([RuntimeValue::f64(7.0), RuntimeValue::f64(7.0)]),
+            ),
+            (new_cell_id(), blob("extra").into()),
+        ]);
+        let pattern = Value::record([(field, Value::list([binding(binder), binding(binder)]))]);
+        for subject in [subject.clone(), subject.to_value().into()] {
+            let functions = functions().register(
+                subject_cell,
+                ForeignFunction::runtime(move |_, _, _| Ok(subject.clone())),
+            );
+            let subject = grap::call(Value::from(subject_cell), []);
+            for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
+                let clauses = Value::list([if function == vocabulary::MATCH {
+                    case_arm(pattern.clone(), Value::from(binder))
+                } else {
+                    binding_clause(pattern.clone(), subject.clone())
+                }]);
+                for referenced in [false, true] {
+                    let clauses_input = if referenced {
+                        Value::from(clauses_cell)
+                    } else {
+                        clauses.clone()
+                    };
+                    let expression = grap::call(
+                        Value::from(function),
+                        if function == vocabulary::MATCH {
+                            [
+                                (vocabulary::VALUE, subject.clone()),
+                                (vocabulary::CASES, clauses_input),
+                            ]
+                        } else {
+                            [
+                                (vocabulary::BINDINGS, clauses_input),
+                                (grap::vocabulary::EXPRESSION, Value::from(binder)),
+                            ]
+                        },
+                    );
+                    let run = |fuel| {
+                        crate::test_evaluate(
+                            &expression,
+                            |cell| (cell == clauses_cell).then(|| clauses.clone()),
+                            &functions,
+                            fuel,
+                        )
+                    };
+                    // Control call (2), subject call (2), clauses (1), body (1).
+                    let fuel = 7 + usize::from(referenced);
+                    let completed = run(fuel);
+                    assert_eq!(completed.result, crate::f64::value(7.0));
+                    assert_eq!(completed.remaining_fuel, 1);
+                    let exhausted = run(fuel - 1);
+                    assert_eq!(
+                        exhausted.result,
+                        grap::absent::value(grap::absent::FUEL_EXHAUSTED),
+                    );
+                    assert_eq!(exhausted.remaining_fuel, 0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn referenced_patterns_preserve_mismatches_and_lazy_binder_errors() {
+        let binder = new_cell_id();
+        let clauses_cell = new_cell_id();
+        let invalid = Value::record([(vocabulary::BIND, blob("not a cell"))]);
+        let subject = Value::list([blob("first"), blob("second")]);
+        for (pattern, reason) in [
+            (Value::list([binding(binder), binding(binder)]), None),
+            (Value::list([binding(binder)]), None),
+            (Value::list([blob("other"), invalid.clone()]), None),
+            (
+                Value::list([blob("first"), invalid]),
+                Some(vocabulary::INVALID_BINDER),
+            ),
+        ] {
+            for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
+                let expected = reason.map(absent::with_reason).unwrap_or_else(|| {
+                    if function == vocabulary::MATCH {
+                        pattern_mismatch(&pattern)
+                    } else {
+                        absent::value()
+                    }
+                });
+                let clauses = Value::list([if function == vocabulary::MATCH {
+                    case_arm(pattern.clone(), blob("never"))
+                } else {
+                    binding_clause(pattern.clone(), subject.clone())
+                }]);
+                for referenced in [false, true] {
+                    let clauses_input = if referenced {
+                        Value::from(clauses_cell)
+                    } else {
+                        clauses.clone()
+                    };
+                    let expression = grap::call(
+                        Value::from(function),
+                        if function == vocabulary::MATCH {
+                            [
+                                (vocabulary::VALUE, subject.clone()),
+                                (vocabulary::CASES, clauses_input),
+                            ]
+                        } else {
+                            [
+                                (vocabulary::BINDINGS, clauses_input),
+                                (grap::vocabulary::EXPRESSION, blob("never")),
+                            ]
+                        },
+                    );
+                    let result = crate::test_evaluate(
+                        &expression,
+                        |cell| (cell == clauses_cell).then(|| clauses.clone()),
+                        &functions(),
+                        20,
+                    );
+                    assert_eq!(result.result, expected);
+                    assert_eq!(result.remaining_fuel, 16 - usize::from(referenced));
+                }
+            }
+        }
     }
 
     #[test]
