@@ -323,9 +323,13 @@ impl RuntimeValue {
                 None => (field == crate::f64::F64)
                     .then(|| Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))),
             },
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::Foreign(_) | RuntimeValueKind::Closure(_) => self
+                .to_value()
+                .as_record()?
+                .get(&field)
+                .cloned()
+                .map(Self::from),
+            RuntimeValueKind::List(_) => None,
         }
     }
 
@@ -354,9 +358,8 @@ impl RuntimeValue {
                 Some(original) => original.as_record()?.len(),
                 None => 1,
             }),
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::Foreign(_) | RuntimeValueKind::Closure(_) => Some(1),
+            RuntimeValueKind::List(_) => None,
         }
     }
 

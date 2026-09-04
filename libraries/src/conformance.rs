@@ -198,6 +198,55 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
     assert_eq!(evaluation.remaining_fuel, 5);
 }
 
+#[test]
+fn callable_record_patterns_are_transparent_to_lowering() {
+    let cases_cell = new_cell_id();
+    let binder = new_cell_id();
+    for (subject, field) in [
+        (grap::lambda([], blob("body")), grap::vocabulary::CLOSURE),
+        (Value::from(f64::vocabulary::SUM), grap::vocabulary::FFI),
+    ] {
+        let evaluated = evaluate(&subject, 100).result;
+        for pattern in [
+            Value::record([]),
+            Value::record([(
+                field,
+                evaluated.as_record().unwrap().get(&field).unwrap().clone(),
+            )]),
+        ] {
+            let cases = Value::list([
+                Value::record([
+                    (control::vocabulary::PATTERN, pattern),
+                    (grap::vocabulary::EXPRESSION, blob("record")),
+                ]),
+                Value::record([
+                    (
+                        control::vocabulary::PATTERN,
+                        Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+                    ),
+                    (grap::vocabulary::EXPRESSION, blob("other")),
+                ]),
+            ]);
+            for clauses in [cases.clone(), Value::from(cases_cell)] {
+                let expression = grap::call(
+                    Value::from(control::vocabulary::MATCH),
+                    [
+                        (control::vocabulary::VALUE, subject.clone()),
+                        (control::vocabulary::CASES, clauses),
+                    ],
+                );
+                let evaluation = evaluate_resolving(
+                    &expression,
+                    |cell| (cell == cases_cell).then(|| cases.clone()),
+                    100,
+                );
+                assert_eq!(evaluation.result, blob("record"));
+                assert!(evaluation.diagnostics.is_empty());
+            }
+        }
+    }
+}
+
 /// The prepared and deferred clause routes must agree: moving a
 /// literal clause list behind a cell changes only the fuel of reaching
 /// it — the cell evaluation plus the list evaluation, one burn more
