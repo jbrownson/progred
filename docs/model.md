@@ -84,29 +84,27 @@ two refinements that bound the ambition:
   cover states, and a bare bool at rest says nothing. A boolean gets
   admitted when a case arrives that those genuinely serve worse.
 
-The editor state itself encodes (2026-08-19, Jake pressing on an
-earlier "tier 2 stays Rust" fence): in-motion text, caret and selection
-offsets, the IME preedit, and the drag all live in the payload — the payload is
-CANONICAL at event boundaries, and the live `LineEditState` is its
-decoded working copy between them (a Rust value must exist for
-dispatch to borrow). Junk decodes to the nearest sane state (offsets
-clamp to char boundaries). The two things that stay Rust are the
-not-yet-encoded and the bookkeeping: the write-through `update`
-function — code is not a ceiling, it is grap's job; the data form is
-a grap function reference evaluated with the stack's foreign
-functions, declining via the absent convention, and any missing
-capability (float parsing, record overlay) is one FFI away — and the
-undo-run `recorded` bit. The hover ring and `pressed` remain input
-state. The layered widget story follows: once widget state inputs are
-data, today's Puri leaves become blessed standard functions over
-boxes + canvas ink, with phase-bound machinery (caret hit-testing,
-the popup channel, IME delivery) remaining editor-owned hooks.
+The editor boundary was simplified on 2026-09-04: live text, caret,
+selection offsets, IME preedit, and drag have one owner, the caller's Rust
+`LineEditState`. Projections and scoped capabilities still read and replace
+these as GID data. Reading a selection derives its payload immediately;
+replacing it decodes the incoming editor fields once and removes them from
+the retained payload. There is no stored editor mirror to synchronize after
+an event. Malformed offsets clamp to character boundaries.
+
+Completion preferences keep the query to which their choice, scroll, and
+expanded vocabulary apply. Changing the live query invalidates that choice
+immediately; the normal event boundary records the reset so returning to the
+old query cannot restore stale completion preferences. This is completion
+bookkeeping, not another source for the editor text. Write-back functions
+remain Grap values, while the undo-run `recorded` bit stays Rust. A valid
+intermediate spelling writes to the document through its projection's rule;
+an invalid spelling can remain in the editor without corrupting the value.
 
 THE POINT of all of it (Jake, 2026-08-19): libraries for custom types
 must be expressible from WITHIN the editor — no Rust edits to add a
 projection. Rust is the substrate: FFI to it while bootstrapping, for
-core machinery, and where efficiency demands (the parked wasm
-experiment is the efficiency lane); the editor itself is not written
+core machinery, and where efficiency demands (foreign-language support can be added through Grap libraries when needed); the editor itself is not written
 in grap, but projections get great flexibility. Remaining bricks, in
 dependency order: (1) DONE 2026-08-19: `update` is a grap callable in
 the selection payload, evaluated in `write_through` with

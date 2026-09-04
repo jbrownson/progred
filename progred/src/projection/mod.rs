@@ -2850,7 +2850,7 @@ fn present_layout<C: 'static>(
                     value,
                     cx.styles.scale,
                     !cx.source.transient() && writable_at(&cx.sources, path),
-                    selection,
+                    selection.as_ref(),
                     pending,
                     state,
                     progred_display::ProjectionTargets::new(&target),

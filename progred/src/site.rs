@@ -49,7 +49,7 @@ pub fn apply_event(
         .selection
         .as_ref()
         .filter(|selection| selection.root() == &root && selection.path() == path)
-        .map(|selection| selection.payload().clone());
+        .map(Selection::payload);
     let annotation = app
         .model
         .workspace

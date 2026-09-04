@@ -530,6 +530,24 @@ fn a_line_control_installs_its_navigation_selection() {
 }
 
 #[test]
+fn leftward_navigation_sets_the_live_caret_and_payload_conversion_preserves_it() {
+    let libraries = core_libraries();
+    let (mut doc, _) = doc_of(vec![(
+        crate::test_values::label("name"),
+        text::value("hello"),
+    )]);
+    let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
+    let mut selection = make_editing_selection(&doc, &libraries, path.clone());
+    assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
+    crate::selection::seed_from_arrow(&mut selection, &arrow(NamedKey::ArrowLeft));
+    assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
+    assert!(!write_through(&mut doc, &libraries, &mut selection));
+    let reified = Selection::from_payload(&src(&doc, &libraries), path, selection.payload());
+    assert_eq!(reified.edit().unwrap().selection_offsets(), (0, 0));
+    assert_eq!(reified.edit().unwrap().text(), "hello");
+}
+
+#[test]
 fn edits_write_through_to_the_field() {
     let lib = core_libraries();
     let (mut doc, _) = doc_of(vec![(
@@ -1922,7 +1940,7 @@ fn partials_receive_selection_and_annotations_positionally() {
 }
 
 #[test]
-fn the_pending_query_writes_through_to_the_payload() {
+fn the_pending_payload_is_derived_from_the_live_editor() {
     let mut doc = Document {
         root: None,
         cells: Cells::new(),
@@ -1934,13 +1952,12 @@ fn the_pending_query_writes_through_to_the_payload() {
         .edit_mut()
         .unwrap()
         .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
-    // The payload is stale only WITHIN the dispatch...
-    assert_eq!(selection_payload::query(pending.payload()), Some(""));
-    assert_eq!(pending.choice(), 2);
-    // ...and the per-event write-through syncs it, the same point the
-    // document takes its writes.
+    assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
+    assert_eq!(pending.choice(), 0);
     write_through(&mut doc, &lib, &mut pending);
-    assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
+    assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
+    assert_eq!(pending.choice(), 0);
+    pending.edit_mut().unwrap().set_text("");
     assert_eq!(pending.choice(), 0);
 }
 

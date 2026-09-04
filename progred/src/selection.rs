@@ -25,13 +25,10 @@ pub(crate) struct Editor {
     recorded: bool,
 }
 
-/// What is selected, stored as data plus tier-2 editing state: the
-/// payload is a GID value — stage, query, choice; what a
-/// projection at the selected path receives — while the live editor
-/// stays Rust beside it, its text writing through to the payload at
-/// the same per-event point the document takes its writes. A pending
-/// stage's query resolves to the value that commits; until then the
-/// graph is untouched, and deselecting discards the pending entirely.
+/// One selection with caller-owned editor state. The live editor owns
+/// text, caret, IME, and drag; its GID description is derived on demand.
+/// Other projection state stays in the payload. QUERY there identifies
+/// the completion view's query, not the editor's current text.
 pub struct Selection {
     /// Which transient projection root owns this occurrence. Paths
     /// may coincide across panes, but selection never does.
@@ -60,8 +57,8 @@ pub enum Stage {
 impl Selection {
     /// Reify a payload at a host-owned path. This is the mutation
     /// boundary used by current-site Grap capabilities: the address
-    /// never enters the payload, and any line editor is only a Rust
-    /// working copy of the payload's editing fields.
+    /// never enters the payload. Editor fields are decoded once into
+    /// their live owner, then removed from the stored payload.
     pub(crate) fn from_payload(sources: &Sources, path: Path, payload: Value) -> Self {
         match payload::stage(&payload) {
             Some(stage) if stage == payload::vocabulary::PENDING => query_selection(path, payload),
@@ -83,7 +80,11 @@ impl Selection {
                 Self {
                     root: workspace::Root::document(),
                     path,
-                    payload,
+                    payload: if editor.is_some() {
+                        payload::without_editor(&payload)
+                    } else {
+                        payload
+                    },
                     editor,
                 }
             }
@@ -150,8 +151,18 @@ impl Selection {
     }
 
     /// The selection as data — what a projection at this path receives.
-    pub fn payload(&self) -> &Value {
-        &self.payload
+    pub fn payload(&self) -> Value {
+        match &self.editor {
+            Some(editor) => {
+                let payload =
+                    payload::with_editor(&self.payload, &editor.line, self.stage() != Stage::Edge);
+                match &editor.update {
+                    Some(update) => payload::with_update(&payload, update),
+                    None => payload,
+                }
+            }
+            None => self.payload.clone(),
+        }
     }
 
     pub fn stage(&self) -> Stage {
@@ -165,18 +176,27 @@ impl Selection {
     /// Which completion entry commits; clamped against the frame's
     /// recomputed entries at use.
     pub fn choice(&self) -> usize {
-        payload::choice(&self.payload).unwrap_or(0)
+        if self.query_changed() {
+            0
+        } else {
+            payload::choice(&self.payload).unwrap_or(0)
+        }
     }
 
     pub fn completion_scroll(&self) -> f64 {
-        payload::completion_scroll(&self.payload).unwrap_or(0.0)
+        if self.query_changed() {
+            0.0
+        } else {
+            payload::completion_scroll(&self.payload).unwrap_or(0.0)
+        }
     }
 
     pub fn completion_everything(&self) -> bool {
-        payload::completion_everything(&self.payload)
+        !self.query_changed() && payload::completion_everything(&self.payload)
     }
 
     pub fn set_completion_view(&mut self, scroll: f64, choice: usize, everything: bool) {
+        self.reset_completion_for_query();
         self.payload = payload::with_completion_view(&self.payload, scroll, choice, everything);
     }
 
@@ -208,34 +228,32 @@ impl Selection {
         if let Some(editor) = &mut self.editor {
             editor.line = line_edit(text);
         }
-        self.sync_payload();
+        self.reset_completion_for_query();
         self
     }
 
-    /// The live editor, written through to the payload whole — the
-    /// same discipline, and the same per-event point, as the document
-    /// write below. The payload is canonical at event boundaries; the
-    /// working copy is its decode between them.
-    fn sync_payload(&mut self) {
-        let Some(editor) = &self.editor else { return };
-        let next = payload::with_editor(&self.payload, &editor.line, self.stage() != Stage::Edge);
-        if next != self.payload {
-            self.payload = next;
+    fn query_changed(&self) -> bool {
+        self.stage() != Stage::Edge
+            && self
+                .editor
+                .as_ref()
+                .is_some_and(|editor| payload::query(&self.payload) != Some(editor.line.text()))
+    }
+
+    fn reset_completion_for_query(&mut self) {
+        if self.query_changed()
+            && let Some(editor) = &self.editor
+        {
+            self.payload = payload::with_completion_query(&self.payload, editor.line.text());
         }
     }
 }
 
-/// An edge selection with its editor's write-back rule encoded into
-/// the payload — the selection is data down to the update.
 fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
-    let payload = match editor.as_ref().and_then(|editor| editor.update.as_ref()) {
-        Some(update) => payload::with_update(&payload::edge(), update),
-        None => payload::edge(),
-    };
     Selection {
         root: workspace::Root::document(),
         path,
-        payload,
+        payload: payload::edge(),
         editor,
     }
 }
@@ -263,8 +281,10 @@ fn line_editing(line: progred_display::LineEdit) -> Editor {
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
 pub fn seed_from_arrow(selection: &mut Selection, event: &KeyboardEvent) {
-    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft)) {
-        selection.payload = payload::with_offsets(&selection.payload, 0, 0);
+    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
+        && let Some(line) = selection.edit_mut()
+    {
+        line.cursor_to_start();
     }
 }
 
@@ -386,15 +406,14 @@ pub(crate) fn pending_with_query(path: Path, seed: &str) -> Selection {
     query_selection(path, payload::pending(seed, 0))
 }
 
-/// A pending selection from its payload: the working editor is the
-/// payload's decode, so the value is the state and the caret defaults
-/// to the end of the seed.
+/// Decode an incoming pending selection. The caret defaults to the
+/// end of the query when no offset was supplied.
 fn query_selection(path: Path, payload: Value) -> Selection {
     let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
         root: workspace::Root::document(),
         path,
-        payload,
+        payload: payload::without_editor(&payload),
         editor: Some(Editor {
             line,
             update: None,
@@ -735,7 +754,7 @@ pub(crate) fn collapse_default_for_value(
 /// exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
 pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut Selection) -> bool {
-    selection.sync_payload();
+    selection.reset_completion_for_query();
     let Selection { path, editor, .. } = selection;
     let Some(editor) = editor else {
         return false;
@@ -801,8 +820,8 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// path is the selected one. Stage is a named cell; the query rides
 /// the text convention and the choice the f64 convention. Editor
 /// gesture internals (text in motion, caret, anchor, preedit, drag)
-/// encode while editing; the live Rust editor is a decode between
-/// event boundaries.
+/// are encoded when requested and decoded when a capability supplies
+/// a replacement. They are never mirrored in the stored payload.
 pub mod payload {
     use gid::{CellId, Value};
     use kurbo::Point;
@@ -896,6 +915,18 @@ pub mod payload {
         with_field(payload, vocabulary::UPDATE, update.clone())
     }
 
+    pub fn with_completion_query(payload: &Value, query: &str) -> Value {
+        if self::query(payload) == Some(query) {
+            payload.clone()
+        } else {
+            with_field(
+                &with_completion_view(payload, 0.0, 0, false),
+                vocabulary::QUERY,
+                text::value(query),
+            )
+        }
+    }
+
     pub fn with_completion_view(
         payload: &Value,
         scroll: f64,
@@ -911,13 +942,19 @@ pub mod payload {
         )
     }
 
-    pub fn with_offsets(payload: &Value, anchor: usize, focus: usize) -> Value {
-        let fields = payload.as_record().cloned().unwrap_or_default();
-        Value::Record(
-            fields
-                .update(vocabulary::ANCHOR, f64_convention::value(anchor as f64))
-                .update(vocabulary::FOCUS, f64_convention::value(focus as f64)),
-        )
+    pub fn without_editor(payload: &Value) -> Value {
+        let mut fields = payload.as_record().cloned().unwrap_or_default();
+        for field in [
+            vocabulary::EDITOR_TEXT,
+            vocabulary::ANCHOR,
+            vocabulary::FOCUS,
+            vocabulary::PREEDIT,
+            vocabulary::DRAG,
+            vocabulary::UPDATE,
+        ] {
+            fields.remove(&field);
+        }
+        Value::Record(fields)
     }
 
     fn with_field(payload: &Value, key: CellId, value: Value) -> Value {
@@ -929,16 +966,13 @@ pub mod payload {
     /// text, the query text when the stage owns it, selection offsets,
     /// and any in-flight IME composition or drag.
     pub fn with_editor(payload: &Value, line: &LineEditState, own_text: bool) -> Value {
+        let payload = if own_text {
+            with_completion_query(payload, line.text())
+        } else {
+            payload.clone()
+        };
         let mut fields = payload.as_record().cloned().unwrap_or_default();
         fields.insert(vocabulary::EDITOR_TEXT, text::value(line.text()));
-        if own_text {
-            if query(payload) != Some(line.text()) {
-                fields.insert(vocabulary::CHOICE, f64_convention::value(0.0));
-                fields.insert(vocabulary::COMPLETION_SCROLL, f64_convention::value(0.0));
-                fields.insert(vocabulary::COMPLETION_EVERYTHING, logic::value(false));
-            }
-            fields.insert(vocabulary::QUERY, text::value(line.text()));
-        }
         let (anchor, focus) = line.selection_offsets();
         fields.insert(vocabulary::ANCHOR, f64_convention::value(anchor as f64));
         fields.insert(vocabulary::FOCUS, f64_convention::value(focus as f64));
