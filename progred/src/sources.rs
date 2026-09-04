@@ -96,20 +96,16 @@ impl<'a> Sources<'a> {
     }
 
     pub fn cells(&self) -> impl Iterator<Item = CellId> + '_ {
-        let mut seen = Vec::new();
-        self.doc
+        let mut cells: Vec<_> = self
+            .doc
             .cells
             .cells()
             .copied()
             .chain(self.libraries.cell_ids())
-            .filter(move |cell| {
-                if seen.contains(cell) {
-                    false
-                } else {
-                    seen.push(*cell);
-                    true
-                }
-            })
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells.into_iter()
     }
 
     /// The library is authoritative only when it supplies the value
@@ -118,12 +114,8 @@ impl<'a> Sources<'a> {
         self.doc.cells.value(cell).is_none() && self.libraries.values(cell).next().is_some()
     }
 
-    pub fn writable(&self, cell: CellId, resolution: &Resolution) -> bool {
+    pub fn writable(&self, _cell: CellId, resolution: &Resolution) -> bool {
         matches!(resolution, Resolution::Document)
-            && self
-                .values(cell)
-                .find(|value| &value.source == resolution)
-                .is_none_or(|value| matches!(value.source, Resolution::Document))
     }
 }
 

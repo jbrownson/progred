@@ -303,7 +303,8 @@ impl PartialEq for Value {
             (Value::Cell(a), Value::Cell(b)) => a == b,
             (Value::Blob(a), Value::Blob(b)) => a == b,
             (Value::List(a), Value::List(b)) => {
-                a.len() == b.len() && a.values().zip(b.values()).all(|(x, y)| x == y)
+                Arc::ptr_eq(&a.0, &b.0)
+                    || (a.len() == b.len() && a.values().zip(b.values()).all(|(x, y)| x == y))
             }
             (Value::Record(a), Value::Record(b)) => a == b,
             _ => false,
