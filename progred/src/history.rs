@@ -15,17 +15,27 @@ struct Entry {
     selection: Option<Path>,
 }
 
-#[derive(Default)]
 pub struct History {
     undo: Vec<Entry>,
     redo: Vec<Entry>,
-    saved: usize,
+    saved: Option<usize>,
+}
+
+impl Default for History {
+    fn default() -> Self {
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            saved: Some(0),
+        }
+    }
 }
 
 impl History {
     /// Records a mutation the caller just made, `before` being the
     /// pre-mutation state.
     pub fn record(&mut self, before: Document, selection: Option<Path>) {
+        self.saved = self.saved.filter(|saved| *saved <= self.undo.len());
         self.redo.clear();
         self.undo.push(Entry {
             doc: before,
@@ -65,13 +75,13 @@ impl History {
     /// open edit run at the selection, keeping runs off the mark.
     #[cfg(any(test, target_os = "macos", target_os = "linux"))]
     pub fn mark_saved(&mut self) {
-        self.saved = self.undo.len();
+        self.saved = Some(self.undo.len());
     }
 
-    /// Modified since the save mark — a pure position comparison, so
-    /// undoing back to the mark is clean again.
+    /// Modified since the save mark. A discarded mark stays dirty
+    /// until the next save.
     pub fn dirty(&self) -> bool {
-        self.undo.len() != self.saved
+        Some(self.undo.len()) != self.saved
     }
 
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -164,5 +174,63 @@ mod tests {
         assert!(!history.dirty());
         let (_, _) = history.undo(one_back, sel).unwrap();
         assert!(history.dirty());
+    }
+
+    #[test]
+    fn branching_before_the_save_mark_stays_dirty_until_saved_again() {
+        let mut history = History::default();
+        history.record(doc("original"), None);
+        history.mark_saved();
+
+        let (original, selection) = history.undo(doc("saved"), None).unwrap();
+        history.record(original, selection);
+        assert!(history.dirty());
+        assert!(!history.can_redo());
+
+        let (original, selection) = history.undo(doc("different"), None).unwrap();
+        assert!(history.dirty());
+        let (different, _) = history.redo(original, selection).unwrap();
+        assert_eq!(x_of(&different), crate::test_values::text("different"));
+        assert!(history.dirty());
+
+        history.mark_saved();
+        assert!(!history.dirty());
+    }
+
+    #[test]
+    fn branching_at_the_save_mark_preserves_it() {
+        let mut history = History::default();
+        history.record(doc("original"), None);
+        history.mark_saved();
+        history.record(doc("saved"), None);
+
+        let (saved, selection) = history.undo(doc("discarded"), None).unwrap();
+        history.record(saved, selection);
+        assert!(history.dirty());
+
+        let (saved, selection) = history.undo(doc("different"), None).unwrap();
+        assert_eq!(x_of(&saved), crate::test_values::text("saved"));
+        assert!(!history.dirty());
+        history.redo(saved, selection).unwrap();
+        assert!(history.dirty());
+    }
+
+    #[test]
+    fn branching_after_the_save_mark_preserves_it() {
+        let mut history = History::default();
+        history.record(doc("original"), None);
+        history.mark_saved();
+        history.record(doc("saved"), None);
+        history.record(doc("later"), None);
+
+        let (later, selection) = history.undo(doc("discarded"), None).unwrap();
+        history.record(later, selection);
+        assert!(history.dirty());
+
+        let (later, selection) = history.undo(doc("different"), None).unwrap();
+        assert!(history.dirty());
+        let (saved, _) = history.undo(later, selection).unwrap();
+        assert_eq!(x_of(&saved), crate::test_values::text("saved"));
+        assert!(!history.dirty());
     }
 }
