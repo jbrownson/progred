@@ -323,12 +323,16 @@ impl RuntimeValue {
                 None => (field == crate::f64::F64)
                     .then(|| Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))),
             },
-            RuntimeValueKind::Foreign(_) | RuntimeValueKind::Closure(_) => self
+            RuntimeValueKind::Foreign(foreign) => {
+                (field == vocabulary::FFI).then(|| Self::from(Value::from(foreign.cell())))
+            }
+            RuntimeValueKind::Closure(_) if field == vocabulary::CLOSURE => self
                 .to_value()
                 .as_record()?
                 .get(&field)
                 .cloned()
                 .map(Self::from),
+            RuntimeValueKind::Closure(_) => None,
             RuntimeValueKind::List(_) => None,
         }
     }
