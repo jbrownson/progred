@@ -199,7 +199,6 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                 // list expression; burn its fuel so the stage stays
                 // burn-invisible.
                 context.burn()?;
-                let mut absents = Vec::new();
                 for case in cases {
                     let CompiledCase::Case {
                         pattern,
@@ -215,13 +214,19 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                                 &environment.extended_runtime(bindings),
                             );
                         }
-                        Ok(None) => absents.push(pattern_mismatch(pattern)),
+                        Ok(None) => {}
                         Err(InvalidBinder) => {
                             return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                         }
                     }
                 }
-                Ok(absent::from_causes(absents).into())
+                Ok(
+                    absent::from_causes(cases.iter().filter_map(|case| match case {
+                        CompiledCase::Case { pattern, .. } => Some(pattern_mismatch(pattern)),
+                        CompiledCase::Malformed => None,
+                    }))
+                    .into(),
+                )
             }
             CompiledCases::Deferred(cases) => {
                 let cases_value = context.eval(*cases, environment)?;
@@ -383,7 +388,6 @@ fn select<'a>(value: &RuntimeValue, cases: &'a Value) -> Selection<'a> {
     let Some(cases) = cases.as_list() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
-    let mut absents = Vec::new();
     for case in cases.values() {
         let Some(fields) = case.as_record() else {
             return Selection::Invalid(vocabulary::INVALID_CASE);
@@ -401,13 +405,19 @@ fn select<'a>(value: &RuntimeValue, cases: &'a Value) -> Selection<'a> {
                     bindings,
                 };
             }
-            Ok(None) => absents.push(pattern_mismatch(pattern)),
+            Ok(None) => {}
             Err(InvalidBinder) => {
                 return Selection::Invalid(vocabulary::INVALID_BINDER);
             }
         }
     }
-    Selection::NoMatch(absents)
+    Selection::NoMatch(
+        cases
+            .values()
+            .filter_map(|case| case.as_record()?.get(&vocabulary::PATTERN))
+            .map(pattern_mismatch)
+            .collect(),
+    )
 }
 
 fn pattern_mismatch(pattern: &Value) -> Value {

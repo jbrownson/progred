@@ -243,82 +243,117 @@ fn place_with_annotations(
     viewport: Option<Rect>,
     root: Option<(&[Step], Option<&Value>)>,
 ) -> (Bench, Extent) {
-    let stack = crate::stack::load::<World>();
-    let sources = Sources {
-        doc,
-        libraries: &stack.libraries,
-    };
-    let styles = crate::styles::editor(1.0);
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
-    let hooks = Hooks::<World> {
-        select: Rc::new(|_, _| {}),
-        select_payload: Rc::new(|_, _, _| {}),
-        start_edit: Rc::new(|_, _, _| {}),
-        toggle: Rc::new(|_, _| {}),
-        update_state: Rc::new(|_, _, _| false),
-        edit: Rc::new(|_| None),
-        pick: Rc::new(|_, _| false),
-        insert: Rc::new(|_, _| {}),
-        delete: Rc::new(|_| false),
-        apply: Rc::new(|_, _, _, _| false),
-        point: Rc::new(|_, _, _, _, _| false),
-        state_drag: Rc::new(|_, _, _, _, _| {}),
-        scrub: Rc::new(|_, _, _, _, _| false),
-        select_source: Rc::new(|_, _| {}),
-        commit_offer: Rc::new(|_, _| {}),
-        set_completion_view: Rc::new(|_, _, _, _| {}),
-    };
-    // Timed as the frame perf canary: projection is reported
-    // separately, while the total also includes placement, hover,
-    // and render-continuation settlement. Fallback-heavy narrow
-    // widths are where accidental exponentials have surfaced twice.
-    // Numbers only, no assert (user call).
-    let start = std::time::Instant::now();
-    let (root_path, root) = root.unwrap_or((&[], sources.root()));
-    let node = project::<World, Bench>(
-        ProjectDescription {
-            sources,
-            root,
-            root_path,
-            selection,
-            scrub_spelling: None,
-            source_selection: selection,
-            annotations,
-            raw: false,
-            styles: &styles,
-            width: width - 48.0,
-            projection: Some(&stack.projection),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
-        },
-        &mut tcx,
-        hooks,
-    );
-    let project_elapsed = start.elapsed();
-    let extent = node.extent;
-    let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    let placed = measured::place(
-        node,
-        match viewport {
-            Some(clip_rect) => Placement::new(rect, clip_rect),
-            None => Placement::root(rect),
-        },
-    );
-    let mut settled = settle(placed, pointer);
-    settled.frame_elapsed = start.elapsed();
-    eprintln!(
-        "frame at {width:.0}px: {:.1?} (project {:.1?})",
-        settled.frame_elapsed, project_elapsed,
-    );
-    (settled, extent)
+    BenchContext::new().place(doc, selection, annotations, width, pointer, viewport, root)
+}
+
+struct BenchContext {
+    stack: crate::stack::Stack<World>,
+    styles: crate::styles::Styles,
+    fonts: parley::FontContext,
+    layouts: parley::LayoutContext<Brush>,
+    cache: puri::text::TextCache,
+}
+
+impl BenchContext {
+    fn new() -> Self {
+        Self {
+            stack: crate::stack::load(),
+            styles: crate::styles::editor(1.0),
+            fonts: parley::FontContext::new(),
+            layouts: parley::LayoutContext::new(),
+            cache: puri::text::TextCache::default(),
+        }
+    }
+
+    fn place(
+        &mut self,
+        doc: &Document,
+        selection: Option<&Selection>,
+        annotations: &Annotations,
+        width: f64,
+        pointer: Option<Point>,
+        viewport: Option<Rect>,
+        root: Option<(&[Step], Option<&Value>)>,
+    ) -> (Bench, Extent) {
+        let Self {
+            stack,
+            styles,
+            fonts,
+            layouts,
+            cache,
+        } = self;
+        let sources = Sources {
+            doc,
+            libraries: &stack.libraries,
+        };
+        let mut tcx = TextCtx {
+            fonts,
+            layouts,
+            scale: 1.0,
+            cache,
+        };
+        let hooks = Hooks::<World> {
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _| {}),
+            commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        };
+        // Timed as the frame perf canary: projection is reported
+        // separately, while the total also includes placement, hover,
+        // and render-continuation settlement. Fallback-heavy narrow
+        // widths are where accidental exponentials have surfaced twice.
+        // Numbers only, no assert (user call).
+        let start = std::time::Instant::now();
+        let (root_path, root) = root.unwrap_or((&[], sources.root()));
+        let node = project::<World, Bench>(
+            ProjectDescription {
+                sources,
+                root,
+                root_path,
+                selection,
+                scrub_spelling: None,
+                source_selection: selection,
+                annotations,
+                raw: false,
+                styles,
+                width: width - 48.0,
+                projection: Some(&stack.projection),
+                root_completions: Some(&stack.root_completions),
+                root_field_completions: Some(&stack.root_field_completions),
+            },
+            &mut tcx,
+            hooks,
+        );
+        let project_elapsed = start.elapsed();
+        let extent = node.extent;
+        let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+        let placed = measured::place(
+            node,
+            match viewport {
+                Some(clip_rect) => Placement::new(rect, clip_rect),
+                None => Placement::root(rect),
+            },
+        );
+        let mut settled = settle(placed, pointer);
+        settled.frame_elapsed = start.elapsed();
+        eprintln!(
+            "frame at {width:.0}px: {:.1?} (project {:.1?})",
+            settled.frame_elapsed, project_elapsed,
+        );
+        (settled, extent)
+    }
 }
 
 fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
@@ -568,7 +603,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
 
 /// Profiling loop: record the IoP tree drawing each frame so a sampler
 /// sees mostly interpreter time.
-/// `cargo test --release -p progred iop_tree_profile_loop -- --ignored`
+/// `./tools/sandbox-cargo test --release -p progred iop_tree_profile_loop -- --ignored`
 #[test]
 #[ignore]
 fn iop_tree_profile_loop() {
@@ -585,9 +620,14 @@ fn iop_tree_profile_loop() {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(30);
+    eprintln!(
+        "runtime value: {} bytes",
+        std::mem::size_of::<grap::RuntimeValue>()
+    );
+    let mut context = BenchContext::new();
     let start = std::time::Instant::now();
     for _ in 0..iterations {
-        let (bench, _) = place_with_annotations(
+        let (bench, _) = context.place(
             &doc,
             None,
             &Annotations::default(),
@@ -604,7 +644,7 @@ fn iop_tree_profile_loop() {
     );
 }
 
-/// Profiling loop for the editable IoP source rather than its canvas pane.
+/// Profile the document view's top viewport, clipping offscreen drawings.
 /// This is the library/name/projection lookup canary.
 #[test]
 #[ignore]
@@ -612,15 +652,16 @@ fn iop_tree_source_profile_loop() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
         .expect("the IoP tree demo parses");
     let iterations = 30;
+    let mut context = BenchContext::new();
     let start = std::time::Instant::now();
     for _ in 0..iterations {
-        let (bench, _) = place_with_annotations(
+        let (bench, _) = context.place(
             &doc,
             None,
             &Annotations::default(),
             1400.0,
             None,
-            None,
+            Some(Rect::new(0.0, 0.0, 1400.0, 900.0)),
             None,
         );
         std::hint::black_box(&bench.list);
