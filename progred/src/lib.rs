@@ -1892,11 +1892,17 @@ impl Editor {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
+        // An in-place save keeps its frame claim; only a new document
+        // identity renames it.
+        #[cfg(target_os = "macos")]
+        if let RenderState::Active { window, .. } = &self.state
+            && self.doc_path.as_deref() != Some(path.as_path())
+        {
+            macos_window::rename_document_frame(window, &path);
+        }
         self.doc_path = Some(path);
         self.refresh_title();
         if let RenderState::Active { window, .. } = &self.state {
-            #[cfg(target_os = "macos")]
-            macos_window::rename_document_frame(window, self.doc_path.as_deref());
             window.request_redraw();
         }
     }

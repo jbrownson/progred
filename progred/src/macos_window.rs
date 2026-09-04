@@ -79,17 +79,17 @@ pub(crate) fn place_and_autosave_frame(
 }
 
 /// Save As: the window's document changed, so its autosave identity
-/// follows — a fresh numbered claim for the new path (never yanking
-/// the window to that name's old frame; the current frame snapshots
-/// as the name's new one).
-pub(crate) fn rename_document_frame(window: &Window, path: Option<&Path>) {
-    with_appkit_window(window, |appkit_window| match path {
-        Some(path) => {
-            let name = claim_name(appkit_window, path);
-            appkit_window.saveFrameUsingName(&name);
+/// follows — a fresh numbered claim for the new path. Assigning a
+/// name reloads that name's saved frame, which would yank the window
+/// to wherever that document's window last sat; the frame is put
+/// back and snapshotted as the name's new one instead.
+pub(crate) fn rename_document_frame(window: &Window, path: &Path) {
+    with_appkit_window(window, |appkit_window| {
+        let frame = appkit_window.frame();
+        let name = claim_name(appkit_window, path);
+        if appkit_window.frame() != frame {
+            appkit_window.setFrame_display(frame, false);
         }
-        None => {
-            appkit_window.setFrameAutosaveName(&NSString::new());
-        }
+        appkit_window.saveFrameUsingName(&name);
     });
 }
