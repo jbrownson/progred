@@ -114,22 +114,21 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         .result,
         absent::with_reason(f64::vocabulary::LEFT_NOT_F64)
     );
-    assert_eq!(
-        evaluate(
-            &doc,
-            evaluated_expression(demo_entry(&doc, &binders, "missing_argument")),
-        )
-        .result,
-        grap::absent::value(grap::absent::MISSING_ARGUMENT)
-    );
-    assert_eq!(
-        evaluate(
-            &doc,
-            evaluated_expression(demo_entry(&doc, &binders, "not_callable")),
-        )
-        .result,
-        grap::absent::value(grap::absent::NOT_CALLABLE)
-    );
+    for (label, reason) in [
+        ("missing_argument", grap::absent::MISSING_ARGUMENT),
+        ("not_callable", grap::absent::NOT_CALLABLE),
+    ] {
+        assert_eq!(
+            absent::reason(
+                &evaluate(
+                    &doc,
+                    evaluated_expression(demo_entry(&doc, &binders, label))
+                )
+                .result
+            ),
+            Some(reason)
+        );
+    }
 
     doc.cells.set_value(binders["a_value"], f64::value(5.0));
     assert_eq!(

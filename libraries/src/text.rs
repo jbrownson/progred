@@ -113,7 +113,7 @@ mod tests {
             &functions(),
             100,
         );
-        assert!(written.diagnostics.is_empty());
+
         assert_eq!(
             written.result,
             Value::record(

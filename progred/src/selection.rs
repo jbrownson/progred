@@ -787,10 +787,7 @@ pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut 
                     |cell| sources.grap_definitions(cell),
                     grap::DEFAULT_FUEL,
                 );
-                // Any diagnostic or a tagged absent result
-                // declines the write whole — the update's "no".
-                (evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result))
-                    .then_some(evaluation.result)
+                (!absent::is_absent(&evaluation.result)).then_some(evaluation.result)
             };
             (current, next)
         };

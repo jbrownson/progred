@@ -10,6 +10,9 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const ABSENT: CellId = grap_runtime::absent::ABSENT;
+    pub const CELL: CellId = grap_runtime::absent::CELL;
+    pub const VALUE: CellId = grap_runtime::absent::VALUE;
+    pub const CYCLE: CellId = grap_runtime::absent::CYCLE;
     pub const CAUSES: CellId = grap_runtime::absent::CAUSES;
     pub const NO_ALTERNATIVE: CellId = grap_runtime::absent::NO_ALTERNATIVE;
     pub const UNSPECIFIED: CellId = CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
@@ -42,6 +45,9 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
+    cells.set_value(vocabulary::CELL, name::record("cell", []));
+    cells.set_value(vocabulary::VALUE, name::record("value", []));
+    cells.set_value(vocabulary::CYCLE, name::record("cycle", []));
     cells.set_value(vocabulary::CAUSES, name::record("causes", []));
     cells.set_value(
         vocabulary::NO_ALTERNATIVE,

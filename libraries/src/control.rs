@@ -1001,7 +1001,6 @@ mod tests {
         let expression = grap::call(Value::from(function), []);
         let evaluation = evaluate(&quote_call(expression.clone()));
         assert_eq!(evaluation.result, expression);
-        assert!(evaluation.diagnostics.is_empty());
     }
 
     #[test]
@@ -1103,7 +1102,7 @@ mod tests {
         let expression = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, expression);
-        assert!(evaluation.diagnostics.is_empty());
+
         assert!(evaluation.dependencies.is_empty());
     }
 
@@ -1114,7 +1113,7 @@ mod tests {
         let expression = quote_call(Value::record([(vocabulary::UNQUOTE, inner.clone())]));
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, inner);
-        assert!(evaluation.diagnostics.is_empty());
+
         assert_eq!(evaluation.dependencies, [vocabulary::QUOTE].into());
     }
 
@@ -1138,7 +1137,6 @@ mod tests {
         );
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, blob("Ada"));
-        assert!(evaluation.diagnostics.is_empty());
     }
 
     #[test]
@@ -1170,7 +1168,7 @@ mod tests {
                 pattern_mismatch(&blob("second")),
             ]),
         );
-        assert!(evaluation.diagnostics.is_empty());
+
         assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
     }
 
@@ -1234,7 +1232,11 @@ mod tests {
         );
         assert_eq!(
             evaluate(&expression).result,
-            grap::absent::value(grap::absent::MISSING_CELL)
+            grap::absent::with_detail(
+                grap::absent::MISSING_CELL,
+                grap::absent::CELL,
+                missing.into()
+            )
         );
     }
 
@@ -1252,7 +1254,6 @@ mod tests {
             let expression = bindings_call(function, bindings(), Value::from(second));
             let evaluation = evaluate(&expression);
             assert_eq!(evaluation.result, blob("bound"));
-            assert!(evaluation.diagnostics.is_empty());
         }
     }
 

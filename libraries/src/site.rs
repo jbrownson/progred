@@ -127,7 +127,8 @@ mod tests {
             &foreign,
             30,
         );
-        assert!(set.diagnostics.is_empty());
+
+        assert_eq!(set.result, written);
         assert_eq!(&*stored.borrow(), &Some(written.clone()));
         assert_eq!(
             crate::test_evaluate(
@@ -164,7 +165,11 @@ mod tests {
                 10,
             )
             .result,
-            grap::absent::value(grap::absent::NOT_CALLABLE)
+            grap::absent::with_detail(
+                grap::absent::NOT_CALLABLE,
+                grap::absent::VALUE,
+                vocabulary::GET.into()
+            )
         );
     }
 }

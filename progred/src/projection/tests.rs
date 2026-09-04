@@ -2275,3 +2275,55 @@ fn a_data_event_realizes_the_apply_hook() {
 fn measured_rect(width: f64) -> kurbo::Rect {
     kurbo::Rect::new(0.0, 0.0, width, 100.0)
 }
+
+#[test]
+fn custom_update_can_discard_an_absent_and_return_a_value() {
+    use progred_libraries::{control::vocabulary as c, line_edit::vocabulary as l};
+    let missing = new_cell_id();
+    let update = grap::lambda(
+        [l::INPUT, l::CURRENT],
+        grap::call(
+            Value::from(c::DO),
+            [(
+                c::EXPRESSIONS,
+                Value::list([Value::from(missing), Value::from(l::INPUT)]),
+            )],
+        ),
+    );
+    let libraries = core_libraries();
+    let mut doc = Document {
+        root: Some(text::value("before")),
+        cells: Cells::new(),
+    };
+    let function = grap::evaluate(
+        &update,
+        |cell| src(&doc, &libraries).grap_definitions(cell),
+        1000,
+    )
+    .result;
+    let evaluated = grap::apply(
+        &function,
+        [
+            (l::INPUT, text::value("after")),
+            (l::CURRENT, doc.root.clone().unwrap()),
+        ],
+        |cell| src(&doc, &libraries).grap_definitions(cell),
+        1000,
+    );
+    assert_eq!(text::read(&evaluated.result), Some("after"));
+    let line = progred_display::LineEdit {
+        text: "after".into(),
+        placeholder: None,
+        update: function,
+        prefix: String::new(),
+        suffix: String::new(),
+        family: Default::default(),
+    };
+    let mut selected = Selection::from_line(&src(&doc, &libraries), vec![], line);
+    assert!(crate::selection::write_through(
+        &mut doc,
+        &libraries,
+        &mut selected
+    ));
+    assert_eq!(text::read(doc.root.as_ref().unwrap()), Some("after"));
+}

@@ -227,7 +227,6 @@ mod tests {
             20,
         );
 
-        assert!(updated.diagnostics.is_empty());
         assert_eq!(read(&updated.result), Some(3.5));
     }
 

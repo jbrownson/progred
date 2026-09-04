@@ -330,7 +330,12 @@ fn evaluate_foreign(
     let environment = context.eval(environment, calling_environment)?;
     match context.environment(&environment) {
         Some(environment) => context.eval_runtime(expression, &environment),
-        None => Ok(absent::with_reason(grap_runtime::absent::INVALID_ENVIRONMENT).into()),
+        None => Ok(grap_runtime::absent::with_detail(
+            grap_runtime::absent::INVALID_ENVIRONMENT,
+            grap_runtime::absent::VALUE,
+            environment,
+        )
+        .into()),
     }
 }
 
@@ -964,6 +969,5 @@ mod tests {
             40,
         );
         assert_eq!(evaluation.result, Value::from(b"evaluated".to_vec()));
-        assert!(evaluation.diagnostics.is_empty());
     }
 }

@@ -87,7 +87,8 @@ mod tests {
             &functions,
             10,
         );
-        assert!(result.diagnostics.is_empty());
+
+        assert_eq!(result.result, next);
         assert_eq!(&*payload.borrow(), &Some(next));
     }
 
@@ -102,7 +103,11 @@ mod tests {
                 10,
             )
             .result,
-            grap_runtime::absent::value(grap_runtime::absent::NOT_CALLABLE)
+            grap_runtime::absent::with_detail(
+                grap_runtime::absent::NOT_CALLABLE,
+                grap_runtime::absent::VALUE,
+                vocabulary::GET.into()
+            )
         );
     }
 }

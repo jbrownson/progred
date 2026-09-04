@@ -97,8 +97,7 @@ callable; realize turns platform events into GID records and invokes
 the callable with capabilities closed over the wrapper's projection
 site. The path stays in Rust. Site annotations and the current
 selection are get/set capabilities in that temporary overlay, and
-their writes commit only when the handler returns a non-absent result
-without diagnostics. Text and f64 request the stock Rust line control
+their writes commit only when the handler returns a non-absent result. Text and f64 request the stock Rust line control
 with their spelling, affixes, and Grap write-back rule. Progred lowers
 that control through Puri. Puri itself is the leaf language: text plus
 fill/stroke/clip canvas programs over its ordinary shape vocabulary, with no
@@ -442,12 +441,15 @@ an operative in advance.
 
 Every evaluation returns a `Value`, including malformed programs,
 missing cells, cycles, and exhausted fuel. An absence is the open tagged
-value `{absent: reason-cell}`. Host-facing diagnostics accompany core
-absences with occurrence-specific detail,
-such as which cell was missing, without introducing a separate host
-result channel into Grap or changing Grap control flow. When an
-evaluated call returns an absence, the result retains both the explicit
-tag and the stable reason identity.
+value `{absent: reason-cell, ...details...}`. Occurrence-specific details are
+ordinary GID fields on that value: `cell` identifies a missing reference or
+argument, `value` contains invalid input, and `cycle` lists the repeated cell
+chain. Hosts and tests inspect this result; there is no Rust diagnostic list.
+Discarding an absent discards its details, so successful updates and event
+handlers commit normally. Only explicit ordered-choice operations combine
+failed alternatives through `causes`. Fuel exhaustion still halts evaluation
+immediately, carrying its absent result; dependencies and drawing origins
+remain separate evaluation outputs, not failure channels.
 
 The bootstrap f64 and geometry libraries define stable library cells
 for their absent reasons and return tagged values containing those

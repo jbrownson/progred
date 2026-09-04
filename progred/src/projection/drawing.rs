@@ -499,11 +499,6 @@ fn record_program(
             &overlay,
             fuel,
         );
-    debug_assert!(
-        evaluation.diagnostics.is_empty(),
-        "drawing program diagnostics: {:?}",
-        evaluation.diagnostics,
-    );
     (
         Recorded {
             commands: canvas.into_inner(),

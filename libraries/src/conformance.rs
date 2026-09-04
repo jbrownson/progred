@@ -1,5 +1,5 @@
 //! An executable slice of Grap's cross-evaluator contract. Each
-//! program pins its result, diagnostics, and exact remaining fuel
+//! program pins its result and exact remaining fuel
 //! under the burn model documented on `Context::burn`; a conforming
 //! evaluator reproduces every tuple. Expectations are hand-derived
 //! from the naive evaluation shape, never copied from a run.
@@ -7,7 +7,7 @@
 use crate::{control, f32, f64, list, number};
 use gid::{CellId, Value, new_cell_id};
 use grap_runtime as grap;
-use grap_runtime::{Diagnostic, ForeignFunctions};
+use grap_runtime::ForeignFunctions;
 use std::collections::BTreeSet;
 
 fn functions() -> ForeignFunctions {
@@ -42,7 +42,7 @@ fn a_lambda_call_burns_its_call_function_argument_and_body() {
     let expression = grap::call(grap::lambda([x], Value::from(x)), [(x, blob("bound"))]);
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result, blob("bound"));
-    assert!(evaluation.diagnostics.is_empty());
+
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -80,14 +80,17 @@ fn a_cell_chain_burns_one_per_link() {
 
 /// A missing cell burns its one evaluation and reports exactly once.
 #[test]
-fn a_missing_cell_burns_once_and_diagnoses() {
+fn a_missing_cell_burns_once_and_carries_its_identity() {
     let missing = new_cell_id();
     let evaluation = evaluate(&Value::from(missing), 10);
     assert_eq!(
         evaluation.result,
-        grap::absent::value(grap::absent::MISSING_CELL),
+        grap::absent::with_detail(
+            grap::absent::MISSING_CELL,
+            grap::absent::CELL,
+            missing.into()
+        ),
     );
-    assert_eq!(evaluation.diagnostics, [Diagnostic::MissingCell(missing)]);
     assert_eq!(evaluation.remaining_fuel, 9);
 }
 
@@ -135,7 +138,7 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
             (control::vocabulary::PATTERN, blob("other")),
         ]),
     );
-    assert!(evaluation.diagnostics.is_empty());
+
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -241,7 +244,6 @@ fn callable_record_patterns_are_transparent_to_lowering() {
                     100,
                 );
                 assert_eq!(evaluation.result, blob("record"));
-                assert!(evaluation.diagnostics.is_empty());
             }
         }
     }
@@ -298,7 +300,7 @@ fn clause_lists_behind_cells_agree_with_literal_clauses() {
             20,
         );
         assert_eq!(literal.result, referenced.result);
-        assert!(literal.diagnostics.is_empty() && referenced.diagnostics.is_empty());
+
         assert_eq!(literal.remaining_fuel, referenced.remaining_fuel + 1);
     };
     check(&matches, cases);
