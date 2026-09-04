@@ -26,7 +26,7 @@ use crate::selection::{
 use crate::sources::Sources;
 use crate::styles::Styles;
 use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
-use progred_libraries::{absent, f64 as f64_convention, layout as layout_data, presentation, text};
+use progred_libraries::{f64 as f64_convention, layout as layout_data, text};
 mod drawing;
 #[cfg(test)]
 mod iop_tree_native;
@@ -161,6 +161,22 @@ struct ProjectEnv<'a, 's> {
 }
 
 impl progred_display::Env for ProjectEnv<'_, '_> {
+    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
+        let fuel = if self.cx.source.transient() {
+            self.cx.fuel.get()
+        } else {
+            grap::DEFAULT_FUEL
+        };
+        let evaluation = grap::apply(
+            function,
+            arguments.iter().cloned(),
+            |cell| resolved_definitions(self.cx, cell),
+            fuel,
+        );
+        self.cx.fuel.set(evaluation.remaining_fuel);
+        (evaluation.result, evaluation.remaining_fuel)
+    }
+
     fn evaluate(&self, expression: &Value) -> (Value, usize) {
         let fuel = if self.cx.source.transient() {
             self.cx.fuel.get()
@@ -2273,7 +2289,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
 
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill. `root` and
-/// `root_path` let an editor pane begin at a stable cell occurrence
+/// `root_path` let an editor pane begin at a value occurrence
 /// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
@@ -2288,19 +2304,11 @@ pub struct ProjectDescription<'a, World> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    /// An ordinary Grap callable placed in front of the normal
-    /// projection for this root. It receives the root under the
-    /// conventional `value` argument; an absent result falls through.
-    pub root_projection: Option<&'a Value>,
     pub projection: Option<&'a Projection<World>>,
     /// Suggestions contributed for an empty document root.
     pub root_completions: Option<&'a progred_display::CompletionProvider>,
     /// Fields contributed for a record at the document root.
     pub root_field_completions: Option<&'a progred_display::CompletionProvider>,
-}
-
-fn projection_is_absent(value: &Value) -> bool {
-    absent::is_absent(value)
 }
 
 #[cfg(test)]
@@ -2330,7 +2338,6 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         raw,
         styles,
         width,
-        root_projection,
         projection,
         root_completions,
         root_field_completions,
@@ -2363,43 +2370,27 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         traversal.cells.insert(cell);
         traversal.enclosing = Some((cell, root_path.len()));
     }
-    let projected = root_projection.zip(root).map(|(function, root)| {
-        let arguments = [(presentation::vocabulary::VALUE, root.clone())];
-        grap::apply(
-            function,
-            arguments,
-            |cell| resolved_definitions(&cx, cell),
-            grap::DEFAULT_FUEL,
-        )
-    });
-    let layout =
-        match projected.filter(|evaluation| !projection_is_absent(&evaluation.result)) {
-            Some(evaluation) => prepare_transient_root(
-                &cx,
-                projection,
-                tcx,
-                root_path,
-                evaluation.result,
-                evaluation.remaining_fuel,
-                &hooks,
-                &mut build,
-            ),
-            None if root.is_none() && root_completions.is_some() => ChoiceLayout::fixed(
-                pending_view(&cx, tcx, root_path.to_vec(), root_completions, &hooks),
-            ),
-            None => prepare_location(
-                &cx,
-                projection,
-                tcx,
-                root_path,
-                &traversal,
-                Location::Root(root),
-                projection,
-                None,
-                &hooks,
-                &mut build,
-            ),
-        };
+    let layout = match root {
+        None if root_completions.is_some() => ChoiceLayout::fixed(pending_view(
+            &cx,
+            tcx,
+            root_path.to_vec(),
+            root_completions,
+            &hooks,
+        )),
+        _ => prepare_location(
+            &cx,
+            projection,
+            tcx,
+            root_path,
+            &traversal,
+            Location::Root(root),
+            projection,
+            None,
+            &hooks,
+            &mut build,
+        ),
+    };
     let resolved = resolve_choices(
         ChoiceGraph {
             root: layout,

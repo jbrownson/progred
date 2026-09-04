@@ -9,8 +9,8 @@ A document may declare auxiliary views through a direct root convention:
 ```text
 {
   panes: {
-    left:  [{value: ..., projection: ...}],
-    right: [{value: ..., projection: ...}],
+    left:  [...values...],
+    right: [...values...],
   },
   ...domain roots...
 }
@@ -18,15 +18,43 @@ A document may declare auxiliary views through a direct root convention:
 
 Only this direct, coherent shape affects the workspace; a `panes` field with
 another shape and identical records elsewhere remain ordinary data. The lists
-determine side and order. Their `value` fields remain visible, editable source
-and default closed in the document view. Deleting one closes its pane. The
+determine side and order. Each element is the pane's value; cells require no
+special handling. Entries remain visible in the document and default closed
+there. Deleting a pane root deletes that list element. The
 document still has one arbitrary GID root and no required `program`, `main`, or
 `body` field.
 
 Pane identity, projection mode, folds, scroll, and requested sizes remain
 editor-session state. A surviving declaration retains that state across
-frames. Manually opened panes remain session-only and follow declared panes in
-their columns.
+frames. Opening a selected value appends that value to a side list; moving and
+deleting panes edit those lists. These operations save and undo as ordinary
+document changes. Opening is available for a record root with absent or
+coherent pane containers; it does not wrap other root shapes or overwrite
+malformed fields. Moving an entry gives it a new position and retargets its
+selection explicitly; scroll, size, and projection mode carry across the move,
+while path-keyed folds reset.
+
+`{value: source, projection: function}` is an ordinary presentation convention,
+usable wherever a value is projected. The presentation library applies the
+function to the source as data and projects its result transiently; absent
+falls back to the editable source. The workspace does not interpret this
+wrapper, and Raw exposes its complete structure.
+
+## Address And Definition Stability — Open Work (2026-09-04)
+
+Keep these identities distinct: an occurrence's structural path, a cell's
+identity, the source of one definition (`Document` or a stable library ID),
+and a transient view root. A cell may have several definitions, so a cell ID
+alone cannot identify the source of a drawing or the value observed by a memo.
+
+The next identity review should specify what survives list moves, deletion and
+undo, source replacement, and library loading or reordering. In particular,
+source tracing currently drops definition provenance, and canvas-memo
+validation must observe changes to every relevant definition, including
+plural results. List positions are session-local occurrence addresses and are
+not content identity. Tests should cover these transitions across editing,
+source highlighting, and the explicit canvas memo. Resolve the identity model
+before adding invalidation machinery; no additional caches are implied.
 
 ## UI State As Data (Direction, 2026-08-19)
 

@@ -589,6 +589,10 @@ mod tests {
     struct NoEval;
 
     impl Env for NoEval {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            panic!("unexpected projection application")
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             panic!("color projection does not evaluate while projecting")
         }

@@ -143,6 +143,12 @@ impl Selection {
         self
     }
 
+    pub(crate) fn relocate(&mut self, root: workspace::Root, path: Path) {
+        self.root = root;
+        self.path = path;
+        self.preserve_recorded(false);
+    }
+
     /// The selection as data — what a projection at this path receives.
     pub fn payload(&self) -> &Value {
         &self.payload

@@ -1659,7 +1659,13 @@ impl Editor {
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
-            open_pane: self.selected_cell_for_pane().is_some(),
+            open_pane: workspace::can_open(self.model.doc.root.as_ref())
+                && self
+                    .model
+                    .selection
+                    .as_ref()
+                    .and_then(|selection| self.sources().resolve_path(selection.path()))
+                    .is_some(),
             move_up: selected_root
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
             move_down: selected_root
@@ -1671,27 +1677,77 @@ impl Editor {
         }
     }
 
-    fn selected_cell_for_pane(&self) -> Option<(gid::CellId, gid::Path)> {
-        let current = self.model.selection.as_ref()?;
-        let path = current.path();
-        let sources = self.sources();
-        if let Some(cell) = sources.resolve_path(path).and_then(gid::Value::as_cell) {
-            return Some((cell, path.to_vec()));
+    fn open_selected_in_pane(&mut self, side: workspace::Side) -> bool {
+        let next = self.model.selection.as_ref().and_then(|selection| {
+            let value = self.sources().resolve_path(selection.path())?.clone();
+            workspace::append(self.model.doc.root.as_ref()?, side, value)
+        });
+        if let Some((value, path)) = next {
+            let before = self.model.doc.clone();
+            let previous = self
+                .model
+                .selection
+                .as_ref()
+                .map(|selection| selection.path().to_vec());
+            self.model.doc.root = Some(value);
+            self.model.history.record(before, previous);
+            self.model
+                .workspace
+                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
+            let root = self
+                .model
+                .workspace
+                .column(side)
+                .panes
+                .last()
+                .unwrap()
+                .view
+                .root
+                .clone();
+            self.model.selection =
+                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
+            self.refresh_title();
+            true
+        } else {
+            false
         }
-        let follow = selection::last_follow(path)?;
-        let anchor = path[..follow].to_vec();
-        let cell = sources.resolve_path(&anchor)?.as_cell()?;
-        Some((cell, anchor))
     }
 
-    fn open_selected_in_pane(&mut self, side: workspace::Side) -> bool {
-        let Some((cell, anchor)) = self.selected_cell_for_pane() else {
-            return false;
-        };
-        let root = self.model.workspace.open_cell(side, cell, anchor.clone());
-        self.model.selection =
-            Some(selection::Selection::edge(&self.sources(), anchor).with_root(root));
-        true
+    fn move_selected_pane(&mut self, direction: workspace::Move) -> bool {
+        let next = self.model.selection.as_ref().and_then(|selection| {
+            let workspace::Target::Pane { path } = selection.root().target() else {
+                return None;
+            };
+            let suffix = selection.path().strip_prefix(path.as_slice())?.to_vec();
+            let (value, path) =
+                workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
+            Some((value, path, suffix, selection.root().clone()))
+        });
+        if let Some((value, path, suffix, root)) = next {
+            let before = self.model.doc.clone();
+            let previous = self
+                .model
+                .selection
+                .as_ref()
+                .map(|selection| selection.path().to_vec());
+            self.model.doc.root = Some(value);
+            self.model.history.record(before, previous);
+            let next_root = workspace::Root::pane(path.clone());
+            if let Some(view) = self.model.workspace.view_mut(&root) {
+                view.root = next_root.clone();
+                view.annotations = Default::default();
+            }
+            if let Some(selection) = self.model.selection.as_mut() {
+                selection.relocate(next_root, path.into_iter().chain(suffix).collect());
+            }
+            self.model
+                .workspace
+                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
+            self.refresh_title();
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn choose_menu(&mut self, command: Command) {
@@ -1731,15 +1787,7 @@ impl Editor {
                     DocCommand::MovePaneRight => workspace::Move::Right,
                     _ => unreachable!(),
                 };
-                if let Some(root) = self
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned()
-                {
-                    self.model.workspace.move_pane(&root, direction);
-                }
+                self.move_selected_pane(direction);
             }
             DocCommand::Raw => {
                 let selected = self

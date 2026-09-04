@@ -406,6 +406,10 @@ mod tests {
     }
 
     impl Env for TestEnv {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            panic!("unexpected projection application")
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             (self.result.clone(), 7)
         }
@@ -474,6 +478,14 @@ mod tests {
     fn parameter_offers_are_prepared_only_during_field_insertion() {
         struct CountingEnv(std::cell::Cell<usize>);
         impl Env for CountingEnv {
+            fn apply(
+                &self,
+                _: &gid::Value,
+                _: &[(gid::CellId, gid::Value)],
+            ) -> (gid::Value, usize) {
+                panic!("unexpected projection application")
+            }
+
             fn evaluate(&self, _: &Value) -> (Value, usize) {
                 panic!("completion does not evaluate the function")
             }
@@ -697,6 +709,14 @@ mod tests {
         }
 
         impl Env for DefinitionEnv {
+            fn apply(
+                &self,
+                _: &gid::Value,
+                _: &[(gid::CellId, gid::Value)],
+            ) -> (gid::Value, usize) {
+                panic!("unexpected projection application")
+            }
+
             fn evaluate(&self, _: &Value) -> (Value, usize) {
                 (Value::record([]), 0)
             }

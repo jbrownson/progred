@@ -172,10 +172,10 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::Undo) => item("Undo", Some(Shortcut::plain(ShortcutKey::Z))),
         Command::Doc(DocCommand::Redo) => item("Redo", Some(Shortcut::shifted(ShortcutKey::Z))),
         Command::Doc(DocCommand::OpenPaneLeft) => {
-            item("Open Cell on Left", Some(Shortcut::plain(ShortcutKey::P)))
+            item("Open Value on Left", Some(Shortcut::plain(ShortcutKey::P)))
         }
         Command::Doc(DocCommand::OpenPaneRight) => item(
-            "Open Cell on Right",
+            "Open Value on Right",
             Some(Shortcut::shifted(ShortcutKey::P)),
         ),
         Command::Doc(DocCommand::MovePaneUp) => item("Move Pane Up", None),

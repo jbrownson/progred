@@ -79,8 +79,9 @@ projection({value: source}) -> projected-value
 The callable may be Grap-defined or registered in Rust. Its result re-enters
 the same normal projection at a transient, read-only root; returning an
 absent-classified value declines and leaves the stored source under the normal
-editable projection. Raw never invokes the function. Document-declared panes
-use this interface rather than defining a second presentation protocol. The
+editable projection. Raw never invokes the function. The presentation library
+recognizes `{value: source, projection: function}` at any projected value,
+including a pane entry. Pane layout does not interpret this wrapper. The
 built-in `drawing` function is one implementation: it wraps its argument in
 the ordinary drawing data form consumed by the layout library.
 When that leaf renders, its scoped drawing functions send fills directly to

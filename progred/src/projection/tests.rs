@@ -3,7 +3,7 @@ use crate::annotations::Annotations;
 use crate::hover::hover_secondary;
 use crate::selection::payload as selection_payload;
 use gid::Position;
-use progred_libraries::{Libraries, absent, f64, fidget, name, text};
+use progred_libraries::{Libraries, f64, fidget, name, text};
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
@@ -69,6 +69,10 @@ fn declining_probe(
 fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() {
     struct NoEval;
     impl progred_display::Env for NoEval {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            panic!("unexpected projection application")
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             panic!("projection evaluated")
         }
@@ -142,13 +146,6 @@ fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
     Sources { doc, libraries }
 }
 
-#[test]
-fn a_projection_absence_carries_its_reason_explicitly() {
-    let reason = gid::new_cell_id();
-    assert!(projection_is_absent(&absent::with_reason(reason)));
-    assert!(!projection_is_absent(&Value::from(reason)));
-}
-
 fn make_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
     Selection::edge(&src(doc, libraries), path)
 }
@@ -196,7 +193,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             raw: false,
             styles: &styles,
             width: 500.0,
-            root_projection: None,
+
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
             root_field_completions: Some(&stack.root_field_completions),
@@ -240,6 +237,10 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
 fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
     struct NoEval;
     impl progred_display::Env for NoEval {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            panic!("unexpected projection application")
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             panic!("line projection evaluated")
         }
@@ -1323,7 +1324,7 @@ fn projected_completion_entries_with(
             raw: false,
             styles: &styles,
             width: 500.0,
-            root_projection: None,
+
             projection: Some(projection.unwrap_or(&stack.projection)),
             root_completions: Some(&stack.root_completions),
             root_field_completions: Some(&stack.root_field_completions),
@@ -1884,7 +1885,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 raw: false,
                 styles: &styles,
                 width: 500.0,
-                root_projection: None,
+
                 projection: Some(&projection),
                 root_completions: None,
                 root_field_completions: None,
@@ -1997,7 +1998,7 @@ fn a_projection_defined_as_data_realizes() {
             raw: false,
             styles: &styles,
             width: 500.0,
-            root_projection: None,
+
             projection: Some(&projection),
             root_completions: None,
             root_field_completions: None,
@@ -2077,7 +2078,7 @@ fn a_data_event_realizes_the_apply_hook() {
             raw: false,
             styles: &styles,
             width: 500.0,
-            root_projection: None,
+
             projection: Some(&projection),
             root_completions: None,
             root_field_completions: None,

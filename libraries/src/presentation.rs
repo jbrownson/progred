@@ -4,8 +4,8 @@
 //! under [`vocabulary::VALUE`] and returns a value; an absent result
 //! declines the projection.
 
-use crate::{Library, f64, layout, name};
-use gid::Cells;
+use crate::{Library, absent, f64, layout, name};
+use gid::{Cells, Step};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3c13de);
 use progred_display::{Layout, ProjectionInput, transient};
@@ -32,6 +32,18 @@ pub fn display<World, Hover: Clone>(
         });
         let (result, fuel) = evaluated.unwrap_or_else(|| input.env.evaluate(expression));
         Some(transient(&result, fuel))
+    } else if let (Some(value), Some(function)) = (
+        fields.get(&vocabulary::VALUE),
+        fields.get(&vocabulary::PROJECTION),
+    ) {
+        let (result, fuel) = input
+            .env
+            .apply(function, &[(vocabulary::VALUE, value.clone())]);
+        Some(if absent::is_absent(&result) {
+            progred_display::descend(Step::Key(vocabulary::VALUE), None, None)
+        } else {
+            transient(&result, fuel)
+        })
     } else {
         None
     }
@@ -65,6 +77,10 @@ mod tests {
     struct EvaluateTo(Value);
 
     impl Env for EvaluateTo {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            (self.0.clone(), 17)
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             (self.0.clone(), 17)
         }
@@ -86,6 +102,32 @@ mod tests {
             state: None,
             targets: ProjectionTargets::new(&target),
         })
+    }
+
+    #[test]
+    fn a_projection_wrapper_is_an_ordinary_value_and_absent_reveals_its_source() {
+        let source = Value::from(b"source".to_vec());
+        let value = Value::record([
+            (vocabulary::VALUE, source),
+            (vocabulary::PROJECTION, Value::from(LEFT_VALUE)),
+        ]);
+        let result = Value::from(b"projected".to_vec());
+        assert!(matches!(projected(&value, &EvaluateTo(result.clone())),
+            Some(Layout::Transient { value, fuel: 17 }) if value == result));
+        assert!(matches!(
+            projected(&value, &EvaluateTo(absent::with_reason(LEFT_VALUE))),
+            Some(Layout::Descend {
+                step: Step::Key(vocabulary::VALUE),
+                ..
+            })
+        ));
+        assert!(
+            projected(
+                &Value::record([(vocabulary::VALUE, value)]),
+                &EvaluateTo(result)
+            )
+            .is_none()
+        );
     }
 
     #[test]

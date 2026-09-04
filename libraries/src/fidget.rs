@@ -1160,6 +1160,10 @@ mod tests {
     struct NoEval;
 
     impl progred_display::Env for NoEval {
+        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+            panic!("unexpected projection application")
+        }
+
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             unreachable!()
         }

@@ -41,14 +41,6 @@ impl Editor {
             Some(current) if current.stage() == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
-                let pane_root = matches!(
-                    root.target(),
-                    crate::workspace::Target::Cell { anchor, .. } if *anchor == path
-                );
-                if pane_root && self.model.workspace.close(&root) {
-                    self.model.selection = None;
-                    return true;
-                }
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge

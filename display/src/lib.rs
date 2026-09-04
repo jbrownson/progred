@@ -543,6 +543,9 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
+    /// Apply a callable to values without evaluating those arguments as expressions.
+    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize);
+
     /// Remaining fuel is the evaluator budget left after this call,
     /// so a grap-shaped result can continue the same allowance.
     fn evaluate(&self, expression: &Value) -> (Value, usize);

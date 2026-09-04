@@ -771,9 +771,7 @@ fn project_workspace_view(
 ) -> measured::Measured<Placed<Editor, Paint>> {
     let margin = 12.0 * scale;
     let body_width = (size.width - 2.0 * margin).max(0.0);
-    let cell_root;
     let root_path;
-    let root_projection;
     let root_completions = matches!(view.root.target(), workspace::Target::Document)
         .then_some(&stack.root_completions);
     let root_field_completions = matches!(view.root.target(), workspace::Target::Document)
@@ -781,22 +779,11 @@ fn project_workspace_view(
     let root = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
-            root_projection = None;
             sources.root()
         }
-        workspace::Target::Cell { cell, anchor } => {
-            root_path = anchor.clone();
-            root_projection = None;
-            cell_root = gid::Value::Cell(*cell);
-            Some(&cell_root)
-        }
-        workspace::Target::Declared {
-            value_path,
-            projection_path,
-        } => {
-            root_path = value_path.clone();
-            root_projection = sources.resolve_path(projection_path);
-            sources.resolve_path(value_path)
+        workspace::Target::Pane { path } => {
+            root_path = path.clone();
+            sources.resolve_path(path)
         }
     };
     let raw = view.projection == workspace::Projection::Raw;
@@ -814,7 +801,6 @@ fn project_workspace_view(
             raw,
             styles,
             width: body_width,
-            root_projection: if raw { None } else { root_projection },
             projection: (!raw).then_some(&stack.projection),
             root_completions: (!raw).then_some(root_completions).flatten(),
             root_field_completions: (!raw).then_some(root_field_completions).flatten(),
@@ -1240,7 +1226,7 @@ mod frame_tests {
         cells.set_value(cell, Value::from(b"pane".to_vec()));
         let mut model = Model {
             doc: Document {
-                root: Some(Value::Cell(cell)),
+                root: Some(Value::record([])),
                 cells,
             },
             selection: None,
@@ -1249,12 +1235,22 @@ mod frame_tests {
             workspace: workspace::Workspace::default(),
         };
         let document = model.workspace.document_root().clone();
-        let upper = model
+        for _ in 0..2 {
+            model.doc.root = Some(
+                workspace::append(
+                    model.doc.root.as_ref().unwrap(),
+                    workspace::Side::Left,
+                    Value::from(cell),
+                )
+                .unwrap()
+                .0,
+            );
+        }
+        model
             .workspace
-            .open_cell(workspace::Side::Left, cell, Vec::new());
-        let lower = model
-            .workspace
-            .open_cell(workspace::Side::Left, cell, Vec::new());
+            .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
+        let upper = model.workspace.left.panes[0].view.root.clone();
+        let lower = model.workspace.left.panes[1].view.root.clone();
         let stack = crate::stack::load::<Editor>();
         let styles = crate::styles::editor(1.0);
         let mut fonts = FontContext::new();
@@ -1310,11 +1306,12 @@ mod frame_tests {
         assert_eq!(upper_region.rect.x1, lower_region.rect.x1);
         assert_eq!(lower_region.rect.y0 - upper_region.rect.y1, 1.0);
         assert!(placed.descends.iter().all(|descend| descend.root.is_some()));
-        assert!(
-            placed.descends.iter().any(|descend| {
-                descend.root.as_ref() == Some(&upper) && descend.path.is_empty()
-            })
-        );
+        let workspace::Target::Pane { path } = upper.target() else {
+            panic!("pane root")
+        };
+        assert!(placed.descends.iter().any(|descend| {
+            descend.root.as_ref() == Some(&upper) && descend.path.as_ref() == path.as_slice()
+        }));
     }
 
     #[test]

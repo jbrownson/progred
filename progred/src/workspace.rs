@@ -7,7 +7,7 @@
 use crate::annotations::Annotations;
 use gid::{CellId, Cells, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
-use progred_libraries::{Library, name, presentation};
+use progred_libraries::{Library, name};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -74,25 +74,11 @@ pub enum Side {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Document,
-    /// `anchor` is the current document path through which ordinary
-    /// editing reaches this cell. The Rc root distinguishes duplicate
-    /// views of that occurrence.
-    Cell {
-        cell: CellId,
-        anchor: Path,
-    },
-    /// A pane declared by an occurrence beneath the document root.
-    /// Its source path is both its editable root and its durable
-    /// identity within this document; the surrounding [`Root`] keeps
-    /// the view's process-local identity stable while it remains.
-    Declared {
-        value_path: Path,
-        projection_path: Path,
-    },
+    Pane { path: Path },
 }
 
 /// A view's transient identity and immutable data root. Equality is
-/// allocation identity: two panes over the same cell remain distinct.
+/// allocation identity: two views of the same value remain distinct.
 #[derive(Clone)]
 pub struct Root(Rc<Target>);
 
@@ -101,15 +87,8 @@ impl Root {
         Self(Rc::new(Target::Document))
     }
 
-    pub fn cell(cell: CellId, anchor: Path) -> Self {
-        Self(Rc::new(Target::Cell { cell, anchor }))
-    }
-
-    fn declared(value_path: Path, projection_path: Path) -> Self {
-        Self(Rc::new(Target::Declared {
-            value_path,
-            projection_path,
-        }))
+    pub fn pane(path: Path) -> Self {
+        Self(Rc::new(Target::Pane { path }))
     }
 
     pub fn target(&self) -> &Target {
@@ -215,12 +194,7 @@ pub struct Workspace {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
     pub side: Side,
-    pub record_path: Path,
-    pub value_path: Path,
-    /// Resolves to an optional ordinary Grap callable applied to the
-    /// pane's source value. An absent result falls through to the
-    /// ordinary projection of that source.
-    pub projection_path: Path,
+    pub path: Path,
 }
 
 /// Read pane declarations only from the document root. No recursive
@@ -244,30 +218,116 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
             .and_then(Value::as_list)
             .into_iter()
             .flat_map(move |declarations| {
-                declarations.iter().filter_map(move |(position, value)| {
-                    value.as_record()?.get(&presentation::vocabulary::VALUE)?;
-                    let parent = vec![
-                        Step::Key(vocabulary::PANES),
-                        Step::Key(field),
-                        Step::Element(position.clone()),
-                    ];
-                    Some(Declaration {
-                        side,
-                        record_path: parent.clone(),
-                        value_path: parent
-                            .iter()
-                            .cloned()
-                            .chain([Step::Key(presentation::vocabulary::VALUE)])
-                            .collect(),
-                        projection_path: parent
-                            .into_iter()
-                            .chain([Step::Key(presentation::vocabulary::PROJECTION)])
-                            .collect(),
-                    })
+                declarations.keys().map(move |position| Declaration {
+                    side,
+                    path: pane_path(side, position.clone()),
                 })
             })
     })
     .collect()
+}
+
+fn column_key(side: Side) -> CellId {
+    match side {
+        Side::Left => vocabulary::LEFT,
+        Side::Right => vocabulary::RIGHT,
+    }
+}
+
+fn pane_path(side: Side, position: gid::Position) -> Path {
+    vec![
+        Step::Key(vocabulary::PANES),
+        Step::Key(column_key(side)),
+        Step::Element(position),
+    ]
+}
+
+pub fn can_open(root: Option<&Value>) -> bool {
+    root.and_then(Value::as_record).is_some_and(|fields| {
+        fields.get(&vocabulary::PANES).is_none_or(|panes| {
+            panes.as_record().is_some_and(|panes| {
+                [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
+                    panes
+                        .get(side)
+                        .is_none_or(|value| value.as_list().is_some())
+                })
+            })
+        })
+    })
+}
+
+pub fn append(root: &Value, side: Side, value: Value) -> Option<(Value, Path)> {
+    let fields = root.as_record()?;
+    let panes = match fields.get(&vocabulary::PANES) {
+        Some(value) => value.as_record()?.clone(),
+        None => gid::Record::new(),
+    };
+    let column = match panes.get(&column_key(side)) {
+        Some(value) => value.as_list()?.clone(),
+        None => gid::List::new(),
+    };
+    let position = gid::position::between(column.keys().next_back(), None)?;
+    Some((
+        Value::Record(fields.update(
+            vocabulary::PANES,
+            Value::Record(panes.update(
+                column_key(side),
+                Value::List(column.update(position.clone(), value)),
+            )),
+        )),
+        pane_path(side, position),
+    ))
+}
+
+pub fn move_value(root: &Value, path: &[Step], direction: Move) -> Option<(Value, Path)> {
+    let [Step::Key(panes), Step::Key(side), Step::Element(position)] = path else {
+        return None;
+    };
+    (*panes == vocabulary::PANES).then_some(())?;
+    let side = match *side {
+        vocabulary::LEFT => Side::Left,
+        vocabulary::RIGHT => Side::Right,
+        _ => return None,
+    };
+    let column = root
+        .as_record()?
+        .get(&vocabulary::PANES)?
+        .as_record()?
+        .get(&column_key(side))?
+        .as_list()?;
+    let value = column.get(position)?.clone();
+    match direction {
+        Move::Left if side == Side::Right => {
+            append(&crate::spine::without(root, path)?, Side::Left, value)
+        }
+        Move::Right if side == Side::Left => {
+            append(&crate::spine::without(root, path)?, Side::Right, value)
+        }
+        Move::Up | Move::Down => {
+            let index = column.keys().position(|key| key == position)?;
+            let destination = match direction {
+                Move::Up => index.checked_sub(1)?,
+                _ => (index + 1 < column.len()).then_some(index + 1)?,
+            };
+            let remaining = column.without(position);
+            let keys: Vec<_> = remaining.keys().collect();
+            let position = gid::position::between(
+                destination
+                    .checked_sub(1)
+                    .and_then(|index| keys.get(index).copied()),
+                keys.get(destination).copied(),
+            )?;
+            Some((
+                crate::spine::set(
+                    Some(root),
+                    &path[..2],
+                    Value::List(remaining.update(position.clone(), value)),
+                )?,
+                pane_path(side, position),
+            ))
+        }
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -338,72 +398,31 @@ impl Workspace {
         };
     }
 
-    pub fn open_cell(&mut self, side: Side, cell: CellId, anchor: Path) -> Root {
-        let root = Root::cell(cell, anchor);
-        let column = self.column_mut(side);
-        let count = column.panes.len() + 1;
-        let retained = (count - 1) as f64 / count as f64;
-        for pane in &mut column.panes {
-            pane.height *= retained;
-        }
-        column.panes.push(Pane {
-            view: View::new(root.clone()),
-            height: 1.0 / count as f64,
-        });
-        root
-    }
-
-    /// Reconcile the document-declared panes with the live workspace.
-    /// Declaration paths determine side and order; surviving panes
-    /// retain their process identity, annotations, scroll, projection,
-    /// and requested height. Manually opened session panes remain after
-    /// the declared panes in their respective columns.
+    /// Reconcile pane occurrences with their transient view state.
     pub fn sync_declared(&mut self, declarations: &[Declaration]) {
-        let mut declared = Vec::new();
-        let mut session_left = Vec::new();
-        let mut session_right = Vec::new();
-        for (side, pane) in std::mem::take(&mut self.left.panes)
+        let mut declared: Vec<_> = std::mem::take(&mut self.left.panes)
             .into_iter()
-            .map(|pane| (Side::Left, pane))
-            .chain(
-                std::mem::take(&mut self.right.panes)
-                    .into_iter()
-                    .map(|pane| (Side::Right, pane)),
-            )
-        {
-            if matches!(pane.view.root.target(), Target::Declared { .. }) {
-                declared.push(pane);
-            } else {
-                match side {
-                    Side::Left => session_left.push(pane),
-                    Side::Right => session_right.push(pane),
-                }
-            }
-        }
-
+            .chain(std::mem::take(&mut self.right.panes))
+            .collect();
         let mut left = Vec::new();
         let mut right = Vec::new();
         for declaration in declarations {
             let existing = declared.iter().position(|pane| {
                 matches!(
                     pane.view.root.target(),
-                    Target::Declared { value_path, .. }
-                        if *value_path == declaration.value_path
+                    Target::Pane { path } if *path == declaration.path
                 )
             });
             let pane = existing.map_or_else(
                 || {
                     crate::annotations::set_collapsed(
                         &mut self.document.annotations,
-                        &declaration.record_path,
+                        &declaration.path,
                         false,
                         true,
                     );
                     Pane {
-                        view: View::new(Root::declared(
-                            declaration.value_path.clone(),
-                            declaration.projection_path.clone(),
-                        )),
+                        view: View::new(Root::pane(declaration.path.clone())),
                         height: 1.0,
                     }
                 },
@@ -414,8 +433,6 @@ impl Workspace {
                 Side::Right => right.push(pane),
             }
         }
-        left.extend(session_left);
-        right.extend(session_right);
         normalize(&mut left);
         normalize(&mut right);
         self.left.panes = left;
@@ -444,34 +461,7 @@ impl Workspace {
             })
     }
 
-    pub fn close(&mut self, root: &Root) -> bool {
-        if matches!(root.target(), Target::Declared { .. }) {
-            return false;
-        }
-        let Some(side) = self.side(root) else {
-            return false;
-        };
-        let column = self.column_mut(side);
-        let before = column.panes.len();
-        column.panes.retain(|pane| pane.view.root != *root);
-        if column.panes.len() == before {
-            return false;
-        }
-        normalize(&mut column.panes);
-        if self
-            .dragging
-            .as_ref()
-            .is_some_and(|drag| drag.divider.names(root))
-        {
-            self.dragging = None;
-        }
-        true
-    }
-
     pub fn can_move(&self, root: &Root, direction: Move) -> bool {
-        if matches!(root.target(), Target::Declared { .. }) {
-            return false;
-        }
         let Some(side) = self.side(root) else {
             return false;
         };
@@ -487,47 +477,6 @@ impl Workspace {
             Move::Left => side == Side::Right,
             Move::Right => side == Side::Left,
         }
-    }
-
-    pub fn move_pane(&mut self, root: &Root, direction: Move) -> bool {
-        if !self.can_move(root, direction) {
-            return false;
-        }
-        let side = self.side(root).expect("a movable pane has a side");
-        match direction {
-            Move::Up | Move::Down => {
-                let column = self.column_mut(side);
-                let index = column
-                    .panes
-                    .iter()
-                    .position(|pane| pane.view.root == *root)
-                    .expect("the pane is in its column");
-                let other = if direction == Move::Up {
-                    index - 1
-                } else {
-                    index + 1
-                };
-                column.panes.swap(index, other);
-            }
-            Move::Left | Move::Right => {
-                let destination = if direction == Move::Left {
-                    Side::Left
-                } else {
-                    Side::Right
-                };
-                let index = self
-                    .column(side)
-                    .panes
-                    .iter()
-                    .position(|pane| pane.view.root == *root)
-                    .expect("the pane is in its column");
-                let pane = self.column_mut(side).panes.remove(index);
-                normalize(&mut self.column_mut(side).panes);
-                self.column_mut(destination).panes.push(pane);
-                normalize(&mut self.column_mut(destination).panes);
-            }
-        }
-        true
     }
 
     pub fn start_resize(&mut self, divider: Divider, start: Vec2) -> bool {
@@ -708,7 +657,7 @@ impl Workspace {
         Geometry { views, dividers }
     }
 
-    fn column(&self, side: Side) -> &Column {
+    pub fn column(&self, side: Side) -> &Column {
         match side {
             Side::Left => &self.left,
             Side::Right => &self.right,
@@ -746,12 +695,6 @@ pub enum Move {
     Down,
     Left,
     Right,
-}
-
-impl Divider {
-    fn names(&self, root: &Root) -> bool {
-        matches!(self, Self::Panes { before, after, .. } if before == root || after == root)
-    }
 }
 
 fn ratio(value: f64, total: f64) -> f64 {
@@ -861,11 +804,38 @@ fn column_geometry(
 mod tests {
     use super::*;
 
+    fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
+        let column = workspace.column_mut(side);
+        let position = gid::position::between(
+            column
+                .panes
+                .last()
+                .and_then(|pane| match pane.view.root.target() {
+                    Target::Pane { path } => match path.last() {
+                        Some(Step::Element(position)) => Some(position),
+                        _ => None,
+                    },
+                    _ => None,
+                }),
+            None,
+        )
+        .unwrap();
+        let root = Root::pane(pane_path(side, position));
+        column.panes.push(Pane {
+            view: View::new(root.clone()),
+            height: 1.0,
+        });
+        for pane in &mut column.panes {
+            pane.height = 1.0;
+        }
+        normalize(&mut column.panes);
+        root
+    }
+
     #[test]
     fn roots_are_view_identity_not_cell_identity() {
-        let cell = CellId::from_u128(1);
-        let left = Root::cell(cell, Vec::new());
-        let other = Root::cell(cell, Vec::new());
+        let left = Root::pane(Vec::new());
+        let other = Root::pane(Vec::new());
         assert_ne!(left, other);
         assert_eq!(left, left.clone());
     }
@@ -873,9 +843,8 @@ mod tests {
     #[test]
     fn duplicate_views_keep_independent_projection_state() {
         let mut workspace = Workspace::default();
-        let cell = CellId::from_u128(1);
-        let one = workspace.open_cell(Side::Left, cell, Vec::new());
-        let other = workspace.open_cell(Side::Right, cell, Vec::new());
+        let one = add_pane(&mut workspace, Side::Left);
+        let other = add_pane(&mut workspace, Side::Right);
 
         crate::annotations::set_collapsed(
             &mut workspace.view_mut(&one).unwrap().annotations,
@@ -902,95 +871,84 @@ mod tests {
     }
 
     #[test]
-    fn columns_stack_move_close_and_keep_the_document() {
-        let mut workspace = Workspace::default();
-        let document = workspace.document.root.clone();
-        let one = workspace.open_cell(Side::Left, CellId::from_u128(1), Vec::new());
-        let two = workspace.open_cell(Side::Left, CellId::from_u128(2), Vec::new());
-        assert_eq!(workspace.left.panes.len(), 2);
-        assert!(workspace.move_pane(&two, Move::Up));
-        assert_eq!(workspace.left.panes[0].view.root, two);
-        assert!(workspace.move_pane(&two, Move::Right));
-        assert_eq!(workspace.side(&two), Some(Side::Right));
-        assert!(!workspace.close(&document));
-        assert!(workspace.close(&one));
-        assert!(workspace.view(&document).is_some());
+    fn panes_are_values_and_their_edits_are_document_edits() {
+        let cell = CellId::from_u128(1);
+        let values = [
+            Value::from(cell),
+            Value::from(b"blob".to_vec()),
+            Value::list([]),
+            Value::record([]),
+        ];
+        let root = values.iter().fold(Value::record([]), |root, value| {
+            append(&root, Side::Left, value.clone()).unwrap().0
+        });
+        let locations = declarations(Some(&root));
+        assert_eq!(locations.len(), values.len());
+        for (location, value) in locations.iter().zip(&values) {
+            assert_eq!(crate::spine::get(&root, &location.path), Some(value));
+            assert!(matches!(location.path.last(), Some(Step::Element(_))));
+        }
+        let (moved, path) = move_value(&root, &locations[1].path, Move::Up).unwrap();
+        assert_eq!(declarations(Some(&moved))[0].path, path);
+        assert_eq!(crate::spine::get(&moved, &path), Some(&values[1]));
+        assert_eq!(
+            crate::spine::get(&moved, &locations[0].path),
+            Some(&values[0])
+        );
+        let (moved, path) = move_value(&moved, &path, Move::Right).unwrap();
+        assert_eq!(declarations(Some(&moved)).last().unwrap().side, Side::Right);
+        let mut doc = gid::Document {
+            root: Some(moved),
+            cells: Cells::new(),
+        };
+        doc.cells
+            .set_value(cell, Value::from(b"definition".to_vec()));
+        let before = doc.clone();
+        assert!(crate::selection::delete_edge(
+            &mut doc,
+            &Default::default(),
+            &path
+        ));
+        assert_eq!(declarations(doc.root.as_ref()).len(), 3);
+        assert_eq!(doc.cells.value(cell), before.cells.value(cell));
+        let mut history = crate::history::History::default();
+        history.record(before.clone(), Some(path));
+        let (restored, _) = history.undo(doc, None).unwrap();
+        assert_eq!(restored.root, before.root);
     }
 
     #[test]
-    fn root_pane_declarations_are_paths_to_their_contents() {
-        let root = Value::record([(
-            vocabulary::PANES,
-            Value::record([
-                (
-                    vocabulary::LEFT,
-                    Value::list([Value::record([
-                        (
-                            presentation::vocabulary::VALUE,
-                            Value::from(CellId::from_u128(1)),
-                        ),
-                        (
-                            presentation::vocabulary::PROJECTION,
-                            Value::from(CellId::from_u128(9)),
-                        ),
-                    ])]),
-                ),
-                (
-                    vocabulary::RIGHT,
-                    Value::list([Value::record([(
-                        presentation::vocabulary::VALUE,
-                        Value::from(CellId::from_u128(2)),
-                    )])]),
-                ),
-            ]),
-        )]);
-        let declarations = declarations(Some(&root));
-        assert_eq!(declarations.len(), 2);
-        assert_eq!(declarations[0].side, Side::Left);
-        assert_eq!(declarations[1].side, Side::Right);
-        assert_eq!(
-            declarations[0].projection_path.last(),
-            Some(&Step::Key(presentation::vocabulary::PROJECTION))
-        );
-        assert_eq!(
-            declarations[0].record_path.first(),
-            Some(&Step::Key(vocabulary::PANES))
-        );
-        assert_eq!(
-            declarations[0].value_path.first(),
-            Some(&Step::Key(vocabulary::PANES))
-        );
-        assert_eq!(
-            declarations[0].value_path.last(),
-            Some(&Step::Key(presentation::vocabulary::VALUE))
-        );
-        assert_eq!(declarations[0].record_path, declarations[0].value_path[..3]);
+    fn opening_panes_preserves_malformed_containers_and_nonrecord_roots() {
+        let value = Value::from(b"data".to_vec());
+        for root in [
+            value.clone(),
+            Value::record([(vocabulary::PANES, value.clone())]),
+        ] {
+            assert!(!can_open(Some(&root)));
+            assert!(append(&root, Side::Left, value.clone()).is_none());
+        }
     }
 
     #[test]
     fn declared_panes_reconcile_without_losing_view_state() {
         let one = Declaration {
             side: Side::Left,
-            record_path: vec![Step::Key(CellId::from_u128(11))],
-            value_path: vec![Step::Key(CellId::from_u128(1))],
-            projection_path: vec![Step::Key(CellId::from_u128(9))],
+            path: vec![Step::Key(CellId::from_u128(1))],
         };
         let two = Declaration {
             side: Side::Left,
-            record_path: vec![Step::Key(CellId::from_u128(12))],
-            value_path: vec![Step::Key(CellId::from_u128(2))],
-            projection_path: vec![Step::Key(CellId::from_u128(9))],
+            path: vec![Step::Key(CellId::from_u128(2))],
         };
         let mut workspace = Workspace::default();
         workspace.sync_declared(&[one.clone(), two.clone()]);
         assert!(crate::annotations::collapsed(
             &workspace.document.annotations,
-            &one.record_path,
+            &one.path,
             false,
         ));
         crate::annotations::set_collapsed(
             &mut workspace.document.annotations,
-            &one.record_path,
+            &one.path,
             false,
             false,
         );
@@ -1005,11 +963,10 @@ mod tests {
         assert_eq!(moved.projection, Projection::Raw);
         assert!(!crate::annotations::collapsed(
             &workspace.document.annotations,
-            &one.record_path,
+            &one.path,
             false,
         ));
-        assert!(!workspace.can_move(&root, Move::Up));
-        assert!(!workspace.close(&root));
+        assert!(workspace.can_move(&root, Move::Up));
 
         workspace.sync_declared(&[]);
         assert!(workspace.left.panes.is_empty());
@@ -1025,8 +982,8 @@ mod tests {
     #[test]
     fn divider_drags_update_requests_without_baking_in_minimums() {
         let mut workspace = Workspace::default();
-        let upper = workspace.open_cell(Side::Left, CellId::from_u128(1), Vec::new());
-        let lower = workspace.open_cell(Side::Left, CellId::from_u128(2), Vec::new());
+        let upper = add_pane(&mut workspace, Side::Left);
+        let lower = add_pane(&mut workspace, Side::Left);
 
         let columns = Divider::Columns(Side::Left);
         workspace.left_width = 0.05;
@@ -1060,9 +1017,9 @@ mod tests {
     fn geometry_keeps_document_full_height_and_stacks_each_side() {
         let mut workspace = Workspace::default();
         let document = workspace.document.root.clone();
-        workspace.open_cell(Side::Left, CellId::from_u128(1), Vec::new());
-        workspace.open_cell(Side::Left, CellId::from_u128(2), Vec::new());
-        workspace.open_cell(Side::Right, CellId::from_u128(3), Vec::new());
+        add_pane(&mut workspace, Side::Left);
+        add_pane(&mut workspace, Side::Left);
+        add_pane(&mut workspace, Side::Right);
         let geometry = workspace.geometry(Size::new(900.0, 600.0), 1.0);
         let document = geometry
             .views

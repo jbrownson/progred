@@ -241,7 +241,7 @@ fn place_with_annotations(
     width: f64,
     pointer: Option<Point>,
     viewport: Option<Rect>,
-    root: Option<(&[Step], Option<&Value>, Option<&Value>)>,
+    root: Option<(&[Step], Option<&Value>)>,
 ) -> (Bench, Extent) {
     place_with_annotations_using(
         doc,
@@ -263,7 +263,7 @@ fn place_with_annotations_using(
     width: f64,
     pointer: Option<Point>,
     viewport: Option<Rect>,
-    root: Option<(&[Step], Option<&Value>, Option<&Value>)>,
+    root: Option<(&[Step], Option<&Value>)>,
     drawing_memo: &DrawingMemo,
 ) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
@@ -302,7 +302,7 @@ fn place_with_annotations_using(
     // widths are where accidental exponentials have surfaced twice.
     // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
-    let (root_path, root, root_projection) = root.unwrap_or((&[], sources.root(), None));
+    let (root_path, root) = root.unwrap_or((&[], sources.root()));
     let node = project_with_drawing_memo::<World, Bench>(
         ProjectDescription {
             sources,
@@ -314,7 +314,6 @@ fn place_with_annotations_using(
             raw: false,
             styles: &styles,
             width: width - 48.0,
-            root_projection,
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
             root_field_completions: Some(&stack.root_field_completions),
@@ -393,9 +392,8 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
         .next()
         .expect("the preview is declared as a pane");
     let root = doc.root.as_ref().unwrap();
-    let value = crate::spine::get(root, &declaration.value_path);
-    let projection = crate::spine::get(root, &declaration.projection_path);
-    let source = Some((declaration.value_path.as_slice(), value, projection));
+    let value = crate::spine::get(root, &declaration.path);
+    let source = Some((declaration.path.as_slice(), value));
     let (bench, _) = place_with_annotations_using(
         &doc,
         None,
@@ -437,10 +435,9 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         .next()
         .expect("the picture is declared as a pane");
     let root = doc.root.as_ref().unwrap();
-    let value = crate::spine::get(root, &declaration.value_path);
-    let projection = crate::spine::get(root, &declaration.projection_path);
+    let value = crate::spine::get(root, &declaration.path);
     let drawing_memo = DrawingMemo::default();
-    let source = Some((declaration.value_path.as_slice(), value, projection));
+    let source = Some((declaration.path.as_slice(), value));
     let (bench, extent) = place_with_annotations_using(
         &doc,
         None,
@@ -554,9 +551,8 @@ fn iop_tree_profile_loop() {
         .next()
         .expect("the picture is declared as a pane");
     let root = doc.root.as_ref().unwrap();
-    let value = crate::spine::get(root, &declaration.value_path);
-    let projection = crate::spine::get(root, &declaration.projection_path);
-    let source = Some((declaration.value_path.as_slice(), value, projection));
+    let value = crate::spine::get(root, &declaration.path);
+    let source = Some((declaration.path.as_slice(), value));
     let iterations: usize = std::env::var("IOP_PROFILE_ITERATIONS")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -686,7 +682,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             raw: false,
             styles: &styles,
             width: 852.0,
-            root_projection: None,
+
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
             root_field_completions: Some(&stack.root_field_completions),
@@ -797,7 +793,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             raw: false,
             styles: &styles,
             width: 852.0,
-            root_projection: None,
+
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
             root_field_completions: Some(&stack.root_field_completions),
