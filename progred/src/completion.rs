@@ -62,7 +62,7 @@ pub(crate) fn completion_entries(
 /// Contextual offers alone in the narrow view, or the universal
 /// layer plus contextual offers when widened. The universal layer
 /// contains the inferred value, named references, and constructors.
-/// Label completion remains universal and only offers valid labels.
+/// Field completion only offers cell identities as labels.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     raw: bool,
@@ -71,11 +71,8 @@ pub(crate) fn completion_entries_with(
     contextual: Option<&CompletionProvider>,
     everything: bool,
 ) -> Vec<Entry> {
-    if !labels
-        && !everything
-        && let Some(contextual) = contextual
-    {
-        return contextual_entries(contextual, query);
+    if !everything && let Some(contextual) = contextual {
+        return contextual_entries(contextual, query, labels);
     }
     let trimmed = query.trim();
     let quoted = trimmed.trim_start().starts_with('"');
@@ -220,8 +217,8 @@ pub(crate) fn completion_entries_with(
         })
         .collect();
     let mut entries = Vec::new();
-    if !labels && let Some(contextual) = contextual {
-        entries.extend(contextual_entries(contextual, query));
+    if let Some(contextual) = contextual {
+        entries.extend(contextual_entries(contextual, query, labels));
     }
     if atom_leads {
         entries.push(atom_entry);
@@ -247,7 +244,7 @@ fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
     }
 }
 
-fn contextual_entries(provider: &CompletionProvider, query: &str) -> Vec<Entry> {
+fn contextual_entries(provider: &CompletionProvider, query: &str, labels: bool) -> Vec<Entry> {
     let completions = provider(query);
     let keys: Vec<_> = completions
         .iter()
@@ -272,7 +269,7 @@ fn contextual_entries(provider: &CompletionProvider, query: &str) -> Vec<Entry> 
                 None
             } else {
                 let completion = &completions[index];
-                Some(Entry {
+                (!labels || completion.value.as_cell().is_some()).then(|| Entry {
                     display: completion.display.clone(),
                     detail: completion.detail.clone(),
                     matches: display_matched

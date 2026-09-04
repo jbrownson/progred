@@ -2793,6 +2793,7 @@ dependencies = [
  "puri",
  "puri-vello",
  "puri-web",
+ "puri-widgets",
  "raw-window-metal",
  "rfd",
  "serde",

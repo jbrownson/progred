@@ -12,6 +12,7 @@ pub struct Stack<World> {
     pub libraries: Libraries,
     pub projection: Projection<World>,
     pub root_completions: progred_display::CompletionProvider,
+    pub root_field_completions: progred_display::CompletionProvider,
 }
 
 impl<World> Clone for Stack<World> {
@@ -20,17 +21,21 @@ impl<World> Clone for Stack<World> {
             libraries: self.libraries.clone(),
             projection: self.projection.clone(),
             root_completions: self.root_completions.clone(),
+            root_field_completions: self.root_field_completions.clone(),
         }
     }
 }
 
 pub fn load<World: 'static>() -> Stack<World> {
-    let (libraries, projections, root_completions) = Libraries::from_contributions(contributions());
+    let (libraries, projections, root_completions, root_field_completions) =
+        Libraries::from_contributions(contributions());
     let root_completions = std::rc::Rc::new(move |_: &str| root_completions.clone());
+    let root_field_completions = std::rc::Rc::new(move |_: &str| root_field_completions.clone());
     Stack {
         libraries,
         projection: Projection::new(projections),
         root_completions,
+        root_field_completions,
     }
 }
 

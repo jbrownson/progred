@@ -850,6 +850,7 @@ mod tests {
             scale_factor: 1.0,
             writable: true,
             selection: None,
+            pending: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&unit_target),
         }
@@ -862,6 +863,7 @@ mod tests {
             scale_factor: 1.0,
             writable: true,
             selection: None,
+            pending: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&relative_target),
         }

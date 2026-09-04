@@ -2843,14 +2843,35 @@ continuity across identity changes (the Haskell spot-transfer).
 Deferred behind projections.
 
 - Bootstrap: projection-owned completion, no schema required.
-- Contextual completion is the ordinary list (2026-09-04): when a
-  projection supplies offers, the popup initially shows only those
-  offers. A trailing `…` affordance or Tab widens it with the universal
-  layer and then disappears; changing the query returns to the focused
-  list. A site without a provider uses
-  the universal list directly. Root offers belong only to an empty
-  document root, not its descendants. The placed frame retains the exact
-  visible offers so hover and commit address the same list.
+- Contextual completion is an explicit control (2026-09-04): the
+  projection that renders a pending field or value places the completion
+  request there and supplies its optional lazy vocabulary directly; it is
+  not inherited through traversal context. Progred adapts its GID values
+  and editor actions to the pure `puri-widgets` completion rows, composes
+  those with the existing column and scroll container, and owns the
+  floater. Providers run only for the active picker; inactive empties do
+  not construct offers. Grap parameter offers are likewise prepared only
+  during field insertion, not for every projected call. This is ordinary
+  demand-driven work, not a cross-frame memo. The popup initially shows
+  only contextual offers. A trailing `…` affordance or Tab widens it with
+  the universal layer and
+  then disappears; changing the query returns to the focused list. A site
+  without a provider uses the universal list directly. Libraries
+  contribute empty-root templates and document-root field identities
+  separately, and neither leaks into descendants. The placed frame retains
+  the exact visible offers so hover and commit address the same list.
+- Pending insertion fallback remains unresolved (2026-09-04): structural
+  records and the general Grap call projection expose pending fields, but
+  specialized projections such as quote, infix, match, and lambda may hide
+  them. A simple option is for those projections to decline while an
+  unsupported insertion is active, exposing the general form. Another is
+  for the per-value projection boundary (including `descend`) to append a
+  standard pending editor when the projection has not supplied one. That
+  needs an explicit indication of coverage to avoid duplicate controls,
+  not a search through drawing output. A pending label has no child step
+  yet, so its parent must participate; an ancestor that hides an existing
+  selected child is a related, broader problem. Do not silently implement
+  either policy before deciding how these editing states should look.
 - Layered like rendering (2026-07-06): a projection contributes
   parameterized offers where it knows something, over a universal
   substrate layer available at every site — atoms by inference (text

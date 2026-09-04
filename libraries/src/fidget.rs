@@ -958,6 +958,12 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     )
     .with_aliases(["sdf"])
     .with_detail("fidget library")])
+    .with_root_field_completions([progred_display::Completion::new(
+        "fidget",
+        Value::from(vocabulary::FIDGET),
+    )
+    .with_aliases(["sdf"])
+    .with_detail("fidget library")])
 }
 
 #[cfg(test)]
@@ -1028,6 +1034,7 @@ mod tests {
                 scale_factor: 2.0,
                 writable: false,
                 selection: None,
+                pending: None,
                 state: None,
                 targets: ProjectionTargets::new(&target),
             },

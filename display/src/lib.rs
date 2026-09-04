@@ -149,9 +149,9 @@ pub struct PointUpdate {
 
 pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
 
-/// One value a projection suggests at pending locations in its
-/// subtree. The host owns filtering and presentation; the projection
-/// owns the contextual vocabulary and the value ultimately inserted.
+/// One value a projection suggests at an explicit completion control.
+/// The host owns filtering and presentation; the projection owns the
+/// contextual vocabulary and the value ultimately inserted.
 #[derive(Clone)]
 pub struct Completion {
     pub display: String,
@@ -185,6 +185,21 @@ impl Completion {
 /// provider generate a large or computed vocabulary lazily; the host
 /// still ranks the returned display names and aliases consistently.
 pub type CompletionProvider = Rc<dyn Fn(&str) -> Vec<Completion>>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompletionKind {
+    Value,
+    Field,
+}
+
+/// Pending editor structure immediately beneath the value being
+/// projected. Projections use this to place the corresponding control;
+/// they never need the host's absolute path or selection encoding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pending {
+    Field,
+    Child(Step),
+}
 
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
@@ -232,16 +247,12 @@ pub enum Layout<World, Hover> {
         fuel: usize,
         program: Value,
     },
-    /// Progred's still-host-owned completion query. This is explicit
-    /// layout composition debt, not a drawing primitive disguised as
-    /// one.
-    Query,
-    /// Supply contextual completion values to pending queries beneath
-    /// `child`. Nested scopes replace the outer provider; the universal
-    /// cell/value vocabulary remains available as a fallback.
-    WithCompletions {
-        child: Box<Layout<World, Hover>>,
-        provider: CompletionProvider,
+    /// One explicit host control request, lowered through the reusable
+    /// Puri completion widget. The projection placing the pending field
+    /// or value supplies its vocabulary directly.
+    Completion {
+        kind: CompletionKind,
+        provider: Option<CompletionProvider>,
     },
     LineEdit(LineEdit),
     OnClick {
@@ -392,9 +403,8 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 fuel: *fuel,
                 program: program.clone(),
             },
-            Self::Query => Self::Query,
-            Self::WithCompletions { child, provider } => Self::WithCompletions {
-                child: child.clone(),
+            Self::Completion { kind, provider } => Self::Completion {
+                kind: *kind,
                 provider: provider.clone(),
             },
             Self::LineEdit(line) => Self::LineEdit(line.clone()),
@@ -581,6 +591,9 @@ pub struct ProjectionInput<'a, World, Hover> {
     /// The selection payload — stage, query, choice — iff this
     /// value's path is the selected one.
     pub selection: Option<&'a Value>,
+    /// A new field or missing child currently being authored directly
+    /// beneath this value, if any.
+    pub pending: Option<Pending>,
     /// This path's annotation record (fold state and whatever joins it).
     pub state: Option<&'a Value>,
     /// Derive this value's interaction target, or one below it,
@@ -630,18 +643,11 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
     })
 }
 
-pub fn query<World, Hover>() -> Layout<World, Hover> {
-    Layout::Query
-}
-
-pub fn with_completions<World, Hover>(
-    child: Layout<World, Hover>,
-    provider: CompletionProvider,
+pub fn completion<World, Hover>(
+    kind: CompletionKind,
+    provider: Option<CompletionProvider>,
 ) -> Layout<World, Hover> {
-    Layout::WithCompletions {
-        child: Box::new(child),
-        provider,
-    }
+    Layout::Completion { kind, provider }
 }
 
 pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
@@ -881,8 +887,20 @@ pub struct RecordField<World, Hover> {
 
 pub fn record<'a, World, Hover: Clone>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
+    order: impl FnMut(&CellId, &CellId) -> Ordering,
+    field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
+) -> Layout<World, Hover> {
+    record_with(fields, order, field, [])
+}
+
+/// The record layout with explicit trailing fields, such as the one
+/// pending field currently being authored. They participate in both
+/// responsive forms but not in sorting the stored fields.
+pub fn record_with<'a, World, Hover: Clone>(
+    fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
     mut field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
+    trailing: impl IntoIterator<Item = RecordField<World, Hover>>,
 ) -> Layout<World, Hover> {
     let mut fields = fields.into_iter().collect::<Vec<_>>();
     fields.sort_by(|(left, _), (right, _)| order(left, right));
@@ -895,6 +913,10 @@ pub fn record<'a, World, Hover: Clone>(
                 value: shared(field.value),
             }
         })
+        .chain(trailing.into_iter().map(|field| RecordField {
+            label: shared(field.label),
+            value: shared(field.value),
+        }))
         .collect::<Vec<_>>();
     let mut flat = Vec::new();
     for (index, field) in fields.iter().enumerate() {

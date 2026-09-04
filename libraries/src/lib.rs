@@ -225,6 +225,7 @@ pub struct Library<World, Hover> {
     pub definitions: Definitions,
     pub projections: Vec<Partial<World, Hover>>,
     pub root_completions: Vec<Completion>,
+    pub root_field_completions: Vec<Completion>,
 }
 
 impl<World, Hover> Clone for Library<World, Hover> {
@@ -234,6 +235,7 @@ impl<World, Hover> Clone for Library<World, Hover> {
             definitions: self.definitions.clone(),
             projections: self.projections.clone(),
             root_completions: self.root_completions.clone(),
+            root_field_completions: self.root_field_completions.clone(),
         }
     }
 }
@@ -245,6 +247,7 @@ impl<World, Hover> Default for Library<World, Hover> {
             definitions: Definitions::default(),
             projections: Vec::new(),
             root_completions: Vec::new(),
+            root_field_completions: Vec::new(),
         }
     }
 }
@@ -260,6 +263,7 @@ impl<World, Hover> Library<World, Hover> {
             definitions,
             projections,
             root_completions: Vec::new(),
+            root_field_completions: Vec::new(),
         }
     }
 
@@ -276,6 +280,14 @@ impl<World, Hover> Library<World, Hover> {
         completions: impl IntoIterator<Item = Completion>,
     ) -> Self {
         self.root_completions = completions.into_iter().collect();
+        self
+    }
+
+    pub fn with_root_field_completions(
+        mut self,
+        completions: impl IntoIterator<Item = Completion>,
+    ) -> Self {
+        self.root_field_completions = completions.into_iter().collect();
         self
     }
 
@@ -304,6 +316,11 @@ impl<World, Hover> Library<World, Hover> {
                 .into_iter()
                 .chain(other.root_completions)
                 .collect(),
+            root_field_completions: self
+                .root_field_completions
+                .into_iter()
+                .chain(other.root_field_completions)
+                .collect(),
         }
     }
 
@@ -328,14 +345,26 @@ pub struct Libraries {
 impl Libraries {
     pub fn from_contributions<World, Hover>(
         entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
-    ) -> (Self, Vec<Partial<World, Hover>>, Vec<Completion>) {
+    ) -> (
+        Self,
+        Vec<Partial<World, Hover>>,
+        Vec<Completion>,
+        Vec<Completion>,
+    ) {
         entries.into_iter().fold(
-            (Self::default(), Vec::new(), Vec::new()),
-            |(mut libraries, mut projections, mut root_completions), (id, library)| {
+            (Self::default(), Vec::new(), Vec::new(), Vec::new()),
+            |(mut libraries, mut projections, mut root_completions, mut root_field_completions),
+             (id, library)| {
                 libraries.insert(id, library.metadata, library.definitions);
                 projections.extend(library.projections);
                 root_completions.extend(library.root_completions);
-                (libraries, projections, root_completions)
+                root_field_completions.extend(library.root_field_completions);
+                (
+                    libraries,
+                    projections,
+                    root_completions,
+                    root_field_completions,
+                )
             },
         )
     }
@@ -541,6 +570,7 @@ mod tests {
                         scale_factor: 1.0,
                         writable: true,
                         selection: None,
+                        pending: None,
                         state: None,
                         targets: progred_display::ProjectionTargets::new(&target),
                     })
@@ -575,7 +605,7 @@ mod tests {
             Definitions::from_parts(right_cells, ForeignFunctions::default()),
             vec![],
         );
-        let (mut libraries, _, _) =
+        let (mut libraries, _, _, _) =
             Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
         let replacement = Definitions::default();
 

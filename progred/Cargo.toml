@@ -13,6 +13,7 @@ progred-display = { path = "../display" }
 gid = { path = "../gid" }
 measured = { path = "../ui/measured" }
 puri = { path = "../ui/puri" }
+puri-widgets = { path = "../ui/puri-widgets" }
 uig = { path = "../ui/uig" }
 kurbo = "0.13.1"
 peniko = "0.6.1"

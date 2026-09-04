@@ -90,6 +90,7 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
                 true,
                 None,
                 None,
+                None,
                 progred_display::ProjectionTargets::new(&target),
             )
             .unwrap()
@@ -198,6 +199,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             root_projection: None,
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
@@ -258,6 +260,7 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
             value,
             1.0,
             true,
+            None,
             None,
             None,
             progred_display::ProjectionTargets::new(&target),
@@ -1289,6 +1292,14 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
 }
 
 fn projected_completion_entries(doc: &Document, selection: &Selection) -> Vec<Entry> {
+    projected_completion_entries_with(doc, selection, None)
+}
+
+fn projected_completion_entries_with(
+    doc: &Document,
+    selection: &Selection,
+    projection: Option<&Projection<()>>,
+) -> Vec<Entry> {
     let stack = crate::stack::load::<()>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -1313,8 +1324,9 @@ fn projected_completion_entries(doc: &Document, selection: &Selection) -> Vec<En
             styles: &styles,
             width: 500.0,
             root_projection: None,
-            projection: Some(&stack.projection),
+            projection: Some(projection.unwrap_or(&stack.projection)),
             root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
@@ -1341,6 +1353,43 @@ fn projected_completion_entries(doc: &Document, selection: &Selection) -> Vec<En
     .completion
     .expect("the selected pending emits its offers")
     .entries
+}
+
+#[test]
+fn only_the_active_empty_requests_completion_offers() {
+    use progred_display::{Completion, CompletionKind, completion, descend};
+
+    let fields = std::array::from_fn::<_, 32, _>(|_| new_cell_id());
+    let requests = Rc::new(std::cell::Cell::new(0));
+    let provider: progred_display::CompletionProvider = {
+        let requests = requests.clone();
+        Rc::new(move |_| {
+            requests.set(requests.get() + 1);
+            vec![Completion::new("offered", Value::record([]))]
+        })
+    };
+    let projection = Projection::new([progred_display::partial(move |_| {
+        Some(progred_display::col(
+            0,
+            0.0,
+            fields.map(|field| {
+                descend(
+                    Step::Key(field),
+                    None,
+                    Some(completion(CompletionKind::Value, Some(provider.clone()))),
+                )
+            }),
+        ))
+    })]);
+    let document = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let selection = pending_value(vec![Step::Key(fields[12])]);
+    let entries = projected_completion_entries_with(&document, &selection, Some(&projection));
+    assert_eq!(requests.get(), 1);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].display, "offered");
 }
 
 #[test]
@@ -1377,14 +1426,72 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
 }
 
 #[test]
-fn completion_view_reveals_keyboard_choices() {
-    let spans: Vec<(f64, f64)> = (0..20)
-        .map(|index| (index as f64 * 12.0, index as f64 * 12.0 + 10.0))
-        .collect();
-    let viewport = 94.0;
-    assert_eq!(reveal_completion(0.0, 7, &spans, viewport), 0.0);
-    assert_eq!(reveal_completion(0.0, 8, &spans, viewport), 12.0);
-    assert_eq!(reveal_completion(144.0, 0, &spans, viewport), 0.0);
+fn root_field_completion_offers_only_root_vocabulary_until_widened() {
+    let document = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let stack = crate::stack::load::<()>();
+    let selection = pending_edge(&src(&document, &stack.libraries), Vec::new()).unwrap();
+    let entries = projected_completion_entries(&document, &selection);
+    let cells = entries
+        .iter()
+        .filter_map(|entry| match &entry.action {
+            EntryAction::Value(value) => value.as_cell(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cells,
+        [
+            fidget::vocabulary::FIDGET,
+            progred_libraries::grap::vocabulary::GRAP,
+            crate::workspace::vocabulary::PANES,
+        ]
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|entry| matches!(entry.action, EntryAction::Value(Value::Cell(_))))
+    );
+}
+
+#[test]
+fn grap_call_field_completion_offers_missing_parameters() {
+    let function = gid::new_cell_id();
+    let left = gid::new_cell_id();
+    let right = gid::new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        function,
+        Value::record([
+            (
+                grap::vocabulary::PARAMS,
+                Value::list([Value::from(left), Value::from(right)]),
+            ),
+            (grap::vocabulary::BODY, Value::record([])),
+        ]),
+    );
+    let document = Document {
+        root: Some(Value::record([(
+            grap::vocabulary::FUNCTION,
+            Value::from(function),
+        )])),
+        cells,
+    };
+    let stack = crate::stack::load::<()>();
+    let selection = pending_edge(&src(&document, &stack.libraries), Vec::new()).unwrap();
+    let entries = projected_completion_entries(&document, &selection);
+    let parameters = entries
+        .iter()
+        .filter_map(|entry| match &entry.action {
+            EntryAction::Value(value) => value.as_cell(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(parameters, [left, right]);
 }
 
 #[test]
@@ -1780,6 +1887,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 root_projection: None,
                 projection: Some(&projection),
                 root_completions: None,
+                root_field_completions: None,
             },
             &mut tcx,
             Hooks::<()> {
@@ -1892,6 +2000,7 @@ fn a_projection_defined_as_data_realizes() {
             root_projection: None,
             projection: Some(&projection),
             root_completions: None,
+            root_field_completions: None,
         },
         &mut tcx,
         Hooks::<()> {
@@ -1971,6 +2080,7 @@ fn a_data_event_realizes_the_apply_hook() {
             root_projection: None,
             projection: Some(&projection),
             root_completions: None,
+            root_field_completions: None,
         },
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {

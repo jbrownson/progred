@@ -5,7 +5,6 @@ use crate::annotations::Annotations;
 use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries_with};
 #[cfg(test)]
 use crate::completion::{completion_entries, resolve_entry, resolve_label};
-use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 #[cfg(test)]
@@ -96,6 +95,7 @@ impl<World> Projection<World> {
         scale_factor: f64,
         writable: bool,
         selection: Option<&Value>,
+        pending: Option<progred_display::Pending>,
         state: Option<&Value>,
         targets: progred_display::ProjectionTargets<'_, World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
@@ -105,6 +105,7 @@ impl<World> Projection<World> {
             scale_factor,
             writable,
             selection,
+            pending,
             state,
             targets,
         };
@@ -132,6 +133,7 @@ struct Cx<'a> {
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
     drawing_memo: &'a DrawingMemo,
+    root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
 #[derive(Clone, Default)]
@@ -140,9 +142,6 @@ struct Traversal {
     cells: HashSet<CellId>,
     /// The nearest followed cell and the start of its relative path.
     enclosing: Option<(CellId, usize)>,
-    /// The nearest projection-supplied vocabulary. This is frame-local
-    /// description data, not retained editor state.
-    completions: Option<progred_display::CompletionProvider>,
 }
 
 #[derive(Clone, Copy)]
@@ -868,20 +867,15 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
         } => ChoiceLayout::fixed(drawing::program_leaf(
             cx, path, width, ascent, descent, fuel, program,
         )),
-        progred_display::Layout::Query => {
-            let engaged = cx.pending_edge_under(path).map(|(query, _)| query);
-            ChoiceLayout::fixed(match engaged {
-                Some(query) => label_query(cx, tcx, query, hooks),
-                None => render::text(tcx, "…", &cx.styles.dim),
-            })
-        }
-        progred_display::Layout::WithCompletions { child, provider } => {
-            let mut scoped = ancestors.clone();
-            scoped.completions = Some(provider);
-            prepare(
-                cx, projection, tcx, path, &scoped, hooks, value, *child, build,
-            )
-        }
+        progred_display::Layout::Completion { kind, provider } => ChoiceLayout::fixed(match kind {
+            progred_display::CompletionKind::Value => {
+                pending_view(cx, tcx, path.to_vec(), provider.as_ref(), hooks)
+            }
+            progred_display::CompletionKind::Field => cx
+                .pending_edge_under(path)
+                .map(|(query, _)| label_query(cx, tcx, query, provider.as_ref(), hooks))
+                .unwrap_or_else(|| render::text(tcx, "…", &cx.styles.dim)),
+        }),
         progred_display::Layout::LineEdit(mut line) => {
             if let Some((scrub_path, spelling)) = cx.scrub_spelling
                 && scrub_path == path
@@ -2301,6 +2295,8 @@ pub struct ProjectDescription<'a, World> {
     pub projection: Option<&'a Projection<World>>,
     /// Suggestions contributed for an empty document root.
     pub root_completions: Option<&'a progred_display::CompletionProvider>,
+    /// Fields contributed for a record at the document root.
+    pub root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
 fn projection_is_absent(value: &Value) -> bool {
@@ -2337,6 +2333,7 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         root_projection,
         projection,
         root_completions,
+        root_field_completions,
     } = description;
     let cx = Cx {
         sources,
@@ -2348,6 +2345,7 @@ pub(crate) fn project_with_drawing_memo<C: 'static, Cv: Canvas + 'static>(
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         drawing_memo,
+        root_field_completions,
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
         secondary: secondary_of(&sources, selection),
@@ -2601,6 +2599,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
         drawing_memo: cx.drawing_memo,
+        root_field_completions: None,
     };
     prepare_location(
         &result_cx,
@@ -2712,13 +2711,17 @@ fn prepare_location<C: 'static, Cv: Canvas + 'static>(
                 layout,
                 build,
             ),
-            None => ChoiceLayout::fixed(pending_view(
+            None => prepare(
                 cx,
+                present_projection,
                 tcx,
-                path.to_vec(),
-                ancestors.completions.as_ref(),
+                path,
+                ancestors,
                 hooks,
-            )),
+                None,
+                progred_display::completion(progred_display::CompletionKind::Value, None),
+                build,
+            ),
         },
     }
 }
@@ -2843,6 +2846,12 @@ fn present_layout<C: 'static>(
                     .selection
                     .filter(|current| current.path() == path)
                     .map(Selection::payload);
+                let pending = if cx.pending_edge_under(path).is_some() {
+                    Some(progred_display::Pending::Field)
+                } else {
+                    cx.pending_child_of(path)
+                        .map(progred_display::Pending::Child)
+                };
                 let state = cx.annotations.at(path);
                 let target = |steps| projection_target(path, hooks, steps);
                 projection.apply(
@@ -2851,6 +2860,7 @@ fn present_layout<C: 'static>(
                     cx.styles.scale,
                     !cx.source.transient() && writable_at(&cx.sources, path),
                     selection,
+                    pending,
                     state,
                     progred_display::ProjectionTargets::new(&target),
                 )
@@ -2942,7 +2952,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     // The card and keyboard commit must answer from one list.
-    let can_show_everything = !labels && completions.is_some();
+    let can_show_everything = completions.is_some();
     let everything =
         !can_show_everything || cx.selection.is_some_and(Selection::completion_everything);
     let entries = completion_entries_with(
@@ -3044,12 +3054,27 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
     let choice = choice.min(entries.len().saturating_sub(1));
-    // Cells first, so rows can pad out to the widest and the chosen
-    // highlight spans the card, not just its own content.
-    let cells: Vec<(Measured<Placed<C, Cv>>, Option<Measured<Placed<C, Cv>>>)> = entries
+    let matches = entries
         .iter()
         .map(|entry| {
-            let style = match &entry.action {
+            entry
+                .matches
+                .iter()
+                .map(|matched| puri_widgets::completion::Match {
+                    start: matched.start,
+                    len: matched.len,
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let widget_entries = entries
+        .iter()
+        .zip(&matches)
+        .map(|(entry, matches)| puri_widgets::completion::Entry {
+            display: &entry.display,
+            detail: entry.detail.as_deref(),
+            matches,
+            style: match &entry.action {
                 EntryAction::Value(value) if text::read(value).is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) if entry.id => &styles.id,
@@ -3058,85 +3083,35 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
                 | EntryAction::NewCell
                 | EntryAction::NewList
                 | EntryAction::NewRecord => &styles.dim,
-            };
-            let display = highlighted(tcx, &entry.display, &entry.matches, style);
-            let detail = entry
-                .detail
-                .as_ref()
-                .map(|detail| text(tcx, detail, &styles.id));
-            (display, detail)
+            },
         })
-        .collect();
-    let widths: Vec<f64> = cells
-        .iter()
-        .map(|(display, detail)| {
-            display.extent.width
-                + detail
-                    .as_ref()
-                    .map_or(0.0, |detail| 8.0 * scale + detail.extent.width)
-        })
-        .collect();
-    let more_label = (!everything).then(|| text::<C, Cv>(tcx, "…", &styles.dim));
-    let max_width = widths
-        .iter()
-        .copied()
-        .chain(more_label.iter().map(|label| label.extent.width))
-        .fold(0.0, f64::max);
-    let rows: Vec<Measured<Placed<C, Cv>>> = cells
+        .collect::<Vec<_>>();
+    let widget = puri_widgets::completion::Completion::new(
+        tcx,
+        &widget_entries,
+        !everything,
+        puri_widgets::completion::Style {
+            detail: &styles.id,
+            more: &styles.dim,
+            scale,
+            chosen: Color::new([0.0, 0.48, 1.0, 0.14]),
+            hovered: Color::new([0.0, 0.48, 1.0, 0.08]),
+        },
+    );
+    let rows = widget
+        .rows
         .into_iter()
-        .zip(widths)
+        .zip(entries)
         .enumerate()
-        .map(|(index, ((display, detail), width))| {
-            let mut cells: Vec<Measured<Placed<C, Cv>>> = vec![display];
-            if let Some(detail) = detail {
-                cells.push(detail);
-            }
-            let content = pad(
-                Insets::new(
-                    8.0 * scale,
-                    2.0 * scale,
-                    8.0 * scale + (max_width - width),
-                    2.0 * scale,
-                ),
-                row(8.0 * scale, cells),
-            );
-            let chosen = index == choice;
-            let action = entries[index].action.clone();
+        .map(|(index, (row, entry))| {
+            let action = entry.action.clone();
             let commit = commit.clone();
-            before(content, move |p, placement| {
-                let rect = placement.rect;
-                p.ink(move |cv, ink| {
-                    let lit = !chosen
-                        && matches!(tree_hovered(ink), Some(Hover::Entry(i)) if *i == index);
-                    if chosen {
-                        cv.fill(
-                            RoundedRect::from_rect(rect, 4.0 * scale),
-                            Color::new([0.0, 0.48, 1.0, 0.14]),
-                            Affine::IDENTITY,
-                        );
-                    } else if lit {
-                        cv.fill(
-                            RoundedRect::from_rect(rect, 4.0 * scale),
-                            Color::new([0.0, 0.48, 1.0, 0.08]),
-                            Affine::IDENTITY,
-                        );
-                    }
-                });
-                hover_claim(p, placement, Hover::Entry(index));
-                let target = Hovered::Tree(Hover::Entry(index));
-                let pick_commit = commit.clone();
-                let pick_action = action.clone();
-                p.activate(target.clone(), move |ctx| {
-                    commit(ctx, &action);
-                    true
-                });
-                p.pick(target, move |ctx| {
-                    pick_commit(ctx, &pick_action);
-                    true
-                });
+            completion_row(row, Hover::Entry(index), index == choice, move |world| {
+                commit(world, &action);
+                true
             })
         })
-        .collect();
+        .collect::<Vec<_>>();
     let gap = 2.0 * scale;
     let row_spans = completion_row_spans(&rows, gap, scale);
     let content = col(0, gap, rows);
@@ -3173,41 +3148,11 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         scrolled,
         move |placement, _, _| Some(placement),
     );
-    let more = more_label.map(|label| {
-        let width = label.extent.width;
-        let more = pad(
-            Insets::new(
-                8.0 * scale,
-                3.0 * scale,
-                8.0 * scale + (max_width - width),
-                3.0 * scale,
-            ),
-            label,
-        );
+    let more = widget.more.map(|row| {
         let set_view = set_view.clone();
-        before(more, move |p, placement| {
-            let target = Hovered::Tree(Hover::MoreCompletions);
-            let mine = Hover::MoreCompletions;
-            p.ink(move |cv, ink| {
-                let hovered = tree_hovered(ink) == Some(&mine);
-                if hovered {
-                    cv.fill(
-                        RoundedRect::from_rect(placement.rect, 4.0 * scale),
-                        Color::new([0.0, 0.48, 1.0, 0.08]),
-                        Affine::IDENTITY,
-                    );
-                }
-            });
-            hover_claim(p, placement, Hover::MoreCompletions);
-            let activate = set_view.clone();
-            p.activate(target.clone(), move |world| {
-                activate(world, 0.0, 0, true);
-                true
-            });
-            p.pick(target, move |world| {
-                set_view(world, 0.0, 0, true);
-                true
-            });
+        completion_row(row, Hover::MoreCompletions, false, move |world| {
+            set_view(world, 0.0, 0, true);
+            true
         })
     });
     let card = col(
@@ -3296,34 +3241,24 @@ fn reveal_completion(
     }
 }
 
-/// Entry text with the query's matched spans in bold — the fuzzy
-/// filter's byte offsets drawn, not recomputed.
-fn highlighted<C: 'static, Cv: Canvas + 'static>(
-    tcx: &mut TextCtx,
-    s: &str,
-    matches: &[filter::Match],
-    style: &TextStyle,
+fn completion_row<C: 'static, Cv: Canvas + 'static>(
+    row: puri_widgets::completion::Row,
+    hover: Hover,
+    chosen: bool,
+    activate: impl Fn(&mut C) -> bool + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    if matches.is_empty() {
-        return text(tcx, s, style);
-    }
-    let bold = TextStyle {
-        weight: Some(700.0),
-        ..style.clone()
-    };
-    let mut segments: Vec<Measured<Placed<C, Cv>>> = Vec::new();
-    let mut at = 0;
-    for span in matches {
-        if span.start > at {
-            segments.push(text(tcx, &s[at..span.start], style));
-        }
-        segments.push(text(tcx, &s[span.start..span.start + span.len], &bold));
-        at = span.start + span.len;
-    }
-    if at < s.len() {
-        segments.push(text(tcx, &s[at..], style));
-    }
-    row(0.0, segments)
+    leaf(
+        placed::metrics_extent(row.metrics()),
+        move |p, placement| {
+            hover_claim(p, placement, hover.clone());
+            let target = Hovered::Tree(hover.clone());
+            p.activate(target.clone(), activate.clone());
+            p.pick(target, activate);
+            p.ink(move |canvas, ink| {
+                row.draw(canvas, placement, chosen, tree_hovered(ink) == Some(&hover));
+            });
+        },
+    )
 }
 
 /// An editable atom's content: the selection's focused editor when
@@ -3366,10 +3301,11 @@ fn label_query<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
+    completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, Some(query), true, None, hooks);
+    let content = placeholder(cx, tcx, Some(query), true, completions, hooks);
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(scale, p, rect);
     });

@@ -9,8 +9,9 @@ use crate::selection::writable_at;
 use crate::sources::DefinitionSource;
 use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
-    Delim, Face, Layout, activatable, alternatives, block_hover, bracket, col, descend, dim, faced,
-    hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
+    CompletionKind, CompletionProvider, Delim, Face, Layout, activatable, alternatives,
+    block_hover, bracket, col, completion, descend, dim, faced, hug, id, on_activate, on_click,
+    on_hover, pickable, row, shared, slot,
 };
 use std::rc::Rc;
 
@@ -200,6 +201,10 @@ fn record_layout<World: 'static>(
         },
     );
     let pending_edge = cx.pending_edge_under(path).is_some();
+    let pending_completions = path
+        .is_empty()
+        .then(|| cx.root_field_completions.cloned())
+        .flatten();
     if items.is_empty() && !pending_edge {
         return selectable(
             bracket(Delim::Brace, row(0.0, Vec::new())),
@@ -226,7 +231,7 @@ fn record_layout<World: 'static>(
         if !items.is_empty() {
             flat.push(dim(", "));
         }
-        flat.push(pending_edge_layout());
+        flat.push(pending_edge_layout(pending_completions.clone()));
     }
     let mut rows: Vec<View<World>> = items
         .iter()
@@ -234,7 +239,7 @@ fn record_layout<World: 'static>(
         .map(|((key, present), child)| field_row(cx, path, *key, *present, child, hooks))
         .collect();
     if pending_edge {
-        rows.push(pending_edge_layout());
+        rows.push(pending_edge_layout(pending_completions));
     }
     alternatives([
         selectable(
@@ -342,9 +347,16 @@ fn insert<World: 'static>(
     )
 }
 
-fn pending_edge_layout<World: 'static>() -> View<World> {
+fn pending_edge_layout<World: 'static>(completions: Option<CompletionProvider>) -> View<World> {
     block_hover(on_click(
-        row(0.0, [query(), dim(": "), slot()]),
+        row(
+            0.0,
+            [
+                completion(CompletionKind::Field, completions),
+                dim(": "),
+                slot(),
+            ],
+        ),
         Rc::new(|_| true),
     ))
 }

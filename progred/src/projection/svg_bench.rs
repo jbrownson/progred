@@ -317,6 +317,7 @@ fn place_with_annotations_using(
             root_projection,
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         hooks,
@@ -688,6 +689,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root_projection: None,
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
@@ -798,6 +800,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root_projection: None,
             projection: Some(&stack.projection),
             root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut frame_tcx,
         Hooks {
@@ -1443,6 +1446,10 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         )
     };
     let mut state = (0.0, 0, false);
+    assert_eq!(
+        frame(state).probe(Point::new(10.0, 10.0), None, 0.0),
+        Some(Claim::Direct(Hovered::Tree(Hover::Entry(0)))),
+    );
     let pointer = PointerInfo {
         pointer_id: Some(PointerId::PRIMARY),
         persistent_device_id: None,
@@ -1464,6 +1471,15 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .handled()
     );
     assert_eq!(state, (200.0, 0, false));
+    let scrolled = frame(state);
+    assert!((4..160).any(|y| matches!(
+        scrolled.probe(Point::new(10.0, y as f64), None, 0.0),
+        Some(Claim::Direct(Hovered::Tree(Hover::Entry(index)))) if index > 0
+    )));
+    assert!(
+        (0..200).all(|y| scrolled.probe(Point::new(10.0, y as f64), None, 0.0)
+            != Some(Claim::Direct(Hovered::Tree(Hover::Entry(0)))))
+    );
     let press = |key| KeyboardEvent {
         key: Key::Named(key),
         state: KeyState::Down,

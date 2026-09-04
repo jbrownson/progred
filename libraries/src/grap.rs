@@ -9,8 +9,9 @@ pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Delim, Face, Layout, ProjectionInput, RecordField, activatable, alternatives,
-    at_with_projection, bracket, col, descend, dim, faced, hug, record, row, shared, transient,
+    Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
+    RecordField, activatable, alternatives, at_with_projection, bracket, col, completion, descend,
+    dim, faced, hug, record_with, row, shared, slot, transient,
 };
 
 pub mod vocabulary {
@@ -193,8 +194,42 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
     }
+    let trailing = match &input.pending {
+        Some(Pending::Field) => {
+            let field_completions: Option<CompletionProvider> =
+                parameters.as_ref().map(|parameters| {
+                    let completions = parameters
+                        .iter()
+                        .filter(|parameter| !fields.contains_key(parameter))
+                        .map(|parameter| {
+                            let (display, _) = field_spelling(input.env, *parameter);
+                            Completion::new(display, Value::from(*parameter))
+                                .with_detail("parameter")
+                        })
+                        .collect::<Vec<_>>();
+                    std::rc::Rc::new(move |_: &str| completions.clone()) as CompletionProvider
+                });
+            vec![RecordField {
+                label: completion(CompletionKind::Field, field_completions),
+                value: slot(),
+            }]
+        }
+        Some(Pending::Child(Step::Key(field))) if !fields.contains_key(field) => {
+            let (spelling, face) = field_spelling(input.env, *field);
+            let target = input.targets.at([Step::Key(*field)]);
+            vec![RecordField {
+                label: activatable(faced(spelling, face), target.hover, target.select),
+                value: descend(
+                    Step::Key(*field),
+                    Some(vec![progred_display::partial(shallow_cell::<World, Hover>)]),
+                    Some(completion(CompletionKind::Value, None)),
+                ),
+            }]
+        }
+        _ => Vec::new(),
+    };
     let function = expression_at([Step::Key(FUNCTION)], function);
-    let arguments = record(
+    let arguments = record_with(
         fields
             .iter()
             .filter(|(field, _)| *field != FUNCTION)
@@ -216,6 +251,7 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
                 value: expression_at([Step::Key(field)], value),
             }
         },
+        trailing,
     );
     Some(hug(function, arguments, 0.0, 20.0))
 }
@@ -352,6 +388,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         Value::record([(vocabulary::GRAP, Value::list([]))]),
     )
     .with_detail("grap library")])
+    .with_root_field_completions([progred_display::Completion::new(
+        "grap",
+        Value::from(vocabulary::GRAP),
+    )
+    .with_detail("grap library")])
 }
 
 #[cfg(test)]
@@ -403,6 +444,7 @@ mod tests {
             scale_factor: 1.0,
             writable: true,
             selection: None,
+            pending: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&unit_target),
         }
@@ -418,6 +460,7 @@ mod tests {
             scale_factor: 1.0,
             writable: true,
             selection: None,
+            pending: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&relative_target),
         }
@@ -425,6 +468,41 @@ mod tests {
 
     fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
         evaluate_display(&input(env, value))
+    }
+
+    #[test]
+    fn parameter_offers_are_prepared_only_during_field_insertion() {
+        struct CountingEnv(std::cell::Cell<usize>);
+        impl Env for CountingEnv {
+            fn evaluate(&self, _: &Value) -> (Value, usize) {
+                panic!("completion does not evaluate the function")
+            }
+
+            fn names(&self, _: CellId) -> Vec<&str> {
+                self.0.set(self.0.get() + 1);
+                vec!["parameter"]
+            }
+        }
+
+        let parameter = new_cell_id();
+        let value = Value::record([(
+            FUNCTION,
+            Value::record([
+                (PARAMS, Value::list([Value::from(parameter)])),
+                (BODY, Value::record([])),
+            ]),
+        )]);
+        let env = CountingEnv(std::cell::Cell::new(0));
+        assert!(call_display(&input(&env, &value)).is_some());
+        assert_eq!(env.0.get(), 0);
+        assert!(
+            call_display(&ProjectionInput {
+                pending: Some(Pending::Field),
+                ..input(&env, &value)
+            })
+            .is_some()
+        );
+        assert_eq!(env.0.get(), 1);
     }
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {

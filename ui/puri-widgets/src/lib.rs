@@ -2,3 +2,4 @@
 //! vocabulary. Applications own their state, layout, and popup policy.
 
 pub mod color_picker;
+pub mod completion;

@@ -776,6 +776,8 @@ fn project_workspace_view(
     let root_projection;
     let root_completions = matches!(view.root.target(), workspace::Target::Document)
         .then_some(&stack.root_completions);
+    let root_field_completions = matches!(view.root.target(), workspace::Target::Document)
+        .then_some(&stack.root_field_completions);
     let root = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
@@ -815,6 +817,7 @@ fn project_workspace_view(
             root_projection: if raw { None } else { root_projection },
             projection: (!raw).then_some(&stack.projection),
             root_completions: (!raw).then_some(root_completions).flatten(),
+            root_field_completions: (!raw).then_some(root_field_completions).flatten(),
         },
         tcx,
         projection_hooks(view.root.clone()),

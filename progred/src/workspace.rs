@@ -52,6 +52,11 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     )
     .with_aliases(["panes"])
     .with_detail("workspace library")])
+    .with_root_field_completions([progred_display::Completion::new(
+        "panes",
+        Value::from(vocabulary::PANES),
+    )
+    .with_detail("workspace library")])
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
