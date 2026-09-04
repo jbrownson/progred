@@ -168,7 +168,7 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         let evaluation = grap::apply(
             function,
             arguments.iter().cloned(),
-            |cell| resolved_definitions(self.cx, cell),
+            |cell| self.cx.sources.grap_definitions(cell),
             fuel,
         );
         self.cx.fuel.set(evaluation.remaining_fuel);
@@ -221,12 +221,8 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
     }
 }
 
-fn resolved_definitions(cx: &Cx<'_>, cell: CellId) -> Vec<(gid::Resolution, grap::Definition)> {
-    cx.sources.grap_definitions(cell)
-}
-
 fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
-    grap::evaluate(expression, |cell| resolved_definitions(cx, cell), fuel)
+    grap::evaluate(expression, |cell| cx.sources.grap_definitions(cell), fuel)
 }
 
 #[derive(Clone, Copy)]
@@ -2294,7 +2290,9 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
     match selection? {
         current if current.stage() == Stage::Edge => {
             let path: SharedPath = Rc::from(current.path());
-            Secondary::from_path(sources, path.clone(), sources.resolve_path(path.as_ref())?)
+            sources
+                .resolve_path(&path)
+                .map(|value| Secondary::from_path(sources, path.clone(), value))
         }
         _ => None,
     }
@@ -2766,19 +2764,17 @@ fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
         build,
     );
     let landmark_path: SharedPath = Rc::from(path);
-    let secondary = Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
     // Other projections of the selected location carry the secondary
     // mark; the selected one has the primary highlight.
     let inner = if cx.selected(path) {
         inner
-    } else if let Some(secondary) = secondary {
+    } else {
+        let secondary = Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
         let strong = cx.secondary.as_ref() == Some(&secondary);
         let scale = cx.styles.scale;
         ChoiceLayout::map(inner, 0.0, move |inner| {
             secondary_mark_with(strong, scale, secondary, inner)
         })
-    } else {
-        inner
     };
     // A landmark, not a target: highlight and keyboard reach span
     // the full bounds, while clicks belong to the content each arm

@@ -124,10 +124,10 @@ impl Secondary {
         path: Rc<[Step]>,
         value: &Value,
         enclosing: Option<(CellId, Resolution, usize)>,
-    ) -> Option<Self> {
+    ) -> Self {
         match value.as_cell() {
-            Some(cell) => Some(Self::Cell(cell)),
-            None => Some(match enclosing {
+            Some(cell) => Self::Cell(cell),
+            None => match enclosing {
                 Some((cell, source, relative_from)) => Self::InCell {
                     cell,
                     source,
@@ -135,7 +135,7 @@ impl Secondary {
                     relative_from,
                 },
                 None => Self::Stored(path),
-            }),
+            },
         }
     }
 
@@ -151,7 +151,7 @@ impl Secondary {
         }
     }
 
-    pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>, value: &Value) -> Option<Self> {
+    pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>, value: &Value) -> Self {
         let enclosing = enclosing_definition(sources, &path);
         Self::from_context(path, value, enclosing)
     }
@@ -195,9 +195,9 @@ pub(crate) fn hover_secondary(
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
-        Hover::Value(path) => {
-            Secondary::from_path(sources, path.clone(), sources.resolve_path(path)?)
-        }
+        Hover::Value(path) => sources
+            .resolve_path(path)
+            .map(|value| Secondary::from_path(sources, path.clone(), value)),
         Hover::Drawing(source) => Some(Secondary::from_trace(source)),
         Hover::Entry(index) => match &completion?.entries.get(*index)?.action {
             EntryAction::Value(value) => value.as_cell().map(Secondary::Cell),
@@ -214,7 +214,9 @@ mod tests {
 
     fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
         let path: Rc<[Step]> = Rc::from(path);
-        Secondary::from_path(sources, path.clone(), sources.resolve_path(path.as_ref())?)
+        sources
+            .resolve_path(&path)
+            .map(|value| Secondary::from_path(sources, path.clone(), value))
     }
 
     #[test]

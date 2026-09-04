@@ -5,11 +5,12 @@ use super::Cx;
 use crate::frame::Hovered;
 use crate::hover::{Hover, SourceTrace};
 use crate::placed::{Placed, leaf};
-use gid::{CellId, Cells, Resolution, Step, Value};
+use crate::sources::Sources;
+use gid::{CellId, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
-use progred_libraries::{Libraries, absent, layout as layout_data};
+use progred_libraries::{absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
@@ -256,8 +257,7 @@ fn transform(
 
 fn record_program(
     program: &Value,
-    document: &Cells,
-    libraries: &Libraries,
+    sources: &Sources,
     faces: &Faces,
     input: &SourceTrace,
     fuel: usize,
@@ -357,21 +357,7 @@ fn record_program(
     let overlay = grap::ForeignOverlay::new(&functions, &draw);
     grap::evaluate_scoped(
         program,
-        |cell| {
-            document
-                .value(cell)
-                .cloned()
-                .map(grap::Definition::Value)
-                .map(|definition| (Resolution::Document, definition))
-                .into_iter()
-                .chain(libraries.definitions(cell).map(|definition| {
-                    (
-                        Resolution::Library(definition.library),
-                        definition.definition.cloned(),
-                    )
-                }))
-                .collect()
-        },
+        |cell| sources.grap_definitions(cell),
         &overlay,
         fuel,
     );
@@ -404,10 +390,19 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
             .chain([Step::Key(layout_data::vocabulary::PROGRAM)])
             .collect::<Rc<[Step]>>(),
     );
-    let document = cx.sources.doc.cells.clone();
+    let document = cx.sources.doc.clone();
     let libraries = cx.sources.libraries.clone();
     let drawing = Rc::new(LazyCell::new(move || {
-        record_program(&program, &document, &libraries, &faces, &input, fuel)
+        record_program(
+            &program,
+            &Sources {
+                doc: &document,
+                libraries: &libraries,
+            },
+            &faces,
+            &input,
+            fuel,
+        )
     }));
     let highlight = cx.styles.accent_wash.brush.clone();
     let selected_highlight = cx.styles.selection_wash.clone();
@@ -443,7 +438,8 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gid::new_cell_id;
+    use gid::{Cells, Resolution, new_cell_id};
+    use progred_libraries::Libraries;
 
     #[test]
     fn recorded_hits_keep_the_executing_library_definition() {
@@ -488,14 +484,13 @@ mod tests {
                 )
             }))
             .0;
-            let sources = crate::sources::Sources {
+            let sources = Sources {
                 doc: &doc,
                 libraries: &libraries,
             };
             let drawing = record_program(
                 &grap::call(Value::from(function), []),
-                &doc.cells,
-                &libraries,
+                &sources,
                 &Faces::new(&crate::styles::editor(1.0)),
                 &SourceTrace::Stored(Rc::from([])),
                 100,
