@@ -1597,24 +1597,31 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    let before_expansion = state;
     frame(state)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Enter));
-    assert_eq!(state, (0.0, 0, true));
+    assert_eq!(state, (before_expansion.0, before_expansion.1, true));
+    frame(state)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    assert_eq!(state.1, entries.len() - 1);
+    let before_tab = state;
     state.2 = false;
     frame(state)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Tab));
-    assert_eq!(state, (0.0, 0, true));
+    assert_eq!(state, before_tab);
     assert!(
         !frame(state)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Tab))
     );
-    assert_eq!(state, (0.0, 0, true));
+    assert_eq!(state, before_tab);
 }
 
 #[test]
@@ -1682,15 +1689,40 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
-    assert_eq!(state.view, (0.0, 0, true));
+    assert_eq!(state.view, (0.0, 1, true));
     assert!(state.committed.is_none());
+    let expanded = [
+        entries[0].clone(),
+        Entry {
+            display: "new record".into(),
+            action: EntryAction::NewRecord,
+            ..entries[0].clone()
+        },
+    ];
+    assert!(
+        frame(&state, &expanded)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
+    assert!(matches!(
+        state.committed.take(),
+        Some(EntryAction::NewRecord)
+    ));
+    assert!(
+        frame(&state, &entries)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::Enter))
+    );
+    assert!(matches!(state.committed.take(), Some(EntryAction::NewList)));
     frame(&state, &entries)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     assert_eq!(state.view.1, 0);
 
-    state.view = (0.0, 0, false);
+    state.view = (0.0, 1, false);
     let placed = frame(&state, &entries);
     let target = Hovered::Tree(Hover::MoreCompletions);
     let point = (0..100)
@@ -1714,7 +1746,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         &event,
         &mut placed::PointerContext::new(None, Some(target)),
     ));
-    assert_eq!(state.view, (0.0, 0, true));
+    assert_eq!(state.view, (0.0, 1, true));
     assert!(state.committed.is_none());
 
     state.view = (0.0, 0, false);

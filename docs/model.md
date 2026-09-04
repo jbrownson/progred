@@ -2899,6 +2899,8 @@ Deferred behind projections.
   only contextual offers. The trailing `…` row participates in arrow-key
   selection and scrolling; its click or Enter action widens the list with
   the universal layer instead of committing a value. Tab also widens it.
+  Expansion keeps the selected row index and scroll offset, clamped to
+  the expanded list's bounds, so the first added offer replaces `…`.
   The row then disappears; changing the query returns to the focused list.
   A site without a provider uses the universal list directly. Libraries
   contribute empty-root templates and document-root field identities

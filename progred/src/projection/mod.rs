@@ -3105,7 +3105,7 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     let expand: progred_display::ActionHandler<C> = {
         let set_view = set_view.clone();
         Rc::new(move |world| {
-            set_view(world, 0.0, 0, true);
+            set_view(world, scroll, choice, true);
             true
         })
     };
