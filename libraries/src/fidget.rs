@@ -21,7 +21,7 @@ pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use progred_display::{
-    Layout, Paint, ProjectionInput, activatable, leaf, on_state_drag, on_state_scroll,
+    Layout, Paint, ProjectionInput, leaf, on_hover, on_state_drag, on_state_scroll,
 };
 use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf};
 use std::{cell::RefCell, rc::Rc};
@@ -871,8 +871,9 @@ fn display<World, Hover: Clone>(
         let hover = target.hover;
         Some(on_state_scroll(
             on_state_drag(
-                activatable(drawing, hover.clone(), target.select),
+                on_hover(drawing, hover.clone()),
                 hover,
+                target.select,
                 orbit_handler(input.state),
             ),
             zoom_handler(input.state),

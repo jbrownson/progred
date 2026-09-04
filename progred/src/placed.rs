@@ -112,7 +112,8 @@ impl Probe {
 
 /// The settled target is an explicit dispatch input, never an input to
 /// description or placement. `targeted` reports whether an activation or
-/// pick accepted, so the shell can begin its associated semantic gesture.
+/// pick accepted. Number scrubbing and drawing-source picking still use
+/// this output after dispatch.
 #[derive(Default)]
 pub struct PointerContext {
     pub root: Option<Root>,
@@ -152,23 +153,6 @@ impl ScrubAction {
     }
 }
 
-/// A projection-local state drag attached to the same identity hover
-/// resolves. Unlike a scrub, its result updates view annotations and
-/// never document data.
-#[derive(Clone)]
-pub struct StateDragAction {
-    root: Option<Root>,
-    target: Hovered,
-    pub path: Path,
-    pub handler: progred_display::StateDragHandler,
-}
-
-impl StateDragAction {
-    pub fn root(&self) -> Option<&Root> {
-        self.root.as_ref()
-    }
-}
-
 /// A nested scroll container's settled geometry, retained so
 /// selection reveal can update the same view state as pointer scroll.
 pub struct ViewRegion {
@@ -182,21 +166,6 @@ pub fn scrub_target(
     root: Option<&Root>,
     target: &Hovered,
 ) -> Option<ScrubAction> {
-    actions.iter().rev().find_map(|candidate| {
-        (candidate
-            .root
-            .as_ref()
-            .is_none_or(|candidate| Some(candidate) == root)
-            && candidate.target == *target)
-            .then(|| candidate.clone())
-    })
-}
-
-pub fn state_drag_target(
-    actions: &[StateDragAction],
-    root: Option<&Root>,
-    target: &Hovered,
-) -> Option<StateDragAction> {
     actions.iter().rev().find_map(|candidate| {
         (candidate
             .root
@@ -225,7 +194,6 @@ pub struct Ink<'a> {
 pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
     pub scrubs: Vec<ScrubAction>,
-    pub state_drags: Vec<StateDragAction>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, PointerContext>>,
@@ -261,7 +229,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
         Self {
             probes: Vec::new(),
             scrubs: Vec::new(),
-            state_drags: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -275,7 +242,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
     fn over(mut self, above: Self) -> Self {
         append(&mut self.probes, above.probes);
         append(&mut self.scrubs, above.scrubs);
-        append(&mut self.state_drags, above.state_drags);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -319,9 +285,6 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         }
         for scrub in &mut self.scrubs {
             scrub.root = Some(root.clone());
-        }
-        for drag in &mut self.state_drags {
-            drag.root = Some(root.clone());
         }
         for floater in &mut self.floaters {
             floater.root_navigation(root);
@@ -494,18 +457,26 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     }
 
     pub fn activate(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
-        self.target_action(target, false, action);
+        self.activate_with(target, move |ctx, _| action(ctx));
     }
 
     pub fn pick(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
-        self.target_action(target, true, action);
+        self.target_action(target, true, move |ctx, _| action(ctx));
+    }
+
+    pub fn activate_with(
+        &mut self,
+        target: Hovered,
+        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+    ) {
+        self.target_action(target, false, action);
     }
 
     fn target_action(
         &mut self,
         target: Hovered,
         pick: bool,
-        action: impl Fn(&mut C) -> bool + 'static,
+        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
     ) {
         if self.visible {
             self.handler()
@@ -513,7 +484,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
                     let handled = puri::interact::is_primary_contact(event)
                         && crate::modifiers::pick(&event.state.modifiers) == pick
                         && pointer.matches(&target)
-                        && action(ctx);
+                        && action(ctx, event);
                     pointer.targeted |= handled;
                     handled
                 });
@@ -546,23 +517,6 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     pub fn scrub(&mut self, target: Hovered, path: Path, handler: progred_display::ScrubHandler) {
         if self.visible {
             self.placed.scrubs.push(ScrubAction {
-                root: None,
-                target,
-                path,
-                handler,
-            });
-        }
-    }
-
-    pub fn state_drag(
-        &mut self,
-        target: Hovered,
-        path: Path,
-        handler: progred_display::StateDragHandler,
-    ) {
-        if self.visible {
-            self.activate(target.clone(), |_| true);
-            self.placed.state_drags.push(StateDragAction {
                 root: None,
                 target,
                 path,
@@ -1370,31 +1324,6 @@ mod tests {
             ));
             assert!(pointer.targeted);
             assert_eq!(log, ["popup"]);
-        }
-    }
-
-    #[test]
-    fn raw_acceptance_does_not_start_a_semantic_gesture() {
-        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
-        for accepts in [false, true] {
-            let mut placed: Placed<(), TestCanvas> = Placed::empty();
-            let mut p = Builder::new(
-                &mut placed,
-                Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-            );
-            p.state_drag(
-                target.clone(),
-                Vec::new(),
-                std::rc::Rc::new(|| Box::new(|_| gid::Value::record([]))),
-            );
-            p.handler().on_pointer_down(move |_, _| accepts);
-            let mut pointer = PointerContext::new(None, Some(target.clone()));
-            assert!(placed.handler.unwrap().dispatch_pointer_down_with(
-                &mut (),
-                &down_at(5.0, 5.0),
-                &mut pointer
-            ));
-            assert_eq!(pointer.targeted, !accepts);
         }
     }
 

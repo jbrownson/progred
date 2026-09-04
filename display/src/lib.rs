@@ -260,8 +260,8 @@ pub enum Layout<World, Hover> {
         handler: ActionHandler<World>,
     },
     /// A coordinate-free editor action addressed by the same target
-    /// used for hover. Raw pointer events get first refusal in the
-    /// host; activation is the semantic fallback.
+    /// used for hover. The host composes it in visual order with raw
+    /// pointer handlers.
     OnActivate {
         child: Box<Layout<World, Hover>>,
         target: Hover,
@@ -288,10 +288,12 @@ pub enum Layout<World, Hover> {
         handler: ScrubHandler,
     },
     /// A drag whose result replaces this projection site's annotation
-    /// value rather than document data.
+    /// value rather than document data. An accepted press performs
+    /// `on_press` and begins the drag as one interaction.
     OnStateDrag {
         child: Box<Layout<World, Hover>>,
         target: Hover,
+        on_press: ActionHandler<World>,
         handler: StateDragHandler,
     },
     /// A scroll whose result replaces this projection site's annotation
@@ -446,10 +448,12 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::OnStateDrag {
                 child,
                 target,
+                on_press,
                 handler,
             } => Self::OnStateDrag {
                 child: child.clone(),
                 target: target.clone(),
+                on_press: on_press.clone(),
                 handler: handler.clone(),
             },
             Self::OnStateScroll { child, handler } => Self::OnStateScroll {
@@ -742,11 +746,13 @@ pub fn on_scrub<World, Hover>(
 pub fn on_state_drag<World, Hover>(
     child: Layout<World, Hover>,
     target: Hover,
+    on_press: ActionHandler<World>,
     handler: StateDragHandler,
 ) -> Layout<World, Hover> {
     Layout::OnStateDrag {
         child: Box::new(child),
         target,
+        on_press,
         handler,
     }
 }

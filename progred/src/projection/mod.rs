@@ -962,14 +962,16 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
         progred_display::Layout::OnStateDrag {
             child,
             target,
+            on_press,
             handler,
         } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
             let path = path.to_vec();
+            let start = hooks.state_drag.clone();
             ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_state_drag(path, target, handler, inner)
+                realize_state_drag(path, target, on_press, handler, start, scale, inner)
             })
         }
         progred_display::Layout::OnStateScroll { child, handler } => {
@@ -1387,11 +1389,22 @@ fn realize_scrub<C: 'static, Cv: Canvas + 'static>(
 fn realize_state_drag<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     target: Hover,
+    on_press: progred_display::ActionHandler<C>,
     handler: progred_display::StateDragHandler,
+    start: Rc<dyn Fn(&mut C, Path, progred_display::StateDragHandler, Point, f64)>,
+    scale: f64,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, _| {
-        p.state_drag(Hovered::Tree(target), path, handler);
+    before(inner, move |p, placement| {
+        p.activate_with(Hovered::Tree(target), move |world, event| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            if placement.contains(point) && on_press(world) {
+                start(world, path.clone(), handler.clone(), point, scale);
+                true
+            } else {
+                false
+            }
+        });
     })
 }
 
@@ -1827,6 +1840,8 @@ pub struct Hooks<C> {
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
     /// Begin a continuous point control at its settled placement.
     pub point: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
+    /// Begin a projection state drag in this hook's owning view.
+    pub state_drag: Rc<dyn Fn(&mut C, Path, progred_display::StateDragHandler, Point, f64)>,
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
     /// Retain the completion offset and choice in the pending selection.
@@ -2575,6 +2590,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         delete: Rc::new(|_| false),
         apply: hooks.apply.clone(),
         point: hooks.point.clone(),
+        state_drag: hooks.state_drag.clone(),
         commit_offer: hooks.commit_offer.clone(),
         set_completion_view: hooks.set_completion_view.clone(),
     };

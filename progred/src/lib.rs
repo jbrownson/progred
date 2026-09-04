@@ -212,7 +212,8 @@ struct PendingScrub {
 struct PendingStateDrag {
     origin: Point,
     scale: f64,
-    action: placed::StateDragAction,
+    root: workspace::Root,
+    path: gid::Path,
     gesture: progred_display::StateDragGesture,
     dragging: bool,
 }
@@ -263,12 +264,19 @@ impl PendingScrub {
 }
 
 impl PendingStateDrag {
-    fn new(origin: Point, scale: f64, action: placed::StateDragAction) -> Self {
-        let gesture = (action.handler)();
+    fn new(
+        origin: Point,
+        scale: f64,
+        root: workspace::Root,
+        path: gid::Path,
+        handler: progred_display::StateDragHandler,
+    ) -> Self {
+        let gesture = handler();
         Self {
             origin,
             scale,
-            action,
+            root,
+            path,
             gesture,
             dragging: false,
         }
@@ -1088,21 +1096,10 @@ impl App {
                         {
                             editor.select_drawing_source(&dispatch.descends, source);
                         }
-                        if pointer.targeted {
-                            if pick {
-                                if let Some(scrub) = scrub {
-                                    editor.scrub = Some(PendingScrub::new(position, scale, scrub));
-                                }
-                            } else if let Some(drag) = pointer.hovered.as_ref().and_then(|target| {
-                                placed::state_drag_target(
-                                    &dispatch.state_drags,
-                                    pointer.root.as_ref(),
-                                    target,
-                                )
-                            }) {
-                                editor.state_drag =
-                                    Some(PendingStateDrag::new(position, scale, drag));
-                            }
+                        if pointer.targeted
+                            && let Some(scrub) = scrub
+                        {
+                            editor.scrub = Some(PendingScrub::new(position, scale, scrub));
                         }
                         handled
                             || (puri::interact::is_primary_contact(&button)
@@ -1424,10 +1421,10 @@ impl Editor {
         let Some(event) = active.update(point) else {
             return true;
         };
-        let root = active.action.root().cloned();
-        let path = active.action.path.clone();
+        let root = active.root.clone();
+        let path = active.path.clone();
         let state = (active.gesture)(event);
-        if let Some(view) = root.and_then(|root| self.model.workspace.view_mut(&root))
+        if let Some(view) = self.model.workspace.view_mut(&root)
             && view.annotations.at(&path) != Some(&state)
         {
             view.annotations.set(&path, Some(state));

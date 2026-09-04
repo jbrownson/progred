@@ -293,6 +293,7 @@ fn place_with_annotations_using(
         delete: Rc::new(|_| false),
         apply: Rc::new(|_, _, _, _| false),
         point: Rc::new(|_, _, _, _, _| false),
+        state_drag: Rc::new(|_, _, _, _, _| {}),
         commit_offer: Rc::new(|_, _| {}),
         set_completion_view: Rc::new(|_, _, _, _| {}),
     };
@@ -715,6 +716,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 true
             }),
             point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -825,6 +827,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             delete: Rc::new(|_| false),
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1732,6 +1735,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
                 true
             }),
             point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1802,4 +1806,183 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     assert!(pointer.targeted);
     assert!(world.selection.is_none());
     assert_eq!(world.applied, Some(Vec::new()));
+}
+
+#[test]
+fn state_drag_press_composes_selection_and_start_in_pointer_order() {
+    use ui_events::pointer::{
+        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+    };
+
+    let target = Hover::Value(Rc::from([]));
+    let path = vec![Step::Key(gid::new_cell_id())];
+    let extent = Extent {
+        width: 20.0,
+        ascent: 0.0,
+        descent: 20.0,
+    };
+    for (accepts, covered) in [(true, false), (false, false), (true, true)] {
+        let captured_path = path.clone();
+        let drag = realize_state_drag(
+            path.clone(),
+            target.clone(),
+            Rc::new(move |log: &mut Vec<&str>| {
+                log.push("select");
+                accepts
+            }),
+            Rc::new(|| Box::new(|_| Value::record([]))),
+            Rc::new(move |log, path, _, point, scale| {
+                assert_eq!(path, captured_path);
+                assert_eq!(point, Point::new(5.0, 5.0));
+                assert_eq!(scale, 2.0);
+                log.push("start drag");
+            }),
+            2.0,
+            leaf::<Vec<&str>, Bench>(extent, |_, _| {}),
+        );
+        let node = realize_activate(
+            target.clone(),
+            Rc::new(|log: &mut Vec<&str>| {
+                log.push("outer selection");
+                true
+            }),
+            drag,
+        );
+        let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
+        let mut placed = measured::place(node, placement);
+        if covered {
+            let cover = leaf::<Vec<&str>, Bench>(extent, |p, placement| {
+                p.occlude(placement);
+            });
+            placed = measured::Output::over(placed, measured::place(cover, placement));
+        }
+        let mut state = PointerState::default();
+        state.position.x = 5.0;
+        state.position.y = 5.0;
+        let event = PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state,
+        };
+        let mut pointer = placed::PointerContext::new(None, Some(Hovered::Tree(target.clone())));
+        let mut log = Vec::new();
+        assert!(
+            placed
+                .handler
+                .unwrap()
+                .dispatch_pointer_down_with(&mut log, &event, &mut pointer)
+        );
+        assert_eq!(
+            log,
+            if covered {
+                vec![]
+            } else if accepts {
+                vec!["select", "start drag"]
+            } else {
+                vec!["select", "outer selection"]
+            }
+        );
+    }
+}
+
+#[test]
+fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
+    use ui_events::pointer::{
+        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+    };
+
+    let target = Hover::Value(Rc::from([]));
+    let root = crate::workspace::Root::document();
+    let node = realize_state_drag(
+        Vec::new(),
+        target.clone(),
+        Rc::new(|_| true),
+        Rc::new(|| Box::new(|_| Value::record([]))),
+        Rc::new(|starts: &mut usize, _, _, _, _| *starts += 1),
+        1.0,
+        leaf::<usize, Bench>(
+            Extent {
+                width: 20.0,
+                ascent: 0.0,
+                descent: 20.0,
+            },
+            |_, _| {},
+        ),
+    );
+    let placed = measured::place(
+        placed::in_view(node, root.clone()),
+        Placement::new(
+            Rect::new(0.0, 0.0, 20.0, 20.0),
+            Rect::new(0.0, 0.0, 10.0, 20.0),
+        ),
+    );
+    for (x, button, pointer_type, owns_view, expected) in [
+        (
+            5.0,
+            Some(PointerButton::Primary),
+            PointerType::Mouse,
+            true,
+            true,
+        ),
+        (5.0, None, PointerType::Touch, true, true),
+        (
+            15.0,
+            Some(PointerButton::Primary),
+            PointerType::Mouse,
+            true,
+            false,
+        ),
+        (
+            25.0,
+            Some(PointerButton::Primary),
+            PointerType::Mouse,
+            true,
+            false,
+        ),
+        (
+            5.0,
+            Some(PointerButton::Secondary),
+            PointerType::Mouse,
+            true,
+            false,
+        ),
+        (
+            5.0,
+            Some(PointerButton::Primary),
+            PointerType::Mouse,
+            false,
+            false,
+        ),
+    ] {
+        let mut state = PointerState::default();
+        state.position.x = x;
+        state.position.y = 5.0;
+        let event = PointerButtonEvent {
+            button,
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type,
+            },
+            state,
+        };
+        let mut pointer = placed::PointerContext::new(
+            owns_view.then(|| root.clone()),
+            Some(Hovered::Tree(target.clone())),
+        );
+        let mut starts = 0;
+        assert_eq!(
+            placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+                &mut starts,
+                &event,
+                &mut pointer,
+            ),
+            expected
+        );
+        assert_eq!(starts, usize::from(expected));
+    }
 }
