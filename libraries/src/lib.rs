@@ -21,7 +21,7 @@ pub mod line_edit;
 pub mod list;
 pub mod logic;
 pub mod name;
-mod number;
+pub mod number;
 pub mod presentation;
 pub mod random;
 pub mod selection;

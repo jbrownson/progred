@@ -2,7 +2,7 @@
 //! these functions only provide the operations awkward to express by
 //! structural matching alone.
 
-use crate::{Library, absent, f64, name};
+use crate::{Library, absent, f64, name, number};
 use gid::Cells;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
@@ -67,13 +67,13 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::CONCAT,
             ForeignFunction::runtime(|context, call, environment| {
-                let Some(left) = evaluated(context, call, environment, f64::vocabulary::LEFT)?
+                let Some(left) = evaluated(context, call, environment, number::vocabulary::LEFT)?
                 else {
-                    return Ok(context.missing_runtime_argument(f64::vocabulary::LEFT));
+                    return Ok(context.missing_runtime_argument(number::vocabulary::LEFT));
                 };
-                let Some(right) = evaluated(context, call, environment, f64::vocabulary::RIGHT)?
+                let Some(right) = evaluated(context, call, environment, number::vocabulary::RIGHT)?
                 else {
-                    return Ok(context.missing_runtime_argument(f64::vocabulary::RIGHT));
+                    return Ok(context.missing_runtime_argument(number::vocabulary::RIGHT));
                 };
                 let (Some(left), Some(right)) = (left.list_values(), right.list_values()) else {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
@@ -272,11 +272,11 @@ mod tests {
             vocabulary::CONCAT,
             [
                 (
-                    f64::vocabulary::LEFT,
+                    number::vocabulary::LEFT,
                     Value::list([Value::from(b"a".to_vec())]),
                 ),
                 (
-                    f64::vocabulary::RIGHT,
+                    number::vocabulary::RIGHT,
                     Value::list([Value::from(b"b".to_vec())]),
                 ),
             ],

@@ -4,7 +4,7 @@
 //! evaluator reproduces every tuple. Expectations are hand-derived
 //! from the naive evaluation shape, never copied from a run.
 
-use crate::{control, f64, list};
+use crate::{control, f32, f64, list, number};
 use gid::{CellId, Value, new_cell_id};
 use grap_runtime as grap;
 use grap_runtime::{Diagnostic, ForeignFunctions};
@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
         control::functions(),
+        f32::functions(),
         f64::functions(),
         list::library::<(), ()>().functions(),
     ])
@@ -269,6 +270,22 @@ fn arithmetic_burns_its_call_function_and_operands() {
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result, f64::value(3.0));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// A representation without the evaluator's fast path burns the same
+/// shape: call(1) + function(1) + left(1) + right(1) = 4.
+#[test]
+fn single_precision_arithmetic_burns_like_f64() {
+    let expression = grap::call(
+        Value::from(f32::vocabulary::SUM),
+        [
+            (number::vocabulary::LEFT, f32::value(1.0)),
+            (number::vocabulary::RIGHT, f32::value(2.0)),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, f32::value(3.0));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 

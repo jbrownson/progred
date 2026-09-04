@@ -32,6 +32,7 @@ const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / PREVIEW_SIZE as f32;
 pub mod vocabulary {
     use gid::CellId;
 
+    pub use crate::number::vocabulary::{LEFT, OPERAND, RIGHT};
     pub const FIDGET: CellId = CellId::from_u128(0x5653d5cc6cf43eb2291f9943c29eeab4);
     pub const AXIS: CellId = CellId::from_u128(0xfb2b3baa73025ae4b7b2aa97d65d1643);
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
@@ -56,9 +57,6 @@ pub mod vocabulary {
     pub const PREVIEW: CellId = CellId::from_u128(0x69662683bafef0d10c88d46245cb638f);
     pub const PREVIEW_3D: CellId = CellId::from_u128(0x9a8142ecc3124e873dd2ad955d28fb85);
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
-    pub const LEFT: CellId = CellId::from_u128(0x74bfc2a4db82ecc1f6af915d46e8f68d);
-    pub const RIGHT: CellId = CellId::from_u128(0x8dfdc3487bdfbc209ffb77c74433ef04);
-    pub const OPERAND: CellId = CellId::from_u128(0x5b4a1c80f5ad91bbfe650e6e81afb1ea);
     pub const RADIUS: CellId = CellId::from_u128(0x64302843e07250efdb485267245c762e);
     pub const DELTA_X: CellId = CellId::from_u128(0x671936a24eb2d9d6e47ac5915a3e38c4);
     pub const DELTA_Y: CellId = CellId::from_u128(0x3dd683179b807ca200980eeffb90011f);
@@ -911,9 +909,6 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::PREVIEW, "preview"),
         (vocabulary::PREVIEW_3D, "preview 3d"),
         (vocabulary::FIELD, "field"),
-        (vocabulary::LEFT, "left"),
-        (vocabulary::RIGHT, "right"),
-        (vocabulary::OPERAND, "operand"),
         (vocabulary::RADIUS, "radius"),
         (vocabulary::DELTA_X, "x"),
         (vocabulary::DELTA_Y, "y"),

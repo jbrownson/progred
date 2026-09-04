@@ -17,6 +17,7 @@ use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, ro
 pub mod vocabulary {
     use gid::CellId;
 
+    pub use crate::number::vocabulary::{LEFT, OPERAND, RIGHT};
     pub use grap_runtime::f64::F64;
     pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
@@ -28,10 +29,7 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0x22ab9aa3e7ce4f4f79a7039e1cc23773);
     pub const FLOOR: CellId = CellId::from_u128(0xd007814c5f6a6c38b025605b399473d4);
     pub const LERP: CellId = CellId::from_u128(0x432ad7a31ef129e353e251419e690ca1);
-    pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
     pub const PI: CellId = CellId::from_u128(0x9cd591f37312e563f52b7374a6cef5c0);
-    pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
-    pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
     pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
     pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
     pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
@@ -312,9 +310,6 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::EQUAL, "=="),
         (vocabulary::FLOOR, "floor"),
         (vocabulary::LERP, "lerp"),
-        (vocabulary::OPERAND, "operand"),
-        (vocabulary::LEFT, "left"),
-        (vocabulary::RIGHT, "right"),
         (vocabulary::START, "start"),
         (vocabulary::END, "end"),
         (vocabulary::AMOUNT, "amount"),

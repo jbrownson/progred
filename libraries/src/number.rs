@@ -1,8 +1,39 @@
-use crate::line_edit;
-use gid::{CellId, Value};
+//! What every number representation shares: the argument labels of
+//! binary and unary operations, and the scrub editing helper. The
+//! operation identities stay with each representation until dispatch
+//! evaluates arguments once per call.
+
+use crate::{Library, line_edit, name};
+use gid::{CellId, Cells, Value};
 use progred_display::{Layout, ProjectionInput, ScrubEvent, ScrubUpdate, on_scrub, overlay_value};
 use std::fmt::Display;
 use std::rc::Rc;
+
+pub const ID: CellId = CellId::from_u128(0xc46d010325d3a1ec0f2a84dd3a9570ae);
+
+pub mod vocabulary {
+    use gid::CellId;
+
+    pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
+    pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
+    pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
+}
+
+pub fn library<World, Hover>() -> Library<World, Hover> {
+    let mut cells = Cells::new();
+    for (cell, spelling) in [
+        (vocabulary::LEFT, "left"),
+        (vocabulary::RIGHT, "right"),
+        (vocabulary::OPERAND, "operand"),
+    ] {
+        cells.set_value(cell, name::record(spelling, []));
+    }
+    Library::named(
+        "number",
+        crate::Definitions::from_parts(cells, Default::default()),
+        vec![],
+    )
+}
 
 const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;

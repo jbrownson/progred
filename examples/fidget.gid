@@ -6,14 +6,14 @@
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
-    "left": 74bfc2a4db82ecc1f6af915d46e8f68d,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "radius": 64302843e07250efdb485267245c762e,
-    "right": 8dfdc3487bdfbc209ffb77c74433ef04,
+    "right": 4f53ff25390f58472d31a6142644dec2,
     "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "sphere": c40de238820c3da73ec7780ddd438757,
     "translate": cc63ad1f4efa15b6f43f36b3cd11f3f6,
@@ -21,13 +21,6 @@
   },
   "cells": {
     ring: {
-      left: {
-        radius: {
-          f32: 0x00008042,
-        },
-        function: sphere,
-      },
-      function: difference,
       right: {
         field: {
           radius: {
@@ -39,6 +32,13 @@
           f32: 0x00004042,
         },
         function: translate,
+      },
+      function: difference,
+      left: {
+        radius: {
+          f32: 0x00008042,
+        },
+        function: sphere,
       },
     },
   },
