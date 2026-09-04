@@ -92,6 +92,14 @@ management.
   `interact` helpers factor the common placement-visible primary-down,
   click-count, ordinary-click, and double-click policies while leaving
   state transitions and decline with their callers.
+- Progred lowers activation and picking into that same pointer-down
+  composition, so their visual order also holds against raw handlers.
+  Puri's optional caller-owned pointer context supplies the settled target
+  at dispatch; ordinary widgets ignore it. Progred uses it to report accepted
+  semantic gestures to the shell. Hover occlusion also consumes pointer
+  starts, leaving active motion and release alone. A hover probe carries
+  its owning view explicitly, including when its floater covers another
+  pane; input does not infer that ownership from the pane underneath.
 - Puri mints no identity and retains no hierarchy. A widget description
   contains no provenance from prior evaluations; if its consumer needs
   identity, that history belongs to the consumer.

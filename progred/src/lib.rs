@@ -1050,76 +1050,64 @@ impl App {
                         editor.pressed = true;
                         editor.state_drag = None;
                         frame_input_changed = true;
-                        let event_root = dispatch
-                            .view_regions
-                            .iter()
-                            .rev()
-                            .find(|region| region.rect.contains(position))
-                            .map(|region| region.root.clone());
-                        let raw = dispatch.handler.dispatch_pointer_down(editor, &button);
-                        if raw || !puri::interact::is_primary_contact(&button) {
-                            raw
-                        } else if let Some(target) = editor.hover.clone() {
-                            if modifiers::pick(&button.state.modifiers) {
-                                let scrub = modifiers::scrub(&button.state.modifiers)
-                                    .then(|| {
-                                        placed::scrub_target(
-                                            &dispatch.scrubs,
-                                            event_root.as_ref(),
-                                            &target,
-                                        )
-                                    })
-                                    .flatten()
-                                    .filter(|_| {
-                                        !matches!(
-                                            editor
-                                                .model
-                                                .selection
-                                                .as_ref()
-                                                .map(selection::Selection::stage),
-                                            Some(
-                                                selection::Stage::Pending | selection::Stage::Label
-                                            )
-                                        )
-                                    });
-                                let handled = placed::dispatch_target(
-                                    &dispatch.picks,
-                                    editor,
-                                    event_root.as_ref(),
-                                    &target,
-                                ) || match &target {
-                                    Hovered::Tree(hover::Hover::Drawing(source)) => {
-                                        editor.select_drawing_source(&dispatch.descends, source)
-                                    }
-                                    _ => false,
-                                };
-                                if handled && let Some(scrub) = scrub {
+                        let mut pointer = placed::PointerContext::new(
+                            dispatch.pointer_root.clone(),
+                            editor.hover.clone(),
+                        );
+                        let pick = modifiers::pick(&button.state.modifiers);
+                        let scrub = (pick && modifiers::scrub(&button.state.modifiers))
+                            .then(|| {
+                                pointer.hovered.as_ref().and_then(|target| {
+                                    placed::scrub_target(
+                                        &dispatch.scrubs,
+                                        pointer.root.as_ref(),
+                                        target,
+                                    )
+                                })
+                            })
+                            .flatten()
+                            .filter(|_| {
+                                !matches!(
+                                    editor
+                                        .model
+                                        .selection
+                                        .as_ref()
+                                        .map(selection::Selection::stage),
+                                    Some(selection::Stage::Pending | selection::Stage::Label)
+                                )
+                            });
+                        let handled = dispatch.handler.dispatch_pointer_down_with(
+                            editor,
+                            &button,
+                            &mut pointer,
+                        );
+                        if pointer.targeted
+                            && pick
+                            && let Some(Hovered::Tree(hover::Hover::Drawing(source))) =
+                                &pointer.hovered
+                        {
+                            editor.select_drawing_source(&dispatch.descends, source);
+                        }
+                        if pointer.targeted {
+                            if pick {
+                                if let Some(scrub) = scrub {
                                     editor.scrub = Some(PendingScrub::new(position, scale, scrub));
                                 }
-                                handled
-                            } else {
-                                let state_drag = placed::state_drag_target(
+                            } else if let Some(drag) = pointer.hovered.as_ref().and_then(|target| {
+                                placed::state_drag_target(
                                     &dispatch.state_drags,
-                                    event_root.as_ref(),
-                                    &target,
-                                );
-                                let handled = placed::dispatch_target(
-                                    &dispatch.activations,
-                                    editor,
-                                    event_root.as_ref(),
-                                    &target,
-                                );
-                                if let Some(state_drag) = state_drag {
-                                    editor.state_drag =
-                                        Some(PendingStateDrag::new(position, scale, state_drag));
-                                    true
-                                } else {
-                                    handled
-                                }
+                                    pointer.root.as_ref(),
+                                    target,
+                                )
+                            }) {
+                                editor.state_drag =
+                                    Some(PendingStateDrag::new(position, scale, drag));
                             }
-                        } else {
-                            editor.model.selection.take().is_some()
                         }
+                        handled
+                            || (puri::interact::is_primary_contact(&button)
+                                && pointer.hovered.is_none()
+                                && editor.model.selection.take().is_some())
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
                         // Pointer position is frame input, whether or

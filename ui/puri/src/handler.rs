@@ -86,8 +86,11 @@ pub enum ImeEvent {
     Commit(String),
 }
 
-pub struct Handler<C> {
-    pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
+/// `P` is optional caller-owned pointer dispatch context, supplied only
+/// when dispatching. Higher-level interactions may use it for settled
+/// hit information and gesture output without changing ordinary widgets.
+pub struct Handler<C, P = ()> {
+    pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent, &mut P) -> bool>,
     pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
     pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
     pub pointer_cancel: Box<dyn Fn(&mut C, &PointerInfo) -> bool>,
@@ -96,10 +99,10 @@ pub struct Handler<C> {
     pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
 }
 
-impl<C> Default for Handler<C> {
+impl<C, P> Default for Handler<C, P> {
     fn default() -> Self {
         Self {
-            pointer_down: Box::new(|_, _| false),
+            pointer_down: Box::new(|_, _, _| false),
             pointer_move: Box::new(|_, _| false),
             pointer_up: Box::new(|_, _| false),
             pointer_cancel: Box::new(|_, _| false),
@@ -133,7 +136,7 @@ fn compose_scroll<C: 'static>(
     });
 }
 
-impl<C> Handler<C> {
+impl<C, P> Handler<C, P> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -146,8 +149,24 @@ impl<C> Handler<C> {
         dispatch: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
     ) where
         C: 'static,
+        P: 'static,
     {
-        compose(&mut self.pointer_down, dispatch);
+        self.on_pointer_down_with(move |ctx, event, _| dispatch(ctx, event));
+    }
+
+    /// Register with explicit caller-owned pointer dispatch context. This
+    /// composes in exactly the same order as an ordinary pointer handler.
+    pub fn on_pointer_down_with(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerButtonEvent, &mut P) -> bool + 'static,
+    ) where
+        C: 'static,
+        P: 'static,
+    {
+        let rest = std::mem::replace(&mut self.pointer_down, Box::new(|_, _, _| false));
+        self.pointer_down = Box::new(move |ctx, event, pointer| {
+            dispatch(ctx, event, pointer) || rest(ctx, event, pointer)
+        });
     }
 
     pub fn on_key(&mut self, dispatch: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static)
@@ -196,8 +215,20 @@ impl<C> Handler<C> {
         compose(&mut self.ime, dispatch);
     }
 
-    pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool {
-        (self.pointer_down)(ctx, event)
+    pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch_pointer_down_with(ctx, event, &mut P::default())
+    }
+
+    pub fn dispatch_pointer_down_with(
+        &self,
+        ctx: &mut C,
+        event: &PointerButtonEvent,
+        pointer: &mut P,
+    ) -> bool {
+        (self.pointer_down)(ctx, event, pointer)
     }
 
     pub fn dispatch_pointer_move(&self, ctx: &mut C, event: &PointerUpdate) -> bool {
@@ -228,11 +259,15 @@ impl<C> Handler<C> {
 /// Implemented by placement contexts that carry a handler, so widgets
 /// can scope their children with [`capture`].
 pub trait HasHandler<C> {
-    fn handler(&mut self) -> &mut Handler<C>;
+    type Pointer: 'static;
+
+    fn handler(&mut self) -> &mut Handler<C, Self::Pointer>;
 }
 
-impl<C> HasHandler<C> for Handler<C> {
-    fn handler(&mut self) -> &mut Handler<C> {
+impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
+    type Pointer = P;
+
+    fn handler(&mut self) -> &mut Handler<C, P> {
         self
     }
 }
@@ -243,7 +278,7 @@ impl<C> HasHandler<C> for Handler<C> {
 pub fn capture<C, P: HasHandler<C> + ?Sized>(
     p: &mut P,
     place_children: impl FnOnce(&mut P),
-) -> Handler<C> {
+) -> Handler<C, P::Pointer> {
     let saved = std::mem::take(p.handler());
     place_children(p);
     std::mem::replace(p.handler(), saved)
@@ -379,7 +414,7 @@ mod tests {
         } = inner;
         handler.on_pointer_down(move |log, event| {
             log.push("before");
-            let handled = inner_pointer(log, event);
+            let handled = inner_pointer(log, event, &mut ());
             log.push("after");
             handled
         });

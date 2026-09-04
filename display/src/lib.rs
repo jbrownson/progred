@@ -87,8 +87,8 @@ pub enum RowAlignment {
 
 /// A coordinate-free action on the subtree that owns the handler.
 /// The language carries no pointer geometry or modifiers; those stay
-/// in [`Layout::OnEvent`] and the editor chooses the later semantic
-/// action itself.
+/// in [`Layout::OnEvent`]; the editor lowers this action into the same
+/// pointer dispatch order as raw event handlers.
 pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
 /// A semantic two-dimensional scrub, recognized by the editor from

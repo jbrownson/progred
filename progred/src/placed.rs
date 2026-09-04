@@ -23,7 +23,6 @@ use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use uig::Placement;
 
 pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
-pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
 
 enum ProbeTarget {
     Retains(Hovered),
@@ -36,6 +35,7 @@ enum ProbeTarget {
 /// ordinary named probes may also retain the same target through their
 /// expanded visible rectangle.
 pub struct Probe {
+    root: Option<Root>,
     placement: Placement,
     target: ProbeTarget,
 }
@@ -43,6 +43,7 @@ pub struct Probe {
 impl Probe {
     pub fn retaining(placement: Placement, target: Hovered) -> Self {
         Self {
+            root: None,
             placement,
             target: ProbeTarget::Retains(target),
         }
@@ -50,6 +51,7 @@ impl Probe {
 
     pub fn exact(placement: Placement, target: Hovered) -> Self {
         Self {
+            root: None,
             placement,
             target: ProbeTarget::Exact(target),
         }
@@ -57,6 +59,7 @@ impl Probe {
 
     pub fn occludes(placement: Placement) -> Self {
         Self {
+            root: None,
             placement,
             target: ProbeTarget::Occludes,
         }
@@ -67,6 +70,7 @@ impl Probe {
         target_at: impl Fn(Point) -> Option<Hovered> + 'static,
     ) -> Self {
         Self {
+            root: None,
             placement,
             target: ProbeTarget::Dynamic(Box::new(target_at)),
         }
@@ -106,14 +110,29 @@ impl Probe {
     }
 }
 
-/// A coordinate-free editor action addressed to the same identity
-/// hover resolves. The topmost registration for a target gets the
-/// first chance to handle it; false falls through to registrations
-/// beneath it.
-pub struct TargetAction<C> {
-    root: Option<Root>,
-    target: Hovered,
-    action: EditorAction<C>,
+/// The settled target is an explicit dispatch input, never an input to
+/// description or placement. `targeted` reports whether an activation or
+/// pick accepted, so the shell can begin its associated semantic gesture.
+#[derive(Default)]
+pub struct PointerContext {
+    pub root: Option<Root>,
+    pub hovered: Option<Hovered>,
+    pub targeted: bool,
+    outside_view: bool,
+}
+
+impl PointerContext {
+    pub fn new(root: Option<Root>, hovered: Option<Hovered>) -> Self {
+        Self {
+            root,
+            hovered,
+            ..Self::default()
+        }
+    }
+
+    fn matches(&self, target: &Hovered) -> bool {
+        !self.outside_view && self.hovered.as_ref() == Some(target)
+    }
 }
 
 /// A semantic scrub attached to one projected value. The shell
@@ -156,22 +175,6 @@ pub struct ViewRegion {
     pub root: Root,
     pub rect: Rect,
     pub maximum: Vec2,
-}
-
-pub fn dispatch_target<C>(
-    actions: &[TargetAction<C>],
-    ctx: &mut C,
-    root: Option<&Root>,
-    target: &Hovered,
-) -> bool {
-    actions.iter().rev().any(|candidate| {
-        candidate
-            .root
-            .as_ref()
-            .is_none_or(|candidate| Some(candidate) == root)
-            && candidate.target == *target
-            && (candidate.action)(ctx)
-    })
 }
 
 pub fn scrub_target(
@@ -221,13 +224,11 @@ pub struct Ink<'a> {
 
 pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
-    pub activations: Vec<TargetAction<C>>,
-    pub picks: Vec<TargetAction<C>>,
     pub scrubs: Vec<ScrubAction>,
     pub state_drags: Vec<StateDragAction>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
-    pub handler: Option<Handler<C>>,
+    pub handler: Option<Handler<C, PointerContext>>,
     pub descends: Vec<Descend<C>>,
     pub view_regions: Vec<ViewRegion>,
     /// A projected control may override how the nearest enclosing
@@ -259,8 +260,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
     fn empty() -> Self {
         Self {
             probes: Vec::new(),
-            activations: Vec::new(),
-            picks: Vec::new(),
             scrubs: Vec::new(),
             state_drags: Vec::new(),
             handler: None,
@@ -275,8 +274,6 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
 
     fn over(mut self, above: Self) -> Self {
         append(&mut self.probes, above.probes);
-        append(&mut self.activations, above.activations);
-        append(&mut self.picks, above.picks);
         append(&mut self.scrubs, above.scrubs);
         append(&mut self.state_drags, above.state_drags);
         self.handler = match (self.handler, above.handler) {
@@ -303,11 +300,22 @@ impl<C: 'static, Cv> Placed<C, Cv> {
     }
 
     fn root_navigation(&mut self, root: &Root) {
+        for probe in &mut self.probes {
+            probe.root = Some(root.clone());
+        }
         for descend in &mut self.descends {
             descend.root = Some(root.clone());
         }
-        for action in self.activations.iter_mut().chain(&mut self.picks) {
-            action.root = Some(root.clone());
+        if let Some(handler) = &mut self.handler {
+            let root = root.clone();
+            let dispatch = std::mem::replace(&mut handler.pointer_down, Box::new(|_, _, _| false));
+            handler.pointer_down = Box::new(move |ctx, event, pointer| {
+                let outside = pointer.outside_view;
+                pointer.outside_view = pointer.root.as_ref() != Some(&root);
+                let handled = dispatch(ctx, event, pointer);
+                pointer.outside_view = outside;
+                handled
+            });
         }
         for scrub in &mut self.scrubs {
             scrub.root = Some(root.clone());
@@ -323,18 +331,31 @@ impl<C: 'static, Cv> Placed<C, Cv> {
     /// What the pointer at `point` rests on. A direct answer or
     /// occluder wins immediately in placement order; an extension of
     /// `prior` is remembered only in case every real region is air.
+    #[cfg(test)]
     pub fn probe(
         &self,
         point: Point,
         prior: Option<&Hovered>,
         reach: f64,
     ) -> Option<Claim<Hovered>> {
+        self.probe_scoped(point, prior, reach)
+            .map(|(_, claim)| claim)
+    }
+
+    pub fn probe_scoped(
+        &self,
+        point: Point,
+        prior: Option<&Hovered>,
+        reach: f64,
+    ) -> Option<(Option<Root>, Claim<Hovered>)> {
         let mut retained = None;
         for probe in self.probes.iter().rev() {
             match probe.answer(point, prior, reach) {
-                direct @ Some(Claim::Direct(_) | Claim::Occludes) => return direct,
+                Some(claim @ (Claim::Direct(_) | Claim::Occludes)) => {
+                    return Some((probe.root.clone(), claim));
+                }
                 Some(Claim::Extended(target)) => {
-                    retained = Some(Claim::Extended(target));
+                    retained = Some((probe.root.clone(), Claim::Extended(target)));
                 }
                 _ => {}
             }
@@ -354,7 +375,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
             .collect()
     }
 
-    pub fn handler_mut(&mut self) -> &mut Handler<C> {
+    pub fn handler_mut(&mut self) -> &mut Handler<C, PointerContext> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
@@ -376,7 +397,10 @@ impl<C: 'static, Cv> Builder<'_, C, Cv> {
 
 /// Stack `above`'s dispatch over `base`'s: above tries first, declines
 /// fall through — placement order as precedence, same as paint.
-fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
+fn handler_over<C: 'static>(
+    base: Handler<C, PointerContext>,
+    above: Handler<C, PointerContext>,
+) -> Handler<C, PointerContext> {
     fn chain<C, E>(
         base: Box<dyn Fn(&mut C, &E) -> bool>,
         above: Box<dyn Fn(&mut C, &E) -> bool>,
@@ -403,7 +427,9 @@ fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
         })
     }
     Handler {
-        pointer_down: chain(base.pointer_down, above.pointer_down),
+        pointer_down: Box::new(move |ctx, event, pointer| {
+            (above.pointer_down)(ctx, event, pointer) || (base.pointer_down)(ctx, event, pointer)
+        }),
         pointer_move: chain(base.pointer_move, above.pointer_move),
         pointer_up: chain(base.pointer_up, above.pointer_up),
         pointer_cancel: chain(base.pointer_cancel, above.pointer_cancel),
@@ -461,26 +487,59 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     pub fn occlude(&mut self, placement: Placement) {
         if !placement.clipped_out() {
             self.placed.probes.push(Probe::occludes(placement));
+            self.handler().on_pointer_down(move |_, event| {
+                placement.contains(Point::new(event.state.position.x, event.state.position.y))
+            });
         }
     }
 
     pub fn activate(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
-        if self.visible {
-            self.placed.activations.push(TargetAction {
-                root: None,
-                target,
-                action: Box::new(action),
-            });
-        }
+        self.target_action(target, false, action);
     }
 
     pub fn pick(&mut self, target: Hovered, action: impl Fn(&mut C) -> bool + 'static) {
+        self.target_action(target, true, action);
+    }
+
+    fn target_action(
+        &mut self,
+        target: Hovered,
+        pick: bool,
+        action: impl Fn(&mut C) -> bool + 'static,
+    ) {
         if self.visible {
-            self.placed.picks.push(TargetAction {
-                root: None,
-                target,
-                action: Box::new(action),
-            });
+            self.handler()
+                .on_pointer_down_with(move |ctx, event, pointer| {
+                    let handled = puri::interact::is_primary_contact(event)
+                        && crate::modifiers::pick(&event.state.modifiers) == pick
+                        && pointer.matches(&target)
+                        && action(ctx);
+                    pointer.targeted |= handled;
+                    handled
+                });
+        }
+    }
+
+    pub fn pick_dynamic(
+        &mut self,
+        placement: Placement,
+        action: impl Fn(&mut C, &Hovered) -> bool + 'static,
+    ) {
+        if self.visible {
+            self.handler()
+                .on_pointer_down_with(move |ctx, event, pointer| {
+                    let handled = puri::interact::is_primary_contact(event)
+                        && crate::modifiers::pick(&event.state.modifiers)
+                        && !pointer.outside_view
+                        && placement
+                            .contains(Point::new(event.state.position.x, event.state.position.y))
+                        && pointer
+                            .hovered
+                            .as_ref()
+                            .is_some_and(|target| action(ctx, target));
+                    pointer.targeted |= handled;
+                    handled
+                });
         }
     }
 
@@ -502,6 +561,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         handler: progred_display::StateDragHandler,
     ) {
         if self.visible {
+            self.activate(target.clone(), |_| true);
             self.placed.state_drags.push(StateDragAction {
                 root: None,
                 target,
@@ -582,7 +642,9 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
 }
 
 impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
-    fn handler(&mut self) -> &mut Handler<C> {
+    type Pointer = PointerContext;
+
+    fn handler(&mut self) -> &mut Handler<C, PointerContext> {
         self.placed.handler_mut()
     }
 }
@@ -765,7 +827,10 @@ pub fn in_view<C: 'static, Cv: 'static>(
     })
 }
 
-fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C> {
+fn gate_starts<C: 'static>(
+    child: Handler<C, PointerContext>,
+    placement: Placement,
+) -> Handler<C, PointerContext> {
     let Handler {
         pointer_down,
         pointer_move,
@@ -777,9 +842,9 @@ fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C
     } = child;
     let mut gated = Handler::new();
     if !placement.clipped_out() {
-        gated.on_pointer_down(move |ctx, event: &PointerButtonEvent| {
+        gated.on_pointer_down_with(move |ctx, event: &PointerButtonEvent, pointer| {
             placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && pointer_down(ctx, event)
+                && pointer_down(ctx, event, pointer)
         });
         gated.on_scroll(move |ctx, event| {
             if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
@@ -907,39 +972,34 @@ mod tests {
     }
 
     #[test]
-    fn target_actions_follow_resolved_hover_and_visual_precedence() {
+    fn target_actions_and_raw_handlers_share_visual_precedence() {
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
-        let actions = vec![
-            TargetAction {
-                root: None,
-                target: target.clone(),
-                action: Box::new(|log: &mut Vec<&'static str>| {
-                    log.push("lower");
-                    true
-                }),
-            },
-            TargetAction {
-                root: None,
-                target: other,
-                action: Box::new(|log: &mut Vec<&'static str>| {
-                    log.push("other");
-                    true
-                }),
-            },
-            TargetAction {
-                root: None,
-                target: target.clone(),
-                action: Box::new(|log: &mut Vec<&'static str>| {
-                    log.push("upper");
-                    false
-                }),
-            },
-        ];
+        let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
+        let mut placed: Placed<Vec<&'static str>, TestCanvas> = Placed::empty();
+        let mut p = Builder::new(&mut placed, placement);
+        p.handler().on_pointer_down(|log, _| {
+            log.push("raw below");
+            true
+        });
+        p.activate(target.clone(), |log| {
+            log.push("activation");
+            true
+        });
+        p.activate(other, |_| panic!("wrong target"));
+        p.handler().on_pointer_down(|log, _| {
+            log.push("raw above declined");
+            false
+        });
+        let mut pointer = PointerContext::new(None, Some(target));
         let mut log = Vec::new();
-
-        assert!(dispatch_target(&actions, &mut log, None, &target));
-        assert_eq!(log, ["upper", "lower"]);
+        assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+            &mut log,
+            &down_at(5.0, 5.0),
+            &mut pointer
+        ));
+        assert_eq!(log, ["raw above declined", "activation"]);
+        assert!(pointer.targeted);
     }
 
     #[test]
@@ -1096,8 +1156,6 @@ mod tests {
         );
 
         assert!(placed.probes.is_empty());
-        assert!(placed.activations.is_empty());
-        assert!(placed.picks.is_empty());
         assert!(placed.renders.is_empty());
         assert!(placed.handler.is_some());
     }
@@ -1210,5 +1268,212 @@ mod tests {
         assert!(handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
         assert!(handler.dispatch_pointer_up(&mut log, &down_at(20.0, 5.0)));
         assert_eq!(log, ["down", "scroll", "move", "up"]);
+    }
+    #[test]
+    fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
+        let mut placed: Placed<Vec<&'static str>, TestCanvas> = Placed::empty();
+        let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let mut p = Builder::new(&mut placed, full);
+        p.handler().on_pointer_down(|log, _| {
+            log.push("covered");
+            true
+        });
+        p.handler().on_pointer_move(|log, _| {
+            log.push("move");
+            true
+        });
+        p.handler().on_pointer_up(|log, _| {
+            log.push("up");
+            true
+        });
+        p.occlude(Placement::new(full.rect, Rect::new(10.0, 10.0, 20.0, 20.0)));
+        let handler = placed.handler.unwrap();
+        let mut log = Vec::new();
+        for button in [PointerButton::Primary, PointerButton::Secondary] {
+            let mut event = down_at(15.0, 15.0);
+            event.button = Some(button);
+            assert!(handler.dispatch_pointer_down(&mut log, &event));
+            assert!(log.is_empty());
+        }
+        assert!(handler.dispatch_pointer_down(&mut log, &down_at(25.0, 15.0)));
+        assert!(handler.dispatch_pointer_move(&mut log, &move_at(150.0, 150.0)));
+        assert!(handler.dispatch_pointer_up(&mut log, &down_at(150.0, 150.0)));
+        assert_eq!(log, ["covered", "move", "up"]);
+    }
+
+    #[test]
+    fn a_floater_keeps_its_view_when_it_covers_another_view() {
+        let owner = Root::document();
+        let covered = Root::document();
+        let target = Hovered::Tree(crate::hover::Hover::Entry(0));
+        let extent = Extent {
+            width: 10.0,
+            ascent: 0.0,
+            descent: 10.0,
+        };
+        let row = |label: &'static str| {
+            let target = target.clone();
+            leaf(
+                extent,
+                move |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, placement| {
+                    p.claim(placement, target.clone());
+                    p.activate(target.clone(), move |log| {
+                        log.push(label);
+                        true
+                    });
+                    p.pick(target, move |log| {
+                        log.push(label);
+                        true
+                    });
+                },
+            )
+        };
+        let popup_rect = Rect::new(50.0, 0.0, 60.0, 10.0);
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let owner_view = in_view(
+            floating(
+                leaf(
+                    extent,
+                    |_: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {},
+                ),
+                row("popup"),
+                move |_, _| Some(Placement::new(popup_rect, bounds)),
+            ),
+            owner.clone(),
+        );
+        let owner_view = measured::place(
+            owner_view,
+            Placement::new(extent.rect_at(Point::ZERO), bounds),
+        );
+        let covered_view = measured::place(
+            in_view(row("covered pane"), covered),
+            Placement::new(popup_rect, bounds),
+        );
+        let placed = owner_view.over(covered_view).raise_floaters();
+        let point = popup_rect.center();
+        let (root, Claim::Direct(hit)) = placed.probe_scoped(point, None, 0.0).unwrap() else {
+            panic!("popup hover")
+        };
+        assert!(root.as_ref() == Some(&owner));
+        for modifiers in [
+            ui_events::keyboard::Modifiers::empty(),
+            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL,
+        ] {
+            let mut pointer = PointerContext::new(root.clone(), Some(hit.clone()));
+            let mut event = down_at(point.x, point.y);
+            event.state.modifiers = modifiers;
+            let mut log = Vec::new();
+            assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+                &mut log,
+                &event,
+                &mut pointer
+            ));
+            assert!(pointer.targeted);
+            assert_eq!(log, ["popup"]);
+        }
+    }
+
+    #[test]
+    fn raw_acceptance_does_not_start_a_semantic_gesture() {
+        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+        for accepts in [false, true] {
+            let mut placed: Placed<(), TestCanvas> = Placed::empty();
+            let mut p = Builder::new(
+                &mut placed,
+                Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+            );
+            p.state_drag(
+                target.clone(),
+                Vec::new(),
+                std::rc::Rc::new(|| Box::new(|_| gid::Value::record([]))),
+            );
+            p.handler().on_pointer_down(move |_, _| accepts);
+            let mut pointer = PointerContext::new(None, Some(target.clone()));
+            assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+                &mut (),
+                &down_at(5.0, 5.0),
+                &mut pointer
+            ));
+            assert_eq!(pointer.targeted, !accepts);
+        }
+    }
+
+    #[test]
+    fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
+        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+        let claimed = target.clone();
+        let child = leaf(
+            Extent {
+                width: 30.0,
+                ascent: 0.0,
+                descent: 30.0,
+            },
+            move |p: &mut Builder<'_, usize, TestCanvas>, placement| {
+                p.claim(placement, claimed.clone());
+                p.activate(claimed, |count| {
+                    *count += 1;
+                    true
+                });
+            },
+        );
+        let placed = measured::place(
+            scrolled_at(child, Vec2::ZERO, None, |_, event| {
+                ScrollOutcome::pass(event)
+            }),
+            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+        );
+        let mut pointer = PointerContext::new(None, Some(target));
+        let handler = placed.handler.unwrap();
+        let mut count = 0;
+        assert!(!handler.dispatch_pointer_down_with(&mut count, &down_at(20.0, 5.0), &mut pointer));
+        assert!(!pointer.targeted);
+        assert_eq!(count, 0);
+        assert!(handler.dispatch_pointer_down_with(&mut count, &down_at(5.0, 5.0), &mut pointer));
+        assert!(pointer.targeted);
+        assert_eq!(count, 1);
+    }
+    #[test]
+    fn dynamic_picks_share_pointer_order_and_respect_occlusion() {
+        let target = Hovered::Tree(crate::hover::Hover::Drawing(
+            crate::hover::SourceTrace::Stored(std::rc::Rc::from([])),
+        ));
+        let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
+        for covered in [false, true] {
+            let mut placed: Placed<usize, TestCanvas> = Placed::empty();
+            let mut p = Builder::new(&mut placed, placement);
+            p.handler()
+                .on_pointer_down(|_, _| panic!("covered raw handler"));
+            p.occlude(placement);
+            let claimed = target.clone();
+            p.claim_dynamic(placement, move |_| Some(claimed.clone()));
+            p.pick_dynamic(placement, |count, target| {
+                if matches!(target, Hovered::Tree(crate::hover::Hover::Drawing(_))) {
+                    *count += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            if covered {
+                p.occlude(placement);
+            }
+            let hovered = match placed.probe(Point::new(5.0, 5.0), None, 0.0) {
+                Some(Claim::Direct(target)) => target,
+                Some(Claim::Occludes) => Hovered::Blocked,
+                _ => panic!("hit"),
+            };
+            let mut pointer = PointerContext::new(None, Some(hovered));
+            let mut event = down_at(5.0, 5.0);
+            event.state.modifiers =
+                ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
+            let mut count = 0;
+            assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+                &mut count,
+                &event,
+                &mut pointer
+            ));
+            assert_eq!(pointer.targeted, !covered);
+            assert_eq!(count, usize::from(!covered));
+        }
     }
 }

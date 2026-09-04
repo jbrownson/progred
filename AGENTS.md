@@ -52,6 +52,7 @@ EOF
 
 - Widgets are pure functions (persistent widget state, props) → (draw calls, handlers). Puri holds nothing between frames, mints no identity, retains no hierarchy.
 - Hover mirrors painting: `puri::hover::Claim` either names a target or occludes (the claim analog of an opaque fill), asked topmost-first over settled geometry; hover itself is derived per pass, with `LazyPointer` as the input-side dead-zone filter. Never store a resolved hover as an input to building a frame.
+- Activation and picking lower into the same front-to-back pointer handler chain as raw input; never dispatch these as separate phases. The shell supplies the settled hover and its owning view explicitly at dispatch. Occlusion blocks pointer starts, while motion and release for active gestures remain available beneath it.
 - Durable widget helper state contains only caller-owned content and cross-frame interaction data. Font, paint, affixes, focus, placeholder, and similar presentation inputs belong to the current description and are captured by its transient handlers.
 - Platform services are caller-supplied capabilities materialized in dispatch context; Puri must not construct global clipboard, clock, or window services itself.
 - Focus is an input: the app owns who has focus and tab order; helpers are pure and advisory. The focused text widget emits an IME caret rect as output.

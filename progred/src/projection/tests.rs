@@ -2042,8 +2042,24 @@ fn a_projection_defined_as_data_realizes() {
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
     );
-    // The data's selectable attached the provided semantic action.
-    assert!(!placed.activations.is_empty());
+    let mut pointer = crate::placed::PointerContext::new(
+        None,
+        Some(crate::frame::Hovered::Tree(Hover::Value(Rc::from([])))),
+    );
+    assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+        &mut (),
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState::default(),
+        },
+        &mut pointer,
+    ));
+    assert!(pointer.targeted);
 }
 
 #[test]

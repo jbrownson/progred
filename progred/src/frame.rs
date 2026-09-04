@@ -38,9 +38,8 @@ use winit::dpi::PhysicalPosition;
 pub(crate) const HOVER_REACH: f64 = 8.0;
 
 pub(crate) struct Dispatch {
-    pub(crate) handler: Handler<Editor>,
-    pub(crate) activations: Vec<placed::TargetAction<Editor>>,
-    pub(crate) picks: Vec<placed::TargetAction<Editor>>,
+    pub(crate) handler: Handler<Editor, placed::PointerContext>,
+    pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) scrubs: Vec<placed::ScrubAction>,
     pub(crate) state_drags: Vec<placed::StateDragAction>,
     pub(crate) descends: Vec<navigate::Descend<Editor>>,
@@ -308,15 +307,14 @@ pub(crate) fn derive_hover<C: 'static, Cv>(
     pointer: Option<Point>,
     pressed: bool,
     reach: f64,
-) -> Option<Hovered> {
+) -> (Option<Hovered>, Option<crate::workspace::Root>) {
     if pressed {
-        return prior;
+        return (prior, None);
     }
-    let point = pointer?;
-    match placed.probe(point, prior.as_ref(), reach) {
-        Some(Claim::Direct(target) | Claim::Extended(target)) => Some(target),
-        Some(Claim::Occludes) => Some(Hovered::Blocked),
-        None => None,
+    match pointer.and_then(|point| placed.probe_scoped(point, prior.as_ref(), reach)) {
+        Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
+        Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
+        None => (None, None),
     }
 }
 
@@ -531,13 +529,14 @@ impl Editor {
         )
         .raise_floaters();
         let hover_reach = HOVER_REACH * scale;
-        self.hover = derive_hover(
+        let (hover, pointer_root) = derive_hover(
             &placed,
             self.hover.take(),
             self.pointer,
             self.pressed,
             hover_reach,
         );
+        self.hover = hover;
         let sources = sources::Sources {
             doc: &self.model.doc,
             libraries: &self.stack.libraries,
@@ -572,8 +571,6 @@ impl Editor {
             .unwrap_or_default();
         let Placed {
             probes: _,
-            activations,
-            picks,
             scrubs,
             state_drags,
             handler,
@@ -599,8 +596,7 @@ impl Editor {
         Frame {
             dispatch: Dispatch {
                 handler: handler.unwrap_or_else(Handler::new),
-                activations,
-                picks,
+                pointer_root,
                 scrubs,
                 state_drags,
                 descends,
@@ -1329,7 +1325,7 @@ mod frame_tests {
         ));
         // A direct answer establishes hover.
         assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,),
+            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,).0,
             Some(target(0))
         );
         // In the gap, only the prior target's extension may retain.
@@ -1340,7 +1336,8 @@ mod frame_tests {
                 Some(Point::new(12.0, 5.0)),
                 false,
                 8.0,
-            ),
+            )
+            .0,
             Some(target(0))
         );
         assert_eq!(
@@ -1350,7 +1347,8 @@ mod frame_tests {
                 Some(Point::new(12.0, 5.0)),
                 false,
                 8.0,
-            ),
+            )
+            .0,
             Some(target(1))
         );
         // Even when the prior target's extension is encountered
@@ -1362,7 +1360,8 @@ mod frame_tests {
                 Some(Point::new(8.0, 5.0)),
                 false,
                 8.0,
-            ),
+            )
+            .0,
             Some(target(0))
         );
         // The neighboring real target overrides the prior target's
@@ -1374,15 +1373,16 @@ mod frame_tests {
                 Some(Point::new(16.0, 5.0)),
                 false,
                 8.0,
-            ),
+            )
+            .0,
             Some(target(1))
         );
         assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(12.0, 5.0)), false, 8.0,),
+            derive_hover(&placed, None, Some(Point::new(12.0, 5.0)), false, 8.0,).0,
             None
         );
         assert_eq!(
-            derive_hover(&placed, Some(target(0)), None, false, 8.0),
+            derive_hover(&placed, Some(target(0)), None, false, 8.0).0,
             None
         );
         // A pressed gesture keeps the hover it began with.
@@ -1393,7 +1393,8 @@ mod frame_tests {
                 Some(Point::new(40.0, 40.0)),
                 true,
                 8.0,
-            ),
+            )
+            .0,
             Some(target(0))
         );
         // An occluder answers "blocked" outright and blocks the
@@ -1404,7 +1405,7 @@ mod frame_tests {
             viewport,
         )));
         assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(25.0, 5.0)), false, 8.0,),
+            derive_hover(&placed, None, Some(Point::new(25.0, 5.0)), false, 8.0,).0,
             Some(Hovered::Blocked)
         );
     }
@@ -1422,7 +1423,7 @@ mod frame_tests {
         ));
 
         assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,),
+            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,).0,
             Some(target.clone())
         );
         assert_eq!(
@@ -1432,7 +1433,8 @@ mod frame_tests {
                 Some(Point::new(11.0, 5.0)),
                 false,
                 8.0,
-            ),
+            )
+            .0,
             None
         );
         assert_eq!(
@@ -1442,7 +1444,8 @@ mod frame_tests {
                 Some(Point::new(11.0, 5.0)),
                 true,
                 8.0,
-            ),
+            )
+            .0,
             Some(target)
         );
     }

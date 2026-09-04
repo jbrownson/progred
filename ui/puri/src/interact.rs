@@ -148,6 +148,8 @@ mod tests {
     }
 
     impl HasHandler<u32> for Frame {
+        type Pointer = ();
+
         fn handler(&mut self) -> &mut Handler<u32> {
             &mut self.handler
         }

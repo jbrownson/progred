@@ -555,6 +555,9 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
         builder.claim_dynamic(placement, move |point| {
             probe_drawing().target_at(point, outer)
         });
+        builder.pick_dynamic(placement, |_, target| {
+            matches!(target, Hovered::Tree(Hover::Drawing(_)))
+        });
         builder.ink(move |canvas: &mut Cv, ink| {
             let drawing = drawing();
             canvas.clip(

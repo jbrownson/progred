@@ -1662,3 +1662,144 @@ fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
     });
     assert_eq!(widths, [widths[0]; 3]);
 }
+
+#[test]
+fn completion_activation_precedes_the_real_editor_it_covers() {
+    struct ClickWorld {
+        doc: Document,
+        libraries: Libraries,
+        selection: Option<Selection>,
+        applied: Option<Path>,
+    }
+
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/sample.gid"))
+        .expect("the sample parses");
+    let stack = crate::stack::load::<ClickWorld>();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let node = project::<ClickWorld, Bench>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &doc,
+                libraries: &stack.libraries,
+            },
+            root: doc.root.as_ref(),
+            root_path: &[],
+            selection: None,
+            source_selection: None,
+            annotations: &Annotations::default(),
+            raw: false,
+            styles: &styles,
+            width: 852.0,
+
+            projection: Some(&stack.projection),
+            root_completions: Some(&stack.root_completions),
+            root_field_completions: Some(&stack.root_field_completions),
+        },
+        &mut tcx,
+        Hooks {
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
+                world.selection = Some(Selection::from_line(
+                    &Sources {
+                        doc: &world.doc,
+                        libraries: &world.libraries,
+                    },
+                    path,
+                    line,
+                ));
+            }),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
+            // A selection transition must consume the click even if
+            // retained dispatch cannot recover an edit context for
+            // the optional caret-placement follow-up.
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
+                world.applied = Some(path);
+                true
+            }),
+            point: Rc::new(|_, _, _, _, _| false),
+            commit_offer: Rc::new(|_, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        },
+    );
+    let path = vec![
+        Step::Key(sample_vocabulary::STYLE),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(sample_vocabulary::COLOR),
+    ];
+    let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+    let placed = measured::place(node, Placement::root(rect));
+    let point = placed
+        .descends
+        .iter()
+        .find(|descend| descend.path.as_ref() == &path)
+        .expect("color descend")
+        .rect
+        .center();
+    let card = completion_card::<ClickWorld, Bench>(
+        &mut tcx,
+        &styles,
+        &[Entry {
+            display: "completion offer".into(),
+            detail: None,
+            matches: Vec::new(),
+            id: false,
+            action: EntryAction::Value(text::value("chosen")),
+        }],
+        0,
+        0.0,
+        true,
+        |world, _| world.applied = Some(Vec::new()),
+        |_, _, _, _| {},
+    );
+    let card_rect = card
+        .extent
+        .rect_at(Point::new(point.x - 8.0, point.y - 8.0));
+    let card = measured::place(card, Placement::root(card_rect));
+    let placed = measured::Output::over(placed, card);
+    let Some(Claim::Direct(target)) = placed.probe(point, None, 0.0) else {
+        panic!("direct hover")
+    };
+    assert_eq!(target, Hovered::Tree(Hover::Entry(0)));
+    let mut state = ui_events::pointer::PointerState::default();
+    state.position.x = point.x;
+    state.position.y = point.y;
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: ui_events::pointer::PointerInfo {
+            pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: ui_events::pointer::PointerType::Mouse,
+        },
+        state,
+    };
+    let mut world = ClickWorld {
+        doc: doc.clone(),
+        libraries: stack.libraries.clone(),
+        selection: None,
+        applied: None,
+    };
+    let mut pointer = placed::PointerContext::new(None, Some(target));
+    assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+        &mut world,
+        &event,
+        &mut pointer
+    ));
+    assert!(pointer.targeted);
+    assert!(world.selection.is_none());
+    assert_eq!(world.applied, Some(Vec::new()));
+}

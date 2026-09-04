@@ -879,6 +879,8 @@ mod tests {
     }
 
     impl HasHandler<()> for DrawFrame {
+        type Pointer = ();
+
         fn handler(&mut self) -> &mut Handler<()> {
             &mut self.handler
         }
