@@ -2,6 +2,84 @@ use super::svg::write_cmds;
 use super::*;
 
 #[test]
+fn grap_template_preview_evaluates_the_shared_cells_current_call() {
+    let mut context = BenchContext::new();
+    let mut doc = Document {
+        root: Some(
+            (context.stack.root_completions)("")
+                .into_iter()
+                .find(|offer| offer.display == "grap")
+                .unwrap()
+                .value
+                .instantiate(),
+        ),
+        cells: Cells::new(),
+    };
+    let cell = doc
+        .root
+        .as_ref()
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&progred_libraries::grap::vocabulary::GRAP)
+        .unwrap()
+        .as_cell()
+        .unwrap();
+    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let displayed = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let observe = displayed.clone();
+    context.stack.projection = Projection {
+        partials: [progred_display::partial(move |input| {
+            observe.borrow_mut().push(input.value.clone());
+            None
+        })]
+        .into_iter()
+        .chain(context.stack.pane_projection.partials.iter().cloned())
+        .collect(),
+        ..context.stack.pane_projection.clone()
+    };
+    let arguments = [
+        (
+            progred_libraries::number::vocabulary::LEFT,
+            progred_libraries::f32::value(7.0),
+        ),
+        (
+            progred_libraries::number::vocabulary::RIGHT,
+            progred_libraries::f32::value(2.0),
+        ),
+    ];
+    let shape = Value::record([(
+        fidget::vocabulary::DIFFERENCE,
+        Value::record(arguments.clone()),
+    )]);
+    for (function, result) in [
+        (
+            progred_libraries::f32::vocabulary::SUBTRACT,
+            progred_libraries::f32::value(5.0),
+        ),
+        (fidget::vocabulary::DIFFERENCE, shape),
+    ] {
+        let expression = grap::call(function.into(), arguments.clone());
+        doc.cells.set_value(cell, expression.clone());
+        displayed.borrow_mut().clear();
+        context.place(
+            &doc,
+            None,
+            &Annotations::default(),
+            600.0,
+            None,
+            None,
+            Some((
+                &pane.path,
+                crate::spine::get(doc.root.as_ref().unwrap(), &pane.path),
+            )),
+        );
+        assert!(displayed.borrow().contains(&result));
+        assert!(!displayed.borrow().contains(&expression));
+    }
+}
+
+#[test]
 fn fidget_template_preview_uses_the_shared_cells_current_definition() {
     let mut context = BenchContext::new();
     let mut doc = Document {
