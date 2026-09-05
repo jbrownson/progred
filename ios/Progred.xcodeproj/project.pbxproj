@@ -8,12 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* main.m */; };
+		A10000000000000000000014 /* libprogred.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* libprogred.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000004 /* Progred.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Progred.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000015 /* libprogred.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libprogred.a; path = libprogred.a; sourceTree = PROGRED_RUST_LIBRARY_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -21,6 +23,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000014 /* libprogred.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,6 +35,7 @@
 			children = (
 				A10000000000000000000007 /* Progred */,
 				A10000000000000000000008 /* Products */,
+				A10000000000000000000015 /* libprogred.a */,
 			);
 			sourceTree = "<group>";
 		};
@@ -131,7 +135,6 @@
 			);
 			outputPaths = (
 				"$(PROGRED_RUST_LIBRARY)",
-				"$(SRCROOT)/../target/ios/generated/rust-build.h",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -178,11 +181,9 @@
 				DEVELOPMENT_TEAM = 42M44KBSH2;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../target/ios/generated";
 				INFOPLIST_FILE = Progred/Info.plist;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(PROGRED_RUST_LIBRARY)",
 					"-framework",
 					UIKit,
 					"-framework",
@@ -199,8 +200,10 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.progred.prototype.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				"PROGRED_RUST_LIBRARY[sdk=iphoneos*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios/release/libprogred.a";
-				"PROGRED_RUST_LIBRARY[sdk=iphonesimulator*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios-sim/release/libprogred.a";
+				LIBRARY_SEARCH_PATHS = "$(PROGRED_RUST_LIBRARY_DIR)";
+				PROGRED_RUST_LIBRARY = "$(PROGRED_RUST_LIBRARY_DIR)/libprogred.a";
+				"PROGRED_RUST_LIBRARY_DIR[sdk=iphoneos*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios/release";
+				"PROGRED_RUST_LIBRARY_DIR[sdk=iphonesimulator*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios-sim/release";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 2;
@@ -216,11 +219,9 @@
 				DEVELOPMENT_TEAM = 42M44KBSH2;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../target/ios/generated";
 				INFOPLIST_FILE = Progred/Info.plist;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(PROGRED_RUST_LIBRARY)",
 					"-framework",
 					UIKit,
 					"-framework",
@@ -237,8 +238,10 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.progred.prototype.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				"PROGRED_RUST_LIBRARY[sdk=iphoneos*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios/release/libprogred.a";
-				"PROGRED_RUST_LIBRARY[sdk=iphonesimulator*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios-sim/release/libprogred.a";
+				LIBRARY_SEARCH_PATHS = "$(PROGRED_RUST_LIBRARY_DIR)";
+				PROGRED_RUST_LIBRARY = "$(PROGRED_RUST_LIBRARY_DIR)/libprogred.a";
+				"PROGRED_RUST_LIBRARY_DIR[sdk=iphoneos*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios/release";
+				"PROGRED_RUST_LIBRARY_DIR[sdk=iphonesimulator*]" = "$(SRCROOT)/../target/sandbox/build/aarch64-apple-ios-sim/release";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 2;

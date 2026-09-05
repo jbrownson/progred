@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#include "rust-build.h"
 
 extern void progred_start(void);
 

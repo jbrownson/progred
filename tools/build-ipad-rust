@@ -3,7 +3,6 @@
 set -eu
 
 tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-project_root=$(dirname "$tool_dir")
 
 case "${PLATFORM_NAME-}" in
     iphonesimulator)
@@ -20,14 +19,3 @@ esac
 
 PATH="${HOME}/.cargo/bin:${PATH}" \
     "$tool_dir/sandbox-cargo" rustc --release -p progred --lib --crate-type staticlib --target "$rust_target"
-
-generated_dir="$project_root/target/ios/generated"
-generated_header="$generated_dir/rust-build.h"
-library_hash=$(/usr/bin/shasum -a 256 "${PROGRED_RUST_LIBRARY:?}")
-library_hash=${library_hash%% *}
-expected="#define PROGRED_RUST_LIBRARY_HASH \"$library_hash\""
-
-mkdir -p "$generated_dir"
-if [ ! -f "$generated_header" ] || ! /usr/bin/grep -Fqx "$expected" "$generated_header"; then
-    /usr/bin/printf '%s\n' "$expected" >"$generated_header"
-fi

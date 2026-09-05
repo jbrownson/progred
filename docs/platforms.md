@@ -1,6 +1,6 @@
 # Platform Work
 
-Progred has native macOS and iPad shells plus a browser shell. The native
+Progred has native macOS/Linux and iPad shells plus a browser shell. The native
 shells enter the same Rust application; platform projects package it rather
 than reimplementing the editor.
 
@@ -28,14 +28,16 @@ builds the Rust static library for the selected SDK through the repository's
 Seatbelt wrapper; Xcode then compiles the tiny Objective-C entry point, links,
 signs, installs, and launches the application. Cargo still performs its normal
 incremental check on every Xcode build, so Rust changes need no separate build
-step.
+step. The generated archive is an explicit input to Xcode's library build
+phase. Rust-only changes relink the host without recompiling its Objective-C
+entry point; no generated header or archive hash is involved.
 
-The native editor currently renders and accepts touch input on iPad hardware.
-The simulator reaches its first Vello frame, but wgpu 29 does not report
-indirect execution there and rejects Vello's indirect buffers. Use hardware or
-the browser build until the upstream
-[wgpu fix](https://github.com/gfx-rs/wgpu/pull/10189) is released rather than
-maintaining a separate simulator renderer path.
+Earlier notes report rendering and touch input on iPad hardware, and a
+simulator failure when Vello requests indirect buffers unsupported by that
+wgpu backend. They reference an upstream
+[wgpu change](https://github.com/gfx-rs/wgpu/pull/10189). The 2026-09-04 cleanup
+verified device/simulator builds and incremental linking, without launching
+either app; those runtime reports still need direct testing.
 
 `make build-ipad` and `make build-ipad-device` remain useful for unsigned CI or
 command-line builds of the simulator and device forms. They use the same Xcode
