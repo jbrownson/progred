@@ -20,6 +20,19 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
+## Reporting completion failures
+
+Offer construction decides applicability; activating an offered completion
+consumes the input. Its Grap continuation can still fail at runtime. For now,
+keep the existing silent failure: unsuccessful preparation installs neither
+the insertion nor its staged selection/annotation changes.
+
+Later, design an editor-owned way to surface these failures, such as alerts or
+notifications, using the failure details in GID values. Do not add that machinery
+now. Distinguishing an actual failure or explicit decline from a legitimate
+absent result remains an open semantic question; absence alone should not be
+assumed to warrant an alert.
+
 ## General computation reuse
 
 The canvas memo was removed because its validation observed less than evaluation
