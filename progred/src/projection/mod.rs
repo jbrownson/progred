@@ -229,7 +229,6 @@ fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
 struct Widths {
     preferred: f64,
     minimum: f64,
-    maximum: f64,
 }
 
 impl Widths {
@@ -237,7 +236,6 @@ impl Widths {
         Self {
             preferred: width,
             minimum: width,
-            maximum: width,
         }
     }
 
@@ -245,7 +243,6 @@ impl Widths {
         Self {
             preferred: self.preferred + width,
             minimum: self.minimum + width,
-            maximum: self.maximum + width,
         }
     }
 }
@@ -377,11 +374,6 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .map(|child| child.widths.minimum)
                 .sum::<f64>()
                 + gaps,
-            maximum: children
-                .iter()
-                .map(|child| child.widths.maximum)
-                .sum::<f64>()
-                + gaps,
         };
         Self {
             widths,
@@ -403,10 +395,6 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .iter()
                 .map(|child| child.widths.minimum)
                 .fold(0.0_f64, f64::max),
-            maximum: children
-                .iter()
-                .map(|child| child.widths.maximum)
-                .fold(0.0_f64, f64::max),
         };
         Self {
             widths,
@@ -427,10 +415,6 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
             minimum: children
                 .iter()
                 .map(|child| child.widths.minimum)
-                .fold(0.0_f64, f64::max),
-            maximum: children
-                .iter()
-                .map(|child| child.widths.maximum)
                 .fold(0.0_f64, f64::max),
         };
         Self {
@@ -473,10 +457,6 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     .iter()
                     .map(|option| option.widths.minimum)
                     .fold(f64::INFINITY, f64::min),
-                maximum: options
-                    .iter()
-                    .map(|option| option.widths.maximum)
-                    .fold(0.0_f64, f64::max),
             },
             None => Widths::fixed(0.0),
         };
@@ -717,10 +697,9 @@ fn resolve_choices<Out: measured::Output + 'static>(
     }
     let preferred = layout.widths.preferred;
     let minimum = layout.widths.minimum;
-    let maximum = layout.widths.maximum;
     if tracing {
         eprintln!(
-            "layout analysis: nodes={} alternatives={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} maximum={maximum:.1} available={available:.1}",
+            "layout analysis: nodes={} alternatives={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} available={available:.1}",
             trace.nodes, trace.alternatives, trace.wider_backups,
         );
     }
