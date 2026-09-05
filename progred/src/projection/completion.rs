@@ -4,7 +4,7 @@ use super::{
     Cx, Hooks, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     placeholder_box, primary_highlight, slot_width, source_target, tree_hovered,
 };
-use crate::completion::{Commit, Entry, Offers, completion_entries_with};
+use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
@@ -82,14 +82,15 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     let can_show_everything = completions.is_some();
     let everything =
         !can_show_everything || cx.selection.is_some_and(Selection::completion_everything);
+    let commit = if labels {
+        Commit::Label(hooks.commit_label.clone())
+    } else {
+        Commit::Value(hooks.commit_value.clone())
+    };
     let entries = completion_entries_with(
         &cx.sources,
         cx.raw,
-        &if labels {
-            Commit::Label(hooks.commit_label.clone())
-        } else {
-            Commit::Value(hooks.commit_value.clone())
-        },
+        &commit,
         query.text(),
         completions,
         everything,
@@ -163,6 +164,23 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
             set_completion_view(world, scroll, choice, everything)
         },
     );
+    let card = if query.text().is_empty() && !query.is_composing() {
+        let constructors = constructor_entries(&commit);
+        on_key(card, move |world, event| {
+            if event.state.is_down()
+                && !(event.modifiers.ctrl() || event.modifiers.meta())
+                && let Key::Character(key) = &event.key
+                && let Some((_, entry)) = constructors.iter().find(|(shortcut, _)| *shortcut == key)
+            {
+                (entry.activate)(world);
+                true
+            } else {
+                false
+            }
+        })
+    } else {
+        card
+    };
     placed::popover(trigger, card, 4.0 * scale)
 }
 

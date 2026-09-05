@@ -1,6 +1,220 @@
 use super::*;
 
 #[test]
+fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker() {
+    struct Clipboard;
+    impl puri::edit::TextClipboard for Clipboard {
+        fn get_text(&mut self) -> Option<String> {
+            None
+        }
+        fn set_text(&mut self, _: &str) {}
+    }
+    struct State {
+        selection: Selection,
+        committed: Vec<Value>,
+        fonts: parley::FontContext,
+        layouts: parley::LayoutContext<Brush>,
+        clipboard: Clipboard,
+    }
+
+    let stack = crate::stack::load::<State>();
+    let root = crate::workspace::Root::document();
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let record = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let mut state = State {
+        selection: pending_value(&root, vec![]),
+        committed: Vec::new(),
+        fonts: parley::FontContext::new(),
+        layouts: parley::LayoutContext::new(),
+        clipboard: Clipboard,
+    };
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let mut frame = |state: &State, doc: &Document| {
+        let node = project::<State, Bench>(
+            ProjectDescription {
+                sources: src(doc, &stack.libraries),
+                root: doc.root.as_ref(),
+                root_path: &[],
+                selection: Some(&state.selection),
+                scrub_spelling: None,
+                source_selection: None,
+                annotations: &Annotations::default(),
+                raw: false,
+                styles: &styles,
+                width: 600.0,
+                projection: Some(&stack.projection),
+                root_completions: Some(&stack.root_completions),
+                root_field_completions: Some(&stack.root_field_completions),
+            },
+            &mut tcx,
+            Hooks {
+                select: Rc::new(|_, _| {}),
+                select_payload: Rc::new(|_, _, _| {}),
+                start_edit: Rc::new(|_, _, _| {}),
+                toggle: Rc::new(|_, _| {}),
+                update_state: Rc::new(|_, _, _| false),
+                edit: Rc::new(|state: &mut State| {
+                    Some(puri::edit::EditCtx {
+                        state: state.selection.edit_mut()?,
+                        fonts: &mut state.fonts,
+                        layouts: &mut state.layouts,
+                        clipboard: &mut state.clipboard,
+                    })
+                }),
+                pick: Rc::new(|_, _| false),
+                insert: Rc::new(|_, _| {}),
+                delete: Rc::new(|_, _| false),
+                apply: Rc::new(|_, _, _, _| false),
+                point: Rc::new(|_, _, _, _, _| false),
+                state_drag: Rc::new(|_, _, _, _, _| {}),
+                scrub: Rc::new(|_, _, _, _, _| false),
+                select_source: Rc::new(|_, _, _| {}),
+                commit_value: Rc::new(|state, value, _| state.committed.push(value)),
+                commit_label: Rc::new(|state, cell, _, _| state.committed.push(Value::from(cell))),
+                set_completion_view: Rc::new(|state, scroll, choice, everything| {
+                    state
+                        .selection
+                        .set_completion_view(scroll, choice, everything);
+                }),
+            },
+        );
+        let rect = node.extent.rect_at(Point::new(20.0, 20.0));
+        measured::place(
+            node,
+            Placement::new(rect, Rect::new(0.0, 0.0, 640.0, 480.0)),
+        )
+        .raise_floaters()
+    };
+    let press = |key: &str, modifiers| KeyboardEvent {
+        key: Key::Character(key.into()),
+        state: KeyState::Down,
+        modifiers,
+        ..Default::default()
+    };
+    for labels in [false, true] {
+        let doc = if labels { &record } else { &empty };
+        for everything in [false, true] {
+            for key in ["[", "(", "{"] {
+                state.selection = if labels {
+                    pending_edge(&root, &src(doc, &stack.libraries), vec![]).unwrap()
+                } else {
+                    pending_value(&root, vec![])
+                };
+                state.selection.set_completion_view(0.0, 0, everything);
+                let placed = frame(&state, doc);
+                if !everything {
+                    assert!(
+                        placed
+                            .completion
+                            .as_ref()
+                            .unwrap()
+                            .entries
+                            .iter()
+                            .all(|entry| !entry.display.starts_with("new "))
+                    );
+                }
+                assert!(
+                    placed
+                        .handler
+                        .unwrap()
+                        .dispatch_key(&mut state, &press(key, Modifiers::SHIFT))
+                );
+                if labels && key != "(" {
+                    assert!(state.committed.is_empty());
+                    assert_eq!(state.selection.edit().unwrap().text(), key);
+                } else {
+                    let value = state.committed.pop().unwrap();
+                    match key {
+                        "[" => assert_eq!(value, Value::list([])),
+                        "{" => assert_eq!(value, Value::record([])),
+                        _ => assert!(value.as_cell().is_some()),
+                    }
+                    assert!(state.selection.edit().unwrap().text().is_empty());
+                    assert_eq!(state.selection.completion_everything(), everything);
+                }
+            }
+        }
+    }
+
+    state.selection = pending_value(&root, vec![]);
+    for modifiers in [Modifiers::CONTROL, Modifiers::META] {
+        assert!(
+            !frame(&state, &empty)
+                .handler
+                .unwrap()
+                .dispatch_key(&mut state, &press("[", modifiers))
+        );
+        assert!(state.committed.is_empty());
+    }
+    let release = KeyboardEvent {
+        state: KeyState::Up,
+        ..press("[", Modifiers::empty())
+    };
+    assert!(
+        !frame(&state, &empty)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &release)
+    );
+    assert!(state.committed.is_empty());
+    assert!(
+        frame(&state, &empty)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press("[", Modifiers::ALT))
+    );
+    assert_eq!(state.committed.pop(), Some(Value::list([])));
+
+    for query in ["\"", "search"] {
+        state.selection = crate::selection::pending_with_query(&root, vec![], query);
+        assert!(
+            frame(&state, &empty)
+                .handler
+                .unwrap()
+                .dispatch_key(&mut state, &press("[", Modifiers::empty()))
+        );
+        assert!(state.committed.is_empty());
+        assert_eq!(state.selection.edit().unwrap().text(), format!("{query}["));
+    }
+    state.selection = pending_value(&root, vec![]);
+    state
+        .selection
+        .edit_mut()
+        .unwrap()
+        .handle_ime(&puri::handler::ImeEvent::Preedit("[".into(), Some((1, 1))));
+    assert!(
+        !frame(&state, &empty)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press("[", Modifiers::empty()))
+    );
+    assert!(state.committed.is_empty());
+    assert!(
+        frame(&state, &empty)
+            .handler
+            .unwrap()
+            .dispatch_ime(&mut state, &puri::handler::ImeEvent::Commit("[".into()))
+    );
+    assert!(state.committed.is_empty());
+    assert_eq!(state.selection.edit().unwrap().text(), "[");
+}
+
+#[test]
 fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
         display: "no edit".into(),

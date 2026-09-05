@@ -104,8 +104,11 @@ Root templates and root field vocabulary are supplied separately and do not
 leak into descendants.
 
 Universal constructor offers accept delimiter aliases: `[` for `new list`,
-`(` for `new cell`, and `{` for `new record`. These use ordinary completion
-matching and activation; quoted punctuation still leads with literal text.
+`(` for `new cell`, and `{` for `new record`. In an empty completion query,
+those keys activate the constructors directly, including in a provider's narrow
+list. A field label permits only the cell constructor. Nonempty queries and
+IME composition keep ordinary text input; quoted punctuation leads with literal
+text. Shortcuts use the same insertion callbacks as the constructor offers.
 
 A library completion can provide an `on_commit` Grap callable, run at the
 committed location with the same site and selection capabilities as event

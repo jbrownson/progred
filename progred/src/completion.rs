@@ -108,6 +108,34 @@ pub struct Offers<C> {
     pub entries: Vec<Entry<C>>,
 }
 
+pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'static str, Entry<C>)> {
+    std::iter::once((
+        "(",
+        Entry {
+            display: "new cell".to_string(),
+            detail: None,
+            matches: Vec::new(),
+            face: Face::Dim,
+            source: None,
+            activate: commit.new_cell(),
+        },
+    ))
+    .chain(
+        [
+            ("[", "new list", Value::list([])),
+            ("{", "new record", Value::record([])),
+        ]
+        .into_iter()
+        .filter_map(|(key, display, value)| {
+            Entry::value(display.to_string(), None, value, commit).map(|mut entry| {
+                entry.face = Face::Dim;
+                (key, entry)
+            })
+        }),
+    )
+    .collect()
+}
+
 pub(crate) struct Prepared {
     pub document: gid::Document,
     pub document_changed: bool,
@@ -292,30 +320,10 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .into_iter()
         .map(|(entry, named, _)| (entry, named, None))
         .collect();
-    references_pool.push((
-        Entry {
-            display: "new cell".to_string(),
-            detail: None,
-            matches: Vec::new(),
-            face: Face::Dim,
-            source: None,
-            activate: commit.new_cell(),
-        },
-        true,
-        Some("("),
-    ));
     references_pool.extend(
-        [
-            ("new list", "[", Value::list([])),
-            ("new record", "{", Value::record([])),
-        ]
-        .into_iter()
-        .filter_map(|(display, alias, value)| {
-            Entry::value(display.to_string(), None, value, commit).map(|mut entry| {
-                entry.face = Face::Dim;
-                (entry, true, Some(alias))
-            })
-        }),
+        constructor_entries(commit)
+            .into_iter()
+            .map(|(key, entry)| (entry, true, Some(key))),
     );
     references_pool.extend(
         external
