@@ -90,16 +90,16 @@ fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() 
     };
     let apply = |projection: &Projection<()>| {
         projection
-            .apply(
-                &NoEval,
-                &value,
-                1.0,
-                true,
-                None,
-                None,
-                None,
-                progred_display::ProjectionTargets::new(&target),
-            )
+            .apply(&progred_display::ProjectionInput {
+                env: &NoEval,
+                value: &value,
+                scale_factor: 1.0,
+                writable: true,
+                selection: None,
+                pending: None,
+                state: None,
+                targets: progred_display::ProjectionTargets::new(&target),
+            })
             .unwrap()
     };
     let text = |layout| match layout {
@@ -272,16 +272,16 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
             select_with: Rc::new(|_: &mut (), _| false),
             hover: Hover::Value(Rc::from(path.clone())),
         };
-        stack.projection.apply(
-            &NoEval,
+        stack.projection.apply(&progred_display::ProjectionInput {
+            env: &NoEval,
             value,
-            1.0,
-            true,
-            None,
-            None,
-            None,
-            progred_display::ProjectionTargets::new(&target),
-        )
+            scale_factor: 1.0,
+            writable: true,
+            selection: None,
+            pending: None,
+            state: None,
+            targets: progred_display::ProjectionTargets::new(&target),
+        })
     }
     .expect("value projection");
     // A scrubbable number wraps its line in the scrub claim; the

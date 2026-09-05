@@ -86,29 +86,11 @@ impl<World> Projection<World> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn apply(
         &self,
-        env: &dyn progred_display::Env,
-        value: &Value,
-        scale_factor: f64,
-        writable: bool,
-        selection: Option<&Value>,
-        pending: Option<progred_display::Pending>,
-        state: Option<&Value>,
-        targets: progred_display::ProjectionTargets<'_, World, Hover>,
+        input: &progred_display::ProjectionInput<'_, World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
-        let input = progred_display::ProjectionInput {
-            env,
-            value,
-            scale_factor,
-            writable,
-            selection,
-            pending,
-            state,
-            targets,
-        };
-        self.partials.iter().find_map(|partial| partial(&input))
+        self.partials.iter().find_map(|partial| partial(input))
     }
 }
 
@@ -2824,37 +2806,34 @@ fn present_layout<C: 'static>(
     {
         return collapsed;
     }
-    let project_layout = || {
-        projection
-            .and_then(|projection| {
-                // Editor state arrives positionally: the payload only at
-                // the selected path, the annotations only at this one.
-                let selection = cx
-                    .selection
-                    .filter(|current| current.path() == path)
-                    .map(Selection::payload);
-                let pending = if cx.pending_edge_under(path).is_some() {
-                    Some(progred_display::Pending::Field)
-                } else {
-                    cx.pending_child_of(path)
-                        .map(progred_display::Pending::Child)
-                };
-                let state = cx.annotations.at(path);
-                let target = |steps| projection_target(path, hooks, steps);
-                projection.apply(
-                    &ProjectEnv { cx },
-                    value,
-                    cx.styles.scale,
-                    !cx.source.transient() && writable_at(&cx.sources, path),
-                    selection.as_ref(),
-                    pending,
-                    state,
-                    progred_display::ProjectionTargets::new(&target),
-                )
+    projection
+        .and_then(|projection| {
+            // Editor state arrives positionally: the payload only at
+            // the selected path, the annotations only at this one.
+            let selection = cx
+                .selection
+                .filter(|current| current.path() == path)
+                .map(Selection::payload);
+            let pending = if cx.pending_edge_under(path).is_some() {
+                Some(progred_display::Pending::Field)
+            } else {
+                cx.pending_child_of(path)
+                    .map(progred_display::Pending::Child)
+            };
+            let state = cx.annotations.at(path);
+            let target = |steps| projection_target(path, hooks, steps);
+            projection.apply(&progred_display::ProjectionInput {
+                env: &ProjectEnv { cx },
+                value,
+                scale_factor: cx.styles.scale,
+                writable: !cx.source.transient() && writable_at(&cx.sources, path),
+                selection: selection.as_ref(),
+                pending,
+                state,
+                targets: progred_display::ProjectionTargets::new(&target),
             })
-            .unwrap_or_else(|| structure::of(cx, path, value, hooks))
-    };
-    project_layout()
+        })
+        .unwrap_or_else(|| structure::of(cx, path, value, hooks))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open
