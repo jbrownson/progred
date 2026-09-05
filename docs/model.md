@@ -120,7 +120,8 @@ and [completion presentation](../progred/src/projection/completion.rs).
 
 A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion
-keeps the selected index, clamped to the available rows. Changing the query
+also happens when pressing Down on the selected `…` row. Expansion keeps the
+selected index, clamped to the available rows. Changing the query
 resets selection, scroll, and expansion; returning to an older query does not
 restore an old choice. Pointer and keyboard activation use the same callbacks.
 Activating a visible offer consumes the input even if its continuation declines;
@@ -151,7 +152,8 @@ see [projection composition](projections.md#projection-composition).
 
 ## History, gestures, and persistence
 
-On desktop, examples open through the normal new-window path, then close the
+Examples are a development and demo aid, intended to be removed from production
+builds. On desktop, they open through the normal new-window path, then close the
 previous editor if it has no unsaved changes. This includes the empty startup
 document and untouched examples; edited documents stay open. File New and Open
 continue to create windows without closing the previous editor.

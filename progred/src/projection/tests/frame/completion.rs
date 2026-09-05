@@ -208,7 +208,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
     assert_eq!(state, (offset, 11, false));
-    for _ in 11..=entries.len() {
+    for _ in 11..entries.len() {
         frame(state)
             .handler
             .unwrap()
@@ -316,15 +316,18 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
-    assert_eq!(state.view.1, 1);
-    assert!(
-        frame(&state, &entries)
-            .handler
-            .unwrap()
-            .dispatch_key(&mut state, &press(NamedKey::Enter))
-    );
-    assert_eq!(state.view, (0.0, 1, true));
-    assert!(state.committed.is_none());
+    assert_eq!(state.view, (0.0, 1, false));
+    for key in [NamedKey::Enter, NamedKey::ArrowDown] {
+        state.view.2 = false;
+        assert!(
+            frame(&state, &entries)
+                .handler
+                .unwrap()
+                .dispatch_key(&mut state, &press(key))
+        );
+        assert_eq!(state.view, (0.0, 1, true));
+        assert!(state.committed.is_none());
+    }
     let expanded = [
         entries[0].clone(),
         Entry {

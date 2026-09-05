@@ -274,6 +274,14 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
                         true
                     })
                 }
+                Key::Named(key @ (NamedKey::Tab | NamedKey::ArrowDown))
+                    if !everything
+                        && !crate::modifiers::command(&event.modifiers)
+                        && (key == NamedKey::Tab || choice == count.saturating_sub(1)) =>
+                {
+                    expand(world);
+                    true
+                }
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
                     if !crate::modifiers::command(&event.modifiers) =>
                 {
@@ -288,12 +296,6 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
                         next,
                         everything,
                     );
-                    true
-                }
-                Key::Named(NamedKey::Tab)
-                    if !everything && !crate::modifiers::command(&event.modifiers) =>
-                {
-                    expand(world);
                     true
                 }
                 _ => false,
