@@ -5,47 +5,13 @@
 //! sizing remain process state.
 
 use crate::annotations::Annotations;
-use gid::{CellId, Cells, Path, Step, Value};
+use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
-use progred_libraries::{Library, name};
+pub use progred_libraries::workspace::vocabulary;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
-
-pub const ID: CellId = CellId::from_u128(0x7c295d8a64d3e257dc2c3932e43def74);
-
-pub mod vocabulary {
-    use gid::CellId;
-
-    pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
-    pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
-    pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
-}
-
-/// The editor-owned vocabulary contributed to the ordinary source
-/// environment. Pane behavior remains root-sensitive host behavior;
-/// these cells only give its document fields readable names.
-pub fn library<World, Hover>() -> Library<World, Hover> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::PANES, "panes"),
-        (vocabulary::LEFT, "left"),
-        (vocabulary::RIGHT, "right"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    Library::named(
-        "workspace",
-        progred_libraries::Definitions::from_parts(cells, Default::default()),
-        vec![],
-    )
-    .with_root_field_completions([progred_display::Completion::new(
-        "panes",
-        Value::from(vocabulary::PANES),
-    )
-    .with_detail("workspace library")])
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Projection {
@@ -790,6 +756,7 @@ fn column_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gid::Cells;
 
     fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
         let column = workspace.column_mut(side);

@@ -1,5 +1,6 @@
 use super::*;
-use progred_libraries::control;
+use gid::Resolution;
+use progred_libraries::{control, presentation};
 
 #[derive(Default)]
 struct CompletionResult {
@@ -151,7 +152,16 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         false,
     );
     assert_eq!(entries[0].display, "fidget");
-    assert_eq!(activated(&entries[0]).value, Some(Value::record([])));
+    assert!(
+        activated(&entries[0])
+            .value
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&fidget::vocabulary::FIDGET)
+            .and_then(Value::as_cell)
+            .is_some()
+    );
     assert!(activated(&entries[0]).on_commit.is_some());
     assert_eq!(entries.len(), 1);
 
@@ -182,7 +192,7 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
 }
 
 #[test]
-fn root_completions_open_the_domain_value_without_a_placeholder() {
+fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition() {
     let stack = crate::stack::load::<()>();
     let doc = Document {
         root: None,
@@ -203,17 +213,44 @@ fn root_completions_open_the_domain_value_without_a_placeholder() {
         progred_libraries::grap::vocabulary::GRAP,
     ]) {
         let mut annotations = Annotations::default();
+        let inserted = offer.value.instantiate();
+        let cell = inserted
+            .as_record()
+            .unwrap()
+            .get(&field)
+            .and_then(Value::as_cell)
+            .unwrap();
         let prepared = crate::completion::prepare(
             &src(&doc, &stack.libraries),
             &pending,
             &annotations,
-            offer.value.clone(),
+            inserted.clone(),
             None,
             offer.on_commit.as_ref(),
         )
         .unwrap();
         assert!(prepared.document_changed);
-        assert_eq!(prepared.document.root, Some(Value::record([])));
+        assert_eq!(prepared.document.root, Some(inserted));
+        assert!(prepared.document.cells.value(cell).is_none());
+        let panes = crate::workspace::declarations(prepared.document.root.as_ref());
+        assert_eq!(panes.len(), 1);
+        assert_eq!(panes[0].side, crate::workspace::Side::Left);
+        let pane =
+            crate::spine::get(prepared.document.root.as_ref().unwrap(), &panes[0].path).unwrap();
+        assert_eq!(
+            pane,
+            &if field == fidget::vocabulary::FIDGET {
+                Value::record([
+                    (presentation::vocabulary::VALUE, cell.into()),
+                    (
+                        presentation::vocabulary::PROJECTION,
+                        fidget::vocabulary::PREVIEW_3D.into(),
+                    ),
+                ])
+            } else {
+                Value::record([(presentation::vocabulary::RENDER, cell.into())])
+            }
+        );
         let mut selected = None;
         crate::site::install(
             prepared.effects,
@@ -224,7 +261,10 @@ fn root_completions_open_the_domain_value_without_a_placeholder() {
             &mut selected,
         );
         let selected = selected.unwrap();
-        assert_eq!(selected.path(), [Step::Key(field)]);
+        assert_eq!(
+            selected.path(),
+            [Step::Key(field), Step::Follow(Resolution::Document)]
+        );
         assert_eq!(selected.stage(), Stage::Pending);
         let choices = projected_completion_entries(&prepared.document, &selected);
         assert!(
@@ -246,10 +286,8 @@ fn root_completions_open_the_domain_value_without_a_placeholder() {
             None,
         )
         .unwrap();
-        assert_eq!(
-            filled.document.root,
-            Some(Value::record([(field, Value::record([]))]))
-        );
+        assert_eq!(filled.document.root, prepared.document.root);
+        assert_eq!(filled.document.cells.value(cell), Some(&Value::record([])));
     }
 }
 
@@ -267,11 +305,12 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         .into_iter()
         .find(|offer| offer.display == "grap")
         .unwrap();
+    let inserted = offer.value.instantiate();
     let prepared = crate::completion::prepare(
         &src(&doc, &stack.libraries),
         &pending,
         &Annotations::default(),
-        offer.value.clone(),
+        inserted.clone(),
         None,
         offer.on_commit.as_ref(),
     )
@@ -280,12 +319,13 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         prepared.effects.selection.as_ref().unwrap().0,
         [
             Step::Key(field),
-            Step::Key(progred_libraries::grap::vocabulary::GRAP)
+            Step::Key(progred_libraries::grap::vocabulary::GRAP),
+            Step::Follow(Resolution::Document),
         ]
     );
     assert_eq!(
         prepared.document.root,
-        Some(Value::record([(field, Value::record([]))]))
+        Some(Value::record([(field, inserted.clone())]))
     );
 
     let declined = grap::lambda(
@@ -306,7 +346,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
             &src(&doc, &stack.libraries),
             &pending,
             &Annotations::default(),
-            offer.value,
+            inserted,
             None,
             Some(&declined),
         )
@@ -569,20 +609,8 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     let existing = new_cell_id();
     let provider: progred_display::CompletionProvider = Rc::new(move |_| {
         vec![
-            progred_display::Completion {
-                on_commit: None,
-                display: "text".into(),
-                detail: None,
-                aliases: vec![],
-                value: text::value("not a label"),
-            },
-            progred_display::Completion {
-                on_commit: None,
-                display: "existing".into(),
-                detail: None,
-                aliases: vec![],
-                value: Value::from(existing),
-            },
+            progred_display::Completion::new("text", text::value("not a label")),
+            progred_display::Completion::new("existing", Value::from(existing)),
         ]
     });
     let labels = completion_entries_with(
@@ -595,6 +623,71 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     );
     assert_eq!(labels.len(), 1);
     assert_eq!(activated(&labels[0]).label, Some((existing, None)));
+}
+
+#[test]
+fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
+    let stack = crate::stack::load::<()>();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = src(&doc, &stack.libraries);
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    let provider: progred_display::CompletionProvider = Rc::new(move |_| {
+        let count = count.clone();
+        vec![progred_display::Completion::generated(
+            "generated",
+            move || {
+                count.set(count.get() + 1);
+                new_cell_id().into()
+            },
+        )]
+    });
+    let entries = completion_entries_with(
+        &sources,
+        false,
+        &Commit::Value(Rc::new(value_commit)),
+        "generated",
+        Some(&provider),
+        false,
+    );
+    let labels = completion_entries_with(
+        &sources,
+        false,
+        &Commit::Label(Rc::new(label_commit)),
+        "generated",
+        Some(&provider),
+        false,
+    );
+    assert_eq!(calls.get(), 0);
+    assert!(labels.is_empty());
+    assert_ne!(activated(&entries[0]).value, activated(&entries[0]).value);
+    assert_eq!(calls.get(), 2);
+
+    for (display, field) in [
+        ("fidget", fidget::vocabulary::FIDGET),
+        ("grap", progred_libraries::grap::vocabulary::GRAP),
+    ] {
+        let entry = completion_entries_with(
+            &sources,
+            false,
+            &Commit::Value(Rc::new(value_commit)),
+            "",
+            Some(&stack.root_completions),
+            false,
+        )
+        .into_iter()
+        .find(|entry| entry.display == display)
+        .unwrap();
+        let first = activated(&entry).value.unwrap();
+        let second = activated(&entry.clone()).value.unwrap();
+        assert_ne!(
+            first.as_record().unwrap().get(&field),
+            second.as_record().unwrap().get(&field)
+        );
+    }
 }
 
 #[test]

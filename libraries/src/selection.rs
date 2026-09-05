@@ -19,8 +19,8 @@ pub mod vocabulary {
     pub use crate::site::vocabulary::VALUE;
 }
 
-/// A Grap continuation which opens a value pending beneath its site.
-pub fn pending_child(step: gid::Step) -> gid::Value {
+/// A Grap continuation which opens a pending value at a path relative to its site.
+pub fn pending_at(path: &[gid::Step]) -> gid::Value {
     use gid::Value;
     use grap_runtime::{call, lambda};
     lambda(
@@ -37,10 +37,7 @@ pub fn pending_child(step: gid::Step) -> gid::Value {
                                 crate::number::vocabulary::LEFT,
                                 call(crate::site::vocabulary::PATH.into(), []),
                             ),
-                            (
-                                crate::number::vocabulary::RIGHT,
-                                crate::path::value(&[step]),
-                            ),
+                            (crate::number::vocabulary::RIGHT, crate::path::value(path)),
                         ],
                     ),
                 ),
@@ -130,7 +127,7 @@ mod tests {
             &interpret,
         );
         let result = grap_runtime::apply_scoped(
-            &pending_child(child.clone()),
+            &pending_at(&[child.clone()]),
             [],
             &crate::TestHost(|cell| {
                 functions

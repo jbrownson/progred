@@ -2,10 +2,10 @@
 
 use crate::hover::Hover;
 use crate::projection::Projection;
-use crate::workspace;
 use progred_libraries::{
     Libraries, Library, absent, color, control, f32, f64, fidget, geometry, grap as grap_library,
     layout, line_edit, list, logic, name, number, presentation, random, selection, site, text, u64,
+    workspace,
 };
 
 pub struct Stack<World> {

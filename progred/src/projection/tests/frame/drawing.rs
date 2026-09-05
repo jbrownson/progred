@@ -2,6 +2,80 @@ use super::svg::write_cmds;
 use super::*;
 
 #[test]
+fn fidget_template_preview_uses_the_shared_cells_current_definition() {
+    let mut context = BenchContext::new();
+    let mut doc = Document {
+        root: Some(
+            (context.stack.root_completions)("")
+                .into_iter()
+                .find(|offer| offer.display == "fidget")
+                .unwrap()
+                .value
+                .instantiate(),
+        ),
+        cells: Cells::new(),
+    };
+    let cell = doc
+        .root
+        .as_ref()
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&fidget::vocabulary::FIDGET)
+        .unwrap()
+        .as_cell()
+        .unwrap();
+    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    context.stack.projection = context.stack.pane_projection.clone();
+    let coverage = [None, Some(40.0), Some(20.0)].map(|radius| {
+        if let Some(radius) = radius {
+            doc.cells.set_value(
+                cell,
+                grap::call(
+                    fidget::vocabulary::SPHERE.into(),
+                    [(
+                        fidget::vocabulary::RADIUS,
+                        progred_libraries::f32::value(radius),
+                    )],
+                ),
+            );
+        }
+        let (bench, _) = context.place(
+            &doc,
+            None,
+            &Annotations::default(),
+            1400.0,
+            None,
+            None,
+            Some((
+                &pane.path,
+                crate::spine::get(doc.root.as_ref().unwrap(), &pane.path),
+            )),
+        );
+        bench.list.0.iter().find_map(|command| match command {
+            DrawCmd::Image { image, .. } => Some(
+                image
+                    .data
+                    .as_ref()
+                    .iter()
+                    .skip(3)
+                    .step_by(4)
+                    .filter(|alpha| **alpha == 255)
+                    .count(),
+            ),
+            _ => None,
+        })
+    });
+    let [None, Some(larger), Some(smaller)] = coverage else {
+        panic!("only the defined shapes should render: {coverage:?}");
+    };
+    assert!(
+        larger > smaller && smaller > 0,
+        "editing the shared cell changes the preview"
+    );
+}
+
+#[test]
 fn fidget_pane_projects_an_image_inside_the_standard_border() {
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

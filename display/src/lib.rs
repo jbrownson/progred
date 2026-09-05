@@ -157,14 +157,45 @@ pub struct Completion {
     pub display: String,
     pub aliases: Vec<String>,
     pub detail: Option<String>,
-    pub value: Value,
+    pub value: CompletionValue,
     /// Grap callable run at the committed location. Its selection and
     /// annotation effects are staged with the insertion.
     pub on_commit: Option<Value>,
 }
 
+#[derive(Clone)]
+pub enum CompletionValue {
+    Literal(Value),
+    Create(Rc<dyn Fn() -> Value>),
+}
+
+impl CompletionValue {
+    pub fn literal(&self) -> Option<&Value> {
+        match self {
+            Self::Literal(value) => Some(value),
+            Self::Create(_) => None,
+        }
+    }
+
+    pub fn instantiate(&self) -> Value {
+        match self {
+            Self::Literal(value) => value.clone(),
+            Self::Create(create) => create(),
+        }
+    }
+}
+
 impl Completion {
     pub fn new(display: impl Into<String>, value: Value) -> Self {
+        Self::with_value(display, CompletionValue::Literal(value))
+    }
+
+    /// Construct a value only when activated, for offers that mint fresh identities.
+    pub fn generated(display: impl Into<String>, create: impl Fn() -> Value + 'static) -> Self {
+        Self::with_value(display, CompletionValue::Create(Rc::new(create)))
+    }
+
+    fn with_value(display: impl Into<String>, value: CompletionValue) -> Self {
         Self {
             display: display.into(),
             aliases: Vec::new(),

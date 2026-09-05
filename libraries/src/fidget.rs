@@ -953,13 +953,31 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             display(input, &renderer)
         })],
     )
-    .with_root_completions([progred_display::Completion::new(
-        "fidget",
-        Value::record([]),
-    )
+    .with_root_completions([progred_display::Completion::generated("fidget", || {
+        let cell = gid::new_cell_id();
+        Value::record([
+            (vocabulary::FIDGET, cell.into()),
+            (
+                crate::workspace::vocabulary::PANES,
+                Value::record([(
+                    crate::workspace::vocabulary::LEFT,
+                    Value::list([Value::record([
+                        (presentation::vocabulary::VALUE, cell.into()),
+                        (
+                            presentation::vocabulary::PROJECTION,
+                            vocabulary::PREVIEW_3D.into(),
+                        ),
+                    ])]),
+                )]),
+            ),
+        ])
+    })
     .with_aliases(["sdf"])
     .with_detail("fidget library")
-    .on_commit(crate::selection::pending_child(gid::Step::Key(vocabulary::FIDGET)))])
+    .on_commit(crate::selection::pending_at(&[
+        gid::Step::Key(vocabulary::FIDGET),
+        gid::Step::Follow(gid::Resolution::Document),
+    ]))])
     .with_root_field_completions([progred_display::Completion::new(
         "fidget",
         Value::from(vocabulary::FIDGET),

@@ -122,9 +122,13 @@ committed location with the same site and selection capabilities as event
 handlers. Insertion and continuation effects are prepared together and installed
 unless the callable explicitly declines or evaluation halts. Ordinary absent
 results do not veto the completion. Selection changes are effectful calls, not a
-special return-value format. Root `grap` and `fidget` offers insert `{}` and
-call `selection set` to open the domain field's pending value; they do not
-invent a list value. `panes` remains an independent root field suggestion.
+special return-value format. Root `grap` and `fidget` offers create a fresh bare
+cell shared by their domain field and a left pane. Fidget's pane applies
+`preview 3d`; Grap's pane renders the evaluated result. The continuation opens
+the cell's pending document definition through the domain field, without
+inventing a placeholder value. Offers that mint identities construct their
+value on activation, so reusing an offer creates independent cells.
+`panes` remains an independent root field suggestion.
 
 The placed frame retains the exact visible offers. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.

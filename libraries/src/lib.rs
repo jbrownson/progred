@@ -29,6 +29,7 @@ pub mod selection;
 pub mod site;
 pub mod text;
 pub mod u64;
+pub mod workspace;
 
 #[cfg(test)]
 pub(crate) struct TestHost<F>(pub F);

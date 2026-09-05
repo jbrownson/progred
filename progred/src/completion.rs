@@ -5,7 +5,7 @@ use crate::identity::short_id;
 use crate::selection::parse_blob;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
-use progred_display::{CompletionProvider, Face};
+use progred_display::{CompletionProvider, CompletionValue, Face};
 use progred_libraries::{name, text};
 use std::ops::Range;
 use std::rc::Rc;
@@ -39,15 +39,19 @@ pub enum Commit<C> {
 }
 
 impl<C: 'static> Commit<C> {
-    fn value(&self, value: Value, on_commit: Option<Value>) -> Option<Rc<dyn Fn(&mut C)>> {
+    fn value(
+        &self,
+        value: CompletionValue,
+        on_commit: Option<Value>,
+    ) -> Option<Rc<dyn Fn(&mut C)>> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();
                 Some(Rc::new(move |world| {
-                    commit(world, value.clone(), on_commit.clone())
+                    commit(world, value.instantiate(), on_commit.clone())
                 }))
             }
-            Self::Label(commit) => value.as_cell().map(|cell| {
+            Self::Label(commit) => value.literal().and_then(Value::as_cell).map(|cell| {
                 let commit = commit.clone();
                 Rc::new(move |world: &mut C| commit(world, cell, None, on_commit.clone()))
                     as Rc<dyn Fn(&mut C)>
@@ -76,13 +80,19 @@ impl<C: 'static> Entry<C> {
         value: Value,
         commit: &Commit<C>,
     ) -> Option<Self> {
-        Self::offered(display, detail, value, None, commit)
+        Self::offered(
+            display,
+            detail,
+            CompletionValue::Literal(value),
+            None,
+            commit,
+        )
     }
 
     fn offered(
         display: String,
         detail: Option<String>,
-        value: Value,
+        value: CompletionValue,
         on_commit: Option<Value>,
         commit: &Commit<C>,
     ) -> Option<Self> {
@@ -90,14 +100,14 @@ impl<C: 'static> Entry<C> {
             display,
             detail,
             matches: Vec::new(),
-            face: if text::read(&value).is_some() {
+            face: if value.literal().and_then(text::read).is_some() {
                 Face::String
-            } else if value.as_blob().is_some() {
+            } else if value.literal().and_then(Value::as_blob).is_some() {
                 Face::Id
             } else {
                 Face::Label
             },
-            source: value.as_cell(),
+            source: value.literal().and_then(Value::as_cell),
             activate,
         })
     }

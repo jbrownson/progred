@@ -395,12 +395,27 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             progred_display::partial(ffi_display::<World, Hover>),
         ],
     )
-    .with_root_completions([progred_display::Completion::new(
-        "grap",
-        Value::record([]),
-    )
+    .with_root_completions([progred_display::Completion::generated("grap", || {
+        let cell = gid::new_cell_id();
+        Value::record([
+            (vocabulary::GRAP, cell.into()),
+            (
+                crate::workspace::vocabulary::PANES,
+                Value::record([(
+                    crate::workspace::vocabulary::LEFT,
+                    Value::list([Value::record([(
+                        crate::presentation::vocabulary::RENDER,
+                        cell.into(),
+                    )])]),
+                )]),
+            ),
+        ])
+    })
     .with_detail("grap library")
-    .on_commit(crate::selection::pending_child(gid::Step::Key(vocabulary::GRAP)))])
+    .on_commit(crate::selection::pending_at(&[
+        gid::Step::Key(vocabulary::GRAP),
+        gid::Step::Follow(gid::Resolution::Document),
+    ]))])
     .with_root_field_completions([progred_display::Completion::new(
         "grap",
         Value::from(vocabulary::GRAP),
