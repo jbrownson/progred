@@ -1801,7 +1801,7 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path)>,
     /// Select a visible occurrence of a drawing's structural source.
-    pub select_source: Rc<dyn Fn(&mut C, &SourceTrace)>,
+    pub select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
     pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
     /// Mount the stock editor described by a Rust projection. Its
     /// first pointer event then uses `edit` below for caret placement.
@@ -1822,7 +1822,7 @@ pub struct Hooks<C> {
     pub insert: Rc<dyn Fn(&mut C, Path)>,
     /// Delete the selected edge. Installed on the selected descend
     /// so Raw and library projections share one handler.
-    pub delete: Rc<dyn Fn(&mut C) -> bool>,
+    pub delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
     /// Apply a Grap event handler at `path` with the event as data and
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
@@ -2410,7 +2410,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     path: SharedPath,
     select: progred_display::ActionHandler<C>,
-    delete: Rc<dyn Fn(&mut C) -> bool>,
+    delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     if transient {
@@ -2453,17 +2453,19 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
 }
 
 fn bind_delete_with<C: 'static, Cv: Canvas + 'static>(
-    delete: Rc<dyn Fn(&mut C) -> bool>,
+    delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    on_key(child, move |ctx, event| {
-        crate::modifiers::plain(&event.modifiers)
-            && matches!(
-                &event.key,
-                Key::Named(NamedKey::Backspace | NamedKey::Delete)
-            )
-            && event.state.is_down()
-            && delete(ctx)
+    before(child, move |p, _| {
+        p.handler().on_key_with(move |ctx, event, input| {
+            crate::modifiers::plain(&event.modifiers)
+                && matches!(
+                    &event.key,
+                    Key::Named(NamedKey::Backspace | NamedKey::Delete)
+                )
+                && event.state.is_down()
+                && delete(ctx, &input.descends)
+        })
     })
 }
 
@@ -2567,7 +2569,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         edit: Rc::new(|_| None),
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),
-        delete: Rc::new(|_| false),
+        delete: Rc::new(|_, _| false),
         apply: hooks.apply.clone(),
         point: hooks.point.clone(),
         state_drag: hooks.state_drag.clone(),

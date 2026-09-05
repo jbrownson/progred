@@ -301,12 +301,12 @@ impl BenchContext {
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_| false),
+            delete: Rc::new(|_, _| false),
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
-            select_source: Rc::new(|_, _| {}),
+            select_source: Rc::new(|_, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         };
@@ -780,7 +780,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_| false),
+            delete: Rc::new(|_, _| false),
             apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
                 world.applied = Some(path);
                 true
@@ -788,7 +788,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
-            select_source: Rc::new(|_, _| {}),
+            select_source: Rc::new(|_, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -897,12 +897,12 @@ fn sample_text_line_click_mounts_its_own_editor() {
             }),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_| false),
+            delete: Rc::new(|_, _| false),
             apply: Rc::new(|_, _, _, _| false),
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
-            select_source: Rc::new(|_, _| {}),
+            select_source: Rc::new(|_, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -1751,7 +1751,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     assert!(placed.handler.unwrap().dispatch_pointer_down_with(
         &mut state,
         &event,
-        &mut placed::PointerContext::new(None, Some(target)),
+        &mut placed::DispatchContext::new(None, Some(target)),
     ));
     assert_eq!(state.view, (0.0, 1, true));
     assert!(state.committed.is_none());
@@ -1993,7 +1993,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_| false),
+            delete: Rc::new(|_, _| false),
             apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
                 world.applied = Some(path);
                 true
@@ -2001,7 +2001,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             point: Rc::new(|_, _, _, _, _| false),
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
-            select_source: Rc::new(|_, _| {}),
+            select_source: Rc::new(|_, _, _| {}),
             commit_offer: Rc::new(|_, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
@@ -2063,7 +2063,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         selection: None,
         applied: None,
     };
-    let mut pointer = placed::PointerContext::new(None, Some(target));
+    let mut pointer = placed::DispatchContext::new(None, Some(target));
     assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
         &mut world,
         &event,
@@ -2133,7 +2133,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             },
             state,
         };
-        let mut pointer = placed::PointerContext::new(None, Some(Hovered::Tree(target.clone())));
+        let mut pointer = placed::DispatchContext::new(None, Some(Hovered::Tree(target.clone())));
         let mut log = Vec::new();
         assert!(
             placed
@@ -2235,7 +2235,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             },
             state,
         };
-        let mut pointer = placed::PointerContext::new(
+        let mut pointer = placed::DispatchContext::new(
             owns_view.then(|| root.clone()),
             Some(Hovered::Tree(target.clone())),
         );
@@ -2359,7 +2359,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
             },
             state,
         };
-        let mut pointer = placed::PointerContext::new(
+        let mut pointer = placed::DispatchContext::new(
             owns_view.then(|| root.clone()),
             Some(Hovered::Tree(target.clone())),
         );
@@ -2390,7 +2390,7 @@ fn drawing_frame(
     doc: &Document,
     libraries: &Libraries,
     shape_function: CellId,
-    select_source: Rc<dyn Fn(&mut (), &SourceTrace)>,
+    select_source: Rc<dyn Fn(&mut (), &[crate::navigate::Descend<()>], &SourceTrace)>,
 ) -> Measured<Placed<(), Bench>> {
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -2464,7 +2464,10 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                 &doc,
                 &libraries,
                 shape_function,
-                Rc::new(move |_, source| picked.borrow_mut().push(source.clone())),
+                Rc::new(move |_, descends, source| {
+                    assert_eq!(descends.len(), 1);
+                    picked.borrow_mut().push(source.clone())
+                }),
             ),
             Placement::root(bounds),
         );
@@ -2483,7 +2486,13 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             placed.probe(Point::new(5.0, 5.0), None, 0.0),
             Some(Claim::Direct(target.clone()))
         );
-        let mut pointer = placed::PointerContext::new(None, Some(target));
+        let mut pointer = placed::DispatchContext::new(None, Some(target));
+        pointer.descends = Rc::from([crate::navigate::Descend {
+            root: None,
+            path: Rc::from([]),
+            rect: bounds,
+            select: Rc::new(|_| true),
+        }]);
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
         state.position.y = 5.0;
@@ -2508,7 +2517,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert_eq!(calls.get(), expected);
     }
     let clipped = measured::place(
-        drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _| {})),
+        drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
     );
     settle(clipped, Some(Point::new(5.0, 5.0)));
@@ -2557,7 +2566,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         (Libraries::default(), vec![]),
     ] {
         let placed = measured::place(
-            drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _| {})),
+            drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
         );
         let drawing = settle(placed, None);

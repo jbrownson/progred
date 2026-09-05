@@ -44,7 +44,7 @@ mod text_store;
 mod workspace;
 
 use crate::command::{AppCommand, Command, DocCommand};
-use crate::frame::{Dispatch, Frame, FrameDisposition, Hovered, Paint, frame_disposition};
+use crate::frame::{Dispatch, FrameDisposition, Hovered, Paint, frame_disposition};
 use crate::model::{Model, ViewFlags};
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
@@ -450,10 +450,6 @@ pub(crate) struct Editor {
     state_drag: Option<PendingStateDrag>,
     /// A continuous point control owns pointer motion until release.
     point: Option<PendingPoint>,
-    /// Geometry from the last minted frame, so projection key
-    /// handlers can land a delete the same way the shell fallback
-    /// does.
-    pub(crate) last_descends: Vec<navigate::Descend<Editor>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
@@ -532,7 +528,6 @@ fn new_editor(
         scrub: None,
         state_drag: None,
         point: None,
-        last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
         pending_discard: None,
@@ -1021,9 +1016,13 @@ impl App {
                     // query must never eat Value JSON — then fall
                     // through to the structural commands.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
+                        let mut input = placed::DispatchContext::new(None, None);
+                        input.descends = dispatch.descends.clone();
                         editor.menu_key(&key_event)
                             || editor.pending_paste_key(&key_event)
-                            || dispatch.handler.dispatch_key(editor, &key_event)
+                            || dispatch
+                                .handler
+                                .dispatch_key_with(editor, &key_event, &mut input)
                             || editor.clipboard_key(&dispatch.descends, &key_event)
                             || editor.delete_key(&dispatch.descends, &key_event)
                             || editor.insert_key(&dispatch.descends, &key_event)
@@ -1059,10 +1058,11 @@ impl App {
                         editor.pressed = true;
                         editor.state_drag = None;
                         frame_input_changed = true;
-                        let mut pointer = placed::PointerContext::new(
+                        let mut pointer = placed::DispatchContext::new(
                             dispatch.pointer_root.clone(),
                             editor.hover.clone(),
                         );
+                        pointer.descends = dispatch.descends.clone();
                         let handled = dispatch.handler.dispatch_pointer_down_with(
                             editor,
                             &button,
@@ -2140,29 +2140,12 @@ impl App {
 
         let viewport = Size::new(width as f64, height as f64);
         editor.scene.reset();
-        let pending = editor
-            .pending_paint
-            .take()
-            .filter(|pending| pending.scale == scale && pending.viewport == viewport);
-        let (renders, hovered_secondary, hovered_trace) = match pending {
-            Some(PendingPaint {
-                renders,
-                hovered_secondary,
-                hovered_trace,
-                ..
-            }) => (renders, hovered_secondary, hovered_trace),
-            None => {
-                let Frame {
-                    dispatch,
-                    renders,
-                    hovered_secondary,
-                    hovered_trace,
-                } = editor.build_frame(scale, viewport);
-                editor.last_descends = dispatch.descends.clone();
-                editor.dispatch = Some(dispatch);
-                (renders, hovered_secondary, hovered_trace)
-            }
-        };
+        let PendingPaint {
+            renders,
+            hovered_secondary,
+            hovered_trace,
+            ..
+        } = editor.prepare_paint(scale, viewport);
         editor.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: editor.hover.as_ref(),
@@ -2272,29 +2255,12 @@ impl App {
         }
 
         let viewport = Size::new(width as f64, height as f64);
-        let pending = editor
-            .pending_paint
-            .take()
-            .filter(|pending| pending.scale == scale && pending.viewport == viewport);
-        let (renders, hovered_secondary, hovered_trace) = match pending {
-            Some(PendingPaint {
-                renders,
-                hovered_secondary,
-                hovered_trace,
-                ..
-            }) => (renders, hovered_secondary, hovered_trace),
-            None => {
-                let Frame {
-                    dispatch,
-                    renders,
-                    hovered_secondary,
-                    hovered_trace,
-                } = editor.build_frame(scale, viewport);
-                editor.last_descends = dispatch.descends.clone();
-                editor.dispatch = Some(dispatch);
-                (renders, hovered_secondary, hovered_trace)
-            }
-        };
+        let PendingPaint {
+            renders,
+            hovered_secondary,
+            hovered_trace,
+            ..
+        } = editor.prepare_paint(scale, viewport);
         editor.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: editor.hover.as_ref(),

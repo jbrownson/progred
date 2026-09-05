@@ -36,9 +36,9 @@ use winit::dpi::PhysicalPosition;
 pub(crate) const HOVER_REACH: f64 = 8.0;
 
 pub(crate) struct Dispatch {
-    pub(crate) handler: Handler<Editor, placed::PointerContext>,
+    pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
-    pub(crate) descends: Vec<navigate::Descend<Editor>>,
+    pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
     pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
@@ -380,8 +380,12 @@ impl Editor {
         outcome
     }
 
-    pub(crate) fn select_drawing_source(&mut self, source: &hover::SourceTrace) {
-        let select = drawing_source_descend(&self.sources(), &self.last_descends, source)
+    pub(crate) fn select_drawing_source(
+        &mut self,
+        descends: &[navigate::Descend<Editor>],
+        source: &hover::SourceTrace,
+    ) {
+        let select = drawing_source_descend(&self.sources(), descends, source)
             .map(|descend| descend.select.clone());
         if let Some(select) = select {
             select(self);
@@ -584,7 +588,7 @@ impl Editor {
             dispatch: Dispatch {
                 handler: handler.unwrap_or_else(Handler::new),
                 pointer_root,
-                descends,
+                descends: descends.into(),
                 view_regions,
                 line: 14.0 * scale,
             },
@@ -604,21 +608,34 @@ impl Editor {
         if revealed_selection || revealed_source {
             frame = self.build_frame(scale, viewport);
         }
+        self.pending_paint = Some(self.install_frame(frame, scale, viewport));
+    }
+
+    fn install_frame(&mut self, frame: Frame, scale: f64, viewport: Size) -> PendingPaint {
         let Frame {
             dispatch,
             renders,
             hovered_secondary,
             hovered_trace,
         } = frame;
-        self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
-        self.pending_paint = Some(PendingPaint {
+        PendingPaint {
             scale,
             viewport,
             renders,
             hovered_secondary,
             hovered_trace,
-        });
+        }
+    }
+
+    pub(crate) fn prepare_paint(&mut self, scale: f64, viewport: Size) -> PendingPaint {
+        self.pending_paint
+            .take()
+            .filter(|pending| pending.scale == scale && pending.viewport == viewport)
+            .unwrap_or_else(|| {
+                let frame = self.build_frame(scale, viewport);
+                self.install_frame(frame, scale, viewport)
+            })
     }
 }
 
@@ -705,10 +722,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
                 app.model.selection = Some(pending);
             }
         }),
-        delete: Rc::new(|app: &mut Editor| {
-            let descends = app.last_descends.clone();
-            app.delete_selected_edge(&descends)
-        }),
+        delete: Rc::new(Editor::delete_selected_edge),
         apply: Rc::new(move |app, path, function, event| {
             crate::site::apply_event(app, apply_root.clone(), path, function, event)
         }),

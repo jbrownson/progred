@@ -111,14 +111,25 @@ impl Probe {
 
 /// The settled target is an explicit dispatch input, never an input to
 /// description or placement. Accepted handlers perform their own actions.
-#[derive(Default)]
-pub struct PointerContext {
+pub struct DispatchContext<C> {
+    pub descends: std::rc::Rc<[Descend<C>]>,
     pub root: Option<Root>,
     pub hovered: Option<Hovered>,
     outside_view: bool,
 }
 
-impl PointerContext {
+impl<C> Default for DispatchContext<C> {
+    fn default() -> Self {
+        Self {
+            descends: Default::default(),
+            root: None,
+            hovered: None,
+            outside_view: false,
+        }
+    }
+}
+
+impl<C> DispatchContext<C> {
     pub fn new(root: Option<Root>, hovered: Option<Hovered>) -> Self {
         Self {
             root,
@@ -159,7 +170,7 @@ pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
-    pub handler: Option<Handler<C, PointerContext>>,
+    pub handler: Option<Handler<C, DispatchContext<C>>>,
     pub descends: Vec<Descend<C>>,
     pub view_regions: Vec<ViewRegion>,
     /// A projected control may override how the nearest enclosing
@@ -296,7 +307,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
             .collect()
     }
 
-    pub fn handler_mut(&mut self) -> &mut Handler<C, PointerContext> {
+    pub fn handler_mut(&mut self) -> &mut Handler<C, DispatchContext<C>> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
@@ -319,15 +330,15 @@ impl<C: 'static, Cv> Builder<'_, C, Cv> {
 /// Stack `above`'s dispatch over `base`'s: above tries first, declines
 /// fall through — placement order as precedence, same as paint.
 fn handler_over<C: 'static>(
-    mut base: Handler<C, PointerContext>,
-    above: Handler<C, PointerContext>,
-) -> Handler<C, PointerContext> {
+    mut base: Handler<C, DispatchContext<C>>,
+    above: Handler<C, DispatchContext<C>>,
+) -> Handler<C, DispatchContext<C>> {
     base.on_pointer_down_with(above.pointer_down);
     base.on_pointer_move(above.pointer_move);
     base.on_pointer_up(above.pointer_up);
     base.on_pointer_cancel(above.pointer_cancel);
     base.on_scroll(above.scroll);
-    base.on_key(above.key);
+    base.on_key_with(above.key);
     base.on_ime(above.ime);
     base
 }
@@ -430,7 +441,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     pub fn pick_dynamic(
         &mut self,
         placement: Placement,
-        action: impl Fn(&mut C, &Hovered) -> bool + 'static,
+        action: impl Fn(&mut C, &Hovered, &[Descend<C>]) -> bool + 'static,
     ) {
         if self.visible {
             self.handler()
@@ -443,7 +454,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
                         && pointer
                             .hovered
                             .as_ref()
-                            .is_some_and(|target| action(ctx, target))
+                            .is_some_and(|target| action(ctx, target, &pointer.descends))
                 });
         }
     }
@@ -519,9 +530,9 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
 }
 
 impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
-    type Pointer = PointerContext;
+    type Input = DispatchContext<C>;
 
-    fn handler(&mut self) -> &mut Handler<C, PointerContext> {
+    fn handler(&mut self) -> &mut Handler<C, DispatchContext<C>> {
         self.placed.handler_mut()
     }
 }
@@ -705,9 +716,9 @@ pub fn in_view<C: 'static, Cv: 'static>(
 }
 
 fn gate_starts<C: 'static>(
-    child: Handler<C, PointerContext>,
+    child: Handler<C, DispatchContext<C>>,
     placement: Placement,
-) -> Handler<C, PointerContext> {
+) -> Handler<C, DispatchContext<C>> {
     let Handler {
         pointer_down,
         pointer_move,
@@ -734,7 +745,7 @@ fn gate_starts<C: 'static>(
     gated.on_pointer_move(pointer_move);
     gated.on_pointer_up(pointer_up);
     gated.on_pointer_cancel(pointer_cancel);
-    gated.on_key(key);
+    gated.on_key_with(key);
     gated.on_ime(ime);
     gated
 }
@@ -868,7 +879,7 @@ mod tests {
             log.push("raw above declined");
             false
         });
-        let mut pointer = PointerContext::new(None, Some(target));
+        let mut pointer = DispatchContext::new(None, Some(target));
         let mut log = Vec::new();
         assert!(placed.handler.unwrap().dispatch_pointer_down_with(
             &mut log,
@@ -1235,7 +1246,7 @@ mod tests {
             ui_events::keyboard::Modifiers::empty(),
             ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL,
         ] {
-            let mut pointer = PointerContext::new(root.clone(), Some(hit.clone()));
+            let mut pointer = DispatchContext::new(root.clone(), Some(hit.clone()));
             let mut event = down_at(point.x, point.y);
             event.state.modifiers = modifiers;
             let mut log = Vec::new();
@@ -1272,7 +1283,7 @@ mod tests {
             }),
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
         );
-        let mut pointer = PointerContext::new(None, Some(target));
+        let mut pointer = DispatchContext::new(None, Some(target));
         let handler = placed.handler.unwrap();
         let mut count = 0;
         assert!(!handler.dispatch_pointer_down_with(&mut count, &down_at(20.0, 5.0), &mut pointer));
@@ -1294,7 +1305,7 @@ mod tests {
             p.occlude(placement);
             let claimed = target.clone();
             p.claim_dynamic(placement, move |_| Some(claimed.clone()));
-            p.pick_dynamic(placement, |count, target| {
+            p.pick_dynamic(placement, |count, target, _| {
                 if matches!(target, Hovered::Tree(crate::hover::Hover::Drawing(_))) {
                     *count += 1;
                     true
@@ -1310,7 +1321,7 @@ mod tests {
                 Some(Claim::Occludes) => Hovered::Blocked,
                 _ => panic!("hit"),
             };
-            let mut pointer = PointerContext::new(None, Some(hovered));
+            let mut pointer = DispatchContext::new(None, Some(hovered));
             let mut event = down_at(5.0, 5.0);
             event.state.modifiers =
                 ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;

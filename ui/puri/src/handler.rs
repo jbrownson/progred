@@ -86,16 +86,15 @@ pub enum ImeEvent {
     Commit(String),
 }
 
-/// `P` is optional caller-owned pointer dispatch context, supplied only
-/// when dispatching. Higher-level interactions may use it for settled
-/// hit information and gesture output without changing ordinary widgets.
+/// `P` is optional caller-owned dispatch input. Pointer starts and keys
+/// may use settled frame data without changing ordinary widgets.
 pub struct Handler<C, P = ()> {
     pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent, &mut P) -> bool>,
     pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
     pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
     pub pointer_cancel: Box<dyn Fn(&mut C, &PointerInfo) -> bool>,
     pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
-    pub key: Box<dyn Fn(&mut C, &KeyboardEvent) -> bool>,
+    pub key: Box<dyn Fn(&mut C, &KeyboardEvent, &mut P) -> bool>,
     pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
 }
 
@@ -107,7 +106,7 @@ impl<C, P> Default for Handler<C, P> {
             pointer_up: Box::new(|_, _| false),
             pointer_cancel: Box::new(|_, _| false),
             scroll: Box::new(|_, event| ScrollOutcome::pass(event)),
-            key: Box::new(|_, _| false),
+            key: Box::new(|_, _, _| false),
             ime: Box::new(|_, _| false),
         }
     }
@@ -120,6 +119,15 @@ fn compose<C: 'static, E: 'static>(
 ) {
     let rest = std::mem::replace(slot, Box::new(|_, _| false));
     *slot = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+}
+
+fn compose_with<C: 'static, E: 'static, P: 'static>(
+    slot: &mut Box<dyn Fn(&mut C, &E, &mut P) -> bool>,
+    dispatch: impl Fn(&mut C, &E, &mut P) -> bool + 'static,
+) {
+    let rest = std::mem::replace(slot, Box::new(|_, _, _| false));
+    *slot =
+        Box::new(move |ctx, event, input| dispatch(ctx, event, input) || rest(ctx, event, input));
 }
 
 fn compose_scroll<C: 'static>(
@@ -163,17 +171,25 @@ impl<C, P> Handler<C, P> {
         C: 'static,
         P: 'static,
     {
-        let rest = std::mem::replace(&mut self.pointer_down, Box::new(|_, _, _| false));
-        self.pointer_down = Box::new(move |ctx, event, pointer| {
-            dispatch(ctx, event, pointer) || rest(ctx, event, pointer)
-        });
+        compose_with(&mut self.pointer_down, dispatch);
     }
 
     pub fn on_key(&mut self, dispatch: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static)
     where
         C: 'static,
+        P: 'static,
     {
-        compose(&mut self.key, dispatch);
+        self.on_key_with(move |ctx, event, _| dispatch(ctx, event));
+    }
+
+    pub fn on_key_with(
+        &mut self,
+        dispatch: impl Fn(&mut C, &KeyboardEvent, &mut P) -> bool + 'static,
+    ) where
+        C: 'static,
+        P: 'static,
+    {
+        compose_with(&mut self.key, dispatch);
     }
 
     pub fn on_pointer_move(&mut self, dispatch: impl Fn(&mut C, &PointerUpdate) -> bool + 'static)
@@ -247,8 +263,15 @@ impl<C, P> Handler<C, P> {
         (self.scroll)(ctx, event)
     }
 
-    pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool {
-        (self.key)(ctx, event)
+    pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch_key_with(ctx, event, &mut P::default())
+    }
+
+    pub fn dispatch_key_with(&self, ctx: &mut C, event: &KeyboardEvent, input: &mut P) -> bool {
+        (self.key)(ctx, event, input)
     }
 
     pub fn dispatch_ime(&self, ctx: &mut C, event: &ImeEvent) -> bool {
@@ -259,13 +282,13 @@ impl<C, P> Handler<C, P> {
 /// Implemented by placement contexts that carry a handler, so widgets
 /// can scope their children with [`capture`].
 pub trait HasHandler<C> {
-    type Pointer: 'static;
+    type Input: 'static;
 
-    fn handler(&mut self) -> &mut Handler<C, Self::Pointer>;
+    fn handler(&mut self) -> &mut Handler<C, Self::Input>;
 }
 
 impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
-    type Pointer = P;
+    type Input = P;
 
     fn handler(&mut self) -> &mut Handler<C, P> {
         self
@@ -278,7 +301,7 @@ impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
 pub fn capture<C, P: HasHandler<C> + ?Sized>(
     p: &mut P,
     place_children: impl FnOnce(&mut P),
-) -> Handler<C, P::Pointer> {
+) -> Handler<C, P::Input> {
     let saved = std::mem::take(p.handler());
     place_children(p);
     std::mem::replace(p.handler(), saved)
@@ -374,6 +397,25 @@ mod tests {
         assert!(outcome.handled());
         assert_eq!(outcome.remaining, ScrollDelta::LineDelta(0.0, 0.0));
         assert_eq!(log, [("inner", 4.0), ("outer", 2.0)]);
+    }
+
+    #[test]
+    fn ordinary_and_contextual_keys_share_precedence_and_the_current_input() {
+        let mut handler: Handler<Vec<usize>, usize> = Handler::new();
+        handler.on_key_with(|log, _, input| {
+            log.push(*input);
+            true
+        });
+        handler.on_key(|_, _| false);
+        let mut log = Vec::new();
+        assert!(handler.dispatch_key_with(&mut log, &KeyboardEvent::default(), &mut 7));
+        assert!(handler.dispatch_key_with(&mut log, &KeyboardEvent::default(), &mut 11));
+        handler.on_key(|log, _| {
+            log.push(0);
+            true
+        });
+        assert!(handler.dispatch_key_with(&mut log, &KeyboardEvent::default(), &mut 13));
+        assert_eq!(log, [7, 11, 0]);
     }
 
     #[test]
