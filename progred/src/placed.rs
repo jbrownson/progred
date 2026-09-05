@@ -319,45 +319,17 @@ impl<C: 'static, Cv> Builder<'_, C, Cv> {
 /// Stack `above`'s dispatch over `base`'s: above tries first, declines
 /// fall through — placement order as precedence, same as paint.
 fn handler_over<C: 'static>(
-    base: Handler<C, PointerContext>,
+    mut base: Handler<C, PointerContext>,
     above: Handler<C, PointerContext>,
 ) -> Handler<C, PointerContext> {
-    fn chain<C, E>(
-        base: Box<dyn Fn(&mut C, &E) -> bool>,
-        above: Box<dyn Fn(&mut C, &E) -> bool>,
-    ) -> Box<dyn Fn(&mut C, &E) -> bool>
-    where
-        C: 'static,
-        E: 'static,
-    {
-        Box::new(move |ctx, event| above(ctx, event) || base(ctx, event))
-    }
-    fn chain_scroll<C>(
-        base: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
-        above: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
-    ) -> Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>
-    where
-        C: 'static,
-    {
-        Box::new(move |ctx, event| {
-            let outcome = above(ctx, event);
-            match outcome.event(event) {
-                Some(event) => outcome.followed_by(base(ctx, &event)),
-                None => outcome,
-            }
-        })
-    }
-    Handler {
-        pointer_down: Box::new(move |ctx, event, pointer| {
-            (above.pointer_down)(ctx, event, pointer) || (base.pointer_down)(ctx, event, pointer)
-        }),
-        pointer_move: chain(base.pointer_move, above.pointer_move),
-        pointer_up: chain(base.pointer_up, above.pointer_up),
-        pointer_cancel: chain(base.pointer_cancel, above.pointer_cancel),
-        scroll: chain_scroll(base.scroll, above.scroll),
-        key: chain(base.key, above.key),
-        ime: chain(base.ime, above.ime),
-    }
+    base.on_pointer_down_with(above.pointer_down);
+    base.on_pointer_move(above.pointer_move);
+    base.on_pointer_up(above.pointer_up);
+    base.on_pointer_cancel(above.pointer_cancel);
+    base.on_scroll(above.scroll);
+    base.on_key(above.key);
+    base.on_ime(above.ime);
+    base
 }
 
 /// The leaf-construction context: today's placement-pass interface,
