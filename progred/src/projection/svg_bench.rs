@@ -2262,7 +2262,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
     struct World {
         pending: bool,
         log: Vec<&'static str>,
-        scrub: Option<crate::PendingScrub>,
+        scrub: Option<Box<dyn crate::gesture::Gesture>>,
     }
 
     let path = vec![Step::Key(new_cell_id())];
@@ -2298,7 +2298,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
                     false
                 } else {
                     world.log.push("scrub");
-                    world.scrub = Some(crate::PendingScrub::new(
+                    world.scrub = Some(crate::gesture::scrub(
                         point,
                         scale,
                         captured_root.clone(),
@@ -2377,12 +2377,6 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
         );
         assert_eq!(world.log, expected.into_iter().collect::<Vec<_>>());
         assert_eq!(world.scrub.is_some(), expected == Some("scrub"));
-        if let Some(scrub) = world.scrub {
-            assert_eq!(scrub.path, path);
-            assert_eq!(scrub.root, root);
-            assert_eq!(scrub.origin, Point::new(5.0, 5.0));
-            assert_eq!(scrub.scale, 2.0);
-        }
     }
 }
 

@@ -8,6 +8,7 @@ mod commands;
 mod completion;
 mod filter;
 mod frame;
+mod gesture;
 mod gid_text;
 #[cfg(target_os = "ios")]
 mod gpu;
@@ -193,112 +194,6 @@ struct PendingPointer {
     viewport: Size,
 }
 
-// Logical pixels. Winit does not expose the platform drag threshold;
-// replace this fallback when the input adapter can provide one.
-const POINTER_DRAG_SLOP: f64 = 3.0;
-
-struct PendingScrub {
-    origin: Point,
-    point: Point,
-    scale: f64,
-    root: workspace::Root,
-    path: gid::Path,
-    gesture: progred_display::ScrubGesture,
-    dragging: bool,
-    recorded: bool,
-    spelling: Option<String>,
-}
-
-struct PendingStateDrag {
-    origin: Point,
-    scale: f64,
-    root: workspace::Root,
-    path: gid::Path,
-    gesture: progred_display::StateDragGesture,
-    dragging: bool,
-}
-
-struct PendingPoint {
-    root: workspace::Root,
-    path: gid::Path,
-    rect: Rect,
-    handler: progred_display::PointHandler,
-    recorded: bool,
-}
-
-impl PendingPoint {
-    fn update(&self, point: Point) -> progred_display::PointUpdate {
-        (self.handler)(progred_display::PointEvent {
-            x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
-            y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
-        })
-    }
-}
-
-impl PendingScrub {
-    fn new(
-        origin: Point,
-        scale: f64,
-        root: workspace::Root,
-        path: gid::Path,
-        handler: progred_display::ScrubHandler,
-    ) -> Self {
-        let gesture = handler();
-        Self {
-            origin,
-            point: origin,
-            scale,
-            root,
-            path,
-            gesture,
-            dragging: false,
-            recorded: false,
-            spelling: None,
-        }
-    }
-
-    fn update(&mut self, point: Point) -> Option<progred_display::ScrubEvent> {
-        let movement = (point - self.point) / self.scale;
-        let distance = (point - self.origin) / self.scale;
-        let was_dragging = self.dragging;
-        self.dragging |= distance.hypot() >= POINTER_DRAG_SLOP;
-        self.point = point;
-        self.dragging.then_some(progred_display::ScrubEvent {
-            movement_x: if was_dragging { movement.x } else { distance.x },
-            distance_y: distance.y,
-        })
-    }
-}
-
-impl PendingStateDrag {
-    fn new(
-        origin: Point,
-        scale: f64,
-        root: workspace::Root,
-        path: gid::Path,
-        handler: progred_display::StateDragHandler,
-    ) -> Self {
-        let gesture = handler();
-        Self {
-            origin,
-            scale,
-            root,
-            path,
-            gesture,
-            dragging: false,
-        }
-    }
-
-    fn update(&mut self, point: Point) -> Option<progred_display::StateDragEvent> {
-        let distance = (point - self.origin) / self.scale;
-        self.dragging |= distance.hypot() >= POINTER_DRAG_SLOP;
-        self.dragging.then_some(progred_display::StateDragEvent {
-            delta_x: distance.x,
-            delta_y: distance.y,
-        })
-    }
-}
-
 impl PendingScroll {
     fn merge(&mut self, next: Self) -> Result<(), Self> {
         let merged = self.scale == next.scale
@@ -441,15 +336,8 @@ pub(crate) struct Editor {
     /// Pressed motion is never deferred; drag gestures receive every
     /// update delivered by the event source.
     pending_pointer: Option<PendingPointer>,
-    /// A semantic value scrub retained from its start frame. Raw
-    /// pointer input remains available to controls; this runs only as
-    /// the editor fallback after the movement threshold is crossed.
-    scrub: Option<PendingScrub>,
-    /// A host-recognized drag whose result is projection-local view
-    /// state rather than a document edit.
-    state_drag: Option<PendingStateDrag>,
-    /// A continuous point control owns pointer motion until release.
-    point: Option<PendingPoint>,
+    /// The continuation installed by the accepting projection handler.
+    gesture: Option<Box<dyn gesture::Gesture>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
@@ -525,9 +413,7 @@ fn new_editor(
         pending_paint: None,
         pending_scroll: None,
         pending_pointer: None,
-        scrub: None,
-        state_drag: None,
-        point: None,
+        gesture: None,
         reducer: WindowEventReducer::default(),
         proxy,
         pending_discard: None,
@@ -1056,7 +942,7 @@ impl App {
                         let position = Point::new(button.state.position.x, button.state.position.y);
                         editor.pointer = Some(position);
                         editor.pressed = true;
-                        editor.state_drag = None;
+                        editor.gesture = None;
                         frame_input_changed = true;
                         let mut pointer = placed::DispatchContext::new(
                             dispatch.pointer_root.clone(),
@@ -1080,10 +966,8 @@ impl App {
                             Point::new(update.current.position.x, update.current.position.y);
                         editor.pointer = Some(position);
                         frame_input_changed = true;
-                        let moved = editor.dispatch_point_move(&update)
-                            || dispatch.handler.dispatch_pointer_move(editor, &update)
-                            || editor.dispatch_state_drag_move(&update)
-                            || editor.dispatch_scrub_move(&update);
+                        let moved = editor.advance_gesture(position)
+                            || dispatch.handler.dispatch_pointer_move(editor, &update);
                         if moved || update.pointer.pointer_type != PointerType::Touch {
                             moved
                         } else {
@@ -1108,18 +992,13 @@ impl App {
                         editor.pointer = Some(position);
                         editor.pressed = false;
                         frame_input_changed = true;
-                        let handled = dispatch.handler.dispatch_pointer_up(editor, &button);
-                        handled
-                            || editor.point.take().is_some()
-                            || editor.state_drag.take().is_some()
-                            || editor.scrub.take().is_some()
+                        editor.gesture.take().is_some()
+                            || dispatch.handler.dispatch_pointer_up(editor, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         editor.pointer = None;
                         editor.pressed = false;
-                        editor.point = None;
-                        editor.state_drag = None;
-                        editor.scrub = None;
+                        editor.gesture = None;
                         frame_input_changed = true;
                         editor.model.workspace.cancel_resize()
                     }
@@ -1132,14 +1011,8 @@ impl App {
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_cancel(editor, &pointer);
                         let resize_cancelled = editor.model.workspace.cancel_resize();
-                        let point_cancelled = editor.point.take().is_some();
-                        let state_drag_cancelled = editor.state_drag.take().is_some();
-                        let scrub_cancelled = editor.scrub.take().is_some();
-                        handled
-                            || resize_cancelled
-                            || point_cancelled
-                            || state_drag_cancelled
-                            || scrub_cancelled
+                        let gesture_cancelled = editor.gesture.take().is_some();
+                        handled || resize_cancelled || gesture_cancelled
                     }
                     _ => false,
                 };
@@ -1347,123 +1220,15 @@ impl Editor {
         }
     }
 
-    fn dispatch_scrub_move(&mut self, update: &PointerUpdate) -> bool {
-        let point = Point::new(update.current.position.x, update.current.position.y);
-        let Some(scrub) = &mut self.scrub else {
-            return false;
-        };
-        let Some(event) = scrub.update(point) else {
-            return true;
-        };
-        let path = scrub.path.clone();
-        let update = (scrub.gesture)(event);
-        scrub.spelling = update.spelling;
-        let replacement = update.value;
-        if self.sources().resolve_path(&path) == Some(&replacement) {
-            return true;
-        }
-        let before = self.model.doc.clone();
-        if selection::set_value(
-            &mut self.model.doc,
-            &self.stack.libraries,
-            &path,
-            replacement,
-        ) {
-            if self.scrub.as_ref().is_some_and(|scrub| !scrub.recorded) {
-                self.model.history.record(before, Some(path));
-                if let Some(scrub) = &mut self.scrub {
-                    scrub.recorded = true;
-                }
-            }
-            self.refresh_title();
-        }
-        true
-    }
-
-    fn dispatch_state_drag_move(&mut self, update: &PointerUpdate) -> bool {
-        let point = Point::new(update.current.position.x, update.current.position.y);
-        let Some(active) = &mut self.state_drag else {
-            return false;
-        };
-        let Some(event) = active.update(point) else {
-            return true;
-        };
-        let root = active.root.clone();
-        let path = active.path.clone();
-        let state = (active.gesture)(event);
-        if let Some(view) = self.model.workspace.view_mut(&root)
-            && view.annotations.at(&path) != Some(&state)
-        {
-            view.annotations.set(&path, Some(state));
-        }
-        true
-    }
-
-    fn start_point(
-        &mut self,
-        root: workspace::Root,
-        path: gid::Path,
-        placement: puri::Placement,
-        handler: progred_display::PointHandler,
-        point: Point,
-    ) -> bool {
-        self.point = Some(PendingPoint {
-            root,
-            path,
-            rect: placement.rect,
-            handler,
-            recorded: false,
-        });
-        self.update_point(point)
-    }
-
-    fn dispatch_point_move(&mut self, update: &PointerUpdate) -> bool {
-        self.point.is_some()
-            && self.update_point(Point::new(
-                update.current.position.x,
-                update.current.position.y,
-            ))
-    }
-
-    fn update_point(&mut self, point: Point) -> bool {
-        let Some(active) = &self.point else {
-            return false;
-        };
-        let root = active.root.clone();
-        let path = active.path.clone();
-        let update = active.update(point);
-        if self.sources().resolve_path(&path) != Some(&update.value) {
-            let before = self.model.doc.clone();
-            if selection::set_value(
-                &mut self.model.doc,
-                &self.stack.libraries,
-                &path,
-                update.value,
-            ) {
-                if self.point.as_ref().is_some_and(|point| !point.recorded) {
-                    self.model.history.record(before, Some(path.clone()));
-                    if let Some(point) = &mut self.point {
-                        point.recorded = true;
-                    }
-                }
+    fn advance_gesture(&mut self, point: Point) -> bool {
+        if let Some(gesture) = &mut self.gesture {
+            if gesture.advance(&mut self.model, &self.stack.libraries, point) {
                 self.refresh_title();
             }
+            true
+        } else {
+            false
         }
-        if let Some(payload) = update.selection {
-            let recorded = self
-                .model
-                .selection
-                .as_ref()
-                .filter(|selection| selection.root() == &root && selection.path() == path)
-                .map(selection::Selection::recorded);
-            if let Some(recorded) = recorded {
-                let mut next =
-                    selection::Selection::from_payload(&root, &self.sources(), path, payload);
-                next.preserve_recorded(recorded);
-                self.model.selection = Some(next);
-            }
-        }
-        true
     }
 
     fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
@@ -1808,6 +1573,7 @@ impl Editor {
             self.model.history.redo(current, selection)
         };
         if let Some((doc, restore)) = restored {
+            self.gesture = None;
             self.model.doc = doc;
             self.model.selection =
                 restore.map(|path| selection::Selection::edge(&root, &self.sources(), path));
@@ -1840,6 +1606,7 @@ impl Editor {
                     // A run must not straddle the save mark, or edits
                     // after it would coalesce into a pre-save step.
                     selection::break_edit_run(self.model.selection.as_mut());
+                    self.gesture = None;
                     self.adopt_doc_path(canonical(path));
                 }
                 Err(error) => {
@@ -1872,8 +1639,7 @@ impl Editor {
             workspace: workspace::Workspace::default(),
         };
         self.hover = None;
-        self.point = None;
-        self.scrub = None;
+        self.gesture = None;
         self.doc_path = path;
         self.revealed = None;
         if let RenderState::Active { window, .. } = &self.state {

@@ -326,13 +326,7 @@ pub(crate) struct FrameDescription<'a> {
     toggles: crate::command::Toggles,
     scale: f64,
     viewport: Size,
-    scrub: Option<ScrubPresentation>,
-}
-
-struct ScrubPresentation {
-    root: workspace::Root,
-    path: gid::Path,
-    spelling: Option<String>,
+    scrub: Option<crate::gesture::ScrubSpelling<'a>>,
 }
 
 pub(crate) struct FrameResources<'a> {
@@ -504,11 +498,10 @@ impl Editor {
             availability,
             scale,
             viewport,
-            scrub: self.scrub.as_ref().map(|scrub| ScrubPresentation {
-                root: scrub.root.clone(),
-                path: scrub.path.clone(),
-                spelling: scrub.spelling.clone(),
-            }),
+            scrub: self
+                .gesture
+                .as_ref()
+                .and_then(|gesture| gesture.scrub_spelling()),
         };
         let resources = FrameResources {
             fonts: &mut self.font_cx,
@@ -727,7 +720,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             crate::site::apply_event(app, apply_root.clone(), path, function, event)
         }),
         state_drag: Rc::new(move |app, path, handler, point, scale| {
-            app.state_drag = Some(crate::PendingStateDrag::new(
+            app.gesture = Some(crate::gesture::state_drag(
                 point,
                 scale,
                 drag_root.clone(),
@@ -745,7 +738,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
                 false
             } else {
                 select(app, path.clone());
-                app.scrub = Some(crate::PendingScrub::new(
+                app.gesture = Some(crate::gesture::scrub(
                     point,
                     scale,
                     scrub_root.clone(),
@@ -756,7 +749,13 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             }
         }),
         point: Rc::new(move |app, path, placement, handler, point| {
-            app.start_point(point_root.clone(), path, placement, handler, point)
+            app.gesture = Some(crate::gesture::point(
+                point_root.clone(),
+                path,
+                placement.rect,
+                handler,
+            ));
+            app.advance_gesture(point)
         }),
         commit_offer: Rc::new(
             |app: &mut Editor, action| match app.model.selection.take() {
@@ -791,7 +790,7 @@ fn project_workspace_view(
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     view: &workspace::View,
-    scrub: Option<&ScrubPresentation>,
+    scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<Editor, Paint>> {
@@ -823,8 +822,8 @@ fn project_workspace_view(
                 .as_ref()
                 .filter(|selection| selection.root() == &view.root),
             scrub_spelling: scrub
-                .filter(|scrub| scrub.root == view.root)
-                .and_then(|scrub| Some((scrub.path.as_slice(), scrub.spelling.as_deref()?))),
+                .filter(|scrub| scrub.root == &view.root)
+                .map(|scrub| (scrub.path, scrub.spelling)),
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
             raw,
@@ -884,7 +883,7 @@ fn project_workspace(
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
-    scrub: Option<&ScrubPresentation>,
+    scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<Editor, Paint>> {

@@ -94,10 +94,13 @@ management.
   state transitions and decline with their callers.
 - Progred lowers activation and picking into that same pointer-down
   composition, so their visual order also holds against raw handlers.
-  Puri's optional caller-owned pointer context supplies the settled target
+  Puri's optional caller-owned dispatch input supplies the settled target
   at dispatch; ordinary widgets ignore it. Accepting handlers perform their
   actions through caller-supplied capabilities: a scrub selects and starts
-  its gesture there, and a drawing pick selects its source there. Acceptance
+  its gesture there, and a drawing pick selects its source there. Progred
+  retains one projection gesture continuation until release or cancellation;
+  its domain update rules live outside the shell. Keyboard deletion and
+  drawing-source picking receive the same frame navigation data explicitly. Acceptance
   controls propagation, with no semantic follow-up inferred by the shell.
   Hover occlusion also consumes pointer starts, leaving active motion and
   release alone. A hover probe carries
