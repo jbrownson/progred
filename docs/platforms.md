@@ -6,6 +6,10 @@ than reimplementing the editor.
 
 ## iPad
 
+The native host is a retained feasibility prototype. Further iPad work is
+deferred while the macOS and Linux editor matures. Its build explicitly requests
+a static library; desktop and browser builds use ordinary Rust library output.
+
 The browser build remains the shortest iPad loop: serve it from the development
 Mac and open the Mac's LAN address in Safari. The native host builds Progred as
 an `aarch64-apple-ios` static library; a minimal Xcode application calls its

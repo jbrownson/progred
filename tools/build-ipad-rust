@@ -19,7 +19,7 @@ case "${PLATFORM_NAME-}" in
 esac
 
 PATH="${HOME}/.cargo/bin:${PATH}" \
-    "$tool_dir/sandbox-cargo" build --release -p progred --lib --target "$rust_target"
+    "$tool_dir/sandbox-cargo" rustc --release -p progred --lib --crate-type staticlib --target "$rust_target"
 
 generated_dir="$project_root/target/ios/generated"
 generated_header="$generated_dir/rust-build.h"
