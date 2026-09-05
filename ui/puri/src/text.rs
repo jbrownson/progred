@@ -123,7 +123,7 @@ pub fn scripted_text(ctx: &mut TextCtx, s: &str, style: &TextStyle, script: Scri
                 ctx,
                 s,
                 &TextStyle {
-                    size: style.size * 0.85,
+                    size: style.size * 0.70,
                     ..style.clone()
                 },
             );
@@ -334,7 +334,7 @@ mod tests {
                 &mut ctx,
                 "f32",
                 &TextStyle {
-                    size: 13.0 * 0.85,
+                    size: 13.0 * 0.70,
                     ..style
                 },
             );
