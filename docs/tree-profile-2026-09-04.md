@@ -18,7 +18,7 @@ change was introduced.
 
 ## Method and limits
 
-`projection::svg_bench::iop_tree_profile_loop` projects the declared picture pane,
+`projection::tests::frame::profile::iop_tree_profile_loop` projects the declared picture pane,
 places it, evaluates Grap, records its drawing commands and picking geometry,
 and replays into the headless `DrawList` canvas. Each iteration rebuilds the
 picture. Measurements below exclude the first five iterations. The reported

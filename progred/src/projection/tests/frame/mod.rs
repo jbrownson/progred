@@ -1,0 +1,241 @@
+//! Real projection and dispatch fixtures, without a window.
+
+use super::*;
+use peniko::ImageData;
+use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
+use puri::hover::Claim;
+
+type World = ();
+
+struct Bench {
+    list: DrawList,
+    descends: Vec<Descend<World>>,
+    /// What the probe answered for the pass's pointer input.
+    hit: Option<Claim<Hovered>>,
+    frame_elapsed: std::time::Duration,
+}
+
+/// Probe with the pointer, then render and unpack the placed frame.
+fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
+    let hit = pointer.and_then(|point| placed.probe(point, None, crate::frame::HOVER_REACH));
+    let hovered = match &hit {
+        Some(Claim::Direct(hover)) => Some(hover.clone()),
+        _ => None,
+    };
+    let Placed {
+        descends, renders, ..
+    } = placed;
+    let mut bench = Bench {
+        list: DrawList::new(),
+        descends,
+        hit,
+        frame_elapsed: std::time::Duration::ZERO,
+    };
+    let ink = crate::placed::Ink {
+        hovered: hovered.as_ref(),
+        hovered_secondary: None,
+        hovered_trace: None,
+        debug_geometry: false,
+    };
+    for render in renders {
+        render(&mut bench, ink);
+    }
+    bench
+}
+
+impl Canvas for Bench {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.list.image(image, transform);
+    }
+
+    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+        self.list.fill(shape, brush, transform);
+    }
+    fn stroke(
+        &mut self,
+        shape: impl Into<Shape>,
+        style: Stroke,
+        brush: impl Into<Brush>,
+        transform: Affine,
+    ) {
+        self.list.stroke(shape, style, brush, transform);
+    }
+    fn glyph_run(&mut self, run: GlyphRun) {
+        self.list.glyph_run(run);
+    }
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
+        let _ = (shape.into(), transform);
+        content(self);
+    }
+}
+
+fn place_with_pointer(
+    doc: &Document,
+    selection: Option<&Selection>,
+    width: f64,
+    pointer: Option<Point>,
+) -> (Bench, Extent) {
+    place_with_inputs(doc, selection, width, pointer, None)
+}
+
+fn place_with_inputs(
+    doc: &Document,
+    selection: Option<&Selection>,
+    width: f64,
+    pointer: Option<Point>,
+    viewport: Option<Rect>,
+) -> (Bench, Extent) {
+    place_with_annotations(
+        doc,
+        selection,
+        &Annotations::default(),
+        width,
+        pointer,
+        viewport,
+        None,
+    )
+}
+
+fn place_with_annotations(
+    doc: &Document,
+    selection: Option<&Selection>,
+    annotations: &Annotations,
+    width: f64,
+    pointer: Option<Point>,
+    viewport: Option<Rect>,
+    root: Option<(&[Step], Option<&Value>)>,
+) -> (Bench, Extent) {
+    BenchContext::new().place(doc, selection, annotations, width, pointer, viewport, root)
+}
+
+struct BenchContext {
+    stack: crate::stack::Stack<World>,
+    styles: crate::styles::Styles,
+    fonts: parley::FontContext,
+    layouts: parley::LayoutContext<Brush>,
+    cache: puri::text::TextCache,
+}
+
+impl BenchContext {
+    fn new() -> Self {
+        Self {
+            stack: crate::stack::load(),
+            styles: crate::styles::editor(1.0),
+            fonts: parley::FontContext::new(),
+            layouts: parley::LayoutContext::new(),
+            cache: puri::text::TextCache::default(),
+        }
+    }
+
+    fn place(
+        &mut self,
+        doc: &Document,
+        selection: Option<&Selection>,
+        annotations: &Annotations,
+        width: f64,
+        pointer: Option<Point>,
+        viewport: Option<Rect>,
+        root: Option<(&[Step], Option<&Value>)>,
+    ) -> (Bench, Extent) {
+        let Self {
+            stack,
+            styles,
+            fonts,
+            layouts,
+            cache,
+        } = self;
+        let sources = Sources {
+            doc,
+            libraries: &stack.libraries,
+        };
+        let mut tcx = TextCtx {
+            fonts,
+            layouts,
+            scale: 1.0,
+            cache,
+        };
+        let hooks = Hooks::<World> {
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_, _| false),
+            apply: Rc::new(|_, _, _, _| false),
+            point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        };
+        // Timed as the frame perf canary: projection is reported
+        // separately, while the total also includes placement, hover,
+        // and render-continuation settlement. Fallback-heavy narrow
+        // widths are where accidental exponentials have surfaced twice.
+        // Numbers only, no assert (user call).
+        let start = std::time::Instant::now();
+        let (root_path, root) = root.unwrap_or((&[], sources.root()));
+        let node = project::<World, Bench>(
+            ProjectDescription {
+                sources,
+                root,
+                root_path,
+                selection,
+                scrub_spelling: None,
+                source_selection: selection,
+                annotations,
+                raw: false,
+                styles,
+                width: width - 48.0,
+                projection: Some(&stack.projection),
+                root_completions: Some(&stack.root_completions),
+                root_field_completions: Some(&stack.root_field_completions),
+            },
+            &mut tcx,
+            hooks,
+        );
+        let project_elapsed = start.elapsed();
+        let extent = node.extent;
+        let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+        let placed = measured::place(
+            node,
+            match viewport {
+                Some(clip_rect) => Placement::new(rect, clip_rect),
+                None => Placement::root(rect),
+            },
+        );
+        let mut settled = settle(placed, pointer);
+        settled.frame_elapsed = start.elapsed();
+        eprintln!(
+            "frame at {width:.0}px: {:.1?} (project {:.1?})",
+            settled.frame_elapsed, project_elapsed,
+        );
+        (settled, extent)
+    }
+}
+
+fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
+    place_with_pointer(doc, selection, width, None)
+}
+
+fn key(s: &str) -> Step {
+    Step::Key(crate::test_values::label(s))
+}
+
+mod completion;
+mod drawing;
+mod interaction;
+mod iop_tree_native;
+mod layout;
+mod profile;
+mod svg;

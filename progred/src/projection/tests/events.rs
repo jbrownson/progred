@@ -1,0 +1,232 @@
+use super::*;
+
+#[test]
+fn a_data_event_realizes_the_apply_hook() {
+    fn probe(
+        input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
+    ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
+        use progred_libraries::layout as data;
+        input.value.as_blob()?;
+        let target = input.targets.current();
+        data::decode(
+            &data::on(
+                data::text_leaf("go", data::vocabulary::NAME_FACE),
+                Value::from(data::vocabulary::HANDLER),
+            ),
+            &target.select,
+            &target.hover,
+        )
+    }
+    let doc = Document {
+        root: Some(Value::from(vec![7u8])),
+        cells: Cells::new(),
+    };
+    let lib = core_libraries();
+    let projection: Projection<Vec<(Path, Value, Value)>> =
+        Projection::new([progred_display::partial(probe)]);
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let empty = Annotations::default();
+    let measured = project::<Vec<(Path, Value, Value)>, crate::frame::Paint>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &doc,
+                libraries: &lib,
+            },
+            root: doc.root.as_ref(),
+            root_path: &[],
+            selection: None,
+            scrub_spelling: None,
+            source_selection: None,
+            annotations: &empty,
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+
+            projection: Some(&projection),
+            root_completions: None,
+            root_field_completions: None,
+        },
+        &mut tcx,
+        Hooks::<Vec<(Path, Value, Value)>> {
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|_, _, _| false),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_, _| false),
+            apply: Rc::new(|events, path, handler, event| {
+                events.push((path, handler, event));
+                true
+            }),
+            point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        },
+    );
+    assert!(measured.extent.width > 0.0);
+    let placed = measured::place(
+        measured,
+        puri::geometry::Placement::root(measured_rect(500.0)),
+    );
+    let handler = placed.handler.expect("event handler");
+    let mut state = PointerState::default();
+    state.position.x = 1.0;
+    state.position.y = 1.0;
+    let mut events = Vec::new();
+    assert!(handler.dispatch_pointer_down(
+        &mut events,
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: state.clone(),
+        },
+    ));
+    let [(path, function, event)] = &events[..] else {
+        panic!("one event");
+    };
+    assert!(path.is_empty());
+    assert_eq!(
+        function,
+        &Value::from(progred_libraries::layout::vocabulary::HANDLER)
+    );
+    assert_eq!(
+        event
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::POINTER_DOWN),
+    );
+    assert!(handler.dispatch_pointer_move(
+        &mut events,
+        &PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            current: state.clone(),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        },
+    ));
+    assert_eq!(
+        events[1]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::POINTER_MOVE),
+    );
+
+    let touch = PointerInfo {
+        pointer_id: PointerId::new(7),
+        persistent_device_id: None,
+        pointer_type: PointerType::Touch,
+    };
+    assert!(handler.dispatch_pointer_down(
+        &mut events,
+        &PointerButtonEvent {
+            button: None,
+            pointer: touch,
+            state: state.clone(),
+        },
+    ));
+    let touch_start = events[2].2.as_record().expect("touch start record");
+    assert_eq!(
+        touch_start
+            .get(&progred_libraries::layout::vocabulary::EVENT_KIND)
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_START),
+    );
+    assert!(!touch_start.contains_key(&progred_libraries::layout::vocabulary::BUTTON));
+
+    assert!(handler.dispatch_pointer_move(
+        &mut events,
+        &PointerUpdate {
+            pointer: touch,
+            current: state.clone(),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        },
+    ));
+    assert_eq!(
+        events[3]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_MOVE),
+    );
+
+    assert!(handler.dispatch_pointer_up(
+        &mut events,
+        &PointerButtonEvent {
+            button: None,
+            pointer: touch,
+            state: state.clone(),
+        },
+    ));
+    assert_eq!(
+        events[4]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_END),
+    );
+
+    assert!(handler.dispatch_pointer_cancel(&mut events, &touch));
+    assert_eq!(
+        events[5]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_CANCEL),
+    );
+
+    assert!(
+        handler
+            .dispatch_scroll(
+                &mut events,
+                &PointerScrollEvent {
+                    pointer: PointerInfo {
+                        pointer_id: Some(PointerId::PRIMARY),
+                        persistent_device_id: None,
+                        pointer_type: PointerType::Mouse,
+                    },
+                    delta: ScrollDelta::LineDelta(0.0, 1.0),
+                    state,
+                },
+            )
+            .handled()
+    );
+    assert_eq!(
+        events[6]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::SCROLL),
+    );
+}
