@@ -26,18 +26,12 @@ pub fn set(current: Option<&Value>, spine: &[Step], leaf: Value) -> Option<Value
         Some((Step::Key(label), rest)) => {
             let fields = current?.as_record()?;
             let child = fields.get(label);
-            if !rest.is_empty() && child.is_none() {
-                return None;
-            }
             let rebuilt = set(child, rest, leaf)?;
             Some(Value::Record(fields.update(*label, rebuilt)))
         }
         Some((Step::Element(position), rest)) => {
             let elements = current?.as_list()?;
             let child = elements.get(position);
-            if !rest.is_empty() && child.is_none() {
-                return None;
-            }
             let rebuilt = set(child, rest, leaf)?;
             Some(Value::List(elements.update(position.clone(), rebuilt)))
         }
