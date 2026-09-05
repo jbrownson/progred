@@ -328,8 +328,15 @@ struct Drag {
 
 impl Default for Workspace {
     fn default() -> Self {
+        let mut document = View::new(Root::document());
+        crate::annotations::set_collapsed(
+            &mut document.annotations,
+            &[Step::Key(vocabulary::PANES)],
+            false,
+            true,
+        );
         Self {
-            document: View::new(Root::document()),
+            document,
             left: Column::default(),
             right: Column::default(),
             left_width: DEFAULT_SIDE_WIDTH,
@@ -402,17 +409,9 @@ impl Workspace {
                 )
             });
             let pane = existing.map_or_else(
-                || {
-                    crate::annotations::set_collapsed(
-                        &mut self.document.annotations,
-                        &declaration.path,
-                        false,
-                        true,
-                    );
-                    Pane {
-                        view: View::new(Root::pane(declaration.path.clone())),
-                        height: 1.0,
-                    }
+                || Pane {
+                    view: View::new(Root::pane(declaration.path.clone())),
+                    height: 1.0,
                 },
                 |index| declared.remove(index),
             );
@@ -928,15 +927,18 @@ mod tests {
             path: vec![Step::Key(CellId::from_u128(2))],
         };
         let mut workspace = Workspace::default();
+        let panes_path = [Step::Key(vocabulary::PANES)];
         workspace.sync_declared(&[one.clone(), two.clone()]);
         assert!(crate::annotations::collapsed(
             &workspace.document.annotations,
-            &one.path,
+            &panes_path,
             false,
         ));
+        assert!(workspace.document.annotations.at(&one.path).is_none());
+        assert!(workspace.document.annotations.at(&two.path).is_none());
         crate::annotations::set_collapsed(
             &mut workspace.document.annotations,
-            &one.path,
+            &panes_path,
             false,
             false,
         );
@@ -951,13 +953,19 @@ mod tests {
         assert_eq!(moved.projection, Projection::Raw);
         assert!(!crate::annotations::collapsed(
             &workspace.document.annotations,
-            &one.path,
+            &panes_path,
             false,
         ));
         assert!(workspace.can_move(&root, Move::Up));
 
         workspace.sync_declared(&[]);
         assert!(workspace.left.panes.is_empty());
+        workspace.sync_declared(&[one]);
+        assert!(!crate::annotations::collapsed(
+            &workspace.document.annotations,
+            &panes_path,
+            false,
+        ));
     }
 
     #[test]

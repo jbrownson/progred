@@ -1327,14 +1327,12 @@ mod frame_tests {
         model
             .workspace
             .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-        for declaration in workspace::declarations(model.doc.root.as_ref()) {
-            crate::annotations::set_collapsed(
-                &mut model.workspace.document.annotations,
-                &declaration.path,
-                false,
-                false,
-            );
-        }
+        crate::annotations::set_collapsed(
+            &mut model.workspace.document.annotations,
+            &[Step::Key(workspace::vocabulary::PANES)],
+            false,
+            false,
+        );
         let calls = Rc::new(Cell::new(0));
         let result = Rc::new(RefCell::new(source.clone()));
         let mut stack = stack::load::<Editor>();

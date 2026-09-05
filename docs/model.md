@@ -153,9 +153,11 @@ lists, so they save and undo with the document. A malformed pane container or
 nonrecord root is not overwritten to make the operation possible.
 
 Pane identity, projection mode, folds, scroll, and requested size are session
-state. Surviving declarations retain their view state. Moving an entry assigns
-a new list position and explicitly retargets selection; its size, scroll, and
-projection mode carry across, while path-keyed folds reset.
+state. The document view starts with the contents of `panes` folded; individual
+pane entries have no initial fold. Expanding the field is preserved when panes
+are added, removed, or moved. Surviving declarations retain their view state.
+Moving an entry assigns a new list position and explicitly retargets selection;
+its size, scroll, and projection mode carry across, while path-keyed folds reset.
 
 `{value: source, projection: function}` is a presentation-library convention,
 not workspace configuration. The document's normal projection shows this
