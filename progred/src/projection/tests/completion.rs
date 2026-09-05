@@ -8,10 +8,9 @@ struct CompletionResult {
     on_commit: Option<Value>,
 }
 
-fn value_commit(result: &mut CompletionResult, value: Value, on_commit: Option<Value>) -> bool {
+fn value_commit(result: &mut CompletionResult, value: Value, on_commit: Option<Value>) {
     result.value = Some(value);
     result.on_commit = on_commit;
-    true
 }
 
 fn label_commit(
@@ -19,10 +18,9 @@ fn label_commit(
     cell: CellId,
     definition: Option<Value>,
     on_commit: Option<Value>,
-) -> bool {
+) {
     result.label = Some((cell, definition));
     result.on_commit = on_commit;
-    true
 }
 
 fn completion_entries(
@@ -47,7 +45,7 @@ fn completion_entries(
 
 fn activated(entry: &Entry<CompletionResult>) -> CompletionResult {
     let mut result = CompletionResult::default();
-    assert!((entry.activate)(&mut result));
+    (entry.activate)(&mut result);
     result
 }
 
@@ -612,7 +610,7 @@ fn entry_hover_marks_follow_the_visible_offers() {
             matches: vec![],
             face: progred_display::Face::Label,
             source: value.as_cell(),
-            activate: Rc::new(|_: &mut ()| true),
+            activate: Rc::new(|_: &mut ()| {}),
         }],
     };
 

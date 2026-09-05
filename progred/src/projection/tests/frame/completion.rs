@@ -1,16 +1,15 @@
 use super::*;
 
 #[test]
-fn a_declined_completion_still_consumes_its_activation() {
+fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
-        display: "declines".into(),
+        display: "no edit".into(),
         detail: None,
         matches: vec![],
         face: progred_display::Face::Label,
         source: None,
         activate: Rc::new(|attempts: &mut usize| {
             *attempts += 1;
-            false
         }),
     }];
     let mut fonts = parley::FontContext::new();
@@ -55,7 +54,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             matches: Vec::new(),
             face: progred_display::Face::String,
             source: None,
-            activate: Rc::new(|_| true),
+            activate: Rc::new(|_| {}),
         },
         Entry {
             display: "new list".to_string(),
@@ -63,7 +62,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             matches: Vec::new(),
             face: progred_display::Face::Dim,
             source: None,
-            activate: Rc::new(|_| true),
+            activate: Rc::new(|_| {}),
         },
     ];
     let place_card = |pointer| {
@@ -120,7 +119,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             matches: Vec::new(),
             face: progred_display::Face::Dim,
             source: None,
-            activate: Rc::new(|_| true),
+            activate: Rc::new(|_| {}),
         })
         .collect();
     let styles = crate::styles::editor(1.0);
@@ -273,7 +272,6 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         source: None,
         activate: Rc::new(|state: &mut State| {
             state.committed = Some(Value::list([]));
-            true
         }),
     }];
     let styles = crate::styles::editor(1.0);
@@ -333,7 +331,6 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             display: "new record".into(),
             activate: Rc::new(|state: &mut State| {
                 state.committed = Some(Value::record([]));
-                true
             }),
             ..entries[0].clone()
         },
@@ -479,8 +476,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| true),
-            commit_label: Rc::new(|_, _, _, _| true),
+            commit_value: Rc::new(|_, _, _| {}),
+            commit_label: Rc::new(|_, _, _, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -509,7 +506,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             source: None,
             activate: Rc::new(|world: &mut ClickWorld| {
                 world.applied = Some(Vec::new());
-                true
             }),
         }],
         0,

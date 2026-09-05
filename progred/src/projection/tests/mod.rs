@@ -135,8 +135,8 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| true),
-            commit_label: Rc::new(|_, _, _, _| true),
+            commit_value: Rc::new(|_, _, _| {}),
+            commit_label: Rc::new(|_, _, _, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );

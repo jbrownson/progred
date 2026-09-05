@@ -5,7 +5,7 @@ use crate::identity::short_id;
 use crate::selection::parse_blob;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
-use progred_display::{ActionHandler, CompletionProvider, Face};
+use progred_display::{CompletionProvider, Face};
 use progred_libraries::{name, text};
 use std::ops::Range;
 use std::rc::Rc;
@@ -16,7 +16,7 @@ pub struct Entry<C> {
     pub matches: Vec<Range<usize>>,
     pub face: Face,
     pub source: Option<CellId>,
-    pub activate: ActionHandler<C>,
+    pub activate: Rc<dyn Fn(&mut C)>,
 }
 
 impl<C> Clone for Entry<C> {
@@ -34,12 +34,12 @@ impl<C> Clone for Entry<C> {
 
 /// The insertion capability supplied by the active completion site.
 pub enum Commit<C> {
-    Value(Rc<dyn Fn(&mut C, Value, Option<Value>) -> bool>),
-    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>) -> bool>),
+    Value(Rc<dyn Fn(&mut C, Value, Option<Value>)>),
+    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>)>),
 }
 
 impl<C: 'static> Commit<C> {
-    fn value(&self, value: Value, on_commit: Option<Value>) -> Option<ActionHandler<C>> {
+    fn value(&self, value: Value, on_commit: Option<Value>) -> Option<Rc<dyn Fn(&mut C)>> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();
@@ -50,12 +50,12 @@ impl<C: 'static> Commit<C> {
             Self::Label(commit) => value.as_cell().map(|cell| {
                 let commit = commit.clone();
                 Rc::new(move |world: &mut C| commit(world, cell, None, on_commit.clone()))
-                    as ActionHandler<C>
+                    as Rc<dyn Fn(&mut C)>
             }),
         }
     }
 
-    fn new_cell(&self) -> ActionHandler<C> {
+    fn new_cell(&self) -> Rc<dyn Fn(&mut C)> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();

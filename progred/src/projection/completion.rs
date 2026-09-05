@@ -201,11 +201,10 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         },
     );
     let set_view = Rc::new(set_view);
-    let expand: progred_display::ActionHandler<C> = {
+    let expand: Rc<dyn Fn(&mut C)> = {
         let set_view = set_view.clone();
         Rc::new(move |world| {
             set_view(world, scroll, choice, true);
-            true
         })
     };
     let items = widget
@@ -213,15 +212,7 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         .into_iter()
         .zip(entries)
         .enumerate()
-        .map(|(index, (row, entry))| {
-            let activate = entry.activate.clone();
-            let accept: progred_display::ActionHandler<C> = Rc::new(move |world| {
-                // A declined edit must not reinterpret this activation as raw query input.
-                activate(world);
-                true
-            });
-            (row, Hover::Entry(index), accept)
-        })
+        .map(|(index, (row, entry))| (row, Hover::Entry(index), entry.activate.clone()))
         .chain(
             widget
                 .more
@@ -278,7 +269,10 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         if event.state.is_down() {
             match event.key {
                 Key::Named(NamedKey::Enter) => {
-                    activate.as_ref().is_some_and(|activate| activate(world))
+                    activate.as_ref().is_some_and(|activate| {
+                        activate(world);
+                        true
+                    })
                 }
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
                     if !crate::modifiers::command(&event.modifiers) =>
@@ -299,7 +293,8 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
                 Key::Named(NamedKey::Tab)
                     if !everything && !crate::modifiers::command(&event.modifiers) =>
                 {
-                    expand(world)
+                    expand(world);
+                    true
                 }
                 _ => false,
             }
@@ -363,15 +358,19 @@ fn completion_row<C: 'static, Cv: Canvas + 'static>(
     row: puri_widgets::completion::Row,
     hover: Hover,
     chosen: bool,
-    activate: impl Fn(&mut C) -> bool + Clone + 'static,
+    activate: impl Fn(&mut C) + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
     leaf(
         placed::metrics_extent(row.metrics()),
         move |p, placement| {
             hover_claim(p, placement, hover.clone());
             let target = Hovered::Tree(hover.clone());
-            p.activate(target.clone(), activate.clone());
-            p.pick(target, activate);
+            let accept = move |world: &mut C| {
+                activate(world);
+                true
+            };
+            p.activate(target.clone(), accept.clone());
+            p.pick(target, accept);
             p.ink(move |canvas, ink| {
                 row.draw(canvas, placement, chosen, tree_hovered(ink) == Some(&hover));
             });
