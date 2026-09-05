@@ -7,6 +7,7 @@ use crate::sources::Sources;
 use gid::{CellId, Document, Resolution, Step, Value, new_cell_id};
 use progred_display::CompletionProvider;
 use progred_libraries::{Libraries, name, text};
+use std::ops::Range;
 
 /// A completion offer on a pending. The display styles itself by the
 /// action's kind at draw time.
@@ -15,7 +16,7 @@ pub struct Entry {
     pub display: String,
     pub detail: Option<String>,
     /// Byte spans of `display` the query matched, for highlighting.
-    pub matches: Vec<filter::Match>,
+    pub matches: Vec<Range<usize>>,
     /// The display spells a bare short id — an unnamed cell — so it
     /// draws in the id face, as ids do everywhere.
     pub id: bool,

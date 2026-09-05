@@ -5,16 +5,12 @@ use puri::{
     Affine, Canvas, Color, Placement, Rect, RoundedRect, Text, TextCtx, TextMetrics, TextStyle,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Match {
-    pub start: usize,
-    pub len: usize,
-}
+use std::ops::Range;
 
 pub struct Entry<'a> {
     pub display: &'a str,
     pub detail: Option<&'a str>,
-    pub matches: &'a [Match],
+    pub matches: &'a [Range<usize>],
     pub style: &'a TextStyle,
 }
 
@@ -133,7 +129,7 @@ pub struct Completion {
     pub more: Option<Row>,
 }
 
-fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Match], style: &TextStyle) -> Line {
+fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &TextStyle) -> Line {
     if matches.is_empty() {
         return Line::one(puri::text(tcx, text, style));
     }
@@ -147,12 +143,8 @@ fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Match], style: &TextSty
         if span.start > at {
             segments.push(puri::text(tcx, &text[at..span.start], style));
         }
-        segments.push(puri::text(
-            tcx,
-            &text[span.start..span.start + span.len],
-            &bold,
-        ));
-        at = span.start + span.len;
+        segments.push(puri::text(tcx, &text[span.clone()], &bold));
+        at = span.end;
     }
     if at < text.len() {
         segments.push(puri::text(tcx, &text[at..], style));

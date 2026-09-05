@@ -3017,26 +3017,12 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
-    let matches = entries
-        .iter()
-        .map(|entry| {
-            entry
-                .matches
-                .iter()
-                .map(|matched| puri_widgets::completion::Match {
-                    start: matched.start,
-                    len: matched.len,
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
     let widget_entries = entries
         .iter()
-        .zip(&matches)
-        .map(|(entry, matches)| puri_widgets::completion::Entry {
+        .map(|entry| puri_widgets::completion::Entry {
             display: &entry.display,
             detail: entry.detail.as_deref(),
-            matches,
+            matches: &entry.matches,
             style: match &entry.action {
                 EntryAction::Value(value) if text::read(value).is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
