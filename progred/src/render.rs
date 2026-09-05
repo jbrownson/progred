@@ -21,6 +21,24 @@ pub fn shaped_text<C: 'static, Cv: Canvas + 'static>(text: puri::Text) -> Measur
     })
 }
 
+pub fn drawing<C: 'static, Cv: Canvas + 'static>(
+    drawing: puri::Drawing<puri::Brush>,
+    scale: f64,
+) -> Measured<Placed<C, Cv>> {
+    placed::leaf(
+        measured::Extent {
+            width: drawing.width * scale,
+            ascent: drawing.ascent * scale,
+            descent: drawing.descent * scale,
+        },
+        move |canvas, placement| {
+            let transform = puri::Affine::translate((placement.rect.x0, placement.rect.y0))
+                * puri::Affine::scale(scale);
+            puri::draw::draw(drawing, canvas, transform, Clone::clone);
+        },
+    )
+}
+
 pub fn text_edit<C: 'static, Cv: Canvas + 'static>(
     description: LineEditDescription<'_>,
     tcx: &mut TextCtx,

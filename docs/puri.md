@@ -115,6 +115,17 @@ reports ascent/descent relative to the surrounding baseline. Ordinary rows
 then align it correctly without a new layout operation. The number projections
 use this for muted representation labels outside the editable digits.
 
+Puri's delimiter widget accepts a vertical span and text size and returns the
+existing `Drawing` description with its metrics. It owns minimum glyph height,
+baseline trimming, side bearings, and width growth. Progred reserves its maximum
+advance while choosing layouts, then composes the final delimiters beside the
+child and attaches selection/picking behavior.
+
+`puri-widgets::panel` supplies the common fill/border painter for popup cards
+and projection borders. Colors, stroke, radius, placement, paint order, and
+whether the surface blocks input are supplied by the host. Panel drawing owns
+no child layout, popup policy, or document state.
+
 Tests can drive pure descriptions and handlers without a window. Projection
 fixtures, interaction regressions, SVG export, and profiling live in
 [`projection/tests`](../progred/src/projection/tests/mod.rs). SVG tests are a

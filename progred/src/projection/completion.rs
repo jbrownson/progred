@@ -18,7 +18,8 @@ use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-use puri::{Affine, Canvas, Color, Point, RoundedRect, Stroke, Vec2};
+use puri::{Canvas, Color, Point, Stroke, Vec2};
+use puri_widgets::panel::Panel;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
 
@@ -323,16 +324,16 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
             false
         }
     });
+    let panel = Panel {
+        fill: Some(Color::WHITE.into()),
+        border: Some((
+            Stroke::new(scale),
+            Color::new([0.75, 0.77, 0.81, 1.0]).into(),
+        )),
+        radius: 6.0 * scale,
+    };
     before(card, move |p, placement| {
-        let rect = placement.rect;
-        let shape = RoundedRect::from_rect(rect, 6.0 * scale);
-        p.fill(shape, Color::new([1.0, 1.0, 1.0, 1.0]), Affine::IDENTITY);
-        p.stroke(
-            shape,
-            Stroke::new(1.0 * scale),
-            Color::new([0.75, 0.77, 0.81, 1.0]),
-            Affine::IDENTITY,
-        );
+        panel.place(p, placement);
         hover_block(p, placement);
     })
 }

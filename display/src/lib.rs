@@ -7,6 +7,7 @@
 
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
+pub use puri::delim::{Delim, Side};
 use puri::{Affine, Command, Drawing, Leaf, RoundedRect, Shape, Stroke};
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -59,24 +60,10 @@ pub struct LineEdit {
     pub family: TextFamily,
 }
 
-/// A layout-owned decoration whose geometry depends on the box it
-/// surrounds. It is deliberately not a display leaf.
+/// A delimiter whose Puri metrics and ink depend on the enclosed span.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Ink {
     Delim { delim: Delim, side: Side },
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Delim {
-    Paren,
-    Bracket,
-    Brace,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    Open,
-    Close,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -383,9 +370,8 @@ pub enum Layout<World, Hover> {
     Border {
         child: Box<Layout<World, Hover>>,
     },
-    /// Measure `child`, then give `left` and `right` the side
-    /// columns: flat advance by the child's height. Layout does not
-    /// paint them. Growth is typographic overhang.
+    /// Measure `child`, then place delimiter widgets beside its vertical
+    /// span. Their metrics include the full ink width and side bearings.
     Surround {
         left: Ink,
         child: Box<Layout<World, Hover>>,

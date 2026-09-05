@@ -8,6 +8,9 @@
 //! same shape at glyph height, near-monoline at the base weight. Ink
 //! spans exactly x in [0, bow-for-height] and y in [top, bottom].
 
+mod widget;
+pub use widget::{Side, maximum_advance, stretched};
+
 use kurbo::{Affine, Arc, BezPath, Point, Rect, Shape, Vec2};
 use std::f64::consts::{FRAC_PI_2, PI};
 

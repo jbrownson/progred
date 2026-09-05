@@ -3,3 +3,4 @@
 
 pub mod color_picker;
 pub mod completion;
+pub mod panel;

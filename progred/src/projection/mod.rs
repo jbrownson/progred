@@ -30,7 +30,7 @@ use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use location::Location;
 use measured::{Extent, Measured, pad, row};
 use peniko::{Brush, Color};
-use puri::delim::{self, Delim, DelimStyle};
+use puri::delim;
 use puri::draw::Canvas;
 use puri::edit::{
     EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
@@ -39,6 +39,7 @@ use puri::geometry::Placement;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
+use puri_widgets::panel::Panel;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -420,14 +421,15 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             let content = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *content, build,
             );
-            let fill = Color::new([0.985, 0.985, 0.99, 1.0]);
-            let stroke = cx.styles.dim.brush.clone();
+            let panel = Panel {
+                fill: Some(Color::new([0.985, 0.985, 0.99, 1.0]).into()),
+                border: Some((Stroke::new(scale), cx.styles.dim.brush.clone())),
+                radius: 6.0 * scale,
+            };
             ChoiceLayout::popover(trigger, content, move |trigger, content| {
                 let card = measured::pad(Insets::uniform(10.0 * scale), content);
                 let card = before(card, move |p, placement| {
-                    let shape = RoundedRect::from_rect(placement.rect, 6.0 * scale);
-                    p.fill(shape, fill, Affine::IDENTITY);
-                    p.stroke(shape, Stroke::new(scale), stroke, Affine::IDENTITY);
+                    panel.place(p, placement);
                     p.occlude(placement);
                 });
                 placed::popover(trigger, card, 4.0 * scale)
@@ -549,14 +551,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                     .collect(),
             )
         }
-    }
-}
-
-fn display_delim(delim: progred_display::Delim) -> Delim {
-    match delim {
-        progred_display::Delim::Paren => Delim::Paren,
-        progred_display::Delim::Bracket => Delim::Bracket,
-        progred_display::Delim::Brace => Delim::Brace,
     }
 }
 
@@ -772,21 +766,13 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     drawing: puri::Drawing<progred_display::Paint>,
 ) -> Measured<Placed<C, Cv>> {
-    let scale = styles.scale;
-    let extent = Extent {
-        width: drawing.width * scale,
-        ascent: drawing.ascent * scale,
-        descent: drawing.descent * scale,
-    };
-    let drawing = drawing.map_paint(|paint| match paint {
-        progred_display::Paint::Face(face) => face_style(styles, face).brush.clone(),
-        progred_display::Paint::Brush(brush) => brush,
-    });
-    leaf(extent, move |p, placement| {
-        let transform =
-            Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
-        puri::draw::draw(drawing, p, transform, Clone::clone);
-    })
+    render::drawing(
+        drawing.map_paint(|paint| match paint {
+            progred_display::Paint::Face(face) => face_style(styles, face).brush.clone(),
+            progred_display::Paint::Brush(brush) => brush,
+        }),
+        styles.scale,
+    )
 }
 
 /// Host callbacks for library value offers, selection, editing,
@@ -913,103 +899,10 @@ fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
     LineEditPresentation::new(style.size, style.brush.clone())
 }
 
-/// The delimiter metrics that marry the drawn family to the text:
-/// the system font's own glyphs span -0.704..+0.171 em around the
-/// baseline while its line box spans -0.929..+0.249, so a stretched
-/// delimiter trims the difference at each end — it meets the glyph
-/// span on its first and last lines, and a one-line span IS the
-/// glyph's. Measured by `puri`'s delimiter_bench example.
-const GLYPH_ASC_EM: f64 = 0.704;
-const GLYPH_DESC_EM: f64 = 0.171;
-const TOP_TRIM_EM: f64 = 0.929 - GLYPH_ASC_EM;
-const BOTTOM_TRIM_EM: f64 = 0.249 - GLYPH_DESC_EM;
-const SIDE_BEARING_EM: f64 = 0.05;
-
-fn delim_style(scale: f64) -> DelimStyle {
-    DelimStyle::for_text_size(14.0 * scale)
-}
-
-/// The delimiter width reserved while responsive choices are being
-/// selected. The child's final height is not known until its choice
-/// settles, so reserve the capped grown width; the final leaf below
-/// takes only its actual height-derived width.
-fn delim_advance(scale: f64, delim: Delim) -> f64 {
-    delim_style(scale).bow(delim) * delim::MAX_GROWTH + 2.0 * SIDE_BEARING_EM * 14.0 * scale
-}
-
 fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
     match ink {
-        progred_display::Ink::Delim { delim, .. } => delim_advance(scale, display_delim(*delim)),
+        progred_display::Ink::Delim { delim, .. } => delim::maximum_advance(*delim, 14.0 * scale),
     }
-}
-
-/// A drawn delimiter leaf whose box grows with and contains its ink.
-/// `extent` supplies the vertical span while `ink_top..ink_bottom`
-/// determines the common height-sensitive width of every delimiter
-/// family. Side bearings are part of the box and therefore of its
-/// honest hover target.
-fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    delim: Delim,
-    open: bool,
-    extent: Extent,
-    ink_top: f64,
-    ink_bottom: f64,
-    brush: Brush,
-) -> Measured<Placed<C, Cv>> {
-    let style = delim_style(scale);
-    let bearing = SIDE_BEARING_EM * 14.0 * scale;
-    let bow = style.bow_for(delim, extent.ascent + extent.descent);
-    let path = if open {
-        delim::open_with_width(delim, &style, ink_top, ink_bottom, bow)
-    } else {
-        delim::close_with_width(delim, &style, ink_top, ink_bottom, bow)
-    };
-    let ink_x = bearing;
-    leaf(
-        Extent {
-            width: bow + 2.0 * bearing,
-            ..extent
-        },
-        move |p, placement| {
-            let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
-            p.fill(
-                path.clone(),
-                brush.clone(),
-                Affine::translate((at.x + ink_x, at.y)),
-            );
-        },
-    )
-}
-
-/// A delimiter stretched over `content`'s extent, ink trimmed to meet
-/// the glyph span on the first and last lines. The charged span never
-/// shrinks below the glyph's own, so an empty pair still stands a
-/// glyph tall — and one-line content gets exactly the flat form.
-fn tall_delim<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    delim: Delim,
-    open: bool,
-    content: Extent,
-    brush: Brush,
-) -> Measured<Placed<C, Cv>> {
-    let em = 14.0 * scale;
-    let content = Extent {
-        width: content.width,
-        ascent: content.ascent.max(GLYPH_ASC_EM * em),
-        descent: content.descent.max(GLYPH_DESC_EM * em),
-    };
-    let (ink_top, ink_bottom) = match delim {
-        // Square caps visibly define the enclosure, so they meet the
-        // full measured box rather than the glyph ink within its
-        // first and last line boxes.
-        Delim::Bracket => (-content.ascent, content.descent),
-        Delim::Paren | Delim::Brace => (
-            -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em),
-            (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em),
-        ),
-    };
-    delim_leaf(scale, delim, open, content, ink_top, ink_bottom, brush)
 }
 
 fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
@@ -1024,28 +917,23 @@ fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
     }
 }
 
-fn glyph_extent(scale: f64) -> Extent {
-    let em = 14.0 * scale;
-    Extent {
-        width: 0.0,
-        ascent: GLYPH_ASC_EM * em,
-        descent: GLYPH_DESC_EM * em,
-    }
-}
-
 fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     brush: Brush,
     ink: progred_display::Ink,
-    stretch: Option<Extent>,
+    content: Extent,
 ) -> Measured<Placed<C, Cv>> {
     match ink {
-        progred_display::Ink::Delim { delim, side } => tall_delim(
-            scale,
-            display_delim(delim),
-            matches!(side, progred_display::Side::Open),
-            stretch.unwrap_or_else(|| glyph_extent(scale)),
-            brush,
+        progred_display::Ink::Delim { delim, side } => render::drawing(
+            delim::stretched(
+                delim,
+                side,
+                14.0 * scale,
+                content.ascent,
+                content.descent,
+                brush,
+            ),
+            1.0,
         ),
     }
 }
@@ -1070,13 +958,18 @@ fn bordered<C: 'static, Cv: Canvas + 'static>(
     brush: Brush,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
+    let panel = Panel {
+        fill: None,
+        border: Some((Stroke::new(scale), brush)),
+        radius: 0.0,
+    };
     measured::around(child, move |placement, inner| {
         let mut placed = inner.place();
         if !placement.clipped_out() {
-            let rect = placement.rect.inset(-0.5 * scale);
-            placed.renders.push(Box::new(move |cv, _| {
-                cv.stroke(rect, Stroke::new(scale), brush, Affine::IDENTITY)
-            }));
+            let placement = Placement::new(placement.rect.inset(-0.5 * scale), placement.clip_rect);
+            placed
+                .renders
+                .push(Box::new(move |cv, _| panel.place(cv, placement)));
         }
         placed
     })
@@ -1110,7 +1003,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
                 pick.clone(),
                 pad(
                     Insets::new(0.0, 0.0, gap, 0.0),
-                    ink_leaf(scale, brush.clone(), left, Some(extent)),
+                    ink_leaf(scale, brush.clone(), left, extent),
                 ),
             ),
             content,
@@ -1121,7 +1014,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
                 pick,
                 pad(
                     Insets::new(gap, 0.0, 0.0, 0.0),
-                    ink_leaf(scale, brush, right, Some(extent)),
+                    ink_leaf(scale, brush, right, extent),
                 ),
             ),
         ],

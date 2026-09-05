@@ -1,5 +1,4 @@
 use super::*;
-use kurbo::Shape as _;
 
 #[test]
 fn secondary_marks_only_the_same_definition_in_other_occurrences() {
@@ -562,66 +561,4 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         &paren.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.is_empty()
     ));
-}
-
-#[test]
-fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
-    let mut expected_width = None;
-    let bearing = SIDE_BEARING_EM * 14.0;
-    for delim in [Delim::Paren, Delim::Bracket, Delim::Brace] {
-        for open in [true, false] {
-            let node = tall_delim::<World, Bench>(
-                1.0,
-                delim,
-                open,
-                Extent {
-                    width: 0.0,
-                    ascent: 80.0,
-                    descent: 80.0,
-                },
-                Color::BLACK.into(),
-            );
-            let rect = node.extent.rect_at(Point::new(20.0, 100.0));
-            let width = *expected_width.get_or_insert(rect.width());
-            assert!((rect.width() - width).abs() < 1e-6);
-            let bench = settle(measured::place(node, Placement::root(rect)), None);
-            let [
-                DrawCmd::Fill {
-                    shape: Shape::Path(path),
-                    transform,
-                    ..
-                },
-            ] = &bench.list.0[..]
-            else {
-                panic!("a delimiter is one filled path");
-            };
-            let mut path = path.clone();
-            path.apply_affine(*transform);
-            let ink = path.bounding_box();
-            assert!((ink.x0 - (rect.x0 + bearing)).abs() < 1e-6);
-            assert!((ink.x1 - (rect.x1 - bearing)).abs() < 1e-6);
-            match delim {
-                Delim::Bracket => {
-                    assert!((ink.y0 - rect.y0).abs() < 1e-6);
-                    assert!((ink.y1 - rect.y1).abs() < 1e-6);
-                }
-                Delim::Paren | Delim::Brace => assert!(
-                    ink.y0 >= rect.y0 && ink.y1 <= rect.y1,
-                    "{ink:?} outside {rect:?}"
-                ),
-            }
-        }
-    }
-
-    let content = Extent {
-        width: 0.0,
-        ascent: 20.0,
-        descent: 10.0,
-    };
-    let widths = [Delim::Paren, Delim::Bracket, Delim::Brace].map(|delim| {
-        tall_delim::<World, Bench>(1.0, delim, true, content, Color::BLACK.into())
-            .extent
-            .width
-    });
-    assert_eq!(widths, [widths[0]; 3]);
 }
