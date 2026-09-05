@@ -186,16 +186,6 @@ impl Definitions {
     }
 
     #[cfg(test)]
-    pub fn merge(mut self, other: Self) -> Self {
-        for (cell, definitions) in other.entries {
-            for definition in definitions {
-                self.insert(cell, definition);
-            }
-        }
-        self
-    }
-
-    #[cfg(test)]
     pub fn functions(&self) -> ForeignFunctions {
         self.entries
             .iter()
@@ -301,38 +291,6 @@ impl<World, Hover> Library<World, Hover> {
     #[cfg(test)]
     pub fn functions(&self) -> ForeignFunctions {
         self.definitions.functions()
-    }
-
-    #[cfg(test)]
-    pub fn merge(self, other: Self) -> Self {
-        Self {
-            metadata: self.metadata,
-            definitions: self.definitions.merge(other.definitions),
-            projections: self
-                .projections
-                .into_iter()
-                .chain(other.projections)
-                .collect(),
-            root_completions: self
-                .root_completions
-                .into_iter()
-                .chain(other.root_completions)
-                .collect(),
-            root_field_completions: self
-                .root_field_completions
-                .into_iter()
-                .chain(other.root_field_completions)
-                .collect(),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn merge_all(libraries: impl IntoIterator<Item = Self>) -> Self {
-        let mut libraries = libraries.into_iter();
-        libraries
-            .next()
-            .map(|first| libraries.fold(first, Self::merge))
-            .unwrap_or_default()
     }
 }
 
@@ -461,10 +419,6 @@ impl Libraries {
             .iter()
             .flat_map(|(_, _, definitions)| definitions.entries.iter().map(|(cell, _)| *cell))
     }
-
-    pub fn ptr_eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.entries, &other.entries)
-    }
 }
 
 #[cfg(test)]
@@ -523,42 +477,52 @@ mod tests {
         left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-        let merged = Library::merge_all([
-            Library::named(
-                "left",
-                Definitions::from_parts(
-                    left_cells,
-                    ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+        let (libraries, projections, _, _) = Libraries::from_contributions([
+            (
+                LEFT_LIBRARY,
+                Library::named(
+                    "left",
+                    Definitions::from_parts(
+                        left_cells,
+                        ForeignFunctions::default()
+                            .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                    ),
+                    vec![progred_display::partial(left_projection)],
                 ),
-                vec![progred_display::partial(left_projection)],
             ),
-            Library::named(
-                "right",
-                Definitions::from_parts(
-                    right_cells,
-                    ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
+            (
+                RIGHT_LIBRARY,
+                Library::named(
+                    "right",
+                    Definitions::from_parts(
+                        right_cells,
+                        ForeignFunctions::default()
+                            .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
+                    ),
+                    vec![progred_display::partial(right_projection)],
                 ),
-                vec![progred_display::partial(right_projection)],
             ),
         ]);
 
         assert_eq!(
-            merged.value(SHARED_CELL),
-            Some(&Value::from(b"right".to_vec()))
+            libraries
+                .values(SHARED_CELL)
+                .map(|definition| (definition.library, definition.value.clone()))
+                .collect::<Vec<_>>(),
+            [
+                (LEFT_LIBRARY, Value::from(b"left".to_vec())),
+                (RIGHT_LIBRARY, Value::from(b"right".to_vec()))
+            ]
         );
-        assert_eq!(merged.definitions.get(SHARED_CELL).len(), 1);
-        assert_eq!(crate::name::read(&merged.metadata), Some("left"));
         assert_eq!(
             grap_runtime::evaluate(
                 &grap_runtime::call(Value::from(SHARED_FUNCTION), []),
-                |cell| merged
-                    .definitions
-                    .get(cell)
-                    .iter()
-                    .cloned()
-                    .map(|definition| (gid::Resolution::Document, definition))
+                |cell| libraries
+                    .definitions(cell)
+                    .map(|definition| (
+                        gid::Resolution::Library(definition.library),
+                        definition.definition.cloned()
+                    ))
                     .collect(),
                 10,
             )
@@ -567,8 +531,7 @@ mod tests {
         );
         let value = Value::record([]);
         assert_eq!(
-            merged
-                .projections
+            projections
                 .iter()
                 .map(|projection| {
                     let target = |_| progred_display::ProjectionTarget {
