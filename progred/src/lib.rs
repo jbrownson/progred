@@ -1457,8 +1457,8 @@ impl Editor {
                 .filter(|selection| selection.root() == &root && selection.path() == path)
                 .map(selection::Selection::recorded);
             if let Some(recorded) = recorded {
-                let mut next = selection::Selection::from_payload(&self.sources(), path, payload)
-                    .with_root(root);
+                let mut next =
+                    selection::Selection::from_payload(&root, &self.sources(), path, payload);
                 next.preserve_recorded(recorded);
                 self.model.selection = Some(next);
             }
@@ -1656,8 +1656,7 @@ impl Editor {
                 .view
                 .root
                 .clone();
-            self.model.selection =
-                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
+            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
             self.refresh_title();
             true
         } else {
@@ -1810,8 +1809,8 @@ impl Editor {
         };
         if let Some((doc, restore)) = restored {
             self.model.doc = doc;
-            self.model.selection = restore
-                .map(|path| selection::Selection::edge(&self.sources(), path).with_root(root));
+            self.model.selection =
+                restore.map(|path| selection::Selection::edge(&root, &self.sources(), path));
             self.refresh_title();
         }
     }

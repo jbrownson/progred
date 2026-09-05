@@ -1,12 +1,10 @@
 //! Per-site access to the editor's annotation trie. GET and SET never
-//! take a path: the host merges [`at`] when it has a place (a click,
-//! a projection). They are not global functions.
+//! take a path: the host supplies them while dispatching an event
+//! at a projection site. The library contributes only their vocabulary.
 
-use crate::{Library, absent, name};
-use gid::Value;
+use crate::{Library, name};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xab8d8d4b75ef3526d258d2689f95daba);
-use grap_runtime::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -19,39 +17,6 @@ pub mod vocabulary {
     pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
     pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
     pub const EXPANDED: CellId = CellId::from_u128(0x1d5b0c47e8f6a923d7405c9128b3fae6);
-}
-
-/// Overlay GET/SET closed over one place. `get` is the current value
-/// (None means absent); `set` writes (None clears). The editor
-/// supplies these; Grap never sees the path.
-pub fn at(
-    get: impl Fn() -> Option<Value> + 'static,
-    set: impl Fn(Option<Value>) + 'static,
-) -> ForeignFunctions {
-    let get = std::rc::Rc::new(get);
-    let set = std::rc::Rc::new(set);
-    ForeignFunctions::default()
-        .register(
-            vocabulary::GET,
-            ForeignFunction::new({
-                let get = get.clone();
-                move |_, _, _| Ok(get().unwrap_or_else(absent::value))
-            }),
-        )
-        .register(
-            vocabulary::SET,
-            ForeignFunction::runtime({
-                let set = set;
-                move |context, call, environment| {
-                    let Some(value) = context.field(call, vocabulary::VALUE) else {
-                        return Ok(context.missing_runtime_argument(vocabulary::VALUE));
-                    };
-                    let value = context.eval_runtime(value, environment)?;
-                    set((!value.is_absent()).then(|| value.to_value()));
-                    Ok(value)
-                }
-            }),
-        )
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {
@@ -76,83 +41,8 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::control;
+    use gid::Value;
     use grap_runtime as grap;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    fn store() -> (Rc<RefCell<Option<Value>>>, ForeignFunctions) {
-        let value = Rc::new(RefCell::new(None));
-        let foreign = at(
-            {
-                let value = value.clone();
-                move || value.borrow().clone()
-            },
-            {
-                let value = value.clone();
-                move |next| *value.borrow_mut() = next
-            },
-        );
-        (value, foreign)
-    }
-
-    fn quote(value: Value) -> Value {
-        grap::call(
-            Value::from(control::vocabulary::QUOTE),
-            [(grap::vocabulary::EXPRESSION, value)],
-        )
-    }
-
-    #[test]
-    fn get_and_set_the_closed_over_value() {
-        let (stored, site) = store();
-        let foreign = control::functions().merge(site);
-        assert!(absent::is_absent(
-            &crate::test_evaluate(
-                &grap::call(Value::from(vocabulary::GET), []),
-                |_| None,
-                &foreign,
-                10,
-            )
-            .result
-        ));
-
-        let written = Value::record([(vocabulary::FOLD, Value::from(vocabulary::FOLDED))]);
-        let set = crate::test_evaluate(
-            &grap::call(
-                Value::from(vocabulary::SET),
-                [(vocabulary::VALUE, quote(written.clone()))],
-            ),
-            |_| None,
-            &foreign,
-            30,
-        );
-
-        assert_eq!(set.result, written);
-        assert_eq!(&*stored.borrow(), &Some(written.clone()));
-        assert_eq!(
-            crate::test_evaluate(
-                &grap::call(Value::from(vocabulary::GET), []),
-                |_| None,
-                &foreign,
-                10,
-            )
-            .result,
-            written
-        );
-
-        let cleared = crate::test_evaluate(
-            &grap::call(
-                Value::from(vocabulary::SET),
-                [(vocabulary::VALUE, absent::value())],
-            ),
-            |_| None,
-            &foreign,
-            10,
-        );
-        assert!(absent::is_absent(&cleared.result));
-        assert!(stored.borrow().is_none());
-    }
 
     #[test]
     fn without_an_overlay_they_are_not_callable() {

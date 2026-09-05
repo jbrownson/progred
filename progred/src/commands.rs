@@ -54,7 +54,7 @@ impl Editor {
                     }
                     let next = navigate::selection_after_delete(descends, Some(&root), &path);
                     self.model.selection =
-                        Some(selection::Selection::edge(&self.sources(), next).with_root(root));
+                        Some(selection::Selection::edge(&root, &self.sources(), next));
                     true
                 }
             }
@@ -122,8 +122,7 @@ impl Editor {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection =
-            Some(selection::Selection::edge(&self.sources(), path).with_root(root));
+        self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
     }
 
     /// A resolved new label advances the pending edge to its value
@@ -142,8 +141,7 @@ impl Editor {
         let mut path = parent.clone();
         path.push(Step::Key(label));
         if self.sources().resolve_path(&path).is_some() {
-            self.model.selection =
-                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
+            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
             return;
         }
         if let Some((cell, value)) = created {
@@ -152,7 +150,7 @@ impl Editor {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(selection::pending_value(path).with_root(root));
+        self.model.selection = Some(selection::pending_value(&root, path));
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -298,8 +296,7 @@ impl Editor {
         if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
-            self.model.selection =
-                Some(selection::Selection::edge(&self.sources(), path).with_root(root));
+            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
             true
         } else {
             false
@@ -354,17 +351,15 @@ impl Editor {
                             .unwrap_or_else(|| self.model.workspace.document_root().clone());
                         let started = match selection.as_ref() {
                             Some(current) if modifiers::command(&event.modifiers) => {
-                                selection::pending_insert(&sources, current.path(), shift)
+                                selection::pending_insert(&root, &sources, current.path(), shift)
                             }
                             Some(current) => {
-                                selection::pending_enter(&sources, current.path(), shift)
+                                selection::pending_enter(&root, &sources, current.path(), shift)
                             }
-                            None => selection::pending_root(&sources),
+                            None => selection::pending_root(&root, &sources),
                         };
                         let began = started.is_some();
-                        self.model.selection = started
-                            .map(|selection| selection.with_root(root))
-                            .or(selection);
+                        self.model.selection = started.or(selection);
                         began
                     }
                 },
@@ -383,20 +378,16 @@ impl Editor {
                             // would pend again.
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
-                            .then(|| {
-                                selection::Selection::edge(&self.sources(), back).with_root(root)
-                            });
+                            .then(|| selection::Selection::edge(&root, &self.sources(), back));
                             true
                         }
                         Some(current) if current.stage() == selection::Stage::Label => {
                             let root = current.root().clone();
-                            self.model.selection = Some(
-                                selection::Selection::edge(
-                                    &self.sources(),
-                                    current.path().to_vec(),
-                                )
-                                .with_root(root),
-                            );
+                            self.model.selection = Some(selection::Selection::edge(
+                                &root,
+                                &self.sources(),
+                                current.path().to_vec(),
+                            ));
                             true
                         }
                         _ => false,

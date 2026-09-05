@@ -2,11 +2,9 @@
 //! overlays these functions only while dispatching an event there;
 //! Grap never receives the site's document path.
 
-use crate::{Library, absent, name};
-use gid::Value;
+use crate::{Library, name};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xbd9a8ecaa53276087806022499c6a61e);
-use grap_runtime::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -14,33 +12,6 @@ pub mod vocabulary {
     pub const GET: CellId = CellId::from_u128(0x67de640ac4e9859c87668564bc008ea0);
     pub const SET: CellId = CellId::from_u128(0xa12f30681dc2a8465da7673a7e2da9a8);
     pub use crate::site::vocabulary::VALUE;
-}
-
-pub fn at(
-    get: impl Fn() -> Option<Value> + 'static,
-    set: impl Fn(Option<Value>) + 'static,
-) -> ForeignFunctions {
-    let get = std::rc::Rc::new(get);
-    let set = std::rc::Rc::new(set);
-    ForeignFunctions::default()
-        .register(
-            vocabulary::GET,
-            ForeignFunction::new({
-                let get = get.clone();
-                move |_, _, _| Ok(get().unwrap_or_else(absent::value))
-            }),
-        )
-        .register(
-            vocabulary::SET,
-            ForeignFunction::runtime(move |context, call, environment| {
-                let Some(value) = context.field(call, vocabulary::VALUE) else {
-                    return Ok(context.missing_runtime_argument(vocabulary::VALUE));
-                };
-                let value = context.eval_runtime(value, environment)?;
-                set((!value.is_absent()).then(|| value.to_value()));
-                Ok(value)
-            }),
-        )
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {
@@ -61,36 +32,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    #[test]
-    fn the_overlay_reads_and_replaces_only_the_current_payload() {
-        let payload = Rc::new(RefCell::new(None));
-        let functions = at(
-            {
-                let payload = payload.clone();
-                move || payload.borrow().clone()
-            },
-            {
-                let payload = payload.clone();
-                move |next| *payload.borrow_mut() = next
-            },
-        );
-        let next = Value::record([]);
-        let result = crate::test_evaluate(
-            &grap_runtime::call(
-                Value::from(vocabulary::SET),
-                [(vocabulary::VALUE, next.clone())],
-            ),
-            |_| None,
-            &functions,
-            10,
-        );
-
-        assert_eq!(result.result, next);
-        assert_eq!(&*payload.borrow(), &Some(next));
-    }
+    use gid::Value;
 
     #[test]
     fn the_vocabulary_alone_grants_no_selection_access() {

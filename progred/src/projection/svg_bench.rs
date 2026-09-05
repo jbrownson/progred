@@ -387,7 +387,11 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         gid::Resolution::Document,
         gid::Resolution::Library(name::ID),
     ] {
-        let selected = Selection::edge(&sources, path(0, source));
+        let selected = Selection::edge(
+            &crate::workspace::Root::document(),
+            &sources,
+            path(0, source),
+        );
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .descends
@@ -759,6 +763,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
                 world.selection = Some(Selection::from_line(
+                    &crate::workspace::Root::document(),
                     &Sources {
                         doc: &world.doc,
                         libraries: &world.libraries,
@@ -1072,7 +1077,9 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             .expect("walk stops on placed descends")
             .rect
     };
-    let select = |path: &[Step]| crate::selection::bare_edge(path.to_vec());
+    let select = |path: &[Step]| {
+        crate::selection::bare_edge(&crate::workspace::Root::document(), path.to_vec())
+    };
     let mut selection: Option<Selection> = None;
     let mut walk: Vec<Path> = Vec::new();
     while walk.len() < 200 {
@@ -1776,7 +1783,10 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The engaged twin: same slot, same rect, selection blue.
     render(
         &empty,
-        Some(&pending_value(Vec::new())),
+        Some(&pending_value(
+            &crate::workspace::Root::document(),
+            Vec::new(),
+        )),
         320.0,
         "raw_placeholder_engaged.svg",
     );
@@ -1796,6 +1806,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     render(
         &empty,
         Some(&crate::selection::pending_with_query(
+            &crate::workspace::Root::document(),
             Vec::new(),
             "\"asdf\"",
         )),
@@ -1807,7 +1818,10 @@ fn svg_bench_renders_the_placeholder_notation() {
             root: Some(crate::test_values::text("asdf")),
             cells: Cells::new(),
         },
-        Some(&crate::selection::bare_edge(Vec::new())),
+        Some(&crate::selection::bare_edge(
+            &crate::workspace::Root::document(),
+            Vec::new(),
+        )),
         320.0,
         "raw_placeholder_committed.svg",
     );
@@ -1819,6 +1833,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     };
     let stack = crate::stack::load::<World>();
     let sel = Selection::edge(
+        &crate::workspace::Root::document(),
         &Sources {
             doc: &empty_string,
             libraries: &stack.libraries,
@@ -1838,6 +1853,7 @@ fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
     let library = crate::stack::load::<()>().libraries;
     let edge = pending_edge(
+        &crate::workspace::Root::document(),
         &Sources {
             doc: &doc,
             libraries: &library,
@@ -1960,6 +1976,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
                 world.selection = Some(Selection::from_line(
+                    &crate::workspace::Root::document(),
                     &Sources {
                         doc: &world.doc,
                         libraries: &world.libraries,

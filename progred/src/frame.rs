@@ -644,8 +644,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             }
         };
         if fresh {
-            let next =
-                selection::Selection::edge(&app.sources(), path).with_root(select_root.clone());
+            let next = selection::Selection::edge(&select_root, &app.sources(), path);
             app.model.selection = Some(next);
         } else if let Some(line) = app
             .model
@@ -660,16 +659,20 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
         select: select.clone(),
         select_source: Rc::new(Editor::select_drawing_source),
         select_payload: Rc::new(move |app: &mut Editor, path, payload| {
-            app.model.selection = Some(
-                selection::Selection::from_payload(&app.sources(), path, payload)
-                    .with_root(payload_root.clone()),
-            );
+            app.model.selection = Some(selection::Selection::from_payload(
+                &payload_root,
+                &app.sources(),
+                path,
+                payload,
+            ));
         }),
         start_edit: Rc::new(move |app: &mut Editor, path, line| {
-            app.model.selection = Some(
-                selection::Selection::from_line(&app.sources(), path, line)
-                    .with_root(edit_root.clone()),
-            );
+            app.model.selection = Some(selection::Selection::from_line(
+                &edit_root,
+                &app.sources(),
+                path,
+                line,
+            ));
         }),
         toggle: Rc::new(move |app: &mut Editor, path| {
             let Some(view) = app.model.workspace.view_mut(&toggle_root) else {
@@ -698,8 +701,8 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
         edit: Rc::new(edit_ctx),
         pick: Rc::new(|app: &mut Editor, id| app.pick_identity(id)),
         insert: Rc::new(move |app: &mut Editor, path| {
-            if let Some(pending) = selection::pending_after(&app.sources(), &path) {
-                app.model.selection = Some(pending.with_root(insert_root.clone()));
+            if let Some(pending) = selection::pending_after(&insert_root, &app.sources(), &path) {
+                app.model.selection = Some(pending);
             }
         }),
         delete: Rc::new(|app: &mut Editor| {

@@ -59,10 +59,19 @@ impl Selection {
     /// boundary used by current-site Grap capabilities: the address
     /// never enters the payload. Editor fields are decoded once into
     /// their live owner, then removed from the stored payload.
-    pub(crate) fn from_payload(sources: &Sources, path: Path, payload: Value) -> Self {
+    pub(crate) fn from_payload(
+        root: &workspace::Root,
+        sources: &Sources,
+        path: Path,
+        payload: Value,
+    ) -> Self {
         match payload::stage(&payload) {
-            Some(stage) if stage == payload::vocabulary::PENDING => query_selection(path, payload),
-            Some(stage) if stage == payload::vocabulary::LABEL => query_selection(path, payload),
+            Some(stage) if stage == payload::vocabulary::PENDING => {
+                query_selection(root, path, payload)
+            }
+            Some(stage) if stage == payload::vocabulary::LABEL => {
+                query_selection(root, path, payload)
+            }
             _ => {
                 let editor = payload
                     .as_record()
@@ -78,7 +87,7 @@ impl Selection {
                         })
                     });
                 Self {
-                    root: workspace::Root::document(),
+                    root: root.clone(),
                     path,
                     payload: if editor.is_some() {
                         payload::without_editor(&payload)
@@ -98,7 +107,7 @@ impl Selection {
     /// there to select, only something to begin, so it pends
     /// immediately: the empty document's root, and a valueless
     /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge(sources: &Sources, path: Path) -> Self {
+    pub fn edge(root: &workspace::Root, sources: &Sources, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
             Some((Step::Follow(resolution), parent)) => sources
@@ -110,9 +119,9 @@ impl Selection {
             _ => false,
         };
         if empty_slot {
-            return pending_value(path);
+            return pending_value(root, path);
         }
-        edge_selection(path, None)
+        edge_selection(root, path, None)
     }
 
     /// Mount a line control already chosen by the current frame. This
@@ -120,12 +129,13 @@ impl Selection {
     /// projection the user clicked, without re-projecting after the
     /// selection transition.
     pub(crate) fn from_line(
+        root: &workspace::Root,
         sources: &Sources,
         path: Path,
         line: progred_display::LineEdit,
     ) -> Self {
         let editor = writable_at(sources, &path).then(|| line_editing(line));
-        edge_selection(path, editor)
+        edge_selection(root, path, editor)
     }
 
     pub fn path(&self) -> &[Step] {
@@ -134,14 +144,6 @@ impl Selection {
 
     pub fn root(&self) -> &workspace::Root {
         &self.root
-    }
-
-    /// Attach a freshly constructed selection to the view whose
-    /// projection created it. Selection constructors stay useful in
-    /// path-only tests while the shell supplies the real Rc root.
-    pub fn with_root(mut self, root: workspace::Root) -> Self {
-        self.root = root;
-        self
     }
 
     pub(crate) fn relocate(&mut self, root: workspace::Root, path: Path) {
@@ -249,9 +251,9 @@ impl Selection {
     }
 }
 
-fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
+fn edge_selection(root: &workspace::Root, path: Path, editor: Option<Editor>) -> Selection {
     Selection {
-        root: workspace::Root::document(),
+        root: root.clone(),
         path,
         payload: payload::edge(),
         editor,
@@ -386,15 +388,15 @@ pub fn delete_edge(doc: &mut Document, libraries: &Libraries, path: &[Step]) -> 
 
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
-pub fn pending_value(path: Path) -> Selection {
-    pending_with_query(path, "")
+pub fn pending_value(root: &workspace::Root, path: Path) -> Selection {
+    pending_with_query(root, path, "")
 }
 
 /// An edge with no editor mounted — the test paths' plain selection.
 #[cfg(test)]
-pub(crate) fn bare_edge(path: Path) -> Selection {
+pub(crate) fn bare_edge(root: &workspace::Root, path: Path) -> Selection {
     Selection {
-        root: workspace::Root::document(),
+        root: root.clone(),
         path,
         payload: payload::edge(),
         editor: None,
@@ -402,16 +404,16 @@ pub(crate) fn bare_edge(path: Path) -> Selection {
 }
 
 /// A value pending with a seeded query — the clipboard and test paths.
-pub(crate) fn pending_with_query(path: Path, seed: &str) -> Selection {
-    query_selection(path, payload::pending(seed, 0))
+pub(crate) fn pending_with_query(root: &workspace::Root, path: Path, seed: &str) -> Selection {
+    query_selection(root, path, payload::pending(seed, 0))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
-fn query_selection(path: Path, payload: Value) -> Selection {
+fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Selection {
     let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
-        root: workspace::Root::document(),
+        root: root.clone(),
         path,
         payload: payload::without_editor(&payload),
         editor: Some(Editor {
@@ -434,7 +436,7 @@ fn sole_value<'a>(sources: &Sources<'a>, cell: CellId) -> Option<crate::sources:
     values.next().is_none().then_some(value)
 }
 
-pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
+pub fn pending_edge(root: &workspace::Root, sources: &Sources, parent: Path) -> Option<Selection> {
     let value = sources.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
@@ -448,12 +450,16 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
         Value::Blob(_) | Value::List(_) => return None,
     };
     writable_at(sources, &parent).then_some(())?;
-    Some(query_selection(parent, payload::label("", 0)))
+    Some(query_selection(root, parent, payload::label("", 0)))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub fn pending_follow(sources: &Sources, path: &[Step]) -> Option<Selection> {
+pub fn pending_follow(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+) -> Option<Selection> {
     let cell = sources.resolve_path(path)?.as_cell()?;
     sources.values(cell).next().is_none().then_some(())?;
     sources
@@ -461,13 +467,18 @@ pub fn pending_follow(sources: &Sources, path: &[Step]) -> Option<Selection> {
         .then_some(())?;
     let mut followed = path.to_vec();
     followed.push(Step::Follow(Resolution::Document));
-    Some(pending_value(followed))
+    Some(pending_value(root, followed))
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
-fn pending_beside(sources: &Sources, path: &[Step], after: bool) -> Option<Selection> {
+fn pending_beside(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+    after: bool,
+) -> Option<Selection> {
     let (step, parent_path) = path.split_last()?;
     let Step::Element(position) = step else {
         return None;
@@ -486,22 +497,35 @@ fn pending_beside(sources: &Sources, path: &[Step], after: bool) -> Option<Selec
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(fresh_path))
+    Some(pending_value(root, fresh_path))
 }
 
-pub fn pending_after(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    pending_beside(sources, path, true)
+pub fn pending_after(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+) -> Option<Selection> {
+    pending_beside(root, sources, path, true)
 }
 
-pub fn pending_before(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    pending_beside(sources, path, false)
+pub fn pending_before(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+) -> Option<Selection> {
+    pending_beside(root, sources, path, false)
 }
 
 /// A pending element inside the list at `path` — inline, or a link's
 /// cell value, normalized through Follow — appended at the end or
 /// prepended at the front. Only lists take elements, by type, and
 /// the owning cell must be writable, as in [`pending_edge`].
-fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Selection> {
+fn pending_into_at(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+    end: bool,
+) -> Option<Selection> {
     let value = sources.resolve_path(path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
@@ -523,17 +547,21 @@ fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Select
     };
     let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(fresh_path))
+    Some(pending_value(root, fresh_path))
 }
 
 /// Appends: "add to this list" goes at the end — the within chord's
 /// meaning on a list, where fields don't exist.
-pub fn pending_into(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    pending_into_at(sources, path, true)
+pub fn pending_into(root: &workspace::Root, sources: &Sources, path: &[Step]) -> Option<Selection> {
+    pending_into_at(root, sources, path, true)
 }
 
-pub fn pending_into_first(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    pending_into_at(sources, path, false)
+pub fn pending_into_first(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+) -> Option<Selection> {
+    pending_into_at(root, sources, path, false)
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
@@ -541,38 +569,51 @@ pub fn pending_into_first(sources: &Sources, path: &[Step]) -> Option<Selection>
 /// shift); a field value pends a new field on its parent; the root
 /// has nothing beside it and falls within — a field on a record, an
 /// appended element on a list.
-pub fn pending_enter(sources: &Sources, path: &[Step], before: bool) -> Option<Selection> {
+pub fn pending_enter(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+    before: bool,
+) -> Option<Selection> {
     let beside = if before {
-        pending_before(sources, path)
+        pending_before(root, sources, path)
     } else {
-        pending_after(sources, path)
+        pending_after(root, sources, path)
     };
     beside
         .or_else(|| {
             path.split_last()
-                .and_then(|(_, parent)| pending_edge(sources, parent.to_vec()))
+                .and_then(|(_, parent)| pending_edge(root, sources, parent.to_vec()))
         })
-        .or_else(|| pending_edge(sources, path.to_vec()))
-        .or_else(|| pending_into(sources, path))
+        .or_else(|| pending_edge(root, sources, path.to_vec()))
+        .or_else(|| pending_into(root, sources, path))
 }
 
 /// The command chord: author WITHIN the selection — a new field on
 /// the selected record or cell, an element appended into a list, or
 /// a bare cell's first value. With shift, the front instead —
 /// prepend. Atoms other than links have no within and decline.
-pub fn pending_insert(sources: &Sources, path: &[Step], front: bool) -> Option<Selection> {
+pub fn pending_insert(
+    root: &workspace::Root,
+    sources: &Sources,
+    path: &[Step],
+    front: bool,
+) -> Option<Selection> {
     if front {
-        pending_into_first(sources, path)
+        pending_into_first(root, sources, path)
     } else {
-        pending_edge(sources, path.to_vec())
-            .or_else(|| pending_into(sources, path))
-            .or_else(|| pending_follow(sources, path))
+        pending_edge(root, sources, path.to_vec())
+            .or_else(|| pending_into(root, sources, path))
+            .or_else(|| pending_follow(root, sources, path))
     }
 }
 
 /// A pending root for an empty document.
-pub fn pending_root(sources: &Sources) -> Option<Selection> {
-    sources.root().is_none().then(|| pending_value(Vec::new()))
+pub fn pending_root(root: &workspace::Root, sources: &Sources) -> Option<Selection> {
+    sources
+        .root()
+        .is_none()
+        .then(|| pending_value(root, Vec::new()))
 }
 
 /// The bytes a `0x` query denotes: hex digits, any case (the value

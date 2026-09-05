@@ -150,7 +150,11 @@ fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
 }
 
 fn make_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    Selection::edge(&src(doc, libraries), path)
+    Selection::edge(
+        &crate::workspace::Root::document(),
+        &src(doc, libraries),
+        path,
+    )
 }
 
 /// Select through the action installed by the projected navigation
@@ -236,7 +240,12 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
         (target.select)(&mut selected);
     }
     match selected.pop() {
-        Some((path, line)) => Selection::from_line(&src(doc, libraries), path, line),
+        Some((path, line)) => Selection::from_line(
+            &crate::workspace::Root::document(),
+            &src(doc, libraries),
+            path,
+            line,
+        ),
         None => make_selection(doc, libraries, path),
     }
 }
@@ -284,7 +293,12 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
     let progred_display::Layout::LineEdit(line) = layout else {
         panic!("value is not line editable")
     };
-    Selection::from_line(&src(doc, libraries), path, line)
+    Selection::from_line(
+        &crate::workspace::Root::document(),
+        &src(doc, libraries),
+        path,
+        line,
+    )
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {
@@ -339,7 +353,8 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 }
 
 fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
-    let selection = from.map(crate::selection::bare_edge);
+    let selection =
+        from.map(|path| crate::selection::bare_edge(&crate::workspace::Root::document(), path));
     step_selection(ds, None, selection.as_ref(), LINE, &arrow(named))
         .map(|descend| descend.path.to_vec())
 }
@@ -549,7 +564,12 @@ fn leftward_navigation_sets_the_live_caret_and_payload_conversion_preserves_it()
     crate::selection::seed_from_arrow(&mut selection, &arrow(NamedKey::ArrowLeft));
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
     assert!(!write_through(&mut doc, &libraries, &mut selection));
-    let reified = Selection::from_payload(&src(&doc, &libraries), path, selection.payload());
+    let reified = Selection::from_payload(
+        &crate::workspace::Root::document(),
+        &src(&doc, &libraries),
+        path,
+        selection.payload(),
+    );
     assert_eq!(reified.edit().unwrap().selection_offsets(), (0, 0));
     assert_eq!(reified.edit().unwrap().text(), "hello");
 }
@@ -1004,9 +1024,10 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
-    let on_cell = pending_edge(&sources, vec![]).unwrap();
+    let on_cell = pending_edge(&crate::workspace::Root::document(), &sources, vec![]).unwrap();
     assert_eq!(on_cell.path(), &[Step::Follow(gid::Resolution::Document)]);
     let inline = pending_edge(
+        &crate::workspace::Root::document(),
         &sources,
         vec![Step::Follow(gid::Resolution::Document), key("at")],
     )
@@ -1021,6 +1042,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // makes its structure visible.
     assert!(
         pending_edge(
+            &crate::workspace::Root::document(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("tags")]
         )
@@ -1028,6 +1050,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
+            &crate::workspace::Root::document(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("s")]
         )
@@ -1035,6 +1058,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
+            &crate::workspace::Root::document(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("lib")]
         )
@@ -1042,6 +1066,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
+            &crate::workspace::Root::document(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("material")]
         )
@@ -1051,6 +1076,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // A bare cell pends its first value at Follow — the
     // within-gesture's meaning there.
     let filling = pending_follow(
+        &crate::workspace::Root::document(),
         &sources,
         &[Step::Follow(gid::Resolution::Document), key("material")],
     )
@@ -1065,6 +1091,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_follow(
+            &crate::workspace::Root::document(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("lib")]
         )
@@ -1072,6 +1099,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_follow(
+            &crate::workspace::Root::document(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("at")]
         )
@@ -1080,6 +1108,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // Into a list through its link, appended at the end.
     let into = pending_into(
+        &crate::workspace::Root::document(),
         &sources,
         &[Step::Follow(gid::Resolution::Document), key("tags")],
     )
@@ -1089,9 +1118,10 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // The within chord: fields on records, elements into lists,
     // first values into bare cells.
-    assert!(pending_insert(&sources, &[], false).is_some());
+    assert!(pending_insert(&crate::workspace::Root::document(), &sources, &[], false).is_some());
     assert!(
         pending_insert(
+            &crate::workspace::Root::document(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("tags")],
             false
@@ -1100,6 +1130,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_insert(
+            &crate::workspace::Root::document(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("material")],
             false
@@ -1108,6 +1139,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_insert(
+            &crate::workspace::Root::document(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("s")],
             false
@@ -1415,7 +1447,10 @@ fn only_the_active_empty_requests_completion_offers() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let selection = pending_value(vec![Step::Key(fields[12])]);
+    let selection = pending_value(
+        &crate::workspace::Root::document(),
+        vec![Step::Key(fields[12])],
+    );
     let entries = projected_completion_entries_with(&document, &selection, Some(&projection));
     assert_eq!(requests.get(), 1);
     assert_eq!(entries.len(), 1);
@@ -1430,7 +1465,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     };
     let root_entries = projected_completion_entries(
         &empty,
-        &crate::selection::pending_with_query(Vec::new(), ""),
+        &crate::selection::pending_with_query(&crate::workspace::Root::document(), Vec::new(), ""),
     );
     assert!(!root_entries.is_empty());
     assert!(
@@ -1446,7 +1481,11 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     };
     let nested_entries = projected_completion_entries(
         &nested,
-        &crate::selection::pending_with_query(vec![Step::Element(position)], ""),
+        &crate::selection::pending_with_query(
+            &crate::workspace::Root::document(),
+            vec![Step::Element(position)],
+            "",
+        ),
     );
     assert!(
         nested_entries
@@ -1462,7 +1501,12 @@ fn root_field_completion_offers_only_root_vocabulary_until_widened() {
         cells: Cells::new(),
     };
     let stack = crate::stack::load::<()>();
-    let selection = pending_edge(&src(&document, &stack.libraries), Vec::new()).unwrap();
+    let selection = pending_edge(
+        &crate::workspace::Root::document(),
+        &src(&document, &stack.libraries),
+        Vec::new(),
+    )
+    .unwrap();
     let entries = projected_completion_entries(&document, &selection);
     let cells = entries
         .iter()
@@ -1511,7 +1555,12 @@ fn grap_call_field_completion_offers_missing_parameters() {
         cells,
     };
     let stack = crate::stack::load::<()>();
-    let selection = pending_edge(&src(&document, &stack.libraries), Vec::new()).unwrap();
+    let selection = pending_edge(
+        &crate::workspace::Root::document(),
+        &src(&document, &stack.libraries),
+        Vec::new(),
+    )
+    .unwrap();
     let entries = projected_completion_entries(&document, &selection);
     let parameters = entries
         .iter()
@@ -1945,7 +1994,13 @@ fn partials_receive_selection_and_annotations_positionally() {
     };
     let empty = Annotations::default();
     let cold = width(None, &empty);
-    let selected = width(Some(&crate::selection::bare_edge(Vec::new())), &empty);
+    let selected = width(
+        Some(&crate::selection::bare_edge(
+            &crate::workspace::Root::document(),
+            Vec::new(),
+        )),
+        &empty,
+    );
     let mut marked = Annotations::default();
     marked.set_field(&[], crate::annotations::FOLD, Some(Value::from(vec![1u8])));
     let annotated = width(None, &marked);
@@ -1961,7 +2016,8 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let mut pending = crate::selection::pending_with_query(Vec::new(), "");
+    let mut pending =
+        crate::selection::pending_with_query(&crate::workspace::Root::document(), Vec::new(), "");
     pending.set_completion_view(0.0, 2, false);
     pending
         .edit_mut()
@@ -2357,7 +2413,12 @@ fn custom_update_can_discard_an_absent_and_return_a_value() {
         suffix: String::new(),
         family: Default::default(),
     };
-    let mut selected = Selection::from_line(&src(&doc, &libraries), vec![], line);
+    let mut selected = Selection::from_line(
+        &crate::workspace::Root::document(),
+        &src(&doc, &libraries),
+        vec![],
+        line,
+    );
     assert!(crate::selection::write_through(
         &mut doc,
         &libraries,

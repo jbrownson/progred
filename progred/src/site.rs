@@ -2,16 +2,12 @@
 //! that place. The path stays in Rust.
 
 use crate::Editor;
-#[cfg(test)]
-use crate::annotations::Annotations;
 use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
 use progred_libraries::{absent, layout, selection as selection_capability, site};
 use std::cell::RefCell;
-#[cfg(test)]
-use std::rc::Rc;
 
 struct PendingChanges {
     annotation: Option<Value>,
@@ -74,8 +70,7 @@ pub fn apply_event(
         if staged.selection_changed {
             match staged.selection {
                 Some(payload) => {
-                    let mut next = Selection::from_payload(&app.sources(), path, payload)
-                        .with_root(root.clone());
+                    let mut next = Selection::from_payload(&root, &app.sources(), path, payload);
                     next.preserve_recorded(recorded);
                     app.model.selection = Some(next);
                 }
@@ -167,53 +162,9 @@ fn event_foreign(
 }
 
 #[cfg(test)]
-fn apply_at(
-    path: &[gid::Step],
-    annotations: &mut Annotations,
-    function: &Value,
-    sources: &Sources<'_>,
-) -> grap::Evaluation {
-    let store = Rc::new(RefCell::new(std::mem::take(annotations)));
-    let evaluation = {
-        let site = site::at(
-            {
-                let store = store.clone();
-                let path = path.to_vec();
-                move || store.borrow().at(&path).cloned()
-            },
-            {
-                let store = store.clone();
-                let path = path.to_vec();
-                move |value| store.borrow_mut().set(&path, value)
-            },
-        );
-        grap::apply(
-            function,
-            [],
-            |cell| {
-                site.get(cell)
-                    .cloned()
-                    .map(grap::Definition::ForeignFunction)
-                    .map(|definition| (gid::Resolution::Document, definition))
-                    .into_iter()
-                    .chain(sources.grap_definitions(cell))
-                    .collect()
-            },
-            grap::DEFAULT_FUEL,
-        )
-    };
-    *annotations = match Rc::try_unwrap(store) {
-        Ok(store) => store.into_inner(),
-        Err(_) => panic!("site overlay dropped"),
-    };
-    evaluation
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::annotations;
-    use gid::{Document, Step};
+    use gid::Document;
     use progred_libraries::control;
 
     fn quote(value: Value) -> Value {
@@ -224,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn a_click_writes_the_closed_over_path_and_not_another() {
+    fn capabilities_read_replace_and_clear_their_own_staged_value() {
         let stack = crate::stack::load::<()>();
         let doc = Document {
             root: None,
@@ -234,31 +185,63 @@ mod tests {
             doc: &doc,
             libraries: &stack.libraries,
         };
-        let mut annotations = Annotations::default();
-        let here = vec![Step::Follow(gid::Resolution::Document)];
-        let elsewhere = Vec::new();
-        let function = grap::lambda(
-            [],
-            grap::call(
-                Value::from(site::vocabulary::SET),
-                [(
-                    site::vocabulary::VALUE,
-                    quote(Value::record([(
-                        site::vocabulary::FOLD,
-                        Value::from(site::vocabulary::FOLDED),
-                    )])),
-                )],
+        let annotation = Value::from(b"annotation".to_vec());
+        let selection = Value::from(b"selection".to_vec());
+        for (get, set, annotation_slot) in [
+            (site::vocabulary::GET, site::vocabulary::SET, true),
+            (
+                selection_capability::vocabulary::GET,
+                selection_capability::vocabulary::SET,
+                false,
             ),
-        );
-        let evaluation = apply_at(&here, &mut annotations, &function, &sources);
-        assert_eq!(Some(&evaluation.result), annotations.at(&here));
-
-        assert_eq!(
-            annotations.field(&here, annotations::FOLD),
-            Some(&Value::from(annotations::FOLDED))
-        );
-        assert!(annotations.at(&elsewhere).is_none());
+        ] {
+            for clear in [false, true] {
+                let function = grap::lambda(
+                    [],
+                    grap::call(
+                        control::vocabulary::DO.into(),
+                        [(
+                            control::vocabulary::EXPRESSIONS,
+                            Value::list([
+                                grap::call(
+                                    set.into(),
+                                    [(
+                                        site::vocabulary::VALUE,
+                                        if clear {
+                                            absent::value()
+                                        } else {
+                                            grap::call(get.into(), [])
+                                        },
+                                    )],
+                                ),
+                                Value::record([]),
+                            ]),
+                        )],
+                    ),
+                );
+                let staged = evaluate_event(
+                    &function,
+                    Value::record([]),
+                    Some(annotation.clone()),
+                    Some(selection.clone()),
+                    &sources,
+                    100,
+                )
+                .unwrap();
+                assert_eq!(staged.annotation_changed, annotation_slot);
+                assert_eq!(staged.selection_changed, !annotation_slot);
+                assert_eq!(
+                    staged.annotation,
+                    (!(annotation_slot && clear)).then(|| annotation.clone())
+                );
+                assert_eq!(
+                    staged.selection,
+                    (!(!annotation_slot && clear)).then(|| selection.clone())
+                );
+            }
+        }
     }
+
     #[test]
     fn event_changes_commit_by_result_even_after_a_discarded_absent() {
         let stack = crate::stack::load::<()>();
