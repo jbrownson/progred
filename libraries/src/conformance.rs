@@ -8,7 +8,6 @@ use crate::{control, f32, f64, list, number};
 use gid::{CellId, Value, new_cell_id};
 use grap_runtime as grap;
 use grap_runtime::ForeignFunctions;
-use std::collections::BTreeSet;
 
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
@@ -75,7 +74,6 @@ fn a_cell_chain_burns_one_per_link() {
     );
     assert_eq!(evaluation.result, blob("end"));
     assert_eq!(evaluation.remaining_fuel, 7);
-    assert_eq!(evaluation.dependencies, BTreeSet::from([first, second]));
 }
 
 /// A missing cell burns its one evaluation and reports exactly once.

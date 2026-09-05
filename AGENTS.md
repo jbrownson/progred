@@ -92,7 +92,7 @@ EOF
 - Well-known library cell IDs are once-minted random identities, never names or hashes of names; readable names are ordinary `libraries::name` GID facts. Mint fixed identities from 16 unmodified OS-CSPRNG bytes (`new_cell_id`/`getrandom`, or `openssl rand -hex 16` when producing a source literal), never from a UUID generator.
 - `CellId` is an opaque 128-bit identity, not an RFC UUID: all bits are random, with no version or variant fields. Preserve the text bridge's canonical 32-hex spelling and the existing hyphenated Serde spelling.
 - Until text-bridge documents exist outside this repository, change its parser and checked-in `*.gid` fixtures in lockstep. Do not add versions, migration branches, or compatibility readers.
-- Evaluation is fueled and dependency-reporting. An `evaluate` wrapper projects absent values like every other transient result; Raw always exposes its stored expression.
+- Evaluation is fueled. An `evaluate` wrapper projects absent values like every other transient result; Raw always exposes its stored expression.
 
 ## Testing
 

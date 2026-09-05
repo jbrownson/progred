@@ -5,7 +5,6 @@
 
 use gid::{CellId, Record, Resolution, Value};
 use std::cell::RefCell;
-use std::collections::BTreeSet;
 use std::fmt;
 use std::rc::Rc;
 
@@ -809,7 +808,6 @@ impl<'a> ForeignOverlay<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evaluation {
     pub result: Value,
-    pub dependencies: BTreeSet<CellId>,
     pub remaining_fuel: usize,
 }
 
@@ -818,7 +816,6 @@ pub struct Context<'a> {
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
-    dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
     expressions: Vec<Lowered>,
     origins: Vec<OriginNode>,
@@ -940,7 +937,6 @@ impl<'a> Context<'a> {
             .unwrap_or_else(|Halt(result)| result);
         Evaluation {
             result,
-            dependencies: self.dependencies,
             remaining_fuel: self.remaining_fuel,
         }
     }
@@ -1334,7 +1330,6 @@ impl<'a> Context<'a> {
         let definitions = match cached {
             Some(definitions) => definitions,
             None => {
-                self.dependencies.insert(cell);
                 let definitions: Rc<[PreparedDefinition]> = (self.definitions)(cell)
                     .into_iter()
                     .map(|(source, definition)| PreparedDefinition {
@@ -1558,7 +1553,6 @@ impl<'a> Context<'a> {
         if let Some(foreign) = self.foreign_target_cell(cell) {
             Ok(RuntimeValue(RuntimeValueKind::Foreign(foreign)))
         } else {
-            self.dependencies.insert(cell);
             let definitions = (self.definitions)(cell);
             match definitions.as_slice() {
                 [] => Ok(RuntimeValue::from_value(absent::with_detail(
@@ -1889,7 +1883,6 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        self.dependencies.insert(cell);
         let definitions = (self.definitions)(cell);
         let mut absents = Vec::new();
         for (source, definition) in definitions.iter() {
@@ -2123,7 +2116,6 @@ fn context<'a>(
         overlay,
         foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
-        dependencies: BTreeSet::new(),
         resolving: Vec::new(),
         expressions: Vec::new(),
         origins: Vec::new(),
@@ -2261,8 +2253,6 @@ mod tests {
         );
 
         assert_eq!(evaluation.result, Value::from(b"grap".to_vec()));
-
-        assert_eq!(evaluation.dependencies, [function].into_iter().collect());
     }
 
     #[test]
@@ -2320,8 +2310,6 @@ mod tests {
         );
 
         assert_eq!(evaluation.result, Value::from(b"grap".to_vec()));
-
-        assert_eq!(evaluation.dependencies, [function].into_iter().collect());
     }
 
     fn blob(text: &str) -> Value {
@@ -2335,12 +2323,11 @@ mod tests {
         let value = Value::record([(field, Value::list([Value::from(cell)]))]);
         let evaluation = evaluate(
             &value,
-            |candidate| (candidate == cell).then(|| blob("not followed")),
+            |_| panic!("inert data must not resolve cells"),
             &ForeignFunctions::default(),
             10,
         );
         assert_eq!(evaluation.result, value);
-        assert!(evaluation.dependencies.is_empty());
     }
 
     #[test]
@@ -2457,7 +2444,6 @@ mod tests {
             10,
         );
         assert_eq!(evaluation.result, blob("done"));
-        assert_eq!(evaluation.dependencies, BTreeSet::from([first, second]));
     }
 
     #[test]
@@ -2466,18 +2452,23 @@ mod tests {
         let x = new_cell_id();
         let y = new_cell_id();
         let definition = lambda([x, y], Value::from(x));
+        let argument = new_cell_id();
+        let reads = std::cell::RefCell::new(Vec::new());
         let expression = call(
             Value::from(function_cell),
-            [(x, blob("x")), (y, Value::from(new_cell_id()))],
+            [(x, blob("x")), (y, Value::from(argument))],
         );
         let evaluation = evaluate(
             &expression,
-            |cell| (cell == function_cell).then(|| definition.clone()),
+            |cell| {
+                reads.borrow_mut().push(cell);
+                (cell == function_cell).then(|| definition.clone())
+            },
             &ForeignFunctions::default(),
             30,
         );
         assert_eq!(evaluation.result, blob("x"));
-        assert_eq!(evaluation.dependencies.len(), 2);
+        assert_eq!(*reads.borrow(), [function_cell, argument]);
     }
 
     #[test]
@@ -2489,12 +2480,11 @@ mod tests {
         );
         let evaluation = evaluate(
             &expression,
-            |cell| (cell == parameter).then(|| blob("document")),
+            |_| panic!("a lexical binding must not consult the document"),
             &ForeignFunctions::default(),
             20,
         );
         assert_eq!(evaluation.result, blob("local"));
-        assert!(evaluation.dependencies.is_empty());
     }
 
     #[test]
@@ -2584,7 +2574,6 @@ mod tests {
             10,
         );
         assert_eq!(evaluation.result, Value::from(echo));
-        assert_eq!(evaluation.dependencies, BTreeSet::from([echo]));
         assert_eq!(
             evaluate(
                 &call(Value::from(echo), [(input, Value::from(echo))]),
@@ -2671,12 +2660,14 @@ mod tests {
         );
         let evaluation = evaluate(
             &call(select_parameter, [(parameter, blob("selected"))]),
-            |_| None,
+            |cell| {
+                assert_eq!(cell, choose);
+                None
+            },
             &foreign,
             50,
         );
         assert_eq!(evaluation.result, blob("selected"));
-        assert_eq!(evaluation.dependencies, BTreeSet::from([choose]));
     }
 
     #[test]
@@ -2734,7 +2725,6 @@ mod tests {
             30,
         );
         assert_eq!(evaluation.result, blob("locally bound"));
-        assert_eq!(evaluation.dependencies, BTreeSet::from([bind]));
     }
 
     #[test]
@@ -2981,7 +2971,6 @@ mod tests {
             20,
         );
         assert_eq!(applied.result, blob("argument"));
-        assert_eq!(applied.dependencies, BTreeSet::from([function]));
     }
 
     #[test]

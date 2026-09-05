@@ -1052,8 +1052,6 @@ mod tests {
         let expression = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, expression);
-
-        assert!(evaluation.dependencies.is_empty());
     }
 
     #[test]
@@ -1063,8 +1061,6 @@ mod tests {
         let expression = quote_call(Value::record([(vocabulary::UNQUOTE, inner.clone())]));
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, inner);
-
-        assert_eq!(evaluation.dependencies, [vocabulary::QUOTE].into());
     }
 
     #[test]

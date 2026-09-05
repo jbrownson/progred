@@ -28,8 +28,7 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
 
 #[test]
 fn the_sample_contains_a_projectable_grap_computation() {
-    let (doc, binders) =
-        parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
+    let (doc, _) = parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
     let roof = doc
         .root
         .as_ref()
@@ -51,17 +50,6 @@ fn the_sample_contains_a_projectable_grap_computation() {
     );
     let evaluation = evaluate(&doc, profile);
     assert_eq!(evaluation.result, geometry::value(40.0));
-    assert_eq!(
-        evaluation.dependencies,
-        [
-            binders["double"],
-            binders["pitch_value"],
-            binders["multiply"],
-            binders["circle"],
-        ]
-        .into_iter()
-        .collect()
-    );
 }
 
 fn demo_fixture() -> (Document, Binders) {

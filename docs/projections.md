@@ -381,9 +381,7 @@ recognition as Grap, so a later projection can wrap them (a unit
 around a number). Each line's update sees the current value and the
 new text, so it can keep extra fields or replace the value.
 
-Every external cell read is collected as a dependency. The set is
-reported even when evaluation produces an absent, ready for future
-precise invalidation. Every evaluation also has explicit fuel, and cell
+Every evaluation has explicit fuel, and cell
 cycles produce a stable absent. Invalid Grap never damages the
 underlying document: its absent is projected like any other normal
 form, and the stored expression remains editable in Raw or wherever
@@ -456,8 +454,8 @@ chain. Hosts and tests inspect this result; there is no Rust diagnostic list.
 Discarding an absent discards its details, so successful updates and event
 handlers commit normally. Only explicit ordered-choice operations combine
 failed alternatives through `causes`. Fuel exhaustion still halts evaluation
-immediately, carrying its absent result; dependencies and drawing origins
-remain separate evaluation outputs, not failure channels.
+immediately, carrying its absent result. Drawing origins are separate
+evaluation outputs, not a failure channel.
 
 The bootstrap f64 and geometry libraries define stable library cells
 for their absent reasons and return tagged values containing those
@@ -517,8 +515,8 @@ construction, not by filling out a language checklist:
   construction needs;
 - project evaluated geometry through Puri rather than only text;
 - make a direct manipulation write its controlling GID values;
-- use the dependency set to reevaluate only affected results if full
-  frame evaluation becomes material;
+- design general dependency tracking if full frame evaluation becomes
+  material, including missing definitions and ordered alternatives;
 - add absents and evaluation traces as projections over the same GID value,
   while keeping Raw as the escape hatch.
 
