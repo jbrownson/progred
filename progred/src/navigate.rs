@@ -1,7 +1,7 @@
 //! Keyboard navigation over a frame's settled descends.
 
 use crate::selection::Selection;
-use crate::workspace::Root;
+use crate::workspace::{Root, Target};
 use gid::{Path, Step};
 use kurbo::Rect;
 use progred_display::ActionHandler;
@@ -63,7 +63,8 @@ pub fn selection_after_delete<World>(
 /// so each press moves down (or up) the screen. Right and left walk
 /// WITHIN the line, into and across the content beside the current
 /// stop; left from a row widens to the parent. Any arrow selects the
-/// root when nothing is selected. `line` is one nominal line height,
+/// view's root when nothing is selected; Cmd+A (Ctrl+A elsewhere)
+/// selects that root from anywhere. `line` is one nominal line height,
 /// the quantum separating "beside" from "below". Returns the settled
 /// landmark whose installed transition should run, or `None` for keys
 /// navigation doesn't own.
@@ -74,6 +75,13 @@ pub fn step_selection<'a, World>(
     line: f64,
     event: &KeyboardEvent,
 ) -> Option<&'a Descend<World>> {
+    if event.state.is_down()
+        && crate::modifiers::command(&event.modifiers)
+        && !(event.modifiers.shift() || event.modifiers.alt())
+        && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a"))
+    {
+        return root_target(descends, root);
+    }
     let modified = event.modifiers.ctrl()
         || event.modifiers.meta()
         || event.modifiers.alt()
@@ -89,9 +97,7 @@ pub fn step_selection<'a, World>(
     }
     .filter(|_| event.state.is_down() && !modified)?;
     let Some(selection) = selection else {
-        return descends.iter().find(|descend| {
-            root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.is_empty()
-        });
+        return root_target(descends, root);
     };
     let path = selection.path();
     let order = reading_order(descends, root, line);
@@ -120,6 +126,19 @@ pub fn step_selection<'a, World>(
         }),
         _ => None,
     }
+}
+
+fn root_target<'a, World>(
+    descends: &'a [Descend<World>],
+    root: Option<&Root>,
+) -> Option<&'a Descend<World>> {
+    let path = match root.map(Root::target) {
+        Some(Target::Pane { path }) => path.as_slice(),
+        _ => &[],
+    };
+    descends.iter().find(|descend| {
+        root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.as_ref() == path
+    })
 }
 
 /// One stop in the frame's reading order: pre-order over the

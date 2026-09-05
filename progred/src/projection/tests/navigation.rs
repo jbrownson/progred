@@ -59,6 +59,75 @@ fn arrows_walk_rows_down_and_lines_across() {
 }
 
 #[test]
+fn command_a_selects_the_current_views_root() {
+    let document = crate::workspace::Root::document();
+    let pane_path = vec![key("pane")];
+    let pane = crate::workspace::Root::pane(pane_path.clone());
+    let other_pane = crate::workspace::Root::pane(pane_path.clone());
+    let child_path = vec![key("pane"), key("child")];
+    let doc = Document {
+        root: Some(Value::record([(
+            crate::test_values::label("pane"),
+            Value::record([(crate::test_values::label("child"), Value::record([]))]),
+        )])),
+        cells: Cells::new(),
+    };
+    let libraries = Libraries::default();
+    let descends: Vec<_> = [
+        (&document, child_path.clone()),
+        (&document, pane_path.clone()),
+        (&document, vec![]),
+        (&other_pane, pane_path.clone()),
+        (&pane, child_path.clone()),
+        (&pane, pane_path.clone()),
+    ]
+    .into_iter()
+    .map(|(root, path)| Descend {
+        root: Some(root.clone()),
+        ..stop(path, 0.0, 0.0, 100.0, 20.0)
+    })
+    .collect();
+    let event = KeyboardEvent {
+        key: Key::Character("a".into()),
+        modifiers: if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        },
+        ..arrow(NamedKey::ArrowDown)
+    };
+    for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
+        let selection = Selection::edge(root, &src(&doc, &libraries), child_path.clone());
+        for selection in [None, Some(&selection)] {
+            let target = step_selection(&descends, Some(root), selection, LINE, &event)
+                .expect("Select All reaches the view root");
+            assert_eq!(target.root.as_ref(), Some(root));
+            assert_eq!(target.path.as_ref(), path);
+        }
+    }
+    for event in [
+        KeyboardEvent {
+            state: KeyState::Up,
+            ..event.clone()
+        },
+        KeyboardEvent {
+            modifiers: Modifiers::empty(),
+            ..event.clone()
+        },
+        KeyboardEvent {
+            modifiers: event.modifiers | Modifiers::SHIFT,
+            ..event.clone()
+        },
+        KeyboardEvent {
+            modifiers: event.modifiers | Modifiers::ALT,
+            ..event.clone()
+        },
+    ] {
+        assert!(step_selection(&descends, Some(&document), None, LINE, &event).is_none());
+    }
+}
+
+#[test]
 fn navigation_declines_modified_keys_releases_and_other_keys() {
     let ds = vec![
         stop(vec![key("a")], 0.0, 2.0, 60.0, 18.0),

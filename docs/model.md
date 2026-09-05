@@ -95,6 +95,10 @@ editable line installs the description produced by that projection, including
 the intended caret position. The shell does not inspect the render tree to
 infer editability. See [navigation](../progred/src/navigate.rs).
 
+Cmd+A (Ctrl+A off macOS) selects the current view's root through its navigation
+callback. With no selection, it targets the document root. Focused text fields
+handle the shortcut first and select their own text.
+
 ## Completion
 
 The projection rendering a pending value or label explicitly requests
