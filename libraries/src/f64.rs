@@ -414,7 +414,7 @@ mod tests {
             )
             .result
         };
-        // Unparseable input declines as an absent — the editor drops
+        // Unparseable input returns an absent — the line editor drops
         // the write whole.
         assert!(crate::absent::is_absent(&update("junk")));
         assert_eq!(

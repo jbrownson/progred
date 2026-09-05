@@ -75,8 +75,11 @@ projected site's document path; `selection get` reads the selection payload
 there. `selection set` takes an explicit `path` and `value`, interpreted in
 the supplied document and view, so it can move selection to another location.
 An absent value clears selection only at the specified path. Reads observe
-staged writes; a declined or halted handler commits no effects. Tests can
-replace these foreign functions with a recording interpreter.
+staged writes; an explicitly declined or halted handler commits no effects.
+Ordinary absent results keep effects, including a setter's successful clear.
+Each attempted definition has its own snapshot, so a later alternative sees
+none of the declined attempt's writes. Tests can replace these foreign functions
+with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and Grap write-back
 function. The function receives the current value and input text as data.
@@ -101,7 +104,8 @@ leak into descendants.
 A library completion can provide an `on_commit` Grap callable, run at the
 committed location with the same site and selection capabilities as event
 handlers. Insertion and continuation effects are prepared together and installed
-only if the callable succeeds. Selection changes are effectful calls, not a
+unless the callable explicitly declines or evaluation halts. Ordinary absent
+results do not veto the completion. Selection changes are effectful calls, not a
 special return-value format. Root `grap` and `fidget` offers insert `{}` and
 call `selection set` to open the domain field's pending value; they do not
 invent a list value. `panes` remains an independent root field suggestion.

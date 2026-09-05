@@ -57,35 +57,50 @@ pub fn at_display_partial() -> Value {
                 ),
                 (
                     control::vocabulary::CASES,
-                    Value::list([Value::record([
-                        (
-                            control::vocabulary::PATTERN,
-                            Value::record([
-                                (
-                                    layout::vocabulary::EVENT_KIND,
-                                    Value::from(layout::vocabulary::POINTER_DOWN),
-                                ),
-                                (
-                                    layout::vocabulary::BUTTON,
-                                    Value::from(layout::vocabulary::PRIMARY),
-                                ),
-                                (layout::vocabulary::MODIFIERS, Value::list([])),
-                            ]),
-                        ),
-                        (
-                            grap::vocabulary::EXPRESSION,
-                            grap::call(
-                                Value::from(selection_capability::vocabulary::SET),
-                                [
+                    Value::list([
+                        Value::record([
+                            (
+                                control::vocabulary::PATTERN,
+                                Value::record([
                                     (
-                                        selection_capability::vocabulary::PATH,
-                                        grap::call(site::vocabulary::PATH.into(), []),
+                                        layout::vocabulary::EVENT_KIND,
+                                        Value::from(layout::vocabulary::POINTER_DOWN),
                                     ),
-                                    (site::vocabulary::VALUE, crate::selection::payload::edge()),
-                                ],
+                                    (
+                                        layout::vocabulary::BUTTON,
+                                        Value::from(layout::vocabulary::PRIMARY),
+                                    ),
+                                    (layout::vocabulary::MODIFIERS, Value::list([])),
+                                ]),
                             ),
-                        ),
-                    ])]),
+                            (
+                                grap::vocabulary::EXPRESSION,
+                                grap::call(
+                                    Value::from(selection_capability::vocabulary::SET),
+                                    [
+                                        (
+                                            selection_capability::vocabulary::PATH,
+                                            grap::call(site::vocabulary::PATH.into(), []),
+                                        ),
+                                        (
+                                            site::vocabulary::VALUE,
+                                            crate::selection::payload::edge(),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ]),
+                        Value::record([
+                            (
+                                control::vocabulary::PATTERN,
+                                bind(layout::vocabulary::EVENT),
+                            ),
+                            (
+                                grap::vocabulary::EXPRESSION,
+                                progred_libraries::absent::decline(),
+                            ),
+                        ]),
+                    ]),
                 ),
             ],
         ),
@@ -165,9 +180,10 @@ pub fn at_display_partial() -> Value {
 #[test]
 fn checked_in_projection_uses_the_current_selection_capabilities() {
     let (document, _) = crate::gid_text::parse(include_str!("../../examples/sample.gid")).unwrap();
-    let projection = document.cells.iter().find_map(|(_, value)| {
-        (name::read(value) == Some("at display")).then_some(value)
-    });
+    let projection = document
+        .cells
+        .iter()
+        .find_map(|(_, value)| (name::read(value) == Some("at display")).then_some(value));
     assert_eq!(projection, Some(&at_display_partial()));
 }
 

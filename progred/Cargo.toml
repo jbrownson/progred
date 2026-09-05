@@ -8,6 +8,7 @@ grap = { path = "../grap" }
 progred-libraries = { path = "../libraries" }
 progred-display.workspace = true
 gid.workspace = true
+im = "15"
 measured = { path = "../ui/measured" }
 puri.workspace = true
 puri-widgets.workspace = true

@@ -5,9 +5,9 @@ use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 use grap_runtime::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Context, Effects, Environment, Expression, ForeignFunction, ForeignFunctions, Halt,
+    RuntimeValue,
 };
-use std::cell::Cell;
 use std::rc::Rc;
 
 pub mod vocabulary {
@@ -35,7 +35,7 @@ fn evaluated(
         .transpose()
 }
 
-fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
+fn stream(state: Rc<Effects<u64>>) -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
         ForeignFunction::runtime(move |context, call, environment| {
@@ -51,10 +51,10 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
                 return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS).into());
             };
             let next = state
-                .get()
+                .borrow()
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1_442_695_040_888_963_407);
-            state.set(next);
+            *state.borrow_mut() = next;
             let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
             Ok(RuntimeValue::f64(min + (max - min) * unit))
         }),
@@ -85,8 +85,11 @@ fn functions() -> ForeignFunctions {
                         context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION)
                     );
                 };
-                context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                    context.eval_runtime(expression, environment)
+                let state = Rc::new(Effects::new(seed));
+                context.with_effects(state.clone(), |context| {
+                    context.with_foreign_functions(stream(state), |context| {
+                        context.eval_runtime(expression, environment)
+                    })
                 })
             }),
         )
@@ -154,6 +157,62 @@ mod tests {
         assert_eq!(sample(None), sample(Some(u64::value(0))));
         assert_eq!(sample(Some(u64::value(42))), sample(Some(u64::value(42))));
         assert_ne!(sample(Some(u64::value(0))), sample(Some(u64::value(42))));
+    }
+
+    #[test]
+    fn a_declined_grap_definition_does_not_advance_the_random_stream() {
+        let function = new_cell_id();
+        let ignored = new_cell_id();
+        let next = grap::call(
+            vocabulary::BETWEEN.into(),
+            [
+                (vocabulary::MIN, f64::value(-2.0)),
+                (vocabulary::MAX, f64::value(3.0)),
+            ],
+        );
+        let functions = functions();
+        let evaluation = grap::evaluate(
+            &grap::call(
+                vocabulary::WITH_RANDOM.into(),
+                [(
+                    grap::vocabulary::EXPRESSION,
+                    grap::call(function.into(), []),
+                )],
+            ),
+            |cell| {
+                if cell == function {
+                    vec![
+                        (
+                            gid::Resolution::Document,
+                            grap::Definition::Value(grap::lambda(
+                                [],
+                                grap::call(
+                                    grap::lambda([ignored], absent::decline()),
+                                    [(ignored, next.clone())],
+                                ),
+                            )),
+                        ),
+                        (
+                            gid::Resolution::Library(ID),
+                            grap::Definition::Value(grap::lambda([], next.clone())),
+                        ),
+                    ]
+                } else {
+                    functions
+                        .get(cell)
+                        .map(|function| {
+                            (
+                                gid::Resolution::Library(ID),
+                                grap::Definition::ForeignFunction(function.clone()),
+                            )
+                        })
+                        .into_iter()
+                        .collect()
+                }
+            },
+            100,
+        );
+        assert_eq!(evaluation.result, sample(None));
     }
 
     #[test]

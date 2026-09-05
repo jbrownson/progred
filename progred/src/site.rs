@@ -6,11 +6,12 @@ use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
+use grap::Effects;
 use progred_libraries::{
     absent, layout, path as path_data, selection as selection_capability, site,
 };
-use std::cell::RefCell;
 
+#[derive(Clone)]
 pub(crate) struct PendingChanges {
     pub annotation: Option<Value>,
     pub annotation_changed: bool,
@@ -27,7 +28,7 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 ];
 
 /// Apply one event handler with its get/set functions bound to this
-/// projection site. An absent result declines without
+/// projection site. Explicit decline or evaluator halt returns without
 /// committing any pending annotation or selection change.
 pub fn apply_event(
     app: &mut Editor,
@@ -118,7 +119,7 @@ pub(crate) fn evaluate(
     sources: &Sources<'_>,
     fuel: usize,
 ) -> Option<PendingChanges> {
-    let staged = RefCell::new(PendingChanges {
+    let staged = Effects::new(PendingChanges {
         annotation,
         annotation_changed: false,
         selection,
@@ -131,7 +132,7 @@ pub(crate) fn evaluate(
                     environment: &grap::Environment| {
             event_foreign(function, context, call, environment, path, &staged)
         };
-        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
+        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call).with_effects(&staged);
         grap::apply_scoped(
             function,
             arguments,
@@ -140,7 +141,7 @@ pub(crate) fn evaluate(
             fuel,
         )
     };
-    (!absent::is_absent(&evaluation.result)).then(|| staged.into_inner())
+    (evaluation.completed && !absent::declines(&evaluation.result)).then(|| staged.into_inner())
 }
 
 fn event_foreign(
@@ -149,7 +150,7 @@ fn event_foreign(
     call: grap::Expression,
     environment: &grap::Environment,
     path: &[gid::Step],
-    staged: &RefCell<PendingChanges>,
+    staged: &Effects<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     if function == site::vocabulary::PATH {
         return Ok(path_data::value(path));
@@ -253,30 +254,21 @@ mod tests {
                 let function = grap::lambda(
                     [],
                     grap::call(
-                        control::vocabulary::DO.into(),
-                        [(
-                            control::vocabulary::EXPRESSIONS,
-                            Value::list([
-                                grap::call(
-                                    set.into(),
-                                    [
-                                        (
-                                            selection_capability::vocabulary::PATH,
-                                            grap::call(site::vocabulary::PATH.into(), []),
-                                        ),
-                                        (
-                                            site::vocabulary::VALUE,
-                                            if clear {
-                                                absent::value()
-                                            } else {
-                                                grap::call(get.into(), [])
-                                            },
-                                        ),
-                                    ],
-                                ),
-                                Value::record([]),
-                            ]),
-                        )],
+                        set.into(),
+                        [
+                            (
+                                selection_capability::vocabulary::PATH,
+                                grap::call(site::vocabulary::PATH.into(), []),
+                            ),
+                            (
+                                site::vocabulary::VALUE,
+                                if clear {
+                                    absent::value()
+                                } else {
+                                    grap::call(get.into(), [])
+                                },
+                            ),
+                        ],
                     ),
                 );
                 let staged = evaluate(
@@ -353,7 +345,7 @@ mod tests {
         assert_eq!(staged.selection, Some((vec![], selection.clone())));
         assert!(
             evaluate(
-                &function(missing.into()),
+                &function(absent::decline()),
                 [],
                 &[],
                 None,
@@ -374,6 +366,58 @@ mod tests {
                 (site::vocabulary::VALUE, payload),
             ],
         )
+    }
+
+    #[test]
+    fn a_declined_definition_leaves_no_selection_or_annotation_for_the_next() {
+        let mut stack = crate::stack::load::<()>();
+        let function = gid::new_cell_id();
+        let mut cells = gid::Cells::new();
+        cells.set_value(
+            function,
+            sequence([
+                set_selection(
+                    Value::list([]),
+                    crate::selection::payload::pending("discarded", 0),
+                ),
+                grap::call(
+                    site::vocabulary::SET.into(),
+                    [(site::vocabulary::VALUE, Value::from(vec![42]))],
+                ),
+                absent::decline(),
+            ]),
+        );
+        let doc = Document {
+            root: Some(Value::record([])),
+            cells,
+        };
+        let mut fallback = gid::Cells::new();
+        fallback.set_value(
+            function,
+            grap::lambda([], grap::call(site::vocabulary::GET.into(), [])),
+        );
+        stack.libraries.insert(
+            gid::new_cell_id(),
+            Value::record([]),
+            progred_libraries::Definitions::from_parts(fallback, Default::default()),
+        );
+        let original = Some((vec![], crate::selection::payload::edge()));
+        let staged = evaluate(
+            &function.into(),
+            [],
+            &[],
+            None,
+            original.clone(),
+            &Sources {
+                doc: &doc,
+                libraries: &stack.libraries,
+            },
+            100,
+        )
+        .unwrap();
+        assert_eq!(staged.selection, original);
+        assert_eq!(staged.annotation, None);
+        assert!(!staged.selection_changed && !staged.annotation_changed);
     }
 
     fn sequence(expressions: impl IntoIterator<Item = Value>) -> Value {

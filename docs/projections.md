@@ -95,7 +95,8 @@ creates temporary selection/annotation capabilities in the current document
 and view. `site path` exposes the actual projection path through the
 [path library](../libraries/src/path.rs); the local selection getter needs no
 address, while the setter accepts one explicitly. Writes are staged and
-committed only when the handler accepts the event. Completion continuations
+committed unless the handler explicitly declines or evaluation halts. An ordinary
+absent result is still a completed result. Completion continuations
 use the same effect interpreter, staged together with the document insertion.
 
 Drawing programs use scoped foreign operations for fills, strokes, paths,
@@ -127,9 +128,24 @@ the cell identity so a later call can dispatch across its definitions.
 
 A direct call through a cell tries the document definition, then library
 definitions in load order. It skips non-callable values, tries candidates
-lazily, and returns the first non-absent result. Scoped capability functions
-can override this lookup. A candidate that may fail must stage effects so
-falling through does not preserve a discarded candidate's mutations.
+lazily, and continues only for `{absent: declined}`. Any other result, including
+another absent, is definitive. Scoped capability functions can override this
+lookup. An exhausted definition chain preserves its explicit declines in order,
+keeping one unchanged or returning `{absent: declined, causes: [...]}` for several.
+
+Hosts supply temporary effect values through `grap::Effects` and register them
+with a foreign overlay or an evaluation scope. Each call and definition attempt
+keeps a snapshot; explicit decline, a skipped non-callable candidate, or evaluator
+halt restores it. Successful nested effects remain provisional until their
+enclosing call accepts. Fuel is never restored. Selection, annotations, drawing
+commands, drawing paths, and deterministic random state use this facility.
+Snapshots share a state pointer; a write clones the current value only when
+needed. The drawing recorder uses persistent vectors of shared command/hit
+entries, so taking a snapshot does not copy previously recorded geometry.
+Snapshot clones must preserve the old value independently; sharing persistent
+storage is fine, sharing untracked mutable storage is not. Rust FFIs must keep
+effects inside these temporary values or take responsibility for their own
+decline behavior. This provides no rollback for external I/O.
 
 Rust foreign functions receive raw call fields, the calling environment, and
 a live evaluation context. They choose which operands to evaluate and in what
@@ -168,12 +184,16 @@ can identify a missing cell, invalid value, or cycle. Code inspects identities,
 not human-readable diagnostic text. Hosts and tests inspect the returned value;
 there is no parallel Rust diagnostics list that can reject a successful result.
 
-Only explicit ordered-choice operations collect alternatives' absents. Function
-dispatch and an unmatched `match` preserve one failure unchanged, or combine
-multiple attempted failures as `{absent: no-alternative, causes: [...]}`.
-Successful alternatives stop further evaluation. Fuel exhaustion halts
-immediately; at the public boundary it is still an absent value. Drawing-source
-origins are separate from failures.
+An unmatched `match` preserves one mismatch unchanged or combines several as
+`{absent: no-alternative, causes: [...]}`. This is an ordinary absent, not an
+implicit request to try another function definition. A handler using `match`
+can explicitly decline with a final catch-all case. A selected expression's
+result remains definitive within that match.
+
+Fuel exhaustion halts immediately; at the public boundary it is still an absent
+value, with `Evaluation.completed` recording that execution did not finish.
+Returning that same value normally still counts as completed execution.
+Drawing-source origins are separate from failures.
 
 ## Equivalent host representations
 

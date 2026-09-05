@@ -15,6 +15,7 @@ pub mod vocabulary {
     pub const CYCLE: CellId = grap_runtime::absent::CYCLE;
     pub const CAUSES: CellId = grap_runtime::absent::CAUSES;
     pub const NO_ALTERNATIVE: CellId = grap_runtime::absent::NO_ALTERNATIVE;
+    pub const DECLINED: CellId = grap_runtime::absent::DECLINED;
     pub const UNSPECIFIED: CellId = CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
 }
 
@@ -33,6 +34,8 @@ pub fn reason(value: &Value) -> Option<CellId> {
 pub fn is_absent(value: &Value) -> bool {
     grap_runtime::absent::is_absent(value)
 }
+
+pub use grap_runtime::absent::{decline, declines};
 
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
     grap_runtime::absent::from_causes(causes)
@@ -54,6 +57,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         named_reason("no applicable alternative"),
     );
     cells.set_value(vocabulary::UNSPECIFIED, named_reason("unspecified absence"));
+    cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
     Library::named(
         "absent",
         crate::Definitions::from_parts(cells, Default::default()),

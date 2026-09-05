@@ -29,9 +29,9 @@ the insertion nor its staged selection/annotation changes.
 
 Later, design an editor-owned way to surface these failures, such as alerts or
 notifications, using the failure details in GID values. Do not add that machinery
-now. Distinguishing an actual failure or explicit decline from a legitimate
-absent result remains an open semantic question; absence alone should not be
-assumed to warrant an alert.
+now. Explicit decline is distinct from ordinary absent results, which are
+definitive values and retain their effects. The eventual reporting policy must
+not assume every absent warrants an alert.
 
 ## General computation reuse
 

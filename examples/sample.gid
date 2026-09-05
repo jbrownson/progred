@@ -2,6 +2,7 @@
   "binders": {
     "_321ee": f297bd70673e008742579e344f2321ee,
     "_8c710": fe958866c1d3ceac555a1b1ad488c710,
+    "absent": d9c0a7145a38859a245640d3469cbcd4,
     "amount": 4a99abd61aa7dfe64f93de9561124845,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "at": 4c2cb3268f1911bd26a0eb74622ba097,
@@ -18,6 +19,7 @@
     "commands": b3604c47bef05aa4c7ef0b2d5794da14,
     "content": 3e6b91d4a25f70c8815d29f6c4a30e7b,
     "corner": 12606ebd874c8c81cb938f4a119baed5,
+    "declined": 1cab38a2c8cffe5c077adc29f74c2ddf,
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "dim_face": f14b6a08d29c53e7bd0561f8a3c2497e,
     "double": 1588cd2c81f1c6563cfe843f32e760df,
@@ -134,6 +136,14 @@
                             selection_path: {
                               function: site_path,
                             },
+                          },
+                        },
+                        {
+                          pattern: {
+                            bind: event,
+                          },
+                          expression: {
+                            absent: declined,
                           },
                         },
                       ],

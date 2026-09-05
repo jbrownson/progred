@@ -296,7 +296,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
                 control::vocabulary::EXPRESSIONS,
                 Value::list([
                     grap::call(offer.on_commit.unwrap(), []),
-                    new_cell_id().into(),
+                    progred_libraries::absent::decline(),
                 ]),
             )],
         ),

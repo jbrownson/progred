@@ -152,7 +152,7 @@ mod tests {
         let definition =
             |value| grap::lambda([], grap::call(Value::from(probe), [(result, value)]));
         let mut cells = Cells::new();
-        cells.set_value(function, definition(progred_libraries::absent::value()));
+        cells.set_value(function, definition(progred_libraries::absent::decline()));
         let doc = doc_of(cells);
         for order in [library_ids, [library_ids[1], library_ids[0]]] {
             let libraries = Libraries::from_contributions(order.map(|id| {

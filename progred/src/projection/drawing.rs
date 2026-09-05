@@ -7,11 +7,11 @@ use crate::hover::{Hover, SourceTrace};
 use crate::placed::{Placed, leaf};
 use crate::sources::Sources;
 use gid::{CellId, Step, Value};
-use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
+use kurbo::{Affine, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
 use progred_libraries::{absent, layout as layout_data};
-use puri::draw::{Canvas, DrawList};
+use puri::draw::{Canvas, DrawCmd, DrawList};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
 
@@ -59,6 +59,7 @@ struct Recorded {
     hits: Vec<Hit>,
 }
 
+#[derive(Clone)]
 struct Hit {
     shape: puri::Shape,
     transform: Affine,
@@ -262,11 +263,14 @@ fn record_program(
     input: &SourceTrace,
     fuel: usize,
 ) -> Recorded {
-    let canvas = RefCell::new(DrawList::new());
-    let hits = RefCell::new(Vec::new());
+    #[derive(Clone, Default)]
+    struct Drawing {
+        commands: im::Vector<Rc<(DrawCmd, Option<Hit>)>>,
+        path: im::Vector<kurbo::PathEl>,
+    }
+    let drawing = grap::Effects::new(Drawing::default());
     // Fill call sites are few; a scan beats hashing per drawn shape.
     let origins = RefCell::new(Vec::<(grap::Expression, Option<SourceTrace>)>::new());
-    let path = RefCell::new(BezPath::new());
     let unit = Value::record([]);
     let functions = [
         layout_data::vocabulary::FILL,
@@ -281,7 +285,7 @@ fn record_program(
                 environment: &grap::Environment| {
         match function {
             layout_data::vocabulary::PATH => {
-                *path.borrow_mut() = BezPath::new();
+                drawing.borrow_mut().path = im::Vector::new();
                 Ok(unit.clone())
             }
             layout_data::vocabulary::MOVE_TO | layout_data::vocabulary::LINE_TO => {
@@ -298,14 +302,23 @@ fn record_program(
                     return Ok(absent::value());
                 };
                 if function == layout_data::vocabulary::MOVE_TO {
-                    path.borrow_mut().move_to((x, y));
+                    drawing
+                        .borrow_mut()
+                        .path
+                        .push_back(kurbo::PathEl::MoveTo((x, y).into()));
                 } else {
-                    path.borrow_mut().line_to((x, y));
+                    drawing
+                        .borrow_mut()
+                        .path
+                        .push_back(kurbo::PathEl::LineTo((x, y).into()));
                 }
                 Ok(unit.clone())
             }
             layout_data::vocabulary::CLOSE => {
-                path.borrow_mut().close_path();
+                drawing
+                    .borrow_mut()
+                    .path
+                    .push_back(kurbo::PathEl::ClosePath);
                 Ok(unit.clone())
             }
             layout_data::vocabulary::FILL => {
@@ -316,7 +329,9 @@ fn record_program(
                 };
                 let shape = match context.field(call, layout_data::vocabulary::SHAPE) {
                     Some(expression) => shape(context, expression, environment)?,
-                    None => Some(puri::Shape::Path(path.borrow().clone())),
+                    None => Some(puri::Shape::Path(
+                        drawing.borrow().path.iter().copied().collect(),
+                    )),
                 };
                 let transform = match context.field(call, layout_data::vocabulary::TRANSFORM) {
                     Some(expression) => transform(context, expression, environment)?,
@@ -342,29 +357,43 @@ fn record_program(
                         source
                     }
                 };
-                if let Some(source) = source {
-                    hits.borrow_mut()
-                        .push(Hit::new(shape.clone(), transform, source));
-                }
-                canvas
-                    .borrow_mut()
-                    .fill(shape, faces.resolve(paint), transform);
+                let hit = source.map(|source| Hit::new(shape.clone(), transform, source));
+                drawing.borrow_mut().commands.push_back(Rc::new((
+                    DrawCmd::Fill {
+                        shape,
+                        brush: faces.resolve(paint),
+                        transform,
+                    },
+                    hit,
+                )));
                 Ok(unit.clone())
             }
             _ => unreachable!("the overlay only advertises drawing functions"),
         }
     };
-    let overlay = grap::ForeignOverlay::new(&functions, &draw);
+    let overlay = grap::ForeignOverlay::new(&functions, &draw).with_effects(&drawing);
     grap::evaluate_scoped(
         program,
         |cell| sources.grap_definitions(cell),
         &overlay,
         fuel,
     );
-    Recorded {
-        commands: canvas.into_inner(),
-        hits: hits.into_inner(),
-    }
+    drawing
+        .into_inner()
+        .commands
+        .into_iter()
+        .map(Rc::unwrap_or_clone)
+        .fold(
+            Recorded {
+                commands: DrawList::new(),
+                hits: Vec::new(),
+            },
+            |mut recorded, (command, hit)| {
+                recorded.commands.0.push(command);
+                recorded.hits.extend(hit);
+                recorded
+            },
+        )
 }
 
 pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
@@ -449,11 +478,98 @@ mod tests {
     use progred_libraries::Libraries;
 
     #[test]
+    fn a_declined_definition_discards_its_ink_hits_and_path_changes() {
+        use layout_data::vocabulary as draw;
+        use progred_libraries::{control, f64};
+        let sequence = |values| {
+            grap::call(
+                control::vocabulary::DO.into(),
+                [(control::vocabulary::EXPRESSIONS, Value::list(values))],
+            )
+        };
+        let point = |function: CellId, x, y| {
+            grap::call(
+                function.into(),
+                [(draw::X, f64::value(x)), (draw::Y, f64::value(y))],
+            )
+        };
+        let fill = grap::call(
+            draw::FILL.into(),
+            [(
+                draw::PAINT,
+                progred_libraries::color::value(peniko::Color::BLACK),
+            )],
+        );
+        let function = new_cell_id();
+        let mut cells = Cells::new();
+        cells.set_value(
+            function,
+            grap::lambda(
+                [],
+                sequence(vec![
+                    grap::call(draw::PATH.into(), []),
+                    point(draw::MOVE_TO, 100.0, 100.0),
+                    point(draw::LINE_TO, 110.0, 110.0),
+                    fill.clone(),
+                    absent::decline(),
+                ]),
+            ),
+        );
+        let doc = gid::Document { root: None, cells };
+        let mut stack = crate::stack::load::<()>();
+        let library = new_cell_id();
+        let mut fallback = Cells::new();
+        fallback.set_value(function, grap::lambda([], fill));
+        stack.libraries.insert(
+            library,
+            Value::record([]),
+            progred_libraries::Definitions::from_parts(fallback, Default::default()),
+        );
+        let drawing = record_program(
+            &sequence(vec![
+                grap::call(draw::PATH.into(), []),
+                point(draw::MOVE_TO, 0.0, 0.0),
+                point(draw::LINE_TO, 10.0, 10.0),
+                grap::call(function.into(), []),
+            ]),
+            &Sources {
+                doc: &doc,
+                libraries: &stack.libraries,
+            },
+            &Faces::new(&crate::styles::editor(1.0)),
+            &SourceTrace::Stored(Rc::from([])),
+            200,
+        );
+        let [
+            DrawCmd::Fill {
+                shape: puri::Shape::Path(path),
+                ..
+            },
+        ] = drawing.commands.0.as_slice()
+        else {
+            panic!("only the fallback fill should remain");
+        };
+        assert_eq!(
+            path.elements(),
+            &[
+                kurbo::PathEl::MoveTo((0.0, 0.0).into()),
+                kurbo::PathEl::LineTo((10.0, 10.0).into()),
+            ]
+        );
+        let [hit] = drawing.hits.as_slice() else {
+            panic!("only the fallback hit should remain");
+        };
+        assert!(
+            matches!(&hit.source, SourceTrace::InCell { cell, source: Resolution::Library(id), .. } if *cell == function && *id == library)
+        );
+    }
+
+    #[test]
     fn recorded_hits_keep_the_executing_library_definition() {
         let function = new_cell_id();
         let library_ids = [new_cell_id(), new_cell_id()];
         let mut cells = Cells::new();
-        cells.set_value(function, grap::lambda([], absent::value()));
+        cells.set_value(function, grap::lambda([], absent::decline()));
         let doc = gid::Document {
             root: Some(Value::from(function)),
             cells,
