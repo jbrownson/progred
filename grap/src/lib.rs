@@ -8,9 +8,6 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-mod effects;
-pub use effects::Effects;
-
 #[cfg(test)]
 mod effect_tests;
 
@@ -40,6 +37,7 @@ pub mod absent {
     pub const MISSING_ARGUMENT: CellId = CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
     pub const INVALID_ENVIRONMENT: CellId = CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
     pub const NO_ALTERNATIVE: CellId = CellId::from_u128(0x3bf0543fa73a0cee9036317cdb5cacd9);
+    pub const EFFECTFUL_DECLINE: CellId = CellId::from_u128(0xdc2651b863aa8aaf2df25ccb0c1fef03);
     pub const DECLINED: CellId = CellId::from_u128(0x1cab38a2c8cffe5c077adc29f74c2ddf);
     pub const CAUSES: CellId = CellId::from_u128(0x2f34365ec4dce76324f482c08afe6aba);
 
@@ -810,7 +808,6 @@ type ScopedCall<'a> = dyn for<'context> Fn(
 pub struct ForeignOverlay<'a> {
     functions: &'a [CellId],
     call: &'a ScopedCall<'a>,
-    effects: Option<&'a dyn effects::Scope>,
 }
 
 impl<'a> ForeignOverlay<'a> {
@@ -826,16 +823,7 @@ impl<'a> ForeignOverlay<'a> {
                 + 'a
             ),
     ) -> Self {
-        Self {
-            functions,
-            call,
-            effects: None,
-        }
-    }
-
-    pub fn with_effects<T: Clone>(mut self, effects: &'a Effects<T>) -> Self {
-        self.effects = Some(effects);
-        self
+        Self { functions, call }
     }
 
     fn handles(&self, function: CellId) -> bool {
@@ -855,7 +843,7 @@ pub struct Context<'a> {
     definitions: &'a dyn Fn(CellId) -> Vec<(Resolution, Definition)>,
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
-    effects: Rc<Vec<Rc<dyn effects::Scope>>>,
+    effects: u64,
     remaining_fuel: usize,
     resolving: Vec<CellId>,
     expressions: Vec<Lowered>,
@@ -973,7 +961,14 @@ impl ResolvedForeign {
 
 impl<'a> Context<'a> {
     fn conclude(mut self, run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>) -> Evaluation {
-        let outcome = self.attempt(run);
+        let outcome = self.checked_call(run);
+        if let Err(Halt(result)) = &outcome
+            && absent::reason(result) == Some(absent::EFFECTFUL_DECLINE)
+        {
+            eprintln!(
+                "Grap: cannot decline after performing an effect; evaluation stopped: {result:?}"
+            );
+        }
         let completed = outcome.is_ok();
         let result = outcome
             .map(RuntimeValue::into_value)
@@ -985,45 +980,37 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn transaction<T>(
-        &mut self,
-        run: impl FnOnce(&mut Self) -> T,
-        accepted: impl FnOnce(&T) -> bool,
-    ) -> T {
-        let overlay = self.overlay.and_then(|overlay| overlay.effects);
-        if overlay.is_none() && self.effects.is_empty() {
-            return run(self);
-        }
-        let effects = self.effects.clone();
-        for effect in overlay.into_iter().chain(effects.iter().map(Rc::as_ref)) {
-            effect.begin();
-        }
-        let result = run(self);
-        let accepted = accepted(&result);
-        for effect in effects.iter().rev().map(Rc::as_ref).chain(overlay) {
-            effect.finish(accepted);
-        }
-        result
+    /// Mark an observable write to evaluation-local state. Foreign functions
+    /// call this when writing, after evaluating and checking their inputs.
+    pub fn effect(&mut self) {
+        self.effects += 1;
     }
 
-    fn attempt(
+    fn check_effects<T>(
+        &mut self,
+        run: impl FnOnce(&mut Self) -> Result<T, Halt>,
+        declined: impl FnOnce(&T) -> Option<Value>,
+    ) -> Result<T, Halt> {
+        let before = self.effects;
+        let result = run(self)?;
+        if self.effects != before
+            && let Some(value) = declined(&result)
+        {
+            Err(Halt(absent::with_detail(
+                absent::EFFECTFUL_DECLINE,
+                absent::VALUE,
+                value,
+            )))
+        } else {
+            Ok(result)
+        }
+    }
+
+    fn checked_call(
         &mut self,
         run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>,
     ) -> Result<RuntimeValue, Halt> {
-        self.transaction(run, |result| {
-            result.as_ref().is_ok_and(|value| !value.declines())
-        })
-    }
-
-    pub fn with_effects<T: Clone + 'static, R>(
-        &mut self,
-        effects: Rc<Effects<T>>,
-        run: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        Rc::make_mut(&mut self.effects).push(effects);
-        let result = run(self);
-        Rc::make_mut(&mut self.effects).pop();
-        result
+        self.check_effects(run, |value| value.declines().then(|| value.to_value()))
     }
 
     fn run(self, expression: &Value) -> Evaluation {
@@ -1378,7 +1365,7 @@ impl<'a> Context<'a> {
             {
                 return context.call_definitions(index, call, environment, &definitions);
             }
-            context.attempt(|context| {
+            context.checked_call(|context| {
                 let callable = match function_cell {
                     Some(index) => {
                         context.burn()?;
@@ -1843,7 +1830,7 @@ impl<'a> Context<'a> {
         callable: &PreparedCallable,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
-        self.attempt(|context| {
+        self.checked_call(|context| {
             context.burn()?;
             context.burn()?;
             let arguments: Vec<_> = arguments.into_iter().collect();
@@ -1941,7 +1928,7 @@ impl<'a> Context<'a> {
         {
             return self.apply_definitions(cell, function.clone(), arguments, &environment);
         }
-        self.attempt(|context| {
+        self.checked_call(|context| {
             let function = context.lower_source(function, OriginRoot::Input);
             let callable = context.eval_runtime(function, &environment)?;
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
@@ -2017,11 +2004,18 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         let mut declines = Vec::new();
         for definition in definitions {
-            let result = self.transaction(
+            let result = self.check_effects(
                 |context| invoke(context, definition),
-                |result| matches!(result, Ok(Some(value)) if !value.declines()),
-            );
-            match result? {
+                |result| match result {
+                    Some(value) => value.declines().then(|| value.to_value()),
+                    None => Some(absent::with_detail(
+                        absent::NOT_CALLABLE,
+                        absent::VALUE,
+                        callable.clone(),
+                    )),
+                },
+            )?;
+            match result {
                 Some(value) if value.declines() => declines.push(value.into_value()),
                 Some(value) => return Ok(value),
                 None => {}
@@ -2214,7 +2208,7 @@ fn context<'a>(
         definitions,
         overlay,
         foreign_scopes: Vec::new(),
-        effects: Rc::new(Vec::new()),
+        effects: 0,
         remaining_fuel: fuel,
         resolving: Vec::new(),
         expressions: Vec::new(),

@@ -363,6 +363,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     }
     for (cell, value) in [
         (grap_runtime::absent::FUEL_EXHAUSTED, "fuel exhausted"),
+        (
+            grap_runtime::absent::EFFECTFUL_DECLINE,
+            "declined after an effect",
+        ),
         (grap_runtime::absent::MISSING_CELL, "missing cell"),
         (grap_runtime::absent::CELL_CYCLE, "cell cycle"),
         (grap_runtime::absent::MALFORMED_LAMBDA, "malformed lambda"),

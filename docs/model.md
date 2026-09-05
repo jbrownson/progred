@@ -77,8 +77,10 @@ the supplied document and view, so it can move selection to another location.
 An absent value clears selection only at the specified path. Reads observe
 staged writes; an explicitly declined or halted handler commits no effects.
 Ordinary absent results keep effects, including a setter's successful clear.
-Each attempted definition has its own snapshot, so a later alternative sees
-none of the declined attempt's writes. Tests can replace these foreign functions
+A function must decline before performing effects, including effects in its
+arguments or nested calls. Declining afterward halts the evaluation and prints
+an error; no later definition runs. Only the complete editor operation is staged,
+with no per-call snapshots or rollback. Tests can replace these foreign functions
 with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and Grap write-back

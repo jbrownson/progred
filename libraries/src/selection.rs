@@ -116,6 +116,7 @@ mod tests {
                 let path = context.eval(path, environment)?;
                 let value = context.field(call, vocabulary::VALUE).unwrap();
                 let value = context.eval(value, environment)?;
+                context.effect();
                 writes
                     .borrow_mut()
                     .push((crate::path::read(&path).unwrap(), value));

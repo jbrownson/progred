@@ -41,13 +41,14 @@ fn run(
     initial: Value,
     fuel: usize,
 ) -> (Evaluation, Value) {
-    let effects = Effects::new(initial);
+    let effects = RefCell::new(initial);
     let invoke = new_cell_id();
     let functions = [operations.read, operations.write, invoke];
     let foreign = |cell, context: &mut Context<'_>, expression, environment: &Environment| {
         if cell == operations.write {
             let argument = context.field(expression, operations.value).unwrap();
             let value = context.eval(argument, environment)?;
+            context.effect();
             *effects.borrow_mut() = value.clone();
             Ok(value)
         } else if cell == operations.read {
@@ -58,7 +59,7 @@ fn run(
             context.call_prepared(&callable, [])
         }
     };
-    let overlay = ForeignOverlay::new(&functions, &foreign).with_effects(&effects);
+    let overlay = ForeignOverlay::new(&functions, &foreign);
     let result = match invocation {
         Invocation::Expression => evaluate_scoped(&call(function, []), definitions, &overlay, fuel),
         Invocation::Applied => apply_scoped(&function, [], definitions, &overlay, fuel),
@@ -87,7 +88,7 @@ fn a_returned_halt_shaped_value_is_still_a_completed_result() {
 }
 
 #[test]
-fn declined_grap_attempts_restore_state_before_the_next_definition() {
+fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
     let operations = Operations::new();
     let function = new_cell_id();
     let library = Resolution::Library(new_cell_id());
@@ -113,16 +114,21 @@ fn declined_grap_attempts_restore_state_before_the_next_definition() {
                         ),
                         (
                             library,
-                            Definition::Value(lambda([], call(operations.read.into(), []))),
+                            Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                                panic!("effectful decline must stop before fallback")
+                            })),
                         ),
                     ]
                 },
                 initial.clone(),
                 100,
             );
-            assert_eq!(evaluation.result, initial);
-            assert_eq!(state, initial);
-            assert!(evaluation.completed);
+            assert_eq!(
+                absent::reason(&evaluation.result),
+                Some(absent::EFFECTFUL_DECLINE)
+            );
+            assert_eq!(state, Value::from(b"discarded".to_vec()));
+            assert!(!evaluation.completed);
         }
     }
 }
@@ -166,7 +172,7 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
 }
 
 #[test]
-fn all_declines_keep_ordered_details_without_keeping_effects() {
+fn pure_declines_keep_ordered_details() {
     let operations = Operations::new();
     let function = new_cell_id();
     let first = absent::with_detail(
@@ -191,10 +197,7 @@ fn all_declines_keep_ordered_details_without_keeping_effects() {
                     .map(|decline| {
                         (
                             Resolution::Library(new_cell_id()),
-                            Definition::Value(lambda(
-                                [],
-                                after(operations.write(Value::from(vec![42])), decline),
-                            )),
+                            Definition::Value(lambda([], decline)),
                         )
                     })
                     .collect()
@@ -219,7 +222,7 @@ fn all_declines_keep_ordered_details_without_keeping_effects() {
 }
 
 #[test]
-fn halts_restore_effects_without_trying_another_definition_or_restoring_fuel() {
+fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
     let operations = Operations::new();
     let function = new_cell_id();
     let recurse = new_cell_id();
@@ -262,12 +265,12 @@ fn halts_restore_effects_without_trying_another_definition_or_restoring_fuel() {
         assert_eq!(evaluation.result, absent::value(absent::FUEL_EXHAUSTED));
         assert_eq!(evaluation.remaining_fuel, 0);
         assert!(!evaluation.completed);
-        assert_eq!(state, Value::record([]));
+        assert_eq!(state, Value::from(vec![42]));
     }
 }
 
 #[test]
-fn ignored_declines_restore_direct_lambda_effects() {
+fn an_effectful_decline_cannot_be_ignored_by_its_caller() {
     let operations = Operations::new();
     let initial = Value::from(b"initial".to_vec());
     for invocation in INVOCATIONS {
@@ -292,13 +295,17 @@ fn ignored_declines_restore_direct_lambda_effects() {
             initial.clone(),
             100,
         );
-        assert_eq!(evaluation.result, initial);
-        assert_eq!(state, initial);
+        assert_eq!(
+            absent::reason(&evaluation.result),
+            Some(absent::EFFECTFUL_DECLINE)
+        );
+        assert!(!evaluation.completed);
+        assert_eq!(state, Value::from(vec![42]));
     }
 }
 
 #[test]
-fn non_callable_candidates_do_not_keep_effects() {
+fn effectful_preparation_cannot_skip_to_a_callable_candidate() {
     let operations = Operations::new();
     let function = new_cell_id();
     let (evaluation, state) = run(
@@ -323,6 +330,105 @@ fn non_callable_candidates_do_not_keep_effects() {
         Value::record([]),
         100,
     );
-    assert_eq!(evaluation.result, Value::record([]));
-    assert_eq!(state, Value::record([]));
+    assert_eq!(
+        absent::reason(&evaluation.result),
+        Some(absent::EFFECTFUL_DECLINE)
+    );
+    assert!(!evaluation.completed);
+    assert_eq!(state, Value::from(vec![42]));
+}
+
+#[test]
+fn earlier_effects_do_not_prevent_a_later_pure_decline() {
+    let operations = Operations::new();
+    let function = new_cell_id();
+    let written = Value::from(vec![42]);
+    for invocation in INVOCATIONS {
+        let (evaluation, state) = run(
+            invocation,
+            lambda(
+                [],
+                after(operations.write(written.clone()), call(function.into(), [])),
+            ),
+            &operations,
+            |_| {
+                vec![
+                    (
+                        Resolution::Document,
+                        Definition::Value(lambda([], absent::decline())),
+                    ),
+                    (
+                        Resolution::Library(new_cell_id()),
+                        Definition::Value(lambda([], call(operations.read.into(), []))),
+                    ),
+                ]
+            },
+            Value::record([]),
+            100,
+        );
+        assert!(evaluation.completed);
+        assert_eq!(evaluation.result, written);
+        assert_eq!(state, written);
+    }
+}
+
+#[test]
+fn rust_functions_obey_the_same_decline_contract() {
+    for staged in [false, true] {
+        for effectful in [false, true] {
+            let operations = Operations::new();
+            let function = new_cell_id();
+            let implementation = move |context: &mut Context<'_>, _: &Environment| {
+                if effectful {
+                    context.effect();
+                }
+                Ok(RuntimeValue::from_value(absent::decline()))
+            };
+            let foreign = if staged {
+                ForeignFunction::staged(move |_, _| Rc::new(implementation))
+            } else {
+                ForeignFunction::runtime(move |context, _, environment| {
+                    implementation(context, environment)
+                })
+            };
+            for invocation in INVOCATIONS {
+                let (evaluation, _) = run(
+                    invocation,
+                    function.into(),
+                    &operations,
+                    |_| {
+                        vec![
+                            (
+                                Resolution::Document,
+                                Definition::ForeignFunction(foreign.clone()),
+                            ),
+                            (
+                                Resolution::Library(new_cell_id()),
+                                Definition::ForeignFunction(ForeignFunction::new(
+                                    move |_, _, _| {
+                                        assert!(
+                                            !effectful,
+                                            "effectful decline must not fall through"
+                                        );
+                                        Ok(Value::record([]))
+                                    },
+                                )),
+                            ),
+                        ]
+                    },
+                    Value::record([]),
+                    100,
+                );
+                assert_eq!(evaluation.completed, !effectful);
+                if effectful {
+                    assert_eq!(
+                        absent::reason(&evaluation.result),
+                        Some(absent::EFFECTFUL_DECLINE)
+                    );
+                } else {
+                    assert_eq!(evaluation.result, Value::record([]));
+                }
+            }
+        }
+    }
 }

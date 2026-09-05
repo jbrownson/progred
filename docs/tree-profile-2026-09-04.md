@@ -116,3 +116,38 @@ Reproduce the canvas run:
 Local evidence is under `target/sandbox/tmp/tree-profile-*.log`, with the initial
 stack sample in `tree-profile-baseline.sample.txt`. Those generated files are
 not committed.
+
+
+## Follow-up: replacing transactional calls with effect checks
+
+The later `a174dcb` change added snapshots around function calls and used
+persistent vectors for drawing so declined calls could discard their effects.
+A fresh comparison on the same local Mac used 100 iterations of the headless
+picture benchmark, with release builds under Seatbelt and no app launch:
+
+| Implementation | Whole-loop average per frame |
+| --- | ---: |
+| `a174dcb`: per-call snapshots and persistent drawing collections | 29.9 ms |
+| Per-call effect-counter checks and local drawing vectors | 24.3 ms |
+
+This is about 19% less time in this comparison. These are whole-loop averages,
+including initial iterations and output destruction, unlike the warmed frame
+medians in the original experiment. The comparison does not isolate the counter
+checks from the collection change, and it does not measure interactive frame
+rate. Its result is near the earlier implementation's timings, without proving
+that the new check has zero overhead.
+
+The replacement changes the contract: a function must decline before effects.
+Rust capabilities increment the context's effect counter when writing, and a
+call that subsequently declines halts the evaluation with a tagged error and
+prints to stderr. Effects in arguments and nested calls count too. Ordinary
+absents still retain their effects. The host can discard the complete temporary
+editor operation or drawing recording; individual calls never roll back state.
+
+To reproduce the comparison's workload:
+
+```sh
+./tools/sandbox-cargo test --release -p progred \
+  --config 'env.IOP_PROFILE_ITERATIONS="100"' \
+  iop_tree_profile_loop -- --ignored --nocapture
+```

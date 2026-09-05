@@ -24,8 +24,9 @@ distinct while answering those questions.
 
 Offer construction decides applicability; activating an offered completion
 consumes the input. Its Grap continuation can still fail at runtime. For now,
-keep the existing silent failure: unsuccessful preparation installs neither
-the insertion nor its staged selection/annotation changes.
+unsuccessful preparation installs neither the insertion nor its staged
+selection/annotation changes. Declining after an effect is now an evaluator
+contract error and prints to stderr; other completion failures remain silent.
 
 Later, design an editor-owned way to surface these failures, such as alerts or
 notifications, using the failure details in GID values. Do not add that machinery

@@ -133,19 +133,26 @@ another absent, is definitive. Scoped capability functions can override this
 lookup. An exhausted definition chain preserves its explicit declines in order,
 keeping one unchanged or returning `{absent: declined, causes: [...]}` for several.
 
-Hosts supply temporary effect values through `grap::Effects` and register them
-with a foreign overlay or an evaluation scope. Each call and definition attempt
-keeps a snapshot; explicit decline, a skipped non-callable candidate, or evaluator
-halt restores it. Successful nested effects remain provisional until their
-enclosing call accepts. Fuel is never restored. Selection, annotations, drawing
-commands, drawing paths, and deterministic random state use this facility.
-Snapshots share a state pointer; a write clones the current value only when
-needed. The drawing recorder uses persistent vectors of shared command/hit
-entries, so taking a snapshot does not copy previously recorded geometry.
-Snapshot clones must preserve the old value independently; sharing persistent
-storage is fine, sharing untracked mutable storage is not. Rust FFIs must keep
-effects inside these temporary values or take responsibility for their own
-decline behavior. This provides no rollback for external I/O.
+Hosts keep effects in evaluation-local data. Rust capability implementations
+call `Context::effect()` when writing selection, annotations, drawing output or
+path state, or advancing a deterministic random stream. Reads do not mark an
+effect. The context owns one effect counter; each call remembers its starting
+count. This includes effects in strict arguments and nested calls, but excludes
+effects performed before that call began.
+
+A function must explicitly decline before performing effects. A decline after
+an effect halts evaluation with `{absent: effectful-decline, value: cause}` and
+prints an error to stderr; it never tries another definition with changed state.
+An effectful candidate that evaluates to a non-callable value also cannot be
+skipped. These checks apply to Grap and Rust functions alike. Other absents
+remain ordinary results, including a successful selection clear.
+
+There are no per-call snapshots or rollback operations. The host stages the
+whole editor operation or drawing recording and discards that temporary output
+when evaluation halts. Drawing uses local vectors, and the random stream uses
+local scalar state. The interpreter does not mutate the live editor. Rust FFIs
+must mark their observable writes and keep their effects local; external I/O
+is not reversible through this facility. Fuel is never restored.
 
 Rust foreign functions receive raw call fields, the calling environment, and
 a live evaluation context. They choose which operands to evaluate and in what
@@ -192,6 +199,7 @@ result remains definitive within that match.
 
 Fuel exhaustion halts immediately; at the public boundary it is still an absent
 value, with `Evaluation.completed` recording that execution did not finish.
+An effectful decline also halts rather than returning normally.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
 

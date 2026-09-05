@@ -2410,7 +2410,6 @@ dependencies = [
  "getrandom 0.3.4",
  "gid",
  "grap",
- "im",
  "kurbo",
  "measured",
  "objc2 0.6.4",

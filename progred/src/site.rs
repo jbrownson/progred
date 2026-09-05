@@ -6,12 +6,11 @@ use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
-use grap::Effects;
 use progred_libraries::{
     absent, layout, path as path_data, selection as selection_capability, site,
 };
+use std::cell::RefCell;
 
-#[derive(Clone)]
 pub(crate) struct PendingChanges {
     pub annotation: Option<Value>,
     pub annotation_changed: bool,
@@ -119,7 +118,7 @@ pub(crate) fn evaluate(
     sources: &Sources<'_>,
     fuel: usize,
 ) -> Option<PendingChanges> {
-    let staged = Effects::new(PendingChanges {
+    let staged = RefCell::new(PendingChanges {
         annotation,
         annotation_changed: false,
         selection,
@@ -132,7 +131,7 @@ pub(crate) fn evaluate(
                     environment: &grap::Environment| {
             event_foreign(function, context, call, environment, path, &staged)
         };
-        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call).with_effects(&staged);
+        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
         grap::apply_scoped(
             function,
             arguments,
@@ -150,7 +149,7 @@ fn event_foreign(
     call: grap::Expression,
     environment: &grap::Environment,
     path: &[gid::Step],
-    staged: &Effects<PendingChanges>,
+    staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     if function == site::vocabulary::PATH {
         return Ok(path_data::value(path));
@@ -189,6 +188,7 @@ fn event_foreign(
         let value = context.eval(expression, environment)?;
         let mut staged = staged.borrow_mut();
         if !absent::is_absent(&value) {
+            context.effect();
             staged.selection = Some((path, value.clone()));
             staged.selection_changed = true;
         } else if staged
@@ -196,6 +196,7 @@ fn event_foreign(
             .as_ref()
             .is_some_and(|(selected, _)| selected == &path)
         {
+            context.effect();
             staged.selection = None;
             staged.selection_changed = true;
         }
@@ -208,6 +209,7 @@ fn event_foreign(
         let value = context.eval(expression, environment)?;
         let value = (!absent::is_absent(&value)).then_some(value.clone());
         let result = value.clone().unwrap_or_else(absent::value);
+        context.effect();
         let mut staged = staged.borrow_mut();
         staged.annotation = value;
         staged.annotation_changed = true;
@@ -369,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn a_declined_definition_leaves_no_selection_or_annotation_for_the_next() {
+    fn declining_after_editing_discards_the_whole_editor_operation() {
         let mut stack = crate::stack::load::<()>();
         let function = gid::new_cell_id();
         let mut cells = gid::Cells::new();
@@ -413,11 +415,8 @@ mod tests {
                 libraries: &stack.libraries,
             },
             100,
-        )
-        .unwrap();
-        assert_eq!(staged.selection, original);
-        assert_eq!(staged.annotation, None);
-        assert!(!staged.selection_changed && !staged.annotation_changed);
+        );
+        assert!(staged.is_none());
     }
 
     fn sequence(expressions: impl IntoIterator<Item = Value>) -> Value {
