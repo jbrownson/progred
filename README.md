@@ -29,9 +29,11 @@ pipeline; and Puri backends for Vello and Canvas2D.
   Canvas2D directly; recorders can reify the same final-tagless drawing
   language for tests and debugging. See [`docs/puri.md`](docs/puri.md).
 
-The current model and projection decisions are summarized in
+The current model and projection implementation are described in
 [`docs/model.md`](docs/model.md) and [`docs/projections.md`](docs/projections.md).
 The broader motivation is in [`MOTIVATION.md`](MOTIVATION.md).
+See the [documentation index](docs/README.md) for current references, deferred
+work, and separately archived historical notes.
 
 ## Run it
 

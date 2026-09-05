@@ -1,3 +1,11 @@
+# Archived Roc comparison notes
+
+Snapshot from `7da4bb0`, archived on 2026-09-04. These assistant-written
+comparison and porting ideas are historical proposals, not a current backlog
+or verified statements of the owner's intent. See [current documentation](../README.md).
+
+---
+
 # Roc Back-Port Backlog
 
 Working list. Delete it when drained; durable design decisions belong in

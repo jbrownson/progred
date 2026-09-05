@@ -5,6 +5,11 @@ the native data substrate, `docs/puri.md` for the UI runtime decision and plan, 
 editor model decisions, and `docs/projections.md` for Grap's GID-
 embedded evaluator.
 
+These documents describe the current implementation, not verified statements
+of the owner's intent. See `docs/README.md` for the reading map. Superseded
+notes belong in `docs/history/`; keep proposals and deferred work separate
+from current contracts, and do not infer owner approval from old prose.
+
 ## Cargo
 
 Cargo build scripts and procedural macros execute dependency code. The
