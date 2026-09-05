@@ -153,9 +153,11 @@ and [completion presentation](../progred/src/projection/completion.rs).
 A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion
 also happens when pressing Down on the selected `…` row. Expansion keeps the
-selected index, clamped to the available rows. Changing the query
-resets selection, scroll, and expansion; returning to an older query does not
-restore an old choice. Pointer and keyboard activation use the same callbacks.
+selected index, clamped to the available rows. Changing the query filters the
+expanded list and resets selection and scroll; expansion lasts for that picker.
+Returning to an older query does not restore an old choice. A new picker starts
+with its provider's narrow vocabulary. Pointer and keyboard activation use the
+same callbacks.
 Activating a visible offer consumes the input even if its continuation declines;
 Enter must not then fall through to inserting the raw query.
 

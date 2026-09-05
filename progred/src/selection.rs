@@ -194,7 +194,7 @@ impl Selection {
     }
 
     pub fn completion_everything(&self) -> bool {
-        !self.query_changed() && payload::completion_everything(&self.payload)
+        payload::completion_everything(&self.payload)
     }
 
     pub fn set_completion_view(&mut self, scroll: f64, choice: usize, everything: bool) {
@@ -927,7 +927,7 @@ pub mod payload {
             payload.clone()
         } else {
             with_field(
-                &with_completion_view(payload, 0.0, 0, false),
+                &with_completion_view(payload, 0.0, 0, completion_everything(payload)),
                 vocabulary::QUERY,
                 text::value(query),
             )
@@ -1107,7 +1107,7 @@ pub mod payload {
         }
 
         #[test]
-        fn changing_an_owned_query_resets_its_completion_choice() {
+        fn changing_an_owned_query_resets_position_but_preserves_expansion() {
             let changed = with_editor(
                 &with_completion_view(&pending("old", 2), 24.0, 2, true),
                 &LineEditState::from_parts("new", 3, 3, None, None),
@@ -1116,7 +1116,7 @@ pub mod payload {
             assert_eq!(query(&changed), Some("new"));
             assert_eq!(choice(&changed), Some(0));
             assert_eq!(completion_scroll(&changed), Some(0.0));
-            assert!(!completion_everything(&changed));
+            assert!(completion_everything(&changed));
 
             let unchanged = with_editor(
                 &with_completion_view(&pending("same", 2), 24.0, 2, true),

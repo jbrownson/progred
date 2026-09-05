@@ -381,20 +381,33 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let mut pending =
-        crate::selection::pending_with_query(&crate::workspace::Root::document(), Vec::new(), "");
-    pending.set_completion_view(0.0, 2, false);
-    pending
-        .edit_mut()
-        .unwrap()
-        .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
-    assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
-    assert_eq!(pending.choice(), 0);
-    write_through(&mut doc, &lib, &mut pending);
-    assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
-    assert_eq!(pending.choice(), 0);
-    pending.edit_mut().unwrap().set_text("");
-    assert_eq!(pending.choice(), 0);
+    for everything in [false, true] {
+        let mut pending = crate::selection::pending_with_query(
+            &crate::workspace::Root::document(),
+            Vec::new(),
+            "",
+        );
+        pending.set_completion_view(24.0, 2, everything);
+        pending
+            .edit_mut()
+            .unwrap()
+            .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
+        assert_eq!(pending.choice(), 0);
+        assert_eq!(pending.completion_scroll(), 0.0);
+        assert_eq!(pending.completion_everything(), everything);
+        assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
+        assert_eq!(
+            selection_payload::completion_everything(&pending.payload()),
+            everything
+        );
+        write_through(&mut doc, &lib, &mut pending);
+        assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
+        assert_eq!(pending.choice(), 0);
+        assert_eq!(pending.completion_everything(), everything);
+        pending.edit_mut().unwrap().set_text("");
+        assert_eq!(pending.choice(), 0);
+        assert_eq!(pending.completion_everything(), everything);
+    }
 }
 
 #[test]
