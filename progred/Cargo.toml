@@ -6,25 +6,25 @@ edition = "2024"
 [dependencies]
 grap = { path = "../grap" }
 progred-libraries = { path = "../libraries" }
-progred-display = { path = "../display" }
-gid = { path = "../gid" }
+progred-display.workspace = true
+gid.workspace = true
 measured = { path = "../ui/measured" }
-puri = { path = "../ui/puri" }
-puri-widgets = { path = "../ui/puri-widgets" }
-uig = { path = "../ui/uig" }
-kurbo = "0.13.1"
-peniko = "0.6.1"
-parley = "0.9.0"
+puri.workspace = true
+puri-widgets.workspace = true
+uig.workspace = true
+kurbo.workspace = true
+peniko.workspace = true
+parley.workspace = true
 winit = "0.30.13"
-ui-events = "0.3"
+ui-events.workspace = true
 ui-events-winit = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-pollster = "0.4.0"
+pollster.workspace = true
 puri-vello = { path = "../ui/puri-vello" }
-vello = "0.9.0"
+vello.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 clipboard-rs = "0.3.3"
@@ -32,10 +32,10 @@ rfd = "0.17"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 puri-web = { path = "../ui/puri-web" }
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = [
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
     "CanvasRenderingContext2d",
     "Document",
     "HtmlCanvasElement",
@@ -58,4 +58,4 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["
 raw-window-metal = "1.1.0"
 
 [dev-dependencies]
-skrifa = "0.42.1"
+skrifa.workspace = true

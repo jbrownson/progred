@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gid = { path = "../gid" }
-puri = { path = "../ui/puri" }
-peniko = "0.6.1"
+gid.workspace = true
+puri.workspace = true
+peniko.workspace = true
