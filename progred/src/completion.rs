@@ -290,7 +290,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
     let mut references_pool: Vec<_> = local
         .into_iter()
-        .map(|(entry, named, _)| (entry, named))
+        .map(|(entry, named, _)| (entry, named, None))
         .collect();
     references_pool.push((
         Entry {
@@ -302,34 +302,44 @@ pub(crate) fn completion_entries_with<C: 'static>(
             activate: commit.new_cell(),
         },
         true,
+        Some("("),
     ));
     references_pool.extend(
         [
-            ("new list", Value::list([])),
-            ("new record", Value::record([])),
+            ("new list", "[", Value::list([])),
+            ("new record", "{", Value::record([])),
         ]
         .into_iter()
-        .filter_map(|(display, value)| {
+        .filter_map(|(display, alias, value)| {
             Entry::value(display.to_string(), None, value, commit).map(|mut entry| {
                 entry.face = Face::Dim;
-                (entry, true)
+                (entry, true, Some(alias))
             })
         }),
     );
-    references_pool.extend(external.into_iter().map(|(entry, named, _)| (entry, named)));
-    let references: Vec<_> = filter::rank(references_pool, |(entry, _)| &entry.display, query)
-        .into_iter()
-        .map(|ranked| {
-            let demoted = ranked.fuzzy() || !ranked.item.1;
-            (
-                Entry {
-                    matches: ranked.matches,
-                    ..ranked.item.0
-                },
-                demoted,
-            )
-        })
-        .collect();
+    references_pool.extend(
+        external
+            .into_iter()
+            .map(|(entry, named, _)| (entry, named, None)),
+    );
+    let references: Vec<_> = filter::rank_with_aliases(
+        references_pool,
+        |(entry, _, _)| &entry.display,
+        |(_, _, alias)| alias.as_slice(),
+        query,
+    )
+    .into_iter()
+    .map(|ranked| {
+        let demoted = ranked.fuzzy() || !ranked.item.1;
+        (
+            Entry {
+                matches: ranked.matches,
+                ..ranked.item.0
+            },
+            demoted,
+        )
+    })
+    .collect();
     let mut entries = contextual
         .map(|provider| contextual_entries(provider, query, commit))
         .unwrap_or_default();
@@ -352,46 +362,28 @@ fn contextual_entries<C: 'static>(
     query: &str,
     commit: &Commit<C>,
 ) -> Vec<Entry<C>> {
-    let completions = provider(query);
-    let keys: Vec<_> = completions
-        .iter()
-        .enumerate()
-        .flat_map(|(index, completion)| {
-            std::iter::once((index, completion.display.clone(), true)).chain(
-                (!query.is_empty())
-                    .then_some(completion.aliases.iter())
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .map(move |alias| (index, alias, false)),
-            )
+    filter::rank_with_aliases(
+        provider(query),
+        |completion| &completion.display,
+        |completion| &completion.aliases,
+        query,
+    )
+    .into_iter()
+    .filter_map(|ranked| {
+        let completion = ranked.item;
+        Entry::offered(
+            completion.display,
+            completion.detail,
+            completion.value,
+            completion.on_commit,
+            commit,
+        )
+        .map(|entry| Entry {
+            matches: ranked.matches,
+            ..entry
         })
-        .collect();
-    let mut seen = vec![false; completions.len()];
-    filter::rank(keys, |(_, key, _)| key, query)
-        .into_iter()
-        .filter_map(|ranked| {
-            let (index, _, display_matched) = ranked.item;
-            if std::mem::replace(&mut seen[index], true) {
-                None
-            } else {
-                let completion = &completions[index];
-                Entry::offered(
-                    completion.display.clone(),
-                    completion.detail.clone(),
-                    completion.value.clone(),
-                    completion.on_commit.clone(),
-                    commit,
-                )
-                .map(|entry| Entry {
-                    matches: display_matched
-                        .then_some(ranked.matches)
-                        .unwrap_or_default(),
-                    ..entry
-                })
-            }
-        })
-        .collect()
+    })
+    .collect()
 }
 
 fn source_name(sources: &Sources<'_>, source: Resolution) -> String {

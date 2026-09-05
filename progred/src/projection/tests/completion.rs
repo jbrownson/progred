@@ -598,6 +598,45 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
 }
 
 #[test]
+fn completion_constructor_aliases_rank_ahead_of_literal_text() {
+    let document = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = progred_libraries::Libraries::default();
+    let sources = src(&document, &libraries);
+    for raw in [false, true] {
+        for (query, display, value) in [
+            ("[", "new list", Some(Value::list([]))),
+            ("(", "new cell", None),
+            ("{", "new record", Some(Value::record([]))),
+        ] {
+            let entries = completion_entries(&sources, raw, false, query);
+            assert_eq!(entries[0].display, display);
+            assert!(entries[0].matches.is_empty());
+            match value {
+                Some(value) => assert_eq!(activated(&entries[0]).value, Some(value)),
+                None => {
+                    let first = activated(&entries[0]).value.unwrap().as_cell().unwrap();
+                    let second = activated(&entries[0]).value.unwrap().as_cell().unwrap();
+                    assert_ne!(first, second);
+                }
+            }
+            assert_eq!(activated(&entries[1]).value, Some(text::value(query)));
+            let quoted = completion_entries(&sources, raw, false, &format!("\"{query}\""));
+            assert_eq!(activated(&quoted[0]).value, Some(text::value(query)));
+            let labels = completion_entries(&sources, raw, true, query);
+            if query == "(" {
+                assert_eq!(labels[0].display, "new cell");
+                assert!(activated(&labels[0]).label.is_some());
+            } else {
+                assert!(labels.iter().all(|entry| entry.display != display));
+            }
+        }
+    }
+}
+
+#[test]
 fn entry_hover_marks_follow_the_visible_offers() {
     let doc = sample_document();
     let lib = crate::stack::load::<()>().libraries;

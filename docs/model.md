@@ -103,6 +103,10 @@ provider for offers. Without one, the editor uses its universal offers.
 Root templates and root field vocabulary are supplied separately and do not
 leak into descendants.
 
+Universal constructor offers accept delimiter aliases: `[` for `new list`,
+`(` for `new cell`, and `{` for `new record`. These use ordinary completion
+matching and activation; quoted punctuation still leads with literal text.
+
 A library completion can provide an `on_commit` Grap callable, run at the
 committed location with the same site and selection capabilities as event
 handlers. Insertion and continuation effects are prepared together and installed

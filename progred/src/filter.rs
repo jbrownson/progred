@@ -127,6 +127,54 @@ pub fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ran
     ranked
 }
 
+/// Keep each item's best display-name or alias match. Alias matches do not
+/// produce spans in the displayed name, and empty queries keep offer order.
+pub fn rank_with_aliases<A, S: AsRef<str>>(
+    items: Vec<A>,
+    display: impl Fn(&A) -> &str,
+    aliases: impl Fn(&A) -> &[S],
+    needle: &str,
+) -> Vec<Ranked<A>> {
+    if needle.is_empty() {
+        rank(items, display, needle)
+    } else {
+        let keys = items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| {
+                std::iter::once((index, display(item), true)).chain(
+                    aliases(item)
+                        .iter()
+                        .map(move |alias| (index, alias.as_ref(), false)),
+                )
+            })
+            .collect();
+        let ranked: Vec<_> = rank(keys, |(_, key, _)| key, needle)
+            .into_iter()
+            .map(|ranked| Ranked {
+                item: ranked.item.0,
+                matches: if ranked.item.2 {
+                    ranked.matches
+                } else {
+                    Vec::new()
+                },
+                tier: ranked.tier,
+            })
+            .collect();
+        let mut items: Vec<_> = items.into_iter().map(Some).collect();
+        ranked
+            .into_iter()
+            .filter_map(|ranked| {
+                items[ranked.item].take().map(|item| Ranked {
+                    item,
+                    matches: ranked.matches,
+                    tier: ranked.tier,
+                })
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,5 +225,31 @@ mod tests {
         // Case-insensitive matching never shifts offsets.
         let ranked = rank(vec!["État"], |w| w, "ét");
         assert_eq!(ranked[0].matches, vec![0..3]);
+    }
+
+    #[test]
+    fn aliases_rank_once_without_highlighting_unmatched_display_text() {
+        let offers = [
+            ("new list", &["[", "list"][..]),
+            ("list of values", &[][..]),
+        ];
+        let search =
+            |query| rank_with_aliases(offers.to_vec(), |offer| offer.0, |offer| offer.1, query);
+        let alias = search("list");
+        assert_eq!(alias.len(), 2);
+        assert_eq!(alias[0].item.0, "new list");
+        assert!(alias[0].matches.is_empty());
+        assert_eq!(alias[1].matches, vec![0..4]);
+        let bracket = search("[");
+        assert_eq!(bracket.len(), 1);
+        assert_eq!(bracket[0].item.0, "new list");
+        assert!(bracket[0].matches.is_empty());
+        assert_eq!(search("new")[0].matches, vec![0..3]);
+        let empty = search("");
+        assert_eq!(
+            empty.iter().map(|ranked| ranked.item).collect::<Vec<_>>(),
+            offers
+        );
+        assert!(empty.iter().all(|ranked| ranked.matches.is_empty()));
     }
 }
