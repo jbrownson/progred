@@ -144,6 +144,10 @@ prints to stderr. Effects in arguments and nested calls count too. Ordinary
 absents still retain their effects. The host can discard the complete temporary
 editor operation or drawing recording; individual calls never roll back state.
 
+Wrapping the effect body in `context.effect(|| operation)` subsequently measured
+25.2 ms/frame and 24.0 ms/frame in two 100-frame runs of the same workload.
+These runs show timing variability rather than establishing any helper overhead.
+
 To reproduce the comparison's workload:
 
 ```sh

@@ -980,10 +980,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Mark an observable write to evaluation-local state. Foreign functions
-    /// call this when writing, after evaluating and checking their inputs.
-    pub fn effect(&mut self) {
+    /// Run an observable write to evaluation-local state. Foreign functions
+    /// evaluate arguments and check applicability before entering this operation.
+    pub fn effect<T>(&mut self, run: impl FnOnce() -> T) -> T {
         self.effects += 1;
+        run()
     }
 
     fn check_effects<T>(

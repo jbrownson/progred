@@ -280,11 +280,10 @@ fn record_program(
                 call,
                 environment: &grap::Environment| {
         match function {
-            layout_data::vocabulary::PATH => {
-                context.effect();
+            layout_data::vocabulary::PATH => Ok(context.effect(|| {
                 *path.borrow_mut() = BezPath::new();
-                Ok(unit.clone())
-            }
+                unit.clone()
+            })),
             layout_data::vocabulary::MOVE_TO | layout_data::vocabulary::LINE_TO => {
                 let (Some(x), Some(y)) = (
                     context.field(call, layout_data::vocabulary::X),
@@ -298,19 +297,19 @@ fn record_program(
                 ) else {
                     return Ok(absent::value());
                 };
-                context.effect();
-                if function == layout_data::vocabulary::MOVE_TO {
-                    path.borrow_mut().move_to((x, y));
-                } else {
-                    path.borrow_mut().line_to((x, y));
-                }
-                Ok(unit.clone())
+                Ok(context.effect(|| {
+                    if function == layout_data::vocabulary::MOVE_TO {
+                        path.borrow_mut().move_to((x, y));
+                    } else {
+                        path.borrow_mut().line_to((x, y));
+                    }
+                    unit.clone()
+                }))
             }
-            layout_data::vocabulary::CLOSE => {
-                context.effect();
+            layout_data::vocabulary::CLOSE => Ok(context.effect(|| {
                 path.borrow_mut().close_path();
-                Ok(unit.clone())
-            }
+                unit.clone()
+            })),
             layout_data::vocabulary::FILL => {
                 let Some(paint) =
                     evaluated_field(context, call, environment, layout_data::vocabulary::PAINT)?
@@ -345,15 +344,16 @@ fn record_program(
                         source
                     }
                 };
-                context.effect();
-                if let Some(source) = source {
-                    hits.borrow_mut()
-                        .push(Hit::new(shape.clone(), transform, source));
-                }
-                canvas
-                    .borrow_mut()
-                    .fill(shape, faces.resolve(paint), transform);
-                Ok(unit.clone())
+                Ok(context.effect(|| {
+                    if let Some(source) = source {
+                        hits.borrow_mut()
+                            .push(Hit::new(shape.clone(), transform, source));
+                    }
+                    canvas
+                        .borrow_mut()
+                        .fill(shape, faces.resolve(paint), transform);
+                    unit.clone()
+                }))
             }
             _ => unreachable!("the overlay only advertises drawing functions"),
         }

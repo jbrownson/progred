@@ -134,11 +134,13 @@ lookup. An exhausted definition chain preserves its explicit declines in order,
 keeping one unchanged or returning `{absent: declined, causes: [...]}` for several.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
-call `Context::effect()` when writing selection, annotations, drawing output or
-path state, or advancing a deterministic random stream. Reads do not mark an
-effect. The context owns one effect counter; each call remembers its starting
-count. This includes effects in strict arguments and nested calls, but excludes
-effects performed before that call began.
+wrap selection, annotation, drawing/path writes, and deterministic random
+advancement in `context.effect(|| operation)`. The combinator marks the effect,
+runs the operation, and returns its result. Arguments and applicability checks
+stay outside the closure, so declining before a write remains possible. Reads
+do not mark an effect. The context owns one effect counter; each call remembers
+its starting count. This includes effects in strict arguments and nested calls,
+but excludes effects performed before that call began.
 
 A function must explicitly decline before performing effects. A decline after
 an effect halts evaluation with `{absent: effectful-decline, value: cause}` and

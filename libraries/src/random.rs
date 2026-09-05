@@ -54,10 +54,11 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
                 .get()
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1_442_695_040_888_963_407);
-            context.effect();
-            state.set(next);
-            let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-            Ok(RuntimeValue::f64(min + (max - min) * unit))
+            Ok(context.effect(|| {
+                state.set(next);
+                let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
+                RuntimeValue::f64(min + (max - min) * unit)
+            }))
         }),
     )
 }

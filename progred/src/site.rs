@@ -188,17 +188,19 @@ fn event_foreign(
         let value = context.eval(expression, environment)?;
         let mut staged = staged.borrow_mut();
         if !absent::is_absent(&value) {
-            context.effect();
-            staged.selection = Some((path, value.clone()));
-            staged.selection_changed = true;
+            context.effect(|| {
+                staged.selection = Some((path, value.clone()));
+                staged.selection_changed = true;
+            });
         } else if staged
             .selection
             .as_ref()
             .is_some_and(|(selected, _)| selected == &path)
         {
-            context.effect();
-            staged.selection = None;
-            staged.selection_changed = true;
+            context.effect(|| {
+                staged.selection = None;
+                staged.selection_changed = true;
+            });
         }
         return Ok(value);
     }
@@ -209,11 +211,12 @@ fn event_foreign(
         let value = context.eval(expression, environment)?;
         let value = (!absent::is_absent(&value)).then_some(value.clone());
         let result = value.clone().unwrap_or_else(absent::value);
-        context.effect();
-        let mut staged = staged.borrow_mut();
-        staged.annotation = value;
-        staged.annotation_changed = true;
-        return Ok(result);
+        return Ok(context.effect(|| {
+            let mut staged = staged.borrow_mut();
+            staged.annotation = value;
+            staged.annotation_changed = true;
+            result
+        }));
     }
     Ok(absent::value())
 }

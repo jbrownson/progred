@@ -48,9 +48,10 @@ fn run(
         if cell == operations.write {
             let argument = context.field(expression, operations.value).unwrap();
             let value = context.eval(argument, environment)?;
-            context.effect();
-            *effects.borrow_mut() = value.clone();
-            Ok(value)
+            Ok(context.effect(|| {
+                *effects.borrow_mut() = value.clone();
+                value
+            }))
         } else if cell == operations.read {
             Ok(effects.borrow().clone())
         } else {
@@ -379,10 +380,11 @@ fn rust_functions_obey_the_same_decline_contract() {
             let operations = Operations::new();
             let function = new_cell_id();
             let implementation = move |context: &mut Context<'_>, _: &Environment| {
-                if effectful {
-                    context.effect();
-                }
-                Ok(RuntimeValue::from_value(absent::decline()))
+                Ok(RuntimeValue::from_value(if effectful {
+                    context.effect(absent::decline)
+                } else {
+                    absent::decline()
+                }))
             };
             let foreign = if staged {
                 ForeignFunction::staged(move |_, _| Rc::new(implementation))
