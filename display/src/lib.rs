@@ -7,8 +7,8 @@
 
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
+use puri::Leaf;
 pub use puri::delim::{Delim, Side};
-use puri::{Affine, Command, Drawing, Leaf, RoundedRect, Shape, Stroke};
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
@@ -282,6 +282,8 @@ pub enum Layout<World, Hover> {
         provider: Option<CompletionProvider>,
     },
     LineEdit(LineEdit),
+    /// An inert empty text frame, measured with the host's text style.
+    EmptySlot,
     OnClick {
         child: Box<Layout<World, Hover>>,
         handler: ActionHandler<World>,
@@ -436,6 +438,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 provider: provider.clone(),
             },
             Self::LineEdit(line) => Self::LineEdit(line.clone()),
+            Self::EmptySlot => Self::EmptySlot,
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
                 handler: handler.clone(),
@@ -695,20 +698,7 @@ pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {
-    leaf(Leaf::Drawing(Drawing {
-        width: 21.0,
-        ascent: 11.0,
-        descent: 4.0,
-        commands: vec![Command::Stroke {
-            shape: Shape::RoundedRect(RoundedRect::from_rect(
-                puri::Rect::new(0.5, 0.5, 20.5, 14.5),
-                3.0,
-            )),
-            style: Stroke::new(1.0),
-            paint: Paint::Face(Face::Dim),
-            transform: Affine::IDENTITY,
-        }],
-    }))
+    Layout::EmptySlot
 }
 
 pub fn leaf<World, Hover>(leaf: Leaf<Paint>) -> Layout<World, Hover> {

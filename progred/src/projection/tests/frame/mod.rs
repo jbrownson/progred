@@ -156,7 +156,7 @@ impl BenchContext {
         let mut tcx = TextCtx {
             fonts,
             layouts,
-            scale: 1.0,
+            scale: styles.scale as f32,
             cache,
         };
         let hooks = Hooks::<World> {

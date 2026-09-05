@@ -2,7 +2,7 @@
 
 use super::{
     Cx, Hooks, atom_content, edit_presentation, face_style, hover_block, hover_claim,
-    placeholder_box, primary_highlight, slot_width, source_target, tree_hovered,
+    placeholder_box, primary_highlight, source_target, tree_hovered,
 };
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
@@ -20,14 +20,12 @@ use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
 use puri::{Canvas, Color, Point, Stroke, Vec2};
 use puri_widgets::panel::Panel;
+use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
 
-/// An EMPTY SLOT at `path`: the [`placeholder`] widget wired to this
-/// projection — engagement derived from the selection, wrapped as an
-/// ordinary descend so it highlights, clicks, and navigates like the
-/// value it may become. Engaged, its placement emits the completion
-/// floating completion card.
+/// A missing value with ordinary selection and navigation behavior.
+/// The active selection replaces its empty frame with a completion query.
 pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -40,20 +38,10 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
         .filter(|current| current.stage() == Stage::Pending && current.path() == path.as_slice())
         .and_then(Selection::edit);
     let content = placeholder(cx, tcx, engaged, false, completions, hooks);
-    // Engaged, the generic ring IS the slot's chrome: it draws
-    // [`highlight_rect`] over the same frame the cold box strokes,
-    // and the same ring survives the commit around the same glyphs —
-    // the box never changes, only its paint.
+    // Selection draws the same outline as the inactive frame.
     source_target(cx, path, None, hooks, content)
 }
 
-/// The slot widget, in the Puri idiom: its one state input is the
-/// engaged pending's query, and None IS the inactive
-/// pending — the cold [`placeholder_box`], whose width the engaged
-/// query's frame holds as its minimum, so the two forms are one
-/// widget in two states and the transition between them is pure
-/// chrome. The caller owns identity (descend, highlight, clicks);
-/// `labels` picks the slot's role.
 fn placeholder<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -108,12 +96,11 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         cx.styles,
         hooks,
     );
-    // The FRAME holds the slot's width as a minimum — the text field
-    // stays content-sized (a blank query is a bare caret), and the
-    // frame around it is what never shrinks to a sliver. Framed
-    // before the decorate so the floater anchor and the caret clicks
-    // span it; the air around it is the caller's [`slot_insets`].
-    let content = min_width(slot_width(cx.styles), content);
+    // Preserve the empty frame's width while the query is short.
+    let content = min_width(
+        text_frame::empty_width(cx.styles.label.size, cx.styles.scale),
+        content,
+    );
     let edit = hooks.edit.clone();
     let offers = Offers {
         entries: entries.clone(),

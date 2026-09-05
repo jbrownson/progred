@@ -1,6 +1,68 @@
 use super::*;
 
 #[test]
+fn decorative_and_pending_slots_share_the_active_query_frame() {
+    let mut context = BenchContext::new();
+    context.stack.projection =
+        Projection::new([progred_display::partial(|_| Some(progred_display::slot()))]);
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let decorative = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let selected = pending_value(&crate::workspace::Root::document(), Vec::new());
+    for (scale, size) in [(1.0, 14.0), (1.0, 22.0), (2.0, 14.0), (2.0, 22.0)] {
+        context.styles = crate::styles::editor(scale);
+        context.styles.label.size = size;
+        let frames = [
+            (&decorative, None),
+            (&empty, None),
+            (&empty, Some(&selected)),
+        ]
+        .map(|(doc, selection)| {
+            context.place(
+                doc,
+                selection,
+                &Annotations::default(),
+                600.0,
+                None,
+                None,
+                None,
+            )
+        });
+        let [
+            (decorative, decorative_extent),
+            (inactive, inactive_extent),
+            (active, active_extent),
+        ] = frames;
+        assert_eq!(decorative_extent, inactive_extent);
+        assert_eq!(inactive_extent, active_extent);
+        assert_eq!(inactive_extent.width, 1.5 * f64::from(size) * scale);
+        let outline = |bench: &Bench, width| {
+            bench
+                .list
+                .0
+                .iter()
+                .find_map(|command| match command {
+                    DrawCmd::Stroke {
+                        shape: Shape::RoundedRect(rect),
+                        style,
+                        transform,
+                        ..
+                    } if style.width == width => Some((*rect, *transform)),
+                    _ => None,
+                })
+                .expect("text frame outline")
+        };
+        assert_eq!(outline(&decorative, scale), outline(&inactive, scale));
+        assert_eq!(outline(&inactive, scale), outline(&active, 2.5 * scale));
+    }
+}
+
+#[test]
 fn secondary_marks_only_the_same_definition_in_other_occurrences() {
     let stack = crate::stack::load::<World>();
     let cell = name::vocabulary::NAME;

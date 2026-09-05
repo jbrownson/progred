@@ -15,7 +15,7 @@ use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::navigate::Descend;
 use crate::placed::{self, Placed, before, decorate, leaf};
-use crate::render::{self, text};
+use crate::render;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
@@ -40,6 +40,7 @@ use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
 use puri_widgets::panel::Panel;
+use puri_widgets::text_frame;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -235,6 +236,7 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
         progred_display::Layout::Leaf(content) => {
             ChoiceLayout::fixed(leaf_display(cx.styles, tcx, content))
         }
+        progred_display::Layout::EmptySlot => ChoiceLayout::fixed(placeholder_box(tcx, cx.styles)),
         progred_display::Layout::DrawingProgram {
             width,
             ascent,
@@ -938,21 +940,6 @@ fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
     }
 }
 
-fn frame_leaf<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    brush: Brush,
-    extent: Extent,
-) -> Measured<Placed<C, Cv>> {
-    leaf(extent, move |p, placement| {
-        p.stroke(
-            highlight_rect(scale, placement.rect),
-            Stroke::new(scale),
-            brush,
-            Affine::IDENTITY,
-        );
-    })
-}
-
 fn bordered<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     brush: Brush,
@@ -1021,43 +1008,15 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
     )
 }
 
-/// The one width every slot state shares: the cold box IS this wide,
-/// and the engaged query's frame never lets the field get narrower —
-/// the parity that keeps engagement from moving anything sideways.
-fn slot_width(styles: &Styles) -> f64 {
-    1.5 * 14.0 * styles.scale
-}
-
-/// The cold slot's ink: an empty rounded outline, the box marking
-/// absence apart from projectional syntax (`…` is elision) — blank
-/// on purpose, no ghost words. It is [`highlight_rect`] itself in
-/// the dim brush — THE box, drawn the one way every box is drawn —
-/// so engaging (the ring, blue over the same frame) and committing
-/// (the ring over the same glyphs) redraw the same shape and only
-/// the paint changes. The charge is exactly the text frame: the
-/// empty line SHAPED, the same runtime metrics the engaged editor's
-/// frame takes — no measured constants, one source.
 fn placeholder_box<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
 ) -> Measured<Placed<C, Cv>> {
-    let extent = Extent {
-        width: slot_width(styles),
-        ..text::<C, Cv>(tcx, "", &styles.name).extent
-    };
-    frame_leaf(styles.scale, styles.dim.brush.clone(), extent)
-}
-
-/// THE box: the one geometry every box around content takes — the
-/// content rect plus breathing room, rounded. The selection ring
-/// draws it in blue, the cold placeholder in dim; sharing the shape
-/// is what keeps slot → pending → committed value from ever
-/// changing the box. Sized so the QUIET wearer fits: the cold box
-/// stands beside delimiters permanently, and this outset keeps its
-/// hairline clear of a paren's ink where the old ring-sized box
-/// overlapped.
-fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
-    RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
+    let frame = text_frame::empty(tcx, &styles.label, styles.dim.brush.clone());
+    leaf(
+        placed::metrics_extent(frame.metrics()),
+        move |p, placement| frame.place(p, placement),
+    )
 }
 
 /// The pointer over this settled rect names `key`, with the visible
@@ -1081,7 +1040,7 @@ fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<'_, C, Cv>, plac
 /// primary would ring, washed faint — hover never outranks selection.
 fn hover_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
     p.fill(
-        highlight_rect(scale, rect),
+        text_frame::outline(scale, rect),
         Color::new([0.0, 0.48, 1.0, 0.08]),
         Affine::IDENTITY,
     );
@@ -1091,7 +1050,7 @@ fn hover_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
 fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
-    let bg = highlight_rect(scale, rect);
+    let bg = text_frame::outline(scale, rect);
     p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
     p.stroke(
         bg,

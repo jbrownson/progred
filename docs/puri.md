@@ -126,6 +126,12 @@ and projection borders. Colors, stroke, radius, placement, paint order, and
 whether the surface blocks input are supplied by the host. Panel drawing owns
 no child layout, popup policy, or document state.
 
+`puri-widgets::text_frame` measures empty frames using the caller's font and
+supplies the outline geometry used around text. Progred lowers the inert
+`Layout::EmptySlot` request through it, and uses it for pending values and their
+selection outlines. Completion behavior and the meaning of an empty slot remain
+in Progred; the widget owns only metrics and drawing.
+
 Tests can drive pure descriptions and handlers without a window. Projection
 fixtures, interaction regressions, SVG export, and profiling live in
 [`projection/tests`](../progred/src/projection/tests/mod.rs). SVG tests are a

@@ -294,4 +294,20 @@ fn svg_bench_renders_a_pending_edge() {
     assert_eq!(edge.stage(), crate::selection::Stage::Label);
     let typing = edge.with_query("na");
     render(&doc, Some(&typing), 560.0, "raw_pending_edge.svg");
+
+    let doc = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let typing = pending_edge(
+        &crate::workspace::Root::document(),
+        &Sources {
+            doc: &doc,
+            libraries: &library,
+        },
+        Vec::new(),
+    )
+    .unwrap()
+    .with_query("field");
+    render(&doc, Some(&typing), 320.0, "pending_field_slot.svg");
 }
