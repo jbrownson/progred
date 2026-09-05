@@ -22,6 +22,7 @@ pub mod list;
 pub mod logic;
 pub mod name;
 pub mod number;
+pub mod path;
 pub mod presentation;
 pub mod random;
 pub mod selection;

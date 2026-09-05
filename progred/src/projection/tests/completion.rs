@@ -1,18 +1,27 @@
 use super::*;
+use progred_libraries::control;
 
 #[derive(Default)]
 struct CompletionResult {
     value: Option<Value>,
     label: Option<(CellId, Option<Value>)>,
+    on_commit: Option<Value>,
 }
 
-fn value_commit(result: &mut CompletionResult, value: Value) -> bool {
+fn value_commit(result: &mut CompletionResult, value: Value, on_commit: Option<Value>) -> bool {
     result.value = Some(value);
+    result.on_commit = on_commit;
     true
 }
 
-fn label_commit(result: &mut CompletionResult, cell: CellId, definition: Option<Value>) -> bool {
+fn label_commit(
+    result: &mut CompletionResult,
+    cell: CellId,
+    definition: Option<Value>,
+    on_commit: Option<Value>,
+) -> bool {
     result.label = Some((cell, definition));
+    result.on_commit = on_commit;
     true
 }
 
@@ -144,14 +153,8 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         false,
     );
     assert_eq!(entries[0].display, "fidget");
-    assert!(
-        activated(&entries[0])
-            .value
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .contains_key(&fidget::vocabulary::FIDGET)
-    );
+    assert_eq!(activated(&entries[0]).value, Some(Value::record([])));
+    assert!(activated(&entries[0]).on_commit.is_some());
     assert_eq!(entries.len(), 1);
 
     let widened = crate::completion::completion_entries_with(
@@ -178,6 +181,140 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
                 .as_deref()
                 .is_some_and(|detail| detail.starts_with("fidget · "))
     }));
+}
+
+#[test]
+fn root_completions_open_the_domain_value_without_a_placeholder() {
+    let stack = crate::stack::load::<()>();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let root = crate::workspace::Root::document();
+    let pending = crate::selection::pending_value(&root, vec![]);
+    let offers = (stack.root_completions)("");
+    assert_eq!(
+        offers
+            .iter()
+            .map(|offer| offer.display.as_str())
+            .collect::<Vec<_>>(),
+        ["fidget", "grap"]
+    );
+    for (offer, field) in offers.iter().zip([
+        fidget::vocabulary::FIDGET,
+        progred_libraries::grap::vocabulary::GRAP,
+    ]) {
+        let mut annotations = Annotations::default();
+        let prepared = crate::completion::prepare(
+            &src(&doc, &stack.libraries),
+            &pending,
+            &annotations,
+            offer.value.clone(),
+            None,
+            offer.on_commit.as_ref(),
+        )
+        .unwrap();
+        assert!(prepared.document_changed);
+        assert_eq!(prepared.document.root, Some(Value::record([])));
+        let mut selected = None;
+        crate::site::install(
+            prepared.effects,
+            &src(&prepared.document, &stack.libraries),
+            &root,
+            &prepared.path,
+            &mut annotations,
+            &mut selected,
+        );
+        let selected = selected.unwrap();
+        assert_eq!(selected.path(), [Step::Key(field)]);
+        assert_eq!(selected.stage(), Stage::Pending);
+        let choices = projected_completion_entries(&prepared.document, &selected);
+        assert!(
+            choices
+                .iter()
+                .any(|choice| activated(choice).value == Some(Value::record([])))
+        );
+        assert!(
+            choices
+                .iter()
+                .any(|choice| activated(choice).value == Some(Value::list([])))
+        );
+        let filled = crate::completion::prepare(
+            &src(&prepared.document, &stack.libraries),
+            &selected,
+            &annotations,
+            Value::record([]),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            filled.document.root,
+            Some(Value::record([(field, Value::record([]))]))
+        );
+    }
+}
+
+#[test]
+fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
+    let stack = crate::stack::load::<()>();
+    let root = crate::workspace::Root::document();
+    let field = new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let pending = crate::selection::pending_value(&root, vec![Step::Key(field)]);
+    let offer = (stack.root_completions)("")
+        .into_iter()
+        .find(|offer| offer.display == "grap")
+        .unwrap();
+    let prepared = crate::completion::prepare(
+        &src(&doc, &stack.libraries),
+        &pending,
+        &Annotations::default(),
+        offer.value.clone(),
+        None,
+        offer.on_commit.as_ref(),
+    )
+    .unwrap();
+    assert_eq!(
+        prepared.effects.selection.as_ref().unwrap().0,
+        [
+            Step::Key(field),
+            Step::Key(progred_libraries::grap::vocabulary::GRAP)
+        ]
+    );
+    assert_eq!(
+        prepared.document.root,
+        Some(Value::record([(field, Value::record([]))]))
+    );
+
+    let declined = grap::lambda(
+        [],
+        grap::call(
+            control::vocabulary::DO.into(),
+            [(
+                control::vocabulary::EXPRESSIONS,
+                Value::list([
+                    grap::call(offer.on_commit.unwrap(), []),
+                    new_cell_id().into(),
+                ]),
+            )],
+        ),
+    );
+    assert!(
+        crate::completion::prepare(
+            &src(&doc, &stack.libraries),
+            &pending,
+            &Annotations::default(),
+            offer.value,
+            None,
+            Some(&declined),
+        )
+        .is_none()
+    );
+    assert_eq!(doc.root, Some(Value::record([])));
 }
 
 fn projected_completion_entries(
@@ -435,12 +572,14 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     let provider: progred_display::CompletionProvider = Rc::new(move |_| {
         vec![
             progred_display::Completion {
+                on_commit: None,
                 display: "text".into(),
                 detail: None,
                 aliases: vec![],
                 value: text::value("not a label"),
             },
             progred_display::Completion {
+                on_commit: None,
                 display: "existing".into(),
                 detail: None,
                 aliases: vec![],

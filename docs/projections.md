@@ -91,9 +91,12 @@ reusable widgets remain consumers of Puri. See [the editor model](model.md).
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)
-creates temporary selection/annotation capabilities closed over the actual
-projection path. Writes are staged and committed only when the handler accepts
-the event. Rust paths are not serialized into the event or capability values.
+creates temporary selection/annotation capabilities in the current document
+and view. `site path` exposes the actual projection path through the
+[path library](../libraries/src/path.rs); the local selection getter needs no
+address, while the setter accepts one explicitly. Writes are staged and
+committed only when the handler accepts the event. Completion continuations
+use the same effect interpreter, staged together with the document insertion.
 
 Drawing programs use scoped foreign operations for fills, strokes, paths,
 transforms, and clips. A temporary path builder belongs to that synchronous

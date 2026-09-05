@@ -757,27 +757,21 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             ));
             app.advance_gesture(point)
         }),
-        commit_value: Rc::new(|app: &mut Editor, value| {
+        commit_value: Rc::new(|app: &mut Editor, value, on_commit| {
             app.model
                 .selection
                 .as_ref()
                 .filter(|current| current.stage() == selection::Stage::Pending)
-                .map(|current| (current.root().clone(), current.path().to_vec()))
-                .is_some_and(|(root, path)| {
-                    app.commit_value(root, path, value);
-                    true
-                })
+                .is_some()
+                && app.commit_completion(value, None, on_commit)
         }),
-        commit_label: Rc::new(|app: &mut Editor, label, definition| {
+        commit_label: Rc::new(|app: &mut Editor, label, definition, on_commit| {
             app.model
                 .selection
                 .as_ref()
                 .filter(|current| current.stage() == selection::Stage::Label)
-                .map(|current| (current.root().clone(), current.path().to_vec()))
-                .is_some_and(|(root, path)| {
-                    app.commit_label(root, path, label, definition);
-                    true
-                })
+                .is_some()
+                && app.commit_completion(label.into(), definition, on_commit)
         }),
         set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice, everything| {
             if let Some(selection) = app.model.selection.as_mut()

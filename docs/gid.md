@@ -25,6 +25,11 @@ system: direct manipulation, cross-document references, indexing, and
 partial or lazy access where useful. Those goals must not be constrained
 by the temporary text bridge.
 
+The path library represents traversal steps and list-position bytes as ordinary
+records, lists, and blobs. This is a library convention, not another GID atom.
+Runtime list positions still have session lifetime; serializing a path as data
+does not make its element addresses survive a document reload.
+
 ## Text bridge
 
 [`gid-text.md`](gid-text.md) documents the current binder-oriented text

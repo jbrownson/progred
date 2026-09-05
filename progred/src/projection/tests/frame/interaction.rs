@@ -94,8 +94,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _| true),
-            commit_label: Rc::new(|_, _, _| true),
+            commit_value: Rc::new(|_, _, _| true),
+            commit_label: Rc::new(|_, _, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -209,8 +209,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _| true),
-            commit_label: Rc::new(|_, _, _| true),
+            commit_value: Rc::new(|_, _, _| true),
+            commit_label: Rc::new(|_, _, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );

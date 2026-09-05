@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn a_declined_completion_still_consumes_its_activation() {
+    let entries = [Entry {
+        display: "declines".into(),
+        detail: None,
+        matches: vec![],
+        face: progred_display::Face::Label,
+        source: None,
+        activate: Rc::new(|attempts: &mut usize| {
+            *attempts += 1;
+            false
+        }),
+    }];
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let card = measured::place_top_left(
+        completion_card::<usize, Bench>(
+            &mut tcx,
+            &crate::styles::editor(1.0),
+            &entries,
+            0,
+            0.0,
+            true,
+            |_, _, _, _| {},
+        ),
+        Point::ZERO,
+    );
+    let mut attempts = 0;
+    assert!(card.handler.unwrap().dispatch_key(
+        &mut attempts,
+        &KeyboardEvent {
+            key: Key::Named(NamedKey::Enter),
+            state: KeyState::Down,
+            ..Default::default()
+        }
+    ));
+    assert_eq!(attempts, 1);
+}
+
+#[test]
 fn completion_rows_claim_their_entries_and_the_card_occludes() {
     let entries = vec![
         Entry {
@@ -433,8 +479,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _| true),
-            commit_label: Rc::new(|_, _, _| true),
+            commit_value: Rc::new(|_, _, _| true),
+            commit_label: Rc::new(|_, _, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );

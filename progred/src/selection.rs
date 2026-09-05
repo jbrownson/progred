@@ -56,8 +56,8 @@ pub enum Stage {
 
 impl Selection {
     /// Reify a payload at a host-owned path. This is the mutation
-    /// boundary used by current-site Grap capabilities: the address
-    /// never enters the payload. Editor fields are decoded once into
+    /// boundary used by Grap capabilities after decoding the path.
+    /// Editor fields are decoded once into
     /// their live owner, then removed from the stored payload.
     pub(crate) fn from_payload(
         root: &workspace::Root,
@@ -868,20 +868,12 @@ pub mod payload {
 
     pub mod vocabulary {
         use gid::CellId;
-
-        pub const STAGE: CellId = CellId::from_u128(0x6a1fd3082b9c47e5f60d21a8c45e9b37);
+        pub use progred_libraries::selection::vocabulary::{STAGE, EDGE, PENDING, LABEL};
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
         pub const COMPLETION_EVERYTHING: CellId =
             CellId::from_u128(0xedfa139b72d468afe1d926e811477456);
-
-        /// A value's edge is selected; editing state, if any, is tier-2.
-        pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
-        /// A value pending: the query authors the value at the path.
-        pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
-        /// A new label pending on the record at the path.
-        pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
 
         /// Selection byte offsets; FOCUS may precede ANCHOR.
         pub const ANCHOR: CellId = CellId::from_u128(0x5d38a1c7f24e9b60d15c7a02e83f46b9);

@@ -1,6 +1,7 @@
 //! Per-site access to the editor's annotation trie. GET and SET never
 //! take a path: the host supplies them while dispatching an event
-//! at a projection site. The library contributes only their vocabulary.
+//! at a projection site. PATH exposes that site's document path as data.
+//! The library contributes only their vocabulary.
 
 use crate::{Library, name};
 
@@ -13,6 +14,7 @@ pub mod vocabulary {
     pub const SET: CellId = CellId::from_u128(0xd9329d07bcdc791919f5252846fa152c);
     /// SET stores this (evaluated).
     pub const VALUE: CellId = CellId::from_u128(0x544d3b52ea73cd263c435ecddfe5e8bf);
+    pub const PATH: CellId = CellId::from_u128(0x803e2b0d0c621eb9688569d0879c3b23);
 
     pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
     pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
@@ -24,6 +26,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     for (cell, spelling) in [
         (vocabulary::GET, "get"),
         (vocabulary::SET, "set"),
+        (vocabulary::PATH, "site path"),
         (vocabulary::VALUE, "value"),
         (vocabulary::FOLD, "fold"),
         (vocabulary::FOLDED, "folded"),

@@ -7,12 +7,54 @@ use crate::modifiers;
 use crate::navigate;
 use crate::selection;
 use crate::sources;
-use gid::{CellId, Path, Step, Value, new_cell_id};
+use gid::{Value, new_cell_id};
 use progred_libraries::name;
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
+    pub(crate) fn commit_completion(
+        &mut self,
+        value: Value,
+        definition: Option<Value>,
+        on_commit: Option<Value>,
+    ) -> bool {
+        let Some(selection) = self.model.selection.as_ref() else {
+            return false;
+        };
+        let root = selection.root().clone();
+        let Some(view) = self.model.workspace.view(&root) else {
+            return false;
+        };
+        let Some(prepared) = crate::completion::prepare(
+            &self.sources(),
+            selection,
+            &view.annotations,
+            value,
+            definition,
+            on_commit.as_ref(),
+        ) else {
+            return false;
+        };
+        let before = std::mem::replace(&mut self.model.doc, prepared.document);
+        if prepared.document_changed {
+            self.model.history.record(before, None);
+            self.refresh_title();
+        }
+        crate::site::install(
+            prepared.effects,
+            &sources::Sources {
+                doc: &self.model.doc,
+                libraries: &self.stack.libraries,
+            },
+            &root,
+            &prepared.path,
+            &mut self.model.workspace.view_mut(&root).unwrap().annotations,
+            &mut self.model.selection,
+        );
+        true
+    }
+
     /// Backspace or Delete removes the selected edge — a focused atom
     /// editor claims the keys while it has text and declines on an
     /// empty buffer, so emptying a string then backspacing again
@@ -69,60 +111,7 @@ impl Editor {
     /// cannot label (a list, a record, a blob) at the label stage —
     /// so the click falls through rather than spending the pending.
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
-        match self.model.selection.as_ref().map(|current| {
-            (
-                current.stage(),
-                current.root().clone(),
-                current.path().to_vec(),
-            )
-        }) {
-            Some((selection::Stage::Pending, root, path)) => {
-                self.commit_value(root, path, id);
-                true
-            }
-            Some((selection::Stage::Label, root, path)) => id.as_cell().is_some_and(|label| {
-                self.commit_label(root, path, label, None);
-                true
-            }),
-            _ => false,
-        }
-    }
-
-    /// Commits the pending value stage — one undo step — and selects
-    /// the edge it wrote.
-    pub(crate) fn commit_value(&mut self, root: crate::workspace::Root, path: Path, value: Value) {
-        let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
-            self.model.history.record(before, None);
-            self.refresh_title();
-        }
-        self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
-    }
-
-    /// A resolved new label advances the pending edge to its value
-    /// stage, or selects the existing field when the label is taken.
-    /// A free-text label persists its newly named cell first; a
-    /// bare-cell choice has nothing to persist.
-    pub(crate) fn commit_label(
-        &mut self,
-        root: crate::workspace::Root,
-        parent: Path,
-        label: CellId,
-        definition: Option<Value>,
-    ) {
-        let mut path = parent;
-        path.push(Step::Key(label));
-        if self.sources().resolve_path(&path).is_some() {
-            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
-            return;
-        }
-        if let Some(value) = definition {
-            let before = self.model.doc.clone();
-            self.model.doc.cells.set_value(label, value);
-            self.model.history.record(before, None);
-            self.refresh_title();
-        }
-        self.model.selection = Some(selection::pending_value(&root, path));
+        self.commit_completion(id, None, None)
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -298,25 +287,16 @@ impl Editor {
             && match &event.key {
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
                     Some(current) if current.stage() != selection::Stage::Edge => {
-                        let root = current.root().clone();
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
-                        let query = current.edit().unwrap_or(&fallback);
-                        if labels {
-                            self.commit_label(
-                                root,
-                                current.path().to_vec(),
-                                new_cell_id(),
-                                Some(name::record(query.text(), [])),
-                            );
+                        let query = current.edit().unwrap_or(&fallback).text();
+                        let (value, definition) = if labels {
+                            (Value::from(new_cell_id()), Some(name::record(query, [])))
                         } else {
-                            self.commit_value(
-                                root,
-                                current.path().to_vec(),
-                                selection::resolve_query(query.text()),
-                            );
-                        }
-                        true
+                            (selection::resolve_query(query), None)
+                        };
+                        self.model.selection = Some(current);
+                        self.commit_completion(value, definition, None)
                     }
                     selection => {
                         let sources = self.sources();

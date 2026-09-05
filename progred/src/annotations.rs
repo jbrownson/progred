@@ -1,8 +1,7 @@
 //! Per-path editor state as data: one UI trie belongs to each workspace
 //! view. Each path holds one open record under convention keys, so
-//! independent concerns compose at a node without owning it. Paths stay
-//! Rust addresses — only the VALUES are data; the customization points
-//! speak GID, the editor is not bootstrapped into its own graph.
+//! independent concerns compose at a node without owning it. The runtime
+//! uses typed paths; the path library exposes their GID representation.
 
 use gid::{CellId, Step, Value};
 use std::collections::HashMap;

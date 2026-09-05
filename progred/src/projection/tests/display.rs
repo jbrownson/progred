@@ -19,8 +19,8 @@ fn projection_target_appends_relative_steps() {
         state_drag: Rc::new(|_, _, _, _, _| {}),
         scrub: Rc::new(|_, _, _, _, _| false),
         select_source: Rc::new(|_, _, _| {}),
-        commit_value: Rc::new(|_, _| true),
-        commit_label: Rc::new(|_, _, _| true),
+        commit_value: Rc::new(|_, _, _| true),
+        commit_label: Rc::new(|_, _, _, _| true),
         set_completion_view: Rc::new(|_, _, _, _| {}),
     };
     let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
@@ -347,8 +347,8 @@ fn partials_receive_selection_and_annotations_positionally() {
                 state_drag: Rc::new(|_, _, _, _, _| {}),
                 scrub: Rc::new(|_, _, _, _, _| false),
                 select_source: Rc::new(|_, _, _| {}),
-                commit_value: Rc::new(|_, _| true),
-                commit_label: Rc::new(|_, _, _| true),
+                commit_value: Rc::new(|_, _, _| true),
+                commit_label: Rc::new(|_, _, _, _| true),
                 set_completion_view: Rc::new(|_, _, _, _| {}),
             },
         )
@@ -471,8 +471,8 @@ fn a_projection_defined_as_data_realizes() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _| true),
-            commit_label: Rc::new(|_, _, _| true),
+            commit_value: Rc::new(|_, _, _| true),
+            commit_label: Rc::new(|_, _, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );

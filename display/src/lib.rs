@@ -158,6 +158,9 @@ pub struct Completion {
     pub aliases: Vec<String>,
     pub detail: Option<String>,
     pub value: Value,
+    /// Grap callable run at the committed location. Its selection and
+    /// annotation effects are staged with the insertion.
+    pub on_commit: Option<Value>,
 }
 
 impl Completion {
@@ -167,6 +170,7 @@ impl Completion {
             aliases: Vec::new(),
             detail: None,
             value,
+            on_commit: None,
         }
     }
 
@@ -177,6 +181,11 @@ impl Completion {
 
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn on_commit(mut self, function: Value) -> Self {
+        self.on_commit = Some(function);
         self
     }
 }

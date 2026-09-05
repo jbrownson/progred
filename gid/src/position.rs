@@ -5,20 +5,24 @@
 //! nonempty, final byte nonzero; construction owns it. `between`
 //! always exists, so relabeling is never required; identifiers grow
 //! roughly a bit per adversarial same-gap insert, the immutable-label
-//! side of the order-maintenance trade. Deliberately not a `Value`:
-//! positions are minted at load and insert, stripped at save, and
-//! cannot occur in data.
+//! side of the order-maintenance trade. Positions are minted at load
+//! and insert and stripped from list storage at save. Libraries may
+//! encode their bytes in ordinary values to describe session paths.
 
 /// A canonical binary fraction. Ordering is the sequence.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position(Vec<u8>);
 
 impl Position {
-    fn canonical(bytes: Vec<u8>) -> Option<Self> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
         bytes
             .last()
             .is_some_and(|last| *last != 0)
             .then_some(Self(bytes))
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -32,7 +36,7 @@ pub fn between(low: Option<&Position>, high: Option<&Position>) -> Option<Positi
     {
         return None;
     }
-    Position::canonical(between_bytes(
+    Position::from_bytes(between_bytes(
         low.map(|p| p.0.as_slice()).unwrap_or(&[]),
         high.map(|p| p.0.as_slice()),
     ))
@@ -59,7 +63,7 @@ pub fn spread(n: usize) -> Vec<Position> {
                 .iter()
                 .rposition(|byte| *byte != 0)
                 .expect("m ≥ 2, so some digit is nonzero");
-            Position::canonical(bytes[..=end].to_vec()).expect("trimmed to a nonzero final byte")
+            Position::from_bytes(bytes[..=end].to_vec()).expect("trimmed to a nonzero final byte")
         })
         .collect()
 }

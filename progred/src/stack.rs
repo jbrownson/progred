@@ -59,6 +59,7 @@ fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library
         (presentation::ID, presentation::library()),
         (layout::ID, layout::library()),
         (selection::ID, selection::library()),
+        (progred_libraries::path::ID, progred_libraries::path::library()),
         (site::ID, site::library()),
         (geometry::ID, geometry::library()),
         (workspace::ID, workspace::library()),

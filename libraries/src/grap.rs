@@ -390,9 +390,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     )
     .with_root_completions([progred_display::Completion::new(
         "grap",
-        Value::record([(vocabulary::GRAP, Value::list([]))]),
+        Value::record([]),
     )
-    .with_detail("grap library")])
+    .with_detail("grap library")
+    .on_commit(crate::selection::pending_child(gid::Step::Key(vocabulary::GRAP)))])
     .with_root_field_completions([progred_display::Completion::new(
         "grap",
         Value::from(vocabulary::GRAP),

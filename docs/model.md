@@ -64,7 +64,19 @@ folding is one convention in those records.
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.
 A capability replacement decodes it once into the live editor; there is no
-second retained editor representation to synchronize. Paths remain in Rust.
+second retained editor representation to synchronize. The path library encodes
+typed paths as ordinary GID lists: `{key: cell}`, `{element: {indexable: blob}}`,
+and `{follow: document}` or `{follow: {library: cell}}`. Decoding checks each
+step and the canonical list-position bytes. Encoding a position does not
+extend its lifetime: loading a document still regenerates its list positions.
+
+Site and selection access are scoped foreign calls. `site path` returns the
+projected site's document path; `selection get` reads the selection payload
+there. `selection set` takes an explicit `path` and `value`, interpreted in
+the supplied document and view, so it can move selection to another location.
+An absent value clears selection only at the specified path. Reads observe
+staged writes; a declined or halted handler commits no effects. Tests can
+replace these foreign functions with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and Grap write-back
 function. The function receives the current value and input text as data.
@@ -86,6 +98,14 @@ provider for offers. Without one, the editor uses its universal offers.
 Root templates and root field vocabulary are supplied separately and do not
 leak into descendants.
 
+A library completion can provide an `on_commit` Grap callable, run at the
+committed location with the same site and selection capabilities as event
+handlers. Insertion and continuation effects are prepared together and installed
+only if the callable succeeds. Selection changes are effectful calls, not a
+special return-value format. Root `grap` and `fidget` offers insert `{}` and
+call `selection set` to open the domain field's pending value; they do not
+invent a list value. `panes` remains an independent root field suggestion.
+
 The placed frame retains the exact visible offers. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.
 The reusable Puri widget draws rows; Progred owns the document operations,
@@ -97,6 +117,8 @@ row navigation but activates expansion rather than committing a value. Expansion
 keeps the selected index, clamped to the available rows. Changing the query
 resets selection, scroll, and expansion; returning to an older query does not
 restore an old choice. Pointer and keyboard activation use the same callbacks.
+Activating a visible offer consumes the input even if its continuation declines;
+Enter must not then fall through to inserting the raw query.
 
 ## Panes
 

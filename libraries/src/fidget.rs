@@ -955,10 +955,11 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     )
     .with_root_completions([progred_display::Completion::new(
         "fidget",
-        Value::record([(vocabulary::FIDGET, Value::list([]))]),
+        Value::record([]),
     )
     .with_aliases(["sdf"])
-    .with_detail("fidget library")])
+    .with_detail("fidget library")
+    .on_commit(crate::selection::pending_child(gid::Step::Key(vocabulary::FIDGET)))])
     .with_root_field_completions([progred_display::Completion::new(
         "fidget",
         Value::from(vocabulary::FIDGET),

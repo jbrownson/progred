@@ -76,7 +76,13 @@ pub fn at_display_partial() -> Value {
                             grap::vocabulary::EXPRESSION,
                             grap::call(
                                 Value::from(selection_capability::vocabulary::SET),
-                                [(site::vocabulary::VALUE, crate::selection::payload::edge())],
+                                [
+                                    (
+                                        selection_capability::vocabulary::PATH,
+                                        grap::call(site::vocabulary::PATH.into(), []),
+                                    ),
+                                    (site::vocabulary::VALUE, crate::selection::payload::edge()),
+                                ],
                             ),
                         ),
                     ])]),
@@ -154,6 +160,15 @@ pub fn at_display_partial() -> Value {
             ),
         ],
     )
+}
+
+#[test]
+fn checked_in_projection_uses_the_current_selection_capabilities() {
+    let (document, _) = crate::gid_text::parse(include_str!("../../examples/sample.gid")).unwrap();
+    let projection = document.cells.iter().find_map(|(_, value)| {
+        (name::read(value) == Some("at display")).then_some(value)
+    });
+    assert_eq!(projection, Some(&at_display_partial()));
 }
 
 /// A small document shaped like a real one. The root is an inline

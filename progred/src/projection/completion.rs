@@ -213,7 +213,15 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         .into_iter()
         .zip(entries)
         .enumerate()
-        .map(|(index, (row, entry))| (row, Hover::Entry(index), entry.activate.clone()))
+        .map(|(index, (row, entry))| {
+            let activate = entry.activate.clone();
+            let accept: progred_display::ActionHandler<C> = Rc::new(move |world| {
+                // A declined edit must not reinterpret this activation as raw query input.
+                activate(world);
+                true
+            });
+            (row, Hover::Entry(index), accept)
+        })
         .chain(
             widget
                 .more

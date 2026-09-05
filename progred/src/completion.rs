@@ -34,20 +34,23 @@ impl<C> Clone for Entry<C> {
 
 /// The insertion capability supplied by the active completion site.
 pub enum Commit<C> {
-    Value(Rc<dyn Fn(&mut C, Value) -> bool>),
-    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>) -> bool>),
+    Value(Rc<dyn Fn(&mut C, Value, Option<Value>) -> bool>),
+    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>) -> bool>),
 }
 
 impl<C: 'static> Commit<C> {
-    fn value(&self, value: Value) -> Option<ActionHandler<C>> {
+    fn value(&self, value: Value, on_commit: Option<Value>) -> Option<ActionHandler<C>> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();
-                Some(Rc::new(move |world| commit(world, value.clone())))
+                Some(Rc::new(move |world| {
+                    commit(world, value.clone(), on_commit.clone())
+                }))
             }
             Self::Label(commit) => value.as_cell().map(|cell| {
                 let commit = commit.clone();
-                Rc::new(move |world: &mut C| commit(world, cell, None)) as ActionHandler<C>
+                Rc::new(move |world: &mut C| commit(world, cell, None, on_commit.clone()))
+                    as ActionHandler<C>
             }),
         }
     }
@@ -56,11 +59,11 @@ impl<C: 'static> Commit<C> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();
-                Rc::new(move |world| commit(world, Value::from(new_cell_id())))
+                Rc::new(move |world| commit(world, Value::from(new_cell_id()), None))
             }
             Self::Label(commit) => {
                 let commit = commit.clone();
-                Rc::new(move |world| commit(world, new_cell_id(), None))
+                Rc::new(move |world| commit(world, new_cell_id(), None, None))
             }
         }
     }
@@ -73,7 +76,17 @@ impl<C: 'static> Entry<C> {
         value: Value,
         commit: &Commit<C>,
     ) -> Option<Self> {
-        commit.value(value.clone()).map(|activate| Self {
+        Self::offered(display, detail, value, None, commit)
+    }
+
+    fn offered(
+        display: String,
+        detail: Option<String>,
+        value: Value,
+        on_commit: Option<Value>,
+        commit: &Commit<C>,
+    ) -> Option<Self> {
+        commit.value(value.clone(), on_commit).map(|activate| Self {
             display,
             detail,
             matches: Vec::new(),
@@ -93,6 +106,75 @@ impl<C: 'static> Entry<C> {
 /// Retained in the placed frame for attribution to the exact visible offers.
 pub struct Offers<C> {
     pub entries: Vec<Entry<C>>,
+}
+
+pub(crate) struct Prepared {
+    pub document: gid::Document,
+    pub document_changed: bool,
+    pub path: gid::Path,
+    pub effects: crate::site::PendingChanges,
+}
+
+/// Prepare the insertion and interpret its continuation against the
+/// resulting document. The caller installs everything only on success.
+pub(crate) fn prepare(
+    sources: &Sources,
+    selection: &crate::selection::Selection,
+    annotations: &crate::annotations::Annotations,
+    value: Value,
+    definition: Option<Value>,
+    on_commit: Option<&Value>,
+) -> Option<Prepared> {
+    use crate::selection::{self, Stage};
+    let mut document = sources.doc.clone();
+    let mut path = selection.path().to_vec();
+    let (document_changed, payload) = match selection.stage() {
+        Stage::Pending => selection::set_value(&mut document, sources.libraries, &path, value)
+            .then_some((true, selection::payload::edge()))?,
+        Stage::Label => {
+            let label = value.as_cell()?;
+            path.push(gid::Step::Key(label));
+            if sources.resolve_path(&path).is_some() {
+                (false, selection::payload::edge())
+            } else {
+                let changed = definition.is_some();
+                if let Some(value) = definition {
+                    document.cells.set_value(label, value);
+                }
+                (changed, selection::payload::pending("", 0))
+            }
+        }
+        Stage::Edge => return None,
+    };
+    let annotation = annotations.at(&path).cloned();
+    let selection = Some((path.clone(), payload));
+    let mut effects = match on_commit {
+        Some(function) => crate::site::evaluate(
+            function,
+            [],
+            &path,
+            annotation,
+            selection,
+            &Sources {
+                doc: &document,
+                libraries: sources.libraries,
+            },
+            grap::DEFAULT_FUEL,
+        )?,
+        None => crate::site::PendingChanges {
+            annotation,
+            annotation_changed: false,
+            selection,
+            selection_changed: false,
+        },
+    };
+    effects.selection_changed = true;
+    Some(Prepared {
+        document,
+        document_changed,
+        path,
+        effects,
+    })
 }
 
 pub(crate) fn completion_entries_with<C: 'static>(
@@ -134,7 +216,12 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 face: Face::Dim,
                 source: None,
                 activate: Rc::new(move |world| {
-                    commit(world, new_cell_id(), Some(name::record(&spelling, [])))
+                    commit(
+                        world,
+                        new_cell_id(),
+                        Some(name::record(&spelling, [])),
+                        None,
+                    )
                 }),
             }
         }
@@ -289,10 +376,11 @@ fn contextual_entries<C: 'static>(
                 None
             } else {
                 let completion = &completions[index];
-                Entry::value(
+                Entry::offered(
                     completion.display.clone(),
                     completion.detail.clone(),
                     completion.value.clone(),
+                    completion.on_commit.clone(),
                     commit,
                 )
                 .map(|entry| Entry {

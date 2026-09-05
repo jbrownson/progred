@@ -40,18 +40,6 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         progred_libraries::Definitions::from_parts(cells, Default::default()),
         vec![],
     )
-    .with_root_completions([progred_display::Completion::new(
-        "workspace",
-        Value::record([(
-            vocabulary::PANES,
-            Value::record([
-                (vocabulary::LEFT, Value::list([])),
-                (vocabulary::RIGHT, Value::list([])),
-            ]),
-        )]),
-    )
-    .with_aliases(["panes"])
-    .with_detail("workspace library")])
     .with_root_field_completions([progred_display::Completion::new(
         "panes",
         Value::from(vocabulary::PANES),

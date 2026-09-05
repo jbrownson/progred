@@ -803,8 +803,8 @@ pub struct Hooks<C> {
     /// Select and begin a value scrub, declining while a pending is active.
     pub scrub: Rc<dyn Fn(&mut C, Path, progred_display::ScrubHandler, Point, f64) -> bool>,
     /// Commit one of the exact offers shown by an engaged pending.
-    pub commit_value: Rc<dyn Fn(&mut C, Value) -> bool>,
-    pub commit_label: Rc<dyn Fn(&mut C, CellId, Option<Value>) -> bool>,
+    pub commit_value: Rc<dyn Fn(&mut C, Value, Option<Value>) -> bool>,
+    pub commit_label: Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>) -> bool>,
     /// Retain the completion offset and choice in the pending selection.
     pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize, bool)>,
 }
