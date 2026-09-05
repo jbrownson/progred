@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+
+r"""Rebuild on Ctrl+C; stop this development session on Ctrl+\ or terminal exit."""
+
+import os
+from collections import deque
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+
+def stop(process):
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+
+
+def develop(commands):
+    requests = deque([signal.SIGINT])
+
+    def request(signum, _):
+        requests.append(signum)
+
+    previous = {
+        signum: signal.signal(signum, request)
+        for signum in (signal.SIGINT, signal.SIGQUIT, signal.SIGTERM, signal.SIGHUP)
+    }
+    try:
+        print("Ctrl+C rebuilds and restarts; Ctrl+\\ quits", flush=True)
+        while True:
+            while not requests:
+                time.sleep(0.1)
+            if requests.popleft() != signal.SIGINT:
+                return 0
+            status = 0
+            for command in commands:
+                if requests:
+                    break
+                try:
+                    process = subprocess.Popen(command, start_new_session=True)
+                except OSError as error:
+                    print(error, file=sys.stderr)
+                    status = 1
+                    break
+                try:
+                    while process.poll() is None and not requests:
+                        time.sleep(0.05)
+                finally:
+                    stop(process)
+                status = process.returncode
+                if status != 0:
+                    break
+            if not requests:
+                message = f"Command failed ({status})." if status else "Progred exited."
+                print(f"{message} Ctrl+C retries; Ctrl+\\ quits", flush=True)
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
+def main():
+    if not sys.stdin.isatty():
+        print("make dev needs an interactive terminal; use make run for a single run", file=sys.stderr)
+        return 2
+    root = Path(__file__).resolve().parent.parent
+    os.chdir(root)
+    if sys.platform == "darwin":
+        commands = [
+            [str(root / "tools/build-macos-app")],
+            ["/usr/bin/swift", str(root / "tools/run-macos.swift"),
+             str(root / "target/sandbox/app/Progred.app")],
+        ]
+    elif sys.platform == "linux":
+        commands = [[str(root / "tools/run-linux"), *sys.argv[1:]]]
+    else:
+        print(f"native Progred is not supported on {sys.platform}", file=sys.stderr)
+        return 2
+    return develop(commands)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

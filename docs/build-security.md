@@ -29,6 +29,20 @@ to exit. Launch Services does not safely attach the sandboxed GUI process to
 the invoking terminal's standard streams; use macOS logging when diagnostics
 are needed.
 
+`make dev` keeps an interactive development session open: Ctrl+C stops its
+current build or app, rebuilds, and launches again; Ctrl+\ quits the session.
+After a failed build or an app exit it waits for Ctrl+C instead of retrying.
+Closing the terminal stops the session. Restarting discards unsaved changes in
+that development instance, as terminating the previous development loop did.
+
+The helper owns a process group for each command. On macOS, its small native
+launcher opens the signed bundle through `NSWorkspace` and retains the returned
+`NSRunningApplication`, so termination targets that instance rather than every
+process named `progred`. Ordinary `make run` still uses `open -W -n`.
+The loop lives outside Make recipes, so `make -n dev` only prints the command.
+Run `python3 tools/test-dev-native.py` to check its process and terminal behavior
+using disposable subprocesses without launching Progred.
+
 On Linux, the same target delegates to `tools/run-linux`, which performs an
 ordinary locked Cargo run in `target/native`. This is not sandboxed. The
 checked-in launcher is the deliberate Linux exception to the Cargo tripwire;

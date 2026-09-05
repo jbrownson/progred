@@ -52,6 +52,9 @@ make serve-web
 make build-ipad
 ```
 
+For an interactive native development session, use `make dev`: Ctrl+C rebuilds
+and restarts its app, and Ctrl+\ quits. A failed build waits for another Ctrl+C.
+
 The browser build is served at `http://localhost:8080`; another device on the
 same network can use this machine's LAN address. Built-in documents are
 available from the Examples menu. The native iPad host and deferred spatial

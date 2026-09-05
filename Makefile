@@ -42,14 +42,7 @@ unsupported-native-platform:
 dev: dev-native
 
 dev-native:
-	@trap ':' INT; \
-	trap 'exit 0' QUIT TERM HUP; \
-	trap 'pkill -x progred >/dev/null 2>&1 || true' EXIT; \
-	while true; do \
-		pkill -x progred >/dev/null 2>&1 || true; \
-		echo "Ctrl+C restarts Progred; Ctrl+\\ quits"; \
-		$(MAKE) run-native || true; \
-	done
+	@./tools/dev-native $(ARGS)
 
 build-web: sandbox-web
 
