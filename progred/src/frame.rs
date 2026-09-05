@@ -805,14 +805,14 @@ fn project_workspace_view(
         .then_some(&stack.root_completions);
     let root_field_completions = matches!(view.root.target(), workspace::Target::Document)
         .then_some(&stack.root_field_completions);
-    let root = match view.root.target() {
+    let (root, projection) = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
-            sources.root()
+            (sources.root(), &stack.projection)
         }
         workspace::Target::Pane { path } => {
             root_path = path.clone();
-            sources.resolve_path(path)
+            (sources.resolve_path(path), &stack.pane_projection)
         }
     };
     let raw = view.projection == workspace::Projection::Raw;
@@ -833,7 +833,7 @@ fn project_workspace_view(
             raw,
             styles,
             width: body_width,
-            projection: (!raw).then_some(&stack.projection),
+            projection: (!raw).then_some(projection),
             root_completions: (!raw).then_some(root_completions).flatten(),
             root_field_completions: (!raw).then_some(root_field_completions).flatten(),
         },
@@ -1266,6 +1266,198 @@ mod frame_tests {
                 .unwrap()
                 .select)(&mut selected));
             assert_eq!(selected, Some(source));
+        }
+    }
+
+    #[test]
+    fn pane_presentations_do_not_run_in_the_document_and_raw_keeps_the_declaration() {
+        use progred_libraries::{Definitions, presentation};
+        use std::cell::{Cell, RefCell};
+
+        let projector = CellId::from_u128(1);
+        let linked = CellId::from_u128(2);
+        let source = Value::from(b"source".to_vec());
+        let declaration = Value::record([
+            (presentation::vocabulary::VALUE, source.clone()),
+            (presentation::vocabulary::PROJECTION, Value::from(projector)),
+        ]);
+        let mut cells = Cells::new();
+        cells.set_value(linked, declaration.clone());
+        let mut model = Model {
+            doc: Document {
+                root: Some(Value::record([])),
+                cells,
+            },
+            selection: None,
+            history: crate::history::History::default(),
+            view: ViewFlags::default(),
+            workspace: workspace::Workspace::default(),
+        };
+        for value in [
+            declaration,
+            Value::from(linked),
+            source.clone(),
+            Value::record([(presentation::vocabulary::VALUE, source.clone())]),
+        ] {
+            model.doc.root = Some(
+                workspace::append(
+                    model.doc.root.as_ref().unwrap(),
+                    workspace::Side::Left,
+                    value,
+                )
+                .unwrap()
+                .0,
+            );
+        }
+        model
+            .workspace
+            .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
+        for declaration in workspace::declarations(model.doc.root.as_ref()) {
+            crate::annotations::set_collapsed(
+                &mut model.workspace.document.annotations,
+                &declaration.path,
+                false,
+                false,
+            );
+        }
+        let calls = Rc::new(Cell::new(0));
+        let result = Rc::new(RefCell::new(Value::from(b"presented".to_vec())));
+        let mut stack = stack::load::<Editor>();
+        stack.libraries.insert(
+            CellId::from_u128(3),
+            Value::record([]),
+            Definitions::from_parts(
+                Cells::new(),
+                grap::ForeignFunctions::default().register(
+                    projector,
+                    grap::ForeignFunction::new({
+                        let calls = calls.clone();
+                        let result = result.clone();
+                        move |context, call, environment| {
+                            let value = context
+                                .field(call, presentation::vocabulary::VALUE)
+                                .unwrap();
+                            assert_eq!(context.eval(value, environment)?, source);
+                            calls.set(calls.get() + 1);
+                            Ok(result.borrow().clone())
+                        }
+                    }),
+                ),
+            ),
+        );
+        let styles = crate::styles::editor(1.0);
+        let mut fonts = FontContext::new();
+        let mut layouts = LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let size = Size::new(1200.0, 1000.0);
+        let mut place = |model: &Model| {
+            measured::place(
+                project_workspace(
+                    model,
+                    &stack,
+                    &styles,
+                    &mut tcx,
+                    sources::Sources {
+                        doc: &model.doc,
+                        libraries: &stack.libraries,
+                    },
+                    None,
+                    size,
+                    1.0,
+                ),
+                Placement::root(Rect::from_origin_size(Point::ZERO, size)),
+            )
+        };
+        let document = model.workspace.document_root();
+        let sources: Vec<_> = model
+            .workspace
+            .left
+            .panes
+            .iter()
+            .take(2)
+            .enumerate()
+            .map(|(index, pane)| {
+                let workspace::Target::Pane { path } = pane.view.root.target() else {
+                    panic!("pane path")
+                };
+                let mut path = path.clone();
+                if index == 1 {
+                    path.push(Step::Follow(gid::Resolution::Document));
+                }
+                (pane.view.root.clone(), path)
+            })
+            .collect();
+        let shown = place(&model);
+        assert_eq!(
+            calls.replace(0),
+            2,
+            "only the two preview panes apply the projection"
+        );
+        for (pane, path) in &sources {
+            for field in [
+                presentation::vocabulary::VALUE,
+                presentation::vocabulary::PROJECTION,
+            ] {
+                let mut field_path = path.clone();
+                field_path.push(Step::Key(field));
+                assert!(
+                    shown
+                        .descends
+                        .iter()
+                        .any(|target| target.root.as_ref() == Some(document)
+                            && target.path.as_ref() == field_path)
+                );
+                assert!(
+                    !shown
+                        .descends
+                        .iter()
+                        .any(|target| target.root.as_ref() == Some(pane)
+                            && target.path.as_ref() == field_path)
+                );
+            }
+        }
+        for pane in &mut model.workspace.left.panes {
+            pane.view.projection = workspace::Projection::Raw;
+        }
+        let raw = place(&model);
+        assert_eq!(calls.replace(0), 0);
+        for (pane, path) in &sources {
+            for field in [
+                presentation::vocabulary::VALUE,
+                presentation::vocabulary::PROJECTION,
+            ] {
+                let mut field_path = path.clone();
+                field_path.push(Step::Key(field));
+                assert!(
+                    raw.descends
+                        .iter()
+                        .any(|target| target.root.as_ref() == Some(pane)
+                            && target.path.as_ref() == field_path)
+                );
+            }
+        }
+        for pane in &mut model.workspace.left.panes {
+            pane.view.projection = workspace::Projection::Standard;
+        }
+        *result.borrow_mut() = progred_libraries::absent::with_reason(projector);
+        let absent = place(&model);
+        assert_eq!(calls.get(), 2);
+        for (pane, path) in &sources {
+            let mut source_path = path.clone();
+            source_path.push(Step::Key(presentation::vocabulary::VALUE));
+            assert!(
+                absent
+                    .descends
+                    .iter()
+                    .any(|target| target.root.as_ref() == Some(pane)
+                        && target.path.as_ref() == source_path)
+            );
         }
     }
 

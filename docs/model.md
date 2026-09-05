@@ -154,8 +154,11 @@ a new list position and explicitly retargets selection; its size, scroll, and
 projection mode carry across, while path-keyed folds reset.
 
 `{value: source, projection: function}` is a presentation-library convention,
-not workspace configuration. It can appear anywhere a value is projected;
-see [projection composition](projections.md#projection-composition).
+not workspace configuration. The document's normal projection shows this
+declaration as editable data. Pane views explicitly compose the presentation
+library's declaration interpreter ahead of the normal projection; Raw shows
+the structural data in either view. See
+[projection composition](projections.md#projection-composition).
 
 ## History, gestures, and persistence
 

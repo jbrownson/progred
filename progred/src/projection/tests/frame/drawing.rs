@@ -15,7 +15,9 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.path);
     let source = Some((declaration.path.as_slice(), value));
-    let (bench, _) = place_with_annotations(
+    let mut context = BenchContext::new();
+    context.stack.projection = context.stack.pane_projection.clone();
+    let (bench, _) = context.place(
         &doc,
         None,
         &Annotations::default(),
@@ -60,7 +62,9 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.path);
     let source = Some((declaration.path.as_slice(), value));
-    let (bench, extent) = place_with_annotations(
+    let mut context = BenchContext::new();
+    context.stack.projection = context.stack.pane_projection.clone();
+    let (bench, extent) = context.place(
         &doc,
         None,
         &Annotations::default(),
@@ -69,7 +73,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         None,
         source,
     );
-    let (rebuilt, _) = place_with_annotations(
+    let (rebuilt, _) = context.place(
         &doc,
         None,
         &Annotations::default(),
@@ -84,7 +88,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
         _ => panic!("the scene starts with the sky fill"),
     };
-    let (linked, _) = place_with_annotations(
+    let (linked, _) = context.place(
         &doc,
         None,
         &Annotations::default(),

@@ -11,6 +11,7 @@ use progred_libraries::{
 pub struct Stack<World> {
     pub libraries: Libraries,
     pub projection: Projection<World>,
+    pub pane_projection: Projection<World>,
     pub root_completions: progred_display::CompletionProvider,
     pub root_field_completions: progred_display::CompletionProvider,
 }
@@ -20,6 +21,7 @@ impl<World> Clone for Stack<World> {
         Self {
             libraries: self.libraries.clone(),
             projection: self.projection.clone(),
+            pane_projection: self.pane_projection.clone(),
             root_completions: self.root_completions.clone(),
             root_field_completions: self.root_field_completions.clone(),
         }
@@ -33,6 +35,10 @@ pub fn load<World: 'static>() -> Stack<World> {
     let root_field_completions = std::rc::Rc::new(move |_: &str| root_field_completions.clone());
     Stack {
         libraries,
+        pane_projection: Projection::new(
+            std::iter::once(progred_display::partial(presentation::projected_display))
+                .chain(projections.iter().cloned()),
+        ),
         projection: Projection::new(projections),
         root_completions,
         root_field_completions,

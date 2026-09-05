@@ -65,11 +65,13 @@ a transient read-only root. A result containing another `evaluate` field can
 invoke that projection again under the remaining fuel allowance. Ordinary
 call-shaped values elsewhere remain editable data until explicitly evaluated.
 
-The presentation library recognizes `{value: source, projection: function}`
-anywhere, including inside a pane. It applies the function to the source as
-data; its result enters normal projection from a transient root. An absent
-result declines to the editable source. The workspace does not interpret this
-wrapper. Raw exposes its stored fields.
+The presentation library offers an opt-in interpreter for
+`{value: source, projection: function}`. Pane views compose it ahead of the
+normal projection; the document view leaves the declaration as editable data.
+It applies the function to the source as data and projects the result from a
+transient root. An absent result declines to the editable source. The workspace
+does not interpret this wrapper. Raw exposes its stored fields in either view.
+Explicit `{render: expression}` values retain their ordinary display behavior.
 
 ## Lowering and interaction
 
