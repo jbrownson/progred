@@ -39,12 +39,6 @@ impl<World> Clone for Descend<World> {
     }
 }
 
-/// Placement contexts that accumulate descends as the projection
-/// places, so the shell can step selection by keyboard.
-pub trait HasDescends<World> {
-    fn descends(&mut self) -> &mut Vec<Descend<World>>;
-}
-
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending
 /// edge returns to.

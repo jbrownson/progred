@@ -44,11 +44,6 @@ pub struct Offers {
     pub entries: Vec<Entry>,
 }
 
-/// Placement contexts that carry the frame's completion offers.
-pub trait HasCompletion {
-    fn completion(&mut self) -> &mut Option<Offers>;
-}
-
 #[cfg(test)]
 pub(crate) fn completion_entries(
     sources: &Sources,

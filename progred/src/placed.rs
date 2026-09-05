@@ -5,10 +5,10 @@
 //! — combined in placement order, so the later contribution is on
 //! top: painted last, asked first.
 
-use crate::completion::{HasCompletion, Offers};
+use crate::completion::Offers;
 use crate::frame::Hovered;
 use crate::hover::Secondary;
-use crate::navigate::{Descend, HasDescends};
+use crate::navigate::Descend;
 use crate::workspace::Root;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
@@ -537,14 +537,12 @@ impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
     }
 }
 
-impl<C: 'static, Cv> HasDescends<C> for Builder<'_, C, Cv> {
-    fn descends(&mut self) -> &mut Vec<Descend<C>> {
+impl<C: 'static, Cv> Builder<'_, C, Cv> {
+    pub fn descends(&mut self) -> &mut Vec<Descend<C>> {
         &mut self.placed.descends
     }
-}
 
-impl<C: 'static, Cv> HasCompletion for Builder<'_, C, Cv> {
-    fn completion(&mut self) -> &mut Option<Offers> {
+    pub fn completion(&mut self) -> &mut Option<Offers> {
         &mut self.placed.completion
     }
 }

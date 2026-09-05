@@ -2,14 +2,14 @@
 //! retain source provenance, and fall back to total structural display.
 
 use crate::annotations::Annotations;
-use crate::completion::{Entry, EntryAction, HasCompletion, Offers, completion_entries_with};
+use crate::completion::{Entry, EntryAction, Offers, completion_entries_with};
 #[cfg(test)]
 use crate::completion::{completion_entries, resolve_entry, resolve_label};
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 #[cfg(test)]
 use crate::identity::short_id;
-use crate::navigate::{Descend, HasDescends};
+use crate::navigate::Descend;
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
