@@ -151,6 +151,11 @@ see [projection composition](projections.md#projection-composition).
 
 ## History, gestures, and persistence
 
+On desktop, examples open through the normal new-window path, then close the
+previous editor if it has no unsaved changes. This includes the empty startup
+document and untouched examples; edited documents stay open. File New and Open
+continue to create windows without closing the previous editor.
+
 [`History`](../progred/src/history.rs) keeps document snapshots and selection
 paths in undo/redo stacks. Recording a new branch clears redo. The saved mark
 is a position on that surviving branch: discarding the branch that held it

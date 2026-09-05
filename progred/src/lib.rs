@@ -1716,8 +1716,8 @@ impl App {
         }
     }
 
-    /// Every document lives in its own window: New, Open, and the
-    /// examples each open one; Quit drains them.
+    /// New, Open, and examples create windows. Opening an example
+    /// also closes the previous editor if it has no unsaved changes.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn run_app_command(&mut self, event_loop: &ActiveEventLoop, command: AppCommand) {
         match command {
@@ -1749,7 +1749,15 @@ impl App {
             }
             AppCommand::Quit => self.begin_quit(event_loop),
             AppCommand::Example(example) => match gid_text::parse(example.source()) {
-                Ok((doc, binders)) => self.open_editor(event_loop, doc, None, binders),
+                Ok((doc, binders)) => {
+                    let previous = self
+                        .focused_index()
+                        .filter(|index| !self.editors[*index].model.history.dirty());
+                    self.open_editor(event_loop, doc, None, binders);
+                    if let Some(index) = previous {
+                        self.close_editor(event_loop, index);
+                    }
+                }
                 Err(error) => panic!("built-in example failed to parse: {error}"),
             },
         }
