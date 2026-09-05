@@ -673,7 +673,11 @@ fn leaf_display<C: 'static, Cv: Canvas + 'static>(
     content: puri::Leaf<progred_display::Paint>,
 ) -> Measured<Placed<C, Cv>> {
     match content {
-        puri::Leaf::Text { text, paint } => {
+        puri::Leaf::Text {
+            text,
+            paint,
+            script,
+        } => {
             let style = match paint {
                 progred_display::Paint::Face(face) => face_style(styles, face).clone(),
                 progred_display::Paint::Brush(brush) => TextStyle {
@@ -681,7 +685,7 @@ fn leaf_display<C: 'static, Cv: Canvas + 'static>(
                     ..styles.name.clone()
                 },
             };
-            render::text(tcx, &text, &style)
+            render::shaped_text(puri::text::scripted_text(tcx, &text, &style, script))
         }
         puri::Leaf::Drawing(drawing) => drawing_leaf(styles, drawing),
     }

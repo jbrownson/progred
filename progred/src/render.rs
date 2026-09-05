@@ -12,7 +12,10 @@ pub fn text<C: 'static, Cv: Canvas + 'static>(
     s: &str,
     style: &TextStyle,
 ) -> Measured<Placed<C, Cv>> {
-    let text = puri::text::text(ctx, s, style);
+    shaped_text(puri::text::text(ctx, s, style))
+}
+
+pub fn shaped_text<C: 'static, Cv: Canvas + 'static>(text: puri::Text) -> Measured<Placed<C, Cv>> {
     placed::leaf(metrics_extent(text.metrics()), move |canvas, placement| {
         text.place(canvas, placement)
     })

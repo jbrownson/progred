@@ -179,6 +179,31 @@ fn svg_bench_renders_the_grap_demo() {
 }
 
 #[test]
+fn svg_bench_renders_numeric_type_labels() {
+    let mut cells = Cells::new();
+    for label in ["radius", "offset", "count"] {
+        cells.set_value(crate::test_values::label(label), name::record(label, []));
+    }
+    let doc = Document {
+        root: Some(Value::record([
+            (
+                crate::test_values::label("radius"),
+                progred_libraries::f32::value(24.5),
+            ),
+            (crate::test_values::label("offset"), f64::value(-2.75)),
+            (
+                crate::test_values::label("count"),
+                progred_libraries::u64::value(12),
+            ),
+        ])),
+        cells,
+    };
+    render(&doc, None, 400.0, "numeric_type_labels.svg");
+    let selection = make_projected_selection(&doc, &core_libraries(), vec![key("radius")]);
+    render(&doc, Some(&selection), 400.0, "numeric_type_labels_editing.svg");
+}
+
+#[test]
 fn svg_bench_renders_the_placeholder_notation() {
     let empty = Document {
         root: None,

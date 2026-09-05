@@ -628,6 +628,7 @@ fn decode_with<World: 'static, Hover: Clone>(
         return Some(leaf(Leaf::Text {
             text: text::read(content.get(&vocabulary::CONTENT)?)?.to_string(),
             paint: Paint::Face(face),
+            script: puri::text::Script::Normal,
         }));
     }
     if let Some(content) = fields.get(&vocabulary::DRAWING) {

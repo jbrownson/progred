@@ -199,10 +199,12 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
         })
     }
     .expect("value projection");
-    // A scrubbable number wraps its line in the scrub claim; the
-    // line itself remains the editable value.
     let layout = match layout {
         progred_display::Layout::OnScrub { child, .. } => *child,
+        layout => layout,
+    };
+    let layout = match layout {
+        progred_display::Layout::Row { children, .. } => children.into_iter().next().unwrap(),
         layout => layout,
     };
     let progred_display::Layout::LineEdit(line) = layout else {

@@ -75,6 +75,7 @@ pub fn display<World, Hover: Clone>(
     Some(number::layout(
         input,
         read(input.value)?,
+        "f32",
         vocabulary::UPDATE,
         value,
     ))

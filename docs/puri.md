@@ -110,6 +110,11 @@ records the same operations for inspection and replay. Rectangles remain
 rectangles in recordings rather than becoming paths merely for transport.
 Parley owns text shaping. Puri does not depend on a platform clipboard library.
 
+Text leaves may request subscript typography: Puri shapes a smaller font and
+reports ascent/descent relative to the surrounding baseline. Ordinary rows
+then align it correctly without a new layout operation. The number projections
+use this for muted representation labels outside the editable digits.
+
 Tests can drive pure descriptions and handlers without a window. Projection
 fixtures, interaction regressions, SVG export, and profiling live in
 [`projection/tests`](../progred/src/projection/tests/mod.rs). SVG tests are a

@@ -685,6 +685,15 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
     leaf(Leaf::Text {
         text: text.into(),
         paint: Paint::Face(face),
+        script: puri::text::Script::Normal,
+    })
+}
+
+pub fn subscript<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World, Hover> {
+    leaf(Leaf::Text {
+        text: text.into(),
+        paint: Paint::Face(face),
+        script: puri::text::Script::Subscript,
     })
 }
 

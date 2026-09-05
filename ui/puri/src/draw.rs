@@ -17,7 +17,11 @@ use peniko::{Brush, FontData, ImageData};
 /// directly.
 #[derive(Debug, Clone)]
 pub enum Leaf<Paint> {
-    Text { text: String, paint: Paint },
+    Text {
+        text: String,
+        paint: Paint,
+        script: crate::text::Script,
+    },
     Drawing(Drawing<Paint>),
 }
 

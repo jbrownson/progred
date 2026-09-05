@@ -74,6 +74,13 @@ pub struct TextStyle {
     pub family: GenericFamily,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Script {
+    #[default]
+    Normal,
+    Subscript,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TextMetrics {
     pub width: f64,
@@ -104,6 +111,33 @@ impl Text {
 /// inline fragments compose without collapsing.
 pub fn text(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Text {
     measured_text(build_layout(ctx, s, style, None, None), true)
+}
+
+/// Script glyphs retain the surrounding baseline for alignment; their
+/// metrics account for the smaller font and displaced glyph baseline.
+pub fn scripted_text(ctx: &mut TextCtx, s: &str, style: &TextStyle, script: Script) -> Text {
+    match script {
+        Script::Normal => text(ctx, s, style),
+        Script::Subscript => {
+            let text = text(
+                ctx,
+                s,
+                &TextStyle {
+                    size: style.size * 0.85,
+                    ..style.clone()
+                },
+            );
+            let offset = f64::from(style.size * 0.23 * ctx.scale);
+            Text {
+                metrics: TextMetrics {
+                    ascent: text.metrics.ascent - offset,
+                    descent: text.metrics.descent + offset,
+                    ..text.metrics
+                },
+                ..text
+            }
+        }
+    }
 }
 
 /// Wrapped to `max_width`; the baseline is the first line's.
@@ -274,6 +308,64 @@ mod tests {
         let second = line_layout(&mut ctx, "shared", &style);
 
         assert!(Rc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn subscript_metrics_preserve_the_alignment_baseline_and_cover_the_shaped_line() {
+        let mut fonts = FontContext::new();
+        let mut layouts = LayoutContext::new();
+        let mut cache = TextCache::default();
+        for scale in [1.0, 1.5, 2.0] {
+            let mut ctx = TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                scale,
+                cache: &mut cache,
+            };
+            let style = TextStyle {
+                size: 13.0,
+                brush: Color::WHITE.into(),
+                weight: None,
+                family: GenericFamily::SystemUi,
+            };
+            let normal = scripted_text(&mut ctx, "f32", &style, Script::Normal);
+            let subscript = scripted_text(&mut ctx, "f32", &style, Script::Subscript);
+            let small = text(
+                &mut ctx,
+                "f32",
+                &TextStyle {
+                    size: 13.0 * 0.85,
+                    ..style
+                },
+            );
+            assert!(Rc::ptr_eq(&subscript.layout, &small.layout));
+            let metrics = subscript.metrics();
+            assert!(metrics.width < normal.metrics().width);
+            let offset = f64::from(13.0 * 0.23 * scale);
+            assert!((metrics.ascent + offset - small.metrics().ascent).abs() < 1e-6);
+            assert!((metrics.descent - offset - small.metrics().descent).abs() < 1e-6);
+
+            let rect = Rect::new(
+                0.0,
+                100.0 - metrics.ascent,
+                metrics.width,
+                100.0 + metrics.descent,
+            );
+            assert!((rect.height() - subscript.layout.height() as f64).abs() < 1e-6);
+            let mut recording = DrawList::new();
+            subscript.place(&mut recording, Placement::root(rect));
+            let run = recording
+                .0
+                .iter()
+                .find_map(|cmd| match cmd {
+                    DrawCmd::GlyphRun(run) => Some(run),
+                    _ => None,
+                })
+                .unwrap();
+            let glyph_baseline =
+                run.transform.translation().y + f64::from(run.glyphs.first().unwrap().y);
+            assert!((glyph_baseline - (100.0 + offset)).abs() < 1e-6);
+        }
     }
 
     #[test]

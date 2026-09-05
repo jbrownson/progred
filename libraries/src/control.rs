@@ -988,7 +988,10 @@ mod tests {
         let Layout::OnActivate { child, .. } = *child else {
             panic!("the marker remains selectable");
         };
-        let Layout::Leaf(puri::Leaf::Text { text, paint: face }) = *child else {
+        let Layout::Leaf(puri::Leaf::Text {
+            text, paint: face, ..
+        }) = *child
+        else {
             panic!("the marker is text");
         };
         assert_eq!(text, "\"");

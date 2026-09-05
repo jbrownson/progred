@@ -80,7 +80,13 @@ pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let number = read(input.value)?;
-    Some(number::layout(input, number, vocabulary::UPDATE, value))
+    Some(number::layout(
+        input,
+        number,
+        "f64",
+        vocabulary::UPDATE,
+        value,
+    ))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

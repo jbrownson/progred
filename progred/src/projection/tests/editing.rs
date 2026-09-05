@@ -96,6 +96,34 @@ fn a_line_control_installs_its_navigation_selection() {
 }
 
 #[test]
+fn annotated_numbers_navigate_and_edit_only_the_digits() {
+    use progred_libraries::{f32, u64};
+
+    let libraries = core_libraries();
+    for (original, spelling, expected) in [
+        (f32::value(24.5), "24.5", f32::value(17.0)),
+        (f64::value(-2.75), "-2.75", f64::value(17.0)),
+        (u64::value(12), "12", u64::value(17)),
+        (
+            f64::value(std::primitive::f64::INFINITY),
+            "inf",
+            f64::value(17.0),
+        ),
+    ] {
+        let mut doc = Document {
+            root: Some(original),
+            cells: Cells::new(),
+        };
+        let mut selected = make_projected_selection(&doc, &libraries, vec![]);
+        assert_eq!(selected.path(), &[]);
+        assert_eq!(selected.edit().map(LineEditState::text), Some(spelling));
+        selected.edit_mut().unwrap().set_text("17");
+        assert!(write_through(&mut doc, &libraries, &mut selected));
+        assert_eq!(doc.root, Some(expected));
+    }
+}
+
+#[test]
 fn leftward_navigation_sets_the_live_caret_and_payload_conversion_preserves_it() {
     let libraries = core_libraries();
     let (mut doc, _) = doc_of(vec![(

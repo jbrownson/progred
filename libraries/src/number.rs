@@ -5,7 +5,9 @@
 
 use crate::{Library, line_edit, name};
 use gid::{CellId, Cells, Value};
-use progred_display::{Layout, ProjectionInput, ScrubEvent, ScrubUpdate, on_scrub, overlay_value};
+use progred_display::{
+    Face, Layout, ProjectionInput, ScrubEvent, ScrubUpdate, on_scrub, overlay_value, row, subscript,
+};
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -68,10 +70,17 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
 pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
     input: &ProjectionInput<'_, World, Hover>,
     number: N,
+    representation: &str,
     update: CellId,
     encode: fn(N) -> Value,
 ) -> Layout<World, Hover> {
-    let line = line_edit::layout(number.to_string(), grap_runtime::ffi(update), "", "");
+    let line = row(
+        2.0,
+        [
+            line_edit::layout(number.to_string(), grap_runtime::ffi(update), "", ""),
+            subscript(representation, Face::Dim),
+        ],
+    );
     if !number.scrubbable() {
         return line;
     }
