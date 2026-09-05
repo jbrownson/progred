@@ -3,6 +3,7 @@
     "border": a4edf70410d16734683d9f2de0bb0080,
     "difference": c621348e3c35e46e87c1994eb1a50965,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -52,7 +53,9 @@
           projection_value: ring,
           projection: {
             function: border,
-            projection: preview_3d,
+            projection: {
+              ffi: preview_3d,
+            },
           },
         },
       ],

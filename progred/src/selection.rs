@@ -822,12 +822,7 @@ pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut 
                     }));
                 // `apply`, not `call` + `evaluate`: the current value
                 // is data even when it is code-shaped.
-                let evaluation = grap::apply(
-                    &update,
-                    arguments,
-                    |cell| sources.grap_definitions(cell),
-                    grap::DEFAULT_FUEL,
-                );
+                let evaluation = grap::apply(&update, arguments, &sources, grap::DEFAULT_FUEL);
                 (!absent::is_absent(&evaluation.result)).then_some(evaluation.result)
             };
             (current, next)
@@ -868,7 +863,7 @@ pub mod payload {
 
     pub mod vocabulary {
         use gid::CellId;
-        pub use progred_libraries::selection::vocabulary::{STAGE, EDGE, PENDING, LABEL};
+        pub use progred_libraries::selection::vocabulary::{EDGE, LABEL, PENDING, STAGE};
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);

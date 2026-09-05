@@ -4,15 +4,9 @@
 //! value definition it crosses into.
 
 use gid::{CellId, Document, Resolution, Step, Value};
-use progred_libraries::{DefinitionRef, Libraries, name};
+use progred_libraries::{Libraries, name};
 
 pub type DefinitionSource = Resolution;
-
-#[derive(Clone, Copy)]
-pub struct LocatedDefinition<'a> {
-    pub source: DefinitionSource,
-    pub definition: DefinitionRef<'a>,
-}
 
 #[derive(Clone, Copy)]
 pub struct LocatedValue<'a> {
@@ -47,36 +41,28 @@ impl<'a> Sources<'a> {
         self.libraries.metadata(library).and_then(name::read)
     }
 
-    pub fn definitions(&self, cell: CellId) -> impl Iterator<Item = LocatedDefinition<'a>> {
+    pub fn contributors(&self, cell: CellId) -> impl Iterator<Item = Resolution> + '_ {
         self.doc
             .cells
             .value(cell)
-            .map(|value| (DefinitionSource::Document, DefinitionRef::Value(value)))
+            .map(|_| Resolution::Document)
             .into_iter()
-            .chain(self.libraries.definitions(cell).map(|definition| {
-                (
-                    DefinitionSource::Library(definition.library),
-                    definition.definition,
-                )
-            }))
-            .map(|(source, definition)| LocatedDefinition { source, definition })
+            .chain(self.libraries.contributors(cell).map(Resolution::Library))
     }
 
     pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
-        self.definitions(cell)
-            .filter_map(|resolved| match resolved.definition {
-                DefinitionRef::Value(value) => Some(LocatedValue {
-                    source: resolved.source,
-                    value,
-                }),
-                DefinitionRef::ForeignFunction(_) => None,
+        self.doc
+            .cells
+            .value(cell)
+            .map(|value| LocatedValue {
+                source: Resolution::Document,
+                value,
             })
-    }
-
-    pub fn grap_definitions(&self, cell: CellId) -> Vec<(Resolution, grap::Definition)> {
-        self.definitions(cell)
-            .map(|resolved| (resolved.source, resolved.definition.cloned()))
-            .collect()
+            .into_iter()
+            .chain(self.libraries.values(cell).map(|value| LocatedValue {
+                source: Resolution::Library(value.library),
+                value: value.value,
+            }))
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -116,6 +102,25 @@ impl<'a> Sources<'a> {
 
     pub fn writable(&self, _cell: CellId, resolution: &Resolution) -> bool {
         matches!(resolution, Resolution::Document)
+    }
+}
+
+impl grap::Host for Sources<'_> {
+    fn values(&self, cell: CellId) -> Vec<(Resolution, Value)> {
+        self.values(cell)
+            .map(|value| (value.source, value.value.clone()))
+            .collect()
+    }
+
+    fn candidates(&self, cell: CellId) -> Vec<(Resolution, grap::CallCandidate)> {
+        self.doc
+            .cells
+            .value(cell)
+            .cloned()
+            .map(|value| (Resolution::Document, grap::CallCandidate::Value(value)))
+            .into_iter()
+            .chain(self.libraries.call_candidates(cell))
+            .collect()
     }
 }
 
@@ -186,17 +191,11 @@ mod tests {
                 };
                 let overlay = grap::ForeignOverlay::new(&functions, &observe);
                 let evaluation = if host_apply {
-                    grap::apply_scoped(
-                        &Value::from(function),
-                        [],
-                        |cell| sources.grap_definitions(cell),
-                        &overlay,
-                        100,
-                    )
+                    grap::apply_scoped(&Value::from(function), [], &sources, &overlay, 100)
                 } else {
                     grap::evaluate_scoped(
                         &grap::call(Value::from(function), []),
-                        |cell| sources.grap_definitions(cell),
+                        &sources,
                         &overlay,
                         100,
                     )
@@ -288,7 +287,7 @@ mod tests {
 
         assert_eq!(
             sources
-                .definitions(cell)
+                .values(cell)
                 .map(|definition| definition.source)
                 .collect::<Vec<_>>(),
             [

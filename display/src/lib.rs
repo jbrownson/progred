@@ -576,17 +576,15 @@ pub trait Env {
         Vec::new()
     }
 
-    /// The cell's definitions, without evaluating them. Contextual
-    /// projections may inspect an unambiguous value definition to
-    /// choose a presentation without hiding foreign alternatives.
-    fn cell_definitions(&self, _cell: CellId) -> Vec<CellDefinition<'_>> {
+    /// Ordinary cell values, without evaluation.
+    fn cell_definitions(&self, _cell: CellId) -> Vec<(Resolution, &Value)> {
         Vec::new()
     }
-}
 
-pub enum CellDefinition<'a> {
-    Value(Resolution, &'a Value),
-    Foreign,
+    /// Sources registering foreign implementations, in call order.
+    fn foreign_sources(&self, _cell: CellId) -> Vec<Resolution> {
+        Vec::new()
+    }
 }
 
 /// Everything a partial projection receives for one value. The

@@ -132,19 +132,19 @@ mod tests {
         let result = grap_runtime::apply_scoped(
             &pending_child(child.clone()),
             [],
-            |cell| {
+            &crate::TestHost(|cell| {
                 functions
                     .get(cell)
                     .cloned()
                     .map(|function| {
                         (
                             gid::Resolution::Document,
-                            grap_runtime::Definition::ForeignFunction(function),
+                            grap_runtime::CallCandidate::ForeignFunction(function),
                         )
                     })
                     .into_iter()
                     .collect()
-            },
+            }),
             &overlay,
             100,
         );

@@ -19,7 +19,8 @@ presentation, layout, and other domains. A `Library` carries GID metadata,
 definitions, and ordered partial projections. `Libraries` keeps an insertion-
 ordered unique map keyed by stable library identities supplied externally.
 Each source contributes at most one value per cell but can supply multiple
-Rust foreign implementations.
+Rust foreign implementations. Those registrations are stored separately from
+the cell values: naming a function does not create a second definition.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections, root templates, and root field vocabulary. Documents
@@ -127,10 +128,20 @@ labels are cell identities, so reusing a library parameter cell is meaningful;
 its display name does not participate in binding. The ordered parameter list
 is the current representation, not a settled general pattern language.
 
-Cell evaluation checks lexical bindings first, then asks the host for all
-ordered definitions. Exactly one value definition evaluates normally;
-exactly one foreign definition becomes an FFI callable. A plural result stays
-the cell identity so a later call can dispatch across its definitions.
+Cell evaluation checks lexical bindings first, then asks the host for ordinary
+value definitions. Exactly one value evaluates normally; several values leave
+the cell identity so a later call can dispatch across its definitions. With no
+value definitions, evaluation returns missing-cell absent. Foreign registrations,
+including scoped capabilities, are not consulted by this lookup. A named foreign
+function therefore evaluates to its ordinary name record, just as it would
+without a registration.
+
+Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
+and Grap implementations. To pass a callable reference through an evaluated
+argument, use the existing inert `{ffi: cell}` representation; passing a bare
+cell evaluates its data. This reference still dispatches in the receiving host
+context. It contains neither a native function pointer nor an extra cell definition.
+The Fidget example uses such a reference as the argument to `border`.
 
 A direct call through a cell tries the document definition, then library
 definitions in load order. It skips non-callable values, tries candidates
@@ -138,6 +149,10 @@ lazily, and continues only for `{absent: declined}`. Any other result, including
 another absent, is definitive. Scoped capability functions can override this
 lookup. An exhausted definition chain preserves its explicit declines in order,
 keeping one unchanged or returning `{absent: declined, causes: [...]}` for several.
+Within each library, registered Rust implementations precede its ordinary value
+candidate. Non-callable name records need no special metadata recognition.
+Projection environments expose ordinary definitions and foreign source identities
+as separate queries, so projections can inspect call registrations explicitly.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
 wrap selection, annotation, drawing/path writes, and deterministic random

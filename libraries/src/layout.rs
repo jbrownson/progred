@@ -1115,7 +1115,7 @@ mod tests {
                 Value::from(vocabulary::BORDER),
                 [(
                     presentation::vocabulary::PROJECTION,
-                    Value::from(vocabulary::DRAWING),
+                    grap_runtime::ffi(vocabulary::DRAWING),
                 )],
             ),
             |cell| library.value(cell).cloned(),

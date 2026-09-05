@@ -152,9 +152,17 @@ pub struct ForeignFunction {
 /// these in library order; a direct call through that cell tries them
 /// in order until one returns a value other than explicit decline.
 #[derive(Clone)]
-pub enum Definition {
+pub enum CallCandidate {
     ForeignFunction(ForeignFunction),
     Value(Value),
+}
+
+/// Cell data and callable implementations are separate host queries.
+/// A foreign registration never changes what evaluating a cell returns.
+pub trait Host {
+    fn values(&self, cell: CellId) -> Vec<(Resolution, Value)>;
+
+    fn candidates(&self, cell: CellId) -> Vec<(Resolution, CallCandidate)>;
 }
 
 impl ForeignFunction {
@@ -840,7 +848,7 @@ pub struct Evaluation {
 }
 
 pub struct Context<'a> {
-    definitions: &'a dyn Fn(CellId) -> Vec<(Resolution, Definition)>,
+    host: &'a dyn Host,
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
     effects: u64,
@@ -887,13 +895,13 @@ struct CallPlan {
     arguments: Rc<[Option<Expression>]>,
 }
 
-struct PreparedDefinition {
-    kind: PreparedDefinitionKind,
+struct PreparedCallCandidate {
+    kind: PreparedCallCandidateKind,
     plan: RefCell<Option<CallPlan>>,
     stages: RefCell<Option<(Prepare, Stage)>>,
 }
 
-enum PreparedDefinitionKind {
+enum PreparedCallCandidateKind {
     Foreign(ForeignFunction),
     Value {
         source: Resolution,
@@ -1356,10 +1364,11 @@ impl<'a> Context<'a> {
         };
         let plan: RefCell<Option<CallPlan>> = RefCell::new(None);
         let stages: RefCell<Option<(Prepare, Stage)>> = RefCell::new(None);
-        let definitions: RefCell<Option<Rc<[PreparedDefinition]>>> = RefCell::new(None);
+        let definitions: RefCell<Option<Rc<[PreparedCallCandidate]>>> = RefCell::new(None);
         thunk(move |context, environment| {
             if let Some(index) = function_cell
-                && !context.indices.borrow().is_bound(index)
+                && (!context.indices.borrow().is_bound(index)
+                    || environment.get_index(index).is_none())
                 && context
                     .transient_foreign_target(context.indices.borrow().cell(index))
                     .is_none()
@@ -1370,7 +1379,14 @@ impl<'a> Context<'a> {
                 let callable = match function_cell {
                     Some(index) => {
                         context.burn()?;
-                        context.eval_cell(index, environment)?
+                        let cell = context.indices.borrow().cell(index);
+                        match environment.get_index(index) {
+                            Some(value) => context.lower_runtime(value.clone()),
+                            None => match context.foreign_target_cell(cell) {
+                                Some(foreign) => RuntimeValue(RuntimeValueKind::Foreign(foreign)),
+                                None => context.eval_cell(index, environment)?,
+                            },
+                        }
                     }
                     None => context.eval_runtime(function, environment)?,
                 };
@@ -1397,7 +1413,7 @@ impl<'a> Context<'a> {
         index: CellIndex,
         call: Expression,
         environment: &Environment,
-        cache: &RefCell<Option<Rc<[PreparedDefinition]>>>,
+        cache: &RefCell<Option<Rc<[PreparedCallCandidate]>>>,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         let cell = self.indices.borrow().cell(index);
@@ -1405,14 +1421,16 @@ impl<'a> Context<'a> {
         let definitions = match cached {
             Some(definitions) => definitions,
             None => {
-                let definitions: Rc<[PreparedDefinition]> = (self.definitions)(cell)
+                let definitions: Rc<[PreparedCallCandidate]> = self
+                    .host
+                    .candidates(cell)
                     .into_iter()
-                    .map(|(source, definition)| PreparedDefinition {
+                    .map(|(source, definition)| PreparedCallCandidate {
                         kind: match definition {
-                            Definition::ForeignFunction(function) => {
-                                PreparedDefinitionKind::Foreign(function)
+                            CallCandidate::ForeignFunction(function) => {
+                                PreparedCallCandidateKind::Foreign(function)
                             }
-                            Definition::Value(value) => PreparedDefinitionKind::Value {
+                            CallCandidate::Value(value) => PreparedCallCandidateKind::Value {
                                 source,
                                 value,
                                 expression: RefCell::new(None),
@@ -1432,7 +1450,7 @@ impl<'a> Context<'a> {
             Value::from(cell),
             &definitions,
             |context, definition| match &definition.kind {
-                PreparedDefinitionKind::Foreign(function) => context
+                PreparedCallCandidateKind::Foreign(function) => context
                     .call_foreign_staged(
                         &ResolvedForeign::Permanent {
                             cell,
@@ -1443,7 +1461,7 @@ impl<'a> Context<'a> {
                         Some(&definition.stages),
                     )
                     .map(Some),
-                PreparedDefinitionKind::Value {
+                PreparedCallCandidateKind::Value {
                     source,
                     value,
                     expression,
@@ -1614,58 +1632,48 @@ impl<'a> Context<'a> {
             return Ok(self.lower_runtime(value));
         }
         let cell = self.indices.borrow().cell(index);
-        if let Some(foreign) = self.foreign_target_cell(cell) {
-            Ok(RuntimeValue(RuntimeValueKind::Foreign(foreign)))
-        } else {
-            let definitions = (self.definitions)(cell);
-            match definitions.as_slice() {
-                [] => Ok(RuntimeValue::from_value(absent::with_detail(
-                    absent::MISSING_CELL,
-                    absent::CELL,
-                    Value::from(cell),
-                ))),
-                [(_, Definition::ForeignFunction(function))] => Ok(RuntimeValue(
-                    RuntimeValueKind::Foreign(ResolvedForeign::Permanent {
-                        cell,
-                        function: function.clone(),
-                    }),
-                )),
-                [(source, Definition::Value(value))] => {
-                    while self.cell_states.len() <= index.0 {
-                        self.cell_states.push(CellState::Unknown);
+        let definitions = self.host.values(cell);
+        match definitions.as_slice() {
+            [] => Ok(RuntimeValue::from_value(absent::with_detail(
+                absent::MISSING_CELL,
+                absent::CELL,
+                Value::from(cell),
+            ))),
+            [(source, value)] => {
+                while self.cell_states.len() <= index.0 {
+                    self.cell_states.push(CellState::Unknown);
+                }
+                match self.cell_states[index.0] {
+                    CellState::Ready(expression) => {
+                        self.eval_resolved_cell(index, cell, expression, environment)
                     }
-                    match self.cell_states[index.0] {
-                        CellState::Ready(expression) => {
-                            self.eval_resolved_cell(index, cell, expression, environment)
-                        }
-                        CellState::Evaluating { stack_index } => {
-                            Ok(RuntimeValue::from_value(absent::with_detail(
-                                absent::CELL_CYCLE,
-                                absent::CYCLE,
-                                Value::list(
-                                    self.resolving[stack_index..]
-                                        .iter()
-                                        .copied()
-                                        .chain([cell])
-                                        .map(Value::from),
-                                ),
-                            )))
-                        }
-                        CellState::Unknown => {
-                            let expression = self.lower_source(
-                                value,
-                                OriginRoot::Cell {
-                                    cell,
-                                    source: *source,
-                                },
-                            );
-                            self.cell_states[index.0] = CellState::Ready(expression);
-                            self.eval_resolved_cell(index, cell, expression, environment)
-                        }
+                    CellState::Evaluating { stack_index } => {
+                        Ok(RuntimeValue::from_value(absent::with_detail(
+                            absent::CELL_CYCLE,
+                            absent::CYCLE,
+                            Value::list(
+                                self.resolving[stack_index..]
+                                    .iter()
+                                    .copied()
+                                    .chain([cell])
+                                    .map(Value::from),
+                            ),
+                        )))
+                    }
+                    CellState::Unknown => {
+                        let expression = self.lower_source(
+                            value,
+                            OriginRoot::Cell {
+                                cell,
+                                source: *source,
+                            },
+                        );
+                        self.cell_states[index.0] = CellState::Ready(expression);
+                        self.eval_resolved_cell(index, cell, expression, environment)
                     }
                 }
-                _ => Ok(RuntimeValue::from_value(Value::from(cell))),
             }
+            _ => Ok(RuntimeValue::from_value(Value::from(cell))),
         }
     }
 
@@ -1709,7 +1717,9 @@ impl<'a> Context<'a> {
     }
 
     fn foreign_target(&self, callable: &Value) -> Option<ResolvedForeign> {
-        let cell = callable.as_record()?.get(&vocabulary::FFI)?.as_cell()?;
+        let cell = callable
+            .as_cell()
+            .or_else(|| callable.as_record()?.get(&vocabulary::FFI)?.as_cell())?;
         self.foreign_target_cell(cell)
     }
 
@@ -1795,7 +1805,35 @@ impl<'a> Context<'a> {
             Rc::ptr_eq(&self.indices, &environment.indices),
             "a prepared callable must use this evaluation's environment",
         );
-        let callable = self.eval_runtime(expression, environment)?;
+        let reference = match self.expressions[expression.0].form {
+            Form::Cell(index) if environment.get_index(index).is_none() => {
+                let cell = self.indices.borrow().cell(index);
+                self.foreign_target_cell(cell)
+                    .map(|foreign| RuntimeValue(RuntimeValueKind::Foreign(foreign)))
+                    .or_else(|| match self.host.candidates(cell).as_slice() {
+                        [(_, CallCandidate::ForeignFunction(function))] => Some(RuntimeValue(
+                            RuntimeValueKind::Foreign(ResolvedForeign::Permanent {
+                                cell,
+                                function: function.clone(),
+                            }),
+                        )),
+                        candidates => candidates
+                            .iter()
+                            .any(|(_, candidate)| {
+                                matches!(candidate, CallCandidate::ForeignFunction(_))
+                            })
+                            .then(|| RuntimeValue::from_value(Value::from(cell))),
+                    })
+            }
+            _ => None,
+        };
+        let callable = match reference {
+            Some(reference) => {
+                self.burn()?;
+                reference
+            }
+            None => self.eval_runtime(expression, environment)?,
+        };
         let callable = match &callable.0 {
             RuntimeValueKind::Data(_) => self
                 .runtime_closure(&callable)
@@ -1930,8 +1968,13 @@ impl<'a> Context<'a> {
             return self.apply_definitions(cell, function.clone(), arguments, &environment);
         }
         self.checked_call(|context| {
-            let function = context.lower_source(function, OriginRoot::Input);
-            let callable = context.eval_runtime(function, &environment)?;
+            let callable = if function.as_cell().is_some() {
+                context.burn()?;
+                RuntimeValue::from_value(function.clone())
+            } else {
+                let function = context.lower_source(function, OriginRoot::Input);
+                context.eval_runtime(function, &environment)?
+            };
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
                 Some(result) => result,
                 None => Ok(RuntimeValue::from_value(absent::with_detail(
@@ -1951,13 +1994,13 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        let definitions = (self.definitions)(cell);
+        let definitions = self.host.candidates(cell);
         self.dispatch(
             cell,
             callable.clone(),
             &definitions,
             |context, (source, definition)| match definition {
-                Definition::ForeignFunction(function) => {
+                CallCandidate::ForeignFunction(function) => {
                     let call = context.lower(&call(
                         callable.clone(),
                         arguments
@@ -1975,7 +2018,7 @@ impl<'a> Context<'a> {
                         )
                         .map(Some)
                 }
-                Definition::Value(value) => {
+                CallCandidate::Value(value) => {
                     let expression = context.lower_source(
                         value,
                         OriginRoot::Cell {
@@ -2201,12 +2244,12 @@ pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)
 }
 
 fn context<'a>(
-    definitions: &'a dyn Fn(CellId) -> Vec<(Resolution, Definition)>,
+    host: &'a dyn Host,
     overlay: Option<&'a ForeignOverlay<'a>>,
     fuel: usize,
 ) -> Context<'a> {
     Context {
-        definitions,
+        host,
         overlay,
         foreign_scopes: Vec::new(),
         effects: 0,
@@ -2221,23 +2264,19 @@ fn context<'a>(
 
 /// The host supplies each definition with its stable source in the current
 /// resolution context. Source origins preserve it independently of load order.
-pub fn evaluate(
-    expression: &Value,
-    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
-    fuel: usize,
-) -> Evaluation {
-    context(&definitions, None, fuel).run(expression)
+pub fn evaluate(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation {
+    context(host, None, fuel).run(expression)
 }
 
 /// Evaluate with a borrowed foreign-function layer that exists only for
 /// this synchronous evaluation.
 pub fn evaluate_scoped<'a>(
     expression: &Value,
-    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
+    host: &dyn Host,
     overlay: &'a ForeignOverlay<'a>,
     fuel: usize,
 ) -> Evaluation {
-    context(&definitions, Some(overlay), fuel).run(expression)
+    context(host, Some(overlay), fuel).run(expression)
 }
 
 /// Apply a callable to already-evaluated argument VALUES. This is the
@@ -2249,10 +2288,10 @@ pub fn evaluate_scoped<'a>(
 pub fn apply(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
-    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
+    host: &dyn Host,
     fuel: usize,
 ) -> Evaluation {
-    context(&definitions, None, fuel)
+    context(host, None, fuel)
         .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
 }
 
@@ -2261,12 +2300,32 @@ pub fn apply(
 pub fn apply_scoped<'a>(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
-    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
+    host: &dyn Host,
     overlay: &'a ForeignOverlay<'a>,
     fuel: usize,
 ) -> Evaluation {
-    context(&definitions, Some(overlay), fuel)
+    context(host, Some(overlay), fuel)
         .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+}
+
+#[cfg(test)]
+struct TestHost<F>(F);
+
+#[cfg(test)]
+impl<F: Fn(CellId) -> Vec<(Resolution, CallCandidate)>> Host for TestHost<F> {
+    fn values(&self, cell: CellId) -> Vec<(Resolution, Value)> {
+        (self.0)(cell)
+            .into_iter()
+            .filter_map(|(source, candidate)| match candidate {
+                CallCandidate::Value(value) => Some((source, value)),
+                CallCandidate::ForeignFunction(_) => None,
+            })
+            .collect()
+    }
+
+    fn candidates(&self, cell: CellId) -> Vec<(Resolution, CallCandidate)> {
+        (self.0)(cell)
+    }
 }
 
 #[cfg(test)]
@@ -2278,17 +2337,17 @@ mod tests {
     fn definitions_from_parts<'a>(
         resolve: impl Fn(CellId) -> Option<Value> + 'a,
         foreign: &'a ForeignFunctions,
-    ) -> impl Fn(CellId) -> Vec<(Resolution, Definition)> + 'a {
-        move |cell| {
+    ) -> impl Host + 'a {
+        TestHost(move |cell| {
             foreign
                 .get(cell)
                 .cloned()
-                .map(Definition::ForeignFunction)
+                .map(CallCandidate::ForeignFunction)
                 .into_iter()
-                .chain(resolve(cell).map(Definition::Value))
+                .chain(resolve(cell).map(CallCandidate::Value))
                 .map(|definition| (Resolution::Document, definition))
                 .collect()
-        }
+        })
     }
 
     fn evaluate(
@@ -2297,7 +2356,7 @@ mod tests {
         foreign: &ForeignFunctions,
         fuel: usize,
     ) -> Evaluation {
-        super::evaluate(expression, definitions_from_parts(resolve, foreign), fuel)
+        super::evaluate(expression, &definitions_from_parts(resolve, foreign), fuel)
     }
 
     fn apply(
@@ -2310,7 +2369,7 @@ mod tests {
         super::apply(
             function,
             arguments,
-            definitions_from_parts(resolve, foreign),
+            &definitions_from_parts(resolve, foreign),
             fuel,
         )
     }
@@ -2322,28 +2381,31 @@ mod tests {
         let expression = call(Value::from(function), []);
         let evaluation = super::evaluate(
             &expression,
-            |cell| {
+            &TestHost(|cell| {
                 assert_eq!(cell, function);
                 vec![
                     (
                         Resolution::Document,
-                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                        CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
                             Ok(absent::decline())
                         })),
                     ),
-                    (Resolution::Document, Definition::Value(Value::record([]))),
                     (
-                        library,
-                        Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                        Resolution::Document,
+                        CallCandidate::Value(Value::record([])),
                     ),
                     (
                         library,
-                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                        CallCandidate::Value(lambda([], Value::from(b"grap".to_vec()))),
+                    ),
+                    (
+                        library,
+                        CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
                             Ok(Value::from(b"too late".to_vec()))
                         })),
                     ),
                 ]
-            },
+            }),
             20,
         );
 
@@ -2358,17 +2420,17 @@ mod tests {
         let second_missing = new_cell_id();
         let evaluation = super::evaluate(
             &call(Value::from(function), []),
-            |cell| match cell {
+            &TestHost(|cell| match cell {
                 cell if cell == function => vec![
                     (
                         Resolution::Document,
-                        Definition::Value(Value::from(first_missing)),
+                        CallCandidate::Value(Value::from(first_missing)),
                     ),
-                    (library, Definition::Value(Value::from(second_missing))),
+                    (library, CallCandidate::Value(Value::from(second_missing))),
                 ],
                 cell if cell == first_missing => Vec::new(),
                 _ => unreachable!(),
-            },
+            }),
             20,
         );
 
@@ -2384,20 +2446,20 @@ mod tests {
         let evaluation = super::apply(
             &Value::from(function),
             [],
-            |_| {
+            &TestHost(|_| {
                 vec![
                     (
                         Resolution::Document,
-                        Definition::ForeignFunction(ForeignFunction::new(|_, _, _| {
+                        CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
                             Ok(absent::decline())
                         })),
                     ),
                     (
                         Resolution::Document,
-                        Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                        CallCandidate::Value(lambda([], Value::from(b"grap".to_vec()))),
                     ),
                 ]
-            },
+            }),
             20,
         );
 
@@ -2594,8 +2656,67 @@ mod tests {
             evaluate(&shadowed, |_| None, &foreign, 30).result,
             blob("bound"),
         );
-        let unshadowed = evaluate(&Value::from(function), |_| None, &foreign, 30);
-        assert_eq!(unshadowed.result, ffi(function));
+        let unshadowed = evaluate(&call(Value::from(function), []), |_| None, &foreign, 30);
+        assert_eq!(unshadowed.result, blob("foreign"));
+    }
+
+    #[test]
+    fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
+        let function = new_cell_id();
+        let ignored = new_cell_id();
+        let foreign = ForeignFunctions::default().register(
+            function,
+            ForeignFunction::new(|_, _, _| Ok(blob("foreign"))),
+        );
+        let expression = call(
+            lambda([ignored], call(function.into(), [])),
+            [(
+                ignored,
+                call(
+                    lambda([function], Value::from(function)),
+                    [(function, blob("local"))],
+                ),
+            )],
+        );
+        assert_eq!(
+            evaluate(&expression, |_| Some(blob("ordinary data")), &foreign, 100).result,
+            blob("foreign")
+        );
+    }
+
+    #[test]
+    fn cell_reads_do_not_query_call_candidates_or_scoped_capabilities() {
+        struct DataHost(CellId, Vec<(Resolution, Value)>);
+        impl Host for DataHost {
+            fn values(&self, cell: CellId) -> Vec<(Resolution, Value)> {
+                assert_eq!(cell, self.0);
+                self.1.clone()
+            }
+            fn candidates(&self, _: CellId) -> Vec<(Resolution, CallCandidate)> {
+                panic!("reading data must not inspect call registrations")
+            }
+        }
+        let cell = new_cell_id();
+        let functions = [cell];
+        let invoke = |_, _: &mut Context<'_>, _, _: &Environment| {
+            panic!("reading data must not invoke a scoped capability")
+        };
+        let overlay = ForeignOverlay::new(&functions, &invoke);
+        let first = (Resolution::Document, blob("document"));
+        let second = (Resolution::Library(new_cell_id()), blob("library"));
+        for (values, expected) in [
+            (
+                vec![],
+                absent::with_detail(absent::MISSING_CELL, absent::CELL, cell.into()),
+            ),
+            (vec![first.clone()], first.1.clone()),
+            (vec![first, second], cell.into()),
+        ] {
+            let result =
+                super::evaluate_scoped(&cell.into(), &DataHost(cell, values), &overlay, 20);
+            assert!(result.completed);
+            assert_eq!(result.result, expected);
+        }
     }
 
     #[test]
@@ -2645,7 +2766,7 @@ mod tests {
     }
 
     #[test]
-    fn singular_foreign_cells_are_callable_values_while_plural_cells_preserve_identity() {
+    fn foreign_registrations_do_not_change_cell_values() {
         const INPUT: CellId = CellId::from_u128(0x2e9c4a71b8d0563f91a0c7e4d15b6820);
         let echo = new_cell_id();
         let input = INPUT;
@@ -2661,14 +2782,14 @@ mod tests {
 
         let evaluation = evaluate(
             &Value::from(echo),
-            |_| Some(blob("foreign cells do not resolve as data")),
+            |_| Some(blob("ordinary data")),
             &foreign,
             10,
         );
-        assert_eq!(evaluation.result, Value::from(echo));
+        assert_eq!(evaluation.result, blob("ordinary data"));
         assert_eq!(
             evaluate(
-                &call(Value::from(echo), [(input, Value::from(echo))]),
+                &call(Value::from(echo), [(input, ffi(echo))]),
                 |_| None,
                 &foreign,
                 10,
@@ -2698,10 +2819,7 @@ mod tests {
             call(Value::from(callable), [(input, Value::from(input))]),
         );
         let evaluation = evaluate(
-            &call(
-                apply,
-                [(callable, Value::from(echo)), (input, blob("passed"))],
-            ),
+            &call(apply, [(callable, ffi(echo)), (input, blob("passed"))]),
             |_| None,
             &foreign,
             40,
@@ -3149,7 +3267,7 @@ mod tests {
         let applied = super::apply_scoped(
             &Value::from(outer),
             [],
-            definitions_from_parts(|_| None, &foreign),
+            &definitions_from_parts(|_| None, &foreign),
             &overlay,
             20,
         );
@@ -3170,7 +3288,7 @@ mod tests {
         let foreign = ForeignFunctions::default();
         let evaluation = super::evaluate_scoped(
             &call(Value::from(function), []),
-            definitions_from_parts(|_| None, &foreign),
+            &definitions_from_parts(|_| None, &foreign),
             &overlay,
             10,
         );
@@ -3194,7 +3312,7 @@ mod tests {
 
         let evaluation = super::evaluate_scoped(
             &call(Value::from(function), []),
-            definitions_from_parts(
+            &definitions_from_parts(
                 |cell| (cell == function).then(|| stored.clone()),
                 &foreign_functions,
             ),
@@ -3227,10 +3345,10 @@ mod tests {
             let overlay = ForeignOverlay::new(&functions, &scoped);
             let evaluation = super::evaluate_scoped(
                 &Value::from(cell),
-                |queried| {
+                &TestHost(|queried| {
                     assert_eq!(queried, cell);
-                    vec![(source, Definition::Value(call(Value::from(foreign), [])))]
-                },
+                    vec![(source, CallCandidate::Value(call(Value::from(foreign), [])))]
+                }),
                 &overlay,
                 20,
             );

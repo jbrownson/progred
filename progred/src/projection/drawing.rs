@@ -359,12 +359,7 @@ fn record_program(
         }
     };
     let overlay = grap::ForeignOverlay::new(&functions, &draw);
-    let evaluation = grap::evaluate_scoped(
-        program,
-        |cell| sources.grap_definitions(cell),
-        &overlay,
-        fuel,
-    );
+    let evaluation = grap::evaluate_scoped(program, sources, &overlay, fuel);
     if evaluation.completed && !absent::declines(&evaluation.result) {
         Recorded {
             commands: canvas.into_inner(),

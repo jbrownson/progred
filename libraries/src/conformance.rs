@@ -205,7 +205,7 @@ fn callable_record_patterns_are_transparent_to_lowering() {
     let binder = new_cell_id();
     for (subject, field) in [
         (grap::lambda([], blob("body")), grap::vocabulary::CLOSURE),
-        (Value::from(f64::vocabulary::SUM), grap::vocabulary::FFI),
+        (grap::ffi(f64::vocabulary::SUM), grap::vocabulary::FFI),
     ] {
         let evaluated = evaluate(&subject, 100).result;
         for pattern in [

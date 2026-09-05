@@ -132,13 +132,7 @@ pub(crate) fn evaluate(
             event_foreign(function, context, call, environment, path, &staged)
         };
         let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
-        grap::apply_scoped(
-            function,
-            arguments,
-            |cell| sources.grap_definitions(cell),
-            &overlay,
-            fuel,
-        )
+        grap::apply_scoped(function, arguments, sources, &overlay, fuel)
     };
     (evaluation.completed && !absent::declines(&evaluation.result)).then(|| staged.into_inner())
 }

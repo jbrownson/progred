@@ -278,8 +278,8 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 .unwrap_or_default();
             if names.is_empty() {
                 let sources_for_cell: Vec<_> = sources
-                    .definitions(cell)
-                    .map(|definition| source_name(sources, definition.source))
+                    .contributors(cell)
+                    .map(|source| source_name(sources, source))
                     .collect();
                 let mut entry = Entry::value(
                     short_id(cell),

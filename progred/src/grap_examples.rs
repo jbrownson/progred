@@ -19,11 +19,7 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
         doc,
         libraries: &stack.libraries,
     };
-    grap::evaluate(
-        expression,
-        |cell| sources.grap_definitions(cell),
-        grap::DEFAULT_FUEL,
-    )
+    grap::evaluate(expression, &sources, grap::DEFAULT_FUEL)
 }
 
 #[test]

@@ -57,7 +57,7 @@ fn deep_cell<World, Hover>(
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
     let definitions = input.env.cell_definitions(cell);
-    let [progred_display::CellDefinition::Value(resolution, _)] = definitions.as_slice() else {
+    let [(resolution, _)] = definitions.as_slice() else {
         return None;
     };
     Some(bracket(
@@ -157,8 +157,11 @@ fn function_parameters(env: &dyn progred_display::Env, function: &Value) -> Opti
         if !followed.insert(cell) {
             return None;
         }
+        if !env.foreign_sources(cell).is_empty() {
+            return None;
+        }
         let definitions = env.cell_definitions(cell);
-        let [progred_display::CellDefinition::Value(_, definition)] = definitions.as_slice() else {
+        let [(_, definition)] = definitions.as_slice() else {
             return None;
         };
         function = definition;
@@ -716,6 +719,7 @@ mod tests {
 
         struct DefinitionEnv {
             definition: Value,
+            native: bool,
         }
 
         impl Env for DefinitionEnv {
@@ -731,18 +735,23 @@ mod tests {
                 (Value::record([]), 0)
             }
 
-            fn cell_definitions(&self, cell: CellId) -> Vec<progred_display::CellDefinition<'_>> {
+            fn cell_definitions(&self, cell: CellId) -> Vec<(gid::Resolution, &Value)> {
                 (cell == FUNCTION_CELL)
-                    .then_some(progred_display::CellDefinition::Value(
-                        gid::Resolution::Document,
-                        &self.definition,
-                    ))
+                    .then_some((gid::Resolution::Document, &self.definition))
+                    .into_iter()
+                    .collect()
+            }
+
+            fn foreign_sources(&self, cell: CellId) -> Vec<gid::Resolution> {
+                (self.native && cell == FUNCTION_CELL)
+                    .then_some(gid::Resolution::Library(ID))
                     .into_iter()
                     .collect()
             }
         }
 
         let env = DefinitionEnv {
+            native: false,
             definition: grap_runtime::lambda(
                 [FIRST_PARAMETER, SECOND_PARAMETER],
                 Value::from(FIRST_PARAMETER),
@@ -762,6 +771,11 @@ mod tests {
         assert_eq!(
             argument_order(&layout),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA,]
+        );
+        let native = DefinitionEnv { native: true, ..env };
+        assert_eq!(
+            argument_order(&call_display(&input(&native, &call)).unwrap()),
+            [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
         );
     }
 

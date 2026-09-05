@@ -178,12 +178,12 @@ mod tests {
                     grap::call(function.into(), []),
                 )],
             ),
-            |cell| {
+            &crate::TestHost(|cell| {
                 if cell == function {
                     vec![
                         (
                             gid::Resolution::Document,
-                            grap::Definition::Value(grap::lambda(
+                            grap::CallCandidate::Value(grap::lambda(
                                 [],
                                 grap::call(
                                     grap::lambda([ignored], absent::decline()),
@@ -193,7 +193,7 @@ mod tests {
                         ),
                         (
                             gid::Resolution::Library(ID),
-                            grap::Definition::Value(grap::lambda([], next.clone())),
+                            grap::CallCandidate::Value(grap::lambda([], next.clone())),
                         ),
                     ]
                 } else {
@@ -202,13 +202,13 @@ mod tests {
                         .map(|function| {
                             (
                                 gid::Resolution::Library(ID),
-                                grap::Definition::ForeignFunction(function.clone()),
+                                grap::CallCandidate::ForeignFunction(function.clone()),
                             )
                         })
                         .into_iter()
                         .collect()
                 }
-            },
+            }),
             100,
         );
         assert!(!evaluation.completed);

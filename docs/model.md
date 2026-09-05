@@ -15,6 +15,9 @@ numbers, absence reasons, and domain data are library conventions.
 A cell can have a document definition and definitions from several loaded
 libraries. The document contributes at most one value; each library contributes
 at most one value and potentially several foreign implementations per cell.
+Foreign registrations belong to call dispatch, not the cell's value definitions
+or structural display. A name record and a Rust implementation at the same cell
+therefore produce one displayed value, not two competing definitions.
 The host preserves library identity and definition order. It does not merge
 these definitions into one value. See [Sources](../progred/src/sources.rs),
 [Library and Libraries](../libraries/src/lib.rs), and

@@ -885,19 +885,14 @@ fn custom_update_can_discard_an_absent_and_return_a_value() {
         root: Some(text::value("before")),
         cells: Cells::new(),
     };
-    let function = grap::evaluate(
-        &update,
-        |cell| src(&doc, &libraries).grap_definitions(cell),
-        1000,
-    )
-    .result;
+    let function = grap::evaluate(&update, &src(&doc, &libraries), 1000).result;
     let evaluated = grap::apply(
         &function,
         [
             (l::INPUT, text::value("after")),
             (l::CURRENT, doc.root.clone().unwrap()),
         ],
-        |cell| src(&doc, &libraries).grap_definitions(cell),
+        &src(&doc, &libraries),
         1000,
     );
     assert_eq!(text::read(&evaluated.result), Some("after"));

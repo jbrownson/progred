@@ -158,12 +158,7 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         } else {
             grap::DEFAULT_FUEL
         };
-        let evaluation = grap::apply(
-            function,
-            arguments.iter().cloned(),
-            |cell| self.cx.sources.grap_definitions(cell),
-            fuel,
-        );
+        let evaluation = grap::apply(function, arguments.iter().cloned(), &self.cx.sources, fuel);
         self.cx.fuel.set(evaluation.remaining_fuel);
         (evaluation.result, evaluation.remaining_fuel)
     }
@@ -198,24 +193,26 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         }
     }
 
-    fn cell_definitions(&self, cell: CellId) -> Vec<progred_display::CellDefinition<'_>> {
+    fn cell_definitions(&self, cell: CellId) -> Vec<(gid::Resolution, &Value)> {
         self.cx
             .sources
-            .definitions(cell)
-            .map(|definition| match definition.definition {
-                progred_libraries::DefinitionRef::Value(value) => {
-                    progred_display::CellDefinition::Value(definition.source, value)
-                }
-                progred_libraries::DefinitionRef::ForeignFunction(_) => {
-                    progred_display::CellDefinition::Foreign
-                }
-            })
+            .values(cell)
+            .map(|value| (value.source, value.value))
+            .collect()
+    }
+
+    fn foreign_sources(&self, cell: CellId) -> Vec<gid::Resolution> {
+        self.cx
+            .sources
+            .libraries
+            .foreign_sources(cell)
+            .map(gid::Resolution::Library)
             .collect()
     }
 }
 
 fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
-    grap::evaluate(expression, |cell| cx.sources.grap_definitions(cell), fuel)
+    grap::evaluate(expression, &cx.sources, fuel)
 }
 
 /// Lower a projection layout to measured boxes. Puri leaves

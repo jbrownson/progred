@@ -79,55 +79,41 @@ pub(super) fn collapsed_layout<World: 'static>(
 }
 
 fn cell_layout<World: 'static>(cx: &Cx, _path: &[Step], cell: CellId) -> View<World> {
-    let definitions: Vec<_> = cx.sources.definitions(cell).collect();
+    let definitions: Vec<_> = cx.sources.values(cell).collect();
     match definitions.as_slice() {
-        [] => {
-            return bracket(
-                Delim::Paren,
-                descend(Step::Follow(Resolution::Document), None, None),
-            );
-        }
-        [
-            crate::sources::LocatedDefinition {
-                definition: progred_libraries::DefinitionRef::Value(_),
-                source,
-                ..
-            },
-        ] => {
-            return bracket(Delim::Paren, descend(Step::Follow(*source), None, None));
-        }
-        [
-            crate::sources::LocatedDefinition {
-                definition: progred_libraries::DefinitionRef::ForeignFunction(_),
-                ..
-            },
-        ] => return bracket(Delim::Paren, dim("foreign function")),
-        _ => {}
-    }
-    bracket(
-        Delim::Paren,
-        col(
-            0,
-            4.0,
-            definitions.into_iter().map(|resolved| {
-                let source = match resolved.source {
-                    DefinitionSource::Document => "document".to_string(),
-                    DefinitionSource::Library(library) => cx
-                        .sources
-                        .library_name(library)
-                        .map(|name| format!("library {name}"))
-                        .unwrap_or_else(|| format!("library {}", short_id(library))),
-                };
-                let definition = match resolved.definition {
-                    progred_libraries::DefinitionRef::Value(_) => {
-                        descend(Step::Follow(resolved.source), None, None)
-                    }
-                    progred_libraries::DefinitionRef::ForeignFunction(_) => dim("foreign function"),
-                };
-                row(6.0, [dim(format!("{source}:")), definition])
-            }),
+        [] => bracket(
+            Delim::Paren,
+            descend(Step::Follow(Resolution::Document), None, None),
         ),
-    )
+        [value] => bracket(
+            Delim::Paren,
+            descend(Step::Follow(value.source), None, None),
+        ),
+        _ => bracket(
+            Delim::Paren,
+            col(
+                0,
+                4.0,
+                definitions.into_iter().map(|resolved| {
+                    let source = match resolved.source {
+                        DefinitionSource::Document => "document".to_string(),
+                        DefinitionSource::Library(library) => cx
+                            .sources
+                            .library_name(library)
+                            .map(|name| format!("library {name}"))
+                            .unwrap_or_else(|| format!("library {}", short_id(library))),
+                    };
+                    row(
+                        6.0,
+                        [
+                            dim(format!("{source}:")),
+                            descend(Step::Follow(resolved.source), None, None),
+                        ],
+                    )
+                }),
+            ),
+        ),
+    }
 }
 
 fn list_layout<World: 'static>(
