@@ -3,12 +3,12 @@
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::CLIPBOARD_FORMAT;
 use crate::Editor;
-use crate::completion;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
 use crate::sources;
-use gid::{Path, Step, Value};
+use gid::{CellId, Path, Step, Value, new_cell_id};
+use progred_libraries::name;
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -69,56 +69,30 @@ impl Editor {
     /// cannot label (a list, a record, a blob) at the label stage —
     /// so the click falls through rather than spending the pending.
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
-        if matches!(
-            &self.model.selection,
-            Some(current) if current.stage() == selection::Stage::Label
-        ) && id.as_cell().is_none()
-        {
-            return false;
-        }
-        match self.model.selection.take() {
-            Some(current) => {
-                let root = current.root().clone();
-                match current.stage() {
-                    selection::Stage::Pending => {
-                        self.commit_value(
-                            root,
-                            current.path().to_vec(),
-                            &completion::EntryAction::Value(id),
-                        );
-                        true
-                    }
-                    selection::Stage::Label => {
-                        self.commit_label(
-                            root,
-                            current.path().to_vec(),
-                            &completion::EntryAction::Value(id),
-                        );
-                        true
-                    }
-                    selection::Stage::Edge => {
-                        self.model.selection = Some(current);
-                        false
-                    }
-                }
+        match self.model.selection.as_ref().map(|current| {
+            (
+                current.stage(),
+                current.root().clone(),
+                current.path().to_vec(),
+            )
+        }) {
+            Some((selection::Stage::Pending, root, path)) => {
+                self.commit_value(root, path, id);
+                true
             }
-            selection => {
-                self.model.selection = selection;
-                false
-            }
+            Some((selection::Stage::Label, root, path)) => id.as_cell().is_some_and(|label| {
+                self.commit_label(root, path, label, None);
+                true
+            }),
+            _ => false,
         }
     }
 
     /// Commits the pending value stage — one undo step — and selects
     /// the edge it wrote.
-    pub(crate) fn commit_value(
-        &mut self,
-        root: crate::workspace::Root,
-        path: Path,
-        action: &completion::EntryAction,
-    ) {
+    pub(crate) fn commit_value(&mut self, root: crate::workspace::Root, path: Path, value: Value) {
         let before = self.model.doc.clone();
-        if completion::commit_pending(&mut self.model.doc, &self.stack.libraries, &path, action) {
+        if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
@@ -133,20 +107,18 @@ impl Editor {
         &mut self,
         root: crate::workspace::Root,
         parent: Path,
-        action: &completion::EntryAction,
+        label: CellId,
+        definition: Option<Value>,
     ) {
-        let Some((label, created)) = completion::resolve_label(action) else {
-            return;
-        };
-        let mut path = parent.clone();
+        let mut path = parent;
         path.push(Step::Key(label));
         if self.sources().resolve_path(&path).is_some() {
             self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
             return;
         }
-        if let Some((cell, value)) = created {
+        if let Some(value) = definition {
             let before = self.model.doc.clone();
-            self.model.doc.cells.set_value(cell, value);
+            self.model.doc.cells.set_value(label, value);
             self.model.history.record(before, None);
             self.refresh_title();
         }
@@ -330,15 +302,19 @@ impl Editor {
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
                         let query = current.edit().unwrap_or(&fallback);
-                        let action = if labels {
-                            completion::EntryAction::NewLabel(query.text().to_string())
-                        } else {
-                            completion::EntryAction::Value(selection::resolve_query(query.text()))
-                        };
                         if labels {
-                            self.commit_label(root, current.path().to_vec(), &action);
+                            self.commit_label(
+                                root,
+                                current.path().to_vec(),
+                                new_cell_id(),
+                                Some(name::record(query.text(), [])),
+                            );
                         } else {
-                            self.commit_value(root, current.path().to_vec(), &action);
+                            self.commit_value(
+                                root,
+                                current.path().to_vec(),
+                                selection::resolve_query(query.text()),
+                            );
                         }
                         true
                     }

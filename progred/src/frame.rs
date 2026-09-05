@@ -757,20 +757,28 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
             ));
             app.advance_gesture(point)
         }),
-        commit_offer: Rc::new(
-            |app: &mut Editor, action| match app.model.selection.take() {
-                Some(current) => match current.stage() {
-                    selection::Stage::Pending => {
-                        app.commit_value(current.root().clone(), current.path().to_vec(), action);
-                    }
-                    selection::Stage::Label => {
-                        app.commit_label(current.root().clone(), current.path().to_vec(), action);
-                    }
-                    selection::Stage::Edge => app.model.selection = Some(current),
-                },
-                selection => app.model.selection = selection,
-            },
-        ),
+        commit_value: Rc::new(|app: &mut Editor, value| {
+            app.model
+                .selection
+                .as_ref()
+                .filter(|current| current.stage() == selection::Stage::Pending)
+                .map(|current| (current.root().clone(), current.path().to_vec()))
+                .is_some_and(|(root, path)| {
+                    app.commit_value(root, path, value);
+                    true
+                })
+        }),
+        commit_label: Rc::new(|app: &mut Editor, label, definition| {
+            app.model
+                .selection
+                .as_ref()
+                .filter(|current| current.stage() == selection::Stage::Label)
+                .map(|current| (current.root().clone(), current.path().to_vec()))
+                .is_some_and(|(root, path)| {
+                    app.commit_label(root, path, label, definition);
+                    true
+                })
+        }),
         set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice, everything| {
             if let Some(selection) = app.model.selection.as_mut()
                 && selection.root() == &completion_root

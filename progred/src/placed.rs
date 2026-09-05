@@ -177,7 +177,7 @@ pub struct Placed<C, Cv> {
     /// navigation landmark is selected. The landmark consumes this
     /// while placing, so it never leaks into an ancestor.
     pub landmark_select: Option<progred_display::ActionHandler<C>>,
-    pub completion: Option<Offers>,
+    pub completion: Option<Offers<C>>,
     /// Out-of-flow subtrees gathered during placement and raised over
     /// the completed frame before hover resolution.
     pub floaters: Vec<Box<Placed<C, Cv>>>,
@@ -542,7 +542,7 @@ impl<C: 'static, Cv> Builder<'_, C, Cv> {
         &mut self.placed.descends
     }
 
-    pub fn completion(&mut self) -> &mut Option<Offers> {
+    pub fn completion(&mut self) -> &mut Option<Offers<C>> {
         &mut self.placed.completion
     }
 }

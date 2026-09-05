@@ -307,7 +307,8 @@ impl BenchContext {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         };
         // Timed as the frame perf canary: projection is reported
@@ -789,7 +790,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -903,7 +905,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -1428,15 +1431,17 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             display: "\"x\"".to_string(),
             detail: None,
             matches: Vec::new(),
-            id: false,
-            action: EntryAction::Value(crate::test_values::text("x")),
+            face: progred_display::Face::String,
+            source: None,
+            activate: Rc::new(|_| true),
         },
         Entry {
             display: "new list".to_string(),
             detail: None,
             matches: Vec::new(),
-            id: false,
-            action: EntryAction::NewList,
+            face: progred_display::Face::Dim,
+            source: None,
+            activate: Rc::new(|_| true),
         },
     ];
     let place_card = |pointer| {
@@ -1456,7 +1461,6 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             0,
             0.0,
             false,
-            |_, _| {},
             |_, _, _, _| {},
         );
         let extent = card.extent;
@@ -1492,8 +1496,9 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             display: format!("entry {index}"),
             detail: None,
             matches: Vec::new(),
-            id: false,
-            action: EntryAction::NewList,
+            face: progred_display::Face::Dim,
+            source: None,
+            activate: Rc::new(|_| true),
         })
         .collect();
     let styles = crate::styles::editor(1.0);
@@ -1515,7 +1520,6 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
                 choice,
                 scroll,
                 everything,
-                |_, _| {},
                 |state, scroll, choice, everything| *state = (scroll, choice, everything),
             ),
             Point::ZERO,
@@ -1636,15 +1640,19 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     #[derive(Default)]
     struct State {
         view: (f64, usize, bool),
-        committed: Option<EntryAction>,
+        committed: Option<Value>,
     }
 
     let entries = [Entry {
         display: "new list".into(),
         detail: None,
         matches: Vec::new(),
-        id: false,
-        action: EntryAction::NewList,
+        face: progred_display::Face::Dim,
+        source: None,
+        activate: Rc::new(|state: &mut State| {
+            state.committed = Some(Value::list([]));
+            true
+        }),
     }];
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1656,7 +1664,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut frame = |state: &State, entries: &[Entry]| {
+    let mut frame = |state: &State, entries: &[Entry<State>]| {
         measured::place_top_left(
             completion_card::<State, Bench>(
                 &mut tcx,
@@ -1665,7 +1673,6 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
                 state.view.1,
                 state.view.0,
                 state.view.2,
-                |state, action| state.committed = Some(action.clone()),
                 |state, scroll, choice, everything| state.view = (scroll, choice, everything),
             ),
             Point::ZERO,
@@ -1683,7 +1690,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
-    assert!(matches!(state.committed.take(), Some(EntryAction::NewList)));
+    assert_eq!(state.committed.take(), Some(Value::list([])));
     assert!(!state.view.2);
     frame(&state, &entries)
         .handler
@@ -1702,7 +1709,10 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         entries[0].clone(),
         Entry {
             display: "new record".into(),
-            action: EntryAction::NewRecord,
+            activate: Rc::new(|state: &mut State| {
+                state.committed = Some(Value::record([]));
+                true
+            }),
             ..entries[0].clone()
         },
     ];
@@ -1712,17 +1722,14 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
-    assert!(matches!(
-        state.committed.take(),
-        Some(EntryAction::NewRecord)
-    ));
+    assert_eq!(state.committed.take(), Some(Value::record([])));
     assert!(
         frame(&state, &entries)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
-    assert!(matches!(state.committed.take(), Some(EntryAction::NewList)));
+    assert_eq!(state.committed.take(), Some(Value::list([])));
     frame(&state, &entries)
         .handler
         .unwrap()
@@ -2002,7 +2009,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -2027,13 +2035,16 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             display: "completion offer".into(),
             detail: None,
             matches: Vec::new(),
-            id: false,
-            action: EntryAction::Value(text::value("chosen")),
+            face: progred_display::Face::String,
+            source: None,
+            activate: Rc::new(|world: &mut ClickWorld| {
+                world.applied = Some(Vec::new());
+                true
+            }),
         }],
         0,
         0.0,
         true,
-        |world, _| world.applied = Some(Vec::new()),
         |_, _, _, _| {},
     );
     let card_rect = card

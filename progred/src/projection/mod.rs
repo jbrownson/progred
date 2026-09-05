@@ -2,9 +2,7 @@
 //! retain source provenance, and fall back to total structural display.
 
 use crate::annotations::Annotations;
-use crate::completion::{Entry, EntryAction, Offers, completion_entries_with};
-#[cfg(test)]
-use crate::completion::{completion_entries, resolve_entry, resolve_label};
+use crate::completion::{Commit, Entry, Offers, completion_entries_with};
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 #[cfg(test)]
@@ -1815,7 +1813,8 @@ pub struct Hooks<C> {
     /// Select and begin a value scrub, declining while a pending is active.
     pub scrub: Rc<dyn Fn(&mut C, Path, progred_display::ScrubHandler, Point, f64) -> bool>,
     /// Commit one of the exact offers shown by an engaged pending.
-    pub commit_offer: Rc<dyn Fn(&mut C, &EntryAction)>,
+    pub commit_value: Rc<dyn Fn(&mut C, Value) -> bool>,
+    pub commit_label: Rc<dyn Fn(&mut C, CellId, Option<Value>) -> bool>,
     /// Retain the completion offset and choice in the pending selection.
     pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize, bool)>,
 }
@@ -2556,7 +2555,8 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         point: hooks.point.clone(),
         state_drag: hooks.state_drag.clone(),
         scrub: hooks.scrub.clone(),
-        commit_offer: hooks.commit_offer.clone(),
+        commit_value: hooks.commit_value.clone(),
+        commit_label: hooks.commit_label.clone(),
         set_completion_view: hooks.set_completion_view.clone(),
     };
     let result_cx = Cx {
@@ -2924,7 +2924,11 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     let entries = completion_entries_with(
         &cx.sources,
         cx.raw,
-        labels,
+        &if labels {
+            Commit::Label(hooks.commit_label.clone())
+        } else {
+            Commit::Value(hooks.commit_value.clone())
+        },
         query.text(),
         completions,
         everything,
@@ -2981,7 +2985,6 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
                 })
         });
     });
-    let commit_offer = hooks.commit_offer.clone();
     let choice = cx.selection.map(Selection::choice).unwrap_or(0);
     let scroll = cx
         .selection
@@ -2995,7 +2998,6 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         choice,
         scroll,
         everything,
-        move |world, action| commit_offer(world, action),
         move |world, scroll, choice, everything| {
             set_completion_view(world, scroll, choice, everything)
         },
@@ -3009,11 +3011,10 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
 pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
-    entries: &[Entry],
+    entries: &[Entry<C>],
     choice: usize,
     scroll: f64,
     everything: bool,
-    commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
@@ -3023,16 +3024,7 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
             display: &entry.display,
             detail: entry.detail.as_deref(),
             matches: &entry.matches,
-            style: match &entry.action {
-                EntryAction::Value(value) if text::read(value).is_some() => &styles.string,
-                EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
-                EntryAction::Value(_) if entry.id => &styles.id,
-                EntryAction::Value(_) => &styles.label,
-                EntryAction::NewLabel(_)
-                | EntryAction::NewCell
-                | EntryAction::NewList
-                | EntryAction::NewRecord => &styles.dim,
-            },
+            style: face_style(styles, entry.face),
         })
         .collect::<Vec<_>>();
     let widget = puri_widgets::completion::Completion::new(
@@ -3060,15 +3052,7 @@ pub fn completion_card<C: 'static, Cv: Canvas + 'static>(
         .into_iter()
         .zip(entries)
         .enumerate()
-        .map(|(index, (row, entry))| {
-            let action = entry.action.clone();
-            let commit = commit.clone();
-            let activate: progred_display::ActionHandler<C> = Rc::new(move |world| {
-                commit(world, &action);
-                true
-            });
-            (row, Hover::Entry(index), activate)
-        })
+        .map(|(index, (row, entry))| (row, Hover::Entry(index), entry.activate.clone()))
         .chain(
             widget
                 .more

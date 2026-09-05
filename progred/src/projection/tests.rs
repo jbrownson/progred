@@ -30,7 +30,8 @@ fn projection_target_appends_relative_steps() {
         state_drag: Rc::new(|_, _, _, _, _| {}),
         scrub: Rc::new(|_, _, _, _, _| false),
         select_source: Rc::new(|_, _, _| {}),
-        commit_offer: Rc::new(|_, _| {}),
+        commit_value: Rc::new(|_, _| true),
+        commit_label: Rc::new(|_, _, _| true),
         set_completion_view: Rc::new(|_, _, _, _| {}),
     };
     let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
@@ -222,7 +223,8 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -1207,6 +1209,48 @@ fn clipboard_spellings_round_trip() {
     assert_eq!(from_clipboard(&spelled), crate::test_values::text(&spelled));
 }
 
+#[derive(Default)]
+struct CompletionResult {
+    value: Option<Value>,
+    label: Option<(CellId, Option<Value>)>,
+}
+
+fn value_commit(result: &mut CompletionResult, value: Value) -> bool {
+    result.value = Some(value);
+    true
+}
+
+fn label_commit(result: &mut CompletionResult, cell: CellId, definition: Option<Value>) -> bool {
+    result.label = Some((cell, definition));
+    true
+}
+
+fn completion_entries(
+    sources: &Sources,
+    raw: bool,
+    labels: bool,
+    query: &str,
+) -> Vec<Entry<CompletionResult>> {
+    completion_entries_with(
+        sources,
+        raw,
+        &if labels {
+            Commit::Label(Rc::new(label_commit))
+        } else {
+            Commit::Value(Rc::new(value_commit))
+        },
+        query,
+        None,
+        true,
+    )
+}
+
+fn activated(entry: &Entry<CompletionResult>) -> CompletionResult {
+    let mut result = CompletionResult::default();
+    assert!((entry.activate)(&mut result));
+    result
+}
+
 #[test]
 fn completion_offers_follow_the_stage() {
     let lib = crate::stack::load::<()>().libraries;
@@ -1249,10 +1293,10 @@ fn completion_offers_follow_the_stage() {
     let label_blob = completion_entries(&sources, false, true, "0xff");
     assert_eq!(label_blob[0].display, "0xff");
     assert_eq!(label_blob[0].detail.as_deref(), Some("new label"));
-    assert!(matches!(
-        &label_blob[0].action,
-        EntryAction::NewLabel(name) if name == "0xff"
-    ));
+    assert_eq!(
+        name::read(activated(&label_blob[0]).label.unwrap().1.as_ref().unwrap()),
+        Some("0xff")
+    );
 
     // A blob query leads with the blob, its string form below.
     let value_blob = displays(false, "0xff");
@@ -1261,16 +1305,12 @@ fn completion_offers_follow_the_stage() {
 
     // Reference commits are links.
     let roof = completion_entries(&sources, false, false, "roof");
-    assert!(matches!(
-        &roof[0].action,
-        EntryAction::Value(value) if value.as_cell() == Some(cell)
-    ));
+    assert_eq!(activated(&roof[0]).value, Some(Value::from(cell)));
     let sum = completion_entries(&sources, false, false, "+");
-    assert!(matches!(
-        &sum[0].action,
-        EntryAction::Value(value)
-            if value.as_cell() == Some(f64::vocabulary::SUM)
-    ));
+    assert_eq!(
+        activated(&sum[0]).value,
+        Some(Value::from(f64::vocabulary::SUM))
+    );
 
     // A bare id never outranks the typed text: the string the
     // query spells comes before every unnamed reference, however
@@ -1282,11 +1322,16 @@ fn completion_offers_follow_the_stage() {
     let entries = completion_entries(&sources, false, false, &short_id(unnamed));
     let atom = entries
         .iter()
-        .position(|e| matches!(&e.action, EntryAction::Value(v) if text::read(v).is_some()))
+        .position(|e| {
+            activated(e)
+                .value
+                .as_ref()
+                .is_some_and(|value| text::read(value).is_some())
+        })
         .unwrap();
     let reference = entries
         .iter()
-        .position(|e| matches!(&e.action, EntryAction::Value(v) if v.as_cell() == Some(unnamed)))
+        .position(|e| e.source == Some(unnamed))
         .unwrap();
     assert!(atom < reference);
 }
@@ -1302,63 +1347,61 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
     let entries = crate::completion::completion_entries_with(
         &sources,
         false,
-        false,
+        &Commit::Value(Rc::new(value_commit)),
         "sdf",
         Some(&stack.root_completions),
         false,
     );
-    assert!(matches!(
-        entries.first(),
-        Some(Entry {
-            display,
-            action: EntryAction::Value(value),
-            ..
-        }) if display == "fidget"
-            && value.as_record().is_some_and(|fields| {
-                fields.contains_key(&fidget::vocabulary::FIDGET)
-            })
-    ));
+    assert_eq!(entries[0].display, "fidget");
+    assert!(
+        activated(&entries[0])
+            .value
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .contains_key(&fidget::vocabulary::FIDGET)
+    );
     assert_eq!(entries.len(), 1);
 
     let widened = crate::completion::completion_entries_with(
         &sources,
         false,
-        false,
+        &Commit::Value(Rc::new(value_commit)),
         "sdf",
         Some(&stack.root_completions),
         true,
     );
     assert!(widened.len() > entries.len());
     assert!(widened.iter().any(|entry| {
-        matches!(
-            &entry.action,
-            EntryAction::Value(value) if text::read(value) == Some("sdf")
-        )
+        activated(entry)
+            .value
+            .as_ref()
+            .is_some_and(|value| text::read(value) == Some("sdf"))
     }));
 
     let entries = completion_entries(&sources, false, false, "fidget");
     assert!(entries.iter().any(|entry| {
-        matches!(
-            &entry.action,
-            EntryAction::Value(value)
-                if value.as_cell() == Some(fidget::vocabulary::FIDGET)
-        ) && entry
-            .detail
-            .as_deref()
-            .is_some_and(|detail| detail.starts_with("fidget · "))
+        (entry.source == Some(fidget::vocabulary::FIDGET))
+            && entry
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.starts_with("fidget · "))
     }));
 }
 
-fn projected_completion_entries(doc: &Document, selection: &Selection) -> Vec<Entry> {
+fn projected_completion_entries(
+    doc: &Document,
+    selection: &Selection,
+) -> Vec<Entry<CompletionResult>> {
     projected_completion_entries_with(doc, selection, None)
 }
 
 fn projected_completion_entries_with(
     doc: &Document,
     selection: &Selection,
-    projection: Option<&Projection<()>>,
-) -> Vec<Entry> {
-    let stack = crate::stack::load::<()>();
+    projection: Option<&Projection<CompletionResult>>,
+) -> Vec<Entry<CompletionResult>> {
+    let stack = crate::stack::load::<CompletionResult>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let mut fonts = parley::FontContext::new();
@@ -1370,7 +1413,7 @@ fn projected_completion_entries_with(
         scale: 1.0,
         cache: &mut cache,
     };
-    let measured = project::<(), crate::frame::Paint>(
+    let measured = project::<CompletionResult, crate::frame::Paint>(
         ProjectDescription {
             sources: src(doc, &stack.libraries),
             root: doc.root.as_ref(),
@@ -1403,7 +1446,8 @@ fn projected_completion_entries_with(
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(value_commit),
+            commit_label: Rc::new(label_commit),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -1471,7 +1515,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     assert!(
         root_entries
             .iter()
-            .all(|entry| !matches!(entry.action, EntryAction::NewList))
+            .all(|entry| activated(entry).value != Some(Value::list([])))
     );
 
     let position = gid::position::between(None, None).unwrap();
@@ -1490,7 +1534,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     assert!(
         nested_entries
             .iter()
-            .any(|entry| matches!(entry.action, EntryAction::NewList))
+            .any(|entry| activated(entry).value == Some(Value::list([])))
     );
 }
 
@@ -1510,10 +1554,7 @@ fn root_field_completion_offers_only_root_vocabulary_until_widened() {
     let entries = projected_completion_entries(&document, &selection);
     let cells = entries
         .iter()
-        .filter_map(|entry| match &entry.action {
-            EntryAction::Value(value) => value.as_cell(),
-            _ => None,
-        })
+        .filter_map(|entry| entry.source)
         .collect::<Vec<_>>();
 
     assert_eq!(
@@ -1524,11 +1565,7 @@ fn root_field_completion_offers_only_root_vocabulary_until_widened() {
             crate::workspace::vocabulary::PANES,
         ]
     );
-    assert!(
-        entries
-            .iter()
-            .all(|entry| matches!(entry.action, EntryAction::Value(Value::Cell(_))))
-    );
+    assert!(entries.iter().all(|entry| activated(entry).label.is_some()));
 }
 
 #[test]
@@ -1564,10 +1601,7 @@ fn grap_call_field_completion_offers_missing_parameters() {
     let entries = projected_completion_entries(&document, &selection);
     let parameters = entries
         .iter()
-        .filter_map(|entry| match &entry.action {
-            EntryAction::Value(value) => value.as_cell(),
-            _ => None,
-        })
+        .filter_map(|entry| entry.source)
         .collect::<Vec<_>>();
 
     assert_eq!(parameters, [left, right]);
@@ -1644,23 +1678,65 @@ fn any_valued_cell_and_any_container_collapse() {
 }
 
 #[test]
-fn minting_seeds_bare_and_named_cells() {
-    // A mint is fully bare: a link with nothing said at all —
-    // naming happens on the head afterward.
-    let bare = resolve_entry(&EntryAction::NewCell);
-    assert!(bare.unwrap().as_cell().is_some());
-    // The value constructors commit pure values — nothing minted.
-    assert_eq!(resolve_entry(&EntryAction::NewList), Some(Value::list([])));
-    assert_eq!(
-        resolve_entry(&EntryAction::NewRecord),
-        Some(Value::record([]))
+fn completion_callbacks_create_values_and_mint_only_on_activation() {
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = progred_libraries::Libraries::default();
+    let sources = src(&doc, &libraries);
+    let entries = completion_entries(&sources, false, false, "");
+    let bare = entries
+        .iter()
+        .find(|entry| entry.display == "new cell")
+        .unwrap();
+    assert_eq!(bare.source, None);
+    let first = activated(bare).value.unwrap().as_cell().unwrap();
+    let second = activated(&bare.clone()).value.unwrap().as_cell().unwrap();
+    assert_ne!(first, second);
+    for (display, expected) in [
+        ("new list", Value::list([])),
+        ("new record", Value::record([])),
+    ] {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.display == display)
+            .unwrap();
+        assert_eq!(activated(entry).value, Some(expected));
+    }
+    let labels = completion_entries(&sources, false, true, "asdf");
+    let label = &labels[0];
+    assert_eq!(label.source, None);
+    let (first, definition) = activated(label).label.unwrap();
+    assert_eq!(name::read(&definition.unwrap()), Some("asdf"));
+    assert_ne!(first, activated(label).label.unwrap().0);
+    let existing = new_cell_id();
+    let provider: progred_display::CompletionProvider = Rc::new(move |_| {
+        vec![
+            progred_display::Completion {
+                display: "text".into(),
+                detail: None,
+                aliases: vec![],
+                value: text::value("not a label"),
+            },
+            progred_display::Completion {
+                display: "existing".into(),
+                detail: None,
+                aliases: vec![],
+                value: Value::from(existing),
+            },
+        ]
+    });
+    let labels = completion_entries_with(
+        &sources,
+        false,
+        &Commit::Label(Rc::new(label_commit)),
+        "",
+        Some(&provider),
+        false,
     );
-
-    let (label, created) = resolve_label(&EntryAction::NewLabel("asdf".to_string())).unwrap();
-    let (cell, value) = created.unwrap();
-    assert_eq!(label, cell);
-    assert_eq!(name::read(&value), Some("asdf"));
-    assert!(resolve_label(&EntryAction::Value(crate::test_values::text("no"))).is_none());
+    assert_eq!(labels.len(), 1);
+    assert_eq!(activated(&labels[0]).label, Some((existing, None)));
 }
 
 #[test]
@@ -1669,13 +1745,14 @@ fn entry_hover_marks_follow_the_visible_offers() {
     let lib = crate::stack::load::<()>().libraries;
     let sources = src(&doc, &lib);
     let cell = new_cell_id();
-    let offers = |value| Offers {
+    let offers = |value: Value| Offers {
         entries: vec![Entry {
             display: "offer".to_string(),
             detail: None,
             matches: vec![],
-            id: false,
-            action: EntryAction::Value(value),
+            face: progred_display::Face::Label,
+            source: value.as_cell(),
+            activate: Rc::new(|_: &mut ()| true),
         }],
     };
 
@@ -1691,7 +1768,10 @@ fn entry_hover_marks_follow_the_visible_offers() {
         ),
         None
     );
-    assert_eq!(hover_secondary(&sources, None, &Hover::Entry(0)), None);
+    assert_eq!(
+        hover_secondary::<()>(&sources, None, &Hover::Entry(0)),
+        None
+    );
 }
 
 #[test]
@@ -1985,7 +2065,8 @@ fn partials_receive_selection_and_annotations_positionally() {
                 state_drag: Rc::new(|_, _, _, _, _| {}),
                 scrub: Rc::new(|_, _, _, _, _| false),
                 select_source: Rc::new(|_, _, _| {}),
-                commit_offer: Rc::new(|_, _| {}),
+                commit_value: Rc::new(|_, _| true),
+                commit_label: Rc::new(|_, _, _| true),
                 set_completion_view: Rc::new(|_, _, _, _| {}),
             },
         )
@@ -2108,7 +2189,8 @@ fn a_projection_defined_as_data_realizes() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
@@ -2210,7 +2292,8 @@ fn a_data_event_realizes_the_apply_hook() {
             state_drag: Rc::new(|_, _, _, _, _| {}),
             scrub: Rc::new(|_, _, _, _, _| false),
             select_source: Rc::new(|_, _, _| {}),
-            commit_offer: Rc::new(|_, _| {}),
+            commit_value: Rc::new(|_, _| true),
+            commit_label: Rc::new(|_, _, _| true),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );

@@ -1,7 +1,7 @@
 //! Pointer hover: the tree hover's identity and the value it refers
 //! to for secondary marks.
 
-use crate::completion::{EntryAction, Offers};
+use crate::completion::Offers;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Step, Value};
 use std::rc::Rc;
@@ -189,9 +189,9 @@ impl Eq for Secondary {}
 
 /// The secondary target a hover refers to. An `Entry` hover reads the
 /// exact completion offers emitted by the current frame.
-pub(crate) fn hover_secondary(
+pub(crate) fn hover_secondary<C>(
     sources: &Sources,
-    completion: Option<&Offers>,
+    completion: Option<&Offers<C>>,
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
@@ -199,10 +199,7 @@ pub(crate) fn hover_secondary(
             .resolve_path(path)
             .map(|value| Secondary::from_path(sources, path.clone(), value)),
         Hover::Drawing(source) => Some(Secondary::from_trace(source)),
-        Hover::Entry(index) => match &completion?.entries.get(*index)?.action {
-            EntryAction::Value(value) => value.as_cell().map(Secondary::Cell),
-            _ => None,
-        },
+        Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
         Hover::Toggle(_) | Hover::Insert(_) | Hover::MoreCompletions => None,
     }
 }

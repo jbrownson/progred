@@ -2,126 +2,153 @@
 
 use crate::filter;
 use crate::identity::short_id;
-use crate::selection::{parse_blob, set_value};
+use crate::selection::parse_blob;
 use crate::sources::Sources;
-use gid::{CellId, Document, Resolution, Step, Value, new_cell_id};
-use progred_display::CompletionProvider;
-use progred_libraries::{Libraries, name, text};
+use gid::{CellId, Resolution, Value, new_cell_id};
+use progred_display::{ActionHandler, CompletionProvider, Face};
+use progred_libraries::{name, text};
 use std::ops::Range;
+use std::rc::Rc;
 
-/// A completion offer on a pending. The display styles itself by the
-/// action's kind at draw time.
-#[derive(Clone)]
-pub struct Entry {
+pub struct Entry<C> {
     pub display: String,
     pub detail: Option<String>,
-    /// Byte spans of `display` the query matched, for highlighting.
     pub matches: Vec<Range<usize>>,
-    /// The display spells a bare short id — an unnamed cell — so it
-    /// draws in the id face, as ids do everywhere.
-    pub id: bool,
-    pub action: EntryAction,
+    pub face: Face,
+    pub source: Option<CellId>,
+    pub activate: ActionHandler<C>,
 }
 
-#[derive(Clone)]
-pub enum EntryAction {
-    /// Commit this value: an inferred atom or a reference.
-    Value(Value),
-    /// Mint a cell named by this text and use its identity as a label.
-    NewLabel(String),
-    /// Mint a bare cell and commit a link to it.
-    NewCell,
-    /// Commit an empty list value.
-    NewList,
-    /// Commit an empty inline record value — anonymous structure, no
-    /// cell minted.
-    NewRecord,
+impl<C> Clone for Entry<C> {
+    fn clone(&self) -> Self {
+        Self {
+            display: self.display.clone(),
+            detail: self.detail.clone(),
+            matches: self.matches.clone(),
+            face: self.face,
+            source: self.source,
+            activate: self.activate.clone(),
+        }
+    }
 }
 
-/// The completion offers a pending row emits during placement. The
-/// card's callbacks own activation; this copy attributes hovered
-/// offers to their document sources.
-pub struct Offers {
-    pub entries: Vec<Entry>,
+/// The insertion capability supplied by the active completion site.
+pub enum Commit<C> {
+    Value(Rc<dyn Fn(&mut C, Value) -> bool>),
+    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>) -> bool>),
 }
 
-#[cfg(test)]
-pub(crate) fn completion_entries(
+impl<C: 'static> Commit<C> {
+    fn value(&self, value: Value) -> Option<ActionHandler<C>> {
+        match self {
+            Self::Value(commit) => {
+                let commit = commit.clone();
+                Some(Rc::new(move |world| commit(world, value.clone())))
+            }
+            Self::Label(commit) => value.as_cell().map(|cell| {
+                let commit = commit.clone();
+                Rc::new(move |world: &mut C| commit(world, cell, None)) as ActionHandler<C>
+            }),
+        }
+    }
+
+    fn new_cell(&self) -> ActionHandler<C> {
+        match self {
+            Self::Value(commit) => {
+                let commit = commit.clone();
+                Rc::new(move |world| commit(world, Value::from(new_cell_id())))
+            }
+            Self::Label(commit) => {
+                let commit = commit.clone();
+                Rc::new(move |world| commit(world, new_cell_id(), None))
+            }
+        }
+    }
+}
+
+impl<C: 'static> Entry<C> {
+    fn value(
+        display: String,
+        detail: Option<String>,
+        value: Value,
+        commit: &Commit<C>,
+    ) -> Option<Self> {
+        commit.value(value.clone()).map(|activate| Self {
+            display,
+            detail,
+            matches: Vec::new(),
+            face: if text::read(&value).is_some() {
+                Face::String
+            } else if value.as_blob().is_some() {
+                Face::Id
+            } else {
+                Face::Label
+            },
+            source: value.as_cell(),
+            activate,
+        })
+    }
+}
+
+/// Retained in the placed frame for attribution to the exact visible offers.
+pub struct Offers<C> {
+    pub entries: Vec<Entry<C>>,
+}
+
+pub(crate) fn completion_entries_with<C: 'static>(
     sources: &Sources,
     raw: bool,
-    labels: bool,
-    query: &str,
-) -> Vec<Entry> {
-    completion_entries_with(sources, raw, labels, query, None, true)
-}
-
-/// Contextual offers alone in the narrow view, or the universal
-/// layer plus contextual offers when widened. The universal layer
-/// contains the inferred value, named references, and constructors.
-/// Field completion only offers cell identities as labels.
-pub(crate) fn completion_entries_with(
-    sources: &Sources,
-    raw: bool,
-    labels: bool,
+    commit: &Commit<C>,
     query: &str,
     contextual: Option<&CompletionProvider>,
     everything: bool,
-) -> Vec<Entry> {
+) -> Vec<Entry<C>> {
     if !everything && let Some(contextual) = contextual {
-        return contextual_entries(contextual, query, labels);
+        return contextual_entries(contextual, query, commit);
     }
+    let labels = matches!(commit, Commit::Label(_));
     let trimmed = query.trim();
-    let quoted = trimmed.trim_start().starts_with('"');
+    let quoted = trimmed.starts_with('"');
     let blob = (!labels).then(|| parse_blob(trimmed)).flatten();
-    let text = trimmed
+    let spelling = trimmed
         .strip_prefix('"')
         .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
         .unwrap_or(query);
     let atom = blob
         .as_ref()
         .map(|bytes| Value::from(bytes.clone()))
-        .unwrap_or_else(|| text::value(text));
-    // Quotes and `0x` state atom intent, so the atom leads; otherwise
-    // a confident (non-fuzzy) NAMED match is likelier the intent than
-    // a new literal — typing a visible name should default to the
-    // reference, quoting always forces text, and bare ids never
-    // outrank the typed text.
+        .unwrap_or_else(|| text::value(spelling));
     let atom_leads = quoted || blob.is_some();
-    // The typed text is always insertable as itself: a blob query
-    // offers its text form right below the blob (a quote already
-    // states text intent, so quoted queries stay text-only).
-    let text_entry = blob.is_some().then(|| Entry {
-        display: format!("\"{query}\""),
-        detail: None,
-        matches: Vec::new(),
-        id: false,
-        action: EntryAction::Value(text::value(query)),
-    });
-    let atom_entry = Entry {
-        display: if labels {
-            text.to_string()
-        } else {
+    let text_entry = blob
+        .is_some()
+        .then(|| Entry::value(format!("\"{query}\""), None, text::value(query), commit))
+        .flatten();
+    let atom_entry = match commit {
+        Commit::Label(commit) => {
+            let commit = commit.clone();
+            let spelling = spelling.to_string();
+            Entry {
+                display: spelling.clone(),
+                detail: Some("new label".to_string()),
+                matches: Vec::new(),
+                face: Face::Dim,
+                source: None,
+                activate: Rc::new(move |world| {
+                    commit(world, new_cell_id(), Some(name::record(&spelling, [])))
+                }),
+            }
+        }
+        Commit::Value(_) => Entry::value(
             text::read(&atom)
                 .map(|text| format!("\"{text}\""))
-                .unwrap_or_else(|| atom.to_string())
-        },
-        detail: labels.then(|| "new label".to_string()),
-        matches: Vec::new(),
-        id: false,
-        action: if labels {
-            EntryAction::NewLabel(text.to_string())
-        } else {
-            EntryAction::Value(atom)
-        },
+                .unwrap_or_else(|| atom.to_string()),
+            None,
+            atom,
+            commit,
+        )
+        .unwrap(),
     };
-    // Every cell the document contains is referenceable: named ones
-    // by name, unnamed ones by the short id they render as — what
-    // you see is what you can type. Unnamed keys start with the
-    // ellipsis, which sorts after names, so they trail on an empty
-    // query. "new list" and "new record" rank among them under their
-    // own display text: type toward one and it surfaces, type away
-    // and it leaves.
-    let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
+    let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
         .flat_map(|cell| {
             let names: Vec<_> = (!raw)
@@ -139,83 +166,86 @@ pub(crate) fn completion_entries_with(
                     .definitions(cell)
                     .map(|definition| source_name(sources, definition.source))
                     .collect();
-                vec![(
-                    (
-                        short_id(cell),
-                        false,
-                        EntryAction::Value(Value::from(cell)),
-                        (!sources_for_cell.is_empty()).then(|| sources_for_cell.join(" / ")),
-                    ),
-                    sources.external(cell),
-                )]
+                let mut entry = Entry::value(
+                    short_id(cell),
+                    (!sources_for_cell.is_empty()).then(|| sources_for_cell.join(" / ")),
+                    Value::from(cell),
+                    commit,
+                )
+                .unwrap();
+                entry.face = Face::Id;
+                vec![(entry, false, sources.external(cell))]
             } else {
                 names
                     .into_iter()
                     .map(|(name, source)| {
                         (
-                            (
+                            Entry::value(
                                 name,
-                                true,
-                                EntryAction::Value(Value::from(cell)),
                                 Some(format!(
                                     "{} · {}",
                                     source_name(sources, source),
                                     short_id(cell)
                                 )),
-                            ),
+                                Value::from(cell),
+                                commit,
+                            )
+                            .unwrap(),
+                            true,
                             !matches!(source, Resolution::Document),
                         )
                     })
                     .collect()
             }
         })
-        .partition(|(_, external)| !*external);
-    let strip_origin = |((display, named, action, detail), _)| (display, named, action, detail);
-    let mut local: Vec<_> = local.into_iter().map(strip_origin).collect();
-    let mut external: Vec<_> = external.into_iter().map(strip_origin).collect();
-    local.sort_by(|a, b| a.0.cmp(&b.0));
-    external.sort_by(|a, b| a.0.cmp(&b.0));
-    let mut references_pool = local;
-    // Constructors follow the current document on an empty query;
-    // library vocabulary follows them. A non-empty query still ranks
-    // all three groups by the ordinary matching tiers.
-    references_pool.push(("new cell".to_string(), true, EntryAction::NewCell, None));
-    if !labels {
-        references_pool.push(("new list".to_string(), true, EntryAction::NewList, None));
-        references_pool.push(("new record".to_string(), true, EntryAction::NewRecord, None));
-    }
-    references_pool.extend(external);
-    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _, _, _)| key, query)
+        .partition(|(_, _, external)| !*external);
+    local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+    external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+    let mut references_pool: Vec<_> = local
+        .into_iter()
+        .map(|(entry, named, _)| (entry, named))
+        .collect();
+    references_pool.push((
+        Entry {
+            display: "new cell".to_string(),
+            detail: None,
+            matches: Vec::new(),
+            face: Face::Dim,
+            source: None,
+            activate: commit.new_cell(),
+        },
+        true,
+    ));
+    references_pool.extend(
+        [
+            ("new list", Value::list([])),
+            ("new record", Value::record([])),
+        ]
+        .into_iter()
+        .filter_map(|(display, value)| {
+            Entry::value(display.to_string(), None, value, commit).map(|mut entry| {
+                entry.face = Face::Dim;
+                (entry, true)
+            })
+        }),
+    );
+    references_pool.extend(external.into_iter().map(|(entry, named, _)| (entry, named)));
+    let references: Vec<_> = filter::rank(references_pool, |(entry, _)| &entry.display, query)
         .into_iter()
         .map(|ranked| {
-            // A DEMOTED reference ranks after the typed atom: fuzzy,
-            // or an unnamed cell's bare id — ids are for reading,
-            // names are for reaching (want it reachable? name it).
-            let fuzzy = ranked.fuzzy();
-            let matches = ranked.matches;
-            let (display, named, action, origin) = ranked.item;
-            let demoted = fuzzy || !named;
-            let detail = origin.or_else(|| match &action {
-                EntryAction::Value(value) => value
-                    .as_cell()
-                    .map(short_id)
-                    .filter(|detail| *detail != display),
-                _ => None,
-            });
-            let entry = Entry {
-                display,
-                detail,
-                matches,
-                id: !named,
-                action,
-            };
-            (entry, demoted)
+            let demoted = ranked.fuzzy() || !ranked.item.1;
+            (
+                Entry {
+                    matches: ranked.matches,
+                    ..ranked.item.0
+                },
+                demoted,
+            )
         })
         .collect();
-    let mut entries = Vec::new();
-    if let Some(contextual) = contextual {
-        entries.extend(contextual_entries(contextual, query, labels));
-    }
+    let mut entries = contextual
+        .map(|provider| contextual_entries(provider, query, commit))
+        .unwrap_or_default();
     if atom_leads {
         entries.push(atom_entry);
         entries.extend(text_entry);
@@ -230,17 +260,11 @@ pub(crate) fn completion_entries_with(
     entries
 }
 
-fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
-    match source {
-        Resolution::Document => "document".to_string(),
-        Resolution::Library(library) => sources
-            .library_name(library)
-            .map(str::to_string)
-            .unwrap_or_else(|| short_id(library)),
-    }
-}
-
-fn contextual_entries(provider: &CompletionProvider, query: &str, labels: bool) -> Vec<Entry> {
+fn contextual_entries<C: 'static>(
+    provider: &CompletionProvider,
+    query: &str,
+    commit: &Commit<C>,
+) -> Vec<Entry<C>> {
     let completions = provider(query);
     let keys: Vec<_> = completions
         .iter()
@@ -265,18 +289,31 @@ fn contextual_entries(provider: &CompletionProvider, query: &str, labels: bool) 
                 None
             } else {
                 let completion = &completions[index];
-                (!labels || completion.value.as_cell().is_some()).then(|| Entry {
-                    display: completion.display.clone(),
-                    detail: completion.detail.clone(),
+                Entry::value(
+                    completion.display.clone(),
+                    completion.detail.clone(),
+                    completion.value.clone(),
+                    commit,
+                )
+                .map(|entry| Entry {
                     matches: display_matched
                         .then_some(ranked.matches)
                         .unwrap_or_default(),
-                    id: false,
-                    action: EntryAction::Value(completion.value.clone()),
+                    ..entry
                 })
             }
         })
         .collect()
+}
+
+fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
+    match source {
+        Resolution::Document => "document".to_string(),
+        Resolution::Library(library) => sources
+            .library_name(library)
+            .map(str::to_string)
+            .unwrap_or_else(|| short_id(library)),
+    }
 }
 
 /// The cells a value links, walked structurally — lists and records
@@ -320,44 +357,4 @@ fn document_cells(sources: &Sources) -> Vec<CellId> {
     cells.sort();
     cells.dedup();
     cells
-}
-
-/// Resolves a value-stage entry to the value it denotes. Pure: a new
-/// cell's mint is a bare id — nothing said until a value is written.
-/// Labels and values resolve alike — the label stage never
-/// offers a non-label action.
-pub fn resolve_entry(action: &EntryAction) -> Option<Value> {
-    match action {
-        EntryAction::Value(value) => Some(value.clone()),
-        EntryAction::NewLabel(_) => None,
-        EntryAction::NewCell => Some(Value::from(new_cell_id())),
-        EntryAction::NewList => Some(Value::list([])),
-        EntryAction::NewRecord => Some(Value::record([])),
-    }
-}
-
-/// Resolves a label-stage entry. Free text becomes a newly minted
-/// named cell; an existing cell value reuses its identity. The
-/// optional cell value is what the caller must add to the document.
-pub fn resolve_label(action: &EntryAction) -> Option<(CellId, Option<(CellId, Value)>)> {
-    match action {
-        EntryAction::Value(value) => value.as_cell().map(|cell| (cell, None)),
-        EntryAction::NewLabel(name) => {
-            let cell = new_cell_id();
-            Some((cell, Some((cell, name::record(name, [])))))
-        }
-        EntryAction::NewCell => Some((new_cell_id(), None)),
-        EntryAction::NewList | EntryAction::NewRecord => None,
-    }
-}
-
-/// Commits a pending from a chosen entry: resolves the action to a
-/// value and writes it.
-pub fn commit_pending(
-    doc: &mut Document,
-    libraries: &Libraries,
-    path: &[Step],
-    action: &EntryAction,
-) -> bool {
-    resolve_entry(action).is_some_and(|value| set_value(doc, libraries, path, value))
 }
