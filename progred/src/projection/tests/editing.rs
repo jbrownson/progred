@@ -32,7 +32,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         .map(LineEditState::text),
         Some("1.5")
     );
-    // Missing fields, links, and blobs carry no editor.
+    // Missing fields and links carry no editor.
     assert!(
         make_selection(
             &doc,
@@ -47,14 +47,14 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         cell,
         Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
     );
-    assert!(
-        make_selection(
+    assert_eq!(
+        edit(
             &doc,
-            &lib,
             vec![Step::Follow(gid::Resolution::Document), key("b")]
         )
         .edit()
-        .is_none()
+        .map(LineEditState::text),
+        Some("ff")
     );
     // A cell holding text edits at its Follow path.
     doc.cells.set_value(cell, crate::test_values::text("held"));
@@ -144,6 +144,45 @@ fn edits_write_through_to_the_field() {
         src(&doc, &lib).resolve_path(&path),
         Some(&crate::test_values::text("new"))
     );
+}
+
+#[test]
+fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
+    let libraries = core_libraries();
+    let cell = new_cell_id();
+    let bytes: Vec<u8> = (0..=31).collect();
+    let mut cells = Cells::new();
+    cells.set_value(cell, Value::from(bytes.clone()));
+    let mut doc = Document {
+        root: Some(cell.into()),
+        cells,
+    };
+    let path = vec![Step::Follow(gid::Resolution::Document)];
+    let mut selected = make_projected_selection(&doc, &libraries, path.clone());
+    assert_eq!(selected.edit().unwrap().text(), gid::hex_string(&bytes));
+    assert!(!write_through(&mut doc, &libraries, &mut selected));
+    selected.edit_mut().unwrap().set_text("DEad");
+    assert!(write_through(&mut doc, &libraries, &mut selected));
+    assert_eq!(doc.cells.value(cell), Some(&Value::from(vec![0xde, 0xad])));
+    for (input, expected) in [
+        ("DEadf", None),
+        ("DEadff", Some(vec![0xde, 0xad, 0xff])),
+        ("xx", None),
+        ("", Some(vec![])),
+    ] {
+        let before = doc.clone();
+        selected.edit_mut().unwrap().set_text(input);
+        assert!(
+            !write_through(&mut doc, &libraries, &mut selected),
+            "one edit run opens one undo step"
+        );
+        assert_eq!(selected.edit().unwrap().text(), input);
+        assert_eq!(doc.root, before.root);
+        match expected {
+            Some(bytes) => assert_eq!(doc.cells.value(cell), Some(&Value::from(bytes))),
+            None => assert_eq!(doc.cells.value(cell), before.cells.value(cell)),
+        }
+    }
 }
 
 #[test]

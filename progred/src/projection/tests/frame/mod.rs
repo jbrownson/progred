@@ -160,6 +160,7 @@ impl BenchContext {
             cache,
         };
         let hooks = Hooks::<World> {
+            value_completions: Some(stack.value_completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

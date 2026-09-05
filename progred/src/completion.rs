@@ -2,11 +2,10 @@
 
 use crate::filter;
 use crate::identity::short_id;
-use crate::selection::parse_blob;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
 use progred_display::{CompletionProvider, CompletionValue, Face};
-use progred_libraries::{name, text};
+use progred_libraries::{blob, name, text};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -220,6 +219,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     raw: bool,
     commit: &Commit<C>,
     query: &str,
+    value_completions: Option<&CompletionProvider>,
     contextual: Option<&CompletionProvider>,
     everything: bool,
 ) -> Vec<Entry<C>> {
@@ -229,7 +229,11 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let labels = matches!(commit, Commit::Label(_));
     let trimmed = query.trim();
     let quoted = trimmed.starts_with('"');
-    let blob = (!labels).then(|| parse_blob(trimmed)).flatten();
+    let value_entries = value_completions
+        .filter(|_| !labels && !quoted)
+        .map(|provider| contextual_entries(provider, query, commit))
+        .unwrap_or_default();
+    let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = trimmed
         .strip_prefix('"')
         .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
@@ -238,7 +242,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .as_ref()
         .map(|bytes| Value::from(bytes.clone()))
         .unwrap_or_else(|| text::value(spelling));
-    let atom_leads = quoted || blob.is_some();
+    let atom_leads = quoted || blob.is_some() || !value_entries.is_empty();
     let text_entry = blob
         .is_some()
         .then(|| Entry::value(format!("\"{query}\""), None, text::value(query), commit))
@@ -361,6 +365,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let mut entries = contextual
         .map(|provider| contextual_entries(provider, query, commit))
         .unwrap_or_default();
+    entries.extend(value_entries);
     if atom_leads {
         entries.push(atom_entry);
         entries.extend(text_entry);

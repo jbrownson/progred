@@ -785,10 +785,11 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// Dispatch-time callbacks the shell injects: what selecting a path
-/// does, what toggling a collapse does, and how a dispatch reaches
-/// the remaining host-owned editor state and measurement caches.
+/// Host callbacks for library value offers, selection, editing,
+/// and dispatch access to caller-owned state and platform services.
 pub struct Hooks<C> {
+    /// Library value offers added by the host when a picker uses its universal vocabulary.
+    pub value_completions: Option<progred_display::CompletionProvider>,
     pub select: Rc<dyn Fn(&mut C, Path)>,
     /// Select a visible occurrence of a drawing's structural source.
     pub select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
@@ -1551,6 +1552,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     let select_payload = hooks.select_payload.clone();
     let payload_origin = origin.clone();
     let result_hooks = Hooks {
+        value_completions: hooks.value_completions.clone(),
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
         select_source: hooks.select_source.clone(),
         select_payload: Rc::new(move |ctx, _, payload| {

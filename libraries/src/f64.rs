@@ -295,6 +295,10 @@ fn unary(
         .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }
 
+pub fn completions(query: &str) -> Vec<progred_display::Completion> {
+    number::completions(query, "f64", value)
+}
+
 pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
@@ -338,6 +342,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             progred_display::partial(display::<World, Hover>),
         ],
     )
+    .with_value_completions(completions)
 }
 
 #[cfg(test)]

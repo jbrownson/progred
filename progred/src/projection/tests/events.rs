@@ -57,6 +57,7 @@ fn a_data_event_realizes_the_apply_hook() {
         },
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {
+            value_completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

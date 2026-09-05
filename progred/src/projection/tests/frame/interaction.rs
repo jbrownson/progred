@@ -64,6 +64,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         },
         &mut tcx,
         Hooks {
+            value_completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
@@ -181,6 +182,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         },
         &mut frame_tcx,
         Hooks {
+            value_completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

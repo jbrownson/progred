@@ -23,7 +23,9 @@ Rust foreign implementations. Those registrations are stored separately from
 the cell values: naming a function does not create a second definition.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
-the partial projections, root templates, and root field vocabulary. Documents
+the partial projections, root templates, root field vocabulary, and query-dependent
+value offers. The host passes general value providers explicitly to completion
+lowering; a projection's own vocabulary remains part of its completion request. Documents
 currently contribute no installed libraries or projections. A Grap function
 stored in a document is ordinary reachable data; it is not discovered as
 configuration through a reserved cell address.

@@ -3,10 +3,11 @@
 
 use gid::Cells;
 use grap_runtime::ForeignFunctions;
-use progred_display::{Completion, Partial};
+use progred_display::{Completion, CompletionProvider, Partial};
 use std::rc::Rc;
 
 pub mod absent;
+pub mod blob;
 pub mod color;
 #[cfg(test)]
 mod conformance;
@@ -182,6 +183,7 @@ pub struct Library<World, Hover> {
     pub projections: Vec<Partial<World, Hover>>,
     pub root_completions: Vec<Completion>,
     pub root_field_completions: Vec<Completion>,
+    pub value_completions: Option<CompletionProvider>,
 }
 
 impl<World, Hover> Clone for Library<World, Hover> {
@@ -192,6 +194,7 @@ impl<World, Hover> Clone for Library<World, Hover> {
             projections: self.projections.clone(),
             root_completions: self.root_completions.clone(),
             root_field_completions: self.root_field_completions.clone(),
+            value_completions: self.value_completions.clone(),
         }
     }
 }
@@ -204,6 +207,7 @@ impl<World, Hover> Default for Library<World, Hover> {
             projections: Vec::new(),
             root_completions: Vec::new(),
             root_field_completions: Vec::new(),
+            value_completions: None,
         }
     }
 }
@@ -220,6 +224,7 @@ impl<World, Hover> Library<World, Hover> {
             projections,
             root_completions: Vec::new(),
             root_field_completions: Vec::new(),
+            value_completions: None,
         }
     }
 
@@ -244,6 +249,14 @@ impl<World, Hover> Library<World, Hover> {
         completions: impl IntoIterator<Item = Completion>,
     ) -> Self {
         self.root_field_completions = completions.into_iter().collect();
+        self
+    }
+
+    pub fn with_value_completions(
+        mut self,
+        completions: impl Fn(&str) -> Vec<Completion> + 'static,
+    ) -> Self {
+        self.value_completions = Some(Rc::new(completions));
         self
     }
 
@@ -274,20 +287,35 @@ impl Libraries {
         Vec<Partial<World, Hover>>,
         Vec<Completion>,
         Vec<Completion>,
+        Vec<CompletionProvider>,
     ) {
         entries.into_iter().fold(
-            (Self::default(), Vec::new(), Vec::new(), Vec::new()),
-            |(mut libraries, mut projections, mut root_completions, mut root_field_completions),
+            (
+                Self::default(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            |(
+                mut libraries,
+                mut projections,
+                mut root_completions,
+                mut root_field_completions,
+                mut value_completions,
+            ),
              (id, library)| {
                 libraries.insert(id, library.metadata, library.definitions);
                 projections.extend(library.projections);
                 root_completions.extend(library.root_completions);
                 root_field_completions.extend(library.root_field_completions);
+                value_completions.extend(library.value_completions);
                 (
                     libraries,
                     projections,
                     root_completions,
                     root_field_completions,
+                    value_completions,
                 )
             },
         )
@@ -463,7 +491,7 @@ mod tests {
         left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-        let (libraries, projections, _, _) = Libraries::from_contributions([
+        let (libraries, projections, _, _, _) = Libraries::from_contributions([
             (
                 LEFT_LIBRARY,
                 Library::named(
@@ -553,7 +581,7 @@ mod tests {
             ),
         );
         definitions.register_foreign(SHARED_FUNCTION, ForeignFunction::new(left_function));
-        let (libraries, _, _, _) = Libraries::from_contributions([(
+        let (libraries, _, _, _, _) = Libraries::from_contributions([(
             LEFT_LIBRARY,
             Library::<(), ()>::named("test", definitions, vec![]),
         )]);
@@ -613,7 +641,7 @@ mod tests {
             Definitions::from_parts(right_cells, ForeignFunctions::default()),
             vec![],
         );
-        let (mut libraries, _, _, _) =
+        let (mut libraries, _, _, _, _) =
             Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
         let replacement = Definitions::default();
 

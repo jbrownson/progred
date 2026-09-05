@@ -35,6 +35,24 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     )
 }
 
+pub(crate) fn completions<N: std::str::FromStr + Display>(
+    query: &str,
+    representation: &str,
+    encode: impl FnOnce(N) -> Value,
+) -> Vec<progred_display::Completion> {
+    query
+        .trim()
+        .parse::<N>()
+        .ok()
+        .map(|number| {
+            progred_display::Completion::new(number.to_string(), encode(number))
+                .with_aliases([query])
+                .with_detail(representation)
+        })
+        .into_iter()
+        .collect()
+}
+
 const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;

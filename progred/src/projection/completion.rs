@@ -92,6 +92,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         cx.raw,
         &commit,
         query.text(),
+        hooks.value_completions.as_ref(),
         completions,
         everything,
     );

@@ -7,7 +7,7 @@ use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
 use gid::{CellId, Document, Path, Position, Resolution, Step, Value, position};
-use progred_libraries::{Libraries, absent, f64 as f64_convention, text};
+use progred_libraries::{Libraries, absent, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -616,24 +616,6 @@ pub fn pending_root(root: &workspace::Root, sources: &Sources) -> Option<Selecti
         .then(|| pending_value(root, Vec::new()))
 }
 
-/// The bytes a `0x` query denotes: hex digits, any case (the value
-/// is the bytes; lowercase is the canonical spelling), whole bytes
-/// only.
-pub(crate) fn parse_blob(text: &str) -> Option<Vec<u8>> {
-    let hex = text.strip_prefix("0x")?;
-    let digit = |c: u8| match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        _ => None,
-    };
-    hex.len().is_multiple_of(2).then_some(())?;
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?))
-        .collect()
-}
-
 /// The value a pending query resolves to: a leading quote forces
 /// text (the closing quote optional, so text mode holds while
 /// typing), `0x` hex reads as a blob, anything else is text as typed.
@@ -641,7 +623,7 @@ pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
         Some(inner) => text::value(inner.strip_suffix('"').unwrap_or(inner)),
-        None => parse_blob(trimmed)
+        None => blob::parse(trimmed)
             .map(Value::from)
             .unwrap_or_else(|| text::value(text)),
     }

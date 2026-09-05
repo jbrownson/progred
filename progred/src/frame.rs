@@ -632,7 +632,10 @@ impl Editor {
     }
 }
 
-fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
+fn projection_hooks(
+    root: Root,
+    value_completions: progred_display::CompletionProvider,
+) -> projection::Hooks<Editor> {
     let select_root = root.clone();
     let edit_root = root.clone();
     let payload_root = root.clone();
@@ -666,6 +669,7 @@ fn projection_hooks(root: Root) -> projection::Hooks<Editor> {
         }
     });
     projection::Hooks {
+        value_completions: Some(value_completions),
         select: select.clone(),
         select_source: Rc::new(Editor::select_drawing_source),
         select_payload: Rc::new(move |app: &mut Editor, path, payload| {
@@ -838,7 +842,7 @@ fn project_workspace_view(
             root_field_completions: (!raw).then_some(root_field_completions).flatten(),
         },
         tcx,
-        projection_hooks(view.root.clone()),
+        projection_hooks(view.root.clone(), stack.value_completions.clone()),
     );
     let content = measured::pad(Insets::uniform(margin), projected);
     let maximum = Vec2::new(

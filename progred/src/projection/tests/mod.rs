@@ -121,6 +121,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
         },
         &mut tcx,
         Hooks {
+            value_completions: Some(stack.value_completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|selected, path, line| selected.push((path, line))),

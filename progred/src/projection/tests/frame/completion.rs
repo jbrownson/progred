@@ -63,6 +63,7 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
             },
             &mut tcx,
             Hooks {
+                value_completions: None,
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
                 start_edit: Rc::new(|_, _, _| {}),
@@ -663,6 +664,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         },
         &mut tcx,
         Hooks {
+            value_completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {

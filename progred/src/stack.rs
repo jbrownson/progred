@@ -3,9 +3,9 @@
 use crate::hover::Hover;
 use crate::projection::Projection;
 use progred_libraries::{
-    Libraries, Library, absent, color, control, f32, f64, fidget, geometry, grap as grap_library,
-    layout, line_edit, list, logic, name, number, presentation, random, selection, site, text, u64,
-    workspace,
+    Libraries, Library, absent, blob, color, control, f32, f64, fidget, geometry,
+    grap as grap_library, layout, line_edit, list, logic, name, number, presentation, random,
+    selection, site, text, u64, workspace,
 };
 
 pub struct Stack<World> {
@@ -14,6 +14,7 @@ pub struct Stack<World> {
     pub pane_projection: Projection<World>,
     pub root_completions: progred_display::CompletionProvider,
     pub root_field_completions: progred_display::CompletionProvider,
+    pub value_completions: progred_display::CompletionProvider,
 }
 
 impl<World> Clone for Stack<World> {
@@ -24,15 +25,22 @@ impl<World> Clone for Stack<World> {
             pane_projection: self.pane_projection.clone(),
             root_completions: self.root_completions.clone(),
             root_field_completions: self.root_field_completions.clone(),
+            value_completions: self.value_completions.clone(),
         }
     }
 }
 
 pub fn load<World: 'static>() -> Stack<World> {
-    let (libraries, projections, root_completions, root_field_completions) =
+    let (libraries, projections, root_completions, root_field_completions, value_completions) =
         Libraries::from_contributions(contributions());
     let root_completions = std::rc::Rc::new(move |_: &str| root_completions.clone());
     let root_field_completions = std::rc::Rc::new(move |_: &str| root_field_completions.clone());
+    let value_completions = std::rc::Rc::new(move |query: &str| {
+        value_completions
+            .iter()
+            .flat_map(|provider| provider(query))
+            .collect()
+    });
     let projection = Projection::new(projections);
     Stack {
         libraries,
@@ -42,6 +50,7 @@ pub fn load<World: 'static>() -> Stack<World> {
         projection,
         root_completions,
         root_field_completions,
+        value_completions,
     }
 }
 
@@ -49,6 +58,7 @@ fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library
     [
         (name::ID, name::library()),
         (text::ID, text::library()),
+        (blob::ID, blob::library()),
         (absent::ID, absent::library()),
         (color::ID, color::library()),
         (control::ID, control::library()),

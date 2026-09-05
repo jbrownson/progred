@@ -93,6 +93,12 @@ leaves the document alone. Invalid intermediate text can therefore remain in
 the editor while the last valid value remains in the document. Loaded library
 values decline writes. Projections decide how unrelated fields survive an edit.
 
+In the normal projection, blobs use a monospace hex line with a fixed `0x`
+prefix. The buffer contains the full hex digits, including for blobs longer
+than the structural summary. Edits accept complete bytes in either case;
+empty hex denotes an empty blob. Query entry and editing share the blob
+library's parser. Raw retains its compact structural blob display.
+
 Navigation landmarks contain their selection callbacks. Moving onto an
 editable line installs the description produced by that projection, including
 the intended caret position. The shell does not inspect the render tree to
@@ -109,6 +115,14 @@ completion and may supply a lazy vocabulary. Only the active picker asks the
 provider for offers. Without one, the editor uses its universal offers.
 Root templates and root field vocabulary are supplied separately and do not
 leak into descendants.
+
+Libraries can also contribute query-dependent value offers to the universal
+vocabulary. The numeric libraries offer `f32`, `f64`, and `u64` interpretations
+when the query parses, showing the representation and the actual stored
+number. Offers retain library order, precede the text interpretation and cell
+search, and introduce no empty-query numeric constructors. Quoting forces
+text, and label pickers do not invoke value providers. A projection's narrow
+vocabulary still takes precedence until the user expands it.
 
 Universal constructor offers accept delimiter aliases: `[` for `new list`,
 `(` for `new cell`, and `{` for `new record`. In an empty completion query,

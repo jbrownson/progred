@@ -28,6 +28,10 @@ pub fn value(value: u64) -> Value {
     Value::record([(vocabulary::U64, Value::from(value.to_le_bytes().to_vec()))])
 }
 
+pub fn completions(query: &str) -> Vec<progred_display::Completion> {
+    number::completions(query, "u64", value)
+}
+
 pub fn read(value: &Value) -> Option<u64> {
     value
         .as_record()?
@@ -190,6 +194,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         crate::Definitions::from_parts(cells, functions()),
         vec![progred_display::partial(display::<World, Hover>)],
     )
+    .with_value_completions(completions)
 }
 
 #[cfg(test)]

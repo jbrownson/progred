@@ -39,6 +39,7 @@ fn completion_entries(
             Commit::Value(Rc::new(value_commit))
         },
         query,
+        Some(&crate::stack::load::<()>().value_completions),
         None,
         true,
     )
@@ -136,6 +137,181 @@ fn completion_offers_follow_the_stage() {
 }
 
 #[test]
+fn typed_numbers_offer_each_valid_representation_then_literal_text() {
+    use progred_libraries::{f32, u64};
+    let stack = crate::stack::load::<()>();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = src(&doc, &stack.libraries);
+    for raw in [false, true] {
+        for (query, expected) in [
+            (
+                "12",
+                vec![f32::value(12.0), f64::value(12.0), u64::value(12)],
+            ),
+            ("-2.5", vec![f32::value(-2.5), f64::value(-2.5)]),
+            ("1e3", vec![f32::value(1000.0), f64::value(1000.0)]),
+            (
+                " +2 ",
+                vec![f32::value(2.0), f64::value(2.0), u64::value(2)],
+            ),
+        ] {
+            let entries = completion_entries(&sources, raw, false, query);
+            assert_eq!(
+                entries
+                    .iter()
+                    .take(expected.len())
+                    .map(|entry| activated(entry).value.unwrap())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert_eq!(
+                activated(&entries[expected.len()]).value,
+                Some(text::value(query))
+            );
+            assert!(
+                entries
+                    .iter()
+                    .take(expected.len())
+                    .all(|entry| entry.detail.is_some())
+            );
+        }
+        for query in ["", "word", "1e", "\"12\"", "0xff"] {
+            assert!(
+                completion_entries(&sources, raw, false, query)
+                    .iter()
+                    .all(|entry| {
+                        let value = activated(entry).value.unwrap();
+                        f32::read(&value).is_none()
+                            && f64::read(&value).is_none()
+                            && u64::read(&value).is_none()
+                    })
+            );
+        }
+        let labels = completion_entries(&sources, raw, true, "12");
+        assert!(labels.iter().all(|entry| activated(entry).value.is_none()));
+        assert!(labels.iter().any(|entry| {
+            activated(entry)
+                .label
+                .and_then(|(_, definition)| definition)
+                .is_some_and(|definition| name::read(&definition) == Some("12"))
+        }));
+    }
+    let entries = completion_entries(&sources, false, false, "18446744073709551615");
+    let integer = entries
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("u64"))
+        .unwrap();
+    assert_eq!(
+        activated(integer).value.as_ref().and_then(u64::read),
+        Some(u64::MAX)
+    );
+    let rounded = completion_entries(&sources, false, false, "16777217");
+    let single = rounded
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("f32"))
+        .unwrap();
+    assert_eq!(single.display, "16777216");
+    assert_eq!(
+        activated(single).value.as_ref().and_then(f32::read),
+        Some(16777216.0)
+    );
+}
+
+#[test]
+fn projected_numeric_offer_commits_the_typed_value() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: Some(Value::list([])),
+        cells: Cells::new(),
+    };
+    let path = vec![Step::Element(gid::position::between(None, None).unwrap())];
+    let pending = crate::selection::pending_with_query(
+        &crate::workspace::Root::document(),
+        path.clone(),
+        "2.5",
+    );
+    let entries = projected_completion_entries(&doc, &pending);
+    let entry = entries
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("f64"))
+        .unwrap();
+    let prepared = crate::completion::prepare(
+        &src(&doc, &libraries),
+        &pending,
+        &Annotations::default(),
+        activated(entry).value.unwrap(),
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        src(&prepared.document, &libraries).resolve_path(&path),
+        Some(&f64::value(2.5))
+    );
+}
+
+#[test]
+fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = Libraries::default();
+    let sources = src(&doc, &libraries);
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    let provider: progred_display::CompletionProvider = Rc::new(move |query| {
+        count.set(count.get() + 1);
+        vec![progred_display::Completion::new(query, Value::record([]))]
+    });
+    let narrow: progred_display::CompletionProvider = Rc::new(|_| vec![]);
+    let entries = completion_entries_with(
+        &sources,
+        false,
+        &Commit::Value(Rc::new(value_commit)),
+        "custom",
+        Some(&provider),
+        Some(&narrow),
+        false,
+    );
+    assert!(entries.is_empty());
+    assert_eq!(calls.get(), 0);
+    let entries = completion_entries_with(
+        &sources,
+        false,
+        &Commit::Value(Rc::new(value_commit)),
+        "custom",
+        Some(&provider),
+        Some(&narrow),
+        true,
+    );
+    assert_eq!(activated(&entries[0]).value, Some(Value::record([])));
+    assert_eq!(calls.get(), 1);
+    completion_entries_with(
+        &sources,
+        false,
+        &Commit::Label(Rc::new(label_commit)),
+        "custom",
+        Some(&provider),
+        None,
+        true,
+    );
+    completion_entries_with(
+        &sources,
+        false,
+        &Commit::Value(Rc::new(value_commit)),
+        "\"custom\"",
+        Some(&provider),
+        None,
+        true,
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
 fn contextual_completion_starts_narrow_and_everything_widens_it() {
     let stack = crate::stack::load::<()>();
     let doc = Document {
@@ -148,6 +324,7 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         false,
         &Commit::Value(Rc::new(value_commit)),
         "sdf",
+        Some(&stack.value_completions),
         Some(&stack.root_completions),
         false,
     );
@@ -170,6 +347,7 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         false,
         &Commit::Value(Rc::new(value_commit)),
         "sdf",
+        Some(&stack.value_completions),
         Some(&stack.root_completions),
         true,
     );
@@ -398,6 +576,7 @@ fn projected_completion_entries_with(
         },
         &mut tcx,
         Hooks {
+            value_completions: Some(stack.value_completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
@@ -618,6 +797,7 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
         false,
         &Commit::Label(Rc::new(label_commit)),
         "",
+        None,
         Some(&provider),
         false,
     );
@@ -650,6 +830,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         false,
         &Commit::Value(Rc::new(value_commit)),
         "generated",
+        None,
         Some(&provider),
         false,
     );
@@ -658,6 +839,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         false,
         &Commit::Label(Rc::new(label_commit)),
         "generated",
+        None,
         Some(&provider),
         false,
     );
@@ -675,6 +857,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
             false,
             &Commit::Value(Rc::new(value_commit)),
             "",
+            Some(&stack.value_completions),
             Some(&stack.root_completions),
             false,
         )
