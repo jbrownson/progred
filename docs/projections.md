@@ -66,11 +66,15 @@ invoke that projection again under the remaining fuel allowance. Ordinary
 call-shaped values elsewhere remain editable data until explicitly evaluated.
 
 The presentation library offers an opt-in interpreter for
-`{value: source, projection: function}`. Pane views compose it ahead of the
-normal projection; the document view leaves the declaration as editable data.
-It applies the function to the source as data and projects the result from a
-transient root. An absent result declines to the editable source. The workspace
-does not interpret this wrapper. Raw exposes its stored fields in either view.
+`{value: source, projection: function}`. Pane views try it only at entry,
+following cells through their ordinary definition paths. The document view
+leaves the declaration as editable data. It applies the function to the source
+as data and projects the result from a transient root using the normal
+projection. An absent result reveals the stored source using that same normal
+projection. Nested declarations remain data, including inside list or record
+panes and computed results. This entry scope does not change the recursive
+scope of ordinary contextual partials. The workspace does not interpret this
+wrapper. Raw exposes its stored fields in either view.
 Explicit `{render: expression}` values retain their ordinary display behavior.
 
 ## Lowering and interaction

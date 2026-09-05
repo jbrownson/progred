@@ -48,13 +48,15 @@ type SharedPath = Rc<[Step]>;
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
 pub struct Projection<World> {
-    partials: Box<[progred_display::Partial<World, Hover>]>,
+    partials: Rc<[progred_display::Partial<World, Hover>]>,
+    entry: Option<progred_display::Partial<World, Hover>>,
 }
 
 impl<World> Clone for Projection<World> {
     fn clone(&self) -> Self {
         Self {
             partials: self.partials.clone(),
+            entry: self.entry.clone(),
         }
     }
 }
@@ -62,7 +64,8 @@ impl<World> Clone for Projection<World> {
 impl<World> Default for Projection<World> {
     fn default() -> Self {
         Self {
-            partials: Box::new([]),
+            partials: Rc::new([]),
+            entry: None,
         }
     }
 }
@@ -71,6 +74,23 @@ impl<World> Projection<World> {
     pub fn new(partials: impl IntoIterator<Item = progred_display::Partial<World, Hover>>) -> Self {
         Self {
             partials: partials.into_iter().collect(),
+            entry: None,
+        }
+    }
+
+    /// Prepend a partial at entry, following cells to their definitions.
+    /// Its children and computed results use the ordinary projection.
+    pub fn with_entry(self, partial: progred_display::Partial<World, Hover>) -> Self {
+        Self {
+            entry: Some(partial),
+            ..self
+        }
+    }
+
+    fn without_entry(&self) -> Self {
+        Self {
+            partials: self.partials.clone(),
+            entry: None,
         }
     }
 
@@ -78,7 +98,10 @@ impl<World> Projection<World> {
         &self,
         input: &progred_display::ProjectionInput<'_, World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
-        self.partials.iter().find_map(|partial| partial(input))
+        self.entry
+            .iter()
+            .chain(self.partials.iter())
+            .find_map(|partial| partial(input))
     }
 }
 
@@ -1523,6 +1546,8 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
+    let ordinary_projection = projection.map(Projection::without_entry);
+    let projection = ordinary_projection.as_ref();
     let origin = path.to_vec();
     let select = hooks.select.clone();
     let select_origin = origin.clone();
@@ -1724,9 +1749,12 @@ fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
     let layout = present_layout(cx, projection, path, ancestors, value, hooks);
+    let ordinary_projection = projection
+        .filter(|projection| projection.entry.is_some() && !matches!(value, Value::Cell(_)))
+        .map(Projection::without_entry);
     let inner = prepare(
         cx,
-        projection,
+        ordinary_projection.as_ref().or(projection),
         tcx,
         path,
         ancestors,

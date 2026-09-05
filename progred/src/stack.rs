@@ -33,13 +33,13 @@ pub fn load<World: 'static>() -> Stack<World> {
         Libraries::from_contributions(contributions());
     let root_completions = std::rc::Rc::new(move |_: &str| root_completions.clone());
     let root_field_completions = std::rc::Rc::new(move |_: &str| root_field_completions.clone());
+    let projection = Projection::new(projections);
     Stack {
         libraries,
-        pane_projection: Projection::new(
-            std::iter::once(progred_display::partial(presentation::projected_display))
-                .chain(projections.iter().cloned()),
-        ),
-        projection: Projection::new(projections),
+        pane_projection: projection
+            .clone()
+            .with_entry(progred_display::partial(presentation::projected_display)),
+        projection,
         root_completions,
         root_field_completions,
     }

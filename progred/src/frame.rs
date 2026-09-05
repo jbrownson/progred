@@ -1270,19 +1270,34 @@ mod frame_tests {
     }
 
     #[test]
-    fn pane_presentations_do_not_run_in_the_document_and_raw_keeps_the_declaration() {
+    fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         use progred_libraries::{Definitions, presentation};
         use std::cell::{Cell, RefCell};
 
         let projector = CellId::from_u128(1);
         let linked = CellId::from_u128(2);
-        let source = Value::from(b"source".to_vec());
+        let library = CellId::from_u128(3);
+        let nested_projector = CellId::from_u128(4);
+        let alias = CellId::from_u128(5);
+        let source = Value::record([
+            (
+                presentation::vocabulary::VALUE,
+                Value::from(b"source".to_vec()),
+            ),
+            (
+                presentation::vocabulary::PROJECTION,
+                Value::from(nested_projector),
+            ),
+        ]);
         let declaration = Value::record([
             (presentation::vocabulary::VALUE, source.clone()),
             (presentation::vocabulary::PROJECTION, Value::from(projector)),
         ]);
         let mut cells = Cells::new();
         cells.set_value(linked, declaration.clone());
+        cells.set_value(alias, Value::from(linked));
+        let mut library_cells = Cells::new();
+        library_cells.set_value(linked, declaration.clone());
         let mut model = Model {
             doc: Document {
                 root: Some(Value::record([])),
@@ -1295,8 +1310,8 @@ mod frame_tests {
         };
         for value in [
             declaration,
-            Value::from(linked),
-            source.clone(),
+            Value::from(alias),
+            Value::list([source.clone(), Value::from(linked)]),
             Value::record([(presentation::vocabulary::VALUE, source.clone())]),
         ] {
             model.doc.root = Some(
@@ -1321,13 +1336,13 @@ mod frame_tests {
             );
         }
         let calls = Rc::new(Cell::new(0));
-        let result = Rc::new(RefCell::new(Value::from(b"presented".to_vec())));
+        let result = Rc::new(RefCell::new(source.clone()));
         let mut stack = stack::load::<Editor>();
         stack.libraries.insert(
-            CellId::from_u128(3),
+            library,
             Value::record([]),
             Definitions::from_parts(
-                Cells::new(),
+                library_cells,
                 grap::ForeignFunctions::default().register(
                     projector,
                     grap::ForeignFunction::new({
@@ -1341,6 +1356,11 @@ mod frame_tests {
                             calls.set(calls.get() + 1);
                             Ok(result.borrow().clone())
                         }
+                    }),
+                ).register(
+                    nested_projector,
+                    grap::ForeignFunction::new(|_, _, _| {
+                        panic!("nested declarations are ordinary data, including results and absent fallbacks")
                     }),
                 ),
             ),
@@ -1375,29 +1395,39 @@ mod frame_tests {
             )
         };
         let document = model.workspace.document_root();
-        let sources: Vec<_> = model
-            .workspace
-            .left
-            .panes
-            .iter()
-            .take(2)
-            .enumerate()
-            .map(|(index, pane)| {
-                let workspace::Target::Pane { path } = pane.view.root.target() else {
-                    panic!("pane path")
-                };
-                let mut path = path.clone();
-                if index == 1 {
-                    path.push(Step::Follow(gid::Resolution::Document));
-                }
-                (pane.view.root.clone(), path)
-            })
-            .collect();
+        let sources: Vec<_> = [
+            (0, vec![]),
+            (
+                1,
+                vec![
+                    Step::Follow(gid::Resolution::Document),
+                    Step::Follow(gid::Resolution::Document),
+                ],
+            ),
+            (
+                1,
+                vec![
+                    Step::Follow(gid::Resolution::Document),
+                    Step::Follow(gid::Resolution::Library(library)),
+                ],
+            ),
+        ]
+        .into_iter()
+        .map(|(index, steps)| {
+            let pane = &model.workspace.left.panes[index];
+            let workspace::Target::Pane { path } = pane.view.root.target() else {
+                panic!("pane path")
+            };
+            let mut path = path.clone();
+            path.extend(steps);
+            (pane.view.root.clone(), path)
+        })
+        .collect();
         let shown = place(&model);
         assert_eq!(
             calls.replace(0),
-            2,
-            "only the two preview panes apply the projection"
+            3,
+            "only the inline declaration and the two cell definitions at pane entry apply"
         );
         for (pane, path) in &sources {
             for field in [
@@ -1447,7 +1477,7 @@ mod frame_tests {
         }
         *result.borrow_mut() = progred_libraries::absent::with_reason(projector);
         let absent = place(&model);
-        assert_eq!(calls.get(), 2);
+        assert_eq!(calls.get(), 3);
         for (pane, path) in &sources {
             let mut source_path = path.clone();
             source_path.push(Step::Key(presentation::vocabulary::VALUE));

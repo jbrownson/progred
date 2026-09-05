@@ -155,9 +155,10 @@ projection mode carry across, while path-keyed folds reset.
 
 `{value: source, projection: function}` is a presentation-library convention,
 not workspace configuration. The document's normal projection shows this
-declaration as editable data. Pane views explicitly compose the presentation
-library's declaration interpreter ahead of the normal projection; Raw shows
-the structural data in either view. See
+declaration as editable data. At pane entry, including through cell definitions,
+the view tries the presentation library's declaration interpreter first. Nested
+values and computed results use the normal projection, so declarations inside
+them remain data. Raw shows the structural data in either view. See
 [projection composition](projections.md#projection-composition).
 
 ## History, gestures, and persistence
