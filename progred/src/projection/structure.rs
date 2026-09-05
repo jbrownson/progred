@@ -6,7 +6,6 @@ use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::selection::writable_at;
-use crate::sources::DefinitionSource;
 use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
     CompletionKind, CompletionProvider, Delim, Face, Layout, activatable, alternatives,
@@ -94,23 +93,9 @@ fn cell_layout<World: 'static>(cx: &Cx, _path: &[Step], cell: CellId) -> View<Wo
             col(
                 0,
                 4.0,
-                definitions.into_iter().map(|resolved| {
-                    let source = match resolved.source {
-                        DefinitionSource::Document => "document".to_string(),
-                        DefinitionSource::Library(library) => cx
-                            .sources
-                            .library_name(library)
-                            .map(|name| format!("library {name}"))
-                            .unwrap_or_else(|| format!("library {}", short_id(library))),
-                    };
-                    row(
-                        6.0,
-                        [
-                            dim(format!("{source}:")),
-                            descend(Step::Follow(resolved.source), None, None),
-                        ],
-                    )
-                }),
+                definitions
+                    .into_iter()
+                    .map(|value| descend(Step::Follow(value.source), None, None)),
             ),
         ),
     }
