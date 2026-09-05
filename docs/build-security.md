@@ -31,7 +31,8 @@ are needed.
 
 `make dev` keeps an interactive development session open: Ctrl+C stops its
 current build or app, rebuilds, and launches again; Ctrl+\ quits the session.
-After a failed build or an app exit it waits for Ctrl+C instead of retrying.
+Quitting the app (Cmd+Q on macOS) also rebuilds and restarts it. A failed
+command waits for Ctrl+C instead of retrying automatically.
 Closing the terminal stops the session. Restarting discards unsaved changes in
 that development instance, as terminating the previous development loop did.
 

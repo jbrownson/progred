@@ -55,7 +55,8 @@ make build-ipad
 ```
 
 For an interactive native development session, use `make dev`: Ctrl+C rebuilds
-and restarts its app, and Ctrl+\ quits. A failed build waits for another Ctrl+C.
+and restarts its app, and quitting the app (Cmd+Q on macOS) does the same.
+Ctrl+\ ends the development session. A failed build waits for another Ctrl+C.
 
 The browser build is served at `http://localhost:8080`; another device on the
 same network can use this machine's LAN address. Built-in documents are

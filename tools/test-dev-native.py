@@ -110,6 +110,26 @@ class DevelopmentTests(unittest.TestCase):
             process.send_signal(signal.SIGQUIT)
             self.assertEqual(process.wait(timeout=3), 0)
 
+    def test_app_exit_rebuilds_and_restarts_without_a_terminal_signal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = str(Path(directory) / "started")
+            run = command(
+                "from pathlib import Path\n"
+                f"marker = Path({marker!r})\n"
+                "if not marker.exists():\n"
+                "    marker.touch()\n"
+                "    print('FIRST EXIT', flush=True)\n"
+                "else:\n"
+                f"    exec({WAITING!r})\n"
+            )
+            with session([command("print('BUILD')"), run]) as process:
+                restarted = read_until(process, "RUNNING")
+                self.assertEqual(restarted.count("BUILD"), 2)
+                self.assertLess(restarted.index("FIRST EXIT"), restarted.rindex("BUILD"))
+                process.send_signal(signal.SIGQUIT)
+                read_until(process, "STOPPED")
+                self.assertEqual(process.wait(timeout=3), 0)
+
     def test_restart_stops_its_child_before_rebuilding_and_leaves_other_processes(self):
         unrelated = subprocess.Popen([PYTHON, "-c", "import time; time.sleep(30)"])
         try:

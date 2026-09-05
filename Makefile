@@ -13,7 +13,7 @@ endif
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once (alias: run-native)"
-	@echo "  make dev          Relaunch the native app after Ctrl+C (alias: dev-native)"
+	@echo "  make dev          Rebuild after app exit or Ctrl+C (alias: dev-native)"
 	@echo "  make build-web    Build the browser app"
 	@echo "  make run-web      Build and serve the browser app on port 8080"
 	@echo "  make build-ipad   Build the native iPad app for Apple Silicon Simulator"
