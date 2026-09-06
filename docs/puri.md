@@ -96,6 +96,10 @@ stages the already-built successor for presentation; it avoids building it
 again at redraw. There is no event-specific list of changes considered
 irrelevant to rendering and no partial invalidation system.
 
+Leaving a window clears its hover position, not its active drag. Captured motion
+and release retain their unbounded coordinates. Focus loss cancels through the
+same pointer-cancellation handlers and clears the adapter's pressed state.
+
 The approved cross-frame computation memo is caller-threaded text shaping.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and

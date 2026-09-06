@@ -59,7 +59,9 @@ use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
-use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType, PointerUpdate};
+use ui_events::pointer::{
+    PointerEvent, PointerId, PointerInfo, PointerScrollEvent, PointerType, PointerUpdate,
+};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "ios")))]
 use vello::util::{RenderContext, RenderSurface};
@@ -473,6 +475,33 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
+fn translate_window_event(
+    reducer: &mut WindowEventReducer,
+    scale: f64,
+    event: &WindowEvent,
+) -> Option<WindowEventTranslation> {
+    if matches!(event, WindowEvent::Focused(false)) {
+        // Focus loss can take the release away from this window. Departure alone
+        // does not cancel: Winit forwards macOS drags outside the client area.
+        *reducer = WindowEventReducer::default();
+        Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(
+            PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+        )))
+    } else {
+        reducer.reduce(scale, event)
+    }
+}
+
+fn window_pointer(position: Point, size: Size) -> Option<Point> {
+    Rect::from_origin_size(Point::ZERO, size)
+        .contains(position)
+        .then_some(position)
+}
+
 fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
     match hover {
         Some(Hovered::Divider(workspace::Divider::Columns(_))) => CursorIcon::ColResize,
@@ -835,7 +864,7 @@ impl App {
                 }),
                 _ => None,
             };
-            let translation = editor.reducer.reduce(scale, &event);
+            let translation = translate_window_event(&mut editor.reducer, scale, &event);
             let previous_cursor = editor.cursor;
             if let Some(WindowEventTranslation::Pointer(pointer)) = &translation
                 && let Some(position) = pointer_position(pointer)
@@ -879,7 +908,8 @@ impl App {
             {
                 let size = window.inner_size();
                 let position = Point::new(update.current.position.x, update.current.position.y);
-                editor.pointer = Some(position);
+                editor.pointer =
+                    window_pointer(position, Size::new(size.width as f64, size.height as f64));
                 editor.modifiers = update.current.modifiers;
                 editor.pending_pointer = Some(PendingPointer {
                     event: update.clone(),
@@ -940,7 +970,8 @@ impl App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
                         let position = Point::new(button.state.position.x, button.state.position.y);
-                        editor.pointer = Some(position);
+                        editor.pointer =
+                            window_pointer(position, Size::new(size.width as f64, viewport));
                         editor.pressed = true;
                         editor.gesture = None;
                         frame_input_changed = true;
@@ -964,7 +995,8 @@ impl App {
                         // not an event handler consumes the motion.
                         let position =
                             Point::new(update.current.position.x, update.current.position.y);
-                        editor.pointer = Some(position);
+                        editor.pointer =
+                            window_pointer(position, Size::new(size.width as f64, viewport));
                         frame_input_changed = true;
                         let moved = editor.advance_gesture(position)
                             || dispatch.handler.dispatch_pointer_move(editor, &update);
@@ -989,7 +1021,8 @@ impl App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         let position = Point::new(button.state.position.x, button.state.position.y);
-                        editor.pointer = Some(position);
+                        editor.pointer =
+                            window_pointer(position, Size::new(size.width as f64, viewport));
                         editor.pressed = false;
                         frame_input_changed = true;
                         editor.gesture.take().is_some()
@@ -997,10 +1030,8 @@ impl App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         editor.pointer = None;
-                        editor.pressed = false;
-                        editor.gesture = None;
                         frame_input_changed = true;
-                        editor.model.workspace.cancel_resize()
+                        false
                     }
                     (
                         None,
@@ -2061,6 +2092,109 @@ mod shell_tests {
     use super::*;
     use ui_events::pointer::{PointerId, PointerInfo, PointerState, PointerType};
     use winit::dpi::PhysicalPosition;
+    use winit::event::{DeviceId, ElementState, MouseButton};
+
+    fn translate_pointer(reducer: &mut WindowEventReducer, event: WindowEvent) -> PointerEvent {
+        match translate_window_event(reducer, 1.0, &event) {
+            Some(WindowEventTranslation::Pointer(pointer)) => pointer,
+            _ => panic!("expected pointer input"),
+        }
+    }
+
+    #[test]
+    fn window_departure_preserves_pressed_motion_and_release_outside() {
+        let mut reducer = WindowEventReducer::default();
+        let device_id = DeviceId::dummy();
+        assert!(matches!(
+            translate_pointer(
+                &mut reducer,
+                WindowEvent::MouseInput {
+                    device_id,
+                    state: ElementState::Pressed,
+                    button: MouseButton::Left,
+                }
+            ),
+            PointerEvent::Down(_)
+        ));
+        assert!(matches!(
+            translate_pointer(&mut reducer, WindowEvent::CursorLeft { device_id }),
+            PointerEvent::Leave(_)
+        ));
+        let PointerEvent::Move(motion) = translate_pointer(
+            &mut reducer,
+            WindowEvent::CursorMoved {
+                device_id,
+                position: PhysicalPosition::new(-40.0, 700.0),
+            },
+        ) else {
+            panic!("expected motion")
+        };
+        assert!(puri::interact::is_primary_contact_move(&motion));
+        assert_eq!(
+            pointer_position(&PointerEvent::Move(motion)),
+            Some(Point::new(-40.0, 700.0))
+        );
+        let PointerEvent::Up(release) = translate_pointer(
+            &mut reducer,
+            WindowEvent::MouseInput {
+                device_id,
+                state: ElementState::Released,
+                button: MouseButton::Left,
+            },
+        ) else {
+            panic!("expected release")
+        };
+        assert!(release.state.buttons.is_empty());
+        assert_eq!(
+            pointer_position(&PointerEvent::Up(release)),
+            Some(Point::new(-40.0, 700.0))
+        );
+    }
+
+    #[test]
+    fn focus_loss_cancels_and_forgets_pressed_mouse_state() {
+        let mut reducer = WindowEventReducer::default();
+        let device_id = DeviceId::dummy();
+        translate_pointer(
+            &mut reducer,
+            WindowEvent::MouseInput {
+                device_id,
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+            },
+        );
+        assert!(matches!(
+            translate_pointer(&mut reducer, WindowEvent::Focused(false)),
+            PointerEvent::Cancel(_)
+        ));
+        let PointerEvent::Move(motion) = translate_pointer(
+            &mut reducer,
+            WindowEvent::CursorMoved {
+                device_id,
+                position: PhysicalPosition::new(10.0, 20.0),
+            },
+        ) else {
+            panic!("expected motion")
+        };
+        assert!(!puri::interact::is_primary_contact_move(&motion));
+    }
+
+    #[test]
+    fn outside_drag_positions_do_not_become_hover_positions() {
+        let size = Size::new(400.0, 300.0);
+        assert_eq!(
+            window_pointer(Point::new(10.0, 20.0), size),
+            Some(Point::new(10.0, 20.0))
+        );
+        for point in [
+            Point::new(-1.0, 20.0),
+            Point::new(401.0, 20.0),
+            Point::new(10.0, -1.0),
+            Point::new(10.0, 301.0),
+        ] {
+            assert_eq!(window_pointer(point, size), None);
+        }
+    }
 
     fn pending(delta: ScrollDelta, x: f64) -> PendingScroll {
         let mut state = PointerState::default();

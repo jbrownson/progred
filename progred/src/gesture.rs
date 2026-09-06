@@ -281,6 +281,10 @@ mod tests {
         assert_eq!(model.doc.root, Some(f64::value(14.0)));
         assert!(gesture.advance(&mut model, &libraries, Point::new(110.0, 206.0)));
         assert_eq!(model.doc.root, Some(f64::value(15.0)));
+        assert!(gesture.advance(&mut model, &libraries, Point::new(-20.0, 206.0)));
+        assert_eq!(model.doc.root, Some(f64::value(-50.0)));
+        assert!(gesture.advance(&mut model, &libraries, Point::new(110.0, 206.0)));
+        assert_eq!(model.doc.root, Some(f64::value(15.0)));
         let presentation = gesture.scrub_spelling().unwrap();
         assert_eq!(presentation.root, &root);
         assert!(presentation.path.is_empty());
