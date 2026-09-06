@@ -526,6 +526,184 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
 }
 
 #[test]
+fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
+    #[derive(Default)]
+    struct State {
+        view: (f64, usize, bool),
+        committed: Option<usize>,
+    }
+    let entries = (0..3)
+        .map(|index| Entry {
+            display: format!("entry {index}"),
+            detail: None,
+            matches: Vec::new(),
+            face: progred_display::Face::Name,
+            source: None,
+            activate: Rc::new(move |state: &mut State| state.committed = Some(index)),
+        })
+        .collect::<Vec<_>>();
+    let mut context = BenchContext::new();
+    let mut tcx = TextCtx {
+        fonts: &mut context.fonts,
+        layouts: &mut context.layouts,
+        cache: &mut context.cache,
+        scale: 1.0,
+    };
+    let mut frame = |state: &State, clip: Option<Rect>| {
+        let card = completion_card::<State, DrawList>(
+            &mut tcx,
+            &context.styles,
+            &entries,
+            state.view.1,
+            state.view.0,
+            state.view.2,
+            |state, scroll, choice, everything| state.view = (scroll, choice, everything),
+        );
+        let rect = card.extent.rect_at(Point::ZERO);
+        measured::place(card, puri::Placement::new(rect, clip.unwrap_or(rect)))
+    };
+    let row_point = |placed: &Placed<State, DrawList>, hover: Hover| {
+        (0..160)
+            .map(|y| Point::new(10.0, y as f64))
+            .find(|point| {
+                placed.probe(*point, None, 0.0) == Some(Claim::Direct(Hovered::Tree(hover.clone())))
+            })
+            .unwrap()
+    };
+    let highlight = |placed: Placed<State, DrawList>, hovered, selected_point| {
+        let mut drawing = DrawList::new();
+        let hovered = Hovered::Tree(hovered);
+        for render in placed.renders {
+            render(
+                &mut drawing,
+                crate::placed::Ink {
+                    hovered: Some(&hovered),
+                    hovered_secondary: None,
+                    hovered_trace: None,
+                    debug_geometry: false,
+                },
+            );
+        }
+        fn highlights(commands: &[DrawCmd]) -> Vec<Rect> {
+            commands
+                .iter()
+                .flat_map(|command| match command {
+                    DrawCmd::Clip { children, .. } => highlights(children),
+                    DrawCmd::Fill {
+                        shape: Shape::RoundedRect(rect),
+                        brush: Brush::Solid(color),
+                        ..
+                    } if [
+                        Color::new([0.0, 0.48, 1.0, 0.14]),
+                        Color::new([0.0, 0.48, 1.0, 0.08]),
+                    ]
+                    .contains(color) =>
+                    {
+                        vec![rect.rect()]
+                    }
+                    _ => Vec::new(),
+                })
+                .collect()
+        }
+        let rects = highlights(&drawing.0);
+        assert_eq!(rects.len(), 1);
+        assert!(rects[0].contains(selected_point));
+    };
+    let press = |key| KeyboardEvent {
+        key: Key::Named(key),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    let move_to = |point: Point, pointer_type| {
+        let mut current = PointerState::default();
+        current.position.x = point.x;
+        current.position.y = point.y;
+        PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type,
+            },
+            current,
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        }
+    };
+    let mut state = State::default();
+    let placed = frame(&state, None);
+    let points = std::array::from_fn::<_, 3, _>(|index| row_point(&placed, Hover::Entry(index)));
+    let more = row_point(&placed, Hover::MoreCompletions);
+    highlight(placed, Hover::Entry(2), points[0]);
+
+    assert!(
+        frame(&state, None)
+            .handler
+            .unwrap()
+            .dispatch_pointer_move(&mut state, &move_to(points[2], PointerType::Mouse))
+    );
+    assert_eq!(state.view.1, 2);
+    highlight(frame(&state, None), Hover::Entry(2), points[2]);
+    assert!(
+        frame(&state, None)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut state, &press(NamedKey::ArrowUp))
+    );
+    assert_eq!(state.view.1, 1);
+    highlight(frame(&state, None), Hover::Entry(2), points[1]);
+    frame(&state, None)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::Enter));
+    assert_eq!(state.committed, Some(1));
+
+    frame(&state, None)
+        .handler
+        .unwrap()
+        .dispatch_pointer_move(&mut state, &move_to(points[0], PointerType::Mouse));
+    assert_eq!(state.view.1, 0);
+    frame(&state, None)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::Enter));
+    assert_eq!(state.committed, Some(0));
+
+    let mut dragging = move_to(points[2], PointerType::Mouse);
+    dragging.current.buttons.insert(PointerButton::Primary);
+    for event in [
+        move_to(points[2], PointerType::Touch),
+        dragging,
+        move_to(Point::new(-10.0, -10.0), PointerType::Mouse),
+    ] {
+        assert!(
+            !frame(&state, None)
+                .handler
+                .unwrap()
+                .dispatch_pointer_move(&mut state, &event)
+        );
+        assert_eq!(state.view.1, 0);
+    }
+    assert!(
+        !frame(&state, Some(Rect::new(0.0, 0.0, 200.0, points[1].y)))
+            .handler
+            .unwrap()
+            .dispatch_pointer_move(&mut state, &move_to(points[2], PointerType::Mouse))
+    );
+    assert_eq!(state.view.1, 0);
+
+    frame(&state, None)
+        .handler
+        .unwrap()
+        .dispatch_pointer_move(&mut state, &move_to(more, PointerType::Mouse));
+    assert_eq!(state.view.1, entries.len());
+    frame(&state, None)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut state, &press(NamedKey::Enter));
+    assert!(state.view.2);
+}
+
+#[test]
 fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     #[derive(Default)]
     struct State {

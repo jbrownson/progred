@@ -2,7 +2,7 @@
 
 use super::{
     Cx, Hooks, atom_content, edit_presentation, face_style, hover_block, hover_claim,
-    placeholder_box, primary_highlight, source_target, tree_hovered,
+    placeholder_box, primary_highlight, source_target,
 };
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
@@ -23,6 +23,7 @@ use puri_widgets::panel::Panel;
 use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
+use ui_events::pointer::PointerType;
 
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
@@ -221,7 +222,6 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
             more: &styles.dim,
             scale,
             chosen: Color::new([0.0, 0.48, 1.0, 0.14]),
-            hovered: Color::new([0.0, 0.48, 1.0, 0.08]),
         },
     );
     let set_view = Rc::new(set_view);
@@ -250,7 +250,14 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         .into_iter()
         .enumerate()
         .map(|(index, (row, hover, activate))| {
-            completion_row(row, hover, index == choice, move |world| activate(world))
+            let set_view = set_view.clone();
+            completion_row(
+                row,
+                hover,
+                index == choice,
+                move |world| set_view(world, scroll, index, everything),
+                move |world| activate(world),
+            )
         })
         .collect::<Vec<_>>();
     let gap = 2.0 * scale;
@@ -382,12 +389,27 @@ fn completion_row<C: 'static, Cv: Canvas + 'static>(
     row: puri_widgets::completion::Row,
     hover: Hover,
     chosen: bool,
+    choose: impl Fn(&mut C) + 'static,
     activate: impl Fn(&mut C) + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
     leaf(
         placed::metrics_extent(row.metrics()),
         move |p, placement| {
             hover_claim(p, placement, hover.clone());
+            p.handler().on_pointer_move(move |world, event| {
+                if event.pointer.pointer_type == PointerType::Mouse
+                    && event.current.buttons.is_empty()
+                    && placement.contains(Point::new(
+                        event.current.position.x,
+                        event.current.position.y,
+                    ))
+                {
+                    choose(world);
+                    true
+                } else {
+                    false
+                }
+            });
             let target = Hovered::Tree(hover.clone());
             let accept = move |world: &mut C| {
                 activate(world);
@@ -395,8 +417,8 @@ fn completion_row<C: 'static, Cv: Canvas + 'static>(
             };
             p.activate(target.clone(), accept.clone());
             p.pick(target, accept);
-            p.ink(move |canvas, ink| {
-                row.draw(canvas, placement, chosen, tree_hovered(ink) == Some(&hover));
+            p.ink(move |canvas, _| {
+                row.draw(canvas, placement, chosen);
             });
         },
     )

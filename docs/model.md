@@ -211,6 +211,12 @@ expanded list and resets selection and scroll; expansion lasts for that picker.
 Returning to an older query does not restore an old choice. A new picker starts
 with its provider's narrow vocabulary. Pointer and keyboard activation use the
 same callbacks.
+Keyboard navigation and unpressed mouse motion over a visible row update the
+same chosen-row state. Only that row is highlighted, and Enter activates it.
+Hover remains available for pointer activation but does not paint a second
+highlight or overwrite the choice during a redraw. Touch motion and active
+mouse drags do not choose rows, so scrolling and text selection can keep their
+gestures.
 Activating a visible offer consumes the input even if its continuation declines;
 Enter must not then fall through to inserting the raw query.
 

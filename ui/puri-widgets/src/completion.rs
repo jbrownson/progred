@@ -19,7 +19,6 @@ pub struct Style<'a> {
     pub more: &'a TextStyle,
     pub scale: f64,
     pub chosen: Color,
-    pub hovered: Color,
 }
 
 struct Line {
@@ -75,7 +74,6 @@ pub struct Row {
     metrics: TextMetrics,
     scale: f64,
     chosen: Color,
-    hovered: Color,
 }
 
 impl Row {
@@ -98,7 +96,6 @@ impl Row {
             detail,
             scale: style.scale,
             chosen: style.chosen,
-            hovered: style.hovered,
         }
     }
 
@@ -106,11 +103,11 @@ impl Row {
         self.metrics
     }
 
-    pub fn draw(self, canvas: &mut impl Canvas, placement: Placement, chosen: bool, hovered: bool) {
-        if chosen || hovered {
+    pub fn draw(self, canvas: &mut impl Canvas, placement: Placement, chosen: bool) {
+        if chosen {
             canvas.fill(
                 RoundedRect::from_rect(placement.rect, 4.0 * self.scale),
-                if chosen { self.chosen } else { self.hovered },
+                self.chosen,
                 Affine::IDENTITY,
             );
         }
