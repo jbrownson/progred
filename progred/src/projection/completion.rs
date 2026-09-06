@@ -1,12 +1,13 @@
 //! Adapt completion offers and pending queries to the editor’s floating card.
 
 use super::{
-    Cx, Hooks, atom_content, edit_presentation, face_style, hover_block, hover_claim,
-    placeholder_box, primary_highlight, source_target,
+    Cx, Hooks, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block,
+    hover_claim, hover_highlight, placeholder_box, primary_highlight, tree_hovered,
 };
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
 use crate::hover::Hover;
+use crate::navigate::Descend;
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
 use crate::render::text;
 use crate::selection::{Selection, Stage};
@@ -40,7 +41,58 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
         .and_then(Selection::edit);
     let content = placeholder(cx, tcx, &path, engaged, false, completions, hooks);
     // Selection draws the same outline as the inactive frame.
-    source_target(cx, path, None, hooks, content)
+    pending_target(cx, path, hooks, content)
+}
+
+fn pending_target<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    path: Path,
+    hooks: &Hooks<C>,
+    child: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    let (path, transient): (SharedPath, bool) = match cx.source {
+        Source::Transient { owner } if owner != path.as_slice() => return child,
+        Source::Transient { owner } => (Rc::from(owner), true),
+        Source::Stored => (Rc::from(path), false),
+    };
+    let scale = cx.styles.scale;
+    let selected = cx.selected(path.as_ref());
+    let select = hooks.select.clone();
+    before(child, move |p, placement| {
+        let outline = text_frame::outline(scale, placement.rect);
+        let highlight_path = path.clone();
+        p.ink(move |cv, ink| {
+            if selected {
+                primary_highlight(scale, cv, outline);
+            } else if matches!(
+                tree_hovered(ink),
+                Some(Hover::Value(hovered)) if hovered == &highlight_path
+            ) {
+                hover_highlight(cv, outline);
+            }
+        });
+        if !transient {
+            hover_claim(p, placement, Hover::Value(path.clone()));
+        }
+        let target = path.clone();
+        let activate_select = select.clone();
+        p.activate(Hovered::Tree(Hover::Value(target.clone())), move |ctx| {
+            activate_select(ctx, target.to_vec());
+            true
+        });
+        if !transient {
+            let target = path.clone();
+            p.descends().push(Descend {
+                root: None,
+                path,
+                rect: placement.rect,
+                select: Rc::new(move |ctx| {
+                    select(ctx, target.to_vec());
+                    true
+                }),
+            });
+        }
+    })
 }
 
 fn placeholder<C: 'static, Cv: Canvas + 'static>(
@@ -440,7 +492,7 @@ pub(super) fn label_query<C: 'static, Cv: Canvas + 'static>(
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, path, Some(query), true, completions, hooks);
     let ringed = decorate(content, move |p, rect| {
-        primary_highlight(scale, p, rect);
+        primary_highlight(scale, p, text_frame::outline(scale, rect));
     });
     // The ring's outset rides inside the node, so glued neighbors —
     // the colon, a flat comma — clear its ink.

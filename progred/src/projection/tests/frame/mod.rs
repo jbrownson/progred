@@ -17,11 +17,23 @@ struct Bench {
 
 /// Probe with the pointer, then render and unpack the placed frame.
 fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
+    settle_with_sources(placed, pointer, None)
+}
+
+fn settle_with_sources(
+    placed: Placed<World, Bench>,
+    pointer: Option<Point>,
+    sources: Option<&Sources>,
+) -> Bench {
     let hit = pointer.and_then(|point| placed.probe(point, None, crate::frame::HOVER_REACH));
     let hovered = match &hit {
         Some(Claim::Direct(hover)) => Some(hover.clone()),
         _ => None,
     };
+    let hovered_secondary = sources.and_then(|sources| match &hovered {
+        Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
+        _ => None,
+    });
     let Placed {
         descends, renders, ..
     } = placed;
@@ -33,7 +45,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
     };
     let ink = crate::placed::Ink {
         hovered: hovered.as_ref(),
-        hovered_secondary: None,
+        hovered_secondary: hovered_secondary.as_ref(),
         hovered_trace: None,
         debug_geometry: false,
     };
@@ -213,7 +225,7 @@ impl BenchContext {
                 None => Placement::root(rect),
             },
         );
-        let mut settled = settle(placed, pointer);
+        let mut settled = settle_with_sources(placed, pointer, Some(&sources));
         settled.frame_elapsed = start.elapsed();
         eprintln!(
             "frame at {width:.0}px: {:.1?} (project {:.1?})",

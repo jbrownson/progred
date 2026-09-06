@@ -112,6 +112,12 @@ editable line installs the description produced by that projection, including
 the intended caret position. The shell does not inspect the render tree to
 infer editability. See [navigation](../progred/src/navigate.rs).
 
+Ordinary hover, selection, and related-occurrence highlights share one padded
+outline. Each occurrence paints at most one mark: selection takes precedence,
+then related selection, direct hover, and related hover. Pending text frames keep
+their own tighter outline through focus and editing; this widget styling does
+not determine the geometry of ordinary value highlights.
+
 Cmd+A (Ctrl+A off macOS) selects the current view's root through its navigation
 callback. With no selection, it targets the document root. Focused text fields
 handle the shortcut first and select their own text.

@@ -630,7 +630,7 @@ fn light_hover<C: 'static, Cv: Canvas + 'static>(
     let mine = hover.clone();
     p.ink(move |cv, ink| {
         if tree_hovered(ink) == Some(&mine) {
-            hover_highlight(scale, cv, placement.rect);
+            hover_highlight(cv, highlight_outline(scale, placement.rect));
         }
     });
     hover_claim(p, placement, hover);
@@ -1016,11 +1016,14 @@ fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<'_, C, Cv>, plac
     p.occlude(placement);
 }
 
-/// The pointer's preview of a click's meaning: the same box the
-/// primary would ring, washed faint — hover never outranks selection.
-fn hover_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
+fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
+    RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
+}
+
+/// The pointer's preview of a click's meaning, washed faint.
+fn hover_highlight<P: Canvas>(p: &mut P, outline: RoundedRect) {
     p.fill(
-        text_frame::outline(scale, rect),
+        outline,
         Color::new([0.0, 0.48, 1.0, 0.08]),
         Affine::IDENTITY,
     );
@@ -1029,84 +1032,18 @@ fn hover_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
-fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
-    let bg = text_frame::outline(scale, rect);
-    p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
+fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, outline: RoundedRect) {
+    p.fill(
+        outline,
+        Color::new([0.0, 0.48, 1.0, 0.22]),
+        Affine::IDENTITY,
+    );
     p.stroke(
-        bg,
+        outline,
         Stroke::new(2.5 * scale),
         Color::new([0.0, 0.48, 1.0, 1.0]),
         Affine::IDENTITY,
     );
-}
-
-/// Marks CONTENT-SHAPED `child` as the projection of the value at
-/// `path` — its bounding box is all ink (a pending's query, an
-/// engaged name, the empty-document placeholder), so the whole box
-/// is an honest hover target. On placement it draws the highlight,
-/// registers Activate and Pick actions addressed to that hover, and
-/// records itself for keyboard navigation. Views whose boxes span
-/// structural whitespace use [`descend_landmark`] plus explicit
-/// content claims instead.
-fn source_target<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    path: Path,
-    value: Option<Value>,
-    hooks: &Hooks<C>,
-    child: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    let (path, transient): (SharedPath, bool) = match cx.source {
-        Source::Transient { owner } if owner != path.as_slice() => return child,
-        Source::Transient { owner } => (Rc::from(owner), true),
-        Source::Stored => (Rc::from(path), false),
-    };
-    let scale = cx.styles.scale;
-    let selected = cx.selected(path.as_ref());
-    let select = hooks.select.clone();
-    let pick = hooks.pick.clone();
-    before(child, move |p, placement| {
-        let rect = placement.rect;
-        let highlight_path = path.clone();
-        p.ink(move |cv, ink| {
-            if selected {
-                primary_highlight(scale, cv, rect);
-            } else if matches!(
-                tree_hovered(ink),
-                Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
-            ) {
-                hover_highlight(scale, cv, rect);
-            }
-        });
-        if !transient {
-            hover_claim(p, placement, Hover::Value(path.clone()));
-        }
-        let select = select.clone();
-        let pick = pick.clone();
-        let target = path.clone();
-        let value = value.clone();
-        let action_target = Hovered::Tree(Hover::Value(target.clone()));
-        let activate_select = select.clone();
-        p.activate(action_target.clone(), move |ctx| {
-            activate_select(ctx, target.to_vec());
-            true
-        });
-        if let Some(value) = value {
-            p.pick(action_target, move |ctx| pick(ctx, value.clone()));
-        }
-        if !transient {
-            let target = path.clone();
-            let select = select.clone();
-            p.descends().push(Descend {
-                root: None,
-                path,
-                rect,
-                select: Rc::new(move |ctx| {
-                    select(ctx, target.to_vec());
-                    true
-                }),
-            });
-        }
-    })
 }
 
 /// The selected location shared by repeated projections of a cell.
@@ -1216,32 +1153,44 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
+#[allow(clippy::too_many_arguments)]
 fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     transient: bool,
     selected: bool,
     scale: f64,
     path: SharedPath,
+    secondary: Option<(Secondary, bool)>,
     select: progred_display::ActionHandler<C>,
     delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    if transient {
-        return child;
-    }
     let highlight_path = path.clone();
     let marked = decorate(child, move |p, rect| {
         let highlight_path = highlight_path.clone();
+        let outline = highlight_outline(scale, rect);
         p.ink(move |cv, ink| {
-            if selected {
-                primary_highlight(scale, cv, rect);
-            } else if matches!(
-                tree_hovered(ink),
-                Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
-            ) {
-                hover_highlight(scale, cv, rect);
+            if selected && !transient {
+                primary_highlight(scale, cv, outline);
+            } else if matches!(&secondary, Some((_, true))) {
+                secondary_highlight(scale, cv, outline, true);
+            } else if !transient
+                && matches!(
+                    tree_hovered(ink),
+                    Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
+                )
+            {
+                hover_highlight(cv, outline);
+            } else if secondary
+                .as_ref()
+                .is_some_and(|(secondary, _)| ink.hovered_secondary == Some(secondary))
+            {
+                secondary_highlight(scale, cv, outline, false);
             }
         });
     });
+    if transient {
+        return marked;
+    }
     let marked = measured::around_into(
         marked,
         move |placement, inner, placed: &mut Placed<C, Cv>| {
@@ -1321,34 +1270,19 @@ fn ground_with<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// The secondary selection's mark: a subtle wash over another whole
-/// projection of the selected value — an expanded block, a collapsed
-/// handle, or a label. The primary selection's geometry at lower
-/// strength, so the two read as one family.
-fn secondary_mark_with<C: 'static, Cv: Canvas + 'static>(
-    strong: bool,
-    scale: f64,
-    secondary: Secondary,
-    content: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    decorate(content, move |p, rect| {
-        p.ink(move |cv, ink| {
-            // The hover variant is the same mark at half voice.
-            let faint = !strong && ink.hovered_secondary == Some(&secondary);
-            if !strong && !faint {
-                return;
-            }
-            let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
-            let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
-            cv.fill(bg, Color::new([0.0, 0.48, 1.0, fill]), Affine::IDENTITY);
-            cv.stroke(
-                bg,
-                Stroke::new(1.5 * scale),
-                Color::new([0.0, 0.48, 1.0, line]),
-                Affine::IDENTITY,
-            );
-        });
-    })
+fn secondary_highlight<P: Canvas>(scale: f64, p: &mut P, outline: RoundedRect, strong: bool) {
+    let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
+    p.fill(
+        outline,
+        Color::new([0.0, 0.48, 1.0, fill]),
+        Affine::IDENTITY,
+    );
+    p.stroke(
+        outline,
+        Stroke::new(1.5 * scale),
+        Color::new([0.0, 0.48, 1.0, line]),
+        Affine::IDENTITY,
+    );
 }
 
 /// Starts the ordinary projection at a value with no document source.
@@ -1551,7 +1485,9 @@ fn prepare_missing_layout<C: 'static, Cv: Canvas + 'static>(
     let select = select_handler(landmark.clone(), hooks);
     let delete = hooks.delete.clone();
     ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(transient, selected, scale, landmark, select, delete, inner)
+        descend_landmark_with(
+            transient, selected, scale, landmark, None, select, delete, inner,
+        )
     })
 }
 
@@ -1584,16 +1520,11 @@ fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
     let landmark_path: SharedPath = Rc::from(path);
     // Other projections of the selected location carry the secondary
     // mark; the selected one has the primary highlight.
-    let inner = if cx.selected(path) {
-        inner
-    } else {
+    let secondary = (!cx.selected(path)).then(|| {
         let secondary = Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
         let strong = cx.secondary.as_ref() == Some(&secondary);
-        let scale = cx.styles.scale;
-        ChoiceLayout::map(inner, 0.0, move |inner| {
-            secondary_mark_with(strong, scale, secondary, inner)
-        })
-    };
+        (secondary, strong)
+    });
     // A landmark, not a target: highlight and keyboard reach span
     // the full bounds, while clicks belong to the content each arm
     // claimed above — structural whitespace deselects.
@@ -1604,7 +1535,9 @@ fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
     let delete = hooks.delete.clone();
     let landmark = landmark_path.clone();
     let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(transient, selected, scale, landmark, select, delete, inner)
+        descend_landmark_with(
+            transient, selected, scale, landmark, secondary, select, delete, inner,
+        )
     });
     let grounded = match ground_decoration(cx, path, value) {
         Some((scale, color)) => {

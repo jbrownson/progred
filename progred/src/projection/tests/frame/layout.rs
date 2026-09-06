@@ -176,11 +176,124 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         assert_eq!(
             marks,
             if source == gid::Resolution::Document {
-                vec![RoundedRect::from_rect(target.rect.inset(3.0), 5.0)]
+                vec![highlight_outline(1.0, target.rect)]
             } else {
                 vec![]
             }
         );
+    }
+}
+
+#[test]
+fn primary_and_related_highlights_share_geometry_without_overlapping() {
+    let cell = new_cell_id();
+    let definition = Value::list([text::value("same"), text::value("same")]);
+    let position = definition.as_list().unwrap().keys().next().unwrap().clone();
+    let mut cells = Cells::new();
+    cells.set_value(cell, definition);
+    let root = Value::list([Value::from(cell), Value::from(cell), text::value("same")]);
+    let positions: Vec<_> = root.as_list().unwrap().keys().cloned().collect();
+    let doc = Document {
+        root: Some(root),
+        cells,
+    };
+    let paths = [0, 1].map(|index| {
+        vec![
+            Step::Element(positions[index].clone()),
+            Step::Follow(gid::Resolution::Document),
+            Step::Element(position.clone()),
+        ]
+    });
+    let mut context = BenchContext::new();
+    let selected = Selection::edge(
+        &crate::workspace::Root::document(),
+        &Sources {
+            doc: &doc,
+            libraries: &context.stack.libraries,
+        },
+        paths[0].clone(),
+    );
+    let blue = |alpha| Brush::from(Color::new([0.0, 0.48, 1.0, alpha]));
+    let fills = |bench: &Bench, alpha| {
+        bench
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::RoundedRect(rect),
+                    brush,
+                    ..
+                } if *brush == blue(alpha) => Some(*rect),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let strokes = |bench: &Bench, alpha| {
+        bench
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Stroke {
+                    shape: Shape::RoundedRect(rect),
+                    brush,
+                    ..
+                } if *brush == blue(alpha) => Some(*rect),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    for scale in [1.0, 2.0] {
+        context.styles = crate::styles::editor(scale);
+        let annotations = Annotations::default();
+        let (unmarked, _) = context.place(&doc, None, &annotations, 1200.0, None, None, None);
+        let rects = paths.each_ref().map(|path| {
+            unmarked
+                .descends
+                .iter()
+                .find(|descend| descend.path.as_ref() == path.as_slice())
+                .unwrap()
+                .rect
+        });
+        let outlines = rects.map(|rect| {
+            RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
+        });
+        let (hovered, _) = context.place(
+            &doc,
+            None,
+            &annotations,
+            1200.0,
+            Some(rects[0].center()),
+            None,
+            None,
+        );
+        assert_eq!(
+            hovered.hit,
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(
+                paths[0].clone()
+            )))))
+        );
+        assert_eq!(fills(&hovered, 0.08), vec![outlines[0]]);
+        assert_eq!(fills(&hovered, 0.05), vec![outlines[1]]);
+        assert_eq!(strokes(&hovered, 0.25), vec![outlines[1]]);
+        for pointer in [None, Some(rects[0].center()), Some(rects[1].center())] {
+            let (selected, _) = context.place(
+                &doc,
+                Some(&selected),
+                &annotations,
+                1200.0,
+                pointer,
+                None,
+                None,
+            );
+            assert_eq!(fills(&selected, 0.22), vec![outlines[0]]);
+            assert_eq!(strokes(&selected, 1.0), vec![outlines[0]]);
+            assert_eq!(fills(&selected, 0.10), vec![outlines[1]]);
+            assert_eq!(strokes(&selected, 0.55), vec![outlines[1]]);
+            assert!(fills(&selected, 0.08).is_empty());
+            assert!(fills(&selected, 0.05).is_empty());
+        }
     }
 }
 
