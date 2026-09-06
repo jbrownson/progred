@@ -202,6 +202,16 @@ fn fidget_viewport_projects_an_image_at_the_assigned_size() {
 
 #[test]
 fn iop_tree_projects_through_grap_into_puri_ink() {
+    for size in [
+        kurbo::Size::new(500.0, 500.0),
+        kurbo::Size::new(720.0, 420.0),
+        kurbo::Size::new(360.0, 640.0),
+    ] {
+        iop_tree_at_size(size);
+    }
+}
+
+fn iop_tree_at_size(size: kurbo::Size) {
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/iop-tree.gid"
@@ -215,7 +225,8 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     let value = crate::spine::get(root, &declaration.path);
     let source = Some((declaration.path.as_slice(), value));
     let mut context = BenchContext::new();
-    context.stack.projection = context.stack.pane_projection.clone();
+    context.stack.projection =
+        crate::projection::viewport::projection(&context.stack.projection, size);
     let (bench, extent) = context.place(
         &doc,
         None,
@@ -264,12 +275,12 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     let (native, native_stats) = (1..native_iterations).fold(
         {
             let mut frame = DrawList::new();
-            let stats = super::iop_tree_native::draw(&mut frame, 500.0, 500.0, outer);
+            let stats = super::iop_tree_native::draw(&mut frame, size.width, size.height, outer);
             (frame, stats)
         },
         |_, _| {
             let mut frame = DrawList::new();
-            let stats = super::iop_tree_native::draw(&mut frame, 500.0, 500.0, outer);
+            let stats = super::iop_tree_native::draw(&mut frame, size.width, size.height, outer);
             std::hint::black_box(&frame);
             (frame, stats)
         },
@@ -280,7 +291,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         "IoP tree: Grap {grap_elapsed:.1?}, native {native_elapsed:.1?}, {:.0}x",
         grap_elapsed.as_secs_f64() / native_elapsed.as_secs_f64(),
     );
-    assert!(extent.width >= 500.0);
+    assert_eq!((extent.width, extent.height()), (size.width, size.height));
     assert_eq!(native_stats.branches, 511);
     assert_eq!(native_stats.blossoms, 7_680);
     assert_eq!(native.0.len(), bench.list.0.len());

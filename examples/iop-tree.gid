@@ -96,7 +96,6 @@
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
     "program": bdf607810b274ad5b02bd409aef34b6a,
-    "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
@@ -138,6 +137,7 @@
     "unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "viewport": 709c987e4c2a110931d8597c4da68f69,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
     "width": f33c672fef9d0d4561102410fd64129f,
     "with_random": f47ef735130ecf7a72105ac58f30075a,
@@ -1569,30 +1569,44 @@
     panes: {
       pane_left: [
         {
-          projection_value: {
-            descent: {
-              f64: 0x0000000000002440,
-            },
-            fuel: {
-              f64: 0x0000000080843e41,
-            },
-            ascent: {
-              f64: 0x0000000000a07e40,
-            },
-            program: {
-              canvas_height: {
-                f64: 0x0000000000407f40,
+          viewport: {
+            params: [
+              projection_value,
+              width,
+              height,
+            ],
+            body: {
+              function: quote,
+              expression: {
+                drawing: {
+                  descent: {
+                    unquote: height,
+                  },
+                  fuel: {
+                    f64: 0x0000000080843e41,
+                  },
+                  ascent: {
+                    f64: 0x0000000000000000,
+                  },
+                  program: {
+                    canvas_height: {
+                      unquote: height,
+                    },
+                    function: {
+                      unquote: projection_value,
+                    },
+                    canvas_width: {
+                      unquote: width,
+                    },
+                  },
+                  width: {
+                    unquote: width,
+                  },
+                },
               },
-              function: tree_scene,
-              canvas_width: {
-                f64: 0x0000000000407f40,
-              },
-            },
-            width: {
-              f64: 0x0000000000407f40,
             },
           },
-          projection: drawing,
+          projection_value: tree_scene,
         },
       ],
     },

@@ -29,7 +29,10 @@ fn iop_tree_profile_loop() {
         std::mem::size_of::<grap::Definition>(),
     );
     let mut context = BenchContext::new();
-    context.stack.projection = context.stack.pane_projection.clone();
+    context.stack.projection = crate::projection::viewport::projection(
+        &context.stack.projection,
+        kurbo::Size::new(500.0, 500.0),
+    );
     let start = std::time::Instant::now();
     for _ in 0..iterations {
         let (bench, _) = context.place(

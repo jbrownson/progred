@@ -274,6 +274,10 @@ resolution follows the display scale; rectangular 3D views preserve square
 pixels rather than stretching the geometry. Ordinary preview calls without size
 arguments retain the 256-point default.
 
+The IoP example uses an inline Grap viewport function to construct a drawing
+program with the assigned width and height. Those dimensions also reach `tree
+scene`; its drawing units and editable tree parameters are not rescaled.
+
 ## History, gestures, and persistence
 
 Examples are a development and demo aid, intended to be removed from production
