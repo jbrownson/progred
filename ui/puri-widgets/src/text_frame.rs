@@ -29,7 +29,7 @@ pub fn empty_width(text_size: f32, scale: f64) -> f64 {
 }
 
 pub fn outline(scale: f64, rect: Rect) -> RoundedRect {
-    RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
+    RoundedRect::from_rect(rect.inflate(scale, 0.0), 4.0 * scale)
 }
 
 pub fn empty(ctx: &mut TextCtx, style: &TextStyle, brush: Brush) -> EmptyFrame {

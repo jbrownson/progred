@@ -247,9 +247,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, absent::named_reason(spelling));
     }
     Library::named(
+        ID,
         "list",
         crate::Definitions::from_parts(cells, functions()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

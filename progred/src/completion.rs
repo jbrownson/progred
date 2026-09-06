@@ -4,7 +4,10 @@ use crate::filter;
 use crate::identity::short_id;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
-use progred_display::{CompletionProvider, CompletionValue, Face};
+use progred_display::{
+    Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionScope,
+    CompletionValue, Face,
+};
 use progred_libraries::{blob, name, text};
 use std::ops::Range;
 use std::rc::Rc;
@@ -218,20 +221,38 @@ pub(crate) fn completion_entries_with<C: 'static>(
     sources: &Sources,
     raw: bool,
     commit: &Commit<C>,
-    query: &str,
-    value_completions: Option<&CompletionProvider>,
+    request: &CompletionRequest<'_>,
+    providers: Option<&CompletionProvider>,
     contextual: Option<&CompletionProvider>,
-    everything: bool,
-) -> Vec<Entry<C>> {
-    if !everything && let Some(contextual) = contextual {
-        return contextual_entries(contextual, query, commit);
+) -> (Vec<Entry<C>>, bool) {
+    let narrow = CompletionRequest {
+        scope: CompletionScope::Suggested,
+        ..*request
+    };
+    let suggested = (!raw)
+        .then(|| {
+            contextual
+                .and_then(|provider| provider(&narrow))
+                .or_else(|| providers.and_then(|provider| provider(&narrow)))
+        })
+        .flatten();
+    if request.scope == CompletionScope::Suggested
+        && let Some(offers) = suggested
+    {
+        return (contextual_entries(offers, request, commit), false);
     }
+    let query = request.query;
     let labels = matches!(commit, Commit::Label(_));
     let trimmed = query.trim();
     let quoted = trimmed.starts_with('"');
-    let value_entries = value_completions
-        .filter(|_| !labels && !quoted)
-        .map(|provider| contextual_entries(provider, query, commit))
+    let universal = CompletionRequest {
+        scope: CompletionScope::Everything,
+        ..*request
+    };
+    let value_entries = providers
+        .filter(|_| !quoted)
+        .and_then(|provider| provider(&universal))
+        .map(|offers| contextual_entries(offers, request, commit))
         .unwrap_or_default();
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = trimmed
@@ -279,53 +300,32 @@ pub(crate) fn completion_entries_with<C: 'static>(
     };
     let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
-        .flat_map(|cell| {
-            let names: Vec<_> = (!raw)
-                .then(|| {
-                    sources
-                        .values(cell)
-                        .filter_map(|value| {
-                            name::read(value.value).map(|name| (name.to_string(), value.source))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            if names.is_empty() {
-                let sources_for_cell: Vec<_> = sources
-                    .contributors(cell)
-                    .map(|source| source_name(sources, source))
-                    .collect();
-                let mut entry = Entry::value(
-                    short_id(cell),
-                    (!sources_for_cell.is_empty()).then(|| sources_for_cell.join(" / ")),
-                    Value::from(cell),
-                    commit,
-                )
-                .unwrap();
+        .map(|cell| {
+            let definition = sources.resolve(cell);
+            let name = (!raw)
+                .then(|| definition.and_then(|value| name::read(value.value)))
+                .flatten();
+            let source = definition
+                .map(|value| value.source)
+                .or_else(|| sources.contributors(cell).next());
+            let mut entry = Entry::value(
+                name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
+                source.map(|source| {
+                    let source = source_name(sources, source);
+                    if name.is_some() {
+                        format!("{} · {}", source, short_id(cell))
+                    } else {
+                        source
+                    }
+                }),
+                Value::from(cell),
+                commit,
+            )
+            .unwrap();
+            if name.is_none() {
                 entry.face = Face::Id;
-                vec![(entry, false, sources.external(cell))]
-            } else {
-                names
-                    .into_iter()
-                    .map(|(name, source)| {
-                        (
-                            Entry::value(
-                                name,
-                                Some(format!(
-                                    "{} · {}",
-                                    source_name(sources, source),
-                                    short_id(cell)
-                                )),
-                                Value::from(cell),
-                                commit,
-                            )
-                            .unwrap(),
-                            true,
-                            !matches!(source, Resolution::Document),
-                        )
-                    })
-                    .collect()
             }
+            (entry, name.is_some(), sources.external(cell))
         })
         .partition(|(_, _, external)| !*external);
     local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
@@ -362,8 +362,8 @@ pub(crate) fn completion_entries_with<C: 'static>(
         )
     })
     .collect();
-    let mut entries = contextual
-        .map(|provider| contextual_entries(provider, query, commit))
+    let mut entries = suggested
+        .map(|offers| contextual_entries(offers, request, commit))
         .unwrap_or_default();
     entries.extend(value_entries);
     if atom_leads {
@@ -377,19 +377,34 @@ pub(crate) fn completion_entries_with<C: 'static>(
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
-    entries
+    (entries, true)
 }
 
 fn contextual_entries<C: 'static>(
-    provider: &CompletionProvider,
-    query: &str,
+    offers: Vec<Completion>,
+    request: &CompletionRequest<'_>,
     commit: &Commit<C>,
 ) -> Vec<Entry<C>> {
     filter::rank_with_aliases(
-        provider(query),
+        offers
+            .into_iter()
+            .filter(|offer| {
+                request.kind != CompletionKind::Field
+                    || !offer
+                        .value
+                        .literal()
+                        .and_then(Value::as_cell)
+                        .is_some_and(|cell| {
+                            request
+                                .value()
+                                .and_then(Value::as_record)
+                                .is_some_and(|fields| fields.contains_key(&cell))
+                        })
+            })
+            .collect(),
         |completion| &completion.display,
         |completion| &completion.aliases,
-        query,
+        request.query,
     )
     .into_iter()
     .filter_map(|ranked| {
@@ -413,7 +428,7 @@ fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
     match source {
         Resolution::Document => "document".to_string(),
         Resolution::Library(library) => sources
-            .library_name(library)
+            .name(library)
             .map(str::to_string)
             .unwrap_or_else(|| short_id(library)),
     }

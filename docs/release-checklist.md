@@ -1,5 +1,11 @@
 # Release Checklist
 
+## Fidget constant-field GPU validation
+
+Adopt and verify the upstream fix on a real GPU. The pinned 0.5.0 can fail when
+rendering constant fields; there is deliberately no local workaround. See
+[the tracked fix and report follow-up](deferred.md#fidget-constant-fields-on-the-gpu--upstream-fix-to-adopt).
+
 ## Fidget cold start
 
 Resolve the first-use Metal pipeline stall before distributing a build with

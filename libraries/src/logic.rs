@@ -27,8 +27,9 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "logic",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }

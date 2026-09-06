@@ -6,7 +6,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let mut context = BenchContext::new();
     let mut doc = Document {
         root: Some(
-            (context.stack.root_completions)("")
+            root_completions(&context.stack)
                 .into_iter()
                 .find(|offer| offer.display == "grap")
                 .unwrap()
@@ -84,7 +84,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
     let mut context = BenchContext::new();
     let mut doc = Document {
         root: Some(
-            (context.stack.root_completions)("")
+            root_completions(&context.stack)
                 .into_iter()
                 .find(|offer| offer.display == "fidget")
                 .unwrap()
@@ -105,18 +105,18 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         .unwrap();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     context.stack.projection = context.stack.pane_projection.clone();
-    let coverage = [None, Some(40.0), Some(20.0)].map(|radius| {
-        if let Some(radius) = radius {
-            doc.cells.set_value(
-                cell,
-                grap::call(
-                    fidget::vocabulary::SPHERE.into(),
-                    [(
-                        fidget::vocabulary::RADIUS,
-                        progred_libraries::f32::value(radius),
-                    )],
-                ),
-            );
+    let sphere = |radius| {
+        grap::call(
+            fidget::vocabulary::SPHERE.into(),
+            [(
+                fidget::vocabulary::RADIUS,
+                progred_libraries::f32::value(radius),
+            )],
+        )
+    };
+    let coverage = [None, Some(sphere(40.0)), Some(sphere(20.0))].map(|value| {
+        if let Some(value) = value {
+            doc.cells.set_value(cell, value);
         }
         let (bench, _) = context.place(
             &doc,
@@ -332,7 +332,6 @@ fn drawing_frame(
         selected_trace: None,
         source: Source::Stored,
         fuel: std::cell::Cell::new(100),
-        root_field_completions: None,
     };
     crate::projection::drawing::program_leaf(
         &cx,
@@ -363,8 +362,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
     let shape_function = new_cell_id();
     let calls = Rc::new(std::cell::Cell::new(0));
     let count = calls.clone();
-    let library = progred_libraries::Library::<(), ()>::named(
-        "shape",
+    let library = progred_libraries::Library::<(), ()>::new(
         progred_libraries::Definitions::from_parts(
             Cells::new(),
             grap::ForeignFunctions::default().register(
@@ -375,7 +373,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                 }),
             ),
         ),
-        vec![],
+        progred_display::partial(|_| None),
     );
     let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
     let doc = Document {
@@ -461,6 +459,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         Libraries::from_contributions([(
             library_id,
             progred_libraries::Library::<(), ()>::named(
+                library_id,
                 "shape",
                 progred_libraries::Definitions::from_parts(
                     cells,
@@ -471,7 +470,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
                         }),
                     ),
                 ),
-                vec![],
+                progred_display::partial(|_| None),
             ),
         )])
         .0

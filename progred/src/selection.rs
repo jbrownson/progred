@@ -6,7 +6,7 @@ use crate::annotations::{self, Annotations};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
-use gid::{CellId, Document, Path, Position, Resolution, Step, Value, position};
+use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use progred_libraries::{Libraries, absent, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -430,18 +430,12 @@ fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Select
 /// cells — the library the authority — decline: a lone document
 /// value would introduce a new document definition. A document that
 /// already owns the traversed path authors freely.
-fn sole_value<'a>(sources: &Sources<'a>, cell: CellId) -> Option<crate::sources::LocatedValue<'a>> {
-    let mut values = sources.values(cell);
-    let value = values.next()?;
-    values.next().is_none().then_some(value)
-}
-
 pub fn pending_edge(root: &workspace::Root, sources: &Sources, parent: Path) -> Option<Selection> {
     let value = sources.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
         Value::Cell(cell) => {
-            let value = sole_value(sources, *cell)?;
+            let value = sources.resolve(*cell)?;
             value.value.as_record()?;
             let mut followed = parent;
             followed.push(Step::Follow(value.source));
@@ -461,7 +455,7 @@ pub fn pending_follow(
     path: &[Step],
 ) -> Option<Selection> {
     let cell = sources.resolve_path(path)?.as_cell()?;
-    sources.values(cell).next().is_none().then_some(())?;
+    sources.resolve(cell).is_none().then_some(())?;
     sources
         .writable(cell, &Resolution::Document)
         .then_some(())?;
@@ -530,7 +524,7 @@ fn pending_into_at(
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
         Value::Cell(cell) => {
-            let value = sole_value(sources, *cell)?;
+            let value = sources.resolve(*cell)?;
             let elements = value.value.as_list()?;
             let mut followed = path.to_vec();
             followed.push(Step::Follow(value.source));

@@ -499,7 +499,6 @@ mod tests {
         fallback.set_value(function, grap::lambda([], fill));
         stack.libraries.insert(
             library,
-            Value::record([]),
             progred_libraries::Definitions::from_parts(fallback, Default::default()),
         );
         let drawing = record_program(
@@ -525,11 +524,9 @@ mod tests {
     fn recorded_hits_keep_the_executing_library_definition() {
         let function = new_cell_id();
         let library_ids = [new_cell_id(), new_cell_id()];
-        let mut cells = Cells::new();
-        cells.set_value(function, grap::lambda([], absent::decline()));
         let doc = gid::Document {
             root: Some(Value::from(function)),
-            cells,
+            cells: Cells::new(),
         };
         let definition = grap::lambda(
             [],
@@ -554,12 +551,13 @@ mod tests {
                 (
                     id,
                     progred_libraries::Library::<(), ()>::named(
+                        id,
                         "drawing",
                         progred_libraries::Definitions::from_parts(
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        vec![],
+                        progred_display::partial(|_| None),
                     ),
                 )
             }))

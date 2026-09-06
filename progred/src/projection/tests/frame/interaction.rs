@@ -59,12 +59,10 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
 
             projection: Some(&stack.projection),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
-            value_completions: None,
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
@@ -177,12 +175,10 @@ fn sample_text_line_click_mounts_its_own_editor() {
             width: 852.0,
 
             projection: Some(&stack.projection),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut frame_tcx,
         Hooks {
-            value_completions: None,
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

@@ -605,6 +605,39 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
 }
 
 #[test]
+fn a_shadowing_document_definition_stays_editable() {
+    let cell = new_cell_id();
+    let mut library_cells = Cells::new();
+    library_cells.set_value(cell, Value::record([]));
+    let lib = libraries(library_cells);
+    let root = crate::workspace::Root::document();
+    let mut doc = Document {
+        root: Some(cell.into()),
+        cells: Cells::new(),
+    };
+    assert!(pending_edge(&root, &src(&doc, &lib), vec![]).is_none());
+
+    doc.cells.set_value(cell, Value::record([]));
+    let pending = pending_edge(&root, &src(&doc, &lib), vec![]).unwrap();
+    assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
+    assert!(
+        pending_edge(
+            &root,
+            &src(&doc, &lib),
+            vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
+        )
+        .is_none()
+    );
+
+    doc.cells.set_value(cell, Value::list([]));
+    let pending = pending_into(&root, &src(&doc, &lib), &[]).unwrap();
+    assert_eq!(
+        pending.path().first(),
+        Some(&Step::Follow(gid::Resolution::Document))
+    );
+}
+
+#[test]
 fn pendings_normalize_through_links_and_gate_on_authority() {
     let mut library_cells = Cells::new();
     let lib_cell = new_cell_id();

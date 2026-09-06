@@ -179,11 +179,16 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         cells.set_value(cell, absent::named_reason(reason));
     }
     Library::named(
+        ID,
         "f32",
         crate::Definitions::from_parts(cells, functions()),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
-    .with_value_completions(completions)
+    .with_completions(|request| {
+        (request.scope == progred_display::CompletionScope::Everything
+            && request.kind == progred_display::CompletionKind::Value)
+            .then(|| completions(request.query))
+    })
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 # Data and editor model
 
-This describes the implementation as of 2026-09-04. It is a reference for
+This describes the implementation as of 2026-09-05. It is a reference for
 working on the code, not an attribution of design intent to the owner. Earlier
 models and unverified rationale are preserved in [historical notes](history/model-notes.md).
 Open work is listed separately in [deferred work](deferred.md).
@@ -12,14 +12,22 @@ A document has an optional root and a `CellId -> Value` table. An identity with
 no table entry is a bare cell. Record labels are cell identities; text, names,
 numbers, absence reasons, and domain data are library conventions.
 
-A cell can have a document definition and definitions from several loaded
-libraries. The document contributes at most one value; each library contributes
-at most one value and potentially several foreign implementations per cell.
-Foreign registrations belong to call dispatch, not the cell's value definitions
-or structural display. A name record and a Rust implementation at the same cell
-therefore produce one displayed value, not two competing definitions.
-The host preserves library identity and definition order. It does not merge
-these definitions into one value. See [Sources](../progred/src/sources.rs),
+A cell may accidentally occur in several sources, for example when editing a
+document that also exists as a loaded library. Normal lookup selects the document
+definition first, otherwise the first loaded library definition. Names, structural
+display, and cell evaluation use that value. Definitions are neither merged nor
+implicitly composed. Duplicate indicators and inspection UI are deferred.
+
+Each library has one definition per cell: either an ordinary value or a native
+definition pairing a descriptive value with its Rust implementation. Reads and
+calls use the same lookup. Reading a native definition uses its description;
+calling it invokes its implementation. An absent or non-callable result does
+not try another source. Library descriptions (currently name records) live in
+that same table under the library identities, not in a separate metadata store.
+Replacing a loaded library replaces all its contributions in place, including
+projections and completions, before those are composed.
+Explicit source-qualified paths still reach a particular definition; loaded
+library values remain read-only. See [Sources](../progred/src/sources.rs),
 [Library and Libraries](../libraries/src/lib.rs), and
 [Grap evaluation](projections.md#evaluation).
 
@@ -82,7 +90,7 @@ staged writes; an explicitly declined or halted handler commits no effects.
 Ordinary absent results keep effects, including a setter's successful clear.
 A function must decline before performing effects, including effects in its
 arguments or nested calls. Declining afterward halts the evaluation and prints
-an error; no later definition runs. Only the complete editor operation is staged,
+an error. Only the complete editor operation is staged,
 with no per-call snapshots or rollback. Tests can replace these foreign functions
 with a recording interpreter.
 
@@ -112,16 +120,35 @@ handle the shortcut first and select their own text.
 
 The projection rendering a pending value or label explicitly requests
 completion and may supply a lazy vocabulary. Only the active picker asks the
-provider for offers. Without one, the editor uses its universal offers.
-Root templates and root field vocabulary are supplied separately and do not
-leak into descendants.
+provider for offers. Each request includes the query, field/value kind,
+suggestion/Everything scope, source-qualified path, and read-only path lookup.
+The path names a missing value or the record receiving a new label. A local
+projection provider takes precedence; otherwise library providers contribute
+in library order. `None` leaves the vocabulary unspecified, while `Some([])`
+means an empty narrow list with the `…` escape. If no provider specifies a
+vocabulary, the editor uses its universal offers directly.
+
+Root templates and root field suggestions are ordinary library providers
+checking the path, not separate editor hooks. Fidget uses the same interface
+for shape expressions, parameter labels, and f32 parameter values, including
+through cell references, source-list items, and existing Grap constructor calls.
+Shape templates open their first missing parameter
+without inventing a value. Label offers omit fields already in the record.
+Fidget field-expression suggestions put shapes before scalar constants; numeric
+parameter slots still lead with their f32 offer, including zero for an empty query.
+Circle and sphere are ordinary named Grap lambdas that use quote/unquote to
+return Fidget arithmetic; the Fidget parser has no circle or sphere forms.
+Their completions insert calls only in evaluated positions (the domain's source
+entries and Fidget constructor arguments), not inside inert Fidget records.
 
 Libraries can also contribute query-dependent value offers to the universal
 vocabulary. The numeric libraries offer `f32`, `f64`, and `u64` interpretations
 when the query parses, showing the representation and the actual stored
-number. Offers retain library order, precede the text interpretation and cell
-search, and introduce no empty-query numeric constructors. Quoting forces
-text, and label pickers do not invoke value providers. A projection's narrow
+number. An empty or whitespace-only query offers zero in each available
+representation; it remains a suggestion until committed. Other invalid numeric
+queries offer no number. Offers retain library order and precede the text
+interpretation and cell search. Quoting forces text; numeric providers decline
+label requests. A projection's narrow
 vocabulary still takes precedence until the user expands it.
 
 Universal constructor offers accept delimiter aliases: `[` for `new list`,

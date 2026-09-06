@@ -634,7 +634,7 @@ impl Editor {
 
 fn projection_hooks(
     root: Root,
-    value_completions: progred_display::CompletionProvider,
+    completions: progred_display::CompletionProvider,
 ) -> projection::Hooks<Editor> {
     let select_root = root.clone();
     let edit_root = root.clone();
@@ -669,7 +669,7 @@ fn projection_hooks(
         }
     });
     projection::Hooks {
-        value_completions: Some(value_completions),
+        completions: Some(completions),
         select: select.clone(),
         select_source: Rc::new(Editor::select_drawing_source),
         select_payload: Rc::new(move |app: &mut Editor, path, payload| {
@@ -762,7 +762,8 @@ fn projection_hooks(
             app.advance_gesture(point)
         }),
         commit_value: Rc::new(|app: &mut Editor, value, on_commit| {
-            if app.model
+            if app
+                .model
                 .selection
                 .as_ref()
                 .is_some_and(|current| current.stage() == selection::Stage::Pending)
@@ -771,7 +772,8 @@ fn projection_hooks(
             }
         }),
         commit_label: Rc::new(|app: &mut Editor, label, definition, on_commit| {
-            if app.model
+            if app
+                .model
                 .selection
                 .as_ref()
                 .is_some_and(|current| current.stage() == selection::Stage::Label)
@@ -805,10 +807,6 @@ fn project_workspace_view(
     let margin = 12.0 * scale;
     let body_width = (size.width - 2.0 * margin).max(0.0);
     let root_path;
-    let root_completions = matches!(view.root.target(), workspace::Target::Document)
-        .then_some(&stack.root_completions);
-    let root_field_completions = matches!(view.root.target(), workspace::Target::Document)
-        .then_some(&stack.root_field_completions);
     let (root, projection) = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
@@ -838,11 +836,9 @@ fn project_workspace_view(
             styles,
             width: body_width,
             projection: (!raw).then_some(projection),
-            root_completions: (!raw).then_some(root_completions).flatten(),
-            root_field_completions: (!raw).then_some(root_field_completions).flatten(),
         },
         tcx,
-        projection_hooks(view.root.clone(), stack.value_completions.clone()),
+        projection_hooks(view.root.clone(), stack.completions.clone()),
     );
     let content = measured::pad(Insets::uniform(margin), projected);
     let maximum = Vec2::new(
@@ -1223,12 +1219,13 @@ mod frame_tests {
         let libraries = progred_libraries::Libraries::from_contributions([(
             library_id,
             progred_libraries::Library::<(), ()>::named(
+                library_id,
                 "source",
                 progred_libraries::Definitions::from_parts(
                     doc.cells.clone(),
                     grap::ForeignFunctions::default(),
                 ),
-                vec![],
+                progred_display::partial(|_| None),
             ),
         )])
         .0;
@@ -1342,7 +1339,6 @@ mod frame_tests {
         let mut stack = stack::load::<Editor>();
         stack.libraries.insert(
             library,
-            Value::record([]),
             Definitions::from_parts(
                 library_cells,
                 grap::ForeignFunctions::default().register(
@@ -1406,13 +1402,6 @@ mod frame_tests {
                     Step::Follow(gid::Resolution::Document),
                 ],
             ),
-            (
-                1,
-                vec![
-                    Step::Follow(gid::Resolution::Document),
-                    Step::Follow(gid::Resolution::Library(library)),
-                ],
-            ),
         ]
         .into_iter()
         .map(|(index, steps)| {
@@ -1428,8 +1417,8 @@ mod frame_tests {
         let shown = place(&model);
         assert_eq!(
             calls.replace(0),
-            3,
-            "only the inline declaration and the two cell definitions at pane entry apply"
+            2,
+            "only the inline declaration and the selected cell definition at pane entry apply"
         );
         for (pane, path) in &sources {
             for field in [
@@ -1479,7 +1468,7 @@ mod frame_tests {
         }
         *result.borrow_mut() = progred_libraries::absent::with_reason(projector);
         let absent = place(&model);
-        assert_eq!(calls.get(), 3);
+        assert_eq!(calls.get(), 2);
         for (pane, path) in &sources {
             let mut source_path = path.clone();
             source_path.push(Step::Key(presentation::vocabulary::VALUE));

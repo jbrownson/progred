@@ -39,7 +39,7 @@ fn completion_entries(
             Commit::Value(Rc::new(value_commit))
         },
         query,
-        Some(&crate::stack::load::<()>().value_completions),
+        Some(&crate::stack::load::<()>().completions),
         None,
         true,
     )
@@ -49,6 +49,38 @@ fn activated(entry: &Entry<CompletionResult>) -> CompletionResult {
     let mut result = CompletionResult::default();
     (entry.activate)(&mut result);
     result
+}
+
+#[test]
+fn duplicate_definitions_offer_one_reference_with_the_selected_name() {
+    let cell = new_cell_id();
+    let mut library_cells = Cells::new();
+    library_cells.set_value(cell, name::record("library name", []));
+    let lib = libraries(library_cells);
+    let mut doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    for (definition, expected) in [
+        (None, "library name".to_owned()),
+        (
+            Some(name::record("document name", [])),
+            "document name".to_owned(),
+        ),
+        (Some(Value::record([])), short_id(cell)),
+    ] {
+        if let Some(value) = definition {
+            doc.cells.set_value(cell, value);
+        }
+        let entries = completion_entries(&src(&doc, &lib), false, false, "");
+        let references: Vec<_> = entries
+            .iter()
+            .filter(|entry| entry.source == Some(cell))
+            .collect();
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0].display, expected);
+        assert_eq!(activated(references[0]).value, Some(cell.into()));
+    }
 }
 
 #[test]
@@ -178,7 +210,19 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                     .all(|entry| entry.detail.is_some())
             );
         }
-        for query in ["", "word", "1e", "\"12\"", "0xff"] {
+        for query in ["", " \t"] {
+            let numbers = completion_entries(&sources, raw, false, query)
+                .iter()
+                .filter_map(|entry| activated(entry).value)
+                .filter(|value| {
+                    f32::read(value).is_some()
+                        || f64::read(value).is_some()
+                        || u64::read(value).is_some()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(numbers, [f32::value(0.0), f64::value(0.0), u64::value(0)]);
+        }
+        for query in ["word", "1e", "\"12\"", "0xff"] {
             assert!(
                 completion_entries(&sources, raw, false, query)
                     .iter()
@@ -263,11 +307,18 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     let sources = src(&doc, &libraries);
     let calls = Rc::new(std::cell::Cell::new(0));
     let count = calls.clone();
-    let provider: progred_display::CompletionProvider = Rc::new(move |query| {
-        count.set(count.get() + 1);
-        vec![progred_display::Completion::new(query, Value::record([]))]
+    let provider: progred_display::CompletionProvider = Rc::new(move |request| {
+        (request.kind == progred_display::CompletionKind::Value
+            && request.scope == progred_display::CompletionScope::Everything)
+            .then(|| {
+                count.set(count.get() + 1);
+                vec![progred_display::Completion::new(
+                    request.query,
+                    Value::record([]),
+                )]
+            })
     });
-    let narrow: progred_display::CompletionProvider = Rc::new(|_| vec![]);
+    let narrow: progred_display::CompletionProvider = Rc::new(|_| Some(vec![]));
     let entries = completion_entries_with(
         &sources,
         false,
@@ -319,13 +370,13 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         cells: gid::Cells::new(),
     };
     let sources = src(&doc, &stack.libraries);
-    let entries = crate::completion::completion_entries_with(
+    let entries = completion_entries_with(
         &sources,
         false,
         &Commit::Value(Rc::new(value_commit)),
         "sdf",
-        Some(&stack.value_completions),
-        Some(&stack.root_completions),
+        Some(&stack.completions),
+        Some(&stack.completions),
         false,
     );
     assert_eq!(entries[0].display, "fidget");
@@ -342,13 +393,13 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
     assert!(activated(&entries[0]).on_commit.is_some());
     assert_eq!(entries.len(), 1);
 
-    let widened = crate::completion::completion_entries_with(
+    let widened = completion_entries_with(
         &sources,
         false,
         &Commit::Value(Rc::new(value_commit)),
         "sdf",
-        Some(&stack.value_completions),
-        Some(&stack.root_completions),
+        Some(&stack.completions),
+        Some(&stack.completions),
         true,
     );
     assert!(widened.len() > entries.len());
@@ -378,7 +429,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
     };
     let root = crate::workspace::Root::document();
     let pending = crate::selection::pending_value(&root, vec![]);
-    let offers = (stack.root_completions)("");
+    let offers = root_completions(&stack);
     assert_eq!(
         offers
             .iter()
@@ -445,16 +496,18 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         );
         assert_eq!(selected.stage(), Stage::Pending);
         let choices = projected_completion_entries(&prepared.document, &selected);
-        assert!(
-            choices
-                .iter()
-                .any(|choice| activated(choice).value == Some(Value::record([])))
-        );
-        assert!(
-            choices
-                .iter()
-                .any(|choice| activated(choice).value == Some(Value::list([])))
-        );
+        if field == fidget::vocabulary::FIDGET {
+            assert!(choices.iter().any(|choice| activated(choice).value
+                == Some(grap::call(fidget::vocabulary::SPHERE.into(), []))));
+        } else {
+            for value in [Value::record([]), Value::list([])] {
+                assert!(
+                    choices
+                        .iter()
+                        .any(|choice| activated(choice).value == Some(value.clone()))
+                );
+            }
+        }
         let filled = crate::completion::prepare(
             &src(&prepared.document, &stack.libraries),
             &selected,
@@ -479,7 +532,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         cells: Cells::new(),
     };
     let pending = crate::selection::pending_value(&root, vec![Step::Key(field)]);
-    let offer = (stack.root_completions)("")
+    let offer = root_completions(&stack)
         .into_iter()
         .find(|offer| offer.display == "grap")
         .unwrap();
@@ -571,12 +624,10 @@ fn projected_completion_entries_with(
             width: 500.0,
 
             projection: Some(projection.unwrap_or(&stack.projection)),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
-            value_completions: Some(stack.value_completions.clone()),
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
@@ -616,7 +667,7 @@ fn only_the_active_empty_requests_completion_offers() {
         let requests = requests.clone();
         Rc::new(move |_| {
             requests.set(requests.get() + 1);
-            vec![Completion::new("offered", Value::record([]))]
+            Some(vec![Completion::new("offered", Value::record([]))])
         })
     };
     let projection = Projection::new([progred_display::partial(move |_| {
@@ -753,6 +804,289 @@ fn grap_call_field_completion_offers_missing_parameters() {
 }
 
 #[test]
+fn existing_root_fields_are_not_offered_again() {
+    let document = Document {
+        root: Some(Value::record([(
+            fidget::vocabulary::FIDGET,
+            Value::record([]),
+        )])),
+        cells: Cells::new(),
+    };
+    let stack = crate::stack::load::<()>();
+    let selection = pending_edge(
+        &crate::workspace::Root::document(),
+        &src(&document, &stack.libraries),
+        vec![],
+    )
+    .unwrap();
+    let entries = projected_completion_entries(&document, &selection);
+    assert_eq!(
+        entries
+            .iter()
+            .filter_map(|entry| entry.source)
+            .collect::<Vec<_>>(),
+        [
+            progred_libraries::grap::vocabulary::GRAP,
+            crate::workspace::vocabulary::PANES,
+        ]
+    );
+}
+
+#[test]
+fn fidget_shape_completion_opens_a_real_missing_radius_and_offers_f32() {
+    use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
+    let stack = crate::stack::load::<()>();
+    let root = crate::workspace::Root::document();
+    let cell = new_cell_id();
+    let document = Document {
+        root: Some(Value::record([(FIDGET, cell.into())])),
+        cells: Cells::new(),
+    };
+    let path = vec![Step::Key(FIDGET), Step::Follow(Resolution::Document)];
+    let selection = pending_value(&root, path.clone());
+    let entries = projected_completion_entries(&document, &selection);
+    assert_eq!(
+        entries.first().map(|entry| entry.display.as_str()),
+        Some("sphere")
+    );
+    assert!(entries.iter().any(|entry| {
+        activated(entry)
+            .value
+            .as_ref()
+            .and_then(progred_libraries::f32::read)
+            == Some(0.0)
+    }));
+    let offer = activated(
+        entries
+            .iter()
+            .find(|entry| entry.display == "sphere")
+            .unwrap(),
+    );
+    let mut annotations = Annotations::default();
+    let prepared = crate::completion::prepare(
+        &src(&document, &stack.libraries),
+        &selection,
+        &annotations,
+        offer.value.unwrap(),
+        None,
+        offer.on_commit.as_ref(),
+    )
+    .unwrap();
+    let mut selected = None;
+    crate::site::install(
+        prepared.effects,
+        &src(&prepared.document, &stack.libraries),
+        &root,
+        &prepared.path,
+        &mut annotations,
+        &mut selected,
+    );
+    let selected = selected.unwrap();
+    assert_eq!(
+        prepared.document.cells.value(cell),
+        Some(&grap::call(SPHERE.into(), []))
+    );
+    let radius = [path.as_slice(), &[Step::Key(RADIUS)]].concat();
+    assert_eq!(selected.path(), radius);
+    assert_eq!(selected.stage(), Stage::Pending);
+    assert!(
+        src(&prepared.document, &stack.libraries)
+            .resolve_path(&radius)
+            .is_none()
+    );
+
+    for (query, number) in [("", 0.0), ("1.25", 1.25)] {
+        let selected = Selection::from_payload(
+            &root,
+            &src(&prepared.document, &stack.libraries),
+            radius.clone(),
+            selection_payload::pending(query, 0),
+        );
+        let entries = projected_completion_entries(&prepared.document, &selected);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            activated(&entries[0])
+                .value
+                .as_ref()
+                .and_then(progred_libraries::f32::read),
+            Some(number)
+        );
+    }
+
+    let fields = pending_edge(
+        &root,
+        &src(&prepared.document, &stack.libraries),
+        path.clone(),
+    )
+    .unwrap();
+    let entries = projected_completion_entries(&prepared.document, &fields);
+    assert_eq!(
+        entries
+            .iter()
+            .filter_map(|entry| entry.source)
+            .collect::<Vec<_>>(),
+        [RADIUS]
+    );
+}
+
+#[test]
+fn providers_receive_the_query_kind_and_source_qualified_list_path() {
+    use progred_display::{
+        Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionScope,
+    };
+    let cell = new_cell_id();
+    let present = new_cell_id();
+    let missing = new_cell_id();
+    let library_id = new_cell_id();
+    let definition = Value::record([(present, text::value("library"))]);
+    let mut definitions = Cells::new();
+    definitions.set_value(cell, definition.clone());
+    let libraries = Libraries::from_contributions([(
+        library_id,
+        progred_libraries::Library::<(), ()>::new(
+            progred_libraries::Definitions::from_parts(
+                definitions,
+                grap::ForeignFunctions::default(),
+            ),
+            progred_display::partial(|_| None),
+        ),
+    )])
+    .0;
+    let mut cells = Cells::new();
+    cells.set_value(cell, text::value("document"));
+    let list = Value::list([cell.into()]);
+    let position = list.as_list().unwrap().keys().next().unwrap().clone();
+    let document = Document {
+        root: Some(list),
+        cells,
+    };
+    let sources = src(&document, &libraries);
+    let path = vec![
+        Step::Element(position),
+        Step::Follow(Resolution::Library(library_id)),
+    ];
+    let expected_path = path.clone();
+    let provider: progred_display::CompletionProvider = Rc::new(move |request| {
+        assert_eq!(request.path, expected_path);
+        assert_eq!(request.query, "offered");
+        assert_eq!(request.kind, CompletionKind::Field);
+        assert_eq!(request.value(), Some(&definition));
+        Some(vec![
+            Completion::new("offered present", present.into()),
+            Completion::new("offered missing", missing.into()),
+        ])
+    });
+    let value_at = |path: &[Step]| sources.resolve_path(path);
+    let request = CompletionRequest {
+        query: "offered",
+        kind: CompletionKind::Field,
+        scope: CompletionScope::Suggested,
+        path: &path,
+        value_at: &value_at,
+    };
+    let commit = Commit::Label(Rc::new(label_commit));
+    let (entries, everything) = crate::completion::completion_entries_with(
+        &sources,
+        false,
+        &commit,
+        &request,
+        None,
+        Some(&provider),
+    );
+    assert!(!everything);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(activated(&entries[0]).label, Some((missing, None)));
+
+    let unspecified: CompletionProvider = Rc::new(|_| None);
+    let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
+    assert!(
+        crate::completion::completion_entries_with(
+            &sources,
+            false,
+            &commit,
+            &request,
+            None,
+            Some(&unspecified)
+        )
+        .1
+    );
+    let (entries, everything) = crate::completion::completion_entries_with(
+        &sources,
+        false,
+        &commit,
+        &request,
+        None,
+        Some(&empty),
+    );
+    assert!(!everything);
+    assert!(entries.is_empty());
+    let (entries, everything) = crate::completion::completion_entries_with(
+        &sources,
+        true,
+        &commit,
+        &request,
+        None,
+        Some(&empty),
+    );
+    assert!(everything);
+    assert!(!entries.is_empty());
+}
+
+#[test]
+fn fidget_suggestions_cover_source_list_items_and_grap_calls() {
+    use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
+    let cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(cell, grap::call(SPHERE.into(), []));
+    let list = Value::list([cell.into()]);
+    let position = list.as_list().unwrap().keys().next().unwrap().clone();
+    let document = Document {
+        root: Some(Value::record([(FIDGET, list)])),
+        cells,
+    };
+    let stack = crate::stack::load::<()>();
+    let root = crate::workspace::Root::document();
+    let sources = src(&document, &stack.libraries);
+    let selected = pending_into(&root, &sources, &[Step::Key(FIDGET)]).unwrap();
+    assert!(
+        projected_completion_entries(&document, &selected)
+            .iter()
+            .any(|entry| entry.display == "sphere")
+    );
+
+    let path = vec![
+        Step::Key(FIDGET),
+        Step::Element(position),
+        Step::Follow(Resolution::Document),
+    ];
+    let selected = pending_edge(&root, &sources, path.clone()).unwrap();
+    let entries = projected_completion_entries(&document, &selected);
+    assert_eq!(
+        entries
+            .iter()
+            .filter_map(|entry| entry.source)
+            .collect::<Vec<_>>(),
+        [RADIUS]
+    );
+
+    let selected = Selection::from_payload(
+        &root,
+        &sources,
+        [path.as_slice(), &[Step::Key(RADIUS)]].concat(),
+        selection_payload::pending("32", 0),
+    );
+    let entries = projected_completion_entries(&document, &selected);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        activated(&entries[0])
+            .value
+            .as_ref()
+            .and_then(progred_libraries::f32::read),
+        Some(32.0)
+    );
+}
+
+#[test]
 fn completion_callbacks_create_values_and_mint_only_on_activation() {
     let doc = Document {
         root: None,
@@ -787,10 +1121,10 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     assert_ne!(first, activated(label).label.unwrap().0);
     let existing = new_cell_id();
     let provider: progred_display::CompletionProvider = Rc::new(move |_| {
-        vec![
+        Some(vec![
             progred_display::Completion::new("text", text::value("not a label")),
             progred_display::Completion::new("existing", Value::from(existing)),
-        ]
+        ])
     });
     let labels = completion_entries_with(
         &sources,
@@ -817,13 +1151,13 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     let count = calls.clone();
     let provider: progred_display::CompletionProvider = Rc::new(move |_| {
         let count = count.clone();
-        vec![progred_display::Completion::generated(
+        Some(vec![progred_display::Completion::generated(
             "generated",
             move || {
                 count.set(count.get() + 1);
                 new_cell_id().into()
             },
-        )]
+        )])
     });
     let entries = completion_entries_with(
         &sources,
@@ -857,8 +1191,8 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
             false,
             &Commit::Value(Rc::new(value_commit)),
             "",
-            Some(&stack.value_completions),
-            Some(&stack.root_completions),
+            Some(&stack.completions),
+            Some(&stack.completions),
             false,
         )
         .into_iter()

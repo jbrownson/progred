@@ -31,9 +31,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));
     Library::named(
+        ID,
         "name",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

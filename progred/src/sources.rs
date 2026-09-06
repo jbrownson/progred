@@ -1,7 +1,6 @@
 //! The reading context: a document followed by an ordered set of
-//! libraries. Resolution exposes every contributed definition with
-//! its source. A stored Follow step names the stable source of the
-//! value definition it crosses into.
+//! libraries. Ordinary lookup selects the document, then the first
+//! library definition. A stored Follow step still names its source.
 
 use gid::{CellId, Document, Resolution, Step, Value};
 use progred_libraries::{Libraries, name};
@@ -27,18 +26,8 @@ impl<'a> Sources<'a> {
             .map(|value| value.value)
     }
 
-    pub fn names(&self, cell: CellId) -> impl Iterator<Item = &'a str> {
-        self.values(cell)
-            .filter_map(|value| name::read(value.value))
-    }
-
-    pub fn display_names(&self, cell: CellId) -> Option<String> {
-        let names: Vec<_> = self.names(cell).collect();
-        (!names.is_empty()).then(|| names.join(" / "))
-    }
-
-    pub fn library_name(&self, library: CellId) -> Option<&'a str> {
-        self.libraries.metadata(library).and_then(name::read)
+    pub fn name(&self, cell: CellId) -> Option<&'a str> {
+        self.resolve(cell).and_then(|value| name::read(value.value))
     }
 
     pub fn contributors(&self, cell: CellId) -> impl Iterator<Item = Resolution> + '_ {
@@ -63,6 +52,10 @@ impl<'a> Sources<'a> {
                 source: Resolution::Library(value.library),
                 value: value.value,
             }))
+    }
+
+    pub fn resolve(&self, cell: CellId) -> Option<LocatedValue<'a>> {
+        self.values(cell).next()
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -106,21 +99,13 @@ impl<'a> Sources<'a> {
 }
 
 impl grap::Host for Sources<'_> {
-    fn values(&self, cell: CellId) -> Vec<(Resolution, Value)> {
-        self.values(cell)
-            .map(|value| (value.source, value.value.clone()))
-            .collect()
-    }
-
-    fn candidates(&self, cell: CellId) -> Vec<(Resolution, grap::CallCandidate)> {
+    fn resolve(&self, cell: CellId) -> Option<(Resolution, grap::Definition)> {
         self.doc
             .cells
             .value(cell)
             .cloned()
-            .map(|value| (Resolution::Document, grap::CallCandidate::Value(value)))
-            .into_iter()
-            .chain(self.libraries.call_candidates(cell))
-            .collect()
+            .map(|value| (Resolution::Document, grap::Definition::Value(value)))
+            .or_else(|| self.libraries.resolve(cell))
     }
 }
 
@@ -133,12 +118,13 @@ mod tests {
         Libraries::from_contributions([(
             id,
             progred_libraries::Library::<(), ()>::named(
+                id,
                 "test",
                 progred_libraries::Definitions::from_parts(
                     cells,
                     grap::ForeignFunctions::default(),
                 ),
-                vec![],
+                progred_display::partial(|_| None),
             ),
         )])
         .0
@@ -149,7 +135,54 @@ mod tests {
     }
 
     #[test]
-    fn grap_origins_follow_the_definition_that_executes_after_fallthrough() {
+    fn document_definitions_shadow_library_calls_including_non_callable_values() {
+        let function = new_cell_id();
+        let (libraries, _, _) = Libraries::from_contributions([(
+            new_cell_id(),
+            progred_libraries::Library::<(), ()>::new(
+                progred_libraries::Definitions::from_parts(
+                    Cells::new(),
+                    grap::ForeignFunctions::default().register(
+                        function,
+                        grap::ForeignFunction::new(|_, _, _| {
+                            panic!("a document definition must shadow the library call")
+                        }),
+                    ),
+                ),
+                progred_display::partial(|_| None),
+            ),
+        )]);
+        let answer = Value::from(b"document".to_vec());
+        for (definition, expected) in [
+            (grap::lambda([], answer.clone()), answer.clone()),
+            (
+                answer.clone(),
+                grap::absent::with_detail(grap::absent::NOT_CALLABLE, grap::absent::VALUE, answer),
+            ),
+            (
+                grap::lambda([], grap::absent::decline()),
+                grap::absent::decline(),
+            ),
+        ] {
+            let mut cells = Cells::new();
+            cells.set_value(function, definition);
+            let doc = doc_of(cells);
+            let sources = Sources {
+                doc: &doc,
+                libraries: &libraries,
+            };
+            for result in [
+                grap::evaluate(&grap::call(function.into(), []), &sources, 100),
+                grap::apply(&function.into(), [], &sources, 100),
+            ] {
+                assert!(result.completed);
+                assert_eq!(result.result, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() {
         let function = new_cell_id();
         let probe = new_cell_id();
         let result = new_cell_id();
@@ -166,12 +199,13 @@ mod tests {
                 (
                     id,
                     progred_libraries::Library::<(), ()>::named(
+                        id,
                         "source",
                         progred_libraries::Definitions::from_parts(
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        vec![],
+                        progred_display::partial(|_| None),
                     ),
                 )
             }))
@@ -200,10 +234,10 @@ mod tests {
                         100,
                     )
                 };
-                assert_eq!(evaluation.result, Value::from(order[0]));
+                assert_eq!(evaluation.result, progred_libraries::absent::decline());
                 assert_eq!(
                     origins.into_inner(),
-                    [Resolution::Document, Resolution::Library(order[0])].map(|source| {
+                    [Resolution::Document].map(|source| {
                         grap::SourceOrigin::Cell {
                             cell: function,
                             source,
@@ -257,10 +291,7 @@ mod tests {
                 .and_then(name::read),
             Some("mine")
         );
-        assert_eq!(
-            sources.names(cell).collect::<Vec<_>>(),
-            ["mine", "lib-name"]
-        );
+        assert_eq!(sources.name(cell), Some("mine"));
         assert_eq!(
             sources
                 .value(cell, &Resolution::Document)
@@ -295,7 +326,7 @@ mod tests {
                 DefinitionSource::Library(library_id)
             ]
         );
-        assert_eq!(sources.library_name(library_id), Some("test"));
+        assert_eq!(sources.name(library_id), Some("test"));
     }
 
     #[test]
@@ -303,16 +334,17 @@ mod tests {
         let cell = new_cell_id();
         let left_id = new_cell_id();
         let right_id = new_cell_id();
-        let library = |name| {
+        let library = |id, name| {
             let mut cells = Cells::new();
             cells.set_value(cell, crate::test_values::text(name));
             progred_libraries::Library::<(), ()>::named(
+                id,
                 name,
                 progred_libraries::Definitions::from_parts(
                     cells,
                     grap::ForeignFunctions::default(),
                 ),
-                vec![],
+                progred_display::partial(|_| None),
             )
         };
         let doc = Document {
@@ -320,16 +352,33 @@ mod tests {
             cells: Cells::new(),
         };
         let left_then_right = Libraries::from_contributions([
-            (left_id, library("left")),
-            (right_id, library("right")),
+            (left_id, library(left_id, "left")),
+            (right_id, library(right_id, "right")),
         ])
         .0;
         let right_then_left = Libraries::from_contributions([
-            (right_id, library("right")),
-            (left_id, library("left")),
+            (right_id, library(right_id, "right")),
+            (left_id, library(left_id, "left")),
         ])
         .0;
         let path = [Step::Follow(Resolution::Library(right_id))];
+
+        for (libraries, first) in [(&left_then_right, "left"), (&right_then_left, "right")] {
+            let sources = Sources {
+                doc: &doc,
+                libraries,
+            };
+            assert_eq!(
+                sources
+                    .resolve(cell)
+                    .and_then(|value| progred_libraries::text::read(value.value)),
+                Some(first),
+            );
+            assert_eq!(
+                grap::evaluate(&cell.into(), &sources, 100).result,
+                crate::test_values::text(first),
+            );
+        }
 
         assert_eq!(
             Sources {

@@ -2,8 +2,8 @@
 //! library and exports its complete contribution to the editor.
 
 use gid::Cells;
-use grap_runtime::ForeignFunctions;
-use progred_display::{Completion, CompletionProvider, Partial};
+use grap_runtime::{Definition, ForeignFunctions};
+use progred_display::{Completion, CompletionProvider, CompletionRequest, Partial};
 use std::rc::Rc;
 
 pub mod absent;
@@ -36,22 +36,32 @@ pub mod workspace;
 pub(crate) struct TestHost<F>(pub F);
 
 #[cfg(test)]
-impl<F: Fn(gid::CellId) -> Vec<(gid::Resolution, grap_runtime::CallCandidate)>> grap_runtime::Host
+impl<F: Fn(gid::CellId) -> Vec<(gid::Resolution, grap_runtime::Definition)>> grap_runtime::Host
     for TestHost<F>
 {
-    fn values(&self, cell: gid::CellId) -> Vec<(gid::Resolution, gid::Value)> {
-        (self.0)(cell)
-            .into_iter()
-            .filter_map(|(source, candidate)| match candidate {
-                grap_runtime::CallCandidate::Value(value) => Some((source, value)),
-                grap_runtime::CallCandidate::ForeignFunction(_) => None,
-            })
-            .collect()
+    fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, grap_runtime::Definition)> {
+        (self.0)(cell).into_iter().next()
     }
+}
 
-    fn candidates(&self, cell: gid::CellId) -> Vec<(gid::Resolution, grap_runtime::CallCandidate)> {
-        (self.0)(cell)
-    }
+#[cfg(test)]
+fn test_host<'a>(
+    resolve: impl Fn(gid::CellId) -> Option<gid::Value> + 'a,
+    foreign: &'a ForeignFunctions,
+) -> impl grap_runtime::Host + 'a {
+    TestHost(move |cell| {
+        match (resolve(cell), foreign.get(cell)) {
+            (value, Some(function)) => Some(Definition::foreign(
+                value.unwrap_or_else(|| gid::Value::record([])),
+                function.clone(),
+            )),
+            (Some(value), None) => Some(Definition::Value(value)),
+            (None, None) => None,
+        }
+        .map(|definition| (gid::Resolution::Document, definition))
+        .into_iter()
+        .collect()
+    })
 }
 
 #[cfg(test)]
@@ -61,20 +71,7 @@ pub(crate) fn test_evaluate(
     foreign: &ForeignFunctions,
     fuel: usize,
 ) -> grap_runtime::Evaluation {
-    grap_runtime::evaluate(
-        expression,
-        &TestHost(|cell| {
-            foreign
-                .get(cell)
-                .cloned()
-                .map(grap_runtime::CallCandidate::ForeignFunction)
-                .into_iter()
-                .chain(resolve(cell).map(grap_runtime::CallCandidate::Value))
-                .map(|definition| (gid::Resolution::Document, definition))
-                .collect()
-        }),
-        fuel,
-    )
+    grap_runtime::evaluate(expression, &test_host(resolve, foreign), fuel)
 }
 
 #[cfg(test)]
@@ -85,21 +82,7 @@ pub(crate) fn test_apply(
     foreign: &ForeignFunctions,
     fuel: usize,
 ) -> grap_runtime::Evaluation {
-    grap_runtime::apply(
-        function,
-        arguments,
-        &TestHost(|cell| {
-            foreign
-                .get(cell)
-                .cloned()
-                .map(grap_runtime::CallCandidate::ForeignFunction)
-                .into_iter()
-                .chain(resolve(cell).map(grap_runtime::CallCandidate::Value))
-                .map(|definition| (gid::Resolution::Document, definition))
-                .collect()
-        }),
-        fuel,
-    )
+    grap_runtime::apply(function, arguments, &test_host(resolve, foreign), fuel)
 }
 
 #[derive(Clone, Copy)]
@@ -110,67 +93,76 @@ pub struct LocatedValue<'a> {
 
 #[derive(Clone, Default)]
 pub struct Definitions {
-    cells: Cells,
-    foreign: Vec<(gid::CellId, grap_runtime::ForeignFunction)>,
+    entries: Rc<Vec<(gid::CellId, Definition)>>,
 }
 
 impl Definitions {
-    pub fn from_parts(cells: Cells, functions: ForeignFunctions) -> Self {
-        Self {
-            cells,
-            foreign: functions
-                .iter()
-                .map(|(cell, function)| (cell, function.clone()))
-                .collect(),
+    pub fn from_parts(cells: Cells, foreign: ForeignFunctions) -> Self {
+        let mut entries: Vec<_> = cells
+            .iter()
+            .map(|(cell, value)| (*cell, Definition::Value(value.clone())))
+            .collect();
+        entries.sort_unstable_by_key(|(cell, _)| *cell);
+        let mut definitions = Self {
+            entries: Rc::new(entries),
+        };
+        for (cell, function) in foreign.iter() {
+            definitions.insert(
+                cell,
+                Definition::foreign(
+                    definitions
+                        .value(cell)
+                        .cloned()
+                        .unwrap_or_else(|| gid::Value::record([])),
+                    function.clone(),
+                ),
+            );
         }
+        definitions
     }
 
-    pub fn register_foreign(&mut self, cell: gid::CellId, function: grap_runtime::ForeignFunction) {
-        let index = self.foreign.partition_point(|(key, _)| *key <= cell);
-        self.foreign.insert(index, (cell, function));
+    pub fn get(&self, cell: gid::CellId) -> Option<&Definition> {
+        self.entries
+            .binary_search_by_key(&cell, |(cell, _)| *cell)
+            .ok()
+            .map(|index| &self.entries[index].1)
     }
 
     pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
-        self.cells.value(cell)
+        self.get(cell).map(Definition::value)
     }
 
-    fn foreign_functions(
-        &self,
-        cell: gid::CellId,
-    ) -> &[(gid::CellId, grap_runtime::ForeignFunction)] {
-        let start = self.foreign.partition_point(|(key, _)| *key < cell);
-        let end = self.foreign.partition_point(|(key, _)| *key <= cell);
-        &self.foreign[start..end]
+    pub fn insert(&mut self, cell: gid::CellId, definition: Definition) -> Option<Definition> {
+        let entries = Rc::make_mut(&mut self.entries);
+        match entries.binary_search_by_key(&cell, |(cell, _)| *cell) {
+            Ok(index) => Some(std::mem::replace(&mut entries[index].1, definition)),
+            Err(index) => {
+                entries.insert(index, (cell, definition));
+                None
+            }
+        }
     }
 
-    fn candidates(
-        &self,
-        cell: gid::CellId,
-    ) -> impl Iterator<Item = grap_runtime::CallCandidate> + '_ {
-        self.foreign_functions(cell)
+    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definition)> {
+        self.entries
             .iter()
-            .map(|(_, function)| grap_runtime::CallCandidate::ForeignFunction(function.clone()))
-            .chain(
-                self.value(cell)
-                    .cloned()
-                    .map(grap_runtime::CallCandidate::Value),
-            )
+            .map(|(cell, definition)| (*cell, definition))
     }
 
     #[cfg(test)]
     pub fn values(&self) -> impl Iterator<Item = (gid::CellId, &gid::Value)> {
-        self.cells.iter().map(|(cell, value)| (*cell, value))
+        self.iter()
+            .map(|(cell, definition)| (cell, definition.value()))
     }
 
     #[cfg(test)]
     pub fn functions(&self) -> ForeignFunctions {
-        self.foreign.iter().fold(
+        self.iter().fold(
             ForeignFunctions::default(),
-            |functions, (cell, function)| {
-                if functions.get(*cell).is_some() {
-                    functions
-                } else {
-                    functions.register(*cell, function.clone())
+            |functions, (cell, definition)| match definition {
+                Definition::Value(_) => functions,
+                Definition::Foreign(native) => {
+                    functions.register(cell, native.implementation.clone())
                 }
             },
         )
@@ -178,23 +170,17 @@ impl Definitions {
 }
 
 pub struct Library<World, Hover> {
-    pub metadata: gid::Value,
     pub definitions: Definitions,
-    pub projections: Vec<Partial<World, Hover>>,
-    pub root_completions: Vec<Completion>,
-    pub root_field_completions: Vec<Completion>,
-    pub value_completions: Option<CompletionProvider>,
+    pub projection: Partial<World, Hover>,
+    pub completions: Option<CompletionProvider>,
 }
 
 impl<World, Hover> Clone for Library<World, Hover> {
     fn clone(&self) -> Self {
         Self {
-            metadata: self.metadata.clone(),
             definitions: self.definitions.clone(),
-            projections: self.projections.clone(),
-            root_completions: self.root_completions.clone(),
-            root_field_completions: self.root_field_completions.clone(),
-            value_completions: self.value_completions.clone(),
+            projection: self.projection.clone(),
+            completions: self.completions.clone(),
         }
     }
 }
@@ -202,61 +188,37 @@ impl<World, Hover> Clone for Library<World, Hover> {
 impl<World, Hover> Default for Library<World, Hover> {
     fn default() -> Self {
         Self {
-            metadata: gid::Value::record([]),
             definitions: Definitions::default(),
-            projections: Vec::new(),
-            root_completions: Vec::new(),
-            root_field_completions: Vec::new(),
-            value_completions: None,
+            projection: progred_display::partial(|_| None),
+            completions: None,
         }
     }
 }
 
 impl<World, Hover> Library<World, Hover> {
-    pub fn new(
-        metadata: gid::Value,
-        definitions: Definitions,
-        projections: Vec<Partial<World, Hover>>,
-    ) -> Self {
+    pub fn new(definitions: Definitions, projection: Partial<World, Hover>) -> Self {
         Self {
-            metadata,
             definitions,
-            projections,
-            root_completions: Vec::new(),
-            root_field_completions: Vec::new(),
-            value_completions: None,
+            projection,
+            completions: None,
         }
     }
 
     pub fn named(
+        id: gid::CellId,
         name: impl Into<String>,
-        definitions: Definitions,
-        projections: Vec<Partial<World, Hover>>,
+        mut definitions: Definitions,
+        projection: Partial<World, Hover>,
     ) -> Self {
-        Self::new(crate::name::record(name, []), definitions, projections)
+        definitions.insert(id, Definition::Value(crate::name::record(name, [])));
+        Self::new(definitions, projection)
     }
 
-    pub fn with_root_completions(
+    pub fn with_completions(
         mut self,
-        completions: impl IntoIterator<Item = Completion>,
+        completions: impl Fn(&CompletionRequest<'_>) -> Option<Vec<Completion>> + 'static,
     ) -> Self {
-        self.root_completions = completions.into_iter().collect();
-        self
-    }
-
-    pub fn with_root_field_completions(
-        mut self,
-        completions: impl IntoIterator<Item = Completion>,
-    ) -> Self {
-        self.root_field_completions = completions.into_iter().collect();
-        self
-    }
-
-    pub fn with_value_completions(
-        mut self,
-        completions: impl Fn(&str) -> Vec<Completion> + 'static,
-    ) -> Self {
-        self.value_completions = Some(Rc::new(completions));
+        self.completions = Some(Rc::new(completions));
         self
     }
 
@@ -272,75 +234,44 @@ impl<World, Hover> Library<World, Hover> {
 }
 
 /// The ordered loaded-library set. A library identity is unique for
-/// now; insertion replaces that identity in place. Each library has a
-/// cell-value table and a separate foreign-function registry.
+/// now; insertion replaces that identity in place.
 #[derive(Clone, Default)]
 pub struct Libraries {
-    entries: Rc<Vec<(gid::CellId, gid::Value, Definitions)>>,
+    entries: Rc<Vec<(gid::CellId, Definitions)>>,
 }
 
 impl Libraries {
     pub fn from_contributions<World, Hover>(
         entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
-    ) -> (
-        Self,
-        Vec<Partial<World, Hover>>,
-        Vec<Completion>,
-        Vec<Completion>,
-        Vec<CompletionProvider>,
-    ) {
-        entries.into_iter().fold(
-            (
-                Self::default(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-            |(
-                mut libraries,
-                mut projections,
-                mut root_completions,
-                mut root_field_completions,
-                mut value_completions,
-            ),
-             (id, library)| {
-                libraries.insert(id, library.metadata, library.definitions);
-                projections.extend(library.projections);
-                root_completions.extend(library.root_completions);
-                root_field_completions.extend(library.root_field_completions);
-                value_completions.extend(library.value_completions);
-                (
-                    libraries,
-                    projections,
-                    root_completions,
-                    root_field_completions,
-                    value_completions,
-                )
+    ) -> (Self, Vec<Partial<World, Hover>>, Vec<CompletionProvider>) {
+        let mut unique: Vec<(gid::CellId, Library<World, Hover>)> = Vec::new();
+        for (id, library) in entries {
+            if let Some((_, previous)) = unique.iter_mut().find(|(key, _)| *key == id) {
+                *previous = library;
+            } else {
+                unique.push((id, library));
+            }
+        }
+        unique.into_iter().fold(
+            (Self::default(), Vec::new(), Vec::new()),
+            |(mut libraries, mut projections, mut completions), (id, library)| {
+                libraries.insert(id, library.definitions);
+                projections.push(library.projection);
+                completions.extend(library.completions);
+                (libraries, projections, completions)
             },
         )
     }
 
-    pub fn insert(
-        &mut self,
-        id: gid::CellId,
-        metadata: gid::Value,
-        definitions: Definitions,
-    ) -> Option<(gid::Value, Definitions)> {
+    pub fn insert(&mut self, id: gid::CellId, definitions: Definitions) -> Option<Definitions> {
         let entries = Rc::make_mut(&mut self.entries);
-        match entries
-            .iter()
-            .position(|(candidate, _, _)| *candidate == id)
-        {
+        match entries.iter().position(|(candidate, _)| *candidate == id) {
             Some(index) => {
                 let entry = &mut entries[index];
-                Some((
-                    std::mem::replace(&mut entry.1, metadata),
-                    std::mem::replace(&mut entry.2, definitions),
-                ))
+                Some(std::mem::replace(&mut entry.1, definitions))
             }
             None => {
-                entries.push((id, metadata, definitions));
+                entries.push((id, definitions));
                 None
             }
         }
@@ -349,27 +280,20 @@ impl Libraries {
     pub fn get(&self, id: gid::CellId) -> Option<&Definitions> {
         self.entries
             .iter()
-            .find(|(candidate, _, _)| *candidate == id)
-            .map(|(_, _, definitions)| definitions)
-    }
-
-    pub fn metadata(&self, id: gid::CellId) -> Option<&gid::Value> {
-        self.entries
-            .iter()
-            .find(|(candidate, _, _)| *candidate == id)
-            .map(|(_, metadata, _)| metadata)
+            .find(|(candidate, _)| *candidate == id)
+            .map(|(_, definitions)| definitions)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
         self.entries
             .iter()
-            .map(|(id, _, definitions)| (*id, definitions))
+            .map(|(id, definitions)| (*id, definitions))
     }
 
     pub fn values(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedValue<'_>> {
         self.entries
             .iter()
-            .filter_map(move |(library, _, definitions)| {
+            .filter_map(move |(library, definitions)| {
                 definitions.value(cell).map(|value| LocatedValue {
                     library: *library,
                     value,
@@ -380,58 +304,43 @@ impl Libraries {
     pub fn foreign_sources(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
         self.entries
             .iter()
-            .filter_map(move |(library, _, definitions)| {
-                (!definitions.foreign_functions(cell).is_empty()).then_some(*library)
+            .filter_map(move |(library, definitions)| {
+                matches!(definitions.get(cell), Some(Definition::Foreign(_))).then_some(*library)
             })
     }
 
     pub fn contributors(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
         self.entries
             .iter()
-            .filter_map(move |(library, _, definitions)| {
-                (definitions.value(cell).is_some()
-                    || !definitions.foreign_functions(cell).is_empty())
-                .then_some(*library)
-            })
+            .filter_map(move |(library, definitions)| definitions.get(cell).map(|_| *library))
     }
 
     pub fn first_value(&self, cell: gid::CellId) -> Option<&gid::Value> {
         self.values(cell).next().map(|definition| definition.value)
     }
 
-    pub fn call_candidates(
+    pub fn resolve(
         &self,
         cell: gid::CellId,
-    ) -> impl Iterator<Item = (gid::Resolution, grap_runtime::CallCandidate)> + '_ {
-        self.entries
-            .iter()
-            .flat_map(move |(source, _, definitions)| {
-                definitions
-                    .candidates(cell)
-                    .map(|candidate| (gid::Resolution::Library(*source), candidate))
-            })
+    ) -> Option<(gid::Resolution, grap_runtime::Definition)> {
+        self.entries.iter().find_map(move |(source, definitions)| {
+            definitions
+                .get(cell)
+                .cloned()
+                .map(|target| (gid::Resolution::Library(*source), target))
+        })
     }
 
     pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
-        self.entries.iter().flat_map(|(_, _, definitions)| {
-            definitions
-                .cells
-                .cells()
-                .copied()
-                .chain(definitions.foreign.iter().map(|(cell, _)| *cell))
-        })
+        self.entries
+            .iter()
+            .flat_map(|(_, definitions)| definitions.iter().map(|(cell, _)| cell))
     }
 }
 
 impl grap_runtime::Host for Libraries {
-    fn values(&self, cell: gid::CellId) -> Vec<(gid::Resolution, gid::Value)> {
-        self.values(cell)
-            .map(|value| (gid::Resolution::Library(value.library), value.value.clone()))
-            .collect()
-    }
-
-    fn candidates(&self, cell: gid::CellId) -> Vec<(gid::Resolution, grap_runtime::CallCandidate)> {
-        self.call_candidates(cell).collect()
+    fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, grap_runtime::Definition)> {
+        self.resolve(cell)
     }
 }
 
@@ -491,29 +400,31 @@ mod tests {
         left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-        let (libraries, projections, _, _, _) = Libraries::from_contributions([
+        let (libraries, projections, _) = Libraries::from_contributions([
             (
                 LEFT_LIBRARY,
                 Library::named(
+                    LEFT_LIBRARY,
                     "left",
                     Definitions::from_parts(
                         left_cells,
                         ForeignFunctions::default()
                             .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
                     ),
-                    vec![progred_display::partial(left_projection)],
+                    progred_display::partial(left_projection),
                 ),
             ),
             (
                 RIGHT_LIBRARY,
                 Library::named(
+                    RIGHT_LIBRARY,
                     "right",
                     Definitions::from_parts(
                         right_cells,
                         ForeignFunctions::default()
                             .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
                     ),
-                    vec![progred_display::partial(right_projection)],
+                    progred_display::partial(right_projection),
                 ),
             ),
         ]);
@@ -569,21 +480,27 @@ mod tests {
     }
 
     #[test]
-    fn multiple_foreign_implementations_do_not_add_cell_values() {
+    fn replacing_a_foreign_registration_does_not_add_cell_values() {
         let name = crate::name::record("shared", []);
         let mut cells = Cells::new();
         cells.set_value(SHARED_FUNCTION, name.clone());
-        let mut definitions = Definitions::from_parts(
+        let definitions = Definitions::from_parts(
             cells,
-            ForeignFunctions::default().register(
-                SHARED_FUNCTION,
-                ForeignFunction::new(|_, _, _| Ok(crate::absent::decline())),
-            ),
+            ForeignFunctions::default()
+                .register(
+                    SHARED_FUNCTION,
+                    ForeignFunction::new(|_, _, _| Ok(crate::absent::decline())),
+                )
+                .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
         );
-        definitions.register_foreign(SHARED_FUNCTION, ForeignFunction::new(left_function));
-        let (libraries, _, _, _, _) = Libraries::from_contributions([(
+        let (libraries, _, _) = Libraries::from_contributions([(
             LEFT_LIBRARY,
-            Library::<(), ()>::named("test", definitions, vec![]),
+            Library::<(), ()>::named(
+                LEFT_LIBRARY,
+                "test",
+                definitions,
+                progred_display::partial(|_| None),
+            ),
         )]);
         assert_eq!(
             libraries
@@ -622,32 +539,184 @@ mod tests {
     }
 
     #[test]
+    fn definitions_are_sorted_unique_and_copy_on_write() {
+        let mut definitions = Definitions::default();
+        definitions.insert(
+            SHARED_FUNCTION,
+            Definition::foreign(
+                name::record("native", []),
+                ForeignFunction::new(left_function),
+            ),
+        );
+        definitions.insert(
+            SHARED_CELL,
+            Definition::Value(Value::from(b"original".to_vec())),
+        );
+        let original = definitions.clone();
+        definitions.insert(
+            SHARED_CELL,
+            Definition::Value(Value::from(b"replacement".to_vec())),
+        );
+
+        assert_eq!(
+            definitions.iter().map(|(id, _)| id).collect::<Vec<_>>(),
+            [SHARED_CELL, SHARED_FUNCTION]
+        );
+        assert_eq!(
+            original.value(SHARED_CELL),
+            Some(&Value::from(b"original".to_vec()))
+        );
+        assert_eq!(
+            definitions.value(SHARED_CELL),
+            Some(&Value::from(b"replacement".to_vec()))
+        );
+        assert_eq!(
+            definitions.value(SHARED_FUNCTION).and_then(name::read),
+            Some("native")
+        );
+        assert!(matches!(
+            definitions.get(SHARED_FUNCTION),
+            Some(Definition::Foreign(_))
+        ));
+    }
+
+    #[test]
+    fn replacing_a_library_replaces_every_contribution_in_place() {
+        let old: Library<(), ()> = Library::named(
+            LEFT_LIBRARY,
+            "old",
+            Definitions::default(),
+            progred_display::partial(|_| panic!("replaced projection")),
+        )
+        .with_completions(|_| panic!("replaced completion provider"));
+        let replacement_projection = progred_display::partial(left_projection);
+        let right_projection = progred_display::partial(right_projection);
+        let replacement = Library::named(
+            LEFT_LIBRARY,
+            "replacement",
+            Definitions::default(),
+            replacement_projection.clone(),
+        )
+        .with_completions(|request| {
+            Some(vec![Completion::new(request.query, SHARED_FUNCTION.into())])
+        });
+        let right = Library::named(
+            RIGHT_LIBRARY,
+            "right",
+            Definitions::default(),
+            right_projection.clone(),
+        );
+        let (libraries, projections, providers) = Libraries::from_contributions([
+            (LEFT_LIBRARY, old),
+            (RIGHT_LIBRARY, right),
+            (LEFT_LIBRARY, replacement),
+        ]);
+
+        assert_eq!(
+            libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),
+            [LEFT_LIBRARY, RIGHT_LIBRARY]
+        );
+        assert_eq!(
+            libraries.first_value(LEFT_LIBRARY).and_then(name::read),
+            Some("replacement")
+        );
+        assert_eq!(projections.len(), 2);
+        assert!(Rc::ptr_eq(&projections[0], &replacement_projection));
+        assert!(Rc::ptr_eq(&projections[1], &right_projection));
+        assert_eq!(providers.len(), 1);
+        for kind in [
+            progred_display::CompletionKind::Value,
+            progred_display::CompletionKind::Field,
+        ] {
+            assert_eq!(
+                providers[0](&CompletionRequest {
+                    query: "query",
+                    kind,
+                    scope: progred_display::CompletionScope::Suggested,
+                    path: &[],
+                    value_at: &|_| None,
+                })
+                .unwrap()[0]
+                    .display,
+                "query"
+            );
+        }
+    }
+
+    #[test]
+    fn library_descriptions_are_ordinary_cells() {
+        let (libraries, _, _) = Libraries::from_contributions([(
+            LEFT_LIBRARY,
+            Library::<(), ()>::named(
+                LEFT_LIBRARY,
+                "library",
+                Definitions::default(),
+                progred_display::partial(|_| None),
+            ),
+        )]);
+        let description = name::record("library", []);
+        assert_eq!(libraries.first_value(LEFT_LIBRARY), Some(&description));
+        assert_eq!(
+            grap_runtime::evaluate(&LEFT_LIBRARY.into(), &libraries, 20).result,
+            description
+        );
+        assert_eq!(libraries.cell_ids().collect::<Vec<_>>(), [LEFT_LIBRARY]);
+    }
+
+    #[test]
+    fn unnamed_native_definitions_have_an_empty_description() {
+        let (libraries, _, _) = Libraries::from_contributions([(
+            LEFT_LIBRARY,
+            Library::<(), ()>::new(
+                Definitions::from_parts(
+                    Cells::new(),
+                    ForeignFunctions::default()
+                        .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                ),
+                progred_display::partial(|_| None),
+            ),
+        )]);
+        assert_eq!(
+            grap_runtime::evaluate(&SHARED_FUNCTION.into(), &libraries, 20).result,
+            Value::record([])
+        );
+        assert_eq!(
+            grap_runtime::apply(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
+            Value::from(b"left".to_vec())
+        );
+    }
+
+    #[test]
     fn libraries_are_an_ordered_unique_map_without_hashing() {
         let mut left_cells = Cells::new();
         left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
         let left = Library::<(), ()>::named(
+            LEFT_LIBRARY,
             "left",
             Definitions::from_parts(
                 left_cells,
                 ForeignFunctions::default()
                     .register(SHARED_CELL, ForeignFunction::new(left_function)),
             ),
-            vec![],
+            progred_display::partial(|_| None),
         );
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
         let right = Library::<(), ()>::named(
+            RIGHT_LIBRARY,
             "right",
             Definitions::from_parts(right_cells, ForeignFunctions::default()),
-            vec![],
+            progred_display::partial(|_| None),
         );
-        let (mut libraries, _, _, _, _) =
+        let (mut libraries, _, _) =
             Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
         let replacement = Definitions::default();
 
         assert!(libraries.get(LEFT_LIBRARY).is_some());
         assert_eq!(
-            libraries.metadata(LEFT_LIBRARY).and_then(crate::name::read),
+            libraries
+                .first_value(LEFT_LIBRARY)
+                .and_then(crate::name::read),
             Some("left")
         );
         assert_eq!(
@@ -661,15 +730,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [LEFT_LIBRARY, RIGHT_LIBRARY]
         );
-        assert!(
-            libraries
-                .insert(
-                    LEFT_LIBRARY,
-                    crate::name::record("replacement", []),
-                    replacement
-                )
-                .is_some()
-        );
+        assert!(libraries.insert(LEFT_LIBRARY, replacement).is_some());
         assert_eq!(
             libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),
             [LEFT_LIBRARY, RIGHT_LIBRARY]

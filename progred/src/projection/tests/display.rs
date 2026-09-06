@@ -5,7 +5,7 @@ fn projection_target_appends_relative_steps() {
     let parent = gid::new_cell_id();
     let field = gid::new_cell_id();
     let hooks = Hooks::<Vec<Path>> {
-        value_completions: None,
+        completions: None,
         select: Rc::new(|selections, path| selections.push(path)),
         select_payload: Rc::new(|selections, path, _| selections.push(path)),
         start_edit: Rc::new(|_, _, _| {}),
@@ -329,12 +329,10 @@ fn partials_receive_selection_and_annotations_positionally() {
                 width: 500.0,
 
                 projection: Some(&projection),
-                root_completions: None,
-                root_field_completions: None,
             },
             &mut tcx,
             Hooks::<()> {
-                value_completions: None,
+                completions: None,
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
                 start_edit: Rc::new(|_, _, _| {}),
@@ -467,12 +465,10 @@ fn a_projection_defined_as_data_realizes() {
             width: 500.0,
 
             projection: Some(&projection),
-            root_completions: None,
-            root_field_completions: None,
         },
         &mut tcx,
         Hooks::<()> {
-            value_completions: None,
+            completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

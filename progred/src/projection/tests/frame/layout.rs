@@ -63,6 +63,66 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
 }
 
 #[test]
+fn cell_parentheses_leave_a_gap_beside_empty_frames() {
+    use kurbo::Shape as _;
+
+    let doc = Document {
+        root: Some(Value::from(new_cell_id())),
+        cells: Cells::new(),
+    };
+    let selected = pending_value(
+        &crate::workspace::Root::document(),
+        vec![Step::Follow(gid::Resolution::Document)],
+    );
+    let mut context = BenchContext::new();
+    for scale in [1.0, 2.0] {
+        context.styles = crate::styles::editor(scale);
+        for selection in [None, Some(&selected)] {
+            let (bench, _) = context.place(
+                &doc,
+                selection,
+                &Annotations::default(),
+                600.0,
+                None,
+                None,
+                None,
+            );
+            let frame = bench
+                .list
+                .0
+                .iter()
+                .find_map(|command| match command {
+                    DrawCmd::Stroke {
+                        shape: Shape::RoundedRect(rect),
+                        style,
+                        transform,
+                        ..
+                    } => Some(transform.transform_rect_bbox(rect.rect().inset(style.width / 2.0))),
+                    _ => None,
+                })
+                .unwrap();
+            let delimiters: Vec<_> = bench
+                .list
+                .0
+                .iter()
+                .filter_map(|command| match command {
+                    DrawCmd::Fill {
+                        shape: Shape::Path(path),
+                        transform,
+                        ..
+                    } => Some(transform.transform_rect_bbox(path.bounding_box())),
+                    _ => None,
+                })
+                .collect();
+            let [left, right] = delimiters.as_slice() else {
+                panic!("two cell parentheses");
+            };
+            assert!(left.x1 < frame.x0 && frame.x1 < right.x0);
+        }
+    }
+}
+
+#[test]
 fn secondary_marks_only_the_same_definition_in_other_occurrences() {
     let stack = crate::stack::load::<World>();
     let cell = name::vocabulary::NAME;
@@ -98,7 +158,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         let target = bench
             .descends
             .iter()
-            .find(|descend| descend.path.as_ref() == path(1, source))
+            .find(|descend| descend.path.as_ref() == path(1, gid::Resolution::Document))
             .unwrap();
         let marks: Vec<_> = bench
             .list
@@ -115,7 +175,11 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
             .collect();
         assert_eq!(
             marks,
-            vec![RoundedRect::from_rect(target.rect.inset(3.0), 5.0)]
+            if source == gid::Resolution::Document {
+                vec![RoundedRect::from_rect(target.rect.inset(3.0), 5.0)]
+            } else {
+                vec![]
+            }
         );
     }
 }

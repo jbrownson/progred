@@ -62,9 +62,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "presentation",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
 }
 

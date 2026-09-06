@@ -234,12 +234,13 @@ mod tests {
                 (
                     id,
                     progred_libraries::Library::<(), ()>::named(
+                        id,
                         "source",
                         progred_libraries::Definitions::from_parts(
                             doc.cells.clone(),
                             grap::ForeignFunctions::default(),
                         ),
-                        vec![],
+                        progred_display::partial(|_| None),
                     ),
                 )
             }))

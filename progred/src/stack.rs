@@ -12,9 +12,7 @@ pub struct Stack<World> {
     pub libraries: Libraries,
     pub projection: Projection<World>,
     pub pane_projection: Projection<World>,
-    pub root_completions: progred_display::CompletionProvider,
-    pub root_field_completions: progred_display::CompletionProvider,
-    pub value_completions: progred_display::CompletionProvider,
+    pub completions: progred_display::CompletionProvider,
 }
 
 impl<World> Clone for Stack<World> {
@@ -23,23 +21,22 @@ impl<World> Clone for Stack<World> {
             libraries: self.libraries.clone(),
             projection: self.projection.clone(),
             pane_projection: self.pane_projection.clone(),
-            root_completions: self.root_completions.clone(),
-            root_field_completions: self.root_field_completions.clone(),
-            value_completions: self.value_completions.clone(),
+            completions: self.completions.clone(),
         }
     }
 }
 
 pub fn load<World: 'static>() -> Stack<World> {
-    let (libraries, projections, root_completions, root_field_completions, value_completions) =
-        Libraries::from_contributions(contributions());
-    let root_completions = std::rc::Rc::new(move |_: &str| root_completions.clone());
-    let root_field_completions = std::rc::Rc::new(move |_: &str| root_field_completions.clone());
-    let value_completions = std::rc::Rc::new(move |query: &str| {
-        value_completions
+    let (libraries, projections, providers) = Libraries::from_contributions(contributions());
+    let completions = std::rc::Rc::new(move |request: &progred_display::CompletionRequest<'_>| {
+        providers
             .iter()
-            .flat_map(|provider| provider(query))
-            .collect()
+            .filter_map(|provider| provider(request))
+            .fold(None, |offers, next| {
+                let mut offers = offers.unwrap_or_else(Vec::new);
+                offers.extend(next);
+                Some(offers)
+            })
     });
     let projection = Projection::new(projections);
     Stack {
@@ -48,9 +45,7 @@ pub fn load<World: 'static>() -> Stack<World> {
             .clone()
             .with_entry(progred_display::partial(presentation::projected_display)),
         projection,
-        root_completions,
-        root_field_completions,
-        value_completions,
+        completions,
     }
 }
 
@@ -75,7 +70,10 @@ fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library
         (presentation::ID, presentation::library()),
         (layout::ID, layout::library()),
         (selection::ID, selection::library()),
-        (progred_libraries::path::ID, progred_libraries::path::library()),
+        (
+            progred_libraries::path::ID,
+            progred_libraries::path::library(),
+        ),
         (site::ID, site::library()),
         (geometry::ID, geometry::library()),
         (workspace::ID, workspace::library()),

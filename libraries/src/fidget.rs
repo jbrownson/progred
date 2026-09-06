@@ -2,7 +2,7 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
-use crate::{Library, absent, f32, name, presentation};
+use crate::{Library, absent, control, f32, name, presentation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
@@ -16,6 +16,8 @@ use fidget_engine::{
     vm::VmShape,
 };
 use gid::{CellId, Cells, Value};
+
+mod completion;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -74,7 +76,6 @@ pub mod vocabulary {
     pub const ZOOM: CellId = CellId::from_u128(0x745f4518cc847a4e7457e3426d010754);
     pub const INVALID_FIELD: CellId = CellId::from_u128(0xc26cfccc2a9fc752bf73c4359f2e9ade);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
-    pub const INVALID_RADIUS: CellId = CellId::from_u128(0x36d2e0bdde4467b9b30e318578bbd79f);
 }
 
 fn node(marker: CellId, content: Value) -> Value {
@@ -164,18 +165,30 @@ fn binary_function(marker: CellId) -> ForeignFunction {
     })
 }
 
-fn circle_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
-        let Some(radius) = evaluated(context, call, environment, vocabulary::RADIUS)? else {
-            return Ok(context.missing_argument(vocabulary::RADIUS));
-        };
-        Ok(
-            match f32::read(&radius).filter(|radius| radius.is_finite() && *radius >= 0.0) {
-                Some(_) => node(marker, Value::record([(vocabulary::RADIUS, radius)])),
-                None => absent::with_reason(vocabulary::INVALID_RADIUS),
-            },
-        )
-    })
+fn radial_function(spelling: &str, squared_distance: Value) -> Value {
+    name::record(
+        spelling,
+        [
+            (
+                grap_runtime::vocabulary::PARAMS,
+                Value::list([vocabulary::RADIUS.into()]),
+            ),
+            (
+                grap_runtime::vocabulary::BODY,
+                grap_runtime::call(
+                    control::vocabulary::QUOTE.into(),
+                    [(
+                        grap_runtime::vocabulary::EXPRESSION,
+                        binary(
+                            vocabulary::SUBTRACT,
+                            unary(vocabulary::SQRT, squared_distance),
+                            node(control::vocabulary::UNQUOTE, vocabulary::RADIUS.into()),
+                        ),
+                    )],
+                ),
+            ),
+        ],
+    )
 }
 
 fn translate_function(
@@ -287,8 +300,6 @@ pub fn functions() -> ForeignFunctions {
         ForeignFunctions::default(),
         |functions, (cell, function)| functions.register(cell, function),
     )
-    .register(vocabulary::CIRCLE, circle_function(vocabulary::CIRCLE))
-    .register(vocabulary::SPHERE, circle_function(vocabulary::SPHERE))
     .register(
         vocabulary::TRANSLATE,
         ForeignFunction::new(translate_function),
@@ -313,8 +324,6 @@ fn one_marker(fields: &gid::Record) -> Option<CellId> {
         vocabulary::ABS,
         vocabulary::SQRT,
         vocabulary::SQUARE,
-        vocabulary::CIRCLE,
-        vocabulary::SPHERE,
         vocabulary::TRANSLATE,
         vocabulary::UNION,
         vocabulary::INTERSECTION,
@@ -341,15 +350,6 @@ fn tree(value: &Value) -> Option<Tree> {
             vocabulary::Z => Some(Tree::z()),
             _ => None,
         },
-        vocabulary::CIRCLE | vocabulary::SPHERE => {
-            let radius = f32::read(content.as_record()?.get(&vocabulary::RADIUS)?)?;
-            let radial = if marker == vocabulary::CIRCLE {
-                Tree::x().square() + Tree::y().square()
-            } else {
-                Tree::x().square() + Tree::y().square() + Tree::z().square()
-            };
-            Some(radial.sqrt() - radius)
-        }
         vocabulary::TRANSLATE => {
             let fields = content.as_record()?;
             let field = tree(fields.get(&vocabulary::FIELD)?)?;
@@ -601,14 +601,12 @@ fn volume_view(preview: &VolumePreview, camera: Camera, raster_size: u32) -> Vol
     }
 }
 
-fn cpu_volume(preview: &VolumePreview, camera: Camera, raster_size: u32) -> Option<Vec<u8>> {
-    let view = volume_view(preview, camera, raster_size);
+fn cpu_volume(shape: VmShape, view: &VolumeView) -> Option<Vec<u8>> {
     let config = VoxelRenderConfig {
         world_to_model: view.world_to_model,
         ..VoxelRenderConfig::from_size(view.size)
     };
-    let shape = VmShape::from(preview.tree.clone()).try_into().ok()?;
-    let image = config.run(shape)?;
+    let image = config.run(shape.try_into().ok()?)?;
     let light = Vector3::new(0.35, -0.45, 1.0).normalize();
     Some(
         image
@@ -649,11 +647,13 @@ impl PreviewRenderer {
         camera: Camera,
         raster_size: u32,
     ) -> Option<Vec<u8>> {
+        let shape = VmShape::from(preview.tree.clone());
+        let view = volume_view(preview, camera, raster_size);
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(preview, camera, raster_size) {
+        if let Some(image) = self.gpu.render(&shape, &view) {
             return Some(image);
         }
-        cpu_volume(preview, camera, raster_size)
+        cpu_volume(shape, &view)
     }
 }
 
@@ -668,12 +668,7 @@ enum GpuState {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl GpuState {
-    fn render(
-        &mut self,
-        preview: &VolumePreview,
-        camera: Camera,
-        raster_size: u32,
-    ) -> Option<Vec<u8>> {
+    fn render(&mut self, shape: &VmShape, view: &VolumeView) -> Option<Vec<u8>> {
         if matches!(self, Self::Uninitialized) {
             let gpu = pollster::block_on(Gpu::init());
             *self = match gpu {
@@ -682,7 +677,7 @@ impl GpuState {
             };
         }
         match self {
-            Self::Available(renderer) => renderer.render(preview, camera, raster_size),
+            Self::Available(renderer) => renderer.render(shape, view),
             Self::Uninitialized | Self::Unavailable => None,
         }
     }
@@ -707,23 +702,14 @@ impl GpuRenderer {
         }
     }
 
-    fn render(
-        &mut self,
-        preview: &VolumePreview,
-        camera: Camera,
-        raster_size: u32,
-    ) -> Option<Vec<u8>> {
-        let shape = self
-            .voxel
-            .shape(&VmShape::from(preview.tree.clone()))
-            .ok()?;
+    fn render(&mut self, shape: &VmShape, view: &VolumeView) -> Option<Vec<u8>> {
+        let shape = self.voxel.shape(shape).ok()?;
         let Self {
             gpu,
             voxel,
             effects,
             buffers,
         } = self;
-        let view = volume_view(preview, camera, raster_size);
         match buffers {
             Some(buffers) if buffers.size == view.size => {}
             Some(buffers)
@@ -901,8 +887,6 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::ABS, "abs"),
         (vocabulary::SQRT, "sqrt"),
         (vocabulary::SQUARE, "square"),
-        (vocabulary::CIRCLE, "circle"),
-        (vocabulary::SPHERE, "sphere"),
         (vocabulary::TRANSLATE, "translate"),
         (vocabulary::UNION, "union"),
         (vocabulary::INTERSECTION, "intersection"),
@@ -931,7 +915,6 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     for (cell, spelling) in [
         (vocabulary::INVALID_FIELD, "invalid field"),
         (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
-        (vocabulary::INVALID_RADIUS, "invalid radius"),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -945,15 +928,40 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             name::record(spelling, [(vocabulary::AXIS, Value::from(cell))]),
         );
     }
+    let square = |axis| {
+        unary(
+            vocabulary::SQUARE,
+            node(vocabulary::AXIS, Value::from(axis)),
+        )
+    };
+    let radial = binary(
+        vocabulary::SUM,
+        square(vocabulary::X),
+        square(vocabulary::Y),
+    );
+    cells.set_value(
+        vocabulary::CIRCLE,
+        radial_function("circle", radial.clone()),
+    );
+    cells.set_value(
+        vocabulary::SPHERE,
+        radial_function(
+            "sphere",
+            binary(vocabulary::SUM, radial, square(vocabulary::Z)),
+        ),
+    );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
     Library::named(
+        ID,
         "fidget",
         crate::Definitions::from_parts(cells, functions()),
-        vec![progred_display::partial(move |input| {
-            display(input, &renderer)
-        })],
+        progred_display::partial(move |input| display(input, &renderer)),
     )
-    .with_root_completions([progred_display::Completion::generated("fidget", || {
+    .with_completions(completion::offers)
+}
+
+fn root_completion() -> progred_display::Completion {
+    progred_display::Completion::generated("fidget", || {
         let cell = gid::new_cell_id();
         Value::record([
             (vocabulary::FIDGET, cell.into()),
@@ -977,13 +985,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     .on_commit(crate::selection::pending_at(&[
         gid::Step::Key(vocabulary::FIDGET),
         gid::Step::Follow(gid::Resolution::Document),
-    ]))])
-    .with_root_field_completions([progred_display::Completion::new(
-        "fidget",
-        Value::from(vocabulary::FIDGET),
-    )
-    .with_aliases(["sdf"])
-    .with_detail("fidget library")])
+    ]))
 }
 
 #[cfg(test)]
@@ -1001,7 +1003,7 @@ mod tests {
         crate::test_evaluate(
             expression,
             |cell| library.value(cell).cloned(),
-            &library.functions(),
+            &library.functions().merge(control::functions()),
             200,
         )
         .result
@@ -1012,6 +1014,75 @@ mod tests {
         let mut evaluator = VmShape::new_float_slice_eval();
         let tape = shape.ez_float_slice_tape();
         evaluator.eval(&tape, &[x], &[y], &[z]).unwrap()[0]
+    }
+
+    #[test]
+    fn radial_shapes_are_grap_functions_returning_fidget_arithmetic() {
+        let library = library::<(), ()>();
+        for (shape, spelling, at_z) in [
+            (vocabulary::CIRCLE, "circle", -10.0),
+            (vocabulary::SPHERE, "sphere", 10.0),
+        ] {
+            assert!(library.functions().get(shape).is_none());
+            let definition = library.value(shape).unwrap();
+            assert_eq!(name::read(definition), Some(spelling));
+            let definition = definition.as_record().unwrap();
+            assert_eq!(
+                definition.get(&grap_runtime::vocabulary::PARAMS),
+                Some(&Value::list([vocabulary::RADIUS.into()]))
+            );
+            assert_eq!(
+                definition
+                    .get(&grap_runtime::vocabulary::BODY)
+                    .and_then(Value::as_record)
+                    .and_then(|body| body.get(&grap_runtime::vocabulary::FUNCTION)),
+                Some(&control::vocabulary::QUOTE.into())
+            );
+
+            let field = evaluate(&call(shape, [(vocabulary::RADIUS, f32::value(10.0))]));
+            assert_eq!(
+                one_marker(field.as_record().unwrap()),
+                Some(vocabulary::SUBTRACT)
+            );
+            let tree = tree(&field).unwrap();
+            assert_eq!(sample(tree.clone(), 0.0, 0.0, 0.0), -10.0);
+            assert_eq!(sample(tree.clone(), 6.0, 8.0, 0.0), 0.0);
+            assert_eq!(sample(tree, 0.0, 0.0, 20.0), at_z);
+            assert!(
+                super::tree(&node(
+                    shape,
+                    Value::record([(vocabulary::RADIUS, f32::value(10.0))])
+                ))
+                .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn radial_templates_splice_the_radius_without_reencoding_it() {
+        let radius = name::record(
+            "radius",
+            [(
+                f32::vocabulary::F32,
+                Value::from(10.0_f32.to_le_bytes().to_vec()),
+            )],
+        );
+        let field = evaluate(&call(
+            vocabulary::SPHERE,
+            [(vocabulary::RADIUS, radius.clone())],
+        ));
+        assert_eq!(
+            field
+                .as_record()
+                .unwrap()
+                .get(&vocabulary::SUBTRACT)
+                .unwrap()
+                .as_record()
+                .unwrap()
+                .get(&vocabulary::RIGHT),
+            Some(&radius)
+        );
+        assert!(tree(&field).is_some());
     }
 
     #[test]
@@ -1092,6 +1163,32 @@ mod tests {
         assert_eq!(preview.max, Vector3::new(80.0, 80.0, 80.0));
         assert!(sample(preview.tree.clone(), 0.0, 0.0, 0.0) < 0.0);
         assert!(sample(preview.tree, 80.0, 0.0, 0.0) > 0.0);
+    }
+
+    #[test]
+    fn cpu_previews_support_constant_fields() {
+        for (field, inside) in [
+            (f32::value(0.0), false),
+            (f32::value(1.0), false),
+            (f32::value(-1.0), true),
+            (
+                binary(vocabulary::SUM, f32::value(1.0), f32::value(-1.0)),
+                false,
+            ),
+        ] {
+            let value = evaluate(&call(
+                vocabulary::PREVIEW_3D,
+                [(presentation::vocabulary::VALUE, field)],
+            ));
+            let preview = volume_preview(&value).unwrap();
+            let view = volume_view(&preview, Camera::default(), 64);
+            let rgba = cpu_volume(VmShape::from(preview.tree), &view).unwrap();
+            assert_eq!(rgba.len(), 64 * 64 * 4);
+            assert!(
+                rgba.chunks_exact(4)
+                    .all(|pixel| pixel[3] == if inside { 255 } else { 0 })
+            );
+        }
     }
 
     #[test]

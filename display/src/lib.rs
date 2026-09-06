@@ -208,10 +208,31 @@ impl Completion {
     }
 }
 
-/// Called only for an engaged pending. Passing the live query lets a
-/// provider generate a large or computed vocabulary lazily; the host
-/// still ranks the returned display names and aliases consistently.
-pub type CompletionProvider = Rc<dyn Fn(&str) -> Vec<Completion>>;
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CompletionScope {
+    Suggested,
+    Everything,
+}
+
+/// The path names the missing value, or the record receiving a new label.
+/// Reads use that same source context, including source-qualified Follow steps.
+pub struct CompletionRequest<'a> {
+    pub query: &'a str,
+    pub kind: CompletionKind,
+    pub scope: CompletionScope,
+    pub path: &'a [Step],
+    pub value_at: &'a dyn Fn(&[Step]) -> Option<&'a Value>,
+}
+
+impl CompletionRequest<'_> {
+    pub fn value(&self) -> Option<&Value> {
+        (self.value_at)(self.path)
+    }
+}
+
+/// Invoked only for an active picker. None leaves vocabulary unspecified;
+/// Some(empty) deliberately offers nothing except the Everything escape.
+pub type CompletionProvider = Rc<dyn Fn(&CompletionRequest<'_>) -> Option<Vec<Completion>>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompletionKind {
@@ -589,21 +610,19 @@ pub trait Env {
         self.evaluate(expression)
     }
 
-    /// Conventional human names for a cell. A projection remains
-    /// responsible for displaying multiple names and for its unnamed
-    /// fallback.
-    fn names(&self, _cell: CellId) -> Vec<&str> {
-        Vec::new()
+    /// The selected definition's conventional human name.
+    fn name(&self, _cell: CellId) -> Option<&str> {
+        None
     }
 
-    /// Ordinary cell values, without evaluation.
-    fn cell_definitions(&self, _cell: CellId) -> Vec<(Resolution, &Value)> {
-        Vec::new()
+    /// The selected ordinary cell definition, without evaluation.
+    fn cell_definition(&self, _cell: CellId) -> Option<(Resolution, &Value)> {
+        None
     }
 
-    /// Sources registering foreign implementations, in call order.
-    fn foreign_sources(&self, _cell: CellId) -> Vec<Resolution> {
-        Vec::new()
+    /// The selected call target's source, if it is foreign.
+    fn foreign_source(&self, _cell: CellId) -> Option<Resolution> {
+        None
     }
 }
 
@@ -652,6 +671,18 @@ pub fn partial<World, Hover>(
     + 'static,
 ) -> Partial<World, Hover> {
     Rc::new(projection)
+}
+
+/// First successful partial wins. An empty composition always declines.
+pub fn compose_partials<World: 'static, Hover: 'static>(
+    partials: impl IntoIterator<Item = Partial<World, Hover>>,
+) -> Partial<World, Hover> {
+    let partials: Vec<_> = partials.into_iter().collect();
+    match partials.as_slice() {
+        [] => partial(|_| None),
+        [only] => only.clone(),
+        _ => partial(move |input| partials.iter().find_map(|projection| projection(input))),
+    }
 }
 
 pub fn text<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
@@ -1097,6 +1128,81 @@ mod tests {
 
     fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
         None
+    }
+
+    fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
+        struct NoEval;
+        impl Env for NoEval {
+            fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+                panic!("unexpected application")
+            }
+
+            fn evaluate(&self, _: &Value) -> (Value, usize) {
+                panic!("unexpected evaluation")
+            }
+        }
+
+        projection(&ProjectionInput {
+            env: &NoEval,
+            value: &Value::record([]),
+            scale_factor: 1.0,
+            writable: false,
+            selection: None,
+            pending: None,
+            state: None,
+            targets: ProjectionTargets::new(&|_| panic!("unexpected target lookup")),
+        })
+    }
+
+    #[test]
+    fn empty_partial_composition_is_an_identity() {
+        let empty = compose_partials([]);
+        assert!(run_partial(&empty).is_none());
+        let success = partial(|_| Some(Layout::EmptySlot));
+        for projection in [
+            compose_partials([empty.clone(), success.clone()]),
+            compose_partials([success, empty]),
+        ] {
+            assert!(matches!(run_partial(&projection), Some(Layout::EmptySlot)));
+        }
+    }
+
+    #[test]
+    fn partial_composition_preserves_order_and_stops_at_success() {
+        let visited = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let projection = |index, succeeds: bool| {
+            let visited = visited.clone();
+            partial(move |_| {
+                visited.borrow_mut().push(index);
+                succeeds.then_some(Layout::EmptySlot)
+            })
+        };
+        let first = projection(1, false);
+        let second = projection(2, false);
+        let third = projection(3, true);
+        let unreachable = partial(|_| panic!("later partial must not run"));
+        for combined in [
+            compose_partials([
+                first.clone(),
+                second.clone(),
+                third.clone(),
+                unreachable.clone(),
+            ]),
+            compose_partials([
+                compose_partials([first.clone(), second.clone()]),
+                compose_partials([third.clone(), unreachable.clone()]),
+            ]),
+            compose_partials([first, compose_partials([second, third, unreachable])]),
+        ] {
+            visited.borrow_mut().clear();
+            assert!(matches!(run_partial(&combined), Some(Layout::EmptySlot)));
+            assert_eq!(*visited.borrow(), [1, 2, 3]);
+        }
+    }
+
+    #[test]
+    fn all_declining_partials_leave_fallback_to_the_caller() {
+        assert!(run_partial(&compose_partials([partial(probe), partial(probe)])).is_none());
     }
 
     #[test]

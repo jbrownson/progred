@@ -23,8 +23,10 @@ fn iop_tree_profile_loop() {
         .and_then(|value| value.parse().ok())
         .unwrap_or(30);
     eprintln!(
-        "runtime value: {} bytes",
-        std::mem::size_of::<grap::RuntimeValue>()
+        "runtime value: {} bytes; GID value: {} bytes; definition: {} bytes",
+        std::mem::size_of::<grap::RuntimeValue>(),
+        std::mem::size_of::<Value>(),
+        std::mem::size_of::<grap::Definition>(),
     );
     let mut context = BenchContext::new();
     context.stack.projection = context.stack.pane_projection.clone();

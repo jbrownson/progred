@@ -75,9 +75,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     cells.set_value(vocabulary::CURRENT, name::record("current", []));
     cells.set_value(vocabulary::INPUT, name::record("input", []));
     Library::named(
+        ID,
         "line edit",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

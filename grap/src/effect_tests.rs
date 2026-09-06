@@ -37,7 +37,7 @@ fn run(
     invocation: Invocation,
     function: Value,
     operations: &Operations,
-    definitions: impl Fn(CellId) -> Vec<(Resolution, CallCandidate)>,
+    definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     initial: Value,
     fuel: usize,
 ) -> (Evaluation, Value) {
@@ -114,16 +114,16 @@ fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
                     vec![
                         (
                             Resolution::Document,
-                            CallCandidate::Value(lambda(
-                                [],
-                                after(effect.clone(), absent::decline()),
-                            )),
+                            Definition::Value(lambda([], after(effect.clone(), absent::decline()))),
                         ),
                         (
                             library,
-                            CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                                panic!("effectful decline must stop before fallback")
-                            })),
+                            Definition::foreign(
+                                gid::Value::record([]),
+                                ForeignFunction::new(|_, _, _| {
+                                    panic!("effectful decline must stop before fallback")
+                                }),
+                            ),
                         ),
                     ]
                 },
@@ -156,16 +156,19 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
                 vec![
                     (
                         Resolution::Document,
-                        CallCandidate::Value(lambda(
+                        Definition::Value(lambda(
                             [],
                             after(operations.write(written.clone()), result.clone()),
                         )),
                     ),
                     (
                         Resolution::Library(new_cell_id()),
-                        CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                            panic!("ordinary absence is definitive")
-                        })),
+                        Definition::foreign(
+                            gid::Value::record([]),
+                            ForeignFunction::new(|_, _, _| {
+                                panic!("ordinary absence is definitive")
+                            }),
+                        ),
                     ),
                 ]
             },
@@ -179,7 +182,7 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
 }
 
 #[test]
-fn pure_declines_keep_ordered_details() {
+fn a_pure_decline_keeps_its_details_without_collecting_other_definitions() {
     let operations = Operations::new();
     let function = new_cell_id();
     let first = absent::with_detail(
@@ -204,7 +207,7 @@ fn pure_declines_keep_ordered_details() {
                     .map(|decline| {
                         (
                             Resolution::Library(new_cell_id()),
-                            CallCandidate::Value(lambda([], decline)),
+                            Definition::Value(lambda([], decline)),
                         )
                     })
                     .collect()
@@ -212,18 +215,7 @@ fn pure_declines_keep_ordered_details() {
             Value::record([]),
             100,
         );
-        assert_eq!(
-            evaluation.result,
-            if count == 1 {
-                first.clone()
-            } else {
-                absent::with_detail(
-                    absent::DECLINED,
-                    absent::CAUSES,
-                    Value::list([first.clone(), second.clone()]),
-                )
-            }
-        );
+        assert_eq!(evaluation.result, first);
         assert_eq!(state, Value::record([]));
     }
 }
@@ -242,14 +234,14 @@ fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
                 if cell == recurse {
                     vec![(
                         Resolution::Document,
-                        CallCandidate::Value(lambda([], call(recurse.into(), []))),
+                        Definition::Value(lambda([], call(recurse.into(), []))),
                     )]
                 } else {
                     assert_eq!(cell, function);
                     vec![
                         (
                             Resolution::Document,
-                            CallCandidate::Value(lambda(
+                            Definition::Value(lambda(
                                 [],
                                 after(
                                     operations.write(Value::from(vec![42])),
@@ -259,9 +251,12 @@ fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
                         ),
                         (
                             Resolution::Library(new_cell_id()),
-                            CallCandidate::ForeignFunction(ForeignFunction::new(|_, _, _| {
-                                panic!("halt must not fall through")
-                            })),
+                            Definition::foreign(
+                                gid::Value::record([]),
+                                ForeignFunction::new(|_, _, _| {
+                                    panic!("halt must not fall through")
+                                }),
+                            ),
                         ),
                     ]
                 }
@@ -312,7 +307,7 @@ fn an_effectful_decline_cannot_be_ignored_by_its_caller() {
 }
 
 #[test]
-fn effectful_preparation_cannot_skip_to_a_callable_candidate() {
+fn a_non_callable_definition_returns_absent_without_trying_another_source() {
     let operations = Operations::new();
     let function = new_cell_id();
     let (evaluation, state) = run(
@@ -323,14 +318,14 @@ fn effectful_preparation_cannot_skip_to_a_callable_candidate() {
             vec![
                 (
                     Resolution::Document,
-                    CallCandidate::Value(after(
+                    Definition::Value(after(
                         operations.write(Value::from(vec![42])),
                         Value::record([]),
                     )),
                 ),
                 (
                     Resolution::Library(new_cell_id()),
-                    CallCandidate::Value(lambda([], call(operations.read.into(), []))),
+                    Definition::Value(lambda([], call(operations.read.into(), []))),
                 ),
             ]
         },
@@ -339,9 +334,9 @@ fn effectful_preparation_cannot_skip_to_a_callable_candidate() {
     );
     assert_eq!(
         absent::reason(&evaluation.result),
-        Some(absent::EFFECTFUL_DECLINE)
+        Some(absent::NOT_CALLABLE)
     );
-    assert!(!evaluation.completed);
+    assert!(evaluation.completed);
     assert_eq!(state, Value::from(vec![42]));
 }
 
@@ -355,18 +350,21 @@ fn earlier_effects_do_not_prevent_a_later_pure_decline() {
             invocation,
             lambda(
                 [],
-                after(operations.write(written.clone()), call(function.into(), [])),
+                after(
+                    operations.write(written.clone()),
+                    after(call(function.into(), []), written.clone()),
+                ),
             ),
             &operations,
             |_| {
                 vec![
                     (
                         Resolution::Document,
-                        CallCandidate::Value(lambda([], absent::decline())),
+                        Definition::Value(lambda([], absent::decline())),
                     ),
                     (
                         Resolution::Library(new_cell_id()),
-                        CallCandidate::Value(lambda([], call(operations.read.into(), []))),
+                        Definition::Value(lambda([], call(operations.read.into(), []))),
                     ),
                 ]
             },
@@ -408,19 +406,20 @@ fn rust_functions_obey_the_same_decline_contract() {
                         vec![
                             (
                                 Resolution::Document,
-                                CallCandidate::ForeignFunction(foreign.clone()),
+                                Definition::foreign(gid::Value::record([]), foreign.clone()),
                             ),
                             (
                                 Resolution::Library(new_cell_id()),
-                                CallCandidate::ForeignFunction(ForeignFunction::new(
-                                    move |_, _, _| {
+                                Definition::foreign(
+                                    gid::Value::record([]),
+                                    ForeignFunction::new(move |_, _, _| {
                                         assert!(
                                             !effectful,
                                             "effectful decline must not fall through"
                                         );
                                         Ok(Value::record([]))
-                                    },
-                                )),
+                                    }),
+                                ),
                             ),
                         ]
                     },
@@ -434,7 +433,7 @@ fn rust_functions_obey_the_same_decline_contract() {
                         Some(absent::EFFECTFUL_DECLINE)
                     );
                 } else {
-                    assert_eq!(evaluation.result, Value::record([]));
+                    assert_eq!(evaluation.result, absent::decline());
                 }
             }
         }

@@ -52,12 +52,10 @@ fn a_data_event_realizes_the_apply_hook() {
             width: 500.0,
 
             projection: Some(&projection),
-            root_completions: None,
-            root_field_completions: None,
         },
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {
-            value_completions: None,
+            completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),

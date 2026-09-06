@@ -1059,6 +1059,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "layout",
         crate::Definitions::from_parts(
             cells,
@@ -1076,7 +1077,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
                     ForeignFunction::runtime(apply_border_projection),
                 ),
         ),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
 }
 

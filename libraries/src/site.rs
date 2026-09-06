@@ -35,9 +35,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "site",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 
@@ -61,7 +62,7 @@ mod tests {
             grap::absent::with_detail(
                 grap::absent::NOT_CALLABLE,
                 grap::absent::VALUE,
-                vocabulary::GET.into()
+                library.value(vocabulary::GET).unwrap().clone()
             )
         );
     }

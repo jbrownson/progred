@@ -37,7 +37,7 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
         .selection
         .filter(|current| current.stage() == Stage::Pending && current.path() == path.as_slice())
         .and_then(Selection::edit);
-    let content = placeholder(cx, tcx, engaged, false, completions, hooks);
+    let content = placeholder(cx, tcx, &path, engaged, false, completions, hooks);
     // Selection draws the same outline as the inactive frame.
     source_target(cx, path, None, hooks, content)
 }
@@ -45,13 +45,14 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
 fn placeholder<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
+    path: &[gid::Step],
     engaged: Option<&LineEditState>,
     labels: bool,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, query, labels, completions, hooks),
+        Some(query) => query_content(cx, tcx, path, query, labels, completions, hooks),
         None => placeholder_box(tcx, cx.styles),
     }
 }
@@ -62,28 +63,42 @@ fn placeholder<C: 'static, Cv: Canvas + 'static>(
 fn query_content<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
+    path: &[gid::Step],
     query: &LineEditState,
     labels: bool,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     // The card and keyboard commit must answer from one list.
-    let can_show_everything = completions.is_some();
-    let everything =
-        !can_show_everything || cx.selection.is_some_and(Selection::completion_everything);
+    let everything = cx.selection.is_some_and(Selection::completion_everything);
     let commit = if labels {
         Commit::Label(hooks.commit_label.clone())
     } else {
         Commit::Value(hooks.commit_value.clone())
     };
-    let entries = completion_entries_with(
+    let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
+    let request = progred_display::CompletionRequest {
+        query: query.text(),
+        kind: if labels {
+            progred_display::CompletionKind::Field
+        } else {
+            progred_display::CompletionKind::Value
+        },
+        scope: if everything {
+            progred_display::CompletionScope::Everything
+        } else {
+            progred_display::CompletionScope::Suggested
+        },
+        path,
+        value_at: &value_at,
+    };
+    let (entries, everything) = completion_entries_with(
         &cx.sources,
         cx.raw,
         &commit,
-        query.text(),
-        hooks.value_completions.as_ref(),
+        &request,
+        hooks.completions.as_ref(),
         completions,
-        everything,
     );
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
@@ -275,12 +290,10 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
     let card = on_key(card, move |world, event| {
         if event.state.is_down() {
             match event.key {
-                Key::Named(NamedKey::Enter) => {
-                    activate.as_ref().is_some_and(|activate| {
-                        activate(world);
-                        true
-                    })
-                }
+                Key::Named(NamedKey::Enter) => activate.as_ref().is_some_and(|activate| {
+                    activate(world);
+                    true
+                }),
                 Key::Named(key @ (NamedKey::Tab | NamedKey::ArrowDown))
                     if !everything
                         && !crate::modifiers::command(&event.modifiers)
@@ -395,12 +408,13 @@ fn completion_row<C: 'static, Cv: Canvas + 'static>(
 pub(super) fn label_query<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
+    path: &[gid::Step],
     query: &LineEditState,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, Some(query), true, completions, hooks);
+    let content = placeholder(cx, tcx, path, Some(query), true, completions, hooks);
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(scale, p, rect);
     });

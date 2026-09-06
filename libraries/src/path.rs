@@ -77,9 +77,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     }
     cells.set_value(INVALID_PATH, absent::named_reason("invalid path"));
     Library::named(
+        ID,
         "path",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

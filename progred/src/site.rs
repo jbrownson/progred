@@ -397,7 +397,6 @@ mod tests {
         );
         stack.libraries.insert(
             gid::new_cell_id(),
-            Value::record([]),
             progred_libraries::Definitions::from_parts(fallback, Default::default()),
         );
         let original = Some((vec![], crate::selection::payload::edge()));

@@ -59,9 +59,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     cells.set_value(vocabulary::UNSPECIFIED, named_reason("unspecified absence"));
     cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
     Library::named(
+        ID,
         "absent",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

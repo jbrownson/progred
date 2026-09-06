@@ -63,9 +63,10 @@ pub fn library<World: 'static, Hover: 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UPDATE, name::record("blob update", []));
     Library::named(
+        ID,
         "blob",
         crate::Definitions::from_parts(cells, functions()),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
 }
 

@@ -751,14 +751,15 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         cells.set_value(cell, absent::named_reason(name));
     }
     Library::named(
+        ID,
         "control",
         crate::Definitions::from_parts(cells, functions()),
-        vec![
+        progred_display::compose_partials([
             progred_display::partial(match_display::<World, Hover>),
             progred_display::partial(bindings_display::<World, Hover>),
             progred_display::partial(do_display::<World, Hover>),
             progred_display::partial(quote_display::<World, Hover>),
-        ],
+        ]),
     )
 }
 
@@ -1635,7 +1636,6 @@ mod tests {
     #[test]
     fn library_describes_control_forms_and_absence_reasons() {
         let library = library::<(), ()>();
-        assert_eq!(library.projections.len(), 4);
         assert_eq!(
             library.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")

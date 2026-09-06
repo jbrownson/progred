@@ -31,9 +31,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "number",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 
@@ -42,17 +43,19 @@ pub(crate) fn completions<N: std::str::FromStr + Display>(
     representation: &str,
     encode: impl FnOnce(N) -> Value,
 ) -> Vec<progred_display::Completion> {
-    query
-        .trim()
-        .parse::<N>()
-        .ok()
-        .map(|number| {
-            progred_display::Completion::new(number.to_string(), encode(number))
-                .with_aliases([query])
-                .with_detail(representation)
-        })
-        .into_iter()
-        .collect()
+    match query.trim() {
+        "" => "0",
+        number => number,
+    }
+    .parse::<N>()
+    .ok()
+    .map(|number| {
+        progred_display::Completion::new(number.to_string(), encode(number))
+            .with_aliases([query])
+            .with_detail(representation)
+    })
+    .into_iter()
+    .collect()
 }
 
 const PIXELS_PER_STEP: f64 = 4.0;
@@ -206,6 +209,32 @@ pub(crate) fn rounded(value: f64, step: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_completions_offer_zero_for_empty_queries_but_not_invalid_numbers() {
+        for (complete, zero, representation) in [
+            (
+                crate::f32::completions as fn(&str) -> Vec<progred_display::Completion>,
+                crate::f32::value(0.0),
+                "f32",
+            ),
+            (crate::f64::completions, crate::f64::value(0.0), "f64"),
+            (crate::u64::completions, crate::u64::value(0), "u64"),
+        ] {
+            for query in ["", " \t\n", "0"] {
+                let offers = complete(query);
+                let [offer] = offers.as_slice() else {
+                    panic!("expected one {representation} zero offer for {query:?}");
+                };
+                assert_eq!(offer.display, "0");
+                assert_eq!(offer.detail.as_deref(), Some(representation));
+                assert_eq!(offer.value.literal(), Some(&zero));
+            }
+            for query in ["not a number", "-", ".", "1e"] {
+                assert!(complete(query).is_empty(), "{representation}: {query:?}");
+            }
+        }
+    }
 
     #[test]
     fn scrubbing_uses_the_active_decimal_precision() {

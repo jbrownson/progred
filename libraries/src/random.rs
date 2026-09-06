@@ -113,9 +113,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, absent::named_reason(spelling));
     }
     Library::named(
+        ID,
         "random",
         crate::Definitions::from_parts(cells, functions()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 
@@ -183,7 +184,7 @@ mod tests {
                     vec![
                         (
                             gid::Resolution::Document,
-                            grap::CallCandidate::Value(grap::lambda(
+                            grap::Definition::Value(grap::lambda(
                                 [],
                                 grap::call(
                                     grap::lambda([ignored], absent::decline()),
@@ -193,7 +194,7 @@ mod tests {
                         ),
                         (
                             gid::Resolution::Library(ID),
-                            grap::CallCandidate::Value(grap::lambda([], next.clone())),
+                            grap::Definition::Value(grap::lambda([], next.clone())),
                         ),
                     ]
                 } else {
@@ -202,7 +203,7 @@ mod tests {
                         .map(|function| {
                             (
                                 gid::Resolution::Library(ID),
-                                grap::CallCandidate::ForeignFunction(function.clone()),
+                                grap::Definition::foreign(gid::Value::record([]), function.clone()),
                             )
                         })
                         .into_iter()

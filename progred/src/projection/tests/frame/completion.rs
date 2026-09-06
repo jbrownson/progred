@@ -58,12 +58,10 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                 styles: &styles,
                 width: 600.0,
                 projection: Some(&stack.projection),
-                root_completions: Some(&stack.root_completions),
-                root_field_completions: Some(&stack.root_field_completions),
             },
             &mut tcx,
             Hooks {
-                value_completions: None,
+                completions: Some(stack.completions.clone()),
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
                 start_edit: Rc::new(|_, _, _| {}),
@@ -659,12 +657,10 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             width: 852.0,
 
             projection: Some(&stack.projection),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
-            value_completions: None,
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|world: &mut ClickWorld, path, line| {

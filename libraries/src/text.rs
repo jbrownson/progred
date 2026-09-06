@@ -76,9 +76,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
     Library::named(
+        ID,
         "text",
         crate::Definitions::from_parts(cells, functions()),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
 }
 
@@ -133,7 +134,7 @@ mod tests {
             select_with: std::rc::Rc::new(|_, _| false),
             hover: (),
         };
-        let display = display::<(), ()>(&ProjectionInput {
+        let display = (library::<(), ()>().projection)(&ProjectionInput {
             env: &NoEval,
             value: &value("hi"),
             scale_factor: 1.0,
@@ -171,6 +172,5 @@ mod tests {
             library.value(vocabulary::UTF8).and_then(name::read),
             Some("utf8")
         );
-        assert_eq!(library.projections.len(), 1);
     }
 }

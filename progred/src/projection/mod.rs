@@ -126,7 +126,6 @@ struct Cx<'a> {
     selected_trace: Option<SourceTrace>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
-    root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
 #[derive(Clone, Default)]
@@ -187,29 +186,22 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         (evaluation.result, evaluation.remaining_fuel)
     }
 
-    fn names(&self, cell: CellId) -> Vec<&str> {
-        if self.cx.raw {
-            Vec::new()
-        } else {
-            self.cx.sources.names(cell).collect()
-        }
+    fn name(&self, cell: CellId) -> Option<&str> {
+        self.cx.name(cell)
     }
 
-    fn cell_definitions(&self, cell: CellId) -> Vec<(gid::Resolution, &Value)> {
+    fn cell_definition(&self, cell: CellId) -> Option<(gid::Resolution, &Value)> {
         self.cx
             .sources
-            .values(cell)
+            .resolve(cell)
             .map(|value| (value.source, value.value))
-            .collect()
     }
 
-    fn foreign_sources(&self, cell: CellId) -> Vec<gid::Resolution> {
-        self.cx
-            .sources
-            .libraries
-            .foreign_sources(cell)
-            .map(gid::Resolution::Library)
-            .collect()
+    fn foreign_source(&self, cell: CellId) -> Option<gid::Resolution> {
+        match grap::Host::resolve(&self.cx.sources, cell) {
+            Some((source, grap::Definition::Foreign(_))) => Some(source),
+            _ => None,
+        }
     }
 }
 
@@ -259,7 +251,7 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             }
             progred_display::CompletionKind::Field => cx
                 .pending_edge_under(path)
-                .map(|(query, _)| label_query(cx, tcx, query, provider.as_ref(), hooks))
+                .map(|(query, _)| label_query(cx, tcx, path, query, provider.as_ref(), hooks))
                 .unwrap_or_else(|| render::text(tcx, "…", &cx.styles.dim)),
         }),
         progred_display::Layout::LineEdit(mut line) => {
@@ -780,8 +772,8 @@ fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
 /// Host callbacks for library value offers, selection, editing,
 /// and dispatch access to caller-owned state and platform services.
 pub struct Hooks<C> {
-    /// Library value offers added by the host when a picker uses its universal vocabulary.
-    pub value_completions: Option<progred_display::CompletionProvider>,
+    /// Library vocabulary used when the control does not specify its own.
+    pub completions: Option<progred_display::CompletionProvider>,
     pub select: Rc<dyn Fn(&mut C, Path)>,
     /// Select a visible occurrence of a drawing's structural source.
     pub select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
@@ -859,10 +851,8 @@ fn projection_target<C: 'static>(
 impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
-    fn names(&self, cell: CellId) -> Option<String> {
-        (!self.raw)
-            .then(|| self.sources.display_names(cell))
-            .flatten()
+    fn name(&self, cell: CellId) -> Option<&str> {
+        (!self.raw).then(|| self.sources.name(cell)).flatten()
     }
 
     /// Whether `path` carries the primary highlight. A label-stage
@@ -1161,10 +1151,6 @@ pub struct ProjectDescription<'a, World> {
     pub styles: &'a Styles,
     pub width: f64,
     pub projection: Option<&'a Projection<World>>,
-    /// Suggestions contributed for an empty document root.
-    pub root_completions: Option<&'a progred_display::CompletionProvider>,
-    /// Fields contributed for a record at the document root.
-    pub root_field_completions: Option<&'a progred_display::CompletionProvider>,
 }
 
 pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
@@ -1184,8 +1170,6 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
         styles,
         width,
         projection,
-        root_completions,
-        root_field_completions,
     } = description;
     let cx = Cx {
         sources,
@@ -1196,7 +1180,6 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
         scrub_spelling,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
-        root_field_completions,
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
         secondary: secondary_of(&sources, selection),
@@ -1214,27 +1197,18 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
         traversal.cells.insert(cell);
         traversal.enclosing = Some((cell, *source, root_path.len()));
     }
-    let layout = match root {
-        None if root_completions.is_some() => ChoiceLayout::fixed(pending_view(
-            &cx,
-            tcx,
-            root_path.to_vec(),
-            root_completions,
-            &hooks,
-        )),
-        _ => prepare_location(
-            &cx,
-            projection,
-            tcx,
-            root_path,
-            &traversal,
-            Location::Root(root),
-            projection,
-            None,
-            &hooks,
-            &mut build,
-        ),
-    };
+    let layout = prepare_location(
+        &cx,
+        projection,
+        tcx,
+        root_path,
+        &traversal,
+        Location::Root(root),
+        projection,
+        None,
+        &hooks,
+        &mut build,
+    );
     resolve_choices(
         ChoiceGraph {
             root: layout,
@@ -1408,7 +1382,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     let select_payload = hooks.select_payload.clone();
     let payload_origin = origin.clone();
     let result_hooks = Hooks {
-        value_completions: hooks.value_completions.clone(),
+        completions: hooks.completions.clone(),
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
         select_source: hooks.select_source.clone(),
         select_payload: Rc::new(move |ctx, _, payload| {
@@ -1440,7 +1414,6 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         selected_trace: cx.selected_trace.clone(),
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
-        root_field_completions: None,
     };
     prepare_location(
         &result_cx,

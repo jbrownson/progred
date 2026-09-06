@@ -59,9 +59,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         absent::named_reason("invalid radius"),
     );
     Library::named(
+        ID,
         "geometry",
         crate::Definitions::from_parts(cells, functions()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 

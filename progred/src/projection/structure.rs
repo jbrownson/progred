@@ -8,9 +8,9 @@ use crate::identity::short_id;
 use crate::selection::writable_at;
 use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
-    CompletionKind, CompletionProvider, Delim, Face, Layout, activatable, alternatives,
-    block_hover, bracket, col, completion, descend, dim, faced, hug, id, on_activate, on_click,
-    on_hover, pickable, row, shared, slot,
+    CompletionKind, Delim, Face, Layout, activatable, alternatives, block_hover, bracket, col,
+    completion, descend, dim, faced, hug, id, on_activate, on_click, on_hover, pickable, row,
+    shared, slot,
 };
 use std::rc::Rc;
 
@@ -24,7 +24,7 @@ pub fn of<World: 'static>(
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
-        Value::Cell(cell) => cell_layout(cx, path, *cell),
+        Value::Cell(cell) => cell_layout(cx, *cell),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
         Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
@@ -47,14 +47,12 @@ pub(super) fn collapsed_layout<World: 'static>(
     hooks: &Hooks<World>,
 ) -> Option<View<World>> {
     let delim = match value {
-        Value::Cell(cell) if cx.sources.values(*cell).next().is_some() => {
-            let pending_inside = cx.sources.values(*cell).any(|value| {
-                let mut followed = path.to_vec();
-                followed.push(Step::Follow(value.source));
-                cx.pending_child_of(&followed).is_some()
-                    || cx.pending_edge_under(&followed).is_some()
-            });
-            (!pending_inside).then_some(Delim::Paren)?
+        Value::Cell(cell) => {
+            let value = cx.sources.resolve(*cell)?;
+            let mut followed = path.to_vec();
+            followed.push(Step::Follow(value.source));
+            (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
+                .then_some(Delim::Paren)?
         }
         Value::List(elements) if !elements.is_empty() && cx.pending_child_of(path).is_none() => {
             Delim::Bracket
@@ -77,28 +75,12 @@ pub(super) fn collapsed_layout<World: 'static>(
     ))
 }
 
-fn cell_layout<World: 'static>(cx: &Cx, _path: &[Step], cell: CellId) -> View<World> {
-    let definitions: Vec<_> = cx.sources.values(cell).collect();
-    match definitions.as_slice() {
-        [] => bracket(
-            Delim::Paren,
-            descend(Step::Follow(Resolution::Document), None, None),
-        ),
-        [value] => bracket(
-            Delim::Paren,
-            descend(Step::Follow(value.source), None, None),
-        ),
-        _ => bracket(
-            Delim::Paren,
-            col(
-                0,
-                4.0,
-                definitions
-                    .into_iter()
-                    .map(|value| descend(Step::Follow(value.source), None, None)),
-            ),
-        ),
-    }
+fn cell_layout<World: 'static>(cx: &Cx, cell: CellId) -> View<World> {
+    let source = cx
+        .sources
+        .resolve(cell)
+        .map_or(Resolution::Document, |value| value.source);
+    bracket(Delim::Paren, descend(Step::Follow(source), None, None))
 }
 
 fn list_layout<World: 'static>(
@@ -164,18 +146,14 @@ fn record_layout<World: 'static>(
         items.push((key, false));
     }
     items.sort_by(
-        |(left, _), (right, _)| match (cx.names(*left), cx.names(*right)) {
-            (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
+        |(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
+            (Some(left_name), Some(right_name)) => left_name.cmp(right_name).then(left.cmp(right)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => left.cmp(right),
         },
     );
     let pending_edge = cx.pending_edge_under(path).is_some();
-    let pending_completions = path
-        .is_empty()
-        .then(|| cx.root_field_completions.cloned())
-        .flatten();
     if items.is_empty() && !pending_edge {
         return selectable(
             bracket(Delim::Brace, row(0.0, Vec::new())),
@@ -202,7 +180,7 @@ fn record_layout<World: 'static>(
         if !items.is_empty() {
             flat.push(dim(", "));
         }
-        flat.push(pending_edge_layout(pending_completions.clone()));
+        flat.push(pending_edge_layout());
     }
     let mut rows: Vec<View<World>> = items
         .iter()
@@ -210,7 +188,7 @@ fn record_layout<World: 'static>(
         .map(|((key, present), child)| field_row(cx, path, *key, *present, child, hooks))
         .collect();
     if pending_edge {
-        rows.push(pending_edge_layout(pending_completions));
+        rows.push(pending_edge_layout());
     }
     alternatives([
         selectable(
@@ -245,8 +223,8 @@ fn field_head<World: 'static>(
 }
 
 fn field_label<World>(cx: &Cx, key: CellId) -> View<World> {
-    let (spelling, face) = match cx.names(key) {
-        Some(names) => (names, Face::Label),
+    let (spelling, face) = match cx.name(key) {
+        Some(name) => (name.to_owned(), Face::Label),
         None => (short_id(key), Face::Id),
     };
     faced(spelling, face)
@@ -318,15 +296,11 @@ fn insert<World: 'static>(
     )
 }
 
-fn pending_edge_layout<World: 'static>(completions: Option<CompletionProvider>) -> View<World> {
+fn pending_edge_layout<World: 'static>() -> View<World> {
     block_hover(on_click(
         row(
             0.0,
-            [
-                completion(CompletionKind::Field, completions),
-                dim(": "),
-                slot(),
-            ],
+            [completion(CompletionKind::Field, None), dim(": "), slot()],
         ),
         Rc::new(|_| true),
     ))

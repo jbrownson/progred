@@ -313,9 +313,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     cells.set_value(vocabulary::HUE, name::record("hue", []));
     named::insert(&mut cells);
     Library::named(
+        ID,
         "color",
         crate::Definitions::from_parts(cells, functions()),
-        vec![progred_display::partial(display::<World, Hover>)],
+        progred_display::partial(display::<World, Hover>),
     )
 }
 

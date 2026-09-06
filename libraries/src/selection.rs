@@ -64,9 +64,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(spelling, []));
     }
     Library::named(
+        ID,
         "selection",
         crate::Definitions::from_parts(cells, Default::default()),
-        vec![],
+        progred_display::partial(|_| None),
     )
 }
 
@@ -89,7 +90,7 @@ mod tests {
             grap_runtime::absent::with_detail(
                 grap_runtime::absent::NOT_CALLABLE,
                 grap_runtime::absent::VALUE,
-                vocabulary::GET.into()
+                library.value(vocabulary::GET).unwrap().clone()
             )
         );
     }
@@ -136,7 +137,7 @@ mod tests {
                     .map(|function| {
                         (
                             gid::Resolution::Document,
-                            grap_runtime::CallCandidate::ForeignFunction(function),
+                            grap_runtime::Definition::foreign(gid::Value::record([]), function),
                         )
                     })
                     .into_iter()

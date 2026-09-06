@@ -160,7 +160,7 @@ impl BenchContext {
             cache,
         };
         let hooks = Hooks::<World> {
-            value_completions: Some(stack.value_completions.clone()),
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
@@ -199,8 +199,6 @@ impl BenchContext {
                 styles,
                 width: width - 48.0,
                 projection: Some(&stack.projection),
-                root_completions: Some(&stack.root_completions),
-                root_field_completions: Some(&stack.root_field_completions),
             },
             &mut tcx,
             hooks,

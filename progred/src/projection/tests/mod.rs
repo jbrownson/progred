@@ -1,7 +1,7 @@
 use super::completion::completion_card;
 use super::*;
 use crate::annotations::Annotations;
-use crate::completion::{Commit, Entry, Offers, completion_entries_with};
+use crate::completion::{Commit, Entry, Offers};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::navigate::{projected_name_owner, step_selection};
@@ -46,9 +46,10 @@ fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
         progred_libraries::Library::<(), ()>::named(
+            CellId::from_u128(1),
             "test",
             progred_libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-            vec![],
+            progred_display::partial(|_| None),
         ),
     )])
     .0
@@ -56,6 +57,53 @@ fn libraries(cells: Cells) -> Libraries {
 
 fn core_libraries() -> Libraries {
     crate::stack::load::<()>().libraries
+}
+
+fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<progred_display::Completion> {
+    (stack.completions)(&progred_display::CompletionRequest {
+        query: "",
+        kind: progred_display::CompletionKind::Value,
+        scope: progred_display::CompletionScope::Suggested,
+        path: &[],
+        value_at: &|_| None,
+    })
+    .unwrap_or_default()
+}
+
+fn completion_entries_with<C: 'static>(
+    sources: &Sources,
+    raw: bool,
+    commit: &Commit<C>,
+    query: &str,
+    providers: Option<&progred_display::CompletionProvider>,
+    contextual: Option<&progred_display::CompletionProvider>,
+    everything: bool,
+) -> Vec<Entry<C>> {
+    use progred_display::{CompletionKind, CompletionRequest, CompletionScope};
+    let value_at = |path: &[Step]| sources.resolve_path(path);
+    crate::completion::completion_entries_with(
+        sources,
+        raw,
+        commit,
+        &CompletionRequest {
+            query,
+            kind: if matches!(commit, Commit::Label(_)) {
+                CompletionKind::Field
+            } else {
+                CompletionKind::Value
+            },
+            scope: if everything {
+                CompletionScope::Everything
+            } else {
+                CompletionScope::Suggested
+            },
+            path: &[],
+            value_at: &value_at,
+        },
+        providers,
+        contextual,
+    )
+    .0
 }
 
 fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
@@ -78,15 +126,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
     let stack = crate::stack::load::<World>();
     let mut projection_libraries = libraries.clone();
     for (id, definitions) in stack.libraries.iter() {
-        projection_libraries.insert(
-            id,
-            stack
-                .libraries
-                .metadata(id)
-                .cloned()
-                .unwrap_or_else(|| Value::record([])),
-            definitions.clone(),
-        );
+        projection_libraries.insert(id, definitions.clone());
     }
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -116,12 +156,10 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
             width: 500.0,
 
             projection: Some(&stack.projection),
-            root_completions: Some(&stack.root_completions),
-            root_field_completions: Some(&stack.root_field_completions),
         },
         &mut tcx,
         Hooks {
-            value_completions: Some(stack.value_completions.clone()),
+            completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             start_edit: Rc::new(|selected, path, line| selected.push((path, line))),

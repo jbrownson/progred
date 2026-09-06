@@ -341,14 +341,19 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
     );
     Library::named(
+        ID,
         "f64",
         crate::Definitions::from_parts(cells, functions()),
-        vec![
+        progred_display::compose_partials([
             progred_display::partial(binary_display::<World, Hover>),
             progred_display::partial(display::<World, Hover>),
-        ],
+        ]),
     )
-    .with_value_completions(completions)
+    .with_completions(|request| {
+        (request.scope == progred_display::CompletionScope::Everything
+            && request.kind == progred_display::CompletionKind::Value)
+            .then(|| completions(request.query))
+    })
 }
 
 #[cfg(test)]

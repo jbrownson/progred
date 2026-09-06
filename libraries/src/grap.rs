@@ -28,9 +28,9 @@ fn short_id(cell: CellId) -> String {
 }
 
 fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
-    match env.names(cell) {
-        names if !names.is_empty() => (names.join(" / "), Face::Name),
-        _ => (short_id(cell), Face::Id),
+    match env.name(cell) {
+        Some(name) => (name.to_owned(), Face::Name),
+        None => (short_id(cell), Face::Id),
     }
 }
 
@@ -56,13 +56,10 @@ fn deep_cell<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
-    let definitions = input.env.cell_definitions(cell);
-    let [(resolution, _)] = definitions.as_slice() else {
-        return None;
-    };
+    let (resolution, _) = input.env.cell_definition(cell)?;
     Some(bracket(
         Delim::Paren,
-        descend(Step::Follow(*resolution), None, None),
+        descend(Step::Follow(resolution), None, None),
     ))
 }
 
@@ -126,9 +123,9 @@ pub(crate) fn expression_descend<World: 'static, Hover: Clone + 'static>(
 }
 
 fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
-    match env.names(field) {
-        names if !names.is_empty() => (names.join(" / "), Face::Label),
-        _ => (short_id(field), Face::Id),
+    match env.name(field) {
+        Some(name) => (name.to_owned(), Face::Label),
+        None => (short_id(field), Face::Id),
     }
 }
 
@@ -157,14 +154,10 @@ fn function_parameters(env: &dyn progred_display::Env, function: &Value) -> Opti
         if !followed.insert(cell) {
             return None;
         }
-        if !env.foreign_sources(cell).is_empty() {
+        if env.foreign_source(cell).is_some() {
             return None;
         }
-        let definitions = env.cell_definitions(cell);
-        let [(_, definition)] = definitions.as_slice() else {
-            return None;
-        };
-        function = definition;
+        function = env.cell_definition(cell)?.1;
     }
     parameters(function)
 }
@@ -174,13 +167,11 @@ fn standard_field_order(
     left: &CellId,
     right: &CellId,
 ) -> std::cmp::Ordering {
-    match (env.names(*left), env.names(*right)) {
-        (left_names, right_names) if !left_names.is_empty() && !right_names.is_empty() => {
-            left_names.cmp(&right_names).then(left.cmp(right))
-        }
-        (left_names, _) if !left_names.is_empty() => std::cmp::Ordering::Less,
-        (_, right_names) if !right_names.is_empty() => std::cmp::Ordering::Greater,
-        _ => left.cmp(right),
+    match (env.name(*left), env.name(*right)) {
+        (Some(left_name), Some(right_name)) => left_name.cmp(right_name).then(left.cmp(right)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => left.cmp(right),
     }
 }
 
@@ -210,7 +201,9 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
                                 .with_detail("parameter")
                         })
                         .collect::<Vec<_>>();
-                    std::rc::Rc::new(move |_: &str| completions.clone()) as CompletionProvider
+                    std::rc::Rc::new(move |_: &progred_display::CompletionRequest<'_>| {
+                        Some(completions.clone())
+                    }) as CompletionProvider
                 });
             vec![RecordField {
                 label: completion(CompletionKind::Field, field_completions),
@@ -384,43 +377,52 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         cells.set_value(cell, absent::named_reason(value));
     }
     Library::named(
+        ID,
         "grap",
         crate::Definitions::from_parts(cells, functions()),
         // Projection order mirrors evaluator precedence: the explicit
         // Grap-result wrapper, calls, lambdas, then FFI values.
-        vec![
+        progred_display::compose_partials([
             progred_display::partial(evaluate_display::<World, Hover>),
             progred_display::partial(call_display::<World, Hover>),
             progred_display::partial(lambda_display::<World, Hover>),
             progred_display::partial(ffi_display::<World, Hover>),
-        ],
+        ]),
     )
-    .with_root_completions([progred_display::Completion::generated("grap", || {
-        let cell = gid::new_cell_id();
-        Value::record([
-            (vocabulary::GRAP, cell.into()),
-            (
-                crate::workspace::vocabulary::PANES,
-                Value::record([(
-                    crate::workspace::vocabulary::LEFT,
-                    Value::list([Value::record([(
-                        crate::presentation::vocabulary::RENDER,
-                        cell.into(),
-                    )])]),
-                )]),
-            ),
-        ])
-    })
-    .with_detail("grap library")
-    .on_commit(crate::selection::pending_at(&[
-        gid::Step::Key(vocabulary::GRAP),
-        gid::Step::Follow(gid::Resolution::Document),
-    ]))])
-    .with_root_field_completions([progred_display::Completion::new(
-        "grap",
-        Value::from(vocabulary::GRAP),
-    )
-    .with_detail("grap library")])
+    .with_completions(completions)
+}
+
+fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    use progred_display::CompletionScope;
+    match (request.scope, request.kind, request.path) {
+        (CompletionScope::Suggested, CompletionKind::Value, []) => Some(vec![
+            Completion::generated("grap", || {
+                let cell = gid::new_cell_id();
+                Value::record([
+                    (vocabulary::GRAP, cell.into()),
+                    (
+                        crate::workspace::vocabulary::PANES,
+                        Value::record([(
+                            crate::workspace::vocabulary::LEFT,
+                            Value::list([Value::record([(
+                                crate::presentation::vocabulary::RENDER,
+                                cell.into(),
+                            )])]),
+                        )]),
+                    ),
+                ])
+            })
+            .with_detail("grap library")
+            .on_commit(crate::selection::pending_at(&[
+                gid::Step::Key(vocabulary::GRAP),
+                gid::Step::Follow(gid::Resolution::Document),
+            ])),
+        ]),
+        (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
+            Completion::new("grap", Value::from(vocabulary::GRAP)).with_detail("grap library"),
+        ]),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -518,9 +520,9 @@ mod tests {
                 panic!("completion does not evaluate the function")
             }
 
-            fn names(&self, _: CellId) -> Vec<&str> {
+            fn name(&self, _: CellId) -> Option<&str> {
                 self.0.set(self.0.get() + 1);
-                vec!["parameter"]
+                Some("parameter")
             }
         }
 
@@ -750,18 +752,12 @@ mod tests {
                 (Value::record([]), 0)
             }
 
-            fn cell_definitions(&self, cell: CellId) -> Vec<(gid::Resolution, &Value)> {
-                (cell == FUNCTION_CELL)
-                    .then_some((gid::Resolution::Document, &self.definition))
-                    .into_iter()
-                    .collect()
+            fn cell_definition(&self, cell: CellId) -> Option<(gid::Resolution, &Value)> {
+                (cell == FUNCTION_CELL).then_some((gid::Resolution::Document, &self.definition))
             }
 
-            fn foreign_sources(&self, cell: CellId) -> Vec<gid::Resolution> {
-                (self.native && cell == FUNCTION_CELL)
-                    .then_some(gid::Resolution::Library(ID))
-                    .into_iter()
-                    .collect()
+            fn foreign_source(&self, cell: CellId) -> Option<gid::Resolution> {
+                (self.native && cell == FUNCTION_CELL).then_some(gid::Resolution::Library(ID))
             }
         }
 
@@ -787,7 +783,10 @@ mod tests {
             argument_order(&layout),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA,]
         );
-        let native = DefinitionEnv { native: true, ..env };
+        let native = DefinitionEnv {
+            native: true,
+            ..env
+        };
         assert_eq!(
             argument_order(&call_display(&input(&native, &call)).unwrap()),
             [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
@@ -983,7 +982,6 @@ mod tests {
             absent::reason(&absent::with_reason(grap_runtime::absent::MISSING_CELL)),
             Some(grap_runtime::absent::MISSING_CELL)
         );
-        assert_eq!(library.projections.len(), 4);
 
         let input = gid::new_cell_id();
         let expression = grap_runtime::call(

@@ -1,6 +1,6 @@
 # Grap and projections
 
-Current implementation, 2026-09-04. Grap is embedded in ordinary GID values.
+Current implementation, 2026-09-05. Grap is embedded in ordinary GID values.
 Its evaluator, library conventions, projection composition, and editor
 adaptation have separate responsibilities. Earlier rationale and proposed
 language directions are [historical notes](history/projections-notes.md), not
@@ -15,17 +15,29 @@ window, or file services.
 
 The [libraries package](../libraries/src/lib.rs) contains conceptual libraries
 as modules: names, text, f64, control, Grap's self-description, geometry,
-presentation, layout, and other domains. A `Library` carries GID metadata,
-definitions, and ordered partial projections. `Libraries` keeps an insertion-
-ordered unique map keyed by stable library identities supplied externally.
-Each source contributes at most one value per cell but can supply multiple
-Rust foreign implementations. Those registrations are stored separately from
-the cell values: naming a function does not create a second definition.
+presentation, layout, and other domains. A `Library` carries definitions and
+one partial projection. A library with several forms composes them with
+`compose_partials`: first success wins, and the empty composition declines.
+The editor composes these library projections in load order above its one
+total structural fallback. `Libraries` keeps an insertion-ordered unique map
+keyed by stable library identities supplied externally. Repeating a library
+identity replaces its entire contribution in place before composition.
+
+Each library stores one sorted definition table. An entry is either an ordinary
+`Value` or a shared native definition containing its descriptive `Value` and Rust
+implementation. Reading uses the description; calling uses the implementation.
+The built-in builders join their data and function declarations once, when
+constructing this table. An unnamed native definition has an empty record as
+its description. The library's own name record is an ordinary definition under
+its library identity, so references and name lookup need no metadata side channel.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
-the partial projections, root templates, root field vocabulary, and query-dependent
-value offers. The host passes general value providers explicitly to completion
-lowering; a projection's own vocabulary remains part of its completion request. Documents
+the partial projections and contextual completion providers. A completion provider
+receives the query, field/value kind, suggestion/Everything scope, source-qualified
+path, and a read-only path lookup. Library providers compose in library order;
+a projection may supply a local vocabulary on its completion control instead.
+There are no root-specific host hooks: root templates and root fields are ordinary
+provider decisions about that request. Documents
 currently contribute no installed libraries or projections. A Grap function
 stored in a document is ordinary reachable data; it is not discovered as
 configuration through a reserved cell address.
@@ -40,7 +52,10 @@ Additional fields do not invalidate a recognized facet.
 Normal display tries an explicit ordered list of partial functions, followed
 by a total structural fallback. A partial can decline; malformed shapes must
 remain accessible through a later projection or Raw. Raw uses the structural
-fallback alone. Specific domain projections precede general ones.
+fallback alone. Specific domain projections precede general ones. Libraries
+contribute these functions explicitly; composition does not depend on registering
+them under a shared cell identity. The current host partials are Rust callbacks,
+while presentation declarations can apply ordinary Grap callables.
 
 [`ProjectionInput`](../display/src/lib.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
@@ -53,7 +68,7 @@ partials. They may supply a missing-child layout at the actual missing
 location, without inventing a value. Omitting these specializations uses the
 ambient projection and ordinary pending behavior.
 
-The structural fallback follows cells deeply and exposes their definitions.
+The structural fallback follows cells deeply into the selected definition.
 Grap expression projections prepend shallow named-cell display at use sites.
 Binder/declaration positions and quoted data restore deep display; these
 contexts can alternate as expressions nest. Calls use a stored or inline
@@ -130,13 +145,13 @@ labels are cell identities, so reusing a library parameter cell is meaningful;
 its display name does not participate in binding. The ordered parameter list
 is the current representation, not a settled general pattern language.
 
-Cell evaluation checks lexical bindings first, then asks the host for ordinary
-value definitions. Exactly one value evaluates normally; several values leave
-the cell identity so a later call can dispatch across its definitions. With no
-value definitions, evaluation returns missing-cell absent. Foreign registrations,
-including scoped capabilities, are not consulted by this lookup. A named foreign
-function therefore evaluates to its ordinary name record, just as it would
-without a registration.
+Cell evaluation checks lexical bindings first, then asks `Host::resolve` for one
+definition: the document's value, otherwise the first loaded library definition.
+Duplicate definitions are tolerated, not merged or composed. With no definition,
+evaluation returns missing-cell absent. A native definition's descriptive value
+is evaluated without invoking its implementation. A named foreign function
+therefore evaluates to its ordinary name record. Scoped capabilities participate
+only in calls, never ordinary reads.
 
 Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
 and Grap implementations. To pass a callable reference through an evaluated
@@ -145,16 +160,15 @@ cell evaluates its data. This reference still dispatches in the receiving host
 context. It contains neither a native function pointer nor an extra cell definition.
 The Fidget example uses such a reference as the argument to `border`.
 
-A direct call through a cell tries the document definition, then library
-definitions in load order. It skips non-callable values, tries candidates
-lazily, and continues only for `{absent: declined}`. Any other result, including
-another absent, is definitive. Scoped capability functions can override this
-lookup. An exhausted definition chain preserves its explicit declines in order,
-keeping one unchanged or returning `{absent: declined, causes: [...]}` for several.
-Within each library, registered Rust implementations precede its ordinary value
-candidate. Non-callable name records need no special metadata recognition.
-Projection environments expose ordinary definitions and foreign source identities
-as separate queries, so projections can inspect call registrations explicitly.
+A direct call uses the same resolver. A native definition invokes its Rust
+implementation; an ordinary value is evaluated as the callable.
+Every result is definitive, including `{absent: declined}`. A non-callable value
+returns a not-callable absent with the offending value; it does not search other
+sources for an implementation. Scoped capability functions can override this
+lookup. Higher-level operations own any deliberate dispatch or composition.
+Projection environments expose the selected ordinary definition and selected
+foreign source as separate queries, so call projections can inspect registration
+metadata without evaluating the callable.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
 wrap selection, annotation, drawing/path writes, and deterministic random
@@ -167,10 +181,10 @@ but excludes effects performed before that call began.
 
 A function must explicitly decline before performing effects. A decline after
 an effect halts evaluation with `{absent: effectful-decline, value: cause}` and
-prints an error to stderr; it never tries another definition with changed state.
-An effectful candidate that evaluates to a non-callable value also cannot be
-skipped. These checks apply to Grap and Rust functions alike. Other absents
-remain ordinary results, including a successful selection clear.
+prints an error to stderr. This contract remains useful to explicit compositions
+and event handlers, independently of cell resolution. It applies to Grap and Rust
+functions alike. Other absents remain ordinary results, including a successful
+selection clear or a non-callable result.
 
 There are no per-call snapshots or rollback operations. The host stages the
 whole editor operation or drawing recording and discards that temporary output
