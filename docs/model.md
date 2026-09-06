@@ -136,6 +136,9 @@ picker resolves their current names before filtering each frame. Renaming a
 definition therefore updates even retained offers without changing their
 insertion value or continuation. An explicit empty name stays empty; a missing
 name uses the usual short cell identity. Typed values remain literal text.
+Cell search entries show their source name as a right-aligned note, without
+appending the cell identity. Identities are low-level inspection information,
+not routine disambiguation labels; Raw still shows them as the primary spelling.
 
 The completion library's `labels` helper turns cell identities into label offers;
 `combine` concatenates applicable lazy providers in order, preserving an explicitly
@@ -165,9 +168,13 @@ vocabulary. The numeric libraries offer `f32`, `f64`, and `u64` interpretations
 when the query parses, showing the representation and the actual stored
 number. An empty or whitespace-only query offers zero in each available
 representation; it remains a suggestion until committed. Other invalid numeric
-queries offer no number. Offers retain library order and precede the text
-interpretation and cell search. Quoting forces text; numeric providers decline
-label requests. A projection's narrow
+queries offer no number. Universal offers use a general ordering: strong named
+cell and constructor matches, library-provided interpretations in library order,
+plain text (or a new label), then weak fuzzy and unnamed references. The editor
+does not distinguish particular numeric representations for ranking. With an
+empty query, the zero interpretations therefore follow named cells and
+constructors, just before the empty string. Explicit quoted text and blob syntax
+lead instead. Numeric providers decline label requests. A projection's narrow
 vocabulary still takes precedence until the user expands it.
 
 Universal constructor offers accept delimiter aliases: `[` for `new list`,

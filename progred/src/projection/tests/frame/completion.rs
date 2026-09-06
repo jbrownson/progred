@@ -259,6 +259,62 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
 }
 
 #[test]
+fn completion_details_share_the_cards_right_edge() {
+    for scale in [1.0, 2.0] {
+        let mut context = BenchContext::new();
+        let styles = crate::styles::editor(scale);
+        let mut tcx = TextCtx {
+            fonts: &mut context.fonts,
+            layouts: &mut context.layouts,
+            cache: &mut context.cache,
+            scale: scale as f32,
+        };
+        let entries = [
+            ("x", "a long library name"),
+            ("a much longer label", "short"),
+        ]
+        .map(|(display, detail)| Entry {
+            display: display.into(),
+            detail: Some(detail.into()),
+            matches: Vec::new(),
+            face: progred_display::Face::Name,
+            source: None,
+            activate: Rc::new(|_: &mut ()| {}),
+        });
+        let detail_widths = entries.each_ref().map(|entry| {
+            puri::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.dim)
+                .metrics()
+                .width
+        });
+        let card = completion_card::<(), Bench>(
+            &mut tcx,
+            &styles,
+            &entries,
+            0,
+            0.0,
+            true,
+            |_, _, _, _| {},
+        );
+        let origin = Point::new(37.0, 59.0);
+        let right = origin.x + card.extent.width - (4.0 + 8.0) * scale;
+        let bench = settle(measured::place_top_left(card, origin), None);
+        let details = bench
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::GlyphRun(run) if run.brush == styles.dim.brush => Some(run),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(details.len(), detail_widths.len());
+        for (run, width) in details.into_iter().zip(detail_widths) {
+            assert!(((run.transform * Point::ZERO).x + width - right).abs() < 1e-6);
+        }
+    }
+}
+
+#[test]
 fn completion_rows_claim_their_entries_and_the_card_occludes() {
     let entries = vec![
         Entry {

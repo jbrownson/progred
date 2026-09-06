@@ -152,7 +152,7 @@ fn completion_source_attribution_uses_the_document_vocabulary_name() {
         .iter()
         .find(|entry| entry.source == Some(cell))
         .unwrap();
-    assert!(entry.detail.as_deref().unwrap().starts_with("documento"));
+    assert_eq!(entry.detail.as_deref(), Some("documento"));
 }
 
 #[test]
@@ -315,7 +315,8 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
             );
         }
         for query in ["", " \t"] {
-            let numbers = completion_entries(&sources, raw, false, query)
+            let entries = completion_entries(&sources, raw, false, query);
+            let numbers = entries
                 .iter()
                 .filter_map(|entry| activated(entry).value)
                 .filter(|value| {
@@ -325,6 +326,27 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                 })
                 .collect::<Vec<_>>();
             assert_eq!(numbers, [f32::value(0.0), f64::value(0.0), u64::value(0)]);
+            if query.is_empty() {
+                let first_number = entries
+                    .iter()
+                    .position(|entry| {
+                        activated(entry).value.as_ref().and_then(f32::read) == Some(0.0)
+                    })
+                    .unwrap();
+                for constructor in ["new cell", "new list", "new record"] {
+                    assert!(
+                        entries
+                            .iter()
+                            .position(|entry| entry.display == constructor)
+                            .unwrap()
+                            < first_number
+                    );
+                }
+                assert_eq!(
+                    activated(&entries[first_number + 3]).value,
+                    Some(text::value(""))
+                );
+            }
         }
         for query in ["word", "1e", "\"12\"", "0xff"] {
             assert!(
@@ -365,6 +387,69 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
     assert_eq!(
         activated(single).value.as_ref().and_then(f32::read),
         Some(16777216.0)
+    );
+}
+
+#[test]
+fn completion_name_matches_precede_numeric_interpretations_unless_explicitly_quoted() {
+    use progred_libraries::{f32, u64};
+    let cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(cell, name::record("length 12", []));
+    let document = Document { root: None, cells };
+    let libraries = core_libraries();
+    let sources = src(&document, &libraries);
+    let entries = completion_entries(&sources, false, false, "12");
+    assert_eq!(
+        entries
+            .iter()
+            .take(5)
+            .map(|entry| activated(entry).value.unwrap())
+            .collect::<Vec<_>>(),
+        [
+            cell.into(),
+            f32::value(12.0),
+            f64::value(12.0),
+            u64::value(12),
+            text::value("12"),
+        ]
+    );
+    for query in ["\"12", "\"12\""] {
+        let entries = completion_entries(&sources, false, false, query);
+        assert_eq!(activated(&entries[0]).value, Some(text::value("12")));
+    }
+}
+
+#[test]
+fn completion_interpretation_order_is_independent_of_the_value_type() {
+    let cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(cell, name::record("custom", []));
+    let document = Document { root: None, cells };
+    let libraries = Libraries::default();
+    let provider: progred_display::CompletionProvider = Rc::new(|request| {
+        (request.scope == progred_display::CompletionScope::Everything).then(|| {
+            vec![progred_display::Completion::new(
+                request.query,
+                Value::record([]),
+            )]
+        })
+    });
+    let entries = completion_entries_with(
+        &src(&document, &libraries),
+        false,
+        &Commit::Value(Rc::new(value_commit)),
+        "custom",
+        Some(&provider),
+        None,
+        true,
+    );
+    assert_eq!(
+        entries
+            .iter()
+            .map(|entry| activated(entry).value.unwrap())
+            .collect::<Vec<_>>(),
+        [cell.into(), Value::record([]), text::value("custom"),]
     );
 }
 
@@ -517,10 +602,7 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
     let entries = completion_entries(&sources, false, false, "fidget");
     assert!(entries.iter().any(|entry| {
         (entry.source == Some(fidget::vocabulary::FIDGET))
-            && entry
-                .detail
-                .as_deref()
-                .is_some_and(|detail| detail.starts_with("fidget · "))
+            && entry.detail.as_deref() == Some("fidget")
     }));
 }
 

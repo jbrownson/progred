@@ -116,9 +116,9 @@ impl Row {
         }
         let x = placement.rect.x0 + 8.0 * self.scale;
         let baseline = placement.rect.y0 + self.metrics.ascent;
-        let detail_x = x + self.display.metrics.width + 8.0 * self.scale;
         self.display.draw(canvas, x, baseline, placement.clip_rect);
         if let Some(detail) = self.detail {
+            let detail_x = placement.rect.x1 - 8.0 * self.scale - detail.metrics.width;
             detail.draw(canvas, detail_x, baseline, placement.clip_rect);
         }
     }

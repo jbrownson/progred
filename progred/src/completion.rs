@@ -263,7 +263,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .as_ref()
         .map(|bytes| Value::from(bytes.clone()))
         .unwrap_or_else(|| text::value(spelling));
-    let atom_leads = quoted || blob.is_some() || !value_entries.is_empty();
+    let atom_leads = quoted || blob.is_some();
     let text_entry = blob
         .is_some()
         .then(|| Entry::value(format!("\"{query}\""), None, text::value(query), commit))
@@ -310,14 +310,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 .or_else(|| sources.contributors(cell).next());
             let mut entry = Entry::value(
                 name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
-                source.map(|source| {
-                    let source = source_name(sources, source);
-                    if name.is_some() {
-                        format!("{} · {}", source, short_id(cell))
-                    } else {
-                        source
-                    }
-                }),
+                source.map(|source| source_name(sources, source)),
                 Value::from(cell),
                 commit,
             )
@@ -365,15 +358,16 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let mut entries = suggested
         .map(|offers| contextual_entries(sources, offers, request, commit))
         .unwrap_or_default();
-    entries.extend(value_entries);
     if atom_leads {
         entries.push(atom_entry);
         entries.extend(text_entry);
+        entries.extend(value_entries);
         entries.extend(references.into_iter().map(|(entry, _)| entry));
     } else {
         let (weak, strong): (Vec<_>, Vec<_>) =
             references.into_iter().partition(|(_, demoted)| *demoted);
         entries.extend(strong.into_iter().map(|(entry, _)| entry));
+        entries.extend(value_entries);
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
