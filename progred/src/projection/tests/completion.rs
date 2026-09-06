@@ -253,7 +253,9 @@ fn completion_offers_follow_the_stage() {
     // exactly the id matches — ids are for reading; want it
     // reachable, name it.
     let unnamed = new_cell_id();
-    doc.cells.set_value(unnamed, crate::test_values::text("x"));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(unnamed, crate::test_values::text("x"));
     let sources = src(&doc, &lib);
     let entries = completion_entries(&sources, false, false, &short_id(unnamed));
     let atom = entries

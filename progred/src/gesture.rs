@@ -223,10 +223,10 @@ fn write_value(
     {
         false
     } else {
-        let before = model.doc.clone();
+        let before = model.snapshot();
         let wrote = selection::set_value(&mut model.doc, libraries, path, replacement);
         if wrote && !*recorded {
-            model.history.record(before, Some(path.to_vec()));
+            model.history.record(before);
             *recorded = true;
         }
         wrote
@@ -240,16 +240,10 @@ mod tests {
     use std::rc::Rc;
 
     fn model(value: Value) -> Model {
-        Model {
-            doc: gid::Document {
-                root: Some(value),
-                cells: gid::Cells::new(),
-            },
-            selection: None,
-            history: Default::default(),
-            view: Default::default(),
-            workspace: Default::default(),
-        }
+        Model::new(gid::Document {
+            root: Some(value),
+            cells: gid::Cells::new(),
+        })
     }
 
     #[test]
@@ -289,10 +283,8 @@ mod tests {
         assert_eq!(presentation.root, &root);
         assert!(presentation.path.is_empty());
         assert_eq!(presentation.spelling, "15.0");
-        assert_eq!(
-            model.history.undo(model.doc.clone(), None).unwrap().0.root,
-            original.root
-        );
+        assert!(model.step_history(true, &libraries));
+        assert_eq!(model.doc.root, original.root);
         assert!(!model.history.can_undo());
     }
 
@@ -361,10 +353,8 @@ mod tests {
         );
         assert!(!gesture.advance(&mut model, &libraries, Point::new(210.0, -20.0)));
         assert_eq!(model.selection.as_ref().unwrap().root(), &root);
-        assert_eq!(
-            model.history.undo(model.doc.clone(), None).unwrap().0.root,
-            original.root
-        );
+        assert!(model.step_history(true, &libraries));
+        assert_eq!(model.doc.root, original.root);
         assert!(!model.history.can_undo());
     }
 }

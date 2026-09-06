@@ -689,17 +689,7 @@ fn projection_hooks(
             ));
         }),
         toggle: Rc::new(move |app: &mut Editor, path| {
-            let Some(view) = app.model.workspace.view_mut(&toggle_root) else {
-                return;
-            };
-            selection::toggle_collapse(
-                &sources::Sources {
-                    doc: &app.model.doc,
-                    libraries: &app.stack.libraries,
-                },
-                &mut view.annotations,
-                &path,
-            );
+            app.collapse(&toggle_root, &path, None);
         }),
         update_state: Rc::new(move |app: &mut Editor, path, state| {
             let Some(view) = app.model.workspace.view_mut(&state_root) else {
@@ -1325,23 +1315,17 @@ mod frame_tests {
         cells.set_value(alias, Value::from(linked));
         let mut library_cells = Cells::new();
         library_cells.set_value(linked, declaration.clone());
-        let mut model = Model {
-            doc: Document {
-                root: Some(Value::record([])),
-                cells,
-            },
-            selection: None,
-            history: crate::history::History::default(),
-            view: ViewFlags::default(),
-            workspace: workspace::Workspace::default(),
-        };
+        let mut model = Model::new(Document {
+            root: Some(Value::record([])),
+            cells,
+        });
         for value in [
             declaration,
             Value::from(alias),
             Value::list([source.clone(), Value::from(linked)]),
             Value::record([(presentation::vocabulary::VALUE, source.clone())]),
         ] {
-            model.doc.root = Some(
+            Rc::make_mut(&mut model.doc).root = Some(
                 workspace::append(
                     model.doc.root.as_ref().unwrap(),
                     workspace::Side::Left,
@@ -1536,24 +1520,18 @@ mod frame_tests {
                 ),
             ),
         ]);
-        let mut model = Model {
-            doc: Document {
-                root: Some(
-                    workspace::append(
-                        &Value::record([]),
-                        workspace::Side::Left,
-                        declaration.clone(),
-                    )
-                    .unwrap()
-                    .0,
-                ),
-                cells: Cells::new(),
-            },
-            selection: None,
-            history: crate::history::History::default(),
-            view: ViewFlags::default(),
-            workspace: workspace::Workspace::default(),
-        };
+        let mut model = Model::new(Document {
+            root: Some(
+                workspace::append(
+                    &Value::record([]),
+                    workspace::Side::Left,
+                    declaration.clone(),
+                )
+                .unwrap()
+                .0,
+            ),
+            cells: Cells::new(),
+        });
         model
             .workspace
             .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
@@ -1674,19 +1652,13 @@ mod frame_tests {
         let cell = CellId::from_u128(1);
         let mut cells = Cells::new();
         cells.set_value(cell, Value::from(b"pane".to_vec()));
-        let mut model = Model {
-            doc: Document {
-                root: Some(Value::record([])),
-                cells,
-            },
-            selection: None,
-            history: crate::history::History::default(),
-            view: ViewFlags::default(),
-            workspace: workspace::Workspace::default(),
-        };
+        let mut model = Model::new(Document {
+            root: Some(Value::record([])),
+            cells,
+        });
         let document = model.workspace.document_root().clone();
         for _ in 0..2 {
-            model.doc.root = Some(
+            Rc::make_mut(&mut model.doc).root = Some(
                 workspace::append(
                     model.doc.root.as_ref().unwrap(),
                     workspace::Side::Left,

@@ -36,9 +36,10 @@ impl Editor {
         ) else {
             return false;
         };
-        let before = std::mem::replace(&mut self.model.doc, prepared.document);
         if prepared.document_changed {
-            self.model.history.record(before, None);
+            let before = self.model.snapshot();
+            self.model.doc = prepared.document;
+            self.model.history.record(before);
             self.refresh_title();
         }
         crate::site::install(
@@ -88,10 +89,10 @@ impl Editor {
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
                 let covered = current.recorded();
-                let before = self.model.doc.clone();
+                let before = self.model.snapshot();
                 selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &path) && {
                     if !covered {
-                        self.model.history.record(before, Some(path.clone()));
+                        self.model.history.record(before);
                         self.refresh_title();
                     }
                     let next = navigate::selection_after_delete(descends, Some(&root), &path);
@@ -253,9 +254,9 @@ impl Editor {
         if self.sources().resolve_path(&path) == Some(&value) {
             return true;
         }
-        let before = self.model.doc.clone();
+        let before = self.model.snapshot();
         if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
-            self.model.history.record(before, Some(path.clone()));
+            self.model.history.record(before);
             self.refresh_title();
             self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
             true
@@ -375,16 +376,21 @@ impl Editor {
         }
         let path = current.path().to_vec();
         let root = current.root().clone();
-        let sources = sources::Sources {
-            doc: &self.model.doc,
-            libraries: &self.stack.libraries,
-        };
-        let Some(view) = self.model.workspace.view_mut(&root) else {
-            return false;
-        };
-        match set {
-            None => selection::toggle_collapse(&sources, &mut view.annotations, &path),
-            Some(closed) => selection::set_collapse(&sources, &mut view.annotations, &path, closed),
+        self.collapse(&root, &path, set)
+    }
+
+    pub(crate) fn collapse(
+        &mut self,
+        root: &crate::workspace::Root,
+        path: &[gid::Step],
+        closed: Option<bool>,
+    ) -> bool {
+        let changed = self
+            .model
+            .collapse(&self.stack.libraries, root, path, closed);
+        if changed {
+            self.gesture = None;
         }
+        changed
     }
 }

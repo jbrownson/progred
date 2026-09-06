@@ -276,15 +276,15 @@ fn key(s: &str) -> Step {
 }
 
 /// A one-cell document: the root links a cell holding `fields`.
-fn doc_of(fields: Vec<(CellId, Value)>) -> (Document, CellId) {
+fn doc_of(fields: Vec<(CellId, Value)>) -> (Rc<Document>, CellId) {
     let mut cells = Cells::new();
     let cell = new_cell_id();
     cells.set_value(cell, Value::record(fields));
     (
-        Document {
+        Rc::new(Document {
             root: Some(Value::from(cell)),
             cells,
-        },
+        }),
         cell,
     )
 }

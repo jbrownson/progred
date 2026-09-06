@@ -374,10 +374,10 @@ fn partials_receive_selection_and_annotations_positionally() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: None,
         cells: Cells::new(),
-    };
+    });
     let lib = core_libraries();
     for everything in [false, true] {
         let mut pending = crate::selection::pending_with_query(

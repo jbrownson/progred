@@ -43,7 +43,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         .is_none()
     );
     assert!(make_selection(&doc, &lib, vec![]).edit().is_none());
-    doc.cells.set_value(
+    Rc::make_mut(&mut doc).cells.set_value(
         cell,
         Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
     );
@@ -57,7 +57,9 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         Some("ff")
     );
     // A cell holding text edits at its Follow path.
-    doc.cells.set_value(cell, crate::test_values::text("held"));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(cell, crate::test_values::text("held"));
     assert_eq!(
         edit(&doc, vec![Step::Follow(gid::Resolution::Document)])
             .edit()
@@ -65,7 +67,9 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         Some("held")
     );
     // A simple name convention is just another text field.
-    doc.cells.set_value(cell, name::record("roof", []));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(cell, name::record("roof", []));
     assert_eq!(
         edit(
             &doc,
@@ -110,10 +114,10 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
             f64::value(17.0),
         ),
     ] {
-        let mut doc = Document {
+        let mut doc = Rc::new(Document {
             root: Some(original),
             cells: Cells::new(),
-        };
+        });
         let mut selected = make_projected_selection(&doc, &libraries, vec![]);
         assert_eq!(selected.path(), &[]);
         assert_eq!(selected.edit().map(LineEditState::text), Some(spelling));
@@ -181,10 +185,10 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
     let bytes: Vec<u8> = (0..=31).collect();
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(bytes.clone()));
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(cell.into()),
         cells,
-    };
+    });
     let path = vec![Step::Follow(gid::Resolution::Document)];
     let mut selected = make_projected_selection(&doc, &libraries, path.clone());
     assert_eq!(selected.edit().unwrap().text(), gid::hex_string(&bytes));
@@ -219,10 +223,10 @@ fn compact_f64_values_edit_as_decimal_text() {
     let cell = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(cell, f64::value(2.5));
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(Value::from(cell)),
         cells,
-    };
+    });
     let path = vec![Step::Follow(gid::Resolution::Document)];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
@@ -257,10 +261,10 @@ fn editing_an_f64_keeps_unrelated_fields() {
                 .update(unit, crate::test_values::text("mm")),
         ),
     );
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(Value::from(cell)),
         cells,
-    };
+    });
     let path = vec![Step::Follow(gid::Resolution::Document)];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
@@ -377,7 +381,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     // A bare cell takes its first value through the empty spine;
     // deeper steps into nothing decline.
     let bare = new_cell_id();
-    doc.root = Some(Value::from(bare));
+    Rc::make_mut(&mut doc).root = Some(Value::from(bare));
     assert!(!set_value(
         &mut doc,
         &lib,
@@ -400,7 +404,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
 
     // An inline record at the root writes on the root spine — no
     // cell involved.
-    doc.root = Some(Value::record([(
+    Rc::make_mut(&mut doc).root = Some(Value::record([(
         crate::test_values::label("shape"),
         Value::from(cell),
     )]));
@@ -455,10 +459,10 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
         ),
     );
     let lib = libraries(library_cells);
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(Value::from(lib_cell)),
         cells: Cells::new(),
-    };
+    });
     // The library's cell declines writes wholesale.
     assert!(!set_value(
         &mut doc,
@@ -486,7 +490,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
         &[Step::Follow(gid::Resolution::Document)]
     ));
     // Forking — the document taking the cell over — writes.
-    doc.cells.set_value(
+    Rc::make_mut(&mut doc).cells.set_value(
         lib_cell,
         Value::record([(
             crate::test_values::label("a"),
@@ -545,7 +549,9 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
             Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
         ),
     ]);
-    doc.cells.set_value(child, name::record("c", []));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(child, name::record("c", []));
 
     assert!(!delete_edge(
         &mut doc,
@@ -611,13 +617,15 @@ fn a_shadowing_document_definition_stays_editable() {
     library_cells.set_value(cell, Value::record([]));
     let lib = libraries(library_cells);
     let root = crate::workspace::Root::document();
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(cell.into()),
         cells: Cells::new(),
-    };
+    });
     assert!(pending_edge(&root, &src(&doc, &lib), vec![]).is_none());
 
-    doc.cells.set_value(cell, Value::record([]));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(cell, Value::record([]));
     let pending = pending_edge(&root, &src(&doc, &lib), vec![]).unwrap();
     assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
     assert!(
@@ -629,7 +637,9 @@ fn a_shadowing_document_definition_stays_editable() {
         .is_none()
     );
 
-    doc.cells.set_value(cell, Value::list([]));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(cell, Value::list([]));
     let pending = pending_into(&root, &src(&doc, &lib), &[]).unwrap();
     assert_eq!(
         pending.path().first(),
@@ -663,7 +673,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
             crate::test_values::text("leaf"),
         ),
     ]);
-    doc.root = doc.root.clone();
+    Rc::make_mut(&mut doc).root = doc.root.clone();
     let sources = src(&doc, &lib);
 
     // A link to a record cell pends its field under Follow; an
@@ -858,10 +868,10 @@ fn selecting_an_empty_value_slot_pends() {
     let mut library_cells = Cells::new();
     library_cells.set_value(lib_cell, name::record("convention", []));
     let lib = libraries(library_cells);
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(Value::from(bare)),
         cells: Cells::new(),
-    };
+    });
     // A writable valueless cell's Follow slot is already
     // authoring: selecting it (the rendered placeholder) pends.
     assert_eq!(
@@ -869,14 +879,16 @@ fn selecting_an_empty_value_slot_pends() {
         crate::selection::Stage::Pending
     );
     // Valued, it selects normally.
-    doc.cells.set_value(bare, crate::test_values::text("v"));
+    Rc::make_mut(&mut doc)
+        .cells
+        .set_value(bare, crate::test_values::text("v"));
     assert_eq!(
         make_selection(&doc, &lib, vec![Step::Follow(gid::Resolution::Document)]).stage(),
         crate::selection::Stage::Edge
     );
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
-    doc.root = Some(Value::from(lib_cell));
+    Rc::make_mut(&mut doc).root = Some(Value::from(lib_cell));
     let external = make_selection(
         &doc,
         &lib,
@@ -981,10 +993,10 @@ fn custom_update_can_discard_an_absent_and_return_a_value() {
         ),
     );
     let libraries = core_libraries();
-    let mut doc = Document {
+    let mut doc = Rc::new(Document {
         root: Some(text::value("before")),
         cells: Cells::new(),
-    };
+    });
     let function = grap::evaluate(&update, &src(&doc, &libraries), 1000).result;
     let evaluated = grap::apply(
         &function,

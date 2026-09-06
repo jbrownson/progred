@@ -286,17 +286,28 @@ previous editor if it has no unsaved changes. This includes the empty startup
 document and untouched examples; edited documents stay open. File New and Open
 continue to create windows without closing the previous editor.
 
-[`History`](../progred/src/history.rs) keeps document snapshots and selection
-paths in undo/redo stacks. Recording a new branch clears redo. The saved mark
-is a position on that surviving branch: discarding the branch that held it
-clears the mark, so reaching the same stack depth cannot report a different
-state as saved.
+[`History`](../progred/src/history.rs) is a generic pair of snapshot stacks;
+recording a new branch clears redo. The editor's snapshot contains its shared
+document, view-qualified selection, and per-view folds. Collapse and expand
+record steps without editing the document. Undo restores fold overrides and
+their view identities, including when a deleted pane returns; it leaves current
+scroll positions, projection modes, and unrelated annotations alone in surviving
+views. Selection paths include the owning view rather than borrowing whichever
+pane happens to be selected when Undo is invoked.
+
+The editor holds its current and saved documents as `Rc<Document>`. Dirty state
+is pointer inequality, constant-time at any document size. Successful writes use
+copy-on-write; rejected writes do not detach the snapshot. Undoing to the saved
+snapshot clears the dirty flag, while manually recreating equal contents does
+not. Folding never changes document identity, and branch depth has no bearing on
+saved state. The GID document and its on-disk representation remain unchanged.
 
 A line's first write records its undo step; subsequent writes in that edit run
-coalesce. Saving breaks the run. Projection gestures have one caller-owned
-continuation in [`gesture`](../progred/src/gesture.rs). The accepting handler
-starts it; the continuation owns domain updates, undo grouping, release, and
-cancellation. Replacing/restoring the document or saving ends it.
+coalesce. Saving or recording a fold breaks the run. Projection gestures have one
+caller-owned continuation in [`gesture`](../progred/src/gesture.rs). The accepting
+handler starts it; the continuation owns domain updates, undo grouping, release,
+and cancellation. Replacing/restoring the document, saving, or recording a fold
+ends it.
 
 The platform supplies persistence and clipboard capabilities. macOS uses its
 native atomic write API. Linux writes a unique sibling temporary file,

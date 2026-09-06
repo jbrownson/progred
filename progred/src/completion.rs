@@ -149,7 +149,7 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
 }
 
 pub(crate) struct Prepared {
-    pub document: gid::Document,
+    pub document: std::rc::Rc<gid::Document>,
     pub document_changed: bool,
     pub path: gid::Path,
     pub effects: crate::site::PendingChanges,
@@ -166,7 +166,7 @@ pub(crate) fn prepare(
     on_commit: Option<&Value>,
 ) -> Option<Prepared> {
     use crate::selection::{self, Stage};
-    let mut document = sources.doc.clone();
+    let mut document = std::rc::Rc::new(sources.doc.clone());
     let mut path = selection.path().to_vec();
     let (document_changed, payload) = match selection.stage() {
         Stage::Pending => selection::set_value(&mut document, sources.libraries, &path, value)
@@ -179,7 +179,9 @@ pub(crate) fn prepare(
             } else {
                 let changed = definition.is_some();
                 if let Some(value) = definition {
-                    document.cells.set_value(label, value);
+                    std::rc::Rc::make_mut(&mut document)
+                        .cells
+                        .set_value(label, value);
                 }
                 (changed, selection::payload::pending("", 0))
             }

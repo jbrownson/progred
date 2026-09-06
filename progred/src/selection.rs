@@ -9,6 +9,7 @@ use crate::workspace;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use progred_libraries::{Libraries, absent, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
+use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 /// Tier-2 editing state beside the selection: the live line editor
@@ -321,9 +322,9 @@ pub(crate) fn writable_at(sources: &Sources, path: &[Step]) -> bool {
 /// removes the cell's own value: bare again, the symmetric partner
 /// of authoring a value into one. The empty path empties the
 /// document's root; paths that no longer resolve decline.
-pub fn delete_edge(doc: &mut Document, libraries: &Libraries, path: &[Step]) -> bool {
+pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, path: &[Step]) -> bool {
     match path.split_last() {
-        None => doc.root.take().is_some(),
+        None => doc.root.is_some() && Rc::make_mut(doc).root.take().is_some(),
         Some((Step::Follow(resolution), parent)) => {
             let cell = {
                 let sources = Sources {
@@ -338,7 +339,7 @@ pub fn delete_edge(doc: &mut Document, libraries: &Libraries, path: &[Step]) -> 
             };
             match cell {
                 Some(cell) => {
-                    doc.cells.clear_value(cell);
+                    Rc::make_mut(doc).cells.clear_value(cell);
                     true
                 }
                 None => false,
@@ -373,11 +374,11 @@ pub fn delete_edge(doc: &mut Document, libraries: &Libraries, path: &[Step]) -> 
             };
             match write {
                 Some((Some(cell), rebuilt)) => {
-                    doc.cells.set_value(cell, rebuilt);
+                    Rc::make_mut(doc).cells.set_value(cell, rebuilt);
                     true
                 }
                 Some((None, rebuilt)) => {
-                    doc.root = Some(rebuilt);
+                    Rc::make_mut(doc).root = Some(rebuilt);
                     true
                 }
                 None => false,
@@ -662,7 +663,12 @@ pub fn from_structure(bytes: &[u8]) -> Option<Value> {
 /// Follow names the owning, authority-gated cell; the steps below it
 /// are a value spine, rebuilt around the new leaf through the lens.
 /// A bare cell takes its first value through the empty spine.
-pub fn set_value(doc: &mut Document, libraries: &Libraries, path: &[Step], value: Value) -> bool {
+pub fn set_value(
+    doc: &mut Rc<Document>,
+    libraries: &Libraries,
+    path: &[Step],
+    value: Value,
+) -> bool {
     let write = {
         let sources = Sources {
             doc: &*doc,
@@ -685,11 +691,11 @@ pub fn set_value(doc: &mut Document, libraries: &Libraries, path: &[Step], value
     };
     match write {
         Some((Some(cell), rebuilt)) => {
-            doc.cells.set_value(cell, rebuilt);
+            Rc::make_mut(doc).cells.set_value(cell, rebuilt);
             true
         }
         Some((None, rebuilt)) => {
-            doc.root = Some(rebuilt);
+            Rc::make_mut(doc).root = Some(rebuilt);
             true
         }
         None => false,
@@ -770,7 +776,11 @@ pub(crate) fn collapse_default_for_value(
 /// boundary. Returns whether this write OPENED an undo step: true
 /// exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
-pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut Selection) -> bool {
+pub fn write_through(
+    doc: &mut Rc<Document>,
+    libraries: &Libraries,
+    selection: &mut Selection,
+) -> bool {
     selection.reset_completion_for_query();
     let Selection { path, editor, .. } = selection;
     let Some(editor) = editor else {
@@ -817,8 +827,7 @@ pub fn write_through(doc: &mut Document, libraries: &Libraries, selection: &mut 
 }
 
 /// Breaks the open edit run: the next write records a fresh undo
-/// step. Called after a save, so a run never straddles the mark.
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
+/// step. Runs must not straddle a save or a view-history step.
 pub fn break_edit_run(selection: Option<&mut Selection>) {
     if let Some(editor) = selection.and_then(|selection| selection.editor.as_mut()) {
         editor.recorded = false;

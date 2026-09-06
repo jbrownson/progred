@@ -145,6 +145,8 @@ pub struct Workspace {
     dragging: Option<Drag>,
 }
 
+pub(crate) struct Folds(Vec<(Root, Annotations)>);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
     pub side: Side,
@@ -313,6 +315,42 @@ impl Default for Workspace {
 }
 
 impl Workspace {
+    pub(crate) fn folds(&self) -> Folds {
+        Folds(
+            std::iter::once(&self.document)
+                .chain(
+                    self.left
+                        .panes
+                        .iter()
+                        .chain(&self.right.panes)
+                        .map(|pane| &pane.view),
+                )
+                .map(|view| (view.root.clone(), view.annotations.clone()))
+                .collect(),
+        )
+    }
+
+    pub(crate) fn restore_folds(&mut self, saved: Folds) {
+        for view in std::iter::once(&mut self.document).chain(
+            self.left
+                .panes
+                .iter_mut()
+                .chain(&mut self.right.panes)
+                .map(|pane| &mut pane.view),
+        ) {
+            if let Some((root, annotations)) = saved
+                .0
+                .iter()
+                .find(|(root, _)| root.target() == view.root.target())
+            {
+                view.root = root.clone();
+                view.annotations
+                    .restore_field(crate::annotations::FOLD, annotations);
+            }
+        }
+        self.dragging = None;
+    }
+
     pub fn document_root(&self) -> &Root {
         &self.document.root
     }
@@ -857,6 +895,7 @@ mod tests {
         };
         doc.cells
             .set_value(cell, Value::from(b"definition".to_vec()));
+        let mut doc = Rc::new(doc);
         let before = doc.clone();
         assert!(crate::selection::delete_edge(
             &mut doc,
@@ -866,8 +905,8 @@ mod tests {
         assert_eq!(declarations(doc.root.as_ref()).len(), 3);
         assert_eq!(doc.cells.value(cell), before.cells.value(cell));
         let mut history = crate::history::History::default();
-        history.record(before.clone(), Some(path));
-        let (restored, _) = history.undo(doc, None).unwrap();
+        history.record(before.clone());
+        let restored = history.undo(doc).unwrap();
         assert_eq!(restored.root, before.root);
     }
 

@@ -5,14 +5,15 @@
 
 use gid::{CellId, Step, Value};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Fold override: one of two named states, absent meaning the default
 /// (collapsed inside a cycle).
 pub use progred_libraries::site::vocabulary::{EXPANDED, FOLD, FOLDED};
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Annotations {
-    values: HashMap<Vec<Step>, Value>,
+    values: Rc<HashMap<Vec<Step>, Value>>,
 }
 
 impl Annotations {
@@ -31,13 +32,13 @@ impl Annotations {
     pub fn set(&mut self, path: &[Step], value: Option<Value>) {
         match value {
             Some(Value::Record(fields)) if fields.is_empty() => {
-                self.values.remove(path);
+                Rc::make_mut(&mut self.values).remove(path);
             }
             Some(value) => {
-                self.values.insert(path.to_vec(), value);
+                Rc::make_mut(&mut self.values).insert(path.to_vec(), value);
             }
             None => {
-                self.values.remove(path);
+                Rc::make_mut(&mut self.values).remove(path);
             }
         }
     }
@@ -60,6 +61,27 @@ impl Annotations {
             }
         }
         self.set(path, (!fields.is_empty()).then_some(Value::Record(fields)));
+    }
+
+    pub fn restore_field(&mut self, key: CellId, saved: &Self) {
+        let paths: Vec<_> = self
+            .values
+            .iter()
+            .filter(|(_, value)| {
+                value
+                    .as_record()
+                    .is_some_and(|fields| fields.contains_key(&key))
+            })
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in paths {
+            self.set_field(&path, key, None);
+        }
+        for (path, value) in saved.values.iter() {
+            if let Some(value) = value.as_record().and_then(|fields| fields.get(&key)) {
+                self.set_field(path, key, Some(value.clone()));
+            }
+        }
     }
 }
 

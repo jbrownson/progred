@@ -46,10 +46,11 @@ mod workspace;
 
 use crate::command::{AppCommand, Command, DocCommand};
 use crate::frame::{Dispatch, FrameDisposition, Hovered, Paint, frame_disposition};
-use crate::model::{Model, ViewFlags};
+use crate::model::Model;
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[cfg(target_os = "ios")]
@@ -394,13 +395,7 @@ fn new_editor(
         #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
         text_clipboard: SystemTextClipboard::default(),
         stack,
-        model: Model {
-            doc,
-            selection: None,
-            history: history::History::default(),
-            view: ViewFlags::default(),
-            workspace: workspace::Workspace::default(),
-        },
+        model: Model::new(doc),
         doc_path,
         text_binders,
         menu: menu::State::default(),
@@ -507,15 +502,6 @@ fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
         Some(Hovered::Divider(workspace::Divider::Columns(_))) => CursorIcon::ColResize,
         Some(Hovered::Divider(workspace::Divider::Panes { .. })) => CursorIcon::RowResize,
         _ => CursorIcon::Default,
-    }
-}
-
-/// The selection as a restorable edge path — pendings restore as
-/// nothing, being disposable.
-pub(crate) fn edge_path(selection: &Option<selection::Selection>) -> Option<gid::Path> {
-    match selection {
-        Some(current) if current.stage() == selection::Stage::Edge => Some(current.path().to_vec()),
-        _ => None,
     }
 }
 
@@ -682,7 +668,7 @@ impl App {
                 return;
             }
             let index = self.focused_index().unwrap_or(0);
-            if self.editors[index].model.history.dirty() {
+            if self.editors[index].model.dirty() {
                 if let RenderState::Active { window, .. } = &self.editors[index].state {
                     window.focus_window();
                     self.quit = QuitState::Draining {
@@ -1241,11 +1227,10 @@ impl Editor {
     fn finish_handled_event(&mut self) {
         let libraries = &self.stack.libraries;
         let model = &mut self.model;
+        let before = model.snapshot();
         if let Some(selection) = &mut model.selection {
-            let before = model.doc.clone();
             if selection::write_through(&mut model.doc, libraries, selection) {
-                let path = selection.path().to_vec();
-                model.history.record(before, Some(path));
+                model.history.record(before);
                 self.refresh_title();
             }
         }
@@ -1347,11 +1332,7 @@ impl Editor {
         };
         #[cfg(not(target_os = "macos"))]
         {
-            let dirty = if self.model.history.dirty() {
-                " •"
-            } else {
-                ""
-            };
+            let dirty = if self.model.dirty() { " •" } else { "" };
             match &self.doc_path {
                 Some(path) => format!("Progred — {}{dirty}", path.display()),
                 None => format!("Progred — untitled{dirty}"),
@@ -1365,7 +1346,7 @@ impl Editor {
             #[cfg(target_os = "macos")]
             {
                 use winit::platform::macos::WindowExtMacOS;
-                window.set_document_edited(self.model.history.dirty());
+                window.set_document_edited(self.model.dirty());
                 macos_window::set_represented(window, self.doc_path.as_deref());
             }
         }
@@ -1404,7 +1385,7 @@ impl Editor {
             .map(selection::Selection::root);
         command::Availability {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            save: self.model.history.dirty() || self.doc_path.is_none(),
+            save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
             open_pane: workspace::can_open(self.model.doc.root.as_ref())
@@ -1431,14 +1412,9 @@ impl Editor {
             workspace::append(self.model.doc.root.as_ref()?, side, value)
         });
         if let Some((value, path)) = next {
-            let before = self.model.doc.clone();
-            let previous = self
-                .model
-                .selection
-                .as_ref()
-                .map(|selection| selection.path().to_vec());
-            self.model.doc.root = Some(value);
-            self.model.history.record(before, previous);
+            let before = self.model.snapshot();
+            Rc::make_mut(&mut self.model.doc).root = Some(value);
+            self.model.history.record(before);
             self.model
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
@@ -1471,14 +1447,9 @@ impl Editor {
             Some((value, path, suffix, selection.root().clone()))
         });
         if let Some((value, path, suffix, root)) = next {
-            let before = self.model.doc.clone();
-            let previous = self
-                .model
-                .selection
-                .as_ref()
-                .map(|selection| selection.path().to_vec());
-            self.model.doc.root = Some(value);
-            self.model.history.record(before, previous);
+            let before = self.model.snapshot();
+            Rc::make_mut(&mut self.model.doc).root = Some(value);
+            self.model.history.record(before);
             let next_root = workspace::Root::pane(path.clone());
             if let Some(view) = self.model.workspace.view_mut(&root) {
                 view.root = next_root.clone();
@@ -1588,26 +1559,8 @@ impl Editor {
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
     pub(crate) fn step_history(&mut self, back: bool) {
-        let current = self.model.doc.clone();
-        let selection = edge_path(&self.model.selection);
-        let root = self
-            .model
-            .selection
-            .as_ref()
-            .map(selection::Selection::root)
-            .filter(|root| self.model.workspace.view(root).is_some())
-            .cloned()
-            .unwrap_or_else(|| self.model.workspace.document_root().clone());
-        let restored = if back {
-            self.model.history.undo(current, selection)
-        } else {
-            self.model.history.redo(current, selection)
-        };
-        if let Some((doc, restore)) = restored {
+        if self.model.step_history(back, &self.stack.libraries) {
             self.gesture = None;
-            self.model.doc = doc;
-            self.model.selection =
-                restore.map(|path| selection::Selection::edge(&root, &self.sources(), path));
             self.refresh_title();
         }
     }
@@ -1633,10 +1586,7 @@ impl Editor {
         if let Some(path) = target {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
                 Ok(()) => {
-                    self.model.history.mark_saved();
-                    // A run must not straddle the save mark, or edits
-                    // after it would coalesce into a pre-save step.
-                    selection::break_edit_run(self.model.selection.as_mut());
+                    self.model.mark_saved();
                     self.gesture = None;
                     self.adopt_doc_path(canonical(path));
                 }
@@ -1662,13 +1612,8 @@ impl Editor {
     ) {
         self.text_binders = text_binders;
         let view = self.model.view;
-        self.model = Model {
-            doc,
-            selection: None,
-            history: history::History::default(),
-            view,
-            workspace: workspace::Workspace::default(),
-        };
+        self.model = Model::new(doc);
+        self.model.view = view;
         self.hover = None;
         self.gesture = None;
         self.doc_path = path;
@@ -1783,7 +1728,7 @@ impl App {
                 Ok((doc, binders)) => {
                     let previous = self
                         .focused_index()
-                        .filter(|index| !self.editors[*index].model.history.dirty());
+                        .filter(|index| !self.editors[*index].model.dirty());
                     self.open_editor(event_loop, doc, None, binders);
                     if let Some(index) = previous {
                         self.close_editor(event_loop, index);
@@ -1831,7 +1776,7 @@ impl App {
         index: usize,
         then: AfterDiscard,
     ) {
-        if !self.editors[index].model.history.dirty() {
+        if !self.editors[index].model.dirty() {
             self.proceed(event_loop, index, then);
             return;
         }
