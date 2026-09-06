@@ -1040,10 +1040,14 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, outline: RoundedRect) {
     );
     p.stroke(
         outline,
-        Stroke::new(2.5 * scale),
+        primary_highlight_stroke(scale),
         Color::new([0.0, 0.48, 1.0, 1.0]),
         Affine::IDENTITY,
     );
+}
+
+fn primary_highlight_stroke(scale: f64) -> Stroke {
+    Stroke::new(2.5 * scale)
 }
 
 /// The selected location shared by repeated projections of a cell.

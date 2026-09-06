@@ -259,6 +259,79 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
 }
 
 #[test]
+fn completion_popup_meets_the_painted_field_border_above_and_below() {
+    for scale in [1.0, 1.5, 2.0] {
+        let mut context = BenchContext::new();
+        let styles = crate::styles::editor(scale);
+        let mut tcx = TextCtx {
+            fonts: &mut context.fonts,
+            layouts: &mut context.layouts,
+            cache: &mut context.cache,
+            scale: scale as f32,
+        };
+        let entries = [Entry {
+            display: "entry".into(),
+            detail: None,
+            matches: Vec::new(),
+            face: progred_display::Face::Name,
+            source: None,
+            activate: Rc::new(|_: &mut ()| {}),
+        }];
+        let bounds = Rect::new(0.0, 0.0, 640.0 * scale, 480.0 * scale);
+        for above in [false, true] {
+            let y = if above { 450.0 } else { 30.0 } * scale;
+            let field = Rect::new(50.0 * scale, y, 150.0 * scale, y + 20.0 * scale);
+            let card = completion_card::<(), Bench>(
+                &mut tcx,
+                &styles,
+                &entries,
+                0,
+                0.0,
+                true,
+                |_, _, _, _| {},
+            );
+            let placement =
+                completion_placement(Placement::new(field, bounds), card.extent, scale).unwrap();
+            let mut painted = settle(measured::place(card, placement), None);
+            primary_highlight(
+                scale,
+                &mut painted,
+                puri_widgets::text_frame::outline(scale, field),
+            );
+            let edge = |color| {
+                painted
+                    .list
+                    .0
+                    .iter()
+                    .find_map(|command| match command {
+                        DrawCmd::Stroke {
+                            shape: Shape::RoundedRect(rect),
+                            style,
+                            brush,
+                            ..
+                        } if *brush == Brush::from(color) => {
+                            Some(rect.rect().inflate(style.width / 2.0, style.width / 2.0))
+                        }
+                        _ => None,
+                    })
+                    .unwrap()
+            };
+            let popup = edge(Color::new([0.75, 0.77, 0.81, 1.0]));
+            let field = edge(Color::new([0.0, 0.48, 1.0, 1.0]));
+            let separation = if above {
+                field.y0 - popup.y1
+            } else {
+                popup.y0 - field.y1
+            };
+            assert!(separation.abs() < 1e-6);
+            assert!((field.x0 - popup.x0).abs() < 1e-6);
+            assert!(popup.x0 >= bounds.x0 && popup.x1 <= bounds.x1);
+            assert!(popup.y0 >= bounds.y0 && popup.y1 <= bounds.y1);
+        }
+    }
+}
+
+#[test]
 fn completion_details_share_the_cards_right_edge() {
     for scale in [1.0, 2.0] {
         let mut context = BenchContext::new();

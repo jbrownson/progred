@@ -10,7 +10,7 @@ use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::Descend;
 use crate::workspace::Root;
-use kurbo::{Affine, Point, Rect, Stroke, Vec2};
+use kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -611,21 +611,31 @@ pub fn popover<C: 'static, Cv: 'static>(
 ) -> Measured<Placed<C, Cv>> {
     floating(trigger, content, move |placement, extent| {
         (!placement.clipped_out()).then(|| {
-            let bounds = placement.clip_rect;
-            let below = placement.rect.y1 + gap;
-            let above = placement.rect.y0 - gap - extent.height();
-            let y = if below + extent.height() <= bounds.y1 || above < bounds.y0 {
-                below.min((bounds.y1 - extent.height()).max(bounds.y0))
-            } else {
-                above
-            };
-            let x = placement
-                .rect
-                .x0
-                .clamp(bounds.x0, (bounds.x1 - extent.width).max(bounds.x0));
-            Placement::new(extent.rect_at(Point::new(x, y)), bounds)
+            Placement::new(
+                popover_rect(
+                    placement.rect,
+                    extent.size(),
+                    placement.clip_rect,
+                    gap,
+                ),
+                placement.clip_rect,
+            )
         })
     })
+}
+
+pub(crate) fn popover_rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {
+    let below = anchor.y1 + gap;
+    let above = anchor.y0 - gap - size.height;
+    let y = if below + size.height <= bounds.y1 || above < bounds.y0 {
+        below.min((bounds.y1 - size.height).max(bounds.y0))
+    } else {
+        above
+    };
+    let x = anchor
+        .x0
+        .clamp(bounds.x0, (bounds.x1 - size.width).max(bounds.x0));
+    Rect::from_origin_size(Point::new(x, y), size)
 }
 
 pub fn decorate<C: 'static, Cv: 'static>(

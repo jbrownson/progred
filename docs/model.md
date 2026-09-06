@@ -208,6 +208,9 @@ callback plus explicit text, styling, matching spans, and source attribution.
 The reusable Puri widget draws rows; Progred owns the document operations,
 query state, scrolling, and floating card. See [offer construction](../progred/src/completion.rs)
 and [completion presentation](../progred/src/projection/completion.rs).
+The card meets the query's painted frame, accounting for the frame outline and
+both border widths. Placement uses those same drawing parameters above or below
+the query, and includes the card's stroke when keeping it within the viewport.
 
 A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion

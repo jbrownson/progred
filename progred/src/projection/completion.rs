@@ -2,7 +2,8 @@
 
 use super::{
     Cx, Hooks, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block,
-    hover_claim, hover_highlight, placeholder_box, primary_highlight, tree_hovered,
+    hover_claim, hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke,
+    tree_hovered,
 };
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
@@ -19,7 +20,7 @@ use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-use puri::{Canvas, Color, Point, Stroke, Vec2};
+use puri::{Canvas, Color, Placement, Point, Stroke, Vec2};
 use puri_widgets::panel::Panel;
 use puri_widgets::text_frame;
 use std::rc::Rc;
@@ -240,7 +241,40 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     } else {
         card
     };
-    placed::popover(trigger, card, 4.0 * scale)
+    placed::floating(trigger, card, move |placement, extent| {
+        completion_placement(placement, extent, scale)
+    })
+}
+
+pub(super) fn completion_placement(
+    placement: Placement,
+    extent: Extent,
+    scale: f64,
+) -> Option<Placement> {
+    (!placement.clipped_out()).then(|| {
+        let ring_outset = primary_highlight_stroke(scale).width / 2.0;
+        let anchor = text_frame::outline(scale, placement.rect)
+            .rect()
+            .inflate(ring_outset, ring_outset);
+        let border_outset = completion_border(scale).width / 2.0;
+        let outer = placed::popover_rect(
+            anchor,
+            Size::new(
+                extent.width + 2.0 * border_outset,
+                extent.height() + 2.0 * border_outset,
+            ),
+            placement.clip_rect,
+            0.0,
+        );
+        Placement::new(
+            outer.inflate(-border_outset, -border_outset),
+            placement.clip_rect,
+        )
+    })
+}
+
+fn completion_border(scale: f64) -> Stroke {
+    Stroke::new(scale)
 }
 
 /// Completion offers and expansion share row navigation. Each row's
@@ -388,7 +422,7 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
     let panel = Panel {
         fill: Some(Color::WHITE.into()),
         border: Some((
-            Stroke::new(scale),
+            completion_border(scale),
             Color::new([0.75, 0.77, 0.81, 1.0]).into(),
         )),
         radius: 6.0 * scale,
