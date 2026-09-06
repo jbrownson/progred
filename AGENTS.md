@@ -73,6 +73,7 @@ EOF
 
 ## Key Design Rules
 
+- Prefer simple constructs and reusable combinators that build layers of abstraction. A composition should remain an ordinary input to further composition: partial projections combine into a partial projection, completion providers into a provider. Build higher-level behavior through these interfaces rather than adding domain-specific cases to central machinery. Lowering may optimize the representation and execution of those layers, but must preserve their meaning and observable behavior. See [MOTIVATION.md](MOTIVATION.md#simple-constructs-and-combinators).
 - GID is the native logical model and future binary storage stack, not a textual format. Documents are structural values plus a direct `CellId -> Value` table; an absent entry is a bare cell. `name`, text, and Grap's tagged absence values are libraries embedded above the data layer, never GID features. The binder notation and the checked-in `*.gid` fixtures are a temporary text bridge only; when a native binary representation lands, it takes over the `.gid` extension and the bridge moves aside.
 - The GID core has only two atoms: cell references and blobs. Record labels are always cell identities. UTF-8 text is the open `libraries::text` record convention over a blob, not a primitive; a line projection recognizes the text or f64 facet even when the record has other fields.
 - Resilient to invalid GID states — projections specify the happy path but must fall through gracefully to default/raw rendering; never crash or hide data on unexpected values

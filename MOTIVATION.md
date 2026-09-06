@@ -24,7 +24,23 @@ Puri is not meant to make the smallest UI take the fewest lines. It makes
 the real state and composition surface explicit so a larger UI does not
 acquire a second, accidental synchronization problem as it grows.
 
-Goals:
+## Simple constructs and combinators
+
+Progred's design style is small, understandable constructs and reusable
+combinators that build layers of abstraction. A composition remains an ordinary
+thing that can participate in further composition: combining partial projections
+produces a partial projection, and combining completion providers produces a
+completion provider. Consumers need not know how these were assembled. Richer
+behavior belongs in those compositions rather than an ever-growing set of special
+cases in the primitives. This applies both to the Rust implementation and to the
+libraries and tools available inside Progred.
+
+The conceptual layers need not impose runtime overhead. Grap's evaluator can
+lower higher-level abstractions into efficient base representations while
+preserving their meaning and observable behavior. Optimization should change how
+the composition runs, not require users to adopt a different semantic model.
+
+## Goals
 
 - **Puri.** Ephemeral widget descriptions consume caller-owned inputs
   and produce drawing, transient handlers, and other placement outputs.
