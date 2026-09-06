@@ -143,8 +143,8 @@ impl<C> DispatchContext<C> {
     }
 }
 
-/// A nested scroll container's settled geometry, retained so
-/// selection reveal can update the same view state as pointer scroll.
+/// An editor view's settled geometry. Fixed viewports have zero scroll
+/// maxima; scrolling views use them for pointer scroll and selection reveal.
 pub struct ViewRegion {
     pub root: Root,
     pub rect: Rect,
@@ -612,12 +612,7 @@ pub fn popover<C: 'static, Cv: 'static>(
     floating(trigger, content, move |placement, extent| {
         (!placement.clipped_out()).then(|| {
             Placement::new(
-                popover_rect(
-                    placement.rect,
-                    extent.size(),
-                    placement.clip_rect,
-                    gap,
-                ),
+                popover_rect(placement.rect, extent.size(), placement.clip_rect, gap),
                 placement.clip_rect,
             )
         })
@@ -695,18 +690,45 @@ pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
         let child_rect = extent.rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
         let child_placement =
             measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
-        let mut placed = inner.place_at(child_placement);
-        let renders = std::mem::take(&mut placed.renders);
-        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-            cv.clip(rect, Affine::IDENTITY, |cv| {
-                Placed::<C, Cv>::render(renders, cv, ink)
-            })
-        }));
-        placed.handler = placed
-            .handler
-            .map(|handler| gate_starts(handler, placement));
-        base.over(placed)
+        base.over(clip_output(inner.place_at(child_placement), placement))
     })
+}
+
+/// An assigned-size editor view, with no content scrolling or padding.
+pub fn viewport<C: 'static, Cv: Canvas + 'static>(
+    child: Measured<Placed<C, Cv>>,
+    root: Root,
+) -> Measured<Placed<C, Cv>> {
+    measured::around(child, move |placement, inner| {
+        let child_rect = inner.extent().rect_at(placement.rect.origin());
+        let child_placement = measured::child_placement(
+            measured::clipped_placement(placement, placement.rect),
+            child_rect,
+        );
+        let mut placed = clip_output(inner.place_at(child_placement), placement);
+        placed.view_regions.push(ViewRegion {
+            root,
+            rect: placement.rect,
+            maximum: Vec2::ZERO,
+        });
+        placed
+    })
+}
+
+fn clip_output<C: 'static, Cv: Canvas + 'static>(
+    mut placed: Placed<C, Cv>,
+    placement: Placement,
+) -> Placed<C, Cv> {
+    let renders = std::mem::take(&mut placed.renders);
+    placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+        cv.clip(placement.rect, Affine::IDENTITY, |cv| {
+            Placed::<C, Cv>::render(renders, cv, ink)
+        })
+    }));
+    placed.handler = placed
+        .handler
+        .map(|handler| gate_starts(handler, placement));
+    placed
 }
 
 /// Associate every navigation occurrence produced by `child` with

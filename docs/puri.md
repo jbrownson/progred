@@ -55,6 +55,12 @@ available width. Selection does not reshape text or rerun projections.
 Shared layout nodes belong to this one frame and are consumed by the selected
 form.
 
+Pane sizing precedes content projection. Ordinary document panes scroll over
+content-sized output; explicit viewport panes pass their assigned size to a
+content function and clip its output without adding padding or scrolling.
+Both use the same placement, clipping, and handler contracts; viewport functions
+do not add a stretch/flex policy to the baseline layout algebra.
+
 `around` lets a consumer control when its subtree places; `before` and
 `decorate` express ordinary placement/paint ordering. These belong to the
 consumer's layout composition, not to a Puri widget's return type.

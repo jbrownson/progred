@@ -661,7 +661,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
                 Value::record([
                     (presentation::vocabulary::VALUE, cell.into()),
                     (
-                        presentation::vocabulary::PROJECTION,
+                        presentation::vocabulary::VIEWPORT,
                         fidget::vocabulary::PREVIEW_3D.into(),
                     ),
                 ])

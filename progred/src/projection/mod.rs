@@ -9,6 +9,7 @@ mod location;
 mod structure;
 #[cfg(test)]
 mod tests;
+pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
 use crate::frame::Hovered;

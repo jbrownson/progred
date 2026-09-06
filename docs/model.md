@@ -258,6 +258,22 @@ values and computed results use the normal projection, so declarations inside
 them remain data. Raw shows the structural data in either view. See
 [projection composition](projections.md#projection-composition).
 
+An assigned-size pane uses `{value: source, viewport: function}` instead. The
+function receives `value`, `width`, and `height` (logical display units) and
+returns ordinary display content, including handlers. Its pane has no automatic
+padding or document scrolling; the assigned rectangle clips its output. Pane
+splitting determines that rectangle before the function runs, so there is no
+feedback from content measurement to pane sizing. View annotations and selection
+keep their existing per-view ownership. Raw returns to ordinary scrolling source
+display. The viewport convention applies only at pane entry, including through
+cell aliases; the main document and nested declarations remain editable data.
+
+The Fidget example and template use this contract. Preview image dimensions are
+explicit arguments, separate from the Fidget field and camera volume. Raster
+resolution follows the display scale; rectangular 3D views preserve square
+pixels rather than stretching the geometry. Ordinary preview calls without size
+arguments retain the 256-point default.
+
 ## History, gestures, and persistence
 
 Examples are a development and demo aid, intended to be removed from production

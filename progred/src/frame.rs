@@ -804,7 +804,22 @@ fn project_workspace_view(
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<Editor, Paint>> {
-    let margin = 12.0 * scale;
+    let raw = view.projection == workspace::Projection::Raw;
+    let viewport = match view.root.target() {
+        workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
+        _ => None,
+    };
+    let viewport = viewport.map(|entry| {
+        (
+            entry,
+            projection::viewport::projection(&stack.projection, size / scale),
+        )
+    });
+    let margin = if viewport.is_some() {
+        0.0
+    } else {
+        12.0 * scale
+    };
     let body_width = (size.width - 2.0 * margin).max(0.0);
     let root_path;
     let (root, projection) = match view.root.target() {
@@ -813,11 +828,15 @@ fn project_workspace_view(
             (sources.root(), &stack.projection)
         }
         workspace::Target::Pane { path } => {
-            root_path = path.clone();
-            (sources.resolve_path(path), &stack.pane_projection)
+            if let Some((entry, projection)) = &viewport {
+                root_path = entry.path.clone();
+                (Some(entry.value), projection)
+            } else {
+                root_path = path.clone();
+                (sources.resolve_path(path), &stack.pane_projection)
+            }
         }
     };
-    let raw = view.projection == workspace::Projection::Raw;
     let projected = projection::project(
         projection::ProjectDescription {
             sources,
@@ -841,32 +860,36 @@ fn project_workspace_view(
         projection_hooks(view.root.clone(), stack.completions.clone()),
     );
     let content = measured::pad(Insets::uniform(margin), projected);
-    let maximum = Vec2::new(
-        ((content.extent.width - size.width) / scale).max(0.0),
-        ((content.extent.height() - size.height) / scale).max(0.0),
-    );
-    let offset = Vec2::new(
-        view.scroll.x.clamp(0.0, maximum.x) * scale,
-        view.scroll.y.clamp(0.0, maximum.y) * scale,
-    );
     let root = view.root.clone();
-    let scroll_root = root.clone();
-    let scrolled = placed::scrolled_at(
-        content,
-        offset,
-        Some((root.clone(), scale)),
-        move |app: &mut Editor, update| {
-            app.scroll_view(
-                scroll_root.clone(),
-                update,
-                scale,
-                size,
-                maximum.y,
-                maximum.x,
-            )
-        },
-    );
-    let scrolled = placed::in_view(scrolled, root);
+    let content = if viewport.is_some() {
+        placed::viewport(content, root.clone())
+    } else {
+        let maximum = Vec2::new(
+            ((content.extent.width - size.width) / scale).max(0.0),
+            ((content.extent.height() - size.height) / scale).max(0.0),
+        );
+        let offset = Vec2::new(
+            view.scroll.x.clamp(0.0, maximum.x) * scale,
+            view.scroll.y.clamp(0.0, maximum.y) * scale,
+        );
+        let scroll_root = root.clone();
+        placed::scrolled_at(
+            content,
+            offset,
+            Some((root.clone(), scale)),
+            move |app: &mut Editor, update| {
+                app.scroll_view(
+                    scroll_root.clone(),
+                    update,
+                    scale,
+                    size,
+                    maximum.y,
+                    maximum.x,
+                )
+            },
+        )
+    };
+    let content = placed::in_view(content, root);
     let frame = placed::leaf(
         measured::Extent {
             width: size.width,
@@ -875,8 +898,11 @@ fn project_workspace_view(
         },
         |_, _| {},
     );
-    measured::overlay(frame, scrolled, move |placement, _, _| {
-        Some(Placement::new(placement.rect, placement.clip_rect))
+    measured::overlay(frame, content, move |placement, _, _| {
+        Some(Placement::new(
+            placement.rect,
+            placement.clip_rect.intersect(placement.rect),
+        ))
     })
 }
 
@@ -1478,6 +1504,167 @@ mod frame_tests {
                     .iter()
                     .any(|target| target.root.as_ref() == Some(pane)
                         && target.path.as_ref() == source_path)
+            );
+        }
+    }
+
+    #[test]
+    fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
+        use progred_libraries::{Definitions, f64, layout, presentation};
+        use std::cell::RefCell;
+        let function = gid::new_cell_id();
+        let source = Value::from(b"source".to_vec());
+        let declaration = Value::record([
+            (presentation::vocabulary::VALUE, source.clone()),
+            (
+                presentation::vocabulary::VIEWPORT,
+                grap::lambda(
+                    [
+                        presentation::vocabulary::VALUE,
+                        layout::vocabulary::WIDTH,
+                        layout::vocabulary::HEIGHT,
+                    ],
+                    grap::call(
+                        function.into(),
+                        [
+                            presentation::vocabulary::VALUE,
+                            layout::vocabulary::WIDTH,
+                            layout::vocabulary::HEIGHT,
+                        ]
+                        .map(|label| (label, label.into())),
+                    ),
+                ),
+            ),
+        ]);
+        let mut model = Model {
+            doc: Document {
+                root: Some(
+                    workspace::append(
+                        &Value::record([]),
+                        workspace::Side::Left,
+                        declaration.clone(),
+                    )
+                    .unwrap()
+                    .0,
+                ),
+                cells: Cells::new(),
+            },
+            selection: None,
+            history: crate::history::History::default(),
+            view: ViewFlags::default(),
+            workspace: workspace::Workspace::default(),
+        };
+        model
+            .workspace
+            .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
+        model.workspace.left.panes[0].view.scroll = Vec2::new(75.0, 150.0);
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut stack = stack::load::<Editor>();
+        stack.libraries.insert(
+            gid::new_cell_id(),
+            Definitions::from_parts(
+                Cells::new(),
+                grap::ForeignFunctions::default().register(
+                    function,
+                    grap::ForeignFunction::new({
+                        let calls = calls.clone();
+                        move |context, call, environment| {
+                            let value = context
+                                .field(call, presentation::vocabulary::VALUE)
+                                .unwrap();
+                            assert_eq!(context.eval(value, environment)?, source);
+                            let width = context.field(call, layout::vocabulary::WIDTH).unwrap();
+                            let width = f64::read(&context.eval(width, environment)?).unwrap();
+                            let height = context.field(call, layout::vocabulary::HEIGHT).unwrap();
+                            let height = f64::read(&context.eval(height, environment)?).unwrap();
+                            calls.borrow_mut().push(Size::new(width, height));
+                            Ok(layout::hoverable(layout::drawing(width, 0.0, height, [])))
+                        }
+                    }),
+                ),
+            ),
+        );
+        let pane = &model.workspace.left.panes[0].view;
+        let workspace::Target::Pane { path } = pane.root.target() else {
+            panic!("pane")
+        };
+        for (size, scale) in [
+            (Size::new(300.0, 500.0), 1.0),
+            (Size::new(700.0, 400.0), 2.0),
+        ] {
+            let styles = crate::styles::editor(scale);
+            let mut fonts = FontContext::new();
+            let mut layouts = LayoutContext::new();
+            let mut cache = puri::text::TextCache::default();
+            let mut tcx = TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                scale: scale as f32,
+                cache: &mut cache,
+            };
+            let mut place = |view| {
+                measured::place(
+                    project_workspace_view(
+                        &model,
+                        &stack,
+                        &styles,
+                        &mut tcx,
+                        sources::Sources {
+                            doc: &model.doc,
+                            libraries: &stack.libraries,
+                        },
+                        view,
+                        None,
+                        size,
+                        scale,
+                    ),
+                    Placement::root(Rect::from_origin_size(Point::new(30.0, 40.0), size)),
+                )
+            };
+            let placed = place(pane);
+            assert_eq!(calls.borrow_mut().pop(), Some(size / scale));
+            let rect = Rect::from_origin_size(Point::new(30.0, 40.0), size);
+            assert_eq!(placed.view_regions[0].rect, rect);
+            assert_eq!(placed.view_regions[0].maximum, Vec2::ZERO);
+            assert!(
+                placed
+                    .descends
+                    .iter()
+                    .any(|node| node.path.as_ref() == path && node.rect == rect)
+            );
+            assert!(matches!(
+                placed.probe(Point::new(30.5, 40.5), None, 0.0),
+                Some(Claim::Direct(_))
+            ));
+            assert!(placed.probe(Point::new(29.5, 40.5), None, 0.0).is_none());
+            assert_eq!(
+                model.workspace.left.panes[0].view.scroll,
+                Vec2::new(75.0, 150.0)
+            );
+
+            let raw = workspace::View {
+                root: pane.root.clone(),
+                projection: workspace::Projection::Raw,
+                annotations: Default::default(),
+                scroll: Vec2::ZERO,
+            };
+            let placed = place(&raw);
+            assert!(calls.borrow().is_empty(), "Raw never invokes the viewport");
+            let field_path: Vec<_> = path
+                .iter()
+                .cloned()
+                .chain([Step::Key(presentation::vocabulary::VIEWPORT)])
+                .collect();
+            assert!(
+                placed
+                    .descends
+                    .iter()
+                    .any(|node| node.path.as_ref() == field_path)
+            );
+            place(&model.workspace.document);
+            assert!(
+                calls.borrow().is_empty(),
+                "the document leaves declarations editable"
             );
         }
     }

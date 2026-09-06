@@ -95,6 +95,17 @@ scope of ordinary contextual partials. The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
 Explicit `{render: expression}` values retain their ordinary display behavior.
 
+Assigned-size panes instead use `{value: source, viewport: function}`. The editor
+recognizes this contract at pane entry and passes the settled logical `width`
+and `height` along with `value`. The result goes through the same transient
+layout lowering and handler machinery as other computed content. There is no
+pane-size lookup FFI and no size field on every ordinary projection input.
+The pane supplies the clip and no padding or document scroll handler. The
+function may provide its own interactions, such as Fidget orbit and zoom.
+An absent result exposes the stored source; Raw exposes the whole declaration
+in the ordinary scrolling view. Malformed declarations and cell cycles fall
+back to normal projection.
+
 ## Lowering and interaction
 
 The [projection runtime](../progred/src/projection/mod.rs) adapts display
@@ -158,7 +169,7 @@ and Grap implementations. To pass a callable reference through an evaluated
 argument, use the existing inert `{ffi: cell}` representation; passing a bare
 cell evaluates its data. This reference still dispatches in the receiving host
 context. It contains neither a native function pointer nor an extra cell definition.
-The Fidget example uses such a reference as the argument to `border`.
+The Fidget example uses such a reference for its viewport function.
 
 A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.

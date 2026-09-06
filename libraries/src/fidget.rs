@@ -25,11 +25,11 @@ use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use progred_display::{
     Layout, Paint, ProjectionInput, leaf, on_hover, on_state_drag, on_state_scroll,
 };
-use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf};
+use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Size};
 use std::{cell::RefCell, rc::Rc};
 
-const PREVIEW_SIZE: f64 = 256.0;
-const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / PREVIEW_SIZE as f32;
+const DEFAULT_PREVIEW_SIZE: f64 = 256.0;
+const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / 256.0;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -76,6 +76,7 @@ pub mod vocabulary {
     pub const ZOOM: CellId = CellId::from_u128(0x745f4518cc847a4e7457e3426d010754);
     pub const INVALID_FIELD: CellId = CellId::from_u128(0xc26cfccc2a9fc752bf73c4359f2e9ade);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
+    pub const INVALID_SIZE: CellId = CellId::from_u128(0x220fe6002d6a973da9c2ea1ff7fec98e);
 }
 
 fn node(marker: CellId, content: Value) -> Value {
@@ -120,6 +121,23 @@ fn preview_value(
     if tree(&field).is_none() {
         return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
     }
+    let dimensions = [
+        crate::layout::vocabulary::WIDTH,
+        crate::layout::vocabulary::HEIGHT,
+    ]
+    .into_iter()
+    .map(|label| {
+        evaluated(context, call, environment, label).map(|value| {
+            let value = value.unwrap_or_else(|| crate::f64::value(DEFAULT_PREVIEW_SIZE));
+            crate::f64::read(&value)
+                .filter(|number| number.is_finite() && *number > 0.0)
+                .map(|_| (label, value))
+        })
+    })
+    .collect::<Result<Option<Vec<_>>, _>>()?;
+    let Some(dimensions) = dimensions else {
+        return Ok(absent::with_reason(vocabulary::INVALID_SIZE));
+    };
     let bounds = bounds
         .into_iter()
         .map(|(label, default)| {
@@ -137,6 +155,7 @@ fn preview_value(
             Value::record(
                 [(vocabulary::FIELD, field)]
                     .into_iter()
+                    .chain(dimensions)
                     .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
             ),
         ),
@@ -388,6 +407,7 @@ fn tree(value: &Value) -> Option<Tree> {
 
 struct SlicePreview {
     tree: Tree,
+    size: Size,
     min_x: f32,
     max_x: f32,
     min_y: f32,
@@ -399,6 +419,7 @@ fn slice_preview(value: &Value) -> Option<SlicePreview> {
     let fields = value.as_record()?.get(&vocabulary::PREVIEW)?.as_record()?;
     let preview = SlicePreview {
         tree: tree(fields.get(&vocabulary::FIELD)?)?,
+        size: preview_size(fields)?,
         min_x: f32::read(fields.get(&vocabulary::MIN_X)?)?,
         max_x: f32::read(fields.get(&vocabulary::MAX_X)?)?,
         min_y: f32::read(fields.get(&vocabulary::MIN_Y)?)?,
@@ -409,19 +430,18 @@ fn slice_preview(value: &Value) -> Option<SlicePreview> {
 }
 
 fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Paint>> {
-    let raster_size = (scale_factor.is_finite() && scale_factor > 0.0).then(|| {
-        (PREVIEW_SIZE * scale_factor)
-            .round()
-            .clamp(1.0, f64::from(u32::MAX)) as u32
-    })?;
+    let raster_size = raster_size(preview.size, scale_factor)?;
+    let minimum = raster_size.width().min(raster_size.height()) as f32;
     let half_width = (preview.max_x - preview.min_x) / 2.0;
     let half_height = (preview.max_y - preview.min_y) / 2.0;
     let tree = preview.tree.remap_xyz(
-        Tree::x() * half_width + (preview.min_x + preview.max_x) / 2.0,
-        Tree::y() * half_height + (preview.min_y + preview.max_y) / 2.0,
+        Tree::x() * (half_width * minimum / raster_size.width() as f32)
+            + (preview.min_x + preview.max_x) / 2.0,
+        Tree::y() * (half_height * minimum / raster_size.height() as f32)
+            + (preview.min_y + preview.max_y) / 2.0,
         Tree::constant(preview.z.into()),
     );
-    let config = PixelRenderConfig::from_size(PixelRenderSize::from(raster_size));
+    let config = PixelRenderConfig::from_size(raster_size);
     let image = config.run(VmShape::from(tree).try_into().ok()?)?;
     let rgba = image
         .iter()
@@ -433,21 +453,50 @@ fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Pai
             }
         })
         .collect::<Vec<u8>>();
-    Some(Drawing {
-        width: PREVIEW_SIZE,
-        ascent: PREVIEW_SIZE / 2.0,
-        descent: PREVIEW_SIZE / 2.0,
+    Some(image_drawing(preview.size, raster_size, rgba))
+}
+
+fn preview_size(fields: &gid::Record) -> Option<Size> {
+    let dimension = |label| {
+        crate::f64::read(fields.get(&label)?).filter(|number| number.is_finite() && *number > 0.0)
+    };
+    Some(Size::new(
+        dimension(crate::layout::vocabulary::WIDTH)?,
+        dimension(crate::layout::vocabulary::HEIGHT)?,
+    ))
+}
+
+fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
+    let dimension = |length| {
+        let pixels: f64 = length * scale;
+        (pixels.is_finite() && pixels > 0.0 && pixels <= f64::from(u32::MAX))
+            .then(|| pixels.round().max(1.0) as u32)
+    };
+    Some(PixelRenderSize::new(
+        dimension(size.width)?,
+        dimension(size.height)?,
+    ))
+}
+
+fn image_drawing(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Drawing<Paint> {
+    Drawing {
+        width: size.width,
+        ascent: size.height / 2.0,
+        descent: size.height / 2.0,
         commands: vec![Command::Image {
             image: ImageData {
                 data: rgba.into(),
                 format: ImageFormat::Rgba8,
                 alpha_type: ImageAlphaType::Alpha,
-                width: raster_size,
-                height: raster_size,
+                width: raster_size.width(),
+                height: raster_size.height(),
             },
-            transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
+            transform: Affine::scale_non_uniform(
+                size.width / f64::from(raster_size.width()),
+                size.height / f64::from(raster_size.height()),
+            ),
         }],
-    })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -541,6 +590,7 @@ fn zoom_handler(state: Option<&Value>) -> progred_display::StateScrollHandler {
 
 struct VolumePreview {
     tree: Tree,
+    size: Size,
     min: Vector3<f32>,
     max: Vector3<f32>,
 }
@@ -552,6 +602,7 @@ fn volume_preview(value: &Value) -> Option<VolumePreview> {
         .as_record()?;
     let preview = VolumePreview {
         tree: tree(fields.get(&vocabulary::FIELD)?)?,
+        size: preview_size(fields)?,
         min: Vector3::new(
             f32::read(fields.get(&vocabulary::MIN_X)?)?,
             f32::read(fields.get(&vocabulary::MIN_Y)?)?,
@@ -576,20 +627,25 @@ struct VolumeView {
     world_to_model: Matrix4<f32>,
 }
 
-fn volume_view(preview: &VolumePreview, camera: Camera, raster_size: u32) -> VolumeView {
+fn volume_view(
+    preview: &VolumePreview,
+    camera: Camera,
+    raster_size: PixelRenderSize,
+) -> VolumeView {
     let center = (preview.min + preview.max) / 2.0;
     let half = (preview.max - preview.min) / 2.0;
     let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
     let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
     let rotation = yaw * pitch;
     let radius = half.norm() * 1.05;
-    let depth = (f64::from(raster_size) * f64::from(camera.zoom.max(1.0)))
+    let minimum = raster_size.width().min(raster_size.height());
+    let depth = (f64::from(minimum) * f64::from(camera.zoom.max(1.0)))
         .ceil()
         .min(f64::from(u32::MAX - 63)) as u32;
     let depth = depth.next_multiple_of(64);
-    let depth_scale = depth as f32 / raster_size as f32;
+    let depth_scale = depth as f32 / minimum as f32;
     VolumeView {
-        size: VoxelRenderSize::new(raster_size, raster_size, depth),
+        size: VoxelRenderSize::new(raster_size.width(), raster_size.height(), depth),
         world_to_model: Translation3::from(center).to_homogeneous()
             * rotation.to_homogeneous()
             * Scale3::new(
@@ -645,7 +701,7 @@ impl PreviewRenderer {
         &mut self,
         preview: &VolumePreview,
         camera: Camera,
-        raster_size: u32,
+        raster_size: PixelRenderSize,
     ) -> Option<Vec<u8>> {
         let shape = VmShape::from(preview.tree.clone());
         let view = volume_view(preview, camera, raster_size);
@@ -812,29 +868,13 @@ fn volume_drawing(
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
 ) -> Option<Drawing<Paint>> {
-    let preview = volume_preview(value);
-    let raster_size = (scale_factor.is_finite() && scale_factor > 0.0).then(|| {
-        (PREVIEW_SIZE * scale_factor)
-            .round()
-            .clamp(1.0, f64::from(u32::MAX)) as u32
-    });
-    preview.zip(raster_size).and_then(|(preview, raster_size)| {
-        Some(Drawing {
-            width: PREVIEW_SIZE,
-            ascent: PREVIEW_SIZE / 2.0,
-            descent: PREVIEW_SIZE / 2.0,
-            commands: vec![Command::Image {
-                image: ImageData {
-                    data: renderer.render(&preview, camera, raster_size)?.into(),
-                    format: ImageFormat::Rgba8,
-                    alpha_type: ImageAlphaType::Alpha,
-                    width: raster_size,
-                    height: raster_size,
-                },
-                transform: Affine::scale(PREVIEW_SIZE / f64::from(raster_size)),
-            }],
-        })
-    })
+    let preview = volume_preview(value)?;
+    let raster_size = raster_size(preview.size, scale_factor)?;
+    Some(image_drawing(
+        preview.size,
+        raster_size,
+        renderer.render(&preview, camera, raster_size)?,
+    ))
 }
 
 fn display<World, Hover: Clone>(
@@ -915,6 +955,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
     for (cell, spelling) in [
         (vocabulary::INVALID_FIELD, "invalid field"),
         (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
+        (vocabulary::INVALID_SIZE, "invalid preview size"),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -972,7 +1013,7 @@ fn root_completion() -> progred_display::Completion {
                     Value::list([Value::record([
                         (presentation::vocabulary::VALUE, cell.into()),
                         (
-                            presentation::vocabulary::PROJECTION,
+                            presentation::vocabulary::VIEWPORT,
                             vocabulary::PREVIEW_3D.into(),
                         ),
                     ])]),
@@ -1166,6 +1207,72 @@ mod tests {
     }
 
     #[test]
+    fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
+        for size in [Size::new(96.0, 48.0), Size::new(48.0, 96.0)] {
+            let value = evaluate(&call(
+                vocabulary::PREVIEW_3D,
+                [
+                    (
+                        presentation::vocabulary::VALUE,
+                        call(vocabulary::SPHERE, [(vocabulary::RADIUS, f32::value(40.0))]),
+                    ),
+                    (
+                        crate::layout::vocabulary::WIDTH,
+                        crate::f64::value(size.width),
+                    ),
+                    (
+                        crate::layout::vocabulary::HEIGHT,
+                        crate::f64::value(size.height),
+                    ),
+                ],
+            ));
+            let preview = volume_preview(&value).unwrap();
+            assert_eq!(preview.size, size);
+            for scale in [1.0, 1.5, 2.0] {
+                let raster = raster_size(size, scale).unwrap();
+                let view = volume_view(&preview, Camera::default(), raster);
+                let screen = view.world_to_model * view.size.screen_to_world();
+                let x = screen.fixed_view::<3, 1>(0, 0).norm();
+                let y = screen.fixed_view::<3, 1>(0, 1).norm();
+                assert!((x - y).abs() < 0.00001, "square pixels must stay square");
+                let rgba = cpu_volume(VmShape::from(preview.tree.clone()), &view).unwrap();
+                assert_eq!(
+                    rgba.len(),
+                    raster.width() as usize * raster.height() as usize * 4
+                );
+                let drawing = image_drawing(size, raster, rgba);
+                assert_eq!(drawing.width, size.width);
+                assert_eq!(drawing.ascent + drawing.descent, size.height);
+                let [Command::Image { image, transform }] = drawing.commands.as_slice() else {
+                    panic!("one image")
+                };
+                assert_eq!(
+                    (image.width, image.height),
+                    ((size.width * scale) as u32, (size.height * scale) as u32)
+                );
+                assert_eq!(
+                    *transform * puri::Point::new(image.width.into(), image.height.into()),
+                    puri::Point::new(size.width, size.height)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_preview_dimensions_decline_without_rendering() {
+        for width in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+            let result = evaluate(&call(
+                vocabulary::PREVIEW_3D,
+                [
+                    (presentation::vocabulary::VALUE, f32::value(1.0)),
+                    (crate::layout::vocabulary::WIDTH, crate::f64::value(width)),
+                ],
+            ));
+            assert_eq!(result, absent::with_reason(vocabulary::INVALID_SIZE));
+        }
+    }
+
+    #[test]
     fn cpu_previews_support_constant_fields() {
         for (field, inside) in [
             (f32::value(0.0), false),
@@ -1181,7 +1288,7 @@ mod tests {
                 [(presentation::vocabulary::VALUE, field)],
             ));
             let preview = volume_preview(&value).unwrap();
-            let view = volume_view(&preview, Camera::default(), 64);
+            let view = volume_view(&preview, Camera::default(), PixelRenderSize::from(64));
             let rgba = cpu_volume(VmShape::from(preview.tree), &view).unwrap();
             assert_eq!(rgba.len(), 64 * 64 * 4);
             assert!(
@@ -1240,6 +1347,7 @@ mod tests {
     fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
         let preview = VolumePreview {
             tree: Tree::from(0.0),
+            size: Size::new(256.0, 256.0),
             min: Vector3::repeat(-1.0),
             max: Vector3::repeat(1.0),
         };
@@ -1250,7 +1358,7 @@ mod tests {
                 pitch: 0.0,
                 zoom: 4.0,
             },
-            256,
+            PixelRenderSize::from(256),
         );
 
         assert_eq!(view.size, VoxelRenderSize::new(256, 256, 1024));

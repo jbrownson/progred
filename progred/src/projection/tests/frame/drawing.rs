@@ -104,7 +104,10 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         .as_cell()
         .unwrap();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    context.stack.projection = context.stack.pane_projection.clone();
+    context.stack.projection = crate::projection::viewport::projection(
+        &context.stack.projection,
+        kurbo::Size::new(96.0, 64.0),
+    );
     let sphere = |radius| {
         grap::call(
             fidget::vocabulary::SPHERE.into(),
@@ -154,7 +157,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
 }
 
 #[test]
-fn fidget_pane_projects_an_image_inside_the_standard_border() {
+fn fidget_viewport_projects_an_image_at_the_assigned_size() {
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/fidget.gid"
@@ -168,8 +171,11 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
     let value = crate::spine::get(root, &declaration.path);
     let source = Some((declaration.path.as_slice(), value));
     let mut context = BenchContext::new();
-    context.stack.projection = context.stack.pane_projection.clone();
-    let (bench, _) = context.place(
+    context.stack.projection = crate::projection::viewport::projection(
+        &context.stack.projection,
+        kurbo::Size::new(160.0, 96.0),
+    );
+    let (bench, extent) = context.place(
         &doc,
         None,
         &Annotations::default(),
@@ -188,16 +194,10 @@ fn fidget_pane_projects_an_image_inside_the_standard_border() {
         })
         .expect("the Fidget projection paints an image");
     let alphas = image.data.as_ref().iter().skip(3).step_by(4);
+    assert_eq!((image.width, image.height), (160, 96));
+    assert_eq!((extent.width, extent.height()), (160.0, 96.0));
     assert!(alphas.clone().any(|alpha| *alpha == 0));
     assert!(alphas.clone().any(|alpha| *alpha == 255));
-    assert!(bench.list.0.iter().any(|command| matches!(
-        command,
-        DrawCmd::Stroke {
-            shape: Shape::Rect(_),
-            style,
-            ..
-        } if style.width == 1.0
-    )));
 }
 
 #[test]
