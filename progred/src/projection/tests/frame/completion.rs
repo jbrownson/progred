@@ -282,7 +282,7 @@ fn completion_details_share_the_cards_right_edge() {
             activate: Rc::new(|_: &mut ()| {}),
         });
         let detail_widths = entries.each_ref().map(|entry| {
-            puri::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.dim)
+            puri::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.detail)
                 .metrics()
                 .width
         });
@@ -303,7 +303,7 @@ fn completion_details_share_the_cards_right_edge() {
             .0
             .iter()
             .filter_map(|command| match command {
-                DrawCmd::GlyphRun(run) if run.brush == styles.dim.brush => Some(run),
+                DrawCmd::GlyphRun(run) if run.brush == styles.detail.brush => Some(run),
                 _ => None,
             })
             .collect::<Vec<_>>();

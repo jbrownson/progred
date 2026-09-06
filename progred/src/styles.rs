@@ -10,6 +10,7 @@ pub struct Styles {
     pub name: TextStyle,
     pub string: TextStyle,
     pub dim: TextStyle,
+    pub detail: TextStyle,
     pub id: TextStyle,
     pub accent_wash: TextStyle,
     pub selection_wash: Brush,
@@ -30,6 +31,7 @@ pub fn editor(scale: f64) -> Styles {
         name: style(14.0, [0.13, 0.14, 0.16, 1.0], None),
         string: style(14.0, [0.55, 0.33, 0.28, 1.0], None),
         dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
+        detail: style(11.0, [0.55, 0.58, 0.64, 1.0], None),
         id: TextStyle {
             family: GenericFamily::Monospace,
             ..style(13.0, [0.55, 0.58, 0.64, 1.0], None)

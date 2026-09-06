@@ -270,7 +270,7 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         &widget_entries,
         !everything,
         puri_widgets::completion::Style {
-            detail: &styles.dim,
+            detail: &styles.detail,
             more: &styles.dim,
             scale,
             chosen: Color::new([0.0, 0.48, 1.0, 0.14]),
