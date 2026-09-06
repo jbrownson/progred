@@ -87,7 +87,7 @@ fn pending_target<C: 'static, Cv: Canvas + 'static>(
                 root: None,
                 path,
                 rect: placement.rect,
-                select: Rc::new(move |ctx| {
+                select: Rc::new(move |ctx, _| {
                     select(ctx, target.to_vec());
                     true
                 }),

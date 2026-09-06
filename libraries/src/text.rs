@@ -36,6 +36,13 @@ pub fn read(value: &Value) -> Option<&str> {
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
 
+pub fn completion(spelling: &str) -> progred_display::Completion {
+    crate::completion::select(progred_display::Completion::new(
+        format!("\"{spelling}\""),
+        value(spelling),
+    ))
+}
+
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,

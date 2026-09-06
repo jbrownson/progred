@@ -85,7 +85,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
 }
 
 #[test]
-fn a_line_control_installs_its_navigation_selection() {
+fn a_line_control_selects_without_storing_its_default_editor() {
     let lib = core_libraries();
     let (doc, _) = doc_of(vec![(
         crate::test_values::label("name"),
@@ -96,7 +96,258 @@ fn a_line_control_installs_its_navigation_selection() {
         &lib,
         vec![Step::Follow(gid::Resolution::Document), key("name")],
     );
-    assert_eq!(selected.edit().map(LineEditState::text), Some("old"));
+    assert!(selected.edit().is_none());
+    assert_eq!(selected.payload(), selection_payload::edge());
+}
+
+#[test]
+fn a_plain_selection_accepts_first_input_using_the_line_default() {
+    let libraries = core_libraries();
+    for (value, input, expected) in [
+        (text::value("hë🦀"), "!", text::value("hë🦀!")),
+        (text::value(""), "first", text::value("first")),
+        (f64::value(12.0), "3", f64::value(123.0)),
+        (Value::from(vec![0xab]), "cd", Value::from(vec![0xab, 0xcd])),
+    ] {
+        let doc = Document {
+            root: Some(value),
+            cells: Cells::new(),
+        };
+        let mut world = EditingWorld::new(&doc, &libraries);
+        world.selection = Some(make_selection(&doc, &libraries, vec![]));
+        let frame = editing_frame(&mut world, false);
+        assert!(world.selection.as_ref().unwrap().edit().is_none());
+        assert!(frame.handler.unwrap().dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Character(input.into()),
+                ..arrow(NamedKey::End)
+            }
+        ));
+        assert!(write_through(
+            &mut world.doc,
+            &libraries,
+            world.selection.as_mut().unwrap()
+        ));
+        assert_eq!(world.doc.root, Some(expected));
+        let selected = world.selection.as_mut().unwrap();
+        selected.edit_mut().unwrap().cursor_to_start();
+        editing_frame(&mut world, false);
+        assert_eq!(
+            world
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .selection_offsets(),
+            (0, 0)
+        );
+    }
+}
+
+#[test]
+fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: Some(text::value("hello")),
+        cells: Cells::new(),
+    };
+    for ime in [false, true] {
+        let mut world = EditingWorld::new(&doc, &libraries);
+        world.selection = Some(make_selection(&doc, &libraries, vec![]));
+        world.clipboard.0 = Some(" world".into());
+        let handler = editing_frame(&mut world, false).handler.unwrap();
+        assert!(if ime {
+            handler.dispatch_ime(
+                &mut world,
+                &puri::handler::ImeEvent::Commit(" world".into()),
+            )
+        } else {
+            handler.dispatch_key(
+                &mut world,
+                &KeyboardEvent {
+                    key: Key::Character("v".into()),
+                    modifiers: if cfg!(target_os = "macos") {
+                        Modifiers::META
+                    } else {
+                        Modifiers::CONTROL
+                    },
+                    ..arrow(NamedKey::End)
+                },
+            )
+        });
+        assert_eq!(
+            world.selection.as_ref().unwrap().edit().unwrap().text(),
+            "hello world"
+        );
+    }
+}
+
+#[test]
+fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: Some(text::value("ab")),
+        cells: Cells::new(),
+    };
+    let mut world = EditingWorld::new(&doc, &libraries);
+    world.selection = Some(Selection::from_payload(
+        &crate::workspace::Root::document(),
+        &src(&doc, &libraries),
+        vec![],
+        Value::record([
+            (selection_payload::vocabulary::ANCHOR, f64::value(1.0)),
+            (selection_payload::vocabulary::FOCUS, f64::value(1.0)),
+        ]),
+    ));
+    let frame = editing_frame(&mut world, false);
+    assert!(world.selection.as_ref().unwrap().edit().is_none());
+    assert!(frame.handler.unwrap().dispatch_key(
+        &mut world,
+        &KeyboardEvent {
+            key: Key::Character("X".into()),
+            ..arrow(NamedKey::End)
+        }
+    ));
+    assert!(write_through(
+        &mut world.doc,
+        &libraries,
+        world.selection.as_mut().unwrap()
+    ));
+    assert_eq!(world.doc.root, Some(text::value("aXb")));
+}
+
+#[test]
+fn leftward_entry_is_explicit_but_ordinary_navigation_keeps_state_missing() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: Some(text::value("hello")),
+        cells: Cells::new(),
+    };
+    use crate::navigate::Direction;
+
+    for direction in [
+        None,
+        Some(Direction::Down),
+        Some(Direction::Up),
+        Some(Direction::Right),
+        Some(Direction::Left),
+    ] {
+        let mut world = EditingWorld::new(&doc, &libraries);
+        let frame = editing_frame(&mut world, false);
+        let target = frame
+            .descends
+            .iter()
+            .find(|target| target.path.is_empty())
+            .unwrap();
+        assert!((target.select)(&mut world, direction));
+        match direction {
+            Some(Direction::Left) => assert_eq!(
+                world
+                    .selection
+                    .as_ref()
+                    .unwrap()
+                    .edit()
+                    .unwrap()
+                    .selection_offsets(),
+                (0, 0)
+            ),
+            _ => assert!(world.selection.as_ref().unwrap().edit().is_none()),
+        }
+    }
+}
+
+#[test]
+fn deletion_and_history_landings_need_no_line_initialization() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: Some(Value::list([text::value("first"), text::value("survivor")])),
+        cells: Cells::new(),
+    };
+    let positions = positions(doc.root.as_ref().unwrap());
+    let first = vec![Step::Element(positions[0].clone())];
+    let second = vec![Step::Element(positions[1].clone())];
+    let mut model = crate::model::Model::new(doc.clone());
+    let root = model.workspace.document_root().clone();
+    model.selection = Some(Selection::edge(
+        &root,
+        &src(&doc, &libraries),
+        first.clone(),
+    ));
+    model.history.record(model.snapshot());
+    let mut world = EditingWorld::new(&doc, &libraries);
+    let frame = editing_frame(&mut world, false);
+    assert!(delete_edge(&mut model.doc, &libraries, &first));
+    let next = crate::navigate::selection_after_delete(&frame.descends, None, &first);
+    assert_eq!(next, second);
+    model.selection = Some(Selection::edge(&root, &src(&model.doc, &libraries), next));
+    for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
+        if undo {
+            assert!(model.step_history(true, &libraries));
+        }
+        let selected = model.selection.as_ref().unwrap();
+        assert!(selected.edit().is_none());
+        world.doc = model.doc.clone();
+        world.selection = Some(make_selection(
+            &world.doc,
+            &libraries,
+            selected.path().to_vec(),
+        ));
+        assert!(
+            editing_frame(&mut world, false)
+                .handler
+                .unwrap()
+                .dispatch_key(
+                    &mut world,
+                    &KeyboardEvent {
+                        key: Key::Character("!".into()),
+                        ..arrow(NamedKey::End)
+                    }
+                )
+        );
+        assert_eq!(
+            world.selection.as_ref().unwrap().edit().unwrap().text(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
+    let cell = new_cell_id();
+    let library = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(cell, text::value("read only"));
+    let mut libraries = core_libraries();
+    libraries.insert(
+        library,
+        progred_libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+    );
+    for (raw, value, path) in [
+        (true, text::value("raw"), vec![]),
+        (
+            false,
+            cell.into(),
+            vec![Step::Follow(gid::Resolution::Library(library))],
+        ),
+    ] {
+        let doc = Document {
+            root: Some(value),
+            cells: Cells::new(),
+        };
+        let mut world = EditingWorld::new(&doc, &libraries);
+        world.selection = Some(make_selection(&doc, &libraries, path));
+        let frame = editing_frame(&mut world, raw);
+        assert!(!frame.handler.is_some_and(|handler| handler.dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Character("!".into()),
+                ..arrow(NamedKey::End)
+            }
+        )));
+        assert!(world.selection.as_ref().unwrap().edit().is_none());
+    }
 }
 
 #[test]
@@ -118,7 +369,7 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
             root: Some(original),
             cells: Cells::new(),
         });
-        let mut selected = make_projected_selection(&doc, &libraries, vec![]);
+        let mut selected = make_projected_editing_selection(&doc, &libraries, vec![]);
         assert_eq!(selected.path(), &[]);
         assert_eq!(selected.edit().map(LineEditState::text), Some(spelling));
         selected.edit_mut().unwrap().set_text("17");
@@ -128,7 +379,7 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
 }
 
 #[test]
-fn leftward_navigation_sets_the_live_caret_and_payload_conversion_preserves_it() {
+fn payload_conversion_preserves_an_explicit_caret() {
     let libraries = core_libraries();
     let (mut doc, _) = doc_of(vec![(
         crate::test_values::label("name"),
@@ -137,7 +388,7 @@ fn leftward_navigation_sets_the_live_caret_and_payload_conversion_preserves_it()
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
     let mut selection = make_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
-    crate::selection::seed_from_arrow(&mut selection, &arrow(NamedKey::ArrowLeft));
+    selection.edit_mut().unwrap().cursor_to_start();
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
     assert!(!write_through(&mut doc, &libraries, &mut selection));
     let reified = Selection::from_payload(
@@ -190,7 +441,7 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         cells,
     });
     let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selected = make_projected_selection(&doc, &libraries, path.clone());
+    let mut selected = make_projected_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selected.edit().unwrap().text(), gid::hex_string(&bytes));
     assert!(!write_through(&mut doc, &libraries, &mut selected));
     selected.edit_mut().unwrap().set_text("DEad");
@@ -966,7 +1217,7 @@ fn editing_an_anonymous_lambdas_placeholder_creates_its_name_field() {
         Step::Follow(gid::Resolution::Document),
         Step::Key(name::vocabulary::NAME),
     ];
-    let mut selection = make_projected_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
 
     assert_eq!(selection.edit().map(LineEditState::text), Some(""));
     selection.edit_mut().unwrap().set_text("tree");

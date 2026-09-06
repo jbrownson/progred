@@ -10,7 +10,6 @@ use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use progred_libraries::{Libraries, absent, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 /// Tier-2 editing state beside the selection: the live line editor
 /// (caret, anchor, IME preedit, drag — and the text in motion), plus
@@ -125,18 +124,18 @@ impl Selection {
         edge_selection(root, path, None)
     }
 
-    /// Mount a line control already chosen by the current frame. This
-    /// keeps pointer selection and caret placement on the exact
-    /// projection the user clicked, without re-projecting after the
-    /// selection transition.
+    #[cfg(test)]
     pub(crate) fn from_line(
         root: &workspace::Root,
         sources: &Sources,
         path: Path,
         line: progred_display::LineEdit,
     ) -> Self {
-        let editor = writable_at(sources, &path).then(|| line_editing(line));
-        edge_selection(root, path, editor)
+        let mut selection = Self::edge(root, sources, path);
+        if writable_at(sources, selection.path()) {
+            selection.edit_line_mut(&line);
+        }
+        selection
     }
 
     pub fn path(&self) -> &[Step] {
@@ -225,6 +224,24 @@ impl Selection {
         self.editor.as_mut().map(|editor| &mut editor.line)
     }
 
+    pub(crate) fn initial_line(&self, text: &str) -> LineEditState {
+        payload::editor_line(&self.payload, text)
+    }
+
+    pub(crate) fn edit_line_mut(&mut self, line: &progred_display::LineEdit) -> &mut LineEditState {
+        let payload = &mut self.payload;
+        let editor = self.editor.get_or_insert_with(|| {
+            let state = payload::editor_line(payload, &line.text);
+            *payload = payload::without_editor(payload);
+            Editor {
+                line: state,
+                update: Some(line.update.clone()),
+                recorded: false,
+            }
+        });
+        &mut editor.line
+    }
+
     /// Reseed a pending's query — the test paths.
     #[cfg(test)]
     pub(crate) fn with_query(mut self, text: &str) -> Selection {
@@ -261,34 +278,9 @@ fn edge_selection(root: &workspace::Root, path: Path, editor: Option<Editor>) ->
     }
 }
 
-// Seeded with the caret at the end: an editor mounted without a
-// pointer — notably a keyboard landing — starts appending (a
-// select-all trial read as dangerous), and a mounting click's caret
-// placement overrides it (`select`). A leftward keyboard
-// landing reseeds the start through `seed_from_arrow`.
+#[cfg(test)]
 pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
-}
-
-fn line_editing(line: progred_display::LineEdit) -> Editor {
-    Editor {
-        line: line_edit(&line.text),
-        update: Some(line.update),
-        recorded: false,
-    }
-}
-
-/// The selection an arrow step lands on: the caret seeds the side the
-/// travel direction exits from, so the next same-direction press
-/// crosses projected text in one press. The end-seeded default already IS
-/// the rightward case; a leftward landing seeds the START instead of
-/// grinding back through every character.
-pub fn seed_from_arrow(selection: &mut Selection, event: &KeyboardEvent) {
-    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
-        && let Some(line) = selection.edit_mut()
-    {
-        line.cursor_to_start();
-    }
 }
 
 /// The index of the path's last Follow step: the identity crossing
@@ -848,7 +840,9 @@ pub mod payload {
 
     pub mod vocabulary {
         use gid::CellId;
-        pub use progred_libraries::selection::vocabulary::{EDGE, LABEL, PENDING, STAGE};
+        #[cfg(test)]
+        pub use progred_libraries::selection::vocabulary::EDGE;
+        pub use progred_libraries::selection::vocabulary::{LABEL, PENDING, STAGE};
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
@@ -876,7 +870,7 @@ pub mod payload {
     }
 
     pub fn edge() -> Value {
-        Value::record([(vocabulary::STAGE, Value::Cell(vocabulary::EDGE))])
+        progred_libraries::selection::edge()
     }
 
     pub fn pending(query: &str, choice: usize) -> Value {

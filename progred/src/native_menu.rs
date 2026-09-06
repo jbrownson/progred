@@ -111,6 +111,7 @@ fn definition() -> Vec<Section> {
             "File",
             vec![
                 Entry::Command(C::App(A::New)),
+                Entry::Command(C::App(A::NewWindow)),
                 Entry::Command(C::App(A::Open)),
                 Entry::Separator,
                 Entry::Command(C::App(A::Close)),
@@ -120,12 +121,10 @@ fn definition() -> Vec<Section> {
         ),
         section(
             "Examples",
-            vec![
-                Entry::Command(C::App(A::Example(E::Sample))),
-                Entry::Command(C::App(A::Example(E::Grap))),
-                Entry::Command(C::App(A::Example(E::IopTree))),
-                Entry::Command(C::App(A::Example(E::Fidget))),
-            ],
+            E::ALL
+                .into_iter()
+                .map(|example| Entry::Command(C::App(A::Example(example))))
+                .collect(),
         ),
         section(
             "Edit",
@@ -429,7 +428,7 @@ mod tests {
             vec!["Progred", "File", "Examples", "Edit", "View", "Window"]
         );
         let commands = commands(&definition);
-        assert_eq!(commands.len(), 20);
+        assert_eq!(commands.len(), 24);
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }

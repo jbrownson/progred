@@ -107,10 +107,21 @@ than the structural summary. Edits accept complete bytes in either case;
 empty hex denotes an empty blob. Query entry and editing share the blob
 library's parser. Raw retains its compact structural blob display.
 
-Navigation landmarks contain their selection callbacks. Moving onto an
-editable line installs the description produced by that projection, including
-the intended caret position. The shell does not inspect the render tree to
-infer editability. See [navigation](../progred/src/navigate.rs).
+Navigation landmarks contain their selection callbacks. A selected, writable
+line with no editing state uses its current projected spelling with the caret
+at the end. Rendering and input use the same default; projection does not store
+it just because the line is selected. On an editing interaction, the line control
+materializes state from that default and its current write-back rule. Existing
+caret, in-progress spelling, and IME state take precedence. Raw and read-only
+views do not acquire an editor from a plain selection.
+
+Ordinary selection therefore needs only a location, including after completion,
+paste, deletion, and undo. Navigation supplies its movement direction to the landmark,
+not the keyboard event (and no direction for direct selection):
+the line control explicitly seeds the start for leftward entry, while other
+entries use the default. Pointer placement also remains an explicit interaction.
+The shell does not inspect values or the render tree to infer editability.
+See [navigation](../progred/src/navigate.rs).
 
 Ordinary hover, selection, and related-occurrence highlights share one padded
 outline. Each occurrence paints at most one mark: selection takes precedence,
@@ -195,7 +206,20 @@ committed location with the same site and selection capabilities as event
 handlers. Insertion and continuation effects are prepared together and installed
 unless the callable explicitly declines or evaluation halts. Ordinary absent
 results do not veto the completion. Selection changes are effectful calls, not a
-special return-value format. Root `grap` and `fidget` offers create a fresh bare
+special return-value format. Insertion itself does not change selection: the
+continuation receives the existing selection, and only its explicit effects
+replace or clear it. A low-level offer with no continuation leaves that selection
+unchanged, including an active pending query. Stock offer combinators supply the
+policy: `completion::select` selects the inserted value, and `completion::label`
+opens the label's missing value. Text, numbers, and blobs simply select their
+location; their line controls supply default editing when projected. Completions
+do not copy editor text, caret, or write-back rules into the selection. Query
+caret positions are not translated across parsing. These same offers work in
+Raw without an override, since that projection contains no atomic line control.
+Enter commits only through the placed completion control; the shell has no
+fallback which inserts query text after its offers decline.
+
+Root `grap` and `fidget` offers create a fresh bare
 cell shared by their domain field and a left pane. Fidget's pane applies
 `preview 3d`; Grap's pane renders the evaluated result. The continuation opens
 the cell's pending document definition through the domain field, without
@@ -280,11 +304,22 @@ scene`; its drawing units and editable tree parameters are not rescaled.
 
 ## History, gestures, and persistence
 
-Examples are a development and demo aid, intended to be removed from production
-builds. On desktop, they open through the normal new-window path, then close the
-previous editor if it has no unsaved changes. This includes the empty startup
-document and untouched examples; edited documents stay open. File New and Open
-continue to create windows without closing the previous editor.
+Examples and replace-in-place New Document are development/demo conveniences,
+not the intended production File menu. Cmd+N (Ctrl+N in the drawn menu) and the
+example shortcuts replace the current document after confirming any unsaved
+changes. With no desktop window, they create one. Cmd+Shift+N / Ctrl+Shift+N
+is New Window; Open also continues to create a separate window.
+
+Replacement keeps the window, surface, geometry, fonts, text-shaping cache,
+clipboard, library stack, physical pointer/modifier input, and debug-display
+preference. It resets document/saved identity, history, selection and text/IME
+state, all pane identities and annotations (including camera and folds), scroll,
+projection modes, divider state, binders, menus, gestures, queued input, retained
+handlers/paint, and hover attribution. The successor frame is built immediately.
+On macOS the old file's frame-autosave name is detached without deleting its
+saved geometry; the represented file, title, and edited flag are refreshed.
+These development commands are currently present in optimized `make dev` builds
+too; optimization level is not a distribution feature flag.
 
 [`History`](../progred/src/history.rs) is a generic pair of snapshot stacks;
 recording a new branch clears redo. The editor's snapshot contains its shared

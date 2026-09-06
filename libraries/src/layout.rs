@@ -103,6 +103,7 @@ pub mod vocabulary {
     pub const SCALE: CellId = CellId::from_u128(0xa370331d2ba2325f05fe6d621b885bef);
     pub const DELTA_X: CellId = CellId::from_u128(0x798ade16a1f9f7beeb7009c1e183b3c7);
     pub const DELTA_Y: CellId = CellId::from_u128(0x1336f899599217d2535819a51a4c981c);
+    pub const COALESCED: CellId = CellId::from_u128(0x5ac14439cfe0120df29ae87604adf300);
     pub const EVENT_STATE: CellId = CellId::from_u128(0x15ab408f66b4286b33f35d95a651b20a);
     pub const DOWN: CellId = CellId::from_u128(0x96a441425ba7048c7fbb1722922e5ffb);
     pub const UP: CellId = CellId::from_u128(0xe47d794f06d1f6fc6166c401aeb17c82);
@@ -1007,6 +1008,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::SCALE, "scale"),
         (vocabulary::DELTA_X, "delta x"),
         (vocabulary::DELTA_Y, "delta y"),
+        (vocabulary::COALESCED, "coalesced"),
         (vocabulary::EVENT_STATE, "event state"),
         (vocabulary::DOWN, "down"),
         (vocabulary::UP, "up"),

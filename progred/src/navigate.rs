@@ -4,11 +4,38 @@ use crate::selection::Selection;
 use crate::workspace::{Root, Target};
 use gid::{Path, Step};
 use kurbo::Rect;
-use progred_display::ActionHandler;
 use progred_libraries::name;
 use std::collections::HashMap;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// Movement direction, or none for selection without directional navigation.
+pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
+
+pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
+    match &event.key {
+        Key::Named(NamedKey::ArrowLeft) => Some(Direction::Left),
+        Key::Named(NamedKey::ArrowRight) => Some(Direction::Right),
+        Key::Named(NamedKey::ArrowUp) => Some(Direction::Up),
+        Key::Named(NamedKey::ArrowDown) => Some(Direction::Down),
+        _ => None,
+    }
+    .filter(|_| {
+        event.state.is_down()
+            && !(event.modifiers.ctrl()
+                || event.modifiers.meta()
+                || event.modifiers.alt()
+                || event.modifiers.shift())
+    })
+}
 
 /// A projected value's settled position: the path it stands for and the
 /// rect it occupied, collected fresh every frame in placement order.
@@ -25,7 +52,7 @@ pub struct Descend<World> {
     /// usually ordinary edge selection, but a projected control may
     /// mount its own editing state without the shell inspecting the
     /// projected layout to rediscover it.
-    pub select: ActionHandler<World>,
+    pub select: Select<World>,
 }
 
 impl<World> Clone for Descend<World> {
@@ -82,20 +109,7 @@ pub fn step_selection<'a, World>(
     {
         return root_target(descends, root);
     }
-    let modified = event.modifiers.ctrl()
-        || event.modifiers.meta()
-        || event.modifiers.alt()
-        || event.modifiers.shift();
-    let arrow = match &event.key {
-        Key::Named(
-            named @ (NamedKey::ArrowLeft
-            | NamedKey::ArrowRight
-            | NamedKey::ArrowUp
-            | NamedKey::ArrowDown),
-        ) => Some(*named),
-        _ => None,
-    }
-    .filter(|_| event.state.is_down() && !modified)?;
+    let direction = direction(event)?;
     let Some(selection) = selection else {
         return root_target(descends, root);
     };
@@ -105,20 +119,16 @@ pub fn step_selection<'a, World>(
         .iter()
         .position(|stop| descends[stop.descend].path.as_ref() == path);
     let found = |stop: &Stop| Some(&descends[stop.descend]);
-    match (arrow, at) {
-        (NamedKey::ArrowDown, Some(at)) => {
-            order[at + 1..].iter().find(|stop| stop.row).and_then(found)
-        }
-        (NamedKey::ArrowUp, Some(at)) => order[..at]
+    match (direction, at) {
+        (Direction::Down, Some(at)) => order[at + 1..].iter().find(|stop| stop.row).and_then(found),
+        (Direction::Up, Some(at)) => order[..at]
             .iter()
             .rev()
             .find(|stop| stop.row)
             .and_then(found),
-        (NamedKey::ArrowRight, Some(at)) => {
-            order.get(at + 1).filter(|stop| !stop.row).and_then(found)
-        }
-        (NamedKey::ArrowLeft, Some(at)) if !order[at].row => found(&order[at - 1]),
-        (NamedKey::ArrowLeft, _) => path.split_last().and_then(|(_, parent)| {
+        (Direction::Right, Some(at)) => order.get(at + 1).filter(|stop| !stop.row).and_then(found),
+        (Direction::Left, Some(at)) if !order[at].row => found(&order[at - 1]),
+        (Direction::Left, _) => path.split_last().and_then(|(_, parent)| {
             descends.iter().find(|descend| {
                 root.is_none_or(|root| descend.root.as_ref() == Some(root))
                     && descend.path.as_ref() == parent

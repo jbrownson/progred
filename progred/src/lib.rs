@@ -104,12 +104,12 @@ pub(crate) enum AfterDiscard {
     /// Close this window; while quitting, the chain then advances.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     CloseWindow,
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    New,
+    Replace {
+        doc: gid::Document,
+        binders: gid_text::Binders,
+    },
     #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
     Quit,
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    Example(command::Example),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -193,8 +193,42 @@ struct PendingScroll {
 
 struct PendingPointer {
     event: PointerUpdate,
+    start: Point,
     scale: f64,
     viewport: Size,
+}
+
+impl PendingPointer {
+    fn merge(&mut self, mut next: Self) -> Result<(), Self> {
+        if self.scale == next.scale
+            && self.viewport == next.viewport
+            && self.event.pointer == next.event.pointer
+            && self.event.current.buttons == next.event.current.buttons
+            && self.event.current.modifiers == next.event.current.modifiers
+        {
+            self.event.coalesced.push(std::mem::replace(
+                &mut self.event.current,
+                next.event.current,
+            ));
+            self.event.coalesced.append(&mut next.event.coalesced);
+            self.event.predicted = next.event.predicted;
+            Ok(())
+        } else {
+            Err(next)
+        }
+    }
+}
+
+fn continuous_input(event: &WindowEvent) -> bool {
+    matches!(
+        event,
+        WindowEvent::MouseWheel { .. }
+            | WindowEvent::CursorMoved { .. }
+            | WindowEvent::Touch(winit::event::Touch {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            })
+    )
 }
 
 impl PendingScroll {
@@ -323,8 +357,8 @@ pub(crate) struct Editor {
     /// Hold them until paint or another event establishes an ordering
     /// boundary, then dispatch their sum through the retained frame.
     pending_scroll: Option<PendingScroll>,
-    /// Unpressed pointer motion is continuous frame input, like
-    /// scrolling. Keep only its latest sample until paint or a
+    /// Pointer motion is continuous frame input, like scrolling.
+    /// Keep the samples until paint or a
     /// discrete event establishes an ordering boundary. This is a
     /// platform-independent frame contract, but matters especially on
     /// macOS: Winit deliberately emits `CursorMoved` before every
@@ -336,8 +370,8 @@ pub(crate) struct Editor {
     /// History: https://github.com/rust-windowing/winit/issues/942
     /// and https://github.com/rust-windowing/winit/pull/1490
     ///
-    /// Pressed motion is never deferred; drag gestures receive every
-    /// update delivered by the event source.
+    /// Handlers receive earlier samples in `PointerUpdate::coalesced`
+    /// and the latest in `current`, including during a drag.
     pending_pointer: Option<PendingPointer>,
     /// The continuation installed by the accepting projection handler.
     gesture: Option<Box<dyn gesture::Gesture>>,
@@ -653,8 +687,14 @@ impl App {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn begin_quit(&mut self, event_loop: &ActiveEventLoop) {
-        self.quit = QuitState::Draining { awaiting: None };
-        self.advance_quit(event_loop);
+        if self
+            .editors
+            .iter()
+            .all(|editor| editor.pending_discard.is_none())
+        {
+            self.quit = QuitState::Draining { awaiting: None };
+            self.advance_quit(event_loop);
+        }
     }
 
     /// Closes clean windows until one needs its discard sheet; the
@@ -807,19 +847,9 @@ impl App {
             _ => return,
         };
         let scale = window.scale_factor();
-        // Coalesce by interaction semantics, not by comparing
-        // coordinates or trying to recognize Winit's macOS-generated
-        // refresh. Real unpressed motion is sampled at frame rate too;
-        // the newest position is the frame input. A future consumer
-        // that needs the intervening samples can receive them through
-        // `PointerUpdate::coalesced` without forcing intermediate
-        // projection/layout passes.
-        let continuous_pointer =
-            matches!(&event, WindowEvent::CursorMoved { .. }) && !editor.pressed;
-        if !matches!(&event, WindowEvent::MouseWheel { .. })
-            && !continuous_pointer
-            && editor.flush_pending_continuous()
-        {
+        // Preserve motion samples without minting intermediate frames.
+        // Discrete input (including release/cancel) first settles the batch.
+        if !continuous_input(&event) && editor.flush_pending_continuous() {
             window.request_redraw();
         }
 
@@ -871,8 +901,8 @@ impl App {
                     false,
                 );
             }
-            // Scroll packets wait for an ordering boundary below.
-            // Every other event dispatches into the retained frame's
+            // Continuous input waits for an ordering boundary below.
+            // Discrete events dispatch into the retained frame's
             // single-shot handler and immediately mints its successor
             // when handled or when a frame input changes.
             if let Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update))) =
@@ -890,18 +920,22 @@ impl App {
                 window.request_redraw();
             } else if let Some(WindowEventTranslation::Pointer(PointerEvent::Move(update))) =
                 &translation
-                && !editor.pressed
             {
                 let size = window.inner_size();
                 let position = Point::new(update.current.position.x, update.current.position.y);
+                let next = PendingPointer {
+                    event: update.clone(),
+                    start: previous_cursor,
+                    scale,
+                    viewport: Size::new(size.width as f64, size.height as f64),
+                };
+                if let Some(pending) = editor.queue_pointer(next) {
+                    editor.dispatch_pointer_batch(&pending);
+                }
+                editor.cursor = position;
                 editor.pointer =
                     window_pointer(position, Size::new(size.width as f64, size.height as f64));
                 editor.modifiers = update.current.modifiers;
-                editor.pending_pointer = Some(PendingPointer {
-                    event: update.clone(),
-                    scale,
-                    viewport: Size::new(size.width as f64, size.height as f64),
-                });
                 window.request_redraw();
             } else if (ime.is_some() || translation.is_some())
                 && let Some(dispatch) = editor.dispatch.take()
@@ -945,10 +979,7 @@ impl App {
                             ) {
                                 Some(target) => {
                                     let select = target.select.clone();
-                                    select(editor);
-                                    if let Some(selection) = &mut editor.model.selection {
-                                        selection::seed_from_arrow(selection, &key_event);
-                                    }
+                                    select(editor, navigate::direction(&key_event));
                                     true
                                 }
                                 None => false,
@@ -975,35 +1006,6 @@ impl App {
                             || (puri::interact::is_primary_contact(&button)
                                 && pointer.hovered.is_none()
                                 && editor.model.selection.take().is_some())
-                    }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
-                        // Pointer position is frame input, whether or
-                        // not an event handler consumes the motion.
-                        let position =
-                            Point::new(update.current.position.x, update.current.position.y);
-                        editor.pointer =
-                            window_pointer(position, Size::new(size.width as f64, viewport));
-                        frame_input_changed = true;
-                        let moved = editor.advance_gesture(position)
-                            || dispatch.handler.dispatch_pointer_move(editor, &update);
-                        if moved || update.pointer.pointer_type != PointerType::Touch {
-                            moved
-                        } else {
-                            // A browser canvas has no wheel gesture on
-                            // touch. An unclaimed finger drag is the same
-                            // continuous displacement sent through the
-                            // existing nested scroll handlers; controls
-                            // with a raw drag handler still win first.
-                            let scroll = PointerScrollEvent {
-                                pointer: update.pointer,
-                                delta: ScrollDelta::PixelDelta(PhysicalPosition::new(
-                                    position.x - previous_cursor.x,
-                                    position.y - previous_cursor.y,
-                                )),
-                                state: update.current.clone(),
-                            };
-                            dispatch.handler.dispatch_scroll(editor, &scroll).handled()
-                        }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         let position = Point::new(button.state.position.x, button.state.position.y);
@@ -1224,6 +1226,25 @@ impl Editor {
         }
     }
 
+    fn queue_pointer(&mut self, next: PendingPointer) -> Option<PendingPointer> {
+        match self.pending_pointer.take() {
+            None => {
+                self.pending_pointer = Some(next);
+                None
+            }
+            Some(mut pending) => match pending.merge(next) {
+                Ok(()) => {
+                    self.pending_pointer = Some(pending);
+                    None
+                }
+                Err(next) => {
+                    self.pending_pointer = Some(next);
+                    Some(pending)
+                }
+            },
+        }
+    }
+
     fn finish_handled_event(&mut self) {
         let libraries = &self.stack.libraries;
         let model = &mut self.model;
@@ -1236,9 +1257,9 @@ impl Editor {
         }
     }
 
-    fn advance_gesture(&mut self, point: Point) -> bool {
+    fn advance_gesture(&mut self, samples: &[Point]) -> bool {
         if let Some(gesture) = &mut self.gesture {
-            if gesture.advance(&mut self.model, &self.stack.libraries, point) {
+            if gesture.advance(&mut self.model, &self.stack.libraries, samples) {
                 self.refresh_title();
             }
             true
@@ -1276,13 +1297,42 @@ impl Editor {
     }
 
     fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
+        self.cursor = Point::new(
+            pending.event.current.position.x,
+            pending.event.current.position.y,
+        );
+        self.pointer = window_pointer(self.cursor, pending.viewport);
+        self.modifiers = pending.event.current.modifiers;
         if self.dispatch.is_none() {
             self.retain_dispatch(pending.scale, pending.viewport, false);
         }
         let Some(dispatch) = self.dispatch.take() else {
             return false;
         };
-        if dispatch.handler.dispatch_pointer_move(self, &pending.event) {
+        let event = &pending.event;
+        let samples: Vec<_> = puri::interact::pointer_samples(event)
+            .map(|sample| Point::new(sample.position.x, sample.position.y))
+            .collect();
+        let moved =
+            self.advance_gesture(&samples) || dispatch.handler.dispatch_pointer_move(self, event);
+        // Unclaimed touch motion scrolls through the same nested handlers.
+        let handled = moved
+            || (event.pointer.pointer_type == PointerType::Touch
+                && dispatch
+                    .handler
+                    .dispatch_scroll(
+                        self,
+                        &PointerScrollEvent {
+                            pointer: event.pointer,
+                            delta: ScrollDelta::PixelDelta(PhysicalPosition::new(
+                                event.current.position.x - pending.start.x,
+                                event.current.position.y - pending.start.y,
+                            )),
+                            state: event.current.clone(),
+                        },
+                    )
+                    .handled());
+        if handled {
             self.finish_handled_event();
             self.retain_dispatch(pending.scale, pending.viewport, true);
             true
@@ -1341,13 +1391,13 @@ impl Editor {
     }
 
     pub(crate) fn refresh_title(&self) {
-        if let RenderState::Active { window, .. } = &self.state {
+        if let Some(window) = self.window() {
             window.set_title(&self.title());
             #[cfg(target_os = "macos")]
             {
                 use winit::platform::macos::WindowExtMacOS;
                 window.set_document_edited(self.model.dirty());
-                macos_window::set_represented(window, self.doc_path.as_deref());
+                macos_window::set_represented(&window, self.doc_path.as_deref());
             }
         }
     }
@@ -1597,36 +1647,80 @@ impl Editor {
         }
     }
 
-    /// Replaces the model wholesale for New and Open. Selection,
-    /// collapse overrides, scroll, and history are bound to the old
-    /// document and reset with it. Mints the successor dispatch
-    /// immediately, as every mutation site does: the retained handler
-    /// was built from the old document, and its dispatches must not
-    /// run against the new model.
-    #[cfg_attr(not(any(target_arch = "wasm32", target_os = "ios")), allow(dead_code))]
+    /// Replace document-owned state, retaining the window and its platform
+    /// resources. In particular, the input reducer still knows the physical
+    /// pointer position and held modifiers; old gestures and handlers do not survive.
     pub(crate) fn adopt_model(
         &mut self,
         doc: gid::Document,
         path: Option<PathBuf>,
         text_binders: gid_text::Binders,
     ) {
-        self.text_binders = text_binders;
-        let view = self.model.view;
-        self.model = Model::new(doc);
-        self.model.view = view;
-        self.hover = None;
-        self.gesture = None;
-        self.doc_path = path;
-        self.revealed = None;
+        // Exhaustive: a new Editor field must explicitly choose its lifetime here.
+        let Self {
+            drawn_menu: _,
+            state: _,
+            #[cfg(not(target_arch = "wasm32"))]
+            scene,
+            font_cx: _,
+            layout_cx: _,
+            text_clipboard: _,
+            text_cache: _,
+            stack: _,
+            model,
+            doc_path,
+            text_binders: binders,
+            menu,
+            cursor: _,
+            cursor_icon: _,
+            pointer: _,
+            hover,
+            modifiers: _,
+            pressed,
+            revealed,
+            dispatch,
+            pending_paint,
+            pending_scroll,
+            pending_pointer,
+            gesture,
+            reducer: _,
+            proxy: _,
+            pending_discard,
+        } = self;
+        #[cfg(target_os = "macos")]
+        let changed_path = *doc_path != path;
+        *gesture = None;
+        *dispatch = None;
+        *pending_paint = None;
+        *pending_scroll = None;
+        *pending_pointer = None;
+        *pending_discard = None;
+        *pressed = false;
+        *hover = None;
+        *revealed = None;
+        *menu = menu::State::default();
+        *binders = text_binders;
+        *doc_path = path;
+        model.replace_document(doc);
+        #[cfg(not(target_arch = "wasm32"))]
+        scene.reset();
+        self.refresh_title();
+        #[cfg(target_os = "macos")]
+        if changed_path && let Some(window) = self.window() {
+            match self.doc_path.as_deref() {
+                Some(path) => macos_window::rename_document_frame(&window, path),
+                None => macos_window::clear_document_frame(&window),
+            }
+        }
         if let RenderState::Active { window, .. } = &self.state {
             let window = window.clone();
-            window.set_title(&self.title());
             let size = window.inner_size();
             self.retain_dispatch(
                 window.scale_factor(),
                 Size::new(size.width as f64, size.height as f64),
                 false,
             );
+            self.sync_cursor(&window);
             window.request_redraw();
         }
     }
@@ -1692,12 +1786,20 @@ impl App {
         }
     }
 
-    /// New, Open, and examples create windows. Opening an example
-    /// also closes the previous editor if it has no unsaved changes.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    /// New and examples are in-place development shortcuts. New Window and
+    /// Open retain desktop new-window behavior.
     fn run_app_command(&mut self, event_loop: &ActiveEventLoop, command: AppCommand) {
         match command {
-            AppCommand::New => self.open_editor(
+            AppCommand::New => self.new_document(
+                event_loop,
+                gid::Document {
+                    root: None,
+                    cells: gid::Cells::new(),
+                },
+                gid_text::Binders::new(),
+            ),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            AppCommand::NewWindow => self.open_editor(
                 event_loop,
                 gid::Document {
                     root: None,
@@ -1706,6 +1808,7 @@ impl App {
                 None,
                 gid_text::Binders::new(),
             ),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Open => {
                 if let Some(path) = text_dialog().pick_file().map(canonical) {
                     match text_store::load(&path) {
@@ -1718,40 +1821,38 @@ impl App {
                     }
                 }
             }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Close => {
                 if let Some(index) = self.focused_index() {
                     self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
                 }
             }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Quit => self.begin_quit(event_loop),
-            AppCommand::Example(example) => match gid_text::parse(example.source()) {
-                Ok((doc, binders)) => {
-                    let previous = self
-                        .focused_index()
-                        .filter(|index| !self.editors[*index].model.dirty());
-                    self.open_editor(event_loop, doc, None, binders);
-                    if let Some(index) = previous {
-                        self.close_editor(event_loop, index);
-                    }
+            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+            AppCommand::Quit => {
+                if let Some(index) = self.focused_index() {
+                    self.request_discard(event_loop, index, AfterDiscard::Quit);
                 }
+            }
+            AppCommand::Example(example) => match gid_text::parse(example.source()) {
+                Ok((doc, binders)) => self.new_document(event_loop, doc, binders),
                 Err(error) => panic!("built-in example failed to parse: {error}"),
             },
         }
     }
 
-    /// One canvas: replace the document in place, gated on unsaved
-    /// changes.
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    fn run_app_command(&mut self, event_loop: &ActiveEventLoop, command: AppCommand) {
-        let Some(index) = self.focused_index() else {
-            return;
-        };
-        match command {
-            AppCommand::New => self.request_discard(event_loop, index, AfterDiscard::New),
-            AppCommand::Quit => self.request_discard(event_loop, index, AfterDiscard::Quit),
-            AppCommand::Example(example) => {
-                self.request_discard(event_loop, index, AfterDiscard::Example(example))
-            }
+    fn new_document(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        doc: gid::Document,
+        binders: gid_text::Binders,
+    ) {
+        if let Some(index) = self.focused_index() {
+            self.request_discard(event_loop, index, AfterDiscard::Replace { doc, binders });
+        } else {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            self.open_editor(event_loop, doc, None, binders);
         }
     }
 
@@ -1776,11 +1877,11 @@ impl App {
         index: usize,
         then: AfterDiscard,
     ) {
-        if !self.editors[index].model.dirty() {
-            self.proceed(event_loop, index, then);
+        if self.editors[index].pending_discard.is_some() {
             return;
         }
-        if self.editors[index].pending_discard.is_some() {
+        if !self.editors[index].model.dirty() {
+            self.proceed(event_loop, index, then);
             return;
         }
         #[cfg(target_arch = "wasm32")]
@@ -1828,7 +1929,6 @@ impl App {
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
-    #[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(unused_variables))]
     pub(crate) fn proceed(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -1841,22 +1941,14 @@ impl App {
                 self.close_editor(event_loop, index);
                 self.advance_quit(event_loop);
             }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            AfterDiscard::New => self.editors[index].adopt_model(
-                gid::Document {
-                    root: None,
-                    cells: gid::Cells::new(),
-                },
-                None,
-                gid_text::Binders::new(),
-            ),
+            AfterDiscard::Replace { doc, binders } => {
+                self.editors[index].adopt_model(doc, None, binders);
+                if self.focused_index() == Some(index) {
+                    self.sync_menus(index);
+                }
+            }
             #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
             AfterDiscard::Quit => event_loop.exit(),
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-            AfterDiscard::Example(example) => match gid_text::parse(example.source()) {
-                Ok((doc, binders)) => self.editors[index].adopt_model(doc, None, binders),
-                Err(error) => panic!("built-in example failed to parse: {error}"),
-            },
         }
     }
 
@@ -2183,6 +2275,113 @@ mod shell_tests {
                 .merge(pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0))
                 .is_err()
         );
+    }
+
+    fn pointer(x: f64) -> PendingPointer {
+        let scroll = pending(ScrollDelta::LineDelta(0.0, 0.0), x);
+        PendingPointer {
+            event: PointerUpdate {
+                pointer: scroll.event.pointer,
+                current: scroll.event.state,
+                coalesced: vec![],
+                predicted: vec![],
+            },
+            start: Point::ZERO,
+            scale: scroll.scale,
+            viewport: scroll.viewport,
+        }
+    }
+
+    #[test]
+    fn pointer_batches_preserve_observed_samples_and_replace_predictions() {
+        let mut batch = pointer(2.0);
+        batch.event.coalesced.push(pointer(1.0).event.current);
+        batch.event.predicted.push(pointer(100.0).event.current);
+        let mut next = pointer(4.0);
+        next.event.coalesced.push(pointer(3.0).event.current);
+        next.event.predicted.push(pointer(5.0).event.current);
+        next.start = Point::new(2.0, 0.0);
+        assert!(batch.merge(next).is_ok());
+        assert_eq!(batch.start, Point::ZERO);
+        assert_eq!(batch.event.current.position.x, 4.0);
+        assert_eq!(
+            puri::interact::pointer_samples(&batch.event)
+                .map(|sample| sample.position.x)
+                .collect::<Vec<_>>(),
+            [1.0, 2.0, 3.0, 4.0],
+        );
+        assert_eq!(batch.event.predicted, vec![pointer(5.0).event.current]);
+    }
+
+    #[test]
+    fn pointer_batches_do_not_mix_contacts_buttons_or_coordinate_systems() {
+        let mut other_contact = pointer(1.0);
+        other_contact.event.pointer.pointer_id = PointerId::new(2);
+        let mut pressed = pointer(1.0);
+        pressed
+            .event
+            .current
+            .buttons
+            .insert(ui_events::pointer::PointerButton::Primary);
+        let mut modified = pointer(1.0);
+        modified.event.current.modifiers = Modifiers::SHIFT;
+        let mut resized = pointer(1.0);
+        resized.viewport.width += 1.0;
+        let mut rescaled = pointer(1.0);
+        rescaled.scale = 1.0;
+        for next in [other_contact, pressed, modified, resized, rescaled] {
+            let mut batch = pointer(0.0);
+            let before = batch.event.clone();
+            assert!(batch.merge(next).is_err());
+            assert_eq!(batch.event, before);
+        }
+        let mut pressed = pointer(1.0);
+        pressed
+            .event
+            .current
+            .buttons
+            .insert(ui_events::pointer::PointerButton::Primary);
+        let mut next = pointer(2.0);
+        next.event.current.buttons = pressed.event.current.buttons;
+        assert!(pressed.merge(next).is_ok(), "pressed motion batches too");
+    }
+
+    #[test]
+    fn redraw_release_and_cancellation_flush_motion_before_dispatch() {
+        let device_id = DeviceId::dummy();
+        assert!(continuous_input(&WindowEvent::CursorMoved {
+            device_id,
+            position: PhysicalPosition::new(-20.0, 30.0),
+        }));
+        for event in [
+            WindowEvent::RedrawRequested,
+            WindowEvent::MouseInput {
+                device_id,
+                state: ElementState::Released,
+                button: MouseButton::Left,
+            },
+            WindowEvent::Focused(false),
+            WindowEvent::CursorLeft { device_id },
+        ] {
+            assert!(!continuous_input(&event));
+        }
+        for (phase, continuous) in [
+            (winit::event::TouchPhase::Started, false),
+            (winit::event::TouchPhase::Moved, true),
+            (winit::event::TouchPhase::Ended, false),
+            (winit::event::TouchPhase::Cancelled, false),
+        ] {
+            assert_eq!(
+                continuous_input(&WindowEvent::Touch(winit::event::Touch {
+                    device_id,
+                    phase,
+                    location: PhysicalPosition::new(10.0, 20.0),
+                    force: None,
+                    id: 1,
+                })),
+                continuous
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,98 @@
+{
+  "binders": {
+    "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "ffi": 912adb7252d689659b6de9eeeb827658,
+    "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
+    "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
+    "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "sqrt": f275fe836c9d66fed1e0de4325e134c6,
+    "square": 6164efe43a126d79bcd252a17a9453c1,
+    "subtract": 90e22494757f01a2ddf9bea409c186ae,
+    "sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
+    "torus": 814313f344bbbb6d1d481aa56494a591,
+    "viewport": 709c987e4c2a110931d8597c4da68f69,
+    "x": 0192bad40c32c951e2237679084528bc,
+    "y": 213e54dd15ac9c9750308f35a606f56f,
+    "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
+  },
+  "cells": {
+    torus: {
+      name: "torus",
+      subtract: {
+        right: {
+          square: {
+            operand: {
+              f32: 0x00007041,
+            },
+          },
+        },
+        left: {
+          sum: {
+            right: {
+              square: {
+                operand: {
+                  axis: z,
+                },
+              },
+            },
+            left: {
+              square: {
+                operand: {
+                  subtract: {
+                    right: {
+                      f32: 0x00003442,
+                    },
+                    left: {
+                      sqrt: {
+                        operand: {
+                          sum: {
+                            right: {
+                              square: {
+                                operand: {
+                                  axis: y,
+                                },
+                              },
+                            },
+                            left: {
+                              square: {
+                                operand: {
+                                  axis: x,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  "root": {
+    fidget: [
+      torus,
+    ],
+    panes: {
+      pane_left: [
+        {
+          viewport: {
+            ffi: preview_3d,
+          },
+          projection_value: torus,
+        },
+      ],
+    },
+  },
+}

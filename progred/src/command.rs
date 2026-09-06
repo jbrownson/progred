@@ -2,11 +2,13 @@
 //! shortcuts — asks the app to do. Application commands are meaningful
 //! with no window at all; document commands act on one editor.
 
-/// Meaningful without any window. On the desktop these create or
-/// drain windows; the single-canvas shells replace in place.
+/// Meaningful without any window. New and examples replace the current
+/// document; desktop Open and NewWindow create windows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppCommand {
     New,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    NewWindow,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Open,
     /// Close the focused window.
@@ -22,15 +24,31 @@ pub enum Example {
     Grap,
     IopTree,
     Fidget,
+    Torus,
+    Tanglecube,
+    Gyroid,
 }
 
 impl Example {
+    pub const ALL: [Self; 7] = [
+        Self::Sample,
+        Self::Grap,
+        Self::IopTree,
+        Self::Fidget,
+        Self::Torus,
+        Self::Tanglecube,
+        Self::Gyroid,
+    ];
+
     pub fn source(self) -> &'static str {
         match self {
             Self::Sample => include_str!("../../examples/sample.gid"),
             Self::Grap => include_str!("../../examples/grap-demo.gid"),
             Self::IopTree => include_str!("../../examples/iop-tree.gid"),
             Self::Fidget => include_str!("../../examples/fidget.gid"),
+            Self::Torus => include_str!("../../examples/fidget-torus.gid"),
+            Self::Tanglecube => include_str!("../../examples/fidget-tanglecube.gid"),
+            Self::Gyroid => include_str!("../../examples/fidget-gyroid.gid"),
         }
     }
 }
@@ -85,6 +103,9 @@ pub enum ShortcutKey {
     Digit2,
     Digit3,
     Digit4,
+    Digit5,
+    Digit6,
+    Digit7,
     D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -106,6 +127,9 @@ impl ShortcutKey {
             Self::Digit2 => "2",
             Self::Digit3 => "3",
             Self::Digit4 => "4",
+            Self::Digit5 => "5",
+            Self::Digit6 => "6",
+            Self::Digit7 => "7",
             Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -144,7 +168,13 @@ pub fn spec(command: Command) -> Spec {
         toggle: true,
     };
     match command {
-        Command::App(AppCommand::New) => item("New", Some(Shortcut::plain(ShortcutKey::N))),
+        Command::App(AppCommand::New) => {
+            item("New Document", Some(Shortcut::plain(ShortcutKey::N)))
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Command::App(AppCommand::NewWindow) => {
+            item("New Window", Some(Shortcut::shifted(ShortcutKey::N)))
+        }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Open) => item("Open…", Some(Shortcut::plain(ShortcutKey::O))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -162,6 +192,15 @@ pub fn spec(command: Command) -> Spec {
         ),
         Command::App(AppCommand::Example(Example::Fidget)) => {
             item("Fidget", Some(Shortcut::plain(ShortcutKey::Digit4)))
+        }
+        Command::App(AppCommand::Example(Example::Torus)) => {
+            item("Torus", Some(Shortcut::plain(ShortcutKey::Digit5)))
+        }
+        Command::App(AppCommand::Example(Example::Tanglecube)) => {
+            item("Tanglecube", Some(Shortcut::plain(ShortcutKey::Digit6)))
+        }
+        Command::App(AppCommand::Example(Example::Gyroid)) => {
+            item("Gyroid sphere", Some(Shortcut::plain(ShortcutKey::Digit7)))
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),

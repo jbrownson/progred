@@ -15,6 +15,14 @@ pub fn parse(text: &str) -> Option<Vec<u8>> {
     parse_hex(text.strip_prefix("0x")?)
 }
 
+pub fn completion(bytes: Vec<u8>) -> progred_display::Completion {
+    let spelling = gid::hex_string(&bytes);
+    crate::completion::select(progred_display::Completion::new(
+        format!("0x{spelling}"),
+        Value::from(bytes),
+    ))
+}
+
 fn parse_hex(hex: &str) -> Option<Vec<u8>> {
     let digit = |c: u8| match c {
         b'0'..=b'9' => Some(c - b'0'),

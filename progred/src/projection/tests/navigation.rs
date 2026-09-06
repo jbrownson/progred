@@ -1,6 +1,50 @@
 use super::*;
 
 #[test]
+fn navigation_direction_excludes_shortcuts_modifiers_and_releases() {
+    use crate::navigate::{Direction, direction};
+
+    for (key, expected) in [
+        (NamedKey::ArrowLeft, Direction::Left),
+        (NamedKey::ArrowRight, Direction::Right),
+        (NamedKey::ArrowUp, Direction::Up),
+        (NamedKey::ArrowDown, Direction::Down),
+    ] {
+        let event = arrow(key);
+        assert_eq!(direction(&event), Some(expected));
+        assert_eq!(
+            direction(&KeyboardEvent {
+                state: KeyState::Up,
+                ..event.clone()
+            }),
+            None
+        );
+        for modifiers in [
+            Modifiers::SHIFT,
+            Modifiers::ALT,
+            Modifiers::CONTROL,
+            Modifiers::META,
+        ] {
+            assert_eq!(
+                direction(&KeyboardEvent {
+                    modifiers,
+                    ..event.clone()
+                }),
+                None
+            );
+        }
+    }
+    assert_eq!(
+        direction(&KeyboardEvent {
+            key: Key::Character("a".into()),
+            modifiers: Modifiers::META,
+            ..arrow(NamedKey::ArrowDown)
+        }),
+        None
+    );
+}
+
+#[test]
 fn arrows_walk_rows_down_and_lines_across() {
     // A block record: field `a` hugs a flat record on line one,
     // field `b` drops a two-row block, field `e` closes. Settled

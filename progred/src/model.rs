@@ -49,6 +49,13 @@ impl Model {
         !Rc::ptr_eq(&self.doc, &self.saved)
     }
 
+    pub fn replace_document(&mut self, doc: Document) {
+        *self = Self {
+            view: self.view,
+            ..Self::new(doc)
+        };
+    }
+
     #[cfg(any(test, target_os = "macos", target_os = "linux"))]
     pub fn mark_saved(&mut self) {
         self.saved = self.doc.clone();
@@ -147,6 +154,80 @@ mod tests {
             Value::list([Value::from(vec![value])])
         ));
         model.history.record(before);
+    }
+
+    #[test]
+    fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
+        let (root, pane_path) =
+            workspace::append(&Value::record([]), workspace::Side::Left, Value::record([]))
+                .unwrap();
+        let mut model = Model::new(Document {
+            root: Some(root),
+            cells: Cells::new(),
+        });
+        let old_cell = gid::new_cell_id();
+        for byte in [1, 2] {
+            let before = model.snapshot();
+            Rc::make_mut(&mut model.doc)
+                .cells
+                .set_value(old_cell, Value::from(vec![byte]));
+            model.history.record(before);
+        }
+        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.dirty());
+        assert!(model.history.can_undo() && model.history.can_redo());
+        let old_root = model.workspace.document.root.clone();
+        let pane_root = model.workspace.left.panes[0].view.root.clone();
+        model.selection = Some(selection::pending_with_query(
+            &pane_root,
+            pane_path,
+            "old query",
+        ));
+        model
+            .selection
+            .as_mut()
+            .unwrap()
+            .edit_mut()
+            .unwrap()
+            .handle_ime(&puri::handler::ImeEvent::Preedit(
+                "old composition".into(),
+                Some((1, 1)),
+            ));
+        model.workspace.document.scroll = Vec2::new(12.0, 300.0);
+        model.workspace.document.projection = workspace::Projection::Raw;
+        model.workspace.left_width = 0.5;
+        model.workspace.right_width = 0.1;
+        for view in [
+            &mut model.workspace.document,
+            &mut model.workspace.left.panes[0].view,
+        ] {
+            view.annotations
+                .set(&[], Some(Value::record([(old_cell, Value::from(vec![1]))])));
+        }
+        model.view.debug_geometry = true;
+        let replacement = Document {
+            root: Some(Value::record([])),
+            cells: Cells::new(),
+        };
+        model.replace_document(replacement.clone());
+        assert_eq!(model.doc.root, replacement.root);
+        assert!(model.doc.cells.value(old_cell).is_none());
+        assert!(!model.dirty());
+        assert!(!model.history.can_undo() && !model.history.can_redo());
+        assert!(model.selection.is_none());
+        assert!(model.workspace.view(&old_root).is_none());
+        assert!(model.workspace.view(&pane_root).is_none());
+        assert!(model.workspace.left.panes.is_empty() && model.workspace.right.panes.is_empty());
+        assert_eq!(model.workspace.document.scroll, Vec2::ZERO);
+        assert_eq!(
+            model.workspace.document.projection,
+            workspace::Projection::Standard
+        );
+        assert!(model.workspace.document.annotations.at(&[]).is_none());
+        let fresh = workspace::Workspace::default();
+        assert_eq!(model.workspace.left_width, fresh.left_width);
+        assert_eq!(model.workspace.right_width, fresh.right_width);
+        assert!(model.view.debug_geometry);
     }
 
     fn select(model: &mut Model, root: &workspace::Root, path: Path) {

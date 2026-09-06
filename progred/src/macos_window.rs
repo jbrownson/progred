@@ -78,6 +78,14 @@ pub(crate) fn place_and_autosave_frame(
     });
 }
 
+/// Detach an untitled replacement from the old file's frame identity.
+/// An empty autosave name disables saving, without deleting the saved frame.
+pub(crate) fn clear_document_frame(window: &Window) {
+    with_appkit_window(window, |appkit_window| {
+        appkit_window.setFrameAutosaveName(&NSString::from_str(""));
+    });
+}
+
 /// Save As: the window's document changed, so its autosave identity
 /// follows — a fresh numbered claim for the new path. Assigning a
 /// name reloads that name's saved frame, which would yank the window

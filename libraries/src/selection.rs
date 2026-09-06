@@ -19,34 +19,52 @@ pub mod vocabulary {
     pub use crate::site::vocabulary::VALUE;
 }
 
-/// A Grap continuation which opens a pending value at a path relative to its site.
-pub fn pending_at(path: &[gid::Step]) -> gid::Value {
+pub fn edge() -> gid::Value {
+    gid::Value::record([(vocabulary::STAGE, vocabulary::EDGE.into())])
+}
+
+/// A Grap continuation setting a payload at a path relative to its site.
+pub fn at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
     use gid::Value;
-    use grap_runtime::{call, lambda};
-    lambda(
-        [],
-        call(
-            vocabulary::SET.into(),
-            [
-                (
-                    vocabulary::PATH,
-                    call(
-                        crate::list::vocabulary::CONCAT.into(),
-                        [
-                            (
-                                crate::number::vocabulary::LEFT,
-                                call(crate::site::vocabulary::PATH.into(), []),
+    use grap_runtime::{call, vocabulary as g};
+    Value::record([(
+        g::CLOSURE,
+        Value::record([
+            (g::PARAMS, Value::list([])),
+            (
+                g::ENVIRONMENT,
+                Value::record([(vocabulary::VALUE, payload)]),
+            ),
+            (
+                g::BODY,
+                call(
+                    vocabulary::SET.into(),
+                    [
+                        (
+                            vocabulary::PATH,
+                            call(
+                                crate::list::vocabulary::CONCAT.into(),
+                                [
+                                    (
+                                        crate::number::vocabulary::LEFT,
+                                        call(crate::site::vocabulary::PATH.into(), []),
+                                    ),
+                                    (crate::number::vocabulary::RIGHT, crate::path::value(path)),
+                                ],
                             ),
-                            (crate::number::vocabulary::RIGHT, crate::path::value(path)),
-                        ],
-                    ),
+                        ),
+                        (vocabulary::VALUE, vocabulary::VALUE.into()),
+                    ],
                 ),
-                (
-                    vocabulary::VALUE,
-                    Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())]),
-                ),
-            ],
-        ),
+            ),
+        ]),
+    )])
+}
+
+pub fn pending_at(path: &[gid::Step]) -> gid::Value {
+    at(
+        path,
+        gid::Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())]),
     )
 }
 

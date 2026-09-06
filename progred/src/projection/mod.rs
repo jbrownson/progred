@@ -670,10 +670,9 @@ fn leaf_display<C: 'static, Cv: Canvas + 'static>(
     }
 }
 
-/// Lower the stock Rust line control. An inactive line owns the raw
-/// click that mounts its editor and places the caret; once active,
-/// Puri's line editor owns pointer, keyboard, and IME dispatch. The
-/// projection still supplies the Grap update rule used at write-back.
+/// A selected line interprets missing state as its current spelling
+/// with the caret at the end. Input materializes that same default;
+/// projection never writes it back merely for being selected.
 fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -682,16 +681,25 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let writable = !cx.source.transient() && writable_at(&cx.sources, path);
-    let editing = if writable {
-        cx.selection
-            .filter(|selection| selection.path() == path)
-            .and_then(Selection::edit)
-    } else {
-        None
+    let selected = cx.selection.filter(|selection| {
+        writable && selection.stage() == Stage::Edge && selection.path() == path
+    });
+    let default = selected
+        .filter(|selection| selection.edit().is_none())
+        .map(|selection| selection.initial_line(&line.text));
+    let editing = selected.and_then(Selection::edit).or(default.as_ref());
+    let active = selected.is_some();
+    let content = match editing {
+        Some(editing) => {
+            let edit = hooks.edit_line.clone();
+            let edit_path = path.to_vec();
+            let edit_line = line.clone();
+            render::line_edit(tcx, cx.styles, &line, Some(editing), move |ctx| {
+                edit(ctx, &edit_path, &edit_line)
+            })
+        }
+        None => render::line_edit(tcx, cx.styles, &line, None, |_| None),
     };
-    let active = editing.is_some();
-    let edit = hooks.edit.clone();
-    let content = render::line_edit(tcx, cx.styles, &line, editing, move |ctx| edit(ctx));
 
     if !writable {
         return content;
@@ -700,22 +708,28 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
     let path: SharedPath = Rc::from(path);
     let select_path = path.clone();
     let select_line = line.clone();
-    let start_edit = hooks.start_edit.clone();
-    let select: progred_display::ActionHandler<C> = Rc::new(move |ctx| {
-        start_edit(ctx, select_path.to_vec(), select_line.clone());
+    let select = hooks.select.clone();
+    let edit = hooks.edit_line.clone();
+    let select: crate::navigate::Select<C> = Rc::new(move |ctx, direction| {
+        select(ctx, select_path.to_vec());
+        if direction == Some(crate::navigate::Direction::Left)
+            && let Some(edit) = edit(ctx, &select_path, &select_line)
+        {
+            edit.state.cursor_to_start();
+        }
         true
     });
     let content = before(content, move |p, _| p.select_landmark(select));
     let presentation = cx.styles.line_presentation(&line);
     let scale = cx.styles.scale;
-    let start_edit = hooks.start_edit.clone();
-    let edit = hooks.edit.clone();
+    let select = hooks.select.clone();
+    let edit = hooks.edit_line.clone();
     before(content, move |p, placement| {
         hover_claim(p, placement, Hover::Value(path.clone()));
         let path = path.clone();
         let line = line.clone();
         let presentation = presentation.clone();
-        let start_edit = start_edit.clone();
+        let select = select.clone();
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
@@ -723,9 +737,9 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     if !active {
-                        start_edit(ctx, path.to_vec(), line.clone());
+                        select(ctx, path.to_vec());
                     }
-                    if let Some(edit) = edit(ctx) {
+                    if let Some(edit) = edit(ctx, &path, &line) {
                         edit.state.pointer_down(
                             &presentation,
                             edit.fonts,
@@ -769,9 +783,10 @@ pub struct Hooks<C> {
     /// Select a visible occurrence of a drawing's structural source.
     pub select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
     pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
-    /// Mount the stock editor described by a Rust projection. Its
-    /// first pointer event then uses `edit` below for caret placement.
-    pub start_edit: Rc<dyn Fn(&mut C, Path, progred_display::LineEdit)>,
+    /// Access a selected line's state, using its current description
+    /// when no editing state has been stored yet.
+    pub edit_line:
+        Rc<dyn for<'a> Fn(&'a mut C, &[Step], &progred_display::LineEdit) -> Option<EditCtx<'a>>>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Replace the annotation value at one projection site. The
     /// concrete view root remains host-owned and closed over here.
@@ -811,6 +826,17 @@ fn select_handler<C: 'static>(
 ) -> progred_display::ActionHandler<C> {
     let select = hooks.select.clone();
     Rc::new(move |world| {
+        select(world, path.to_vec());
+        true
+    })
+}
+
+fn navigation_select_handler<C: 'static>(
+    path: SharedPath,
+    hooks: &Hooks<C>,
+) -> crate::navigate::Select<C> {
+    let select = hooks.select.clone();
+    Rc::new(move |world, _| {
         select(world, path.to_vec());
         true
     })
@@ -1165,7 +1191,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     path: SharedPath,
     secondary: Option<(Secondary, bool)>,
-    select: progred_display::ActionHandler<C>,
+    select: crate::navigate::Select<C>,
     delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
@@ -1317,7 +1343,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         select_payload: Rc::new(move |ctx, _, payload| {
             select_payload(ctx, payload_origin.clone(), payload)
         }),
-        start_edit: Rc::new(|_, _, _| {}),
+        edit_line: Rc::new(|_, _, _| None),
         toggle: Rc::new(|_, _| {}),
         update_state: hooks.update_state.clone(),
         edit: Rc::new(|_| None),
@@ -1487,7 +1513,7 @@ fn prepare_missing_layout<C: 'static, Cv: Canvas + 'static>(
     let transient = cx.source.transient();
     let selected = cx.selected(path);
     let scale = cx.styles.scale;
-    let select = select_handler(landmark.clone(), hooks);
+    let select = navigation_select_handler(landmark.clone(), hooks);
     let delete = hooks.delete.clone();
     ChoiceLayout::map(inner, 0.0, move |inner| {
         descend_landmark_with(
@@ -1536,7 +1562,7 @@ fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
     let transient = cx.source.transient();
     let selected = cx.selected(path);
     let scale = cx.styles.scale;
-    let select = select_handler(landmark_path.clone(), hooks);
+    let select = navigation_select_handler(landmark_path.clone(), hooks);
     let delete = hooks.delete.clone();
     let landmark = landmark_path.clone();
     let placed = ChoiceLayout::map(inner, 0.0, move |inner| {

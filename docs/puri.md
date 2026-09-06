@@ -18,6 +18,12 @@ affixes, focus, placeholder, and chrome for this description. `EditCtx` supplies
 mutable state, Parley contexts, and a clipboard capability at dispatch. The
 focused editor emits a caret rectangle for the platform IME.
 
+At Progred's line-control boundary, missing editing state has a defined default:
+the current spelling with the caret at its end. The frame uses that state without
+persisting it; dispatch materializes it on access for an editing interaction.
+Selection operations need not eagerly construct widget state. This policy belongs
+to the line control, not to generic selection or the data model.
+
 The package boundaries are:
 
 | Package | Responsibility |
@@ -101,6 +107,21 @@ A changed frame input remints a whole frame. The event-to-redraw pending frame
 stages the already-built successor for presentation; it avoids building it
 again at redraw. There is no event-specific list of changes considered
 irrelevant to rendering and no partial invalidation system.
+
+Pointer motion, pressed or unpressed, accumulates until a redraw or discrete
+event. Each dispatch receives one `PointerUpdate`: `coalesced` contains earlier
+observed states in order, excluding `current`, which is the latest state.
+Only the latest packet's predictions survive; predictions are never applied as
+observed input. Different contacts, buttons, modifiers, scales, or viewport sizes
+start a new batch. Release and cancellation flush pending motion first.
+
+Handlers choose which samples matter, without rebuilding between samples.
+Number scrubbing integrates the full precision path; state-drag callbacks receive
+the latest logical displacement and the earlier displacements, letting Fidget
+orbit use only the latest. Raw Puri handlers receive the whole pointer update;
+Grap motion events expose earlier sample records under `coalesced` alongside
+their existing latest-position fields. Unclaimed touch motion uses the batch's
+total displacement for ordinary document scrolling.
 
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the

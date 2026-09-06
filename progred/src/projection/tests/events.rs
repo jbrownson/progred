@@ -58,7 +58,7 @@ fn a_data_event_realizes_the_apply_hook() {
             completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _| None),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|_| None),

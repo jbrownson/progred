@@ -69,10 +69,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
             600.0,
             None,
             None,
-            Some((
-                &pane.path,
-                crate::spine::get(doc.root.as_ref().unwrap(), &pane.path),
-            )),
+            Some(&pane.path),
         );
         assert!(displayed.borrow().contains(&result));
         assert!(!displayed.borrow().contains(&expression));
@@ -128,10 +125,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
             1400.0,
             None,
             None,
-            Some((
-                &pane.path,
-                crate::spine::get(doc.root.as_ref().unwrap(), &pane.path),
-            )),
+            Some(&pane.path),
         );
         bench.list.0.iter().find_map(|command| match command {
             DrawCmd::Image { image, .. } => Some(
@@ -167,9 +161,7 @@ fn fidget_viewport_projects_an_image_at_the_assigned_size() {
         .into_iter()
         .next()
         .expect("the preview is declared as a pane");
-    let root = doc.root.as_ref().unwrap();
-    let value = crate::spine::get(root, &declaration.path);
-    let source = Some((declaration.path.as_slice(), value));
+    let source = Some(declaration.path.as_slice());
     let mut context = BenchContext::new();
     context.stack.projection = crate::projection::viewport::projection(
         &context.stack.projection,
@@ -221,9 +213,7 @@ fn iop_tree_at_size(size: kurbo::Size) {
         .into_iter()
         .next()
         .expect("the picture is declared as a pane");
-    let root = doc.root.as_ref().unwrap();
-    let value = crate::spine::get(root, &declaration.path);
-    let source = Some((declaration.path.as_slice(), value));
+    let source = Some(declaration.path.as_slice());
     let mut context = BenchContext::new();
     context.stack.projection =
         crate::projection::viewport::projection(&context.stack.projection, size);
@@ -427,7 +417,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             root: None,
             path: Rc::from([]),
             rect: bounds,
-            select: Rc::new(|_| true),
+            select: Rc::new(|_, _| true),
         }]);
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;

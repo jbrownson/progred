@@ -23,7 +23,12 @@ Start with:
 review. [Historical notes](history/README.md) preserve earlier models and
 proposals separately; they are not required reading for ordinary changes.
 
-[Tree profiling](tree-profile-2026-09-04.md) is a dated measurement report.
+[Performance checks](performance.md) describes the shared headless frame harness
+and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
+dated measurement report.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.
+
+[Examples](../examples/README.md) lists the bundled documents, shortcuts, and
+the formulas behind the Fidget shapes.

@@ -65,28 +65,47 @@ impl<C: 'static> Commit<C> {
         match self {
             Self::Value(commit) => {
                 let commit = commit.clone();
-                Rc::new(move |world| commit(world, Value::from(new_cell_id()), None))
+                let select =
+                    progred_libraries::selection::at(&[], progred_libraries::selection::edge());
+                Rc::new(move |world| {
+                    commit(world, Value::from(new_cell_id()), Some(select.clone()))
+                })
             }
             Self::Label(commit) => {
                 let commit = commit.clone();
-                Rc::new(move |world| commit(world, new_cell_id(), None, None))
+                let select = progred_libraries::selection::pending_at(&[]);
+                Rc::new(move |world| commit(world, new_cell_id(), None, Some(select.clone())))
             }
         }
     }
 }
 
 impl<C: 'static> Entry<C> {
+    fn completion(sources: &Sources, offer: Completion, commit: &Commit<C>) -> Option<Self> {
+        Self::offered(
+            completion_text(sources, &offer.display),
+            offer
+                .detail
+                .as_ref()
+                .map(|detail| completion_text(sources, detail)),
+            offer.value,
+            offer.on_commit,
+            commit,
+        )
+    }
+
     fn value(
         display: String,
         detail: Option<String>,
         value: Value,
+        on_commit: Value,
         commit: &Commit<C>,
     ) -> Option<Self> {
         Self::offered(
             display,
             detail,
             CompletionValue::Literal(value),
-            None,
+            Some(on_commit),
             commit,
         )
     }
@@ -139,7 +158,14 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
         ]
         .into_iter()
         .filter_map(|(key, display, value)| {
-            Entry::value(display.to_string(), None, value, commit).map(|mut entry| {
+            Entry::value(
+                display.to_string(),
+                None,
+                value,
+                progred_libraries::selection::at(&[], progred_libraries::selection::edge()),
+                commit,
+            )
+            .map(|mut entry| {
                 entry.face = Face::Dim;
                 (key, entry)
             })
@@ -168,14 +194,15 @@ pub(crate) fn prepare(
     use crate::selection::{self, Stage};
     let mut document = std::rc::Rc::new(sources.doc.clone());
     let mut path = selection.path().to_vec();
-    let (document_changed, payload) = match selection.stage() {
-        Stage::Pending => selection::set_value(&mut document, sources.libraries, &path, value)
-            .then_some((true, selection::payload::edge()))?,
+    let document_changed = match selection.stage() {
+        Stage::Pending => {
+            selection::set_value(&mut document, sources.libraries, &path, value).then_some(true)?
+        }
         Stage::Label => {
             let label = value.as_cell()?;
             path.push(gid::Step::Key(label));
             if sources.resolve_path(&path).is_some() {
-                (false, selection::payload::edge())
+                false
             } else {
                 let changed = definition.is_some();
                 if let Some(value) = definition {
@@ -183,14 +210,14 @@ pub(crate) fn prepare(
                         .cells
                         .set_value(label, value);
                 }
-                (changed, selection::payload::pending("", 0))
+                changed
             }
         }
         Stage::Edge => return None,
     };
     let annotation = annotations.at(&path).cloned();
-    let selection = Some((path.clone(), payload));
-    let mut effects = match on_commit {
+    let selection = Some((selection.path().to_vec(), selection.payload()));
+    let effects = match on_commit {
         Some(function) => crate::site::evaluate(
             function,
             [],
@@ -210,7 +237,6 @@ pub(crate) fn prepare(
             selection_changed: false,
         },
     };
-    effects.selection_changed = true;
     Some(Prepared {
         document,
         document_changed,
@@ -261,14 +287,10 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .strip_prefix('"')
         .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
         .unwrap_or(query);
-    let atom = blob
-        .as_ref()
-        .map(|bytes| Value::from(bytes.clone()))
-        .unwrap_or_else(|| text::value(spelling));
     let atom_leads = quoted || blob.is_some();
     let text_entry = blob
         .is_some()
-        .then(|| Entry::value(format!("\"{query}\""), None, text::value(query), commit))
+        .then(|| Entry::completion(sources, text::completion(query), commit))
         .flatten();
     let atom_entry = match commit {
         Commit::Label(commit) => {
@@ -285,23 +307,33 @@ pub(crate) fn completion_entries_with<C: 'static>(
                         world,
                         new_cell_id(),
                         Some(name::record(&spelling, [])),
-                        None,
+                        Some(progred_libraries::selection::pending_at(&[])),
                     )
                 }),
             }
         }
-        Commit::Value(_) => Entry::value(
-            text::read(&atom)
-                .map(|text| format!("\"{text}\""))
-                .unwrap_or_else(|| atom.to_string()),
-            None,
-            atom,
+        Commit::Value(_) => Entry::completion(
+            sources,
+            blob.map(blob::completion)
+                .unwrap_or_else(|| text::completion(spelling)),
             commit,
         )
         .unwrap(),
     };
+    let reference_selection = if labels {
+        progred_libraries::selection::pending_at(&[])
+    } else {
+        progred_libraries::selection::at(&[], progred_libraries::selection::edge())
+    };
     let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
+        .filter(|cell| {
+            !labels
+                || !request
+                    .value()
+                    .and_then(Value::as_record)
+                    .is_some_and(|fields| fields.contains_key(cell))
+        })
         .map(|cell| {
             let definition = sources.resolve(cell);
             let name = (!raw)
@@ -314,6 +346,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
                 source.map(|source| source_name(sources, source)),
                 Value::from(cell),
+                reference_selection.clone(),
                 commit,
             )
             .unwrap();

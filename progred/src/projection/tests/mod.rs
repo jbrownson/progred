@@ -125,54 +125,109 @@ fn make_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selectio
     )
 }
 
-/// Select through the action installed by the projected navigation
-/// landmark, as the shell does after an arrow step.
-fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    type World = Vec<(Path, progred_display::LineEdit)>;
+#[derive(Default)]
+struct TestClipboard(Option<String>);
 
-    let stack = crate::stack::load::<World>();
-    let mut projection_libraries = libraries.clone();
-    for (id, definitions) in stack.libraries.iter() {
-        projection_libraries.insert(id, definitions.clone());
+impl puri::edit::TextClipboard for TestClipboard {
+    fn get_text(&mut self) -> Option<String> {
+        self.0.clone()
     }
+
+    fn set_text(&mut self, text: &str) {
+        self.0 = Some(text.into());
+    }
+}
+
+struct EditingWorld {
+    doc: Rc<Document>,
+    libraries: Libraries,
+    selection: Option<Selection>,
+    fonts: parley::FontContext,
+    layouts: parley::LayoutContext<Brush>,
+    cache: puri::text::TextCache,
+    clipboard: TestClipboard,
+}
+
+impl EditingWorld {
+    fn new(doc: &Document, libraries: &Libraries) -> Self {
+        Self {
+            doc: Rc::new(doc.clone()),
+            libraries: libraries.clone(),
+            selection: None,
+            fonts: parley::FontContext::new(),
+            layouts: parley::LayoutContext::new(),
+            cache: puri::text::TextCache::default(),
+            clipboard: TestClipboard::default(),
+        }
+    }
+}
+
+fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, crate::frame::Paint> {
+    let stack = crate::stack::load::<EditingWorld>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
+        fonts: &mut world.fonts,
+        layouts: &mut world.layouts,
         scale: 1.0,
-        cache: &mut cache,
+        cache: &mut world.cache,
     };
-    let measured = project::<World, crate::frame::Paint>(
+    let measured = project::<EditingWorld, crate::frame::Paint>(
         ProjectDescription {
             sources: Sources {
-                doc,
-                libraries: &projection_libraries,
+                doc: &world.doc,
+                libraries: &world.libraries,
             },
-            root: doc.root.as_ref(),
+            root: world.doc.root.as_ref(),
             root_path: &[],
-            selection: None,
+            selection: world.selection.as_ref(),
             scrub_spelling: None,
-            source_selection: None,
+            source_selection: world.selection.as_ref(),
             annotations: &annotations,
-            raw: false,
+            raw,
             styles: &styles,
             width: 500.0,
 
-            projection: Some(&stack.projection),
+            projection: (!raw).then_some(&stack.projection),
         },
         &mut tcx,
         Hooks {
             completions: Some(stack.completions.clone()),
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|selected, path, line| selected.push((path, line))),
+            select: Rc::new(|world, path| {
+                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
+            }),
+            select_payload: Rc::new(|world, path, payload| {
+                world.selection = Some(Selection::from_payload(
+                    &crate::workspace::Root::document(),
+                    &src(&world.doc, &world.libraries),
+                    path,
+                    payload,
+                ));
+            }),
+            edit_line: Rc::new(|world, path, line| {
+                if !writable_at(&src(&world.doc, &world.libraries), path) {
+                    return None;
+                }
+                let selected = world.selection.as_mut().filter(|selected| {
+                    selected.path() == path && selected.stage() == Stage::Edge
+                })?;
+                Some(EditCtx {
+                    state: selected.edit_line_mut(line),
+                    fonts: &mut world.fonts,
+                    layouts: &mut world.layouts,
+                    clipboard: &mut world.clipboard,
+                })
+            }),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|_| None),
+            edit: Rc::new(|world| {
+                Some(EditCtx {
+                    state: world.selection.as_mut()?.edit_mut()?,
+                    fonts: &mut world.fonts,
+                    layouts: &mut world.layouts,
+                    clipboard: &mut world.clipboard,
+                })
+            }),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
@@ -187,27 +242,40 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
         },
     );
     let height = measured.extent.height().max(1.0);
-    let placed = measured::place(
+    measured::place(
         measured,
         Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
-    );
-    let mut selected = World::new();
+    )
+}
+
+/// Select through the current projection, without an editing interaction.
+fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
+    let mut world = EditingWorld::new(doc, libraries);
+    let placed = editing_frame(&mut world, false);
     if let Some(target) = placed
         .descends
         .iter()
         .find(|target| target.path.as_ref() == &path)
     {
-        (target.select)(&mut selected);
+        (target.select)(&mut world, None);
     }
-    match selected.pop() {
-        Some((path, line)) => Selection::from_line(
-            &crate::workspace::Root::document(),
-            &src(doc, libraries),
-            path,
-            line,
-        ),
-        None => make_selection(doc, libraries, path),
-    }
+    world
+        .selection
+        .unwrap_or_else(|| make_selection(doc, libraries, path))
+}
+
+fn make_projected_editing_selection(
+    doc: &Document,
+    libraries: &Libraries,
+    path: Path,
+) -> Selection {
+    let mut world = EditingWorld::new(doc, libraries);
+    world.selection = Some(make_projected_selection(doc, libraries, path));
+    editing_frame(&mut world, false)
+        .handler
+        .unwrap()
+        .dispatch_key(&mut world, &arrow(NamedKey::End));
+    world.selection.unwrap()
 }
 
 fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
@@ -301,7 +369,7 @@ fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
         root: None,
         path: Rc::from(path),
         rect: Rect::new(x0, y0, x1, y1),
-        select: Rc::new(|_| true),
+        select: Rc::new(|_, _| true),
     }
 }
 

@@ -7,8 +7,7 @@ use crate::modifiers;
 use crate::navigate;
 use crate::selection;
 use crate::sources;
-use gid::{Value, new_cell_id};
-use progred_libraries::name;
+use gid::Value;
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -112,7 +111,24 @@ impl Editor {
     /// cannot label (a list, a record, a blob) at the label stage —
     /// so the click falls through rather than spending the pending.
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
-        self.commit_completion(id, None, None)
+        let continuation = match self.model.selection.as_ref() {
+            Some(current)
+                if current.stage() == selection::Stage::Label
+                    && id.as_cell().is_some_and(|label| {
+                        let path: Vec<_> = current
+                            .path()
+                            .iter()
+                            .cloned()
+                            .chain([gid::Step::Key(label)])
+                            .collect();
+                        self.sources().resolve_path(&path).is_none()
+                    }) =>
+            {
+                progred_libraries::selection::pending_at(&[])
+            }
+            _ => progred_libraries::selection::at(&[], progred_libraries::selection::edge()),
+        };
+        self.commit_completion(id, None, Some(continuation))
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -265,9 +281,8 @@ impl Editor {
         }
     }
 
-    /// After completion handlers decline, Enter commits the query
-    /// directly or begins a pending stage (the chains live
-    /// in raw). Plain Enter is a new peer BESIDE the selection: a
+    /// Completion handlers own committing their query. Otherwise
+    /// plain Enter is a new peer BESIDE the selection: a
     /// sibling element in a list (Shift+Enter before), a new field on
     /// the parent record otherwise; the root has nothing beside it
     /// and takes the field on itself. The command chord authors
@@ -288,16 +303,8 @@ impl Editor {
             && match &event.key {
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
                     Some(current) if current.stage() != selection::Stage::Edge => {
-                        let labels = current.stage() == selection::Stage::Label;
-                        let fallback = selection::line_edit("");
-                        let query = current.edit().unwrap_or(&fallback).text();
-                        let (value, definition) = if labels {
-                            (Value::from(new_cell_id()), Some(name::record(query, [])))
-                        } else {
-                            (selection::resolve_query(query), None)
-                        };
                         self.model.selection = Some(current);
-                        self.commit_completion(value, definition, None)
+                        false
                     }
                     selection => {
                         let sources = self.sources();

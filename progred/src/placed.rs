@@ -176,7 +176,7 @@ pub struct Placed<C, Cv> {
     /// A projected control may override how the nearest enclosing
     /// navigation landmark is selected. The landmark consumes this
     /// while placing, so it never leaks into an ancestor.
-    pub landmark_select: Option<progred_display::ActionHandler<C>>,
+    pub landmark_select: Option<crate::navigate::Select<C>>,
     pub completion: Option<Offers<C>>,
     /// Out-of-flow subtrees gathered during placement and raised over
     /// the completed frame before hover resolution.
@@ -322,7 +322,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
 impl<C: 'static, Cv> Builder<'_, C, Cv> {
     /// Install the selection transition for the navigation landmark
     /// enclosing this projected control.
-    pub fn select_landmark(&mut self, action: progred_display::ActionHandler<C>) {
+    pub fn select_landmark(&mut self, action: crate::navigate::Select<C>) {
         self.placed.landmark_select = Some(action);
     }
 }

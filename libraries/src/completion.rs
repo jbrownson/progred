@@ -4,11 +4,16 @@ use gid::CellId;
 use progred_display::{Completion, CompletionProvider};
 use std::rc::Rc;
 
+pub fn select(offer: Completion) -> Completion {
+    offer.on_commit(crate::selection::at(&[], crate::selection::edge()))
+}
+
+pub fn label(cell: CellId) -> Completion {
+    Completion::new(cell, cell.into()).on_commit(crate::selection::pending_at(&[]))
+}
+
 pub fn labels(cells: impl IntoIterator<Item = CellId>) -> Vec<Completion> {
-    cells
-        .into_iter()
-        .map(|cell| Completion::new(cell, cell.into()))
-        .collect()
+    cells.into_iter().map(label).collect()
 }
 
 /// Combine applicable providers in order. An explicit empty vocabulary stays

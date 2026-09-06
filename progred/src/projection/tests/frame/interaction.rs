@@ -63,19 +63,11 @@ fn sample_text_line_click_mounts_its_own_editor() {
         &mut tcx,
         Hooks {
             completions: Some(stack.completions.clone()),
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
-                world.selection = Some(Selection::from_line(
-                    &crate::workspace::Root::document(),
-                    &Sources {
-                        doc: &world.doc,
-                        libraries: &world.libraries,
-                    },
-                    path,
-                    line,
-                ));
+            select: Rc::new(|world: &mut ClickWorld, path| {
+                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
             }),
+            select_payload: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _| None),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             // A selection transition must consume the click even if
@@ -181,7 +173,18 @@ fn sample_text_line_click_mounts_its_own_editor() {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|world: &mut ClickWorld, path, line| {
+                let selected = world
+                    .selection
+                    .as_mut()
+                    .filter(|selected| selected.path() == path)?;
+                Some(EditCtx {
+                    state: selected.edit_line_mut(line),
+                    fonts: &mut world.fonts,
+                    layouts: &mut world.layouts,
+                    clipboard: &mut world.clipboard,
+                })
+            }),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|world: &mut ClickWorld| {
@@ -260,7 +263,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                 log.push("select");
                 accepts
             }),
-            Rc::new(|| Box::new(|_| Value::record([]))),
+            Rc::new(|| Box::new(|_, _| Value::record([]))),
             Rc::new(move |log, path, _, point, scale| {
                 assert_eq!(path, captured_path);
                 assert_eq!(point, Point::new(5.0, 5.0));
@@ -331,7 +334,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
         Vec::new(),
         target.clone(),
         Rc::new(|_| true),
-        Rc::new(|| Box::new(|_| Value::record([]))),
+        Rc::new(|| Box::new(|_, _| Value::record([]))),
         Rc::new(|starts: &mut usize, _, _, _, _| *starts += 1),
         1.0,
         leaf::<usize, Bench>(

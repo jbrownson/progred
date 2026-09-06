@@ -382,7 +382,7 @@ impl Editor {
         let select = drawing_source_descend(&self.sources(), descends, source)
             .map(|descend| descend.select.clone());
         if let Some(select) = select {
-            select(self);
+            select(self, None);
         }
     }
 
@@ -680,13 +680,8 @@ fn projection_hooks(
                 payload,
             ));
         }),
-        start_edit: Rc::new(move |app: &mut Editor, path, line| {
-            app.model.selection = Some(selection::Selection::from_line(
-                &edit_root,
-                &app.sources(),
-                path,
-                line,
-            ));
+        edit_line: Rc::new(move |app: &mut Editor, path, line| {
+            line_edit_ctx(app, &edit_root, path, line)
         }),
         toggle: Rc::new(move |app: &mut Editor, path| {
             app.collapse(&toggle_root, &path, None);
@@ -749,7 +744,7 @@ fn projection_hooks(
                 placement.rect,
                 handler,
             ));
-            app.advance_gesture(point)
+            app.advance_gesture(&[point])
         }),
         commit_value: Rc::new(|app: &mut Editor, value, on_commit| {
             if app
@@ -1147,6 +1142,35 @@ pub(crate) fn edit_ctx(app: &mut Editor) -> Option<EditCtx<'_>> {
     })
 }
 
+fn line_edit_ctx<'a>(
+    app: &'a mut Editor,
+    root: &Root,
+    path: &[gid::Step],
+    line: &progred_display::LineEdit,
+) -> Option<EditCtx<'a>> {
+    if !selection::writable_at(&app.sources(), path) {
+        return None;
+    }
+    let Editor {
+        model,
+        font_cx,
+        layout_cx,
+        text_clipboard,
+        ..
+    } = app;
+    let selected = model.selection.as_mut().filter(|selected| {
+        selected.root() == root
+            && selected.path() == path
+            && selected.stage() == selection::Stage::Edge
+    })?;
+    Some(EditCtx {
+        state: selected.edit_line_mut(line),
+        fonts: font_cx,
+        layouts: layout_cx,
+        clipboard: text_clipboard,
+    })
+}
+
 #[cfg(test)]
 mod frame_tests {
     use super::*;
@@ -1262,7 +1286,7 @@ mod frame_tests {
                 root: Some(root.clone()),
                 path: Rc::from([Step::Follow(source), Step::Key(call)]),
                 rect,
-                select: Rc::new(move |selected| {
+                select: Rc::new(move |selected, _| {
                     *selected = Some(source);
                     true
                 }),
@@ -1281,7 +1305,7 @@ mod frame_tests {
             let mut selected = None;
             assert!((drawing_source_descend(&sources, &descends, &trace)
                 .unwrap()
-                .select)(&mut selected));
+                .select)(&mut selected, None));
             assert_eq!(selected, Some(source));
         }
     }

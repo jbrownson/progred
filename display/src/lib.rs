@@ -105,7 +105,9 @@ pub struct StateDragEvent {
     pub delta_y: f64,
 }
 
-pub type StateDragGesture = Box<dyn FnMut(StateDragEvent) -> Value>;
+/// The latest displacement and earlier samples in order. A handler may
+/// use just the latest displacement or integrate the complete path.
+pub type StateDragGesture = Box<dyn FnMut(StateDragEvent, &[StateDragEvent]) -> Value>;
 pub type StateDragHandler = Rc<dyn Fn() -> StateDragGesture>;
 
 /// Scroll displacement over a projection-local control, normalized to
@@ -147,6 +149,8 @@ pub struct Completion {
     pub value: CompletionValue,
     /// Grap callable run at the committed location. Its selection and
     /// annotation effects are staged with the insertion.
+    /// No continuation means no selection change; standard completion
+    /// combinators supply their own selection transitions explicitly.
     pub on_commit: Option<Value>,
 }
 

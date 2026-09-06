@@ -64,7 +64,7 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                 completions: Some(stack.completions.clone()),
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
-                start_edit: Rc::new(|_, _, _| {}),
+                edit_line: Rc::new(|_, _, _| None),
                 toggle: Rc::new(|_, _| {}),
                 update_state: Rc::new(|_, _, _| false),
                 edit: Rc::new(|state: &mut State| {
@@ -968,19 +968,11 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         &mut tcx,
         Hooks {
             completions: Some(stack.completions.clone()),
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
-                world.selection = Some(Selection::from_line(
-                    &crate::workspace::Root::document(),
-                    &Sources {
-                        doc: &world.doc,
-                        libraries: &world.libraries,
-                    },
-                    path,
-                    line,
-                ));
+            select: Rc::new(|world: &mut ClickWorld, path| {
+                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
             }),
+            select_payload: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _| None),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             // A selection transition must consume the click even if

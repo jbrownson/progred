@@ -77,6 +77,16 @@ extra fields. This is a raw definition lookup, not evaluation of the callable.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
 
+The Fidget library projects field arithmetic as infix expressions, other scalar
+operations as named argument groups, and coordinates as shallow references.
+Grouping preserves the expression tree, including right-nested operations of
+equal precedence; it never reassociates floating-point arithmetic. Names come
+from ordinary definitions. Operands retain their stored paths and stock editing
+controls, while an operator targets its whole expression. Named fields expose
+their editable name beside the formula. Incomplete forms or extra fields decline
+to structural display; translation keeps its explicit named parameters. These
+are source projections only, independent of the opt-in rendered viewport.
+
 `{evaluate: expression}` is a Grap-library projection convention, not evaluator
 syntax. It shows the stored expression, an arrow, and the returned value from
 a transient read-only root. A result containing another `evaluate` field can

@@ -204,6 +204,19 @@ fn svg_bench_renders_numeric_type_labels() {
 }
 
 #[test]
+fn svg_bench_renders_fidget_source() {
+    use crate::command::Example;
+    for (example, file) in [
+        (Example::Torus, "fidget_torus.svg"),
+        (Example::Tanglecube, "fidget_tanglecube.svg"),
+        (Example::Gyroid, "fidget_gyroid.svg"),
+    ] {
+        let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
+        render(&doc, None, 560.0, file);
+    }
+}
+
+#[test]
 fn svg_bench_renders_the_placeholder_notation() {
     let empty = Document {
         root: None,

@@ -44,6 +44,7 @@ pub fn definition() -> Vec<Menu> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let file_entries = vec![
         Entry::Command(C::App(A::New)),
+        Entry::Command(C::App(A::NewWindow)),
         Entry::Command(C::App(A::Open)),
         Entry::Separator,
         Entry::Command(C::App(A::Close)),
@@ -59,12 +60,10 @@ pub fn definition() -> Vec<Menu> {
         },
         Menu {
             label: "Examples",
-            entries: vec![
-                Entry::Command(C::App(A::Example(E::Sample))),
-                Entry::Command(C::App(A::Example(E::Grap))),
-                Entry::Command(C::App(A::Example(E::IopTree))),
-                Entry::Command(C::App(A::Example(E::Fidget))),
-            ],
+            entries: E::ALL
+                .into_iter()
+                .map(|example| Entry::Command(C::App(A::Example(example))))
+                .collect(),
         },
         Menu {
             label: "Edit",
@@ -560,6 +559,14 @@ mod tests {
     #[test]
     fn shortcuts_are_drawn_application_commands() {
         assert_eq!(
+            shortcut(&key("n", Modifiers::CONTROL)),
+            Some(Command::App(AppCommand::New))
+        );
+        assert_eq!(
+            shortcut(&key("N", Modifiers::CONTROL | Modifiers::SHIFT)),
+            Some(Command::App(AppCommand::NewWindow))
+        );
+        assert_eq!(
             shortcut(&key("s", Modifiers::CONTROL)),
             Some(Command::Doc(DocCommand::Save))
         );
@@ -581,6 +588,9 @@ mod tests {
             ("2", Example::Grap),
             ("3", Example::IopTree),
             ("4", Example::Fidget),
+            ("5", Example::Torus),
+            ("6", Example::Tanglecube),
+            ("7", Example::Gyroid),
         ] {
             assert_eq!(
                 shortcut(&key(digit, Modifiers::CONTROL)),
@@ -714,7 +724,7 @@ mod tests {
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition();
         let commands = commands(&definition).collect::<Vec<_>>();
-        assert_eq!(commands.len(), 20);
+        assert_eq!(commands.len(), 24);
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }
@@ -731,6 +741,7 @@ mod tests {
             definition[0].entries,
             vec![
                 Entry::Command(Command::App(AppCommand::New)),
+                Entry::Command(Command::App(AppCommand::NewWindow)),
                 Entry::Command(Command::App(AppCommand::Open)),
                 Entry::Separator,
                 Entry::Command(Command::App(AppCommand::Close)),

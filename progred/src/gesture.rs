@@ -12,7 +12,7 @@ use progred_libraries::Libraries;
 
 pub(crate) trait Gesture {
     /// Returns whether the document changed, for the window's save indicator.
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool;
+    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool;
 
     fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
         None
@@ -88,7 +88,23 @@ pub(crate) fn scrub(
 }
 
 impl Gesture for Scrub {
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
+    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool {
+        samples.iter().fold(false, |changed, point| {
+            self.advance_point(model, libraries, *point) || changed
+        })
+    }
+
+    fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
+        self.spelling.as_deref().map(|spelling| ScrubSpelling {
+            root: &self.root,
+            path: &self.path,
+            spelling,
+        })
+    }
+}
+
+impl Scrub {
+    fn advance_point(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
         self.drag.advance(point).is_some_and(|motion| {
             let update = (self.gesture)(progred_display::ScrubEvent {
                 movement_x: motion.movement.x,
@@ -102,14 +118,6 @@ impl Gesture for Scrub {
                 update.value,
                 &mut self.recorded,
             )
-        })
-    }
-
-    fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
-        self.spelling.as_deref().map(|spelling| ScrubSpelling {
-            root: &self.root,
-            path: &self.path,
-            spelling,
         })
     }
 }
@@ -137,12 +145,17 @@ pub(crate) fn state_drag(
 }
 
 impl Gesture for StateDrag {
-    fn advance(&mut self, model: &mut Model, _: &Libraries, point: Point) -> bool {
-        if let Some(motion) = self.drag.advance(point) {
-            let state = (self.gesture)(progred_display::StateDragEvent {
+    fn advance(&mut self, model: &mut Model, _: &Libraries, samples: &[Point]) -> bool {
+        let samples: Vec<_> = samples
+            .iter()
+            .filter_map(|point| self.drag.advance(*point))
+            .map(|motion| progred_display::StateDragEvent {
                 delta_x: motion.distance.x,
                 delta_y: motion.distance.y,
-            });
+            })
+            .collect();
+        if let Some((current, coalesced)) = samples.split_last() {
+            let state = (self.gesture)(*current, coalesced);
             if let Some(view) = model.workspace.view_mut(&self.root)
                 && view.annotations.at(&self.path) != Some(&state)
             {
@@ -172,7 +185,15 @@ pub(crate) fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -
 }
 
 impl Gesture for PointControl {
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
+    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool {
+        samples.iter().fold(false, |changed, point| {
+            self.advance_point(model, libraries, *point) || changed
+        })
+    }
+}
+
+impl PointControl {
+    fn advance_point(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
         let update = (self.handler)(progred_display::PointEvent {
             x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
             y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
@@ -269,15 +290,15 @@ mod tests {
                 })
             }),
         );
-        assert!(!gesture.advance(&mut model, &libraries, Point::new(102.0, 202.0)));
+        assert!(!gesture.advance(&mut model, &libraries, &[Point::new(102.0, 202.0)]));
         assert!(!model.history.can_undo());
-        assert!(gesture.advance(&mut model, &libraries, Point::new(108.0, 206.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(108.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(14.0)));
-        assert!(gesture.advance(&mut model, &libraries, Point::new(110.0, 206.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(110.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(15.0)));
-        assert!(gesture.advance(&mut model, &libraries, Point::new(-20.0, 206.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(-20.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(-50.0)));
-        assert!(gesture.advance(&mut model, &libraries, Point::new(110.0, 206.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(110.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(15.0)));
         let presentation = gesture.scrub_spelling().unwrap();
         assert_eq!(presentation.root, &root);
@@ -300,12 +321,12 @@ mod tests {
             root.clone(),
             path.clone(),
             Rc::new(|| {
-                Box::new(|event| {
+                Box::new(|event, _| {
                     Value::list([f64::value(event.delta_x), f64::value(event.delta_y)])
                 })
             }),
         );
-        gesture.advance(&mut model, &libraries, Point::new(5.0, 0.0));
+        gesture.advance(&mut model, &libraries, &[Point::new(5.0, 0.0)]);
         assert!(
             model
                 .workspace
@@ -315,13 +336,91 @@ mod tests {
                 .at(&path)
                 .is_none()
         );
-        gesture.advance(&mut model, &libraries, Point::new(8.0, 12.0));
-        gesture.advance(&mut model, &libraries, Point::new(10.0, 12.0));
+        gesture.advance(&mut model, &libraries, &[Point::new(8.0, 12.0)]);
+        gesture.advance(&mut model, &libraries, &[Point::new(10.0, 12.0)]);
         assert_eq!(
             model.workspace.view(&root).unwrap().annotations.at(&path),
             Some(&Value::list([f64::value(5.0), f64::value(6.0)]))
         );
         assert_eq!(model.doc.root, Some(Value::record([])));
+        assert!(!model.history.can_undo());
+    }
+
+    #[test]
+    fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
+        let libraries = Libraries::default();
+        let mut model = model(f64::value(0.0));
+        let root = model.workspace.document_root().clone();
+        let samples = [
+            Point::new(10.0, 0.0),
+            Point::new(10.0, 10.0),
+            Point::new(20.0, 10.0),
+        ];
+        let received = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let log = received.clone();
+        let mut gesture = scrub(
+            Point::ZERO,
+            1.0,
+            root,
+            vec![],
+            Rc::new(move || {
+                let log = log.clone();
+                let mut value = 0.0;
+                Box::new(move |event| {
+                    log.borrow_mut().push((event.movement_x, event.distance_y));
+                    value += event.movement_x * if event.distance_y == 0.0 { 1.0 } else { 0.1 };
+                    progred_display::ScrubUpdate {
+                        value: f64::value(value),
+                        spelling: None,
+                    }
+                })
+            }),
+        );
+        assert!(gesture.advance(&mut model, &libraries, &samples));
+        assert_eq!(*received.borrow(), [(10.0, 0.0), (0.0, 10.0), (10.0, 10.0)]);
+        assert_eq!(
+            model.doc.root,
+            Some(f64::value(11.0)),
+            "latest-only would produce 2"
+        );
+        assert!(model.step_history(true, &libraries));
+        assert_eq!(model.doc.root, Some(f64::value(0.0)));
+        assert!(!model.history.can_undo());
+    }
+
+    #[test]
+    fn state_drag_gets_one_batch_including_threshold_excursions() {
+        let mut model = model(Value::record([]));
+        let root = model.workspace.document_root().clone();
+        let calls = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let log = calls.clone();
+        let mut gesture = state_drag(
+            Point::ZERO,
+            1.0,
+            root.clone(),
+            vec![],
+            Rc::new(move || {
+                let log = log.clone();
+                Box::new(move |current, coalesced| {
+                    log.borrow_mut().push((current, coalesced.to_vec()));
+                    f64::value(current.delta_x)
+                })
+            }),
+        );
+        gesture.advance(
+            &mut model,
+            &Libraries::default(),
+            &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)],
+        );
+        let sample = |x| progred_display::StateDragEvent {
+            delta_x: x,
+            delta_y: 0.0,
+        };
+        assert_eq!(*calls.borrow(), [(sample(1.0), vec![sample(8.0)])]);
+        assert_eq!(
+            model.workspace.view(&root).unwrap().annotations.at(&[]),
+            Some(&f64::value(1.0))
+        );
         assert!(!model.history.can_undo());
     }
 
@@ -341,17 +440,17 @@ mod tests {
                 selection: Some(selection::payload::edge()),
             }),
         );
-        assert!(gesture.advance(&mut model, &libraries, Point::new(30.0, 40.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(30.0, 40.0)]));
         assert_eq!(
             model.doc.root,
             Some(Value::list([f64::value(0.2), f64::value(0.2)]))
         );
-        assert!(gesture.advance(&mut model, &libraries, Point::new(210.0, -20.0)));
+        assert!(gesture.advance(&mut model, &libraries, &[Point::new(210.0, -20.0)]));
         assert_eq!(
             model.doc.root,
             Some(Value::list([f64::value(1.0), f64::value(0.0)]))
         );
-        assert!(!gesture.advance(&mut model, &libraries, Point::new(210.0, -20.0)));
+        assert!(!gesture.advance(&mut model, &libraries, &[Point::new(210.0, -20.0)]));
         assert_eq!(model.selection.as_ref().unwrap().root(), &root);
         assert!(model.step_history(true, &libraries));
         assert_eq!(model.doc.root, original.root);

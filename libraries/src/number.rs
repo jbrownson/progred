@@ -50,9 +50,12 @@ pub(crate) fn completions<N: std::str::FromStr + Display>(
     .parse::<N>()
     .ok()
     .map(|number| {
-        progred_display::Completion::new(number.to_string(), encode(number))
-            .with_aliases([query])
-            .with_detail(representation)
+        crate::completion::select(progred_display::Completion::new(
+            number.to_string(),
+            encode(number),
+        ))
+        .with_aliases([query])
+        .with_detail(representation)
     })
     .into_iter()
     .collect()

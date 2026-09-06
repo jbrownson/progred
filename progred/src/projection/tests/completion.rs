@@ -489,6 +489,234 @@ fn projected_numeric_offer_commits_the_typed_value() {
 }
 
 #[test]
+fn atomic_completions_select_and_the_projection_supplies_default_editing() {
+    use progred_libraries::{f32, u64};
+    let libraries = core_libraries();
+    let root = crate::workspace::Root::document();
+    let doc = Document {
+        root: Some(Value::list([])),
+        cells: Cells::new(),
+    };
+    let path = vec![Step::Element(gid::position::between(None, None).unwrap())];
+    for (query, value, spelling, edit, changed) in [
+        (
+            "hello",
+            text::value("hello"),
+            "hello",
+            "hello!",
+            text::value("hello!"),
+        ),
+        (
+            "\"hë🦀\"",
+            text::value("hë🦀"),
+            "hë🦀",
+            "new",
+            text::value("new"),
+        ),
+        (
+            "\"open",
+            text::value("open"),
+            "open",
+            "closed",
+            text::value("closed"),
+        ),
+        ("\"\"", text::value(""), "", "x", text::value("x")),
+        ("2.5", f64::value(2.5), "2.5", "3.5", f64::value(3.5)),
+        ("2.5", f32::value(2.5), "2.5", "3.5", f32::value(3.5)),
+        ("42", u64::value(42), "42", "43", u64::value(43)),
+        (
+            "0xff",
+            Value::from(vec![0xff]),
+            "ff",
+            "aabb",
+            Value::from(vec![0xaa, 0xbb]),
+        ),
+    ] {
+        let mut pending = crate::selection::pending_with_query(&root, path.clone(), query);
+        pending.edit_mut().unwrap().cursor_to_start();
+        let entries = projected_completion_entries(&doc, &pending);
+        let offer = activated(
+            entries
+                .iter()
+                .find(|entry| activated(entry).value.as_ref() == Some(&value))
+                .unwrap(),
+        );
+        assert!(
+            offer.on_commit.is_some(),
+            "{query:?} supplies selection policy"
+        );
+        let prepared = crate::completion::prepare(
+            &src(&doc, &libraries),
+            &pending,
+            &Annotations::default(),
+            offer.value.unwrap(),
+            None,
+            offer.on_commit.as_ref(),
+        )
+        .unwrap();
+        let mut selected = Some(pending);
+        let mut document = prepared.document;
+        crate::site::install(
+            prepared.effects,
+            &src(&document, &libraries),
+            &root,
+            &prepared.path,
+            &mut Annotations::default(),
+            &mut selected,
+        );
+        let selected = selected.unwrap();
+        assert_eq!(selected.path(), path);
+        assert_eq!(selected.stage(), Stage::Edge);
+        assert!(selected.edit().is_none());
+        assert_eq!(
+            selected.payload(),
+            make_projected_selection(&document, &libraries, path.clone()).payload()
+        );
+        let mut world = EditingWorld::new(&document, &libraries);
+        world.selection = Some(selected);
+        let frame = editing_frame(&mut world, false);
+        assert!(
+            world.selection.as_ref().unwrap().edit().is_none(),
+            "projection is pure"
+        );
+        frame
+            .handler
+            .unwrap()
+            .dispatch_key(&mut world, &arrow(NamedKey::End));
+        let mut selected = world.selection.unwrap();
+        let editor = selected.edit().expect("the selected line handles input");
+        assert_eq!(editor.text(), spelling);
+        assert_eq!(editor.selection_offsets(), (spelling.len(), spelling.len()));
+        selected.edit_mut().unwrap().set_text(edit);
+        assert!(write_through(&mut document, &libraries, &mut selected));
+        assert_eq!(
+            src(&document, &libraries).resolve_path(&path),
+            Some(&changed)
+        );
+    }
+}
+
+#[test]
+fn completion_insertion_never_invents_or_overwrites_selection_policy() {
+    let libraries = core_libraries();
+    let root = crate::workspace::Root::document();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let pending = crate::selection::pending_with_query(&root, vec![], "original query");
+    let old_payload = pending.payload();
+    for continuation in [None, Some(grap::lambda([], Value::record([])))] {
+        let prepared = crate::completion::prepare(
+            &src(&doc, &libraries),
+            &pending,
+            &Annotations::default(),
+            text::value("inserted"),
+            None,
+            continuation.as_ref(),
+        )
+        .unwrap();
+        assert_eq!(prepared.document.root, Some(text::value("inserted")));
+        assert!(!prepared.effects.selection_changed);
+        assert_eq!(
+            prepared.effects.selection,
+            Some((vec![], old_payload.clone()))
+        );
+    }
+    let custom = Value::record([
+        (new_cell_id(), text::value("custom state")),
+        // A payload is data even when it looks like an application.
+        (grap::vocabulary::FUNCTION, new_cell_id().into()),
+    ]);
+    for payload in [custom.clone(), progred_libraries::absent::value()] {
+        let continuation = progred_libraries::selection::at(&[], payload.clone());
+        let prepared = crate::completion::prepare(
+            &src(&doc, &libraries),
+            &pending,
+            &Annotations::default(),
+            text::value("inserted"),
+            None,
+            Some(&continuation),
+        )
+        .unwrap();
+        assert!(prepared.effects.selection_changed);
+        assert_eq!(
+            prepared.effects.selection,
+            (payload == custom).then(|| (vec![], custom.clone()))
+        );
+    }
+}
+
+#[test]
+fn label_offer_explicitly_opens_its_missing_value() {
+    let libraries = core_libraries();
+    let root = crate::workspace::Root::document();
+    let doc = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    let pending = pending_edge(&root, &src(&doc, &libraries), vec![]).unwrap();
+    let field = new_cell_id();
+    let offer = progred_libraries::completion::label(field);
+    let prepared = crate::completion::prepare(
+        &src(&doc, &libraries),
+        &pending,
+        &Annotations::default(),
+        offer.value.instantiate(),
+        None,
+        offer.on_commit.as_ref(),
+    )
+    .unwrap();
+    assert!(!prepared.document_changed);
+    assert!(
+        src(&prepared.document, &libraries)
+            .resolve_path(&[Step::Key(field)])
+            .is_none()
+    );
+    assert!(prepared.effects.selection_changed);
+    let (path, payload) = prepared.effects.selection.unwrap();
+    assert_eq!(path, [Step::Key(field)]);
+    assert_eq!(
+        Selection::from_payload(&root, &src(&doc, &libraries), path, payload).stage(),
+        Stage::Pending
+    );
+}
+
+#[test]
+fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors() {
+    let libraries = core_libraries();
+    let root = crate::workspace::Root::document();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let pending = crate::selection::pending_with_query(&root, vec![], "2.5");
+    let entries = completion_entries(&src(&doc, &libraries), true, false, "2.5");
+    for value in [text::value("2.5"), f64::value(2.5)] {
+        let offer = activated(
+            entries
+                .iter()
+                .find(|entry| activated(entry).value.as_ref() == Some(&value))
+                .unwrap(),
+        );
+        let prepared = crate::completion::prepare(
+            &src(&doc, &libraries),
+            &pending,
+            &Annotations::default(),
+            offer.value.unwrap(),
+            None,
+            offer.on_commit.as_ref(),
+        )
+        .unwrap();
+        assert!(prepared.effects.selection_changed);
+        assert_eq!(
+            prepared.effects.selection,
+            Some((vec![], selection_payload::edge()))
+        );
+    }
+}
+
+#[test]
 fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     let doc = Document {
         root: None,
@@ -821,7 +1049,7 @@ fn projected_completion_entries_with(
             completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _| None),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|_| None),

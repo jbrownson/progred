@@ -2,7 +2,7 @@
 //! libraries can use the same ordinary data when constructing templates.
 
 use crate::{Library, name};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Cells};
 
 pub const ID: CellId = CellId::from_u128(0x7c295d8a64d3e257dc2c3932e43def74);
 
@@ -30,10 +30,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         progred_display::partial(|_| None),
     )
     .with_completions(|request| {
-        use progred_display::{Completion, CompletionKind, CompletionScope};
+        use progred_display::{CompletionKind, CompletionScope};
         match (request.scope, request.kind, request.path) {
             (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-                Completion::new(vocabulary::PANES, Value::from(vocabulary::PANES)).with_detail(ID),
+                crate::completion::label(vocabulary::PANES).with_detail(ID),
             ]),
             _ => None,
         }

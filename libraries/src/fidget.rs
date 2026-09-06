@@ -18,6 +18,7 @@ use fidget_engine::{
 use gid::{CellId, Cells, Value};
 
 mod completion;
+mod projection;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -50,6 +51,8 @@ pub mod vocabulary {
     pub const ABS: CellId = CellId::from_u128(0x9f71b219018a191fab7b726732645ab1);
     pub const SQRT: CellId = CellId::from_u128(0xf275fe836c9d66fed1e0de4325e134c6);
     pub const SQUARE: CellId = CellId::from_u128(0x6164efe43a126d79bcd252a17a9453c1);
+    pub const SIN: CellId = CellId::from_u128(0xd9f6470a88f105fc9a54f65226afd55d);
+    pub const COS: CellId = CellId::from_u128(0x68f159b5e393e2f827de486f95c2df6b);
     pub const CIRCLE: CellId = CellId::from_u128(0xe467941b11832c441c98488dbdc5a540);
     pub const SPHERE: CellId = CellId::from_u128(0xc40de238820c3da73ec7780ddd438757);
     pub const TRANSLATE: CellId = CellId::from_u128(0xcc63ad1f4efa15b6f43f36b3cd11f3f6);
@@ -314,6 +317,8 @@ pub fn functions() -> ForeignFunctions {
         (vocabulary::ABS, unary_function(vocabulary::ABS)),
         (vocabulary::SQRT, unary_function(vocabulary::SQRT)),
         (vocabulary::SQUARE, unary_function(vocabulary::SQUARE)),
+        (vocabulary::SIN, unary_function(vocabulary::SIN)),
+        (vocabulary::COS, unary_function(vocabulary::COS)),
     ])
     .fold(
         ForeignFunctions::default(),
@@ -343,6 +348,8 @@ fn one_marker(fields: &gid::Record) -> Option<CellId> {
         vocabulary::ABS,
         vocabulary::SQRT,
         vocabulary::SQUARE,
+        vocabulary::SIN,
+        vocabulary::COS,
         vocabulary::TRANSLATE,
         vocabulary::UNION,
         vocabulary::INTERSECTION,
@@ -353,6 +360,18 @@ fn one_marker(fields: &gid::Record) -> Option<CellId> {
         .filter(|marker| fields.contains_key(marker));
     let marker = present.next()?;
     present.next().is_none().then_some(marker)
+}
+
+fn parameters(marker: CellId) -> Option<&'static [CellId]> {
+    use vocabulary::*;
+    match marker {
+        TRANSLATE => Some(&[FIELD, DELTA_X, DELTA_Y, DELTA_Z]),
+        SUM | SUBTRACT | MULTIPLY | DIVIDE | MIN | MAX | UNION | DIFFERENCE | INTERSECTION => {
+            Some(&[LEFT, RIGHT])
+        }
+        NEGATE | ABS | SQRT | SQUARE | SIN | COS => Some(&[OPERAND]),
+        _ => None,
+    }
 }
 
 fn tree(value: &Value) -> Option<Tree> {
@@ -377,13 +396,20 @@ fn tree(value: &Value) -> Option<Tree> {
             let dz = f32::read(fields.get(&vocabulary::DELTA_Z)?)?;
             Some(field.remap_xyz(Tree::x() - dx, Tree::y() - dy, Tree::z() - dz))
         }
-        vocabulary::NEGATE | vocabulary::ABS | vocabulary::SQRT | vocabulary::SQUARE => {
+        vocabulary::NEGATE
+        | vocabulary::ABS
+        | vocabulary::SQRT
+        | vocabulary::SQUARE
+        | vocabulary::SIN
+        | vocabulary::COS => {
             let operand = tree(content.as_record()?.get(&vocabulary::OPERAND)?)?;
             match marker {
                 vocabulary::NEGATE => Some(-operand),
                 vocabulary::ABS => Some(operand.abs()),
                 vocabulary::SQRT => Some(operand.sqrt()),
                 vocabulary::SQUARE => Some(operand.square()),
+                vocabulary::SIN => Some(operand.sin()),
+                vocabulary::COS => Some(operand.cos()),
                 _ => None,
             }
         }
@@ -557,7 +583,7 @@ fn orbit_handler(state: Option<&Value>) -> progred_display::StateDragHandler {
     let initial = camera(state.as_ref());
     Rc::new(move || {
         let state = state.clone();
-        Box::new(move |event| {
+        Box::new(move |event, _coalesced| {
             with_camera(
                 state.as_ref(),
                 Camera {
@@ -927,6 +953,8 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::ABS, "abs"),
         (vocabulary::SQRT, "sqrt"),
         (vocabulary::SQUARE, "square"),
+        (vocabulary::SIN, "sin"),
+        (vocabulary::COS, "cos"),
         (vocabulary::TRANSLATE, "translate"),
         (vocabulary::UNION, "union"),
         (vocabulary::INTERSECTION, "intersection"),
@@ -996,7 +1024,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         ID,
         "fidget",
         crate::Definitions::from_parts(cells, functions()),
-        progred_display::partial(move |input| display(input, &renderer)),
+        progred_display::compose_partials([
+            progred_display::partial(projection::field::<World, Hover>),
+            progred_display::partial(move |input| display(input, &renderer)),
+        ]),
     )
     .with_completions(completion::offers)
 }
@@ -1055,6 +1086,26 @@ mod tests {
         let mut evaluator = VmShape::new_float_slice_eval();
         let tape = shape.ez_float_slice_tape();
         evaluator.eval(&tape, &[x], &[y], &[z]).unwrap()[0]
+    }
+
+    #[test]
+    fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
+        let operand = name::record("phase", [(vocabulary::AXIS, vocabulary::X.into())]);
+        for (marker, operation) in [
+            (vocabulary::SIN, std::primitive::f32::sin as fn(f32) -> f32),
+            (vocabulary::COS, std::primitive::f32::cos as fn(f32) -> f32),
+        ] {
+            let data = unary(marker, operand.clone());
+            assert_eq!(
+                evaluate(&call(marker, [(vocabulary::OPERAND, operand.clone())])),
+                data,
+            );
+            let field = tree(&data).unwrap();
+            for phase in [-3.0, -0.5, 0.0, 0.5, 3.0] {
+                assert!((sample(field.clone(), phase, 0.0, 0.0) - operation(phase)).abs() < 1e-6);
+            }
+            assert!(tree(&node(marker, Value::record([]))).is_none());
+        }
     }
 
     #[test]
@@ -1313,10 +1364,16 @@ mod tests {
             ),
         ]);
         let mut orbit = orbit_handler(Some(&state))();
-        let state = orbit(progred_display::StateDragEvent {
-            delta_x: 128.0,
-            delta_y: -128.0,
-        });
+        let state = orbit(
+            progred_display::StateDragEvent {
+                delta_x: 128.0,
+                delta_y: -128.0,
+            },
+            &[progred_display::StateDragEvent {
+                delta_x: -256.0,
+                delta_y: 256.0,
+            }],
+        );
 
         assert_eq!(
             camera(Some(&state)),

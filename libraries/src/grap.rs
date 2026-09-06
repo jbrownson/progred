@@ -185,7 +185,7 @@ pub fn call_completion<'a>(
     let offer = Completion::new(display, grap_runtime::call(function, []));
     match first {
         Some(parameter) => offer.on_commit(crate::selection::pending_at(&[Step::Key(parameter)])),
-        None => offer,
+        None => crate::completion::select(offer),
     }
 }
 
@@ -434,7 +434,7 @@ fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<C
             ])),
         ]),
         (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-            Completion::new(vocabulary::GRAP, Value::from(vocabulary::GRAP)).with_detail(ID),
+            crate::completion::label(vocabulary::GRAP).with_detail(ID),
         ]),
         _ => None,
     }
@@ -588,6 +588,7 @@ mod tests {
                 expected
                     .first()
                     .map(|first| crate::selection::pending_at(&[Step::Key(*first)]))
+                    .or_else(|| Some(crate::selection::at(&[], crate::selection::edge())))
             );
         }
     }

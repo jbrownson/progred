@@ -12,6 +12,7 @@ struct Bench {
     descends: Vec<Descend<World>>,
     /// What the probe answered for the pass's pointer input.
     hit: Option<Claim<Hovered>>,
+    project_elapsed: std::time::Duration,
     frame_elapsed: std::time::Duration,
 }
 
@@ -41,6 +42,7 @@ fn settle_with_sources(
         list: DrawList::new(),
         descends,
         hit,
+        project_elapsed: std::time::Duration::ZERO,
         frame_elapsed: std::time::Duration::ZERO,
     };
     let ink = crate::placed::Ink {
@@ -120,7 +122,7 @@ fn place_with_annotations(
     width: f64,
     pointer: Option<Point>,
     viewport: Option<Rect>,
-    root: Option<(&[Step], Option<&Value>)>,
+    root: Option<&[Step]>,
 ) -> (Bench, Extent) {
     BenchContext::new().place(doc, selection, annotations, width, pointer, viewport, root)
 }
@@ -131,6 +133,17 @@ struct BenchContext {
     fonts: parley::FontContext,
     layouts: parley::LayoutContext<Brush>,
     cache: puri::text::TextCache,
+}
+
+struct BenchFrame<'a> {
+    doc: &'a Document,
+    selection: Option<&'a Selection>,
+    annotations: &'a Annotations,
+    width: f64,
+    origin: Point,
+    pointer: Option<Point>,
+    viewport: Option<Rect>,
+    root: &'a [Step],
 }
 
 impl BenchContext {
@@ -152,8 +165,36 @@ impl BenchContext {
         width: f64,
         pointer: Option<Point>,
         viewport: Option<Rect>,
-        root: Option<(&[Step], Option<&Value>)>,
+        root: Option<&[Step]>,
     ) -> (Bench, Extent) {
+        let (bench, extent) = self.frame(BenchFrame {
+            doc,
+            selection,
+            annotations,
+            width: width - 48.0,
+            origin: Point::new(24.0, 24.0),
+            pointer,
+            viewport,
+            root: root.unwrap_or(&[]),
+        });
+        eprintln!(
+            "frame at {width:.0}px: {:.1?} (project {:.1?})",
+            bench.frame_elapsed, bench.project_elapsed,
+        );
+        (bench, extent)
+    }
+
+    fn frame(&mut self, input: BenchFrame<'_>) -> (Bench, Extent) {
+        let BenchFrame {
+            doc,
+            selection,
+            annotations,
+            width,
+            origin,
+            pointer,
+            viewport,
+            root,
+        } = input;
         let Self {
             stack,
             styles,
@@ -175,7 +216,7 @@ impl BenchContext {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            start_edit: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _| None),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|_| None),
@@ -197,7 +238,8 @@ impl BenchContext {
         // widths are where accidental exponentials have surfaced twice.
         // Numbers only, no assert (user call).
         let start = std::time::Instant::now();
-        let (root_path, root) = root.unwrap_or((&[], sources.root()));
+        let root_path = root;
+        let root = sources.resolve_path(root_path);
         let node = project::<World, Bench>(
             ProjectDescription {
                 sources,
@@ -209,7 +251,7 @@ impl BenchContext {
                 annotations,
                 raw: false,
                 styles,
-                width: width - 48.0,
+                width,
                 projection: Some(&stack.projection),
             },
             &mut tcx,
@@ -217,7 +259,7 @@ impl BenchContext {
         );
         let project_elapsed = start.elapsed();
         let extent = node.extent;
-        let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+        let rect = node.extent.rect_at(origin);
         let placed = measured::place(
             node,
             match viewport {
@@ -226,11 +268,8 @@ impl BenchContext {
             },
         );
         let mut settled = settle_with_sources(placed, pointer, Some(&sources));
+        settled.project_elapsed = project_elapsed;
         settled.frame_elapsed = start.elapsed();
-        eprintln!(
-            "frame at {width:.0}px: {:.1?} (project {:.1?})",
-            settled.frame_elapsed, project_elapsed,
-        );
         (settled, extent)
     }
 }
@@ -245,6 +284,7 @@ fn key(s: &str) -> Step {
 
 mod completion;
 mod drawing;
+mod fidget_source;
 mod interaction;
 mod iop_tree_native;
 mod layout;

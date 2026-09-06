@@ -1,4 +1,4 @@
-use super::{f32, node, vocabulary::*};
+use super::{f32, node, parameters, vocabulary::*};
 use gid::{CellId, Step, Value};
 use progred_display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 
@@ -17,18 +17,9 @@ const SHAPES: &[CellId] = &[
     ABS,
     SQRT,
     SQUARE,
+    SIN,
+    COS,
 ];
-
-fn parameters(marker: CellId) -> Option<&'static [CellId]> {
-    match marker {
-        TRANSLATE => Some(&[FIELD, DELTA_X, DELTA_Y, DELTA_Z]),
-        SUM | SUBTRACT | MULTIPLY | DIVIDE | MIN | MAX | UNION | DIFFERENCE | INTERSECTION => {
-            Some(&[LEFT, RIGHT])
-        }
-        NEGATE | ABS | SQRT | SQUARE => Some(&[OPERAND]),
-        _ => None,
-    }
-}
 
 enum Slot {
     Expression,
@@ -135,10 +126,10 @@ fn fields() -> Vec<Completion> {
                 .with_detail(super::ID)
                 .on_commit(crate::selection::pending_at(&path))
         })
-        .chain(
-            [X, Y, Z]
-                .map(|axis| Completion::new(axis, node(AXIS, axis.into())).with_detail(super::ID)),
-        )
+        .chain([X, Y, Z].map(|axis| {
+            crate::completion::select(Completion::new(axis, node(AXIS, axis.into())))
+                .with_detail(super::ID)
+        }))
         .collect()
 }
 
@@ -156,7 +147,7 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
         Some(match request.kind {
             CompletionKind::Value => vec![super::root_completion()],
             CompletionKind::Field => vec![
-                Completion::new(FIDGET, FIDGET.into())
+                crate::completion::label(FIDGET)
                     .with_aliases(["sdf"])
                     .with_detail(super::ID),
             ],
@@ -191,7 +182,15 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                 ),
             ]),
             (Slot::Number, CompletionKind::Value) => Some(f32::completions(request.query)),
-            (Slot::Axis, CompletionKind::Value) => Some(labels(&[X, Y, Z])),
+            (Slot::Axis, CompletionKind::Value) => Some(
+                [X, Y, Z]
+                    .into_iter()
+                    .map(|axis| {
+                        crate::completion::select(Completion::new(axis, axis.into()))
+                            .with_detail(super::ID)
+                    })
+                    .collect(),
+            ),
             _ => None,
         }
     }

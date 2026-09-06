@@ -305,15 +305,33 @@ fn pointer_button_value(
     event_value(if touch { touch_kind } else { pointer_kind }, fields)
 }
 
-fn pointer_move_value(placement: Placement, scale: f64, event: &PointerUpdate) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.current);
-    let touch = event.pointer.pointer_type == PointerType::Touch;
-    if !touch && event.current.buttons.contains(PointerButton::Primary) {
+fn pointer_motion_fields(
+    placement: Placement,
+    scale: f64,
+    touch: bool,
+    state: &ui_events::pointer::PointerState,
+) -> Vec<(CellId, Value)> {
+    let mut fields = pointer_fields(placement, scale, state);
+    if !touch && state.buttons.contains(PointerButton::Primary) {
         fields.push((
             layout_data::vocabulary::BUTTON,
             Value::Cell(layout_data::vocabulary::PRIMARY),
         ));
     }
+    fields
+}
+
+fn pointer_move_value(placement: Placement, scale: f64, event: &PointerUpdate) -> Value {
+    let touch = event.pointer.pointer_type == PointerType::Touch;
+    let mut fields = pointer_motion_fields(placement, scale, touch, &event.current);
+    fields.push((
+        layout_data::vocabulary::COALESCED,
+        Value::list(
+            event.coalesced.iter().map(|sample| {
+                Value::record(pointer_motion_fields(placement, scale, touch, sample))
+            }),
+        ),
+    ));
     event_value(
         if touch {
             layout_data::vocabulary::TOUCH_MOVE
@@ -333,6 +351,62 @@ fn pointer_cancel_value(event: &ui_events::pointer::PointerInfo) -> Value {
         },
         [],
     )
+}
+
+#[cfg(test)]
+mod motion_tests {
+    use super::*;
+    use ui_events::pointer::{PointerId, PointerInfo, PointerState};
+
+    #[test]
+    fn grap_motion_preserves_the_batch_in_local_coordinates() {
+        let placement = Placement::root(kurbo::Rect::new(10.0, 20.0, 110.0, 120.0));
+        let sample = |x: f64| {
+            let mut state = PointerState::default();
+            state.position.x = x;
+            state.position.y = 30.0;
+            state.buttons.insert(PointerButton::Primary);
+            state
+        };
+        let mut event = PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            current: sample(40.0),
+            coalesced: vec![sample(20.0), sample(30.0)],
+            predicted: vec![sample(50.0)],
+        };
+        for (pointer_type, kind) in [
+            (PointerType::Mouse, layout_data::vocabulary::POINTER_MOVE),
+            (PointerType::Touch, layout_data::vocabulary::TOUCH_MOVE),
+        ] {
+            event.pointer.pointer_type = pointer_type;
+            let value = pointer_move_value(placement, 2.0, &event);
+            let fields = value.as_record().unwrap();
+            assert_eq!(
+                fields.get(&layout_data::vocabulary::EVENT_KIND),
+                Some(&Value::Cell(kind))
+            );
+            assert_eq!(
+                fields.get(&layout_data::vocabulary::X),
+                Some(&f64_convention::value(30.0))
+            );
+            let earlier = fields.get(&layout_data::vocabulary::COALESCED).unwrap();
+            let expected = [10.0, 20.0].map(|x| {
+                let mut fields = pointer_fields(placement, 2.0, &sample(x + 10.0));
+                if pointer_type == PointerType::Mouse {
+                    fields.push((
+                        layout_data::vocabulary::BUTTON,
+                        Value::Cell(layout_data::vocabulary::PRIMARY),
+                    ));
+                }
+                Value::record(fields)
+            });
+            assert_eq!(earlier, &Value::list(expected));
+        }
+    }
 }
 
 fn scroll_value(placement: Placement, scale: f64, event: &PointerScrollEvent) -> Value {

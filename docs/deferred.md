@@ -11,6 +11,19 @@ The general interaction and presentation policy needs dedicated design work.
 Do not hide a fallback policy in reusable widgets or infer it by inspecting a
 render tree. This was explicitly set aside for another day.
 
+## Selection destinations and history
+
+Plain selections now work with line controls' missing-state defaults, so paste,
+deletion, and undo do not need editor-initialization hooks. Destination policies
+may still merit customization: deletion chooses a surviving sibling or parent;
+undo restores an edge location, not its prior caret or pending query. Preserving
+those states is a separate UX decision, not necessary to make restored selections
+usable. Never resurrect active drags or IME composition from history.
+
+`Selection::edge` still implicitly starts a pending query for an empty root or
+bare-cell definition. Review this policy when generalizing missing-value controls;
+do not add domain-specific recognition to the selection core.
+
 ## Duplicate-definition inspection
 
 Normal lookup selects the document definition, otherwise the first library

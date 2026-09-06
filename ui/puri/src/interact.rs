@@ -5,7 +5,18 @@
 use crate::geometry::Placement;
 use crate::handler::HasHandler;
 use kurbo::Point;
-use ui_events::pointer::{PointerButton, PointerButtonEvent, PointerType, PointerUpdate};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerState, PointerType, PointerUpdate,
+};
+
+/// Observed motion in arrival order, ending with the current sample.
+/// Coalesced samples precede (and exclude) `current`; predictions are not input.
+pub fn pointer_samples(event: &PointerUpdate) -> impl DoubleEndedIterator<Item = &PointerState> {
+    event
+        .coalesced
+        .iter()
+        .chain(std::iter::once(&event.current))
+}
 
 /// Whether a button event represents the ordinary direct-contact
 /// gesture: the primary mouse/pen button, or a touch contact (which
