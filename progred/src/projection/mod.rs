@@ -190,18 +190,8 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         self.cx.name(cell)
     }
 
-    fn cell_definition(&self, cell: CellId) -> Option<(gid::Resolution, &Value)> {
-        self.cx
-            .sources
-            .resolve(cell)
-            .map(|value| (value.source, value.value))
-    }
-
-    fn foreign_source(&self, cell: CellId) -> Option<gid::Resolution> {
-        match grap::Host::resolve(&self.cx.sources, cell) {
-            Some((source, grap::Definition::Foreign(_))) => Some(source),
-            _ => None,
-        }
+    fn resolve(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'_>> {
+        self.cx.sources.definition(cell)
     }
 }
 

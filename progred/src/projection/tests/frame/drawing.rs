@@ -8,7 +8,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         root: Some(
             root_completions(&context.stack)
                 .into_iter()
-                .find(|offer| offer.display == "grap")
+                .find(|offer| offer.display == progred_libraries::grap::vocabulary::GRAP.into())
                 .unwrap()
                 .value
                 .instantiate(),
@@ -86,7 +86,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         root: Some(
             root_completions(&context.stack)
                 .into_iter()
-                .find(|offer| offer.display == "fidget")
+                .find(|offer| offer.display == fidget::vocabulary::FIDGET.into())
                 .unwrap()
                 .value
                 .instantiate(),

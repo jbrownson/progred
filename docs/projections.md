@@ -34,7 +34,7 @@ its library identity, so references and name lookup need no metadata side channe
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
 receives the query, field/value kind, suggestion/Everything scope, source-qualified
-path, and a read-only path lookup. Library providers compose in library order;
+path, and read-only path and cell lookups. Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
 provider decisions about that request. Documents
@@ -166,9 +166,10 @@ Every result is definitive, including `{absent: declined}`. A non-callable value
 returns a not-callable absent with the offending value; it does not search other
 sources for an implementation. Scoped capability functions can override this
 lookup. Higher-level operations own any deliberate dispatch or composition.
-Projection environments expose the selected ordinary definition and selected
-foreign source as separate queries, so call projections can inspect registration
-metadata without evaluating the callable.
+Projection environments expose one borrowed resolution containing the selected
+definition's value, source, and whether it has a native implementation. Call
+projections and completion providers can inspect this metadata without evaluating
+the callable or mistaking a native function's description for a Grap lambda.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
 wrap selection, annotation, drawing/path writes, and deterministic random

@@ -28,16 +28,7 @@ impl<World> Clone for Stack<World> {
 
 pub fn load<World: 'static>() -> Stack<World> {
     let (libraries, projections, providers) = Libraries::from_contributions(contributions());
-    let completions = std::rc::Rc::new(move |request: &progred_display::CompletionRequest<'_>| {
-        providers
-            .iter()
-            .filter_map(|provider| provider(request))
-            .fold(None, |offers, next| {
-                let mut offers = offers.unwrap_or_else(Vec::new);
-                offers.extend(next);
-                Some(offers)
-            })
-    });
+    let completions = progred_libraries::completion::combine(providers);
     let projection = Projection::new(projections);
     Stack {
         libraries,

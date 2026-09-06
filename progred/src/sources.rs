@@ -20,6 +20,28 @@ pub struct Sources<'a> {
 }
 
 impl<'a> Sources<'a> {
+    pub fn definition(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'a>> {
+        self.doc
+            .cells
+            .value(cell)
+            .map(|value| progred_display::ResolvedCell {
+                source: Resolution::Document,
+                value,
+                native: false,
+            })
+            .or_else(|| {
+                self.libraries.iter().find_map(|(library, definitions)| {
+                    definitions
+                        .get(cell)
+                        .map(|definition| progred_display::ResolvedCell {
+                            source: Resolution::Library(library),
+                            value: definition.value(),
+                            native: matches!(definition, grap::Definition::Foreign(_)),
+                        })
+                })
+            })
+    }
+
     pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
         self.values(cell)
             .find(|value| &value.source == resolution)
@@ -137,8 +159,9 @@ mod tests {
     #[test]
     fn document_definitions_shadow_library_calls_including_non_callable_values() {
         let function = new_cell_id();
+        let library = new_cell_id();
         let (libraries, _, _) = Libraries::from_contributions([(
-            new_cell_id(),
+            library,
             progred_libraries::Library::<(), ()>::new(
                 progred_libraries::Definitions::from_parts(
                     Cells::new(),
@@ -152,6 +175,16 @@ mod tests {
                 progred_display::partial(|_| None),
             ),
         )]);
+        let empty = doc_of(Cells::new());
+        let native = Sources {
+            doc: &empty,
+            libraries: &libraries,
+        }
+        .definition(function)
+        .unwrap();
+        assert_eq!(native.source, Resolution::Library(library));
+        assert!(native.native);
+        assert_eq!(native.value, &Value::record([]));
         let answer = Value::from(b"document".to_vec());
         for (definition, expected) in [
             (grap::lambda([], answer.clone()), answer.clone()),
@@ -171,6 +204,10 @@ mod tests {
                 doc: &doc,
                 libraries: &libraries,
             };
+            let resolved = sources.definition(function).unwrap();
+            assert_eq!(resolved.source, Resolution::Document);
+            assert!(!resolved.native);
+            assert_eq!(Some(resolved.value), doc.cells.value(function));
             for result in [
                 grap::evaluate(&grap::call(function.into(), []), &sources, 100),
                 grap::apply(&function.into(), [], &sources, 100),

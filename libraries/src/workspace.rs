@@ -33,8 +33,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         use progred_display::{Completion, CompletionKind, CompletionScope};
         match (request.scope, request.kind, request.path) {
             (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-                Completion::new("panes", Value::from(vocabulary::PANES))
-                    .with_detail("workspace library"),
+                Completion::new(vocabulary::PANES, Value::from(vocabulary::PANES)).with_detail(ID),
             ]),
             _ => None,
         }

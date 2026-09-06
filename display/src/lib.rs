@@ -141,13 +141,39 @@ pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
 /// contextual vocabulary and the value ultimately inserted.
 #[derive(Clone)]
 pub struct Completion {
-    pub display: String,
+    pub display: CompletionText,
     pub aliases: Vec<String>,
-    pub detail: Option<String>,
+    pub detail: Option<CompletionText>,
     pub value: CompletionValue,
     /// Grap callable run at the committed location. Its selection and
     /// annotation effects are staged with the insertion.
     pub on_commit: Option<Value>,
+}
+
+/// Names are resolved from the current sources when the picker is built,
+/// before filtering, rather than copied into a retained offer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompletionText {
+    Literal(String),
+    Name(CellId),
+}
+
+impl From<String> for CompletionText {
+    fn from(text: String) -> Self {
+        Self::Literal(text)
+    }
+}
+
+impl From<&str> for CompletionText {
+    fn from(text: &str) -> Self {
+        Self::Literal(text.into())
+    }
+}
+
+impl From<CellId> for CompletionText {
+    fn from(cell: CellId) -> Self {
+        Self::Name(cell)
+    }
 }
 
 #[derive(Clone)]
@@ -173,16 +199,19 @@ impl CompletionValue {
 }
 
 impl Completion {
-    pub fn new(display: impl Into<String>, value: Value) -> Self {
+    pub fn new(display: impl Into<CompletionText>, value: Value) -> Self {
         Self::with_value(display, CompletionValue::Literal(value))
     }
 
     /// Construct a value only when activated, for offers that mint fresh identities.
-    pub fn generated(display: impl Into<String>, create: impl Fn() -> Value + 'static) -> Self {
+    pub fn generated(
+        display: impl Into<CompletionText>,
+        create: impl Fn() -> Value + 'static,
+    ) -> Self {
         Self::with_value(display, CompletionValue::Create(Rc::new(create)))
     }
 
-    fn with_value(display: impl Into<String>, value: CompletionValue) -> Self {
+    fn with_value(display: impl Into<CompletionText>, value: CompletionValue) -> Self {
         Self {
             display: display.into(),
             aliases: Vec::new(),
@@ -197,7 +226,7 @@ impl Completion {
         self
     }
 
-    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+    pub fn with_detail(mut self, detail: impl Into<CompletionText>) -> Self {
         self.detail = Some(detail.into());
         self
     }
@@ -214,6 +243,14 @@ pub enum CompletionScope {
     Everything,
 }
 
+/// Read-only definition metadata; native implementations are never exposed here.
+#[derive(Clone, Copy)]
+pub struct ResolvedCell<'a> {
+    pub source: Resolution,
+    pub value: &'a Value,
+    pub native: bool,
+}
+
 /// The path names the missing value, or the record receiving a new label.
 /// Reads use that same source context, including source-qualified Follow steps.
 pub struct CompletionRequest<'a> {
@@ -222,6 +259,7 @@ pub struct CompletionRequest<'a> {
     pub scope: CompletionScope,
     pub path: &'a [Step],
     pub value_at: &'a dyn Fn(&[Step]) -> Option<&'a Value>,
+    pub resolve: &'a dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 }
 
 impl CompletionRequest<'_> {
@@ -615,13 +653,8 @@ pub trait Env {
         None
     }
 
-    /// The selected ordinary cell definition, without evaluation.
-    fn cell_definition(&self, _cell: CellId) -> Option<(Resolution, &Value)> {
-        None
-    }
-
-    /// The selected call target's source, if it is foreign.
-    fn foreign_source(&self, _cell: CellId) -> Option<Resolution> {
+    /// The selected definition and its source, without evaluation.
+    fn resolve(&self, _cell: CellId) -> Option<ResolvedCell<'_>> {
         None
     }
 }

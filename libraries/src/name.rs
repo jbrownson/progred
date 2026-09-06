@@ -27,6 +27,11 @@ pub fn read(value: &Value) -> Option<&str> {
         .and_then(text::read)
 }
 
+pub(crate) fn short_id(cell: CellId) -> String {
+    let hex = cell.simple().to_string();
+    format!("…{}", &hex[hex.len() - 5..])
+}
+
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));

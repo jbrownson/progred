@@ -2,6 +2,7 @@
 //! does not observe this field; a host that never loads this
 //! projection never sees it.
 
+use crate::name::short_id;
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 
@@ -10,8 +11,8 @@ use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
-    RecordField, activatable, alternatives, at_with_projection, bracket, col, completion, descend,
-    dim, faced, hug, record_with, row, shared, slot, transient,
+    RecordField, ResolvedCell, activatable, alternatives, at_with_projection, bracket, col,
+    completion, descend, dim, faced, hug, record_with, row, shared, slot, transient,
 };
 
 pub mod vocabulary {
@@ -20,11 +21,6 @@ pub mod vocabulary {
     /// Source whose contents belong to the Grap domain. This is an
     /// ordinary field and requests no evaluation.
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
-}
-
-fn short_id(cell: CellId) -> String {
-    let hex = cell.simple().to_string();
-    format!("…{}", &hex[hex.len() - 5..])
 }
 
 fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
@@ -56,10 +52,10 @@ fn deep_cell<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
-    let (resolution, _) = input.env.cell_definition(cell)?;
+    let definition = input.env.resolve(cell)?;
     Some(bracket(
         Delim::Paren,
-        descend(Step::Follow(resolution), None, None),
+        descend(Step::Follow(definition.source), None, None),
     ))
 }
 
@@ -147,19 +143,50 @@ fn parameters(value: &Value) -> Option<Vec<CellId>> {
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
-fn function_parameters(env: &dyn progred_display::Env, function: &Value) -> Option<Vec<CellId>> {
+pub fn function_parameters<'a>(
+    function: &Value,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+) -> Option<Vec<CellId>> {
     let mut function = function;
     let mut followed = std::collections::BTreeSet::new();
     while let Some(cell) = function.as_cell() {
         if !followed.insert(cell) {
             return None;
         }
-        if env.foreign_source(cell).is_some() {
+        let definition = resolve(cell)?;
+        if definition.native {
             return None;
         }
-        function = env.cell_definition(cell)?.1;
+        function = definition.value;
     }
     parameters(function)
+}
+
+pub fn parameter_labels(function: Value) -> CompletionProvider {
+    std::rc::Rc::new(move |request| {
+        matches!(request.kind, CompletionKind::Field).then_some(())?;
+        Some(
+            crate::completion::labels(function_parameters(&function, request.resolve)?)
+                .into_iter()
+                .map(|offer| offer.with_detail(PARAMS))
+                .collect(),
+        )
+    })
+}
+
+/// Construct a call and focus its first declared parameter, when known.
+pub fn call_completion<'a>(
+    function: Value,
+    display: impl Into<progred_display::CompletionText>,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+) -> Completion {
+    let first =
+        function_parameters(&function, resolve).and_then(|parameters| parameters.first().copied());
+    let offer = Completion::new(display, grap_runtime::call(function, []));
+    match first {
+        Some(parameter) => offer.on_commit(crate::selection::pending_at(&[Step::Key(parameter)])),
+        None => offer,
+    }
 }
 
 fn standard_field_order(
@@ -183,30 +210,18 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let function = fields.get(&FUNCTION)?;
-    let parameters = function_parameters(input.env, function);
+    let parameters = function_parameters(function, &|cell| input.env.resolve(cell));
     let mut parameter_positions = std::collections::BTreeMap::new();
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
     }
     let trailing = match &input.pending {
         Some(Pending::Field) => {
-            let field_completions: Option<CompletionProvider> =
-                parameters.as_ref().map(|parameters| {
-                    let completions = parameters
-                        .iter()
-                        .filter(|parameter| !fields.contains_key(parameter))
-                        .map(|parameter| {
-                            let (display, _) = field_spelling(input.env, *parameter);
-                            Completion::new(display, Value::from(*parameter))
-                                .with_detail("parameter")
-                        })
-                        .collect::<Vec<_>>();
-                    std::rc::Rc::new(move |_: &progred_display::CompletionRequest<'_>| {
-                        Some(completions.clone())
-                    }) as CompletionProvider
-                });
             vec![RecordField {
-                label: completion(CompletionKind::Field, field_completions),
+                label: completion(
+                    CompletionKind::Field,
+                    Some(parameter_labels(function.clone())),
+                ),
                 value: slot(),
             }]
         }
@@ -396,7 +411,7 @@ fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<C
     use progred_display::CompletionScope;
     match (request.scope, request.kind, request.path) {
         (CompletionScope::Suggested, CompletionKind::Value, []) => Some(vec![
-            Completion::generated("grap", || {
+            Completion::generated(vocabulary::GRAP, || {
                 let cell = gid::new_cell_id();
                 Value::record([
                     (vocabulary::GRAP, cell.into()),
@@ -412,14 +427,14 @@ fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<C
                     ),
                 ])
             })
-            .with_detail("grap library")
+            .with_detail(ID)
             .on_commit(crate::selection::pending_at(&[
                 gid::Step::Key(vocabulary::GRAP),
                 gid::Step::Follow(gid::Resolution::Document),
             ])),
         ]),
         (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-            Completion::new("grap", Value::from(vocabulary::GRAP)).with_detail("grap library"),
+            Completion::new(vocabulary::GRAP, Value::from(vocabulary::GRAP)).with_detail(ID),
         ]),
         _ => None,
     }
@@ -505,7 +520,144 @@ mod tests {
     }
 
     #[test]
-    fn parameter_offers_are_prepared_only_during_field_insertion() {
+    fn parameter_completions_resolve_lazily_and_follow_current_definitions() {
+        use progred_display::{CompletionRequest, CompletionScope};
+        let function = new_cell_id();
+        let first = new_cell_id();
+        let second = new_cell_id();
+        let provider = parameter_labels(function.into());
+        let reads = std::cell::Cell::new(0);
+        for expected in [vec![first, second], vec![second, first], vec![]] {
+            let definition = grap_runtime::lambda(expected.iter().copied(), Value::record([]));
+            let resolve = |cell| {
+                reads.set(reads.get() + 1);
+                (cell == function).then_some(ResolvedCell {
+                    source: gid::Resolution::Document,
+                    value: &definition,
+                    native: false,
+                })
+            };
+            let request = CompletionRequest {
+                query: "",
+                kind: CompletionKind::Field,
+                scope: CompletionScope::Suggested,
+                path: &[],
+                value_at: &|_| None,
+                resolve: &resolve,
+            };
+            let before = reads.get();
+            assert!(
+                provider(&CompletionRequest {
+                    kind: CompletionKind::Value,
+                    ..request
+                })
+                .is_none()
+            );
+            assert_eq!(reads.get(), before);
+            let offers = provider(&request).unwrap();
+            assert_eq!(reads.get(), before + 1);
+            assert_eq!(
+                offers
+                    .iter()
+                    .map(|offer| offer.value.instantiate())
+                    .collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .copied()
+                    .map(Value::from)
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                offers
+                    .iter()
+                    .map(|offer| offer.display.clone())
+                    .collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .copied()
+                    .map(progred_display::CompletionText::Name)
+                    .collect::<Vec<_>>()
+            );
+            let call = call_completion(function.into(), function, &resolve);
+            assert_eq!(
+                call.value.instantiate(),
+                grap_runtime::call(function.into(), [])
+            );
+            assert_eq!(
+                call.on_commit,
+                expected
+                    .first()
+                    .map(|first| crate::selection::pending_at(&[Step::Key(*first)]))
+            );
+        }
+    }
+
+    #[test]
+    fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_callables() {
+        let function = new_cell_id();
+        let alias = new_cell_id();
+        let parameter = new_cell_id();
+        let lambda = grap_runtime::lambda([parameter], Value::record([]));
+        let closure = Value::record([(
+            grap_runtime::vocabulary::CLOSURE,
+            Value::record([
+                (PARAMS, Value::list([parameter.into()])),
+                (BODY, Value::record([])),
+                (grap_runtime::vocabulary::ENVIRONMENT, Value::record([])),
+            ]),
+        )]);
+        for value in [&lambda, &closure] {
+            assert_eq!(
+                function_parameters(value, &|_| panic!("inline function needs no lookup")),
+                Some(vec![parameter])
+            );
+        }
+        let reference = Value::from(function);
+        let resolve = |cell| {
+            Some(ResolvedCell {
+                source: gid::Resolution::Library(ID),
+                value: if cell == alias { &reference } else { &lambda },
+                native: false,
+            })
+        };
+        assert_eq!(
+            function_parameters(&alias.into(), &resolve),
+            Some(vec![parameter])
+        );
+        assert_eq!(function_parameters(&reference, &|_| None), None);
+        assert_eq!(
+            function_parameters(&reference, &|_| Some(ResolvedCell {
+                source: gid::Resolution::Document,
+                value: &reference,
+                native: false,
+            })),
+            None
+        );
+        assert_eq!(
+            function_parameters(&reference, &|_| Some(ResolvedCell {
+                source: gid::Resolution::Library(ID),
+                value: &lambda,
+                native: true,
+            })),
+            None
+        );
+        for invalid in [
+            Value::record([]),
+            grap_runtime::call(reference.clone(), []),
+            Value::record([
+                (PARAMS, Value::list([Value::record([])])),
+                (BODY, Value::record([])),
+            ]),
+        ] {
+            assert_eq!(
+                function_parameters(&invalid, &|_| panic!("metadata must not evaluate a call")),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn parameter_offers_defer_name_lookup_to_the_picker() {
         struct CountingEnv(std::cell::Cell<usize>);
         impl Env for CountingEnv {
             fn apply(
@@ -544,7 +696,7 @@ mod tests {
             })
             .is_some()
         );
-        assert_eq!(env.0.get(), 1);
+        assert_eq!(env.0.get(), 0);
     }
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
@@ -752,12 +904,12 @@ mod tests {
                 (Value::record([]), 0)
             }
 
-            fn cell_definition(&self, cell: CellId) -> Option<(gid::Resolution, &Value)> {
-                (cell == FUNCTION_CELL).then_some((gid::Resolution::Document, &self.definition))
-            }
-
-            fn foreign_source(&self, cell: CellId) -> Option<gid::Resolution> {
-                (self.native && cell == FUNCTION_CELL).then_some(gid::Resolution::Library(ID))
+            fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
+                (cell == FUNCTION_CELL).then_some(ResolvedCell {
+                    source: gid::Resolution::Document,
+                    value: &self.definition,
+                    native: self.native,
+                })
             }
         }
 

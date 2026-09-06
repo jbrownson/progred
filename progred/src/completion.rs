@@ -6,7 +6,7 @@ use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
 use progred_display::{
     Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionScope,
-    CompletionValue, Face,
+    CompletionText, CompletionValue, Face,
 };
 use progred_libraries::{blob, name, text};
 use std::ops::Range;
@@ -239,7 +239,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     if request.scope == CompletionScope::Suggested
         && let Some(offers) = suggested
     {
-        return (contextual_entries(offers, request, commit), false);
+        return (contextual_entries(sources, offers, request, commit), false);
     }
     let query = request.query;
     let labels = matches!(commit, Commit::Label(_));
@@ -252,7 +252,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let value_entries = providers
         .filter(|_| !quoted)
         .and_then(|provider| provider(&universal))
-        .map(|offers| contextual_entries(offers, request, commit))
+        .map(|offers| contextual_entries(sources, offers, request, commit))
         .unwrap_or_default();
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = trimmed
@@ -363,7 +363,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     })
     .collect();
     let mut entries = suggested
-        .map(|offers| contextual_entries(offers, request, commit))
+        .map(|offers| contextual_entries(sources, offers, request, commit))
         .unwrap_or_default();
     entries.extend(value_entries);
     if atom_leads {
@@ -381,6 +381,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
 }
 
 fn contextual_entries<C: 'static>(
+    sources: &Sources,
     offers: Vec<Completion>,
     request: &CompletionRequest<'_>,
     commit: &Commit<C>,
@@ -401,17 +402,21 @@ fn contextual_entries<C: 'static>(
                                 .is_some_and(|fields| fields.contains_key(&cell))
                         })
             })
+            .map(|offer| (completion_text(sources, &offer.display), offer))
             .collect(),
-        |completion| &completion.display,
-        |completion| &completion.aliases,
+        |(display, _)| display,
+        |(_, completion)| &completion.aliases,
         request.query,
     )
     .into_iter()
     .filter_map(|ranked| {
-        let completion = ranked.item;
+        let (display, completion) = ranked.item;
         Entry::offered(
-            completion.display,
-            completion.detail,
+            display,
+            completion
+                .detail
+                .as_ref()
+                .map(|detail| completion_text(sources, detail)),
             completion.value,
             completion.on_commit,
             commit,
@@ -424,14 +429,24 @@ fn contextual_entries<C: 'static>(
     .collect()
 }
 
-fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
-    match source {
-        Resolution::Document => "document".to_string(),
-        Resolution::Library(library) => sources
-            .name(library)
-            .map(str::to_string)
-            .unwrap_or_else(|| short_id(library)),
+fn completion_text(sources: &Sources<'_>, text: &CompletionText) -> String {
+    match text {
+        CompletionText::Literal(text) => text.clone(),
+        CompletionText::Name(cell) => sources
+            .name(*cell)
+            .map(str::to_owned)
+            .unwrap_or_else(|| short_id(*cell)),
     }
+}
+
+fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
+    completion_text(
+        sources,
+        &CompletionText::Name(match source {
+            Resolution::Document => progred_libraries::path::vocabulary::DOCUMENT,
+            Resolution::Library(library) => library,
+        }),
+    )
 }
 
 /// The cells a value links, walked structurally — lists and records

@@ -77,6 +77,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         Commit::Value(hooks.commit_value.clone())
     };
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
+    let resolve = |cell| cx.sources.definition(cell);
     let request = progred_display::CompletionRequest {
         query: query.text(),
         kind: if labels {
@@ -91,6 +92,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         },
         path,
         value_at: &value_at,
+        resolve: &resolve,
     };
     let (entries, everything) = completion_entries_with(
         &cx.sources,

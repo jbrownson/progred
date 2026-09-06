@@ -83,7 +83,7 @@ pub fn display<World, Hover: Clone>(
     Some(number::layout(
         input,
         number,
-        "f64",
+        vocabulary::F64,
         vocabulary::UPDATE,
         value,
     ))
@@ -302,7 +302,7 @@ fn unary(
 }
 
 pub fn completions(query: &str) -> Vec<progred_display::Completion> {
-    number::completions(query, "f64", value)
+    number::completions(query, vocabulary::F64, value)
 }
 
 pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {

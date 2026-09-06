@@ -9,6 +9,7 @@ use std::rc::Rc;
 pub mod absent;
 pub mod blob;
 pub mod color;
+pub mod completion;
 #[cfg(test)]
 mod conformance;
 pub mod control;
@@ -635,10 +636,11 @@ mod tests {
                     scope: progred_display::CompletionScope::Suggested,
                     path: &[],
                     value_at: &|_| None,
+                    resolve: &|_| None,
                 })
                 .unwrap()[0]
                     .display,
-                "query"
+                "query".into()
             );
         }
     }

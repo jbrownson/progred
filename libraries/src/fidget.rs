@@ -961,7 +961,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 }
 
 fn root_completion() -> progred_display::Completion {
-    progred_display::Completion::generated("fidget", || {
+    progred_display::Completion::generated(vocabulary::FIDGET, || {
         let cell = gid::new_cell_id();
         Value::record([
             (vocabulary::FIDGET, cell.into()),
@@ -981,7 +981,7 @@ fn root_completion() -> progred_display::Completion {
         ])
     })
     .with_aliases(["sdf"])
-    .with_detail("fidget library")
+    .with_detail(ID)
     .on_commit(crate::selection::pending_at(&[
         gid::Step::Key(vocabulary::FIDGET),
         gid::Step::Follow(gid::Resolution::Document),

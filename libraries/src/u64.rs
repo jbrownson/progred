@@ -29,7 +29,7 @@ pub fn value(value: u64) -> Value {
 }
 
 pub fn completions(query: &str) -> Vec<progred_display::Completion> {
-    number::completions(query, "u64", value)
+    number::completions(query, vocabulary::U64, value)
 }
 
 pub fn read(value: &Value) -> Option<u64> {
@@ -74,7 +74,7 @@ pub fn display<World, Hover: Clone>(
     Some(number::layout(
         input,
         read(input.value)?,
-        "u64",
+        vocabulary::U64,
         vocabulary::UPDATE,
         value,
     ))

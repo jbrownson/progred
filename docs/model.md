@@ -121,12 +121,29 @@ handle the shortcut first and select their own text.
 The projection rendering a pending value or label explicitly requests
 completion and may supply a lazy vocabulary. Only the active picker asks the
 provider for offers. Each request includes the query, field/value kind,
-suggestion/Everything scope, source-qualified path, and read-only path lookup.
+suggestion/Everything scope, source-qualified path, and read-only path and cell
+lookups. Cell lookup exposes the selected definition's value, source, and whether
+it has a native implementation, without evaluating it.
 The path names a missing value or the record receiving a new label. A local
 projection provider takes precedence; otherwise library providers contribute
 in library order. `None` leaves the vocabulary unspecified, while `Some([])`
 means an empty narrow list with the `…` escape. If no provider specifies a
 vocabulary, the editor uses its universal offers directly.
+
+Completion display text and detail can be literal text or a named cell reference.
+Library, constructor, parameter, and numeric-type labels use references; the
+picker resolves their current names before filtering each frame. Renaming a
+definition therefore updates even retained offers without changing their
+insertion value or continuation. An explicit empty name stays empty; a missing
+name uses the usual short cell identity. Typed values remain literal text.
+
+The completion library's `labels` helper turns cell identities into label offers;
+`combine` concatenates applicable lazy providers in order, preserving an explicitly
+empty vocabulary. Grap's `parameter_labels` reads an inline or stored lambda's
+declared parameters when asked. The same metadata reader supplies call field order
+and `call_completion`'s initial pending parameter. It follows cell aliases, declines
+cycles and computed callables, and does not interpret native descriptions as lambdas.
+Filtering names and excluding existing record labels remain picker responsibilities.
 
 Root templates and root field suggestions are ordinary library providers
 checking the path, not separate editor hooks. Fidget uses the same interface
@@ -138,6 +155,8 @@ Fidget field-expression suggestions put shapes before scalar constants; numeric
 parameter slots still lead with their f32 offer, including zero for an empty query.
 Circle and sphere are ordinary named Grap lambdas that use quote/unquote to
 return Fidget arithmetic; the Fidget parser has no circle or sphere forms.
+Their parameter suggestions and initial focus come from their current definitions;
+the native Fidget forms retain explicit domain schemas.
 Their completions insert calls only in evaluated positions (the domain's source
 entries and Fidget constructor arguments), not inside inert Fidget records.
 

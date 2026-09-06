@@ -60,12 +60,18 @@ fn core_libraries() -> Libraries {
 }
 
 fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<progred_display::Completion> {
+    let document = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = src(&document, &stack.libraries);
     (stack.completions)(&progred_display::CompletionRequest {
         query: "",
         kind: progred_display::CompletionKind::Value,
         scope: progred_display::CompletionScope::Suggested,
         path: &[],
         value_at: &|_| None,
+        resolve: &|cell| sources.definition(cell),
     })
     .unwrap_or_default()
 }
@@ -99,6 +105,7 @@ fn completion_entries_with<C: 'static>(
             },
             path: &[],
             value_at: &value_at,
+            resolve: &|cell| sources.definition(cell),
         },
         providers,
         contextual,

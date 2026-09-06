@@ -2,36 +2,30 @@ use super::{f32, node, vocabulary::*};
 use gid::{CellId, Step, Value};
 use progred_display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 
-const SHAPES: &[(CellId, &str)] = &[
-    (UNION, "union"),
-    (DIFFERENCE, "difference"),
-    (INTERSECTION, "intersection"),
-    (TRANSLATE, "translate"),
-    (SUM, "sum"),
-    (SUBTRACT, "subtract"),
-    (MULTIPLY, "multiply"),
-    (DIVIDE, "divide"),
-    (MIN, "min"),
-    (MAX, "max"),
-    (NEGATE, "negate"),
-    (ABS, "abs"),
-    (SQRT, "sqrt"),
-    (SQUARE, "square"),
+const SHAPES: &[CellId] = &[
+    UNION,
+    DIFFERENCE,
+    INTERSECTION,
+    TRANSLATE,
+    SUM,
+    SUBTRACT,
+    MULTIPLY,
+    DIVIDE,
+    MIN,
+    MAX,
+    NEGATE,
+    ABS,
+    SQRT,
+    SQUARE,
 ];
 
-fn parameters(marker: CellId) -> Option<&'static [(CellId, &'static str)]> {
+fn parameters(marker: CellId) -> Option<&'static [CellId]> {
     match marker {
-        SPHERE | CIRCLE => Some(&[(RADIUS, "radius")]),
-        TRANSLATE => Some(&[
-            (FIELD, "field"),
-            (DELTA_X, "x"),
-            (DELTA_Y, "y"),
-            (DELTA_Z, "z"),
-        ]),
+        TRANSLATE => Some(&[FIELD, DELTA_X, DELTA_Y, DELTA_Z]),
         SUM | SUBTRACT | MULTIPLY | DIVIDE | MIN | MAX | UNION | DIFFERENCE | INTERSECTION => {
-            Some(&[(LEFT, "left"), (RIGHT, "right")])
+            Some(&[LEFT, RIGHT])
         }
-        NEGATE | ABS | SQRT | SQUARE => Some(&[(OPERAND, "operand")]),
+        NEGATE | ABS | SQRT | SQUARE => Some(&[OPERAND]),
         _ => None,
     }
 }
@@ -39,22 +33,18 @@ fn parameters(marker: CellId) -> Option<&'static [(CellId, &'static str)]> {
 enum Slot {
     Expression,
     Field,
-    Parameters(CellId),
+    Parameters(Vec<CellId>),
     Number,
     Axis,
 }
 
-fn argument(marker: CellId, field: CellId) -> Option<Slot> {
-    parameters(marker)?
-        .iter()
-        .any(|(id, _)| *id == field)
-        .then(|| {
-            if matches!(field, LEFT | RIGHT | OPERAND | FIELD) {
-                Slot::Field
-            } else {
-                Slot::Number
-            }
-        })
+fn argument(parameters: &[CellId], field: CellId) -> Option<Slot> {
+    parameters.contains(&field).then_some(())?;
+    match field {
+        LEFT | RIGHT | OPERAND | FIELD => Some(Slot::Field),
+        RADIUS | DELTA_X | DELTA_Y | DELTA_Z => Some(Slot::Number),
+        _ => None,
+    }
 }
 
 fn called_shape(value: &Value) -> Option<CellId> {
@@ -62,12 +52,24 @@ fn called_shape(value: &Value) -> Option<CellId> {
         .as_record()?
         .get(&grap_runtime::vocabulary::FUNCTION)?
         .as_cell()?;
-    parameters(function).map(|_| function)
+    (matches!(function, SPHERE | CIRCLE) || SHAPES.contains(&function)).then_some(function)
+}
+
+fn call_parameters(request: &CompletionRequest<'_>, function: CellId) -> Option<Vec<CellId>> {
+    if (request.resolve)(function)?.native {
+        parameters(function).map(<[CellId]>::to_vec)
+    } else {
+        crate::grap::function_parameters(&function.into(), request.resolve)
+    }
 }
 
 fn context(request: &CompletionRequest<'_>) -> Option<Slot> {
     match request.kind {
-        CompletionKind::Field => request.value().and_then(called_shape).map(Slot::Parameters),
+        CompletionKind::Field => request
+            .value()
+            .and_then(called_shape)
+            .and_then(|function| call_parameters(request, function))
+            .map(Slot::Parameters),
         CompletionKind::Value => request
             .path
             .iter()
@@ -77,7 +79,8 @@ fn context(request: &CompletionRequest<'_>) -> Option<Slot> {
             .and_then(|(index, step)| match step {
                 Step::Key(field) => (request.value_at)(&request.path[..index])
                     .and_then(called_shape)
-                    .and_then(|marker| argument(marker, *field))
+                    .and_then(|function| call_parameters(request, function))
+                    .and_then(|parameters| argument(&parameters, *field))
                     .map(|slot| match slot {
                         Slot::Field => Slot::Expression,
                         slot => slot,
@@ -96,13 +99,11 @@ fn slot(path: &[Step]) -> Option<Slot> {
     match steps.next()? {
         Step::Key(FIDGET) => Some(Slot::Expression),
         Step::Key(AXIS) => Some(Slot::Axis),
-        Step::Key(marker) if SHAPES.iter().any(|(id, _)| id == marker) => {
-            Some(Slot::Parameters(*marker))
+        Step::Key(marker) if SHAPES.contains(marker) => {
+            Some(Slot::Parameters(parameters(*marker)?.to_vec()))
         }
         Step::Key(field) => match steps.next()? {
-            Step::Key(marker) if SHAPES.iter().any(|(id, _)| id == marker) => {
-                argument(*marker, *field)
-            }
+            Step::Key(marker) if SHAPES.contains(marker) => argument(parameters(*marker)?, *field),
             _ => None,
         },
         Step::Element(_) if matches!(steps.next(), Some(Step::Key(FIDGET))) => {
@@ -112,42 +113,40 @@ fn slot(path: &[Step]) -> Option<Slot> {
     }
 }
 
-fn labels(fields: &[(CellId, &str)]) -> Vec<Completion> {
-    fields
-        .iter()
-        .map(|(cell, name)| Completion::new(*name, (*cell).into()).with_detail("fidget library"))
+fn labels(fields: &[CellId]) -> Vec<Completion> {
+    crate::completion::labels(fields.iter().copied())
+        .into_iter()
+        .map(|offer| offer.with_detail(super::ID))
         .collect()
 }
 
 fn fields() -> Vec<Completion> {
     SHAPES
         .iter()
-        .map(|(marker, name)| {
+        .map(|marker| {
             let path = std::iter::once(Step::Key(*marker))
                 .chain(
                     parameters(*marker)
                         .and_then(|fields| fields.first())
-                        .map(|(field, _)| Step::Key(*field)),
+                        .map(|field| Step::Key(*field)),
                 )
                 .collect::<Vec<_>>();
-            Completion::new(*name, node(*marker, Value::record([])))
-                .with_detail("fidget library")
+            Completion::new(*marker, node(*marker, Value::record([])))
+                .with_detail(super::ID)
                 .on_commit(crate::selection::pending_at(&path))
         })
-        .chain([(X, "x"), (Y, "y"), (Z, "z")].map(|(axis, name)| {
-            Completion::new(name, node(AXIS, axis.into())).with_detail("fidget library")
-        }))
+        .chain(
+            [X, Y, Z]
+                .map(|axis| Completion::new(axis, node(AXIS, axis.into())).with_detail(super::ID)),
+        )
         .collect()
 }
 
-fn shape_calls() -> impl Iterator<Item = Completion> {
-    [(SPHERE, "sphere"), (CIRCLE, "circle")]
-        .into_iter()
-        .map(|(function, name)| {
-            Completion::new(name, grap_runtime::call(function.into(), []))
-                .with_detail("fidget library")
-                .on_commit(crate::selection::pending_at(&[Step::Key(RADIUS)]))
-        })
+fn shape_calls<'a>(request: &'a CompletionRequest<'_>) -> impl Iterator<Item = Completion> + 'a {
+    [SPHERE, CIRCLE].into_iter().map(|function| {
+        crate::grap::call_completion(function.into(), function, request.resolve)
+            .with_detail(super::ID)
+    })
 }
 
 pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
@@ -157,15 +156,15 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
         Some(match request.kind {
             CompletionKind::Value => vec![super::root_completion()],
             CompletionKind::Field => vec![
-                Completion::new("fidget", FIDGET.into())
+                Completion::new(FIDGET, FIDGET.into())
                     .with_aliases(["sdf"])
-                    .with_detail("fidget library"),
+                    .with_detail(super::ID),
             ],
         })
     } else {
         match (context(request)?, request.kind) {
             (Slot::Expression, CompletionKind::Value) => Some(
-                shape_calls()
+                shape_calls(request)
                     .chain(fields())
                     .chain(f32::completions(request.query))
                     .collect(),
@@ -176,26 +175,23 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                     .chain(f32::completions(request.query))
                     .collect(),
             ),
-            (Slot::Field | Slot::Expression, CompletionKind::Field) => Some(
-                labels(SHAPES)
-                    .into_iter()
-                    .chain(labels(&[(AXIS, "axis")]))
-                    .collect(),
-            ),
-            (Slot::Parameters(marker), CompletionKind::Field) => Some(labels(parameters(marker)?)),
-            (Slot::Parameters(marker), CompletionKind::Value) => Some(vec![
-                Completion::new("parameters", Value::record([])).on_commit(
+            (Slot::Field | Slot::Expression, CompletionKind::Field) => {
+                Some(labels(SHAPES).into_iter().chain(labels(&[AXIS])).collect())
+            }
+            (Slot::Parameters(parameters), CompletionKind::Field) => Some(labels(&parameters)),
+            (Slot::Parameters(parameters), CompletionKind::Value) => Some(vec![
+                Completion::new(grap_runtime::vocabulary::PARAMS, Value::record([])).on_commit(
                     crate::selection::pending_at(
-                        &parameters(marker)?
+                        &parameters
                             .first()
-                            .map(|(id, _)| Step::Key(*id))
+                            .map(|id| Step::Key(*id))
                             .into_iter()
                             .collect::<Vec<_>>(),
                     ),
                 ),
             ]),
             (Slot::Number, CompletionKind::Value) => Some(f32::completions(request.query)),
-            (Slot::Axis, CompletionKind::Value) => Some(labels(&[(X, "x"), (Y, "y"), (Z, "z")])),
+            (Slot::Axis, CompletionKind::Value) => Some(labels(&[X, Y, Z])),
             _ => None,
         }
     }
@@ -261,6 +257,7 @@ mod tests {
             kind: CompletionKind::Value,
             scope: CompletionScope::Suggested,
             value_at: &lookup,
+            resolve: &|_| None,
         };
         for shape in [SPHERE, CIRCLE] {
             assert!(offers(&request).unwrap().iter().any(|offer| {

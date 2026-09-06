@@ -40,7 +40,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
 
 pub(crate) fn completions<N: std::str::FromStr + Display>(
     query: &str,
-    representation: &str,
+    representation: CellId,
     encode: impl FnOnce(N) -> Value,
 ) -> Vec<progred_display::Completion> {
     match query.trim() {
@@ -73,7 +73,7 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
 pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
     input: &ProjectionInput<'_, World, Hover>,
     number: N,
-    representation: &str,
+    representation: CellId,
     update: CellId,
     encode: fn(N) -> Value,
 ) -> Layout<World, Hover> {
@@ -81,7 +81,14 @@ pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
         2.0,
         [
             line_edit::layout(number.to_string(), grap_runtime::ffi(update), "", ""),
-            subscript(representation, Face::Dim),
+            subscript(
+                input
+                    .env
+                    .name(representation)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| name::short_id(representation)),
+                Face::Dim,
+            ),
         ],
     );
     if !number.scrubbable() {
@@ -216,18 +223,26 @@ mod tests {
             (
                 crate::f32::completions as fn(&str) -> Vec<progred_display::Completion>,
                 crate::f32::value(0.0),
-                "f32",
+                crate::f32::vocabulary::F32,
             ),
-            (crate::f64::completions, crate::f64::value(0.0), "f64"),
-            (crate::u64::completions, crate::u64::value(0), "u64"),
+            (
+                crate::f64::completions,
+                crate::f64::value(0.0),
+                crate::f64::vocabulary::F64,
+            ),
+            (
+                crate::u64::completions,
+                crate::u64::value(0),
+                crate::u64::vocabulary::U64,
+            ),
         ] {
             for query in ["", " \t\n", "0"] {
                 let offers = complete(query);
                 let [offer] = offers.as_slice() else {
                     panic!("expected one {representation} zero offer for {query:?}");
                 };
-                assert_eq!(offer.display, "0");
-                assert_eq!(offer.detail.as_deref(), Some(representation));
+                assert_eq!(offer.display, "0".into());
+                assert_eq!(offer.detail, Some(representation.into()));
                 assert_eq!(offer.value.literal(), Some(&zero));
             }
             for query in ["not a number", "-", ".", "1e"] {

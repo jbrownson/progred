@@ -29,7 +29,7 @@ pub fn value(number: f32) -> Value {
 }
 
 pub fn completions(query: &str) -> Vec<progred_display::Completion> {
-    number::completions(query, "f32", value)
+    number::completions(query, vocabulary::F32, value)
 }
 
 pub fn read(value: &Value) -> Option<f32> {
@@ -75,7 +75,7 @@ pub fn display<World, Hover: Clone>(
     Some(number::layout(
         input,
         read(input.value)?,
-        "f32",
+        vocabulary::F32,
         vocabulary::UPDATE,
         value,
     ))
