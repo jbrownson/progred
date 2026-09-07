@@ -97,6 +97,13 @@ output. `Layers` supplies clipping and floater attachment, while `HasHandler`
 supplies input composition. The editor adds view ownership separately and raises
 floaters once at the frame boundary. Clips do not capture floating subtrees.
 
+The [navigation combinator](../display/src/widget/navigation.rs) similarly
+contributes a projection-declared path, settled rectangle, and arrival handler.
+It consumes a control's arrival override only at the nearest landmark and
+restores the enclosing scope. The native output can carry complete landmarks;
+view attribution remains the editor's separate wrapper. Unplaced subtrees
+contribute neither geometry nor navigation.
+
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,
 then return an opaque placement callback; layout knows neither the control nor

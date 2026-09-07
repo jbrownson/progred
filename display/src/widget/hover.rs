@@ -118,7 +118,7 @@ mod tests {
         let output = place(crate::widget::border(crate::text("inside")), placement);
         assert!(output.handler.is_none());
         assert!(output.claims.is_empty());
-        assert!(output.select.is_none());
+        assert!(output.landmark_select.is_none());
         let mut drawing = DrawList::new();
         for render in output.renders {
             render(&mut drawing, None);

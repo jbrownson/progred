@@ -46,6 +46,17 @@ pub struct Descend<World> {
     pub select: Select<World>,
 }
 
+impl<World> From<progred_display::widget::navigation::Landmark<World>> for Descend<World> {
+    fn from(landmark: progred_display::widget::navigation::Landmark<World>) -> Self {
+        Self {
+            root: None,
+            path: landmark.path,
+            rect: landmark.rect,
+            select: landmark.select,
+        }
+    }
+}
+
 impl<World> Clone for Descend<World> {
     fn clone(&self) -> Self {
         Self {

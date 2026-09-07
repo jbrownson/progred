@@ -111,7 +111,7 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
         let target = site.target;
         let primary_edit = context.primary_edit;
         measured::before_into(content, move |placement: Placement, output| {
-            output.select = Some(navigation);
+            output.landmark_select = Some(navigation);
             if !placement.clipped_out() {
                 output
                     .claims

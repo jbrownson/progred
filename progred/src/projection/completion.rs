@@ -8,7 +8,6 @@ use super::{
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use crate::navigate::Descend;
 use crate::placed::{self, Placed, before, decorate, on_key};
 use crate::render::text;
 use crate::selection::{Selection, Stage};
@@ -64,6 +63,20 @@ fn pending_target<C: 'static, Cv: Canvas + 'static>(
     let scale = cx.styles.scale;
     let selected = cx.selected(path.as_ref());
     let select = hooks.select.clone();
+    let child = if transient {
+        child
+    } else {
+        let target = path.clone();
+        let select = select.clone();
+        progred_display::widget::navigation::landmark(
+            child,
+            path.clone(),
+            Rc::new(move |ctx, _| {
+                select(ctx, target.to_vec());
+                true
+            }),
+        )
+    };
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);
         let highlight_path = path.clone();
@@ -86,18 +99,6 @@ fn pending_target<C: 'static, Cv: Canvas + 'static>(
             activate_select(ctx, target.to_vec());
             true
         });
-        if !transient {
-            let target = path.clone();
-            p.descends().push(Descend {
-                root: None,
-                path,
-                rect: placement.rect,
-                select: Rc::new(move |ctx, _| {
-                    select(ctx, target.to_vec());
-                    true
-                }),
-            });
-        }
     })
 }
 

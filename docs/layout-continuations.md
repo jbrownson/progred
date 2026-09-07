@@ -33,6 +33,16 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Navigation landmarks are placement-output contributions, with one measured
+  combinator shared by native widgets and the editor adapter. Projections
+  supply a path and arrival handler; placement supplies the rectangle. A text
+  control's arrival override is consumed only by its nearest landmark, with
+  nested and sibling scopes isolated. Native fragments carry complete landmarks
+  as well as overrides; adaptation and floater raising preserve them, and the
+  editor assigns owning views afterward. Pending locations use this same
+  combinator. Traversal still resolves in the interpreter; this makes its
+  navigation output available across the native boundary, not yet its removal.
+
 - Borders are native paint decorators. `Layout::Border` and its rendering arm
   are gone; ordinary `after` contributes above a child's output just as `before`
   contributes below it. Both derive from the existing measured `around`
@@ -162,7 +172,7 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 21 `progred-display`,
+The affected library tests pass: 22 `measured`, 24 `progred-display`,
 161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 268 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
@@ -309,3 +319,10 @@ canaries still pass; source is 4.54 ms (p95 4.90 ms), picture 24.19 ms, Fidget
 9.67 ms, Torus 7.76 ms, Tanglecube 47.31 ms, Gyroid 31.26 ms, and Cube 16.94 ms.
 A separate Cube repeat measured 16.08 ms. Native/web and formatting checks
 pass, with only the two unchanged web menu warnings.
+
+The navigation slice adds three pure scope/placement tests and extends the
+native-floater regression to check landmark geometry, source-qualified paths,
+arrival callbacks, and view ownership. All 268 editor and 24 display tests pass.
+The 60-frame release source canary measured 4.13 ms (p95 4.35 ms), versus
+4.54 ms at the preceding checkpoint; this is a regression check, not a claimed
+speedup from extracting the combinator.

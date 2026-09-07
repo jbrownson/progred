@@ -14,6 +14,7 @@ use kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
 use peniko::{Brush, Color, ImageData};
 use progred_display::widget::container::{self, Layers};
+use progred_display::widget::navigation::{Landmark, Navigation, Select};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
@@ -33,7 +34,8 @@ fn from_fragment<C: 'static, Cv: Canvas + 'static>(
         .into_iter()
         .map(|probe| Probe::new(probe.map(Hovered::Tree)))
         .collect();
-    placed.landmark_select = fragment.select;
+    placed.landmark_select = fragment.landmark_select;
+    placed.descends = fragment.landmarks.into_iter().map(Descend::from).collect();
     placed.floaters = fragment
         .floaters
         .into_iter()
@@ -506,6 +508,16 @@ impl<C: 'static, Cv> HasHandler<C> for Placed<C, Cv> {
     }
 }
 
+impl<C: 'static, Cv: 'static> Navigation<C> for Placed<C, Cv> {
+    fn landmark_select(&mut self) -> &mut Option<Select<C>> {
+        &mut self.landmark_select
+    }
+
+    fn push_landmark(&mut self, landmark: Landmark<C>) {
+        self.descends.push(landmark.into());
+    }
+}
+
 impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
     type Input = DispatchContext<C>;
 
@@ -515,10 +527,6 @@ impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
 }
 
 impl<C: 'static, Cv> Builder<'_, C, Cv> {
-    pub fn descends(&mut self) -> &mut Vec<Descend<C>> {
-        &mut self.placed.descends
-    }
-
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
         &mut self.placed.completion
     }
@@ -1418,6 +1426,14 @@ mod tests {
                     });
             },
         );
+        let popup = widget::navigation::landmark(
+            popup,
+            std::rc::Rc::from([gid::Step::Follow(gid::Resolution::Document)]),
+            std::rc::Rc::new(|count, _| {
+                *count += 10;
+                true
+            }),
+        );
         let widget = container::floating(
             widget::leaf(Extent::default(), |_, _| {}),
             popup,
@@ -1439,6 +1455,21 @@ mod tests {
         );
         let output = native.over(covered).raise_floaters();
         assert!(output.floaters.is_empty());
+        let [landmark] = output.descends.as_slice() else {
+            panic!("native popup must contribute exactly one landmark");
+        };
+        assert_eq!(landmark.root, Some(owner.clone()));
+        assert_eq!(landmark.rect, rect);
+        assert_eq!(
+            landmark.path.as_ref(),
+            &[gid::Step::Follow(gid::Resolution::Document)]
+        );
+        let mut count = 0;
+        assert!((landmark.select)(
+            &mut count,
+            Some(crate::navigate::Direction::Left)
+        ));
+        assert_eq!(count, 10);
         let (root, claim) = output.probe_scoped(rect.center(), None, 0.0).unwrap();
         assert_eq!(root, Some(owner.clone()));
         assert_eq!(claim, Claim::Direct(expected.clone()));

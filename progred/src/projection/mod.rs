@@ -959,21 +959,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     if transient {
         return marked;
     }
-    let marked = measured::around_into(
-        marked,
-        move |placement, inner, placed: &mut Placed<C, Cv>| {
-            let outer_select = placed.landmark_select.take();
-            inner.place_into(placed);
-            let select = placed.landmark_select.take().unwrap_or(select);
-            placed.landmark_select = outer_select;
-            placed.descends.push(Descend {
-                root: None,
-                path,
-                rect: placement.rect,
-                select,
-            });
-        },
-    );
+    let marked = progred_display::widget::navigation::landmark(marked, path, select);
     if selected {
         bind_delete_with(delete, marked)
     } else {

@@ -20,18 +20,11 @@ pub mod gesture;
 pub mod hover;
 pub mod interaction;
 pub mod line;
+pub mod navigation;
 pub mod scroll;
 pub mod style;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
+pub use navigation::{Direction, Select};
 pub type Edit<World> = Rc<dyn Fn(&mut World, &LineEdit, &EditOperation<'_>) -> bool>;
 pub type Pick<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
 /// Interpret a Grap handler with caller-supplied capabilities at this site.
@@ -187,7 +180,8 @@ pub struct Fragment<World, Hover> {
     pub renders: Vec<Render<Hover>>,
     pub handler: Option<Handler<World, Option<Hover>>>,
     pub claims: Vec<Probe<Hover>>,
-    pub select: Option<Select<World>>,
+    pub landmarks: Vec<navigation::Landmark<World>>,
+    pub landmark_select: Option<Select<World>>,
     pub floaters: Vec<Box<Self>>,
 }
 
@@ -197,7 +191,8 @@ impl<World, Hover> Default for Fragment<World, Hover> {
             renders: vec![],
             handler: None,
             claims: vec![],
-            select: None,
+            landmarks: vec![],
+            landmark_select: None,
             floaters: vec![],
         }
     }
@@ -211,14 +206,25 @@ impl<World: 'static, Hover: 'static> Output for Fragment<World, Hover> {
     fn over(mut self, mut above: Self) -> Self {
         self.renders.append(&mut above.renders);
         self.claims.append(&mut above.claims);
+        self.landmarks.append(&mut above.landmarks);
         self.floaters.append(&mut above.floaters);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
             (Some(base), Some(above)) => Some(base.over(above)),
         };
-        self.select = above.select.or(self.select);
+        self.landmark_select = above.landmark_select.or(self.landmark_select);
         self
+    }
+}
+
+impl<World: 'static, Hover: 'static> navigation::Navigation<World> for Fragment<World, Hover> {
+    fn landmark_select(&mut self) -> &mut Option<Select<World>> {
+        &mut self.landmark_select
+    }
+
+    fn push_landmark(&mut self, landmark: navigation::Landmark<World>) {
+        self.landmarks.push(landmark);
     }
 }
 
@@ -322,7 +328,7 @@ mod tests {
                     state.push("key");
                     true
                 });
-                output.select = Some(Rc::new(|state, _| {
+                output.landmark_select = Some(Rc::new(|state, _| {
                     state.push("select");
                     true
                 }));
@@ -352,7 +358,10 @@ mod tests {
                 .unwrap()
                 .dispatch_key(&mut state, &puri::handler::KeyboardEvent::default())
         );
-        assert!(output.select.unwrap()(&mut state, Some(Direction::Left)));
+        assert!(output.landmark_select.unwrap()(
+            &mut state,
+            Some(Direction::Left)
+        ));
         assert_eq!(state, ["key", "select"]);
     }
 
