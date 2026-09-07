@@ -12,6 +12,7 @@ pub mod geometry;
 pub mod handler;
 pub mod hover;
 pub mod interact;
+pub mod scroll;
 pub mod text;
 
 pub use delim::{Delim, DelimStyle};

@@ -31,6 +31,7 @@ fn with_interpreter<Hover: Default, R>(
         },
         styles: &widget::style::editor(1.0),
         event_interpreter: &|| interpret.clone(),
+        annotate: &|| panic!("unexpected annotation request"),
         command: |_| false,
         site: &|| widget::Site {
             writable: true,

@@ -226,6 +226,13 @@ incoming Puri event and calls the supplied site-scoped interpreter. The adapter
 owns the event vocabulary; the app owns staging and committing effects. Native
 widgets bypass that interpretation and use their callbacks directly.
 
+Scrolling uses an ordinary native placement handler too. Fidget's handler
+closes over a requested annotation-write capability and explicitly applies its
+camera update; layout does not interpret a state-scroll result. Acceptance and
+the unused displacement use Puri's `ScrollOutcome`, independently of writes.
+Document scrolling and widget scrolling share the same conversion of pixel,
+line, and page input and its remainder. The conversion knows no document state.
+
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)

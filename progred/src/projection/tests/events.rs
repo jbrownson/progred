@@ -1,131 +1,102 @@
 use super::*;
 
 #[test]
-fn state_scroll_acceptance_does_not_depend_on_a_changed_value() {
-    let event = PointerScrollEvent {
-        pointer: PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
-        state: PointerState::default(),
-        delta: ScrollDelta::LineDelta(0.0, 1.0),
+fn native_annotation_handler_retains_the_projected_site() {
+    let cell = new_cell_id();
+    let path = vec![Step::Follow(gid::Resolution::Document)];
+    let mut cells = Cells::new();
+    cells.set_value(cell, Value::from(vec![7u8]));
+    let doc = Document {
+        root: Some(cell.into()),
+        cells,
     };
-    for accepts in [false, true] {
-        let inner = leaf::<usize, crate::frame::Paint>(
-            Extent {
-                width: 20.0,
-                ascent: 10.0,
-                descent: 10.0,
-            },
-            |_, _| {},
-        );
-        let layout = events::realize_state_scroll(
-            vec![],
-            Rc::new(move |event| {
-                (
-                    accepts.then(|| Value::record([])),
-                    if accepts {
+    let libraries = Libraries::default();
+    let styles = crate::styles::editor(1.0);
+    let projection = Projection::new([progred_display::partial(|input| {
+        input.value?.as_blob()?;
+        Some(progred_display::widget::before(
+            progred_display::text("scroll"),
+            Rc::new(|context| {
+                let annotate = (context.annotate)();
+                progred_display::widget::scroll::scroll(
+                    context.styles.scale,
+                    move |world, delta| {
+                        annotate(world, f64::value(delta.y));
                         puri::handler::ScrollOutcome::with_remainder(Default::default())
-                    } else {
-                        puri::handler::ScrollOutcome::unhandled(event)
                     },
                 )
             }),
-            Rc::new(|writes, _, _| {
-                *writes += 1;
+        ))
+    })]);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::TextCache::default();
+    let measured = project::<Vec<(Path, Value)>, crate::frame::Paint>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &doc,
+                libraries: &libraries,
+            },
+            root: doc.cells.value(cell),
+            root_path: &path,
+            selection: None,
+            scrub_spelling: None,
+            source_selection: None,
+            annotations: &Annotations::default(),
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+            projection: Some(&projection),
+        },
+        &mut TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            cache: &mut cache,
+            scale: 1.0,
+        },
+        Hooks {
+            completions: None,
+            select: Rc::new(|_, _| {}),
+            select_payload: Rc::new(|_, _, _| {}),
+            edit_line: Rc::new(|_, _, _, _| panic!("scroll does not edit text")),
+            toggle: Rc::new(|_, _| {}),
+            update_state: Rc::new(|writes: &mut Vec<(Path, Value)>, path, state| {
+                writes.push((path, state));
                 false
             }),
-            1.0,
-            inner,
-        );
-        let placed = measured::place(layout, Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)));
-        let mut writes = 0;
-        let outcome = placed.handler.unwrap().dispatch_scroll(&mut writes, &event);
-        assert_eq!(outcome.handled(), accepts);
-        assert_eq!(writes, usize::from(accepts));
-        match outcome.remaining {
-            None => assert!(accepts),
-            Some(puri::handler::Event::Scroll(remaining)) => {
-                assert!(!accepts);
-                assert_eq!(remaining.delta, event.delta);
-            }
-            _ => panic!("unexpected scroll remainder"),
-        }
-    }
-}
-
-#[test]
-fn state_scroll_preserves_partial_consumption_and_units() {
-    use progred_display::StateScrollEvent;
-    use puri::handler::ScrollOutcome;
-
-    for delta in [
-        ScrollDelta::LineDelta(2.0, 4.0),
-        ScrollDelta::PageDelta(2.0, 4.0),
-        ScrollDelta::PixelDelta((2.0, 4.0).into()),
-    ] {
-        let event = PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState::default(),
-            delta,
-        };
-        let expected = match delta {
-            ScrollDelta::LineDelta(..) => StateScrollEvent {
-                delta_x: 80.0,
-                delta_y: 160.0,
-            },
-            ScrollDelta::PageDelta(..) => StateScrollEvent {
-                delta_x: 20.0,
-                delta_y: 60.0,
-            },
-            ScrollDelta::PixelDelta(..) => StateScrollEvent {
-                delta_x: 1.0,
-                delta_y: 2.0,
-            },
-        };
-        let layout = events::realize_state_scroll(
-            vec![],
-            Rc::new(move |input| {
-                assert_eq!(input, expected);
-                (
-                    None,
-                    ScrollOutcome::with_remainder(StateScrollEvent {
-                        delta_x: input.delta_x,
-                        delta_y: input.delta_y / 2.0,
-                    }),
-                )
-            }),
-            Rc::new(|_: &mut (), _, _| panic!("acceptance does not require a state write")),
-            2.0,
-            leaf::<(), crate::frame::Paint>(
-                Extent {
-                    width: 20.0,
-                    ascent: 15.0,
-                    descent: 15.0,
-                },
-                |_, _| {},
-            ),
-        );
-        let placed = measured::place(layout, Placement::root(Rect::new(0.0, 0.0, 20.0, 30.0)));
-        let outcome = placed.handler.unwrap().dispatch_scroll(&mut (), &event);
-        assert!(outcome.handled());
-        let Some(puri::handler::Event::Scroll(remaining)) = outcome.remaining else {
-            panic!("expected unconsumed scroll")
-        };
-        assert_eq!(
-            remaining.delta,
-            match delta {
-                ScrollDelta::LineDelta(..) => ScrollDelta::LineDelta(2.0, 2.0),
-                ScrollDelta::PageDelta(..) => ScrollDelta::PageDelta(2.0, 2.0),
-                ScrollDelta::PixelDelta(..) => ScrollDelta::PixelDelta((2.0, 2.0).into()),
-            }
-        );
-    }
+            edit: Rc::new(|_, _| false),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_, _| false),
+            apply: Rc::new(|_, _, _, _| panic!("native scroll does not interpret Grap")),
+            point: Rc::new(|_, _, _, _, _| false),
+            state_drag: Rc::new(|_, _, _, _, _| {}),
+            scrub: Rc::new(|_, _, _, _, _| false),
+            select_source: Rc::new(|_, _, _| {}),
+            commit_value: Rc::new(|_, _, _| {}),
+            commit_label: Rc::new(|_, _, _, _| {}),
+            set_completion_view: Rc::new(|_, _, _, _| {}),
+        },
+    );
+    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
+    let placed = measured::place(measured, placement);
+    let mut writes = vec![];
+    let event = PointerScrollEvent {
+        pointer: PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: PointerState {
+            position: (placement.rect.center().x, placement.rect.center().y).into(),
+            ..Default::default()
+        },
+        delta: ScrollDelta::LineDelta(0.0, 1.0),
+    };
+    let outcome = placed.handler.unwrap().dispatch_scroll(&mut writes, &event);
+    assert!(outcome.handled());
+    assert!(outcome.remaining.is_none());
+    assert_eq!(writes, vec![(path, f64::value(40.0))]);
 }
 
 #[test]

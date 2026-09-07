@@ -846,6 +846,7 @@ mod tests {
             },
             styles: &widget::style::editor(scale),
             event_interpreter: &|| panic!("delimiter does not interpret Grap"),
+            annotate: &|| panic!("delimiter does not request annotation writes"),
             command: |_| false,
             site: &|| widget::Site {
                 writable: false,

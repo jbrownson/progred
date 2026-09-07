@@ -28,10 +28,8 @@ use puri_vello::VelloCanvas;
 #[cfg(target_arch = "wasm32")]
 use puri_web::WebCanvas;
 use std::rc::Rc;
-use ui_events::ScrollDelta;
 #[cfg(not(target_arch = "wasm32"))]
 use vello::Scene;
-use winit::dpi::PhysicalPosition;
 
 pub(crate) const HOVER_REACH: f64 = 8.0;
 
@@ -254,41 +252,23 @@ pub(crate) fn scroll_offset(
     viewport: Size,
     maximum: Vec2,
 ) -> (Vec2, ScrollOutcome) {
-    let line = 40.0 * scale;
-    // A split can transiently have no room while its window is being
-    // resized. Page deltas still need finite units and remainders.
-    let page = PhysicalPosition {
-        x: viewport.width.max(1.0),
-        y: viewport.height.max(1.0),
-    };
-    let delta = update
-        .delta
-        .to_pixel_delta(PhysicalPosition { x: line, y: line }, page);
-    let current = Vec2::new(
-        stored.x.clamp(0.0, maximum.x),
-        stored.y.clamp(0.0, maximum.y),
-    );
-    let next = Vec2::new(
-        (current.x - delta.x / scale).clamp(0.0, maximum.x),
-        (current.y - delta.y / scale).clamp(0.0, maximum.y),
-    );
-    let outcome = if next != stored {
-        let remaining = PhysicalPosition {
-            x: delta.x - (current.x - next.x) * scale,
-            y: delta.y - (current.y - next.y) * scale,
-        };
-        ScrollOutcome::with_remainder(match update.delta {
-            ScrollDelta::PageDelta(_, _) => {
-                ScrollDelta::PageDelta((remaining.x / page.x) as f32, (remaining.y / page.y) as f32)
+    let mut next = stored;
+    let outcome =
+        progred_display::widget::scroll::units(scale, viewport).handle(update.delta, |delta| {
+            let current = Vec2::new(
+                stored.x.clamp(0.0, maximum.x),
+                stored.y.clamp(0.0, maximum.y),
+            );
+            next = Vec2::new(
+                (current.x - delta.x).clamp(0.0, maximum.x),
+                (current.y - delta.y).clamp(0.0, maximum.y),
+            );
+            if next != stored {
+                ScrollOutcome::with_remainder(delta - (current - next))
+            } else {
+                ScrollOutcome::unhandled(delta)
             }
-            ScrollDelta::LineDelta(_, _) => {
-                ScrollDelta::LineDelta((remaining.x / line) as f32, (remaining.y / line) as f32)
-            }
-            ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(remaining),
-        })
-    } else {
-        ScrollOutcome::pass(update)
-    };
+        });
     (next, outcome)
 }
 

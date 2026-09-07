@@ -21,7 +21,7 @@ use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
 use completion::{label_query, pending_view};
-use events::{realize_point, realize_scrub, realize_state_drag, realize_state_scroll};
+use events::{realize_point, realize_scrub, realize_state_drag};
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, RoundedRect, Stroke};
 use location::Location;
@@ -286,16 +286,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             let start = hooks.state_drag.clone();
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 realize_state_drag(path, target, on_press, handler, start, scale, inner)
-            })
-        }
-        progred_display::Layout::OnStateScroll { child, handler } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let path = path.to_vec();
-            let update_state = hooks.update_state.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_state_scroll(path, handler, update_state, scale, inner)
             })
         }
         progred_display::Layout::OnPoint { child, handler } => {
@@ -751,11 +741,18 @@ fn with_widget_context<C: 'static, Result>(
             apply(world, path.clone(), function.clone(), event)
         }) as progred_display::widget::EventInterpreter<C>
     };
+    let annotate = || {
+        let update = hooks.update_state.clone();
+        let path = path.to_vec();
+        Rc::new(move |world: &mut C, state| update(world, path.clone(), state))
+            as progred_display::widget::Annotate<C>
+    };
     widget(&mut progred_display::widget::Context {
         text,
         styles: cx.styles,
         site: &site,
         event_interpreter: &event_interpreter,
+        annotate: &annotate,
         command: crate::modifiers::command,
         pick: hooks.pick.clone(),
         picking: |event| crate::modifiers::pick(&event.state.modifiers),

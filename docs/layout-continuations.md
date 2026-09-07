@@ -33,6 +33,14 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- State scrolling is an ordinary native placement callback. `OnStateScroll`,
+  its interpreter arm, and its special state-result/event types are removed.
+  Fidget explicitly writes its camera annotation through a lazily requested
+  capability; it otherwise receives and returns ordinary displacement vectors.
+  The common Puri units conversion serves both this handler and document
+  scrolling, preserving partial consumption and finite page units during resize.
+  Acceptance remains independent of state writes. No per-control method was
+  added to a central host interface.
 - The Grap event adapter is an ordinary library widget using `before`.
   `OnEvent` and its app interpreter arm are removed. The adapter owns GID event
   encoding and installs one function over `Event`, not seven closures with
@@ -89,10 +97,6 @@ composition, not replacements for that stage.
   The app's line adapter retains only document conversion and undo logic.
 - Layout's GID traversal descriptions now use the path library, including list
   elements and source-qualified follows. The duplicate encoding is removed.
-- State-scroll handlers use the same partial-consumption `ScrollOutcome` as
-  ordinary scroll containers, independent of whether they update state. The
-  adapter converts the remainder back to the incoming units. Fidget passes
-  horizontal scrolling and any displacement beyond its zoom limits outward.
 - Ordered choice resolution lives in `measured::choices`, generic over placement
   output. Its builder owns slot bookkeeping; popover policy remains outside it.
   Placement tests cover chosen alternatives, shared children, clipping,
@@ -125,8 +129,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 14 `progred-display`,
-161 `progred-libraries`, 53 `puri`, 3 `puri-widgets`, and 265 `progred`
+The affected library tests pass: 22 `measured`, 18 `progred-display`,
+161 `progred-libraries`, 53 `puri`, 3 `puri-widgets`, and 264 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -220,3 +224,16 @@ Its batch-encoding test moved from the app to the owning library; app integratio
 coverage now also checks keyboard/IME data, the supplied command-modifier policy,
 and outside-rectangle motion/release versus bounded starts/scroll. Native/web
 checks pass, with only the unchanged web menu warnings.
+
+The native-scroll slice retains 521 passing tests. Its native handler tests
+cover acceptance without writes, clipped nested handlers receiving only unused
+scroll, all three unit conversions, and empty viewport page units. The app test
+checks the source-qualified annotation callback through the real projection
+pipeline without text editing or Grap interpretation.
+The final serial canary medians were IoP source 4.31 ms (p95 4.64 ms), IoP picture
+23.90 ms, Fidget 8.67 ms, Torus 6.76 ms, Tanglecube 43.91 ms, Gyroid 29.12 ms,
+and Cube 15.19 ms. Earlier checks of this slice measured source at 4.07 and
+4.16 ms, against 4.15 ms at the preceding checkpoint. These short runs show
+variation rather than a clear speedup; the final source median is slightly
+higher. Native tests, the web check, formatting, and whitespace checks pass;
+the web check retains the same two menu warnings.

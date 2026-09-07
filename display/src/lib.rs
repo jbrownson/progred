@@ -86,24 +86,6 @@ pub struct StateDragEvent {
 pub type StateDragGesture = Box<dyn FnMut(StateDragEvent, &[StateDragEvent]) -> Value>;
 pub type StateDragHandler = Rc<dyn Fn() -> StateDragGesture>;
 
-/// Scroll displacement over a projection-local control, normalized to
-/// logical pixels by the host. The handler returns the unconsumed
-/// displacement using the same contract as Puri's scroll containers.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct StateScrollEvent {
-    pub delta_x: f64,
-    pub delta_y: f64,
-}
-
-pub type StateScrollHandler = Rc<
-    dyn Fn(
-        StateScrollEvent,
-    ) -> (
-        Option<Value>,
-        puri::handler::ScrollOutcome<StateScrollEvent>,
-    ),
->;
-
 /// A position inside a continuous two-dimensional control, normalized
 /// to its settled rectangle. The host owns pointer capture and writes
 /// the returned value through the projected location.
@@ -346,7 +328,6 @@ pub enum Layout<World, Hover> {
     },
     /// An ordinary native measurement program, producing opaque placement output.
     Widget(widget::Widget<World, Hover>),
-    /// An inert empty text frame, measured with the host's text style.
     /// Add ordinary placement outputs before a child, without changing its geometry.
     Before {
         child: Box<Layout<World, Hover>>,
@@ -365,12 +346,6 @@ pub enum Layout<World, Hover> {
         target: Hover,
         on_press: ActionHandler<World>,
         handler: StateDragHandler,
-    },
-    /// A scroll handler with an optional annotation update. Unconsumed
-    /// displacement propagates to enclosing handlers.
-    OnStateScroll {
-        child: Box<Layout<World, Hover>>,
-        handler: StateScrollHandler,
     },
     OnPoint {
         child: Box<Layout<World, Hover>>,
@@ -495,10 +470,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 target: target.clone(),
                 on_press: on_press.clone(),
-                handler: handler.clone(),
-            },
-            Self::OnStateScroll { child, handler } => Self::OnStateScroll {
-                child: child.clone(),
                 handler: handler.clone(),
             },
             Self::OnPoint { child, handler } => Self::OnPoint {
@@ -755,16 +726,6 @@ pub fn on_state_drag<World, Hover>(
         child: Box::new(child),
         target,
         on_press,
-        handler,
-    }
-}
-
-pub fn on_state_scroll<World, Hover>(
-    child: Layout<World, Hover>,
-    handler: StateScrollHandler,
-) -> Layout<World, Hover> {
-    Layout::OnStateScroll {
-        child: Box::new(child),
         handler,
     }
 }

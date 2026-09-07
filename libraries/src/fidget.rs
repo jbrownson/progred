@@ -23,10 +23,8 @@ mod projection;
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
-use progred_display::{
-    Layout, Paint, ProjectionInput, leaf, on_hover, on_state_drag, on_state_scroll,
-};
-use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Size};
+use progred_display::{Layout, Paint, ProjectionInput, leaf, on_hover, on_state_drag};
+use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Size, Vec2};
 use std::{cell::RefCell, rc::Rc};
 
 const DEFAULT_PREVIEW_SIZE: f64 = 256.0;
@@ -598,28 +596,30 @@ fn orbit_handler(state: Option<&Value>) -> progred_display::StateDragHandler {
     })
 }
 
-fn zoom_handler(state: Option<&Value>) -> progred_display::StateScrollHandler {
+fn zoom_handler(
+    state: Option<&Value>,
+) -> impl Fn(Vec2) -> (Option<Value>, puri::handler::ScrollOutcome<Vec2>) + 'static {
     let state = state.cloned();
     let initial = camera(state.as_ref());
-    Rc::new(move |event| {
-        let requested = initial.zoom * (event.delta_y as f32 * 0.0025).exp();
+    move |event| {
+        let requested = initial.zoom * (event.y as f32 * 0.0025).exp();
         let zoom = requested.clamp(0.05, 20.0);
         if zoom == initial.zoom {
             (None, puri::handler::ScrollOutcome::unhandled(event))
         } else {
             (
                 Some(with_camera(state.as_ref(), Camera { zoom, ..initial })),
-                puri::handler::ScrollOutcome::with_remainder(progred_display::StateScrollEvent {
-                    delta_x: event.delta_x,
-                    delta_y: if zoom == requested {
+                puri::handler::ScrollOutcome::with_remainder(Vec2::new(
+                    event.x,
+                    if zoom == requested {
                         0.0
                     } else {
-                        event.delta_y - (f64::from(zoom) / f64::from(initial.zoom)).ln() / 0.0025
+                        event.y - (f64::from(zoom) / f64::from(initial.zoom)).ln() / 0.0025
                     },
-                }),
+                )),
             )
         }
-    })
+    }
 }
 
 struct VolumePreview {
@@ -929,14 +929,28 @@ fn display<World: 'static, Hover: Clone + 'static>(
         )?));
         let target = input.targets.current();
         let hover = target.hover;
-        Some(on_state_scroll(
+        let state = input.state.cloned();
+        Some(progred_display::widget::before(
             on_state_drag(
                 on_hover(drawing, hover.clone()),
                 hover,
                 target.select,
                 orbit_handler(input.state),
             ),
-            zoom_handler(input.state),
+            Rc::new(move |context| {
+                let annotate = (context.annotate)();
+                let zoom = zoom_handler(state.as_ref());
+                progred_display::widget::scroll::scroll(
+                    context.styles.scale,
+                    move |world, delta| {
+                        let (state, outcome) = zoom(delta);
+                        if let Some(state) = state {
+                            annotate(world, state);
+                        }
+                        outcome
+                    },
+                )
+            }),
         ))
     } else {
         Some(leaf(Leaf::Drawing(slice_drawing(
@@ -1401,12 +1415,9 @@ mod tests {
                 .is_some_and(|camera| camera.contains_key(&other_camera))
         );
 
-        let state = zoom_handler(Some(&state))(progred_display::StateScrollEvent {
-            delta_x: 0.0,
-            delta_y: 100.0,
-        })
-        .0
-        .expect("vertical scroll zooms");
+        let state = zoom_handler(Some(&state))(Vec2::new(0.0, 100.0))
+            .0
+            .expect("vertical scroll zooms");
         assert!((camera(Some(&state)).zoom - 0.25_f32.exp()).abs() < 0.0001);
     }
 
@@ -1440,14 +1451,7 @@ mod tests {
 
     #[test]
     fn horizontal_scroll_declines_camera_zoom() {
-        assert!(
-            zoom_handler(None)(progred_display::StateScrollEvent {
-                delta_x: 10.0,
-                delta_y: 0.0,
-            })
-            .0
-            .is_none()
-        );
+        assert!(zoom_handler(None)(Vec2 { x: 10.0, y: 0.0 }).0.is_none());
     }
 
     #[test]
@@ -1461,17 +1465,14 @@ mod tests {
                 },
             );
             assert!(
-                zoom_handler(Some(&state))(progred_display::StateScrollEvent {
-                    delta_x: 0.0,
-                    delta_y,
-                })
-                .0
-                .is_none()
+                zoom_handler(Some(&state))(Vec2 { x: 0.0, y: delta_y })
+                    .0
+                    .is_none()
             );
             assert!(
-                zoom_handler(Some(&state))(progred_display::StateScrollEvent {
-                    delta_x: 0.0,
-                    delta_y: -delta_y,
+                zoom_handler(Some(&state))(Vec2 {
+                    x: 0.0,
+                    y: -delta_y,
                 })
                 .0
                 .is_some()
@@ -1482,29 +1483,17 @@ mod tests {
     #[test]
     fn camera_zoom_passes_unused_scroll_to_its_parent() {
         for (delta_y, limit) in [(2000.0, 20.0), (-2000.0, 0.05)] {
-            let (state, outcome) = zoom_handler(None)(progred_display::StateScrollEvent {
-                delta_x: 8.0,
-                delta_y,
-            });
+            let (state, outcome) = zoom_handler(None)(Vec2 { x: 8.0, y: delta_y });
             let zoom = camera(state.as_ref()).zoom;
             assert_eq!(zoom, limit);
             assert!(outcome.handled());
-            assert_eq!(outcome.remaining.delta_x, 8.0);
-            assert_eq!(outcome.remaining.delta_y.signum(), delta_y.signum());
-            let consumed = delta_y - outcome.remaining.delta_y;
+            assert_eq!(outcome.remaining.x, 8.0);
+            assert_eq!(outcome.remaining.y.signum(), delta_y.signum());
+            let consumed = delta_y - outcome.remaining.y;
             assert!(((consumed * 0.0025).exp() - f64::from(zoom)).abs() < 0.0001);
         }
-        let (_, outcome) = zoom_handler(None)(progred_display::StateScrollEvent {
-            delta_x: 8.0,
-            delta_y: 10.0,
-        });
-        assert_eq!(
-            outcome.remaining,
-            progred_display::StateScrollEvent {
-                delta_x: 8.0,
-                delta_y: 0.0,
-            }
-        );
+        let (_, outcome) = zoom_handler(None)(Vec2 { x: 8.0, y: 10.0 });
+        assert_eq!(outcome.remaining, Vec2 { x: 8.0, y: 0.0 });
     }
 
     struct NoEval;

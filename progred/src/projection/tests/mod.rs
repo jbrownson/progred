@@ -358,6 +358,7 @@ fn placed_line_description(
         },
         styles: &crate::styles::editor(1.0),
         event_interpreter: &|| panic!("native line does not interpret Grap"),
+        annotate: &|| panic!("native line does not request annotation writes"),
         command: |_| false,
         site: &|| {
             let output = output.clone();
