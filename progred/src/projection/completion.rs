@@ -263,7 +263,7 @@ pub(super) fn completion_placement(
             .rect()
             .inflate(ring_outset, ring_outset);
         let border_outset = completion_border(scale).width / 2.0;
-        let outer = placed::popover_rect(
+        let outer = progred_display::widget::popover::rect(
             anchor,
             Size::new(
                 extent.width + 2.0 * border_outset,

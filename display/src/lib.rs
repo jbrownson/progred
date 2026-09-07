@@ -308,11 +308,13 @@ pub enum Layout<World, Hover> {
     Overlay {
         children: Vec<Layout<World, Hover>>,
     },
-    /// Float `content` above the ordinary layout, anchored to
-    /// `trigger`. The trigger alone contributes to surrounding layout.
-    Popover {
-        trigger: Box<Layout<World, Hover>>,
+    /// Only `base` contributes to surrounding layout. An explicit geometry
+    /// function places or omits the floating content; it supplies its own ink
+    /// and interaction, just like any other box.
+    Floating {
+        base: Box<Layout<World, Hover>>,
         content: Box<Layout<World, Hover>>,
+        position: FloatingPosition,
     },
     Pad {
         left: f64,
@@ -414,9 +416,14 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::Overlay { children } => Self::Overlay {
                 children: children.clone(),
             },
-            Self::Popover { trigger, content } => Self::Popover {
-                trigger: trigger.clone(),
+            Self::Floating {
+                base,
+                content,
+                position,
+            } => Self::Floating {
+                base: base.clone(),
                 content: content.clone(),
+                position: position.clone(),
             },
             Self::Pad {
                 left,
@@ -662,15 +669,23 @@ pub fn overlay<World, Hover>(
     }
 }
 
-pub fn popover<World, Hover>(
-    trigger: Layout<World, Hover>,
+/// Geometry inputs are the current display scale, base placement, and content extent.
+pub type FloatingPosition =
+    Rc<dyn Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement>>;
+
+pub fn floating<World, Hover>(
+    base: Layout<World, Hover>,
     content: Layout<World, Hover>,
+    position: impl Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement> + 'static,
 ) -> Layout<World, Hover> {
-    Layout::Popover {
-        trigger: Box::new(trigger),
+    Layout::Floating {
+        base: Box::new(base),
         content: Box::new(content),
+        position: Rc::new(position),
     }
 }
+
+pub use widget::popover::popover;
 
 pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World, Hover> {
     Layout::Pad {

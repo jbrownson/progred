@@ -10,7 +10,7 @@ use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::Descend;
 use crate::workspace::Root;
-use kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
+use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
 use peniko::{Brush, Color, ImageData};
 use progred_display::widget::container::{self, Layers};
@@ -579,37 +579,6 @@ pub fn after<C: 'static, Cv: 'static>(
 /// together.
 pub use progred_display::widget::container::floating;
 
-/// Float `content` next to `trigger`. Placement's clip rectangle
-/// supplies the popup bounds.
-pub fn popover<C: 'static, Cv: Canvas + 'static>(
-    trigger: Measured<Placed<C, Cv>>,
-    content: Measured<Placed<C, Cv>>,
-    gap: f64,
-) -> Measured<Placed<C, Cv>> {
-    floating(trigger, content, move |placement, extent| {
-        (!placement.clipped_out()).then(|| {
-            Placement::new(
-                popover_rect(placement.rect, extent.size(), placement.clip_rect, gap),
-                placement.clip_rect,
-            )
-        })
-    })
-}
-
-pub(crate) fn popover_rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {
-    let below = anchor.y1 + gap;
-    let above = anchor.y0 - gap - size.height;
-    let y = if below + size.height <= bounds.y1 || above < bounds.y0 {
-        below.min((bounds.y1 - size.height).max(bounds.y0))
-    } else {
-        above
-    };
-    let x = anchor
-        .x0
-        .clamp(bounds.x0, (bounds.x1 - size.width).max(bounds.x0));
-    Rect::from_origin_size(Point::new(x, y), size)
-}
-
 pub fn decorate<C: 'static, Cv: 'static>(
     child: Measured<Placed<C, Cv>>,
     draw: impl FnOnce(&mut Builder<'_, C, Cv>, Rect) + 'static,
@@ -1082,7 +1051,9 @@ mod tests {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
-        let popup = popover(trigger, content, 2.0);
+        let popup = floating(trigger, content, |placement, extent| {
+            progred_display::widget::popover::position(placement, extent, 2.0)
+        });
 
         assert_eq!(popup.extent.width, 10.0);
         assert_eq!(popup.extent.height(), 10.0);

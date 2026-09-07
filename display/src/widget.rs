@@ -21,6 +21,7 @@ pub mod hover;
 pub mod interaction;
 pub mod line;
 pub mod navigation;
+pub mod popover;
 pub mod scroll;
 pub mod style;
 

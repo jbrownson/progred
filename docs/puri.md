@@ -74,6 +74,10 @@ compose those continuations without interpreting their output. Out-of-flow
 content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
+The display layout's `Floating` construct supplies only two boxes and a
+positioning function. The ordinary [popover widget](../display/src/widget/popover.rs)
+composes its padding, panel ink, and input blocking explicitly; the layout
+interpreter does not add these to a floating box.
 
 Native widgets use `progred_display::widget::Widget`: a measurement function
 whose result places a `Fragment` of deferred ink, handlers, hover claims,

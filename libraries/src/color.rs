@@ -559,10 +559,11 @@ mod tests {
         let Layout::Row { children, .. } = layout else {
             panic!("color projection is one row")
         };
-        let Layout::Popover { content, .. } = &children[0] else {
+        let Layout::Floating { .. } = &children[0] else {
             panic!("picker mode floats from the swatch")
         };
-        let Layout::Col { children, .. } = content.as_ref() else {
+        let Layout::Col { children, .. } = picker::<(), ()>(&color, encoded(&color).unwrap(), 0.1)
+        else {
             panic!("picker controls are stacked")
         };
         let updated =

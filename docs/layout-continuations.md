@@ -33,6 +33,15 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Popovers are ordinary widget composition: padding, a native panel decorator,
+  input occlusion, and an explicit positioning function. The layout interpreter
+  no longer installs any of those policies. Its `Floating` box combines two
+  subtrees through the shared out-of-flow container; only the base affects
+  surrounding layout, and the placement function can omit the content. The
+  color picker uses the standard card, while completion keeps its own card
+  policy and shares only edge positioning. Neither the choice engine nor the
+  floating box knows what a popup looks like or how it handles input.
+
 - Navigation landmarks are placement-output contributions, with one measured
   combinator shared by native widgets and the editor adapter. Projections
   supply a path and arrival handler; placement supplies the rectangle. A text
@@ -172,8 +181,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 24 `progred-display`,
-161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 268 `progred`
+The affected library tests pass: 22 `measured`, 25 `progred-display`,
+161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 269 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -326,3 +335,14 @@ arrival callbacks, and view ownership. All 268 editor and 24 display tests pass.
 The 60-frame release source canary measured 4.13 ms (p95 4.35 ms), versus
 4.54 ms at the preceding checkpoint; this is a regression check, not a claimed
 speedup from extracting the combinator.
+
+The popover slice brings the affected total to 534 passing tests. Its real
+projection/handler regression contrasts a plain floating box with a styled
+card: padding and occlusion are explicit, controls still receive clicks, and
+the floater stays above later document content. Pure geometry tests check
+screen-edge positioning and omission for an offscreen anchor. Native/web,
+formatting, and whitespace checks pass, with the two existing web warnings.
+The seven serial 60-frame release medians are source 4.18 ms (p95 4.43 ms),
+picture 24.38 ms, Fidget 9.26 ms, Torus 6.77 ms, Tanglecube 44.78 ms, Gyroid
+29.38 ms, and Cube 13.91 ms. There is no material regression against the recent
+checkpoints; this remains an interface cleanup, not a performance claim.

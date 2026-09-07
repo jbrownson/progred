@@ -1,6 +1,117 @@
 use super::*;
 
 #[test]
+fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusion() {
+    use progred_display::{Layout, widget};
+    use std::cell::RefCell;
+
+    for card in [false, true] {
+        let placements = Rc::new(RefCell::new(vec![]));
+        let placed_boxes = placements.clone();
+        let projection = Projection::new([progred_display::partial(move |_| {
+            let rectangle = |id, width, height| {
+                let placements = placed_boxes.clone();
+                Layout::Widget(Rc::new(move |_| {
+                    let placements = placements.clone();
+                    widget::leaf(
+                        Extent {
+                            width,
+                            ascent: 0.0,
+                            descent: height,
+                        },
+                        move |output: &mut widget::Fragment<EditingWorld, Hover>, placement| {
+                            placements.borrow_mut().push((id, placement.rect));
+                            output
+                                .claims
+                                .push(puri::hover::Probe::exact(placement, Hover::Entry(id)));
+                            output.handler().on_pointer_down(move |world, event| {
+                                placement.contains(Point::new(
+                                    event.state.position.x,
+                                    event.state.position.y,
+                                )) && {
+                                    world.clipboard.0 = Some(id.to_string());
+                                    true
+                                }
+                            });
+                        },
+                    )
+                }))
+            };
+            let trigger = rectangle(0, 20.0, 20.0);
+            let content = rectangle(1, 30.0, 40.0);
+            let floating = if card {
+                progred_display::popover(trigger, content)
+            } else {
+                progred_display::floating(trigger, content, |scale, anchor, extent| {
+                    widget::popover::position(anchor, extent, 4.0 * scale)
+                })
+            };
+            Some(progred_display::overlay([
+                floating,
+                rectangle(2, 100.0, 150.0),
+            ]))
+        })]);
+        let doc = Document {
+            root: Some(Value::record([])),
+            cells: Cells::new(),
+        };
+        let mut world = EditingWorld::new(&doc, &core_libraries());
+        let output =
+            editing_frame_with_projection(&mut world, false, Some(&projection)).raise_floaters();
+        let content = placements
+            .borrow()
+            .iter()
+            .find(|(id, _)| *id == 1)
+            .unwrap()
+            .1;
+        assert_eq!(
+            content,
+            if card {
+                Rect::new(10.0, 34.0, 40.0, 74.0)
+            } else {
+                Rect::new(0.0, 24.0, 30.0, 64.0)
+            }
+        );
+        let margin = Point::new(35.0, 25.0);
+        assert_eq!(
+            output.probe(margin, None, 0.0),
+            Some(if card {
+                Claim::Occludes
+            } else {
+                Claim::Direct(Hovered::Tree(Hover::Entry(2)))
+            })
+        );
+        assert_eq!(
+            output.probe(content.center(), None, 0.0),
+            Some(Claim::Direct(Hovered::Tree(Hover::Entry(1))))
+        );
+        let handler = output.handler.unwrap();
+        for (point, expected) in [
+            (margin, if card { None } else { Some("2") }),
+            (content.center(), Some("1")),
+        ] {
+            world.clipboard.0 = None;
+            assert!(handler.dispatch_pointer_down(
+                &mut world,
+                &PointerButtonEvent {
+                    button: Some(PointerButton::Primary),
+                    pointer: PointerInfo {
+                        pointer_id: Some(PointerId::PRIMARY),
+                        persistent_device_id: None,
+                        pointer_type: PointerType::Mouse
+                    },
+                    state: PointerState {
+                        position: (point.x, point.y).into(),
+                        ..Default::default()
+                    },
+                }
+            ));
+            assert_eq!(world.clipboard.0.as_deref(), expected);
+        }
+    }
+}
+
+#[test]
 fn native_leading_continuations_place_only_for_the_chosen_alternative() {
     use progred_display::widget;
     use std::cell::RefCell;

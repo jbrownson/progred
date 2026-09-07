@@ -33,7 +33,6 @@ use puri::geometry::Placement;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
-use puri_widgets::panel::Panel;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -301,25 +300,21 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 })
                 .collect(),
         ),
-        progred_display::Layout::Popover { trigger, content } => {
-            let trigger = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *trigger, build,
+        progred_display::Layout::Floating {
+            base,
+            content,
+            position,
+        } => {
+            let base = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *base, build,
             );
             let content = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *content, build,
             );
-            let panel = Panel {
-                fill: Some(Color::new([0.985, 0.985, 0.99, 1.0]).into()),
-                border: Some((Stroke::new(scale), cx.styles.dim.brush.clone())),
-                radius: 6.0 * scale,
-            };
-            ChoiceLayout::attach(trigger, content, move |trigger, content| {
-                let card = measured::pad(Insets::uniform(10.0 * scale), content);
-                let card = before(card, move |p, placement| {
-                    panel.place(p, placement);
-                    p.occlude(placement);
-                });
-                placed::popover(trigger, card, 4.0 * scale)
+            ChoiceLayout::attach(base, content, move |base, content| {
+                placed::floating(base, content, move |base, extent| {
+                    position(scale, base, extent)
+                })
             })
         }
         progred_display::Layout::Pad {
