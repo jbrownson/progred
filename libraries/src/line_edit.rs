@@ -1,6 +1,6 @@
 //! The stock Rust line-edit control shared by atomic-value libraries.
 //! A library supplies spelling, affixes, and a conversion callback;
-//! Progred lowers the description through Puri.
+//! the native widget composes Puri text, painting, and handlers directly.
 
 use crate::{Library, name};
 use gid::{Cells, Value};
@@ -35,7 +35,7 @@ pub mod vocabulary {
     pub const INPUT: CellId = CellId::from_u128(0xd58c17f3402b96ea6f0e4a2b91c738d5);
 }
 
-pub fn layout<World, Hover>(
+pub fn layout<World: 'static, Hover: Clone + 'static>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
@@ -44,7 +44,7 @@ pub fn layout<World, Hover>(
     layout_with_family(text, update, prefix, suffix, TextFamily::SystemUi)
 }
 
-pub fn layout_with_family<World, Hover>(
+pub fn layout_with_family<World: 'static, Hover: Clone + 'static>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
@@ -54,7 +54,7 @@ pub fn layout_with_family<World, Hover>(
     description(text, None::<String>, update, prefix, suffix, family)
 }
 
-pub fn layout_with_placeholder<World, Hover>(
+pub fn layout_with_placeholder<World: 'static, Hover: Clone + 'static>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
     update: LineUpdate,
@@ -71,7 +71,7 @@ pub fn layout_with_placeholder<World, Hover>(
     )
 }
 
-fn description<World, Hover>(
+fn description<World: 'static, Hover: Clone + 'static>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
     update: LineUpdate,
@@ -106,10 +106,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_describes_the_host_line_editor() {
+    fn native_handler_captures_the_current_line_description() {
         let update = native(|spelling, _| Some(crate::text::value(spelling)));
         let layout = layout::<(), ()>("42", update.clone(), "(", ")");
-        let Layout::LineEdit(line) = layout else {
+        let Some(line) = crate::test_widgets::line(&layout) else {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.text, "42");
@@ -122,13 +122,13 @@ mod tests {
 
     #[test]
     fn layout_can_request_a_monospace_editor() {
-        let Layout::LineEdit(line) = layout_with_family::<(), ()>(
+        let Some(line) = crate::test_widgets::line(&layout_with_family::<(), ()>(
             "b4e0fe",
             native(|_, _| None),
             "#",
             "",
             TextFamily::Monospace,
-        ) else {
+        )) else {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.family, TextFamily::Monospace);
@@ -136,9 +136,13 @@ mod tests {
 
     #[test]
     fn layout_exposes_a_placeholder() {
-        let Layout::LineEdit(line) =
-            layout_with_placeholder::<(), ()>("", Some("λ"), native(|_, _| None), "", "")
-        else {
+        let Some(line) = crate::test_widgets::line(&layout_with_placeholder::<(), ()>(
+            "",
+            Some("λ"),
+            native(|_, _| None),
+            "",
+            "",
+        )) else {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.placeholder.as_deref(), Some("λ"));

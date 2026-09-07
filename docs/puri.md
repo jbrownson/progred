@@ -75,7 +75,16 @@ content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
 
-The upper `progred_display::Layout` still mixes these boxes with deferred
+Native widgets use `progred_display::widget::Widget`: a measurement function
+whose result places a `Fragment` of deferred ink, handlers, hover claims, and
+navigation declarations. `LineEdit` uses this path, with no control-specific
+layout constructor. `CanvasSink` is an object-safe bridge to the existing
+canvas interpreter, allowing native render closures to outlive measurement
+without fixing a rendering backend or constructing GID drawing data.
+The editor supplies the current text state and edit/selection capabilities;
+the generic layout adapter does not parse or render line-editor props.
+
+The upper `progred_display::Layout` still mixes boxes with other deferred
 editor requests. Separating that remaining layer is an
 [in-progress migration](layout-continuations.md), not a completed boundary.
 

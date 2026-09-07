@@ -237,6 +237,48 @@ pub trait Canvas {
     fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self));
 }
 
+/// Object-safe destination for native drawing continuations. This forwards
+/// operations immediately; it is not a command recording or another language.
+pub trait CanvasSink {
+    fn draw_image(&mut self, image: ImageData, transform: Affine);
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine);
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine);
+    fn draw_glyphs(&mut self, run: GlyphRun);
+    fn with_clip(
+        &mut self,
+        shape: Shape,
+        transform: Affine,
+        content: Box<dyn FnOnce(&mut dyn CanvasSink) + '_>,
+    );
+}
+
+impl<C: Canvas> CanvasSink for C {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
+        Canvas::image(self, image, transform);
+    }
+
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
+        Canvas::fill(self, shape, brush, transform);
+    }
+
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
+        Canvas::stroke(self, shape, style, brush, transform);
+    }
+
+    fn draw_glyphs(&mut self, run: GlyphRun) {
+        Canvas::glyph_run(self, run);
+    }
+
+    fn with_clip(
+        &mut self,
+        shape: Shape,
+        transform: Affine,
+        content: Box<dyn FnOnce(&mut dyn CanvasSink) + '_>,
+    ) {
+        Canvas::clip(self, shape, transform, move |canvas| content(canvas));
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DrawCmd {
     Image {

@@ -259,7 +259,7 @@ fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
     }))
 }
 
-pub fn display<World: 'static, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let encoded = encoded(input.value?)?;
@@ -443,8 +443,8 @@ mod tests {
                     if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_))))
         ));
         assert!(matches!(
-            &children[1],
-            Layout::LineEdit(line)
+            crate::test_widgets::line(&children[1]),
+            Some(line)
                 if line.text == "b4e0fe"
                     && line.prefix == "#"
                     && line.suffix.is_empty()
@@ -519,8 +519,8 @@ mod tests {
             } if field == name::vocabulary::NAME
         ));
         assert!(matches!(
-            &children[2],
-            Layout::LineEdit(line) if line.text == "663399"
+            crate::test_widgets::line(&children[2]),
+            Some(line) if line.text == "663399"
         ));
     }
 

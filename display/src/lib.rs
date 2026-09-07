@@ -1,9 +1,6 @@
-//! Layout a projection can return: boxes, leaves, walk, and event
-//! attachment. A leaf is a paint-parametric Puri program. The editor
-//! measures boxes and turns leaves into place continuations;
-//! libraries never see a UI runtime. Host intents are owned callbacks
-//! over the caller's `World`; Grap handlers are data carried by
-//! [`Layout::OnEvent`], not a central enum of editor actions.
+//! Projection composition and editor-facing native widgets. Native widgets
+//! return opaque measurement/placement continuations; the remaining traversal
+//! and event request nodes are being migrated through that same boundary.
 
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
@@ -14,6 +11,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 pub mod structure;
+pub mod widget;
 
 static NEXT_SHARED_LAYOUT: AtomicUsize = AtomicUsize::new(0);
 
@@ -46,23 +44,7 @@ pub enum Paint {
     Brush(Brush),
 }
 
-/// A Rust library's description of the stock host line editor. This
-/// is a layout/control request, not a drawing primitive: Progred
-/// lowers it through Puri into text, canvas ink, and event handlers.
-#[derive(Clone)]
-pub struct LineEdit {
-    pub text: String,
-    /// Ghost text shown only while the editable text is empty.
-    pub placeholder: Option<String>,
-    /// Convert the current spelling against the live value. This belongs
-    /// to this description's handlers, never durable selection state.
-    pub update: LineUpdate,
-    pub prefix: String,
-    pub suffix: String,
-    pub family: TextFamily,
-}
-
-pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
+pub use widget::line::{LineEdit, LineUpdate, layout as line_edit};
 
 /// A delimiter whose Puri metrics and ink depend on the enclosed span.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -368,7 +350,8 @@ pub enum Layout<World, Hover> {
         kind: CompletionKind,
         provider: Option<CompletionProvider>,
     },
-    LineEdit(LineEdit),
+    /// An ordinary native measurement program, producing opaque placement output.
+    Widget(widget::Widget<World, Hover>),
     /// An inert empty text frame, measured with the host's text style.
     EmptySlot,
     OnClick {
@@ -522,7 +505,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 kind: *kind,
                 provider: provider.clone(),
             },
-            Self::LineEdit(line) => Self::LineEdit(line.clone()),
+            Self::Widget(widget) => Self::Widget(widget.clone()),
             Self::EmptySlot => Self::EmptySlot,
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
@@ -787,10 +770,6 @@ pub fn completion<World, Hover>(
     provider: Option<CompletionProvider>,
 ) -> Layout<World, Hover> {
     Layout::Completion { kind, provider }
-}
-
-pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
-    Layout::LineEdit(line)
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {

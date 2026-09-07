@@ -183,13 +183,18 @@ vocabulary.
 
 Puri leaves carry text or canvas drawing operations. They do not acquire
 selection paths, document editing rules, names, or completion providers.
-`LineEdit` and `Completion` are explicit host-control requests above that leaf
-boundary. Text and f64 projections supply the stock line control's spelling,
-affixes, and a native conversion callback. The line library offers a separate
-adapter for Grap conversions; native controls do not round-trip through Grap.
-The current handler owns conversion, not the selection payload.
-Progred's [line control](../progred/src/projection/line_control.rs) adapts document operations;
-reusable widgets remain consumers of Puri. See [the editor model](model.md).
+The stock [line widget](../display/src/widget/line.rs) is an ordinary native
+function. Text and number projections supply its spelling, affixes, and
+conversion callback; `Layout::Widget` carries the resulting measurement
+program without inspecting its props. Placement contributes native render
+continuations, handlers, hover claims, and a navigation transition through
+the [widget output interface](../display/src/widget.rs). The editor supplies
+state and capabilities; its [line adapter](../progred/src/projection/line_control.rs)
+only applies editing operations, conversion, and undo grouping. The current
+handler owns conversion, not the selection payload. The line library adapts
+Grap conversions explicitly; native controls do not round-trip through Grap.
+Completion remains a host-control request pending the same migration.
+Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap

@@ -45,7 +45,7 @@ pub(crate) fn shallow_cell<World, Hover: Clone>(
     ))
 }
 
-fn declaration_cell<World: 'static, Hover: 'static>(
+fn declaration_cell<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value?.as_cell()?;
@@ -60,7 +60,7 @@ fn declaration_cell<World: 'static, Hover: 'static>(
     ))
 }
 
-fn declaration_name<World: 'static, Hover: 'static>(
+fn declaration_name<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     input.pending.is_none().then_some(())?;
@@ -80,7 +80,7 @@ fn declaration_name<World: 'static, Hover: 'static>(
     ))
 }
 
-fn lambda_name<World: 'static, Hover: Clone>(
+fn lambda_name<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     Some(match input.value {
@@ -123,7 +123,7 @@ pub(crate) fn expression_at<World: 'static, Hover: Clone + 'static>(
 
 /// Declaration cells keep their parentheses, with a name-only definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_at<World: 'static, Hover: 'static>(
+pub(crate) fn declaration_at<World: 'static, Hover: Clone + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     default: &progred_display::Partial<World, Hover>,
@@ -639,7 +639,9 @@ mod tests {
                     .unwrap()
                     .get(&name::vocabulary::NAME)
                     .unwrap();
-                let Layout::LineEdit(line) = projection(&input(&env, value)).unwrap() else {
+                let Some(line) =
+                    crate::test_widgets::line(&projection(&input(&env, value)).unwrap())
+                else {
                     panic!("a declaration name uses the stock editor");
                 };
                 assert_eq!(line.text, spelling);
@@ -1220,7 +1222,9 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Layout::LineEdit(line) = projection(&relative_input(&env(), value)).unwrap() else {
+        let Some(line) =
+            crate::test_widgets::line(&projection(&relative_input(&env(), value)).unwrap())
+        else {
             panic!("lambda name uses the stock line editor");
         };
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
@@ -1274,7 +1278,9 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Layout::LineEdit(line) = projection(&relative_input(&env(), value)).unwrap() else {
+        let Some(line) =
+            crate::test_widgets::line(&projection(&relative_input(&env(), value)).unwrap())
+        else {
             panic!("lambda name uses the stock line editor");
         };
         assert_eq!(line.text, "");

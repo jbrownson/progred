@@ -33,7 +33,7 @@ use measured::{Extent, Measured, pad, row};
 use peniko::{Brush, Color};
 use puri::delim;
 use puri::draw::Canvas;
-use puri::edit::{LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState};
+use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
@@ -243,13 +243,8 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 .map(|(query, _)| label_query(cx, tcx, path, query, provider.as_ref(), hooks))
                 .unwrap_or_else(|| render::text(tcx, "…", &cx.styles.dim)),
         }),
-        progred_display::Layout::LineEdit(mut line) => {
-            if let Some((scrub_path, spelling)) = cx.scrub_spelling
-                && scrub_path == path
-            {
-                line.text = spelling.to_owned();
-            }
-            ChoiceLayout::fixed(line_control::view(cx, tcx, path, line, hooks))
+        progred_display::Layout::Widget(widget) => {
+            ChoiceLayout::fixed(native_widget(cx, tcx, path, hooks, &widget))
         }
         progred_display::Layout::OnClick { child, handler } => {
             let inner = prepare(
@@ -786,6 +781,50 @@ impl Cx<'_> {
 
 fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
     LineEditPresentation::new(style.size, style.brush.clone())
+}
+
+fn native_widget<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    text: &mut TextCtx,
+    path: &[Step],
+    hooks: &Hooks<C>,
+    widget: &progred_display::widget::Widget<C, Hover>,
+) -> Measured<Placed<C, Cv>> {
+    let writable = !cx.source.transient() && writable_at(&cx.sources, path);
+    let selected = cx.selection.filter(|selection| {
+        writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
+    });
+    let initial_text = |spelling: &str| {
+        selected
+            .map(|selection| selection.initial_line(spelling))
+            .unwrap_or_else(|| LineEditState::new(spelling).with_cursor_at_end())
+    };
+    let edit = hooks.edit_line.clone();
+    let site: SharedPath = Rc::from(path);
+    let edit_path = site.clone();
+    let measured = widget(&mut progred_display::widget::Context {
+        text,
+        styles: cx.styles,
+        writable,
+        selected: selected.is_some(),
+        editing: selected.and_then(Selection::edit),
+        initial_text: &initial_text,
+        spelling: cx
+            .scrub_spelling
+            .filter(|(site, _)| *site == path)
+            .map(|(_, text)| text),
+        target: Hover::Value(site.clone()),
+        select: select_handler(site, hooks),
+        edit: Rc::new(move |world, description, operation| {
+            edit(world, &edit_path, description, operation)
+        }),
+        primary_edit: |event| {
+            is_primary_contact(event) && !crate::modifiers::pick(&event.state.modifiers)
+        },
+    });
+    placed::leaf(measured.extent, move |output, placement| {
+        output.fragment(measured::place(measured, placement));
+    })
 }
 
 fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {

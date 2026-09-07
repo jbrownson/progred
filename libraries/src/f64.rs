@@ -76,7 +76,7 @@ impl number::Scrubbable for f64 {
     }
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let number = read(input.value?)?;

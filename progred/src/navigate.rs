@@ -9,16 +9,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-/// Movement direction, or none for selection without directional navigation.
-pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
+pub use progred_display::widget::{Direction, Select};
 
 pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
     match &event.key {

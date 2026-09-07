@@ -326,15 +326,52 @@ fn projected_line(
         layout => layout,
     };
     match layout {
-        progred_display::Layout::LineEdit(line) => Some(line),
+        progred_display::Layout::Widget(widget) => placed_line_description(&widget),
         progred_display::Layout::Row { children, .. } => {
             children.into_iter().find_map(|child| match child {
-                progred_display::Layout::LineEdit(line) => Some(line),
+                progred_display::Layout::Widget(widget) => placed_line_description(&widget),
                 _ => None,
             })
         }
         _ => None,
     }
+}
+
+fn placed_line_description(
+    widget: &progred_display::widget::Widget<(), Hover>,
+) -> Option<progred_display::LineEdit> {
+    use std::cell::RefCell;
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::TextCache::default();
+    let captured = Rc::new(RefCell::new(None));
+    let output = captured.clone();
+    let measured = widget(&mut progred_display::widget::Context {
+        text: &mut TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            cache: &mut cache,
+            scale: 1.0,
+        },
+        styles: &crate::styles::editor(1.0),
+        writable: true,
+        selected: true,
+        editing: None,
+        spelling: None,
+        initial_text: &crate::selection::line_edit,
+        target: Hover::Value(Rc::from([])),
+        select: Rc::new(|_| true),
+        edit: Rc::new(move |_, description, _| {
+            output.replace(Some(description.clone()));
+            true
+        }),
+        primary_edit: |_| true,
+    });
+    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
+    measured::place(measured, placement)
+        .handler?
+        .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
+    captured.take()
 }
 
 // Direct conversion tests use a fresh projection's callback, just as a

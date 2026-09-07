@@ -58,7 +58,7 @@ pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
     parse_hex(spelling.trim()).map(Value::from)
 }
 
-pub fn display<World, Hover>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     Some(line_edit::layout_with_family(
@@ -70,7 +70,7 @@ pub fn display<World, Hover>(
     ))
 }
 
-pub fn library<World: 'static, Hover: 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UPDATE, name::record("blob update", []));
     Library::named(

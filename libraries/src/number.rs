@@ -73,7 +73,7 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
     fn spelling(self, precision: f64) -> String;
 }
 
-pub(crate) fn layout<World, Hover: Clone, N: Scrubbable + std::str::FromStr>(
+pub(crate) fn layout<World: 'static, Hover: Clone + 'static, N: Scrubbable + std::str::FromStr>(
     input: &ProjectionInput<'_, World, Hover>,
     number: N,
     representation: CellId,

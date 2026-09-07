@@ -69,7 +69,7 @@ impl number::Scrubbable for f32 {
     }
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     number::layout(input, read(input.value?)?, vocabulary::F32, value)

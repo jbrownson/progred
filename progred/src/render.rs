@@ -1,10 +1,9 @@
 //! Lower display leaves to measured Puri drawing and interaction.
 
 use crate::placed::{self, Placed, metrics_extent};
-use crate::styles::Styles;
 use measured::Measured;
 use puri::draw::Canvas;
-use puri::edit::{LineEditDescription, LineEditState};
+use puri::edit::LineEditDescription;
 use puri::text::{TextCtx, TextStyle};
 
 pub fn text<C: 'static, Cv: Canvas + 'static>(
@@ -48,46 +47,4 @@ pub fn text_edit<C: 'static, Cv: Canvas + 'static>(
     placed::leaf(metrics_extent(edit.metrics()), move |p, placement| {
         edit.place(p, placement, with)
     })
-}
-
-pub fn line_edit<C: 'static, Cv: Canvas + 'static>(
-    tcx: &mut TextCtx,
-    styles: &Styles,
-    line: &progred_display::LineEdit,
-    editing: Option<&LineEditState>,
-    edit: impl Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool + Clone + 'static,
-) -> Measured<Placed<C, Cv>> {
-    let style = styles.line_style(line);
-    let placeholder_style = TextStyle {
-        family: style.family,
-        ..styles.dim.clone()
-    };
-    match editing {
-        Some(state) => text_edit(
-            LineEditDescription {
-                state,
-                focused: true,
-                presentation: styles.line_presentation(line),
-                style: &styles.edit,
-                placeholder: line
-                    .placeholder
-                    .as_deref()
-                    .map(|placeholder| (placeholder, &placeholder_style)),
-            },
-            tcx,
-            edit,
-        ),
-        None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
-            Some(placeholder) => text(
-                tcx,
-                &format!("{}{}{}", line.prefix, placeholder, line.suffix),
-                &placeholder_style,
-            ),
-            None => text(
-                tcx,
-                &format!("{}{}{}", line.prefix, line.text, line.suffix),
-                &style,
-            ),
-        },
-    }
 }

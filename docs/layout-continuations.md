@@ -38,6 +38,18 @@ composition, not replacements for that stage.
   Progred's view and clipping wrappers forward this function rather than
   reconstructing seven channels. Clipping still gates starts and scroll, not
   active motion/release or keyboard/IME. Hover and rendering stages are unchanged.
+- LineEdit now crosses the native continuation boundary end-to-end.
+  `Layout::LineEdit` and its interpreter arm are deleted. The line widget is
+  an ordinary function in the Progred editor-facing widget API; it composes
+  Puri text measurement, rendering, and interaction. `Layout::Widget` carries
+  an opaque measurement function returning `Measured<Fragment>`.
+  The fragment contributes native render closures, a handler, hover claims,
+  and a navigation transition. The editor supplies current state and scoped
+  editing/selection capabilities, then incorporates these ordinary outputs.
+  Styles and navigation direction are shared API types, not application imports.
+  `CanvasSink` forwards native operations to any existing `Canvas`; it adds
+  no GID encoding, recording, evaluator round-trip, or cross-frame state.
+  The app's line adapter retains only document conversion and undo logic.
 - Layout's GID traversal descriptions now use the path library, including list
   elements and source-qualified follows. The duplicate encoding is removed.
 - State-scroll handlers use the same partial-consumption `ScrollOutcome` as
@@ -58,18 +70,13 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Move LineEdit through the continuation boundary end-to-end. Keep the actual
-   Puri editor; remove its special request from the upper Layout language.
-   Handler-owned conversion and native callbacks are done; `Layout::LineEdit`
-   is still a host request and must be removed. Preserve undo
-   grouping, intermediate spellings, IME, clipboard, and default caret behavior.
-2. Make geometric delimiters purely geometric. Attach their hover, selection,
+1. Make geometric delimiters purely geometric. Attach their hover, selection,
    and picking through explicit editor combinators with unchanged hit targets.
    Migrate other event and control wrappers through the same interface.
-3. Move traversal/evaluation out of the layout interpreter. Resolve a location
+2. Move traversal/evaluation out of the layout interpreter. Resolve a location
    and project it during description; contribute navigation and interactions
    from placement continuations so discarded alternatives register nothing.
-4. Delete obsolete Layout variants and interpreter arms as each producer moves.
+3. Delete obsolete Layout variants and interpreter arms as each producer moves.
    Do not retain a compatibility interpreter or replace each variant with an
    equivalent method on one giant host interface.
 
@@ -81,8 +88,9 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 5 `progred-display`,
-160 `progred-libraries`, 47 `puri`, and 261 `progred` (seven opt-in profiles excluded).
+The affected library tests pass: 22 `measured`, 8 `progred-display`,
+160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 261 `progred`
+(seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
 Line-control regressions cover a different conversion after reminting, no
@@ -126,3 +134,15 @@ versus 7 µs for the old separate-channel handler. A unified chain visits
 unrelated event registrations too. This is a deliberate interface tradeoff,
 not a dispatch speedup; the absolute cost is small against these frame workloads.
 The opt-in `puri` test `handler_dispatch_profile` retains that check.
+
+After the native LineEdit migration, the same frame medians were 3.96 ms for
+IoP source, 23.56 ms for IoP picture, 8.80 ms for Fidget, 7.65 ms for Torus,
+47.56 ms for Tanglecube, 30.07 ms for Gyroid, and 14.85 ms for Cube. Using the
+existing in-place measurement combinators instead of temporary fragment
+composition brought a repeat source run to 3.87 ms (p95 4.22 ms), against
+3.70 ms (p95 4.23 ms) at the preceding checkpoint. This small interface cost
+is not being presented as a performance improvement.
+Generic output tests verify deferred painting, explicit hover input, navigation
+and handler outputs, nested canvas clips, and discarded layout alternatives
+contributing no placement output. Existing line interaction tests still cover
+selection defaults, conversion, undo, caret movement, and reminted callbacks.

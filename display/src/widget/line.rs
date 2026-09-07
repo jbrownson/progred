@@ -1,0 +1,152 @@
+//! A document-aware line widget, composed from Puri text and input functions.
+
+use super::{Context, Direction, Fragment, Select, extent, leaf};
+use crate::{Env, Layout, TextFamily};
+use gid::Value;
+use measured::Measured;
+use puri::edit::{LineEditDescription, LineEditPointerDown};
+use puri::handler::HasHandler;
+use puri::text::TextStyle;
+use puri::{Placement, Point};
+use std::rc::Rc;
+
+/// Current props, captured by this frame's handlers; never persistent state.
+#[derive(Clone)]
+pub struct LineEdit {
+    pub text: String,
+    pub placeholder: Option<String>,
+    pub update: LineUpdate,
+    pub prefix: String,
+    pub suffix: String,
+    pub family: TextFamily,
+}
+
+pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
+
+pub fn layout<World: 'static, Hover: Clone + 'static>(line: LineEdit) -> Layout<World, Hover> {
+    Layout::Widget(Rc::new(move |context| view(context, line.clone())))
+}
+
+pub fn view<World: 'static, Hover: Clone + 'static>(
+    context: &mut Context<'_, '_, World, Hover>,
+    mut line: LineEdit,
+) -> Measured<Fragment<World, Hover>> {
+    if let Some(spelling) = context.spelling {
+        line.text = spelling.to_owned();
+    }
+    let active = context.writable && context.selected;
+    let default = (active && context.editing.is_none()).then(|| (context.initial_text)(&line.text));
+    let editing = active
+        .then_some(context.editing.or(default.as_ref()))
+        .flatten();
+    let style = context.styles.line_style(&line);
+    let placeholder_style = TextStyle {
+        family: style.family,
+        ..context.styles.dim.clone()
+    };
+    let content = match editing {
+        Some(state) => {
+            let widget = puri::edit::text_edit(
+                LineEditDescription {
+                    state,
+                    focused: true,
+                    presentation: context.styles.line_presentation(&line),
+                    style: &context.styles.edit,
+                    placeholder: line
+                        .placeholder
+                        .as_deref()
+                        .map(|text| (text, &placeholder_style)),
+                },
+                context.text,
+            );
+            let edit = context.edit.clone();
+            let line = line.clone();
+            leaf(extent(widget.metrics()), move |output, placement| {
+                if !placement.clipped_out() {
+                    widget.draw(output, placement);
+                }
+                widget.install(output, placement, move |world, operation| {
+                    edit(world, &line, operation)
+                });
+            })
+        }
+        None => {
+            let placeholder = line.placeholder.as_deref().filter(|_| line.text.is_empty());
+            let text = puri::text::text(
+                context.text,
+                &format!(
+                    "{}{}{}",
+                    line.prefix,
+                    placeholder.unwrap_or(&line.text),
+                    line.suffix
+                ),
+                if placeholder.is_some() {
+                    &placeholder_style
+                } else {
+                    &style
+                },
+            );
+            leaf(extent(text.metrics()), move |output, placement| {
+                if !placement.clipped_out() {
+                    text.place(output, placement);
+                }
+            })
+        }
+    };
+    if context.writable {
+        let select = context.select.clone();
+        let edit = context.edit.clone();
+        let description = line.clone();
+        let navigation: Select<World> = Rc::new(move |world, direction| {
+            select(world);
+            if direction == Some(Direction::Left) {
+                edit(world, &description, &|edit| {
+                    edit.state.cursor_to_start();
+                    true
+                });
+            }
+            true
+        });
+        let presentation = context.styles.line_presentation(&line);
+        let scale = context.styles.scale as f32;
+        let select = context.select.clone();
+        let edit = context.edit.clone();
+        let target = context.target.clone();
+        let primary_edit = context.primary_edit;
+        measured::before_into(content, move |placement: Placement, output| {
+            output.select = Some(navigation);
+            if !placement.clipped_out() {
+                output.claims.push((placement, target));
+            }
+            output.handler().on_pointer_down(move |world, event| {
+                primary_edit(event)
+                    && placement
+                        .contains(Point::new(event.state.position.x, event.state.position.y))
+                    && {
+                        if !active {
+                            select(world);
+                        }
+                        edit(world, &line, &|edit| {
+                            edit.state.pointer_down(
+                                &presentation,
+                                edit.fonts,
+                                edit.layouts,
+                                scale,
+                                LineEditPointerDown {
+                                    point: Point::new(
+                                        event.state.position.x - placement.rect.x0,
+                                        event.state.position.y - placement.rect.y0,
+                                    ),
+                                    shift: event.state.modifiers.shift(),
+                                    count: event.state.count.max(1),
+                                },
+                            );
+                            true
+                        }) || !active
+                    }
+            });
+        })
+    } else {
+        content
+    }
+}

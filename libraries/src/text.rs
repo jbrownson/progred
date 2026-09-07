@@ -78,7 +78,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value?)?;
@@ -165,7 +165,7 @@ mod tests {
             targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("text projection");
-        let progred_display::Layout::LineEdit(line) = display else {
+        let Some(line) = crate::test_widgets::line(&display) else {
             panic!("text projects directly to a line editor")
         };
         assert_eq!(line.text, "hi");

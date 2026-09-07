@@ -23,6 +23,43 @@ use uig::Placement;
 
 pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
 
+fn from_fragment<C: 'static, Cv: Canvas + 'static>(
+    fragment: progred_display::widget::Fragment<C, crate::hover::Hover>,
+) -> Placed<C, Cv> {
+    let mut placed = Placed::empty();
+    placed.probes = fragment
+        .claims
+        .into_iter()
+        .map(|(placement, target)| Probe::retaining(placement, Hovered::Tree(target)))
+        .collect();
+    placed.landmark_select = fragment.select;
+    placed.handler = fragment.handler.map(|handler| {
+        Handler::from_function(move |world, event, _| handler.dispatch(world, event, &mut ()))
+    });
+    if !fragment.renders.is_empty() {
+        placed.renders.push(Box::new(move |canvas, ink| {
+            let hover = match ink.hovered {
+                Some(Hovered::Tree(target)) => Some(target),
+                _ => None,
+            };
+            for render in fragment.renders {
+                render(canvas, hover);
+            }
+        }));
+    }
+    placed
+}
+
+impl<C: 'static, Cv: Canvas + 'static> Builder<'_, C, Cv> {
+    pub fn fragment(
+        &mut self,
+        fragment: progred_display::widget::Fragment<C, crate::hover::Hover>,
+    ) {
+        let before = std::mem::replace(self.placed, Placed::empty());
+        *self.placed = before.over(from_fragment(fragment));
+    }
+}
+
 enum ProbeTarget {
     Retains(Hovered),
     Exact(Hovered),
@@ -321,14 +358,6 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         for render in renders {
             render(canvas, ink);
         }
-    }
-}
-
-impl<C: 'static, Cv> Builder<'_, C, Cv> {
-    /// Install the selection transition for the navigation landmark
-    /// enclosing this projected control.
-    pub fn select_landmark(&mut self, action: crate::navigate::Select<C>) {
-        self.placed.landmark_select = Some(action);
     }
 }
 
