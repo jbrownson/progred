@@ -1,0 +1,377 @@
+{
+  "binders": {
+    "abs": 9f71b219018a191fab7b726732645ab1,
+    "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "bindings": f6fb0062e8a14f808e416a9edece2a9d,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "center_depth": 0006e7b3a692dacf923c343f440997b4,
+    "chamfer": c8d941b591fe167eddf75746f1715e3b,
+    "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "control_depth": 65ad865257a071f944d92b08fec98ebf,
+    "coordinate": 51c725afd7f69a39972f5e910066a235,
+    "cube": 650c98379ab879a6b902b0bc94305103,
+    "divide": f9b35090433ceb932fb6da18d0dcc9bf,
+    "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "f32_divide": fbf1ebc4eeeea21f86af583f6ad85e71,
+    "f32_subtract": 5cd7408dab067d8b92c7a1bd9cda7b05,
+    "face_pair": 111895a6b630ea7972df149951c62b9b,
+    "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
+    "half_size": f6e416437259d6867c11eced7923bf1c,
+    "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "max": 7082a82b3fd6dbc575aa5c85adfacc76,
+    "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
+    "max_y": c9e7268eb34af7bea225df94841c1c27,
+    "max_z": da0ed6603210813bf52a20df7bf27c7d,
+    "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
+    "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
+    "min_z": 392a615eb91c6d64df871ec95831f89a,
+    "multiply": d2b341855e79890fc79bb562b109fcaf,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "normal": 4b3db08982e1a337f2d43489f59b82a9,
+    "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
+    "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
+    "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
+    "size": f8ddfd6772816a66d2bc9c4d11df6625,
+    "square": 6164efe43a126d79bcd252a17a9453c1,
+    "subtract": 90e22494757f01a2ddf9bea409c186ae,
+    "sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
+    "u": c55bbadf3e61435c3aeab495079d1b19,
+    "v": 2029830ebecc5accb54f884443f9ae07,
+    "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "viewport": 709c987e4c2a110931d8597c4da68f69,
+    "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "x": 0192bad40c32c951e2237679084528bc,
+    "y": 213e54dd15ac9c9750308f35a606f56f,
+    "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
+  },
+  "cells": {
+    center_depth: {
+      name: "center depth",
+    },
+    chamfer: {
+      name: "chamfer",
+    },
+    chamfer_pair: {
+      name: "chamfer pair",
+    },
+    control_depth: {
+      name: "control depth",
+    },
+    coordinate: {
+      name: "coordinate",
+    },
+    edge_limit: {
+      name: "edge limit",
+    },
+    face_pair: {
+      name: "face pair",
+    },
+    cube: {
+      name: "fidget cube",
+      params: [],
+      body: {
+        function: where,
+        expression: {
+          right: {
+            right: {
+              right: {
+                v: {
+                  axis: z,
+                },
+                function: chamfer_pair,
+                u: {
+                  axis: y,
+                },
+              },
+              function: max,
+              left: {
+                v: {
+                  axis: z,
+                },
+                function: chamfer_pair,
+                u: {
+                  axis: x,
+                },
+              },
+            },
+            function: max,
+            left: {
+              v: {
+                axis: y,
+              },
+              function: chamfer_pair,
+              u: {
+                axis: x,
+              },
+            },
+          },
+          function: max,
+          left: {
+            right: {
+              right: {
+                v: {
+                  axis: y,
+                },
+                normal: {
+                  axis: z,
+                },
+                function: face_pair,
+                u: {
+                  axis: x,
+                },
+              },
+              function: max,
+              left: {
+                v: {
+                  axis: z,
+                },
+                normal: {
+                  axis: y,
+                },
+                function: face_pair,
+                u: {
+                  axis: x,
+                },
+              },
+            },
+            function: max,
+            left: {
+              v: {
+                axis: z,
+              },
+              normal: {
+                axis: x,
+              },
+              function: face_pair,
+              u: {
+                axis: y,
+              },
+            },
+          },
+        },
+        bindings: [
+          {
+            value: {
+              f32: 0x0000803f,
+            },
+            bind: size,
+          },
+          {
+            value: {
+              f32: 0xcdcccc3d,
+            },
+            bind: chamfer,
+          },
+          {
+            value: {
+              f32: 0x0000003f,
+            },
+            bind: control_depth,
+          },
+          {
+            value: {
+              right: {
+                f32: 0x00000040,
+              },
+              function: f32_divide,
+              left: size,
+            },
+            bind: half_size,
+          },
+          {
+            value: {
+              right: chamfer,
+              function: f32_subtract,
+              left: half_size,
+            },
+            bind: half_face,
+          },
+          {
+            value: {
+              right: {
+                f32: 0x00008040,
+              },
+              function: f32_divide,
+              left: control_depth,
+            },
+            bind: center_depth,
+          },
+          {
+            value: {
+              right: chamfer,
+              function: f32_subtract,
+              left: size,
+            },
+            bind: edge_limit,
+          },
+          {
+            value: {
+              params: [
+                coordinate,
+              ],
+              body: {
+                right: {
+                  right: {
+                    operand: {
+                      right: half_face,
+                      function: divide,
+                      left: coordinate,
+                    },
+                    function: square,
+                  },
+                  function: subtract,
+                  left: {
+                    f32: 0x0000803f,
+                  },
+                },
+                function: max,
+                left: {
+                  f32: 0x00000000,
+                },
+              },
+            },
+            bind: shoulder,
+          },
+          {
+            value: {
+              params: [
+                normal,
+                u,
+                v,
+              ],
+              body: {
+                right: {
+                  right: {
+                    right: {
+                      coordinate: v,
+                      function: shoulder,
+                    },
+                    function: multiply,
+                    left: {
+                      coordinate: u,
+                      function: shoulder,
+                    },
+                  },
+                  function: multiply,
+                  left: center_depth,
+                },
+                function: sum,
+                left: {
+                  right: half_size,
+                  function: subtract,
+                  left: {
+                    operand: normal,
+                    function: abs,
+                  },
+                },
+              },
+            },
+            bind: face_pair,
+          },
+          {
+            value: {
+              params: [
+                u,
+                v,
+              ],
+              body: {
+                right: edge_limit,
+                function: subtract,
+                left: {
+                  right: {
+                    operand: v,
+                    function: abs,
+                  },
+                  function: sum,
+                  left: {
+                    operand: u,
+                    function: abs,
+                  },
+                },
+              },
+            },
+            bind: chamfer_pair,
+          },
+        ],
+      },
+    },
+    half_face: {
+      name: "half face",
+    },
+    half_size: {
+      name: "half size",
+    },
+    normal: {
+      name: "normal",
+    },
+    shoulder: {
+      name: "shoulder",
+    },
+    size: {
+      name: "size",
+    },
+    u: {
+      name: "u",
+    },
+    v: {
+      name: "v",
+    },
+  },
+  "root": {
+    fidget: [
+      cube,
+    ],
+    panes: {
+      pane_left: [
+        {
+          viewport: {
+            params: [
+              projection_value,
+              width,
+              height,
+            ],
+            body: {
+              min_z: {
+                f32: 0x9a9919bf,
+              },
+              function: preview_3d,
+              projection_value: {
+                function: projection_value,
+              },
+              max_x: {
+                f32: 0x9a99193f,
+              },
+              max_y: {
+                f32: 0x9a99193f,
+              },
+              height: height,
+              max_z: {
+                f32: 0x9a99193f,
+              },
+              min_y: {
+                f32: 0x9a9919bf,
+              },
+              width: width,
+              min_x: {
+                f32: 0x9a9919bf,
+              },
+            },
+          },
+          projection_value: cube,
+        },
+      ],
+    },
+  },
+}

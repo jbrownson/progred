@@ -284,6 +284,7 @@ fn key(s: &str) -> Step {
 
 mod completion;
 mod drawing;
+mod fidget_cube;
 mod fidget_source;
 mod interaction;
 mod iop_tree_native;

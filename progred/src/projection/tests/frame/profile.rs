@@ -255,9 +255,20 @@ fn fidget_gyroid_profile_loop() {
 }
 
 #[test]
+#[ignore]
+fn fidget_cube_profile_loop() {
+    fidget_orbit_profile(Example::Cube);
+}
+
+#[test]
 fn complex_fidget_examples_render_visible_surfaces() {
     let side = 64;
-    for example in [Example::Torus, Example::Tanglecube, Example::Gyroid] {
+    for example in [
+        Example::Torus,
+        Example::Tanglecube,
+        Example::Gyroid,
+        Example::Cube,
+    ] {
         let doc = fixture(example.source());
         let view = ProfileView {
             size: kurbo::Size::new(side as f64, side as f64),

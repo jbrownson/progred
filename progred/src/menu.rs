@@ -591,6 +591,7 @@ mod tests {
             ("5", Example::Torus),
             ("6", Example::Tanglecube),
             ("7", Example::Gyroid),
+            ("8", Example::Cube),
         ] {
             assert_eq!(
                 shortcut(&key(digit, Modifiers::CONTROL)),
@@ -724,7 +725,7 @@ mod tests {
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition();
         let commands = commands(&definition).collect::<Vec<_>>();
-        assert_eq!(commands.len(), 24);
+        assert_eq!(commands.len(), 17 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }

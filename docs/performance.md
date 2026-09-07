@@ -60,9 +60,11 @@ before/after runs when evaluating small changes.
 | Torus orbit | 400 × 600 | 2 | Same camera sequence |
 | Tanglecube orbit | 400 × 600 | 2 | Same camera sequence |
 | Gyroid sphere orbit | 400 × 600 | 2 | Same camera sequence |
+| Fidget cube orbit | 400 × 600 | 2 | Same camera sequence; Rhino-derived quadratic faces |
 
 The additional filters are `fidget_torus_profile_loop`,
-`fidget_tanglecube_profile_loop`, and `fidget_gyroid_profile_loop`. These use the
+`fidget_tanglecube_profile_loop`, `fidget_gyroid_profile_loop`, and
+`fidget_cube_profile_loop`. These use the
 same helper as the original Fidget canary, changing only the document. Their
 editable formulas and sources are described in [the examples guide](../examples/README.md).
 

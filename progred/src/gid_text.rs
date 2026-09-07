@@ -820,7 +820,12 @@ mod checked_in_files {
     #[test]
     fn complex_fidget_examples_are_fixed_points_without_orphans() {
         use crate::command::Example;
-        for example in [Example::Torus, Example::Tanglecube, Example::Gyroid] {
+        for example in [
+            Example::Torus,
+            Example::Tanglecube,
+            Example::Gyroid,
+            Example::Cube,
+        ] {
             let (doc, binders) = parse(example.source()).expect("the example parses");
             assert_eq!(print(&doc, &binders), example.source(), "{example:?}");
             let reached = root_reachable_cells(&doc);

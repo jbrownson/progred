@@ -210,6 +210,7 @@ fn svg_bench_renders_fidget_source() {
         (Example::Torus, "fidget_torus.svg"),
         (Example::Tanglecube, "fidget_tanglecube.svg"),
         (Example::Gyroid, "fidget_gyroid.svg"),
+        (Example::Cube, "fidget_cube.svg"),
     ] {
         let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
         render(&doc, None, 560.0, file);

@@ -27,10 +27,11 @@ pub enum Example {
     Torus,
     Tanglecube,
     Gyroid,
+    Cube,
 }
 
 impl Example {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Sample,
         Self::Grap,
         Self::IopTree,
@@ -38,6 +39,7 @@ impl Example {
         Self::Torus,
         Self::Tanglecube,
         Self::Gyroid,
+        Self::Cube,
     ];
 
     pub fn source(self) -> &'static str {
@@ -49,6 +51,7 @@ impl Example {
             Self::Torus => include_str!("../../examples/fidget-torus.gid"),
             Self::Tanglecube => include_str!("../../examples/fidget-tanglecube.gid"),
             Self::Gyroid => include_str!("../../examples/fidget-gyroid.gid"),
+            Self::Cube => include_str!("../../examples/fidget-cube.gid"),
         }
     }
 }
@@ -106,6 +109,7 @@ pub enum ShortcutKey {
     Digit5,
     Digit6,
     Digit7,
+    Digit8,
     D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -130,6 +134,7 @@ impl ShortcutKey {
             Self::Digit5 => "5",
             Self::Digit6 => "6",
             Self::Digit7 => "7",
+            Self::Digit8 => "8",
             Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -201,6 +206,9 @@ pub fn spec(command: Command) -> Spec {
         }
         Command::App(AppCommand::Example(Example::Gyroid)) => {
             item("Gyroid sphere", Some(Shortcut::plain(ShortcutKey::Digit7)))
+        }
+        Command::App(AppCommand::Example(Example::Cube)) => {
+            item("Fidget cube", Some(Shortcut::plain(ShortcutKey::Digit8)))
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),

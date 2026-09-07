@@ -428,7 +428,7 @@ mod tests {
             vec!["Progred", "File", "Examples", "Edit", "View", "Window"]
         );
         let commands = commands(&definition);
-        assert_eq!(commands.len(), 24);
+        assert_eq!(commands.len(), 17 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }
