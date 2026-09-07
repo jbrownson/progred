@@ -42,64 +42,313 @@ fn projection_target_appends_relative_steps() {
 }
 
 #[test]
-fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() {
-    struct NoEval;
-    impl progred_display::Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
-            panic!("unexpected projection application")
-        }
-
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            panic!("projection evaluated")
+fn contextual_projection_is_local_whether_it_accepts_or_declines() {
+    use progred_display::{at_local, descend, descend_local, partial, row};
+    for use_at in [false, true] {
+        for accepts in [false, true] {
+            let field = new_cell_id();
+            let child = new_cell_id();
+            let sibling = new_cell_id();
+            let nested = Value::record([(child, Value::from(vec![1]))]);
+            let root = Value::record([(field, nested.clone()), (sibling, Value::from(vec![2]))]);
+            let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+            let calls = seen.clone();
+            let local = partial(
+                move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                    calls.borrow_mut().push(input.value?.clone());
+                    accepts.then(|| descend(Step::Key(child), None, None))
+                },
+            );
+            let expected_root = root.clone();
+            let ambient_seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+            let ambient_calls = ambient_seen.clone();
+            let projection = Projection::new([partial(move |input| {
+                ambient_calls.borrow_mut().push(input.value?.clone());
+                (input.value == Some(&expected_root)).then(|| {
+                    row(
+                        0.0,
+                        [
+                            if use_at {
+                                at_local(
+                                    [Step::Key(field)],
+                                    &nested,
+                                    local.clone(),
+                                    &input.default_projection,
+                                )
+                            } else {
+                                descend_local(
+                                    Step::Key(field),
+                                    local.clone(),
+                                    &input.default_projection,
+                                )
+                            },
+                            descend(Step::Key(sibling), None, None),
+                        ],
+                    )
+                })
+            })]);
+            let mut world = EditingWorld::new(
+                &Document {
+                    root: Some(root),
+                    cells: Cells::new(),
+                },
+                &core_libraries(),
+            );
+            editing_frame_with_projection(&mut world, false, Some(&projection));
+            assert_eq!(
+                *seen.borrow(),
+                [Value::record([(child, Value::from(vec![1]))])]
+            );
+            assert!(ambient_seen.borrow().contains(&Value::from(vec![1])));
+            assert!(ambient_seen.borrow().contains(&Value::from(vec![2])));
+            assert_eq!(ambient_seen.borrow().contains(&seen.borrow()[0]), !accepts);
         }
     }
+}
 
-    let ambient = Projection::new([progred_display::partial(ambient_probe)]);
-    let value = Value::record([]);
-    let target = |_| progred_display::ProjectionTarget {
-        select: Rc::new(|_: &mut ()| false),
-        select_with: Rc::new(|_: &mut (), _| false),
-        hover: Hover::Value(Rc::from([])),
-    };
-    let apply = |projection: &Projection<()>| {
-        projection
-            .apply(&progred_display::ProjectionInput {
-                env: &NoEval,
-                value: &value,
-                scale_factor: 1.0,
-                writable: true,
-                selection: None,
-                pending: None,
-                state: None,
-                targets: progred_display::ProjectionTargets::new(&target),
+#[test]
+fn local_projection_receives_missing_values_without_leaking_through_follow_or_transient_roots() {
+    use progred_display::{descend, descend_local, partial, transient};
+    for mode in 0..3 {
+        let cell = new_cell_id();
+        let field = new_cell_id();
+        let leaf = Value::from(vec![7]);
+        let root = Value::record([(field, Value::Cell(cell))]);
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let calls = seen.clone();
+        let local = partial(
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                calls.borrow_mut().push(input.value.cloned());
+                match mode {
+                    0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
+                    1 => Some(transient(&Value::from(vec![7]), 100)),
+                    _ => None,
+                }
+            },
+        );
+        let expected_root = root.clone();
+        let projection = Projection::new([partial(move |input| {
+            (input.value == Some(&expected_root)).then(|| {
+                descend_local(
+                    Step::Key(if mode == 2 { cell } else { field }),
+                    local.clone(),
+                    &input.default_projection,
+                )
             })
-            .unwrap()
-    };
-    let text = |layout| match layout {
-        progred_display::Layout::Leaf(puri::Leaf::Text { text, .. }) => text,
-        _ => panic!("probe returns text"),
-    };
+        })]);
+        let mut cells = Cells::new();
+        cells.set_value(cell, leaf.clone());
+        let mut world = EditingWorld::new(
+            &Document {
+                root: Some(root),
+                cells,
+            },
+            &core_libraries(),
+        );
+        editing_frame_with_projection(&mut world, false, Some(&projection));
+        assert_eq!(
+            *seen.borrow(),
+            [if mode == 2 { None } else { Some(cell.into()) }]
+        );
+        assert!(!seen.borrow().contains(&Some(leaf)));
+    }
+}
 
-    assert_eq!(
-        text(apply(
-            &contextual_projection(
-                Some(&ambient),
-                Some(vec![progred_display::partial(contextual_probe)]),
-            )
-            .unwrap()
-        )),
-        "contextual"
+#[test]
+fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
+    let cell = new_cell_id();
+    let field = new_cell_id();
+    let definition = Value::record([(field, Value::from(vec![3]))]);
+    let mut cells = Cells::new();
+    cells.set_value(cell, definition.clone());
+    let mut world = EditingWorld::new(
+        &Document {
+            root: Some(cell.into()),
+            cells,
+        },
+        &core_libraries(),
     );
-    assert_eq!(
-        text(apply(
-            &contextual_projection(
-                Some(&ambient),
-                Some(vec![progred_display::partial(declining_probe)]),
-            )
-            .unwrap()
-        )),
-        "ambient"
+    let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let calls = seen.clone();
+    let projection = Projection::default().with_entry(progred_display::partial(move |input| {
+        calls.borrow_mut().push(input.value?.clone());
+        None
+    }));
+    editing_frame_with_projection(&mut world, false, Some(&projection));
+    assert_eq!(*seen.borrow(), [Value::Cell(cell), definition]);
+}
+
+#[test]
+fn descents_replace_current_and_default_projections_independently() {
+    use progred_display::{at_with_projection, descend, dim, partial, row};
+    for use_at in [false, true] {
+        let field = new_cell_id();
+        let child = new_cell_id();
+        let sibling = new_cell_id();
+        let nested = Value::record([(child, Value::from(vec![1]))]);
+        let root = Value::record([(field, nested.clone()), (sibling, Value::from(vec![2]))]);
+        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let current_seen = seen.clone();
+        let current = partial(
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                current_seen
+                    .borrow_mut()
+                    .push(("current", input.value?.clone()));
+                None
+            },
+        );
+        let child_seen = seen.clone();
+        let children = partial(
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                child_seen
+                    .borrow_mut()
+                    .push(("children", input.value?.clone()));
+                Some(dim("child"))
+            },
+        );
+        let default_seen = seen.clone();
+        let expected_root = root.clone();
+        let projection = Projection::new([partial(move |input| {
+            default_seen
+                .borrow_mut()
+                .push(("original", input.value?.clone()));
+            (input.value == Some(&expected_root)).then(|| {
+                row(
+                    0.0,
+                    [
+                        if use_at {
+                            at_with_projection(
+                                [Step::Key(field)],
+                                &nested,
+                                Some(current.clone()),
+                                Some(children.clone()),
+                            )
+                        } else {
+                            descend(
+                                Step::Key(field),
+                                Some(current.clone()),
+                                Some(children.clone()),
+                            )
+                        },
+                        descend(Step::Key(sibling), None, None),
+                    ],
+                )
+            })
+        })]);
+        let mut world = EditingWorld::new(
+            &Document {
+                root: Some(root.clone()),
+                cells: Cells::new(),
+            },
+            &core_libraries(),
+        );
+        editing_frame_with_projection(&mut world, false, Some(&projection));
+        assert_eq!(
+            *seen.borrow(),
+            [
+                ("original", root),
+                ("current", Value::record([(child, Value::from(vec![1]))])),
+                ("children", Value::from(vec![1])),
+                ("original", Value::from(vec![2])),
+            ]
+        );
+    }
+}
+
+#[test]
+fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
+    use progred_display::{at_scoped, descend, dim, partial, row};
+    let scoped = new_cell_id();
+    let ordinary = new_cell_id();
+    let items = new_cell_id();
+    let cell = new_cell_id();
+    let nested = Value::record([(items, Value::list([Value::from(vec![1]), cell.into()]))]);
+    let root = Value::record([(scoped, nested.clone()), (ordinary, nested.clone())]);
+    let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let calls = seen.clone();
+    let special = partial(
+        move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+            input.value?.as_blob()?;
+            calls.borrow_mut().push(input.value?.clone());
+            Some(dim("scoped"))
+        },
     );
+    let expected_root = root.clone();
+    let projection = Projection::new([partial(move |input| {
+        (input.value == Some(&expected_root)).then(|| {
+            row(
+                0.0,
+                [
+                    at_scoped(
+                        [Step::Key(scoped)],
+                        &nested,
+                        special.clone(),
+                        &input.default_projection,
+                    ),
+                    descend(Step::Key(ordinary), None, None),
+                ],
+            )
+        })
+    })]);
+    let mut cells = Cells::new();
+    cells.set_value(cell, Value::from(vec![2]));
+    let mut world = EditingWorld::new(
+        &Document {
+            root: Some(root),
+            cells,
+        },
+        &core_libraries(),
+    );
+    editing_frame_with_projection(&mut world, false, Some(&projection));
+    assert_eq!(*seen.borrow(), [Value::from(vec![1]), Value::from(vec![2])]);
+}
+
+#[test]
+fn record_combinator_chooses_a_projection_for_each_field() {
+    use progred_display::{dim, partial, structure};
+    let first = new_cell_id();
+    let second = new_cell_id();
+    let ordinary = new_cell_id();
+    let value = Value::from(vec![1]);
+    let root = Value::record([
+        (first, value.clone()),
+        (second, value.clone()),
+        (ordinary, value),
+    ]);
+    let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let observe = |key| {
+        let seen = seen.clone();
+        partial(
+            move |_: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                seen.borrow_mut().push(key);
+                Some(dim("field"))
+            },
+        )
+    };
+    let first_projection = observe(first);
+    let second_projection = observe(second);
+    let default_projection = observe(ordinary);
+    let projection = Projection::new([
+        structure::record(move |key| match key {
+            key if key == first => Some(first_projection.clone()),
+            key if key == second => Some(second_projection.clone()),
+            _ => None,
+        }),
+        default_projection,
+    ]);
+    let mut world = EditingWorld::new(
+        &Document {
+            root: Some(root),
+            cells: Cells::new(),
+        },
+        &core_libraries(),
+    );
+    editing_frame_with_projection(&mut world, false, Some(&projection));
+    let mut actual = seen.borrow().clone();
+    actual.sort();
+    let mut expected = [first, second, ordinary];
+    expected.sort();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -286,7 +535,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     fn probe(
         input: &progred_display::ProjectionInput<'_, (), Hover>,
     ) -> Option<progred_display::Layout<(), Hover>> {
-        input.value.as_blob()?;
+        input.value?.as_blob()?;
         Some(progred_display::dim(
             match (input.selection.is_some(), input.state.is_some()) {
                 (true, _) => "selected here",
@@ -417,7 +666,7 @@ fn a_projection_defined_as_data_realizes() {
         input: &progred_display::ProjectionInput<'_, (), Hover>,
     ) -> Option<progred_display::Layout<(), Hover>> {
         use progred_libraries::layout as data;
-        input.value.as_blob()?;
+        input.value?.as_blob()?;
         let target = input.targets.current();
         data::decode(
             &data::selectable(data::row(

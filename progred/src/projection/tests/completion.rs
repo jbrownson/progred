@@ -156,6 +156,151 @@ fn completion_source_attribution_uses_the_document_vocabulary_name() {
 }
 
 #[test]
+fn a_plain_missing_name_selection_offers_and_commits_text() {
+    let stack = crate::stack::load::<()>();
+    let root = crate::workspace::Root::document();
+    let doc = Document {
+        root: Some(grap::lambda([], Value::record([]))),
+        cells: Cells::new(),
+    };
+    let path = vec![Step::Key(name::vocabulary::NAME)];
+    for payload in [Value::record([]), progred_libraries::selection::edge()] {
+        let selected = Selection::from_payload(
+            &root,
+            &src(&doc, &stack.libraries),
+            path.clone(),
+            payload.clone(),
+        );
+        assert!(selected.edit().is_none());
+        let entries = projected_completion_entries(&doc, &selected);
+        assert_eq!(entries.len(), 1);
+        let offered = activated(&entries[0]);
+        assert_eq!(offered.value, Some(text::value("")));
+        assert_eq!(selected.payload(), payload);
+        let prepared = crate::completion::prepare(
+            &src(&doc, &stack.libraries),
+            &selected,
+            &Annotations::default(),
+            offered.value.unwrap(),
+            None,
+            offered.on_commit.as_ref(),
+        )
+        .unwrap();
+        assert_eq!(
+            src(&prepared.document, &stack.libraries).resolve_path(&path),
+            Some(&text::value(""))
+        );
+        assert!(src(&doc, &stack.libraries).resolve_path(&path).is_none());
+    }
+}
+
+#[test]
+fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
+    use grap::vocabulary::{BODY, PARAMS};
+    use progred_libraries::grap::vocabulary::GRAP;
+
+    let libraries = core_libraries();
+    let root = crate::workspace::Root::document();
+    let cell = new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([(GRAP, cell.into())])),
+        cells: Cells::new(),
+    };
+    let path = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
+    for query in ["new lambda", "lambda", "λ"] {
+        let pending = crate::selection::pending_with_query(&root, path.clone(), query);
+        let entries = projected_completion_entries(&doc, &pending);
+        let entry = entries
+            .iter()
+            .find(|entry| entry.display == "new lambda")
+            .expect("lambda is available without expanding");
+        assert_eq!(entry.detail.as_deref(), Some("grap"));
+        let offered = activated(entry);
+        assert_eq!(
+            offered.value,
+            Some(Value::record([(PARAMS, Value::list([]))]))
+        );
+        let prepared = crate::completion::prepare(
+            &src(&doc, &libraries),
+            &pending,
+            &Annotations::default(),
+            offered.value.unwrap(),
+            None,
+            offered.on_commit.as_ref(),
+        )
+        .unwrap();
+        let mut selected = Some(pending);
+        crate::site::install(
+            prepared.effects,
+            &src(&prepared.document, &libraries),
+            &root,
+            &prepared.path,
+            &mut Annotations::default(),
+            &mut selected,
+        );
+        let selected = selected.unwrap();
+        let body_path = path
+            .iter()
+            .cloned()
+            .chain([Step::Key(BODY)])
+            .collect::<Path>();
+        let name_path = path
+            .iter()
+            .cloned()
+            .chain([Step::Key(name::vocabulary::NAME)])
+            .collect::<Path>();
+        assert_eq!(selected.path(), body_path);
+        assert_eq!(
+            selected.stage(&src(&prepared.document, &libraries)),
+            Stage::Pending
+        );
+        assert!(
+            src(&prepared.document, &libraries)
+                .resolve_path(&body_path)
+                .is_none()
+        );
+        assert!(
+            src(&prepared.document, &libraries)
+                .resolve_path(&name_path)
+                .is_none()
+        );
+        let mut world = EditingWorld::new(&prepared.document, &libraries);
+        world.selection = Some(selected);
+        assert!(editing_frame(&mut world, false).completion.is_some());
+
+        let name_selection = make_projected_selection(&prepared.document, &libraries, name_path);
+        let names = projected_completion_entries(&prepared.document, &name_selection);
+        assert_eq!(names.len(), 1);
+        assert_eq!(activated(&names[0]).value, Some(text::value("")));
+        assert!(
+            doc.cells.value(cell).is_none(),
+            "offering and staging do not edit the original"
+        );
+    }
+}
+
+#[test]
+fn lambda_completion_is_available_in_everything_but_not_in_label_pickers() {
+    let libraries = core_libraries();
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = src(&doc, &libraries);
+    for query in ["lambda", "λ"] {
+        for raw in [false, true] {
+            let entries = completion_entries(&sources, raw, false, query);
+            assert!(entries.iter().any(|entry| entry.display == "new lambda"));
+            assert!(
+                !completion_entries(&sources, raw, true, query)
+                    .iter()
+                    .any(|entry| entry.display == "new lambda")
+            );
+        }
+    }
+}
+
+#[test]
 fn duplicate_definitions_offer_one_reference_with_the_selected_name() {
     let cell = new_cell_id();
     let mut library_cells = Cells::new();
@@ -344,10 +489,17 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                             < first_number
                     );
                 }
-                assert_eq!(
-                    activated(&entries[first_number + 3]).value,
-                    Some(text::value(""))
-                );
+                let last_number = entries
+                    .iter()
+                    .rposition(|entry| {
+                        activated(entry).value.as_ref().and_then(u64::read) == Some(0)
+                    })
+                    .unwrap();
+                let empty_string = entries
+                    .iter()
+                    .position(|entry| activated(entry).value == Some(text::value("")))
+                    .unwrap();
+                assert!(last_number < empty_string);
             }
         }
         for query in ["word", "1e", "\"12\"", "0xff"] {
@@ -566,7 +718,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
         );
         let selected = selected.unwrap();
         assert_eq!(selected.path(), path);
-        assert_eq!(selected.stage(), Stage::Edge);
+        assert_eq!(selected.stage(&src(&document, &libraries)), Stage::Edge);
         assert!(selected.edit().is_none());
         assert_eq!(
             selected.payload(),
@@ -677,7 +829,8 @@ fn label_offer_explicitly_opens_its_missing_value() {
     let (path, payload) = prepared.effects.selection.unwrap();
     assert_eq!(path, [Step::Key(field)]);
     assert_eq!(
-        Selection::from_payload(&root, &src(&doc, &libraries), path, payload).stage(),
+        Selection::from_payload(&root, &src(&doc, &libraries), path, payload)
+            .stage(&src(&doc, &libraries)),
         Stage::Pending
     );
 }
@@ -913,7 +1066,10 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             selected.path(),
             [Step::Key(field), Step::Follow(Resolution::Document)]
         );
-        assert_eq!(selected.stage(), Stage::Pending);
+        assert_eq!(
+            selected.stage(&src(&prepared.document, &stack.libraries)),
+            Stage::Pending
+        );
         let choices = projected_completion_entries(&prepared.document, &selected);
         if field == fidget::vocabulary::FIDGET {
             assert!(choices.iter().any(|choice| activated(choice).value
@@ -1009,13 +1165,14 @@ fn projected_completion_entries(
     doc: &Document,
     selection: &Selection,
 ) -> Vec<Entry<CompletionResult>> {
-    projected_completion_entries_with(doc, selection, None)
+    projected_completion_entries_with(doc, selection, None, None)
 }
 
 fn projected_completion_entries_with(
     doc: &Document,
     selection: &Selection,
     projection: Option<&Projection<CompletionResult>>,
+    provider: Option<&progred_display::CompletionProvider>,
 ) -> Vec<Entry<CompletionResult>> {
     let stack = crate::stack::load::<CompletionResult>();
     let styles = crate::styles::editor(1.0);
@@ -1046,7 +1203,7 @@ fn projected_completion_entries_with(
         },
         &mut tcx,
         Hooks {
-            completions: Some(stack.completions.clone()),
+            completions: Some(provider.unwrap_or(&stack.completions).clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
             edit_line: Rc::new(|_, _, _| None),
@@ -1078,7 +1235,7 @@ fn projected_completion_entries_with(
 
 #[test]
 fn only_the_active_empty_requests_completion_offers() {
-    use progred_display::{Completion, CompletionKind, completion, descend};
+    use progred_display::{Completion, descend};
 
     let fields = std::array::from_fn::<_, 32, _>(|_| new_cell_id());
     let requests = Rc::new(std::cell::Cell::new(0));
@@ -1089,17 +1246,12 @@ fn only_the_active_empty_requests_completion_offers() {
             Some(vec![Completion::new("offered", Value::record([]))])
         })
     };
-    let projection = Projection::new([progred_display::partial(move |_| {
+    let projection = Projection::new([progred_display::partial(move |input| {
+        input.value?.as_record()?;
         Some(progred_display::col(
             0,
             0.0,
-            fields.map(|field| {
-                descend(
-                    Step::Key(field),
-                    None,
-                    Some(completion(CompletionKind::Value, Some(provider.clone()))),
-                )
-            }),
+            fields.map(|field| descend(Step::Key(field), None, None)),
         ))
     })]);
     let document = Document {
@@ -1110,7 +1262,12 @@ fn only_the_active_empty_requests_completion_offers() {
         &crate::workspace::Root::document(),
         vec![Step::Key(fields[12])],
     );
-    let entries = projected_completion_entries_with(&document, &selection, Some(&projection));
+    let entries = projected_completion_entries_with(
+        &document,
+        &selection,
+        Some(&projection),
+        Some(&provider),
+    );
     assert_eq!(requests.get(), 1);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].display, "offered");
@@ -1320,7 +1477,10 @@ fn fidget_shape_completion_opens_a_real_missing_radius_and_offers_f32() {
     );
     let radius = [path.as_slice(), &[Step::Key(RADIUS)]].concat();
     assert_eq!(selected.path(), radius);
-    assert_eq!(selected.stage(), Stage::Pending);
+    assert_eq!(
+        selected.stage(&src(&prepared.document, &stack.libraries)),
+        Stage::Pending
+    );
     assert!(
         src(&prepared.document, &stack.libraries)
             .resolve_path(&radius)

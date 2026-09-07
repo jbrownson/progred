@@ -65,16 +65,16 @@ impl Model {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             doc: self.doc.clone(),
-            selection: self
-                .selection
-                .as_ref()
-                .filter(|selection| selection.stage() == selection::Stage::Edge)
-                .map(|selection| (selection.root().clone(), selection.path().to_vec())),
+            selection: self.selection.as_ref().and_then(|selection| {
+                selection
+                    .history_path()
+                    .map(|path| (selection.root().clone(), path.to_vec()))
+            }),
             folds: self.workspace.folds(),
         }
     }
 
-    pub fn step_history(&mut self, back: bool, libraries: &Libraries) -> bool {
+    pub fn step_history(&mut self, back: bool) -> bool {
         let current = self.snapshot();
         let restored = if back {
             self.history.undo(current)
@@ -86,16 +86,9 @@ impl Model {
             self.workspace
                 .sync_declared(&workspace::declarations(self.doc.root.as_ref()));
             self.workspace.restore_folds(restored.folds);
-            self.selection = restored.selection.map(|(root, path)| {
-                selection::Selection::edge(
-                    &root,
-                    &crate::sources::Sources {
-                        doc: &self.doc,
-                        libraries,
-                    },
-                    path,
-                )
-            });
+            self.selection = restored
+                .selection
+                .map(|(root, path)| selection::Selection::edge(&root, path));
             true
         } else {
             false
@@ -173,7 +166,7 @@ mod tests {
                 .set_value(old_cell, Value::from(vec![byte]));
             model.history.record(before);
         }
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(model.dirty());
         assert!(model.history.can_undo() && model.history.can_redo());
         let old_root = model.workspace.document.root.clone();
@@ -231,14 +224,7 @@ mod tests {
     }
 
     fn select(model: &mut Model, root: &workspace::Root, path: Path) {
-        model.selection = Some(selection::Selection::edge(
-            root,
-            &Sources {
-                doc: &model.doc,
-                libraries: &Libraries::default(),
-            },
-            path,
-        ));
+        model.selection = Some(selection::Selection::edge(root, path));
     }
 
     #[test]
@@ -252,20 +238,20 @@ mod tests {
         let saved = model.doc.clone();
         edit(&mut model, 3);
         assert!(model.dirty());
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(!model.dirty());
         assert!(Rc::ptr_eq(&model.doc, &saved));
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(model.dirty());
         assert!(Rc::ptr_eq(&model.doc, &original));
-        assert!(model.step_history(false, &Libraries::default()));
+        assert!(model.step_history(false));
         assert!(!model.dirty());
         edit(&mut model, 3);
         edit(&mut model, 2);
         assert_eq!(model.doc.root, saved.root);
         assert!(model.dirty());
-        assert!(model.step_history(true, &Libraries::default()));
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
+        assert!(model.step_history(true));
         assert!(!model.dirty());
     }
 
@@ -279,13 +265,13 @@ mod tests {
             edit(&mut model, 3);
             edit(&mut model, 4);
             for _ in 0..steps_back {
-                assert!(model.step_history(true, &Libraries::default()));
+                assert!(model.step_history(true));
             }
             edit(&mut model, 5);
             assert!(model.dirty());
             assert!(!model.history.can_redo());
             let mut reached_save = false;
-            while model.step_history(true, &Libraries::default()) {
+            while model.step_history(true) {
                 assert_eq!(model.dirty(), !Rc::ptr_eq(&model.doc, &saved));
                 reached_save |= !model.dirty();
             }
@@ -305,18 +291,18 @@ mod tests {
         assert!(model.collapse(&Libraries::default(), &root, &[], None));
         assert!(Rc::ptr_eq(&model.doc, &edited));
         model.mark_saved();
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(!annotations::collapsed(
             &model.workspace.document.annotations,
             &[],
             false
         ));
         assert!(!model.dirty());
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(model.dirty());
-        assert!(model.step_history(false, &Libraries::default()));
+        assert!(model.step_history(false));
         assert!(!model.dirty());
-        assert!(model.step_history(false, &Libraries::default()));
+        assert!(model.step_history(false));
         assert!(annotations::collapsed(
             &model.workspace.document.annotations,
             &[],
@@ -365,7 +351,7 @@ mod tests {
             .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
         select(&mut model, &second_root, second.1);
         assert!(model.workspace.view(&first_root).is_none());
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert_eq!(model.selection.as_ref().unwrap().root(), &first_root);
         assert!(annotations::collapsed(
             &model.workspace.view(&first_root).unwrap().annotations,
@@ -373,7 +359,7 @@ mod tests {
             false
         ));
         assert!(!model.dirty());
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert!(!annotations::collapsed(
             &model.workspace.view(&first_root).unwrap().annotations,
             &first.1,
@@ -381,8 +367,8 @@ mod tests {
         ));
         assert!(model.workspace.view(&second_root).is_some());
         assert!(!model.dirty());
-        assert!(model.step_history(false, &Libraries::default()));
-        assert!(model.step_history(false, &Libraries::default()));
+        assert!(model.step_history(false));
+        assert!(model.step_history(false));
         assert!(model.workspace.view(&first_root).is_none());
         assert_eq!(model.selection.as_ref().unwrap().root(), &second_root);
         assert!(model.dirty());
@@ -406,7 +392,7 @@ mod tests {
             .set(&[Step::Key(state)], Some(Value::from(vec![6])));
         model.workspace.document.scroll = Vec2::new(50.0, 75.0);
         model.workspace.document.projection = workspace::Projection::Raw;
-        assert!(model.step_history(true, &Libraries::default()));
+        assert!(model.step_history(true));
         assert_eq!(model.workspace.document.scroll, Vec2::new(50.0, 75.0));
         assert_eq!(
             model.workspace.document.projection,
@@ -525,14 +511,14 @@ mod tests {
         type_text(&mut model, "abcd");
         assert!(model.collapse(&libraries, &root, &[], None));
         type_text(&mut model, "abcde");
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(spelling(&model), "abcd");
         assert!(annotations::collapsed(
             &model.workspace.document.annotations,
             &[],
             false
         ));
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(spelling(&model), "abcd");
         assert!(!annotations::collapsed(
             &model.workspace.document.annotations,
@@ -540,10 +526,10 @@ mod tests {
             false
         ));
         assert!(model.dirty());
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(spelling(&model), "abc");
         assert!(!model.dirty());
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(spelling(&model), "a");
         assert!(!model.history.can_undo());
         assert!(model.dirty());

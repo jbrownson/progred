@@ -79,14 +79,8 @@ impl number::Scrubbable for f64 {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let number = read(input.value)?;
-    Some(number::layout(
-        input,
-        number,
-        vocabulary::F64,
-        vocabulary::UPDATE,
-        value,
-    ))
+    let number = read(input.value?)?;
+    number::layout(input, number, vocabulary::F64, vocabulary::UPDATE, value)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -117,8 +111,9 @@ fn operand<World: 'static, Hover: Clone + 'static>(
     field: CellId,
     value: &Value,
     parent: Precedence,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    let child = crate::grap::expression_descend(Step::Key(field));
+    let child = crate::grap::expression_descend(Step::Key(field), default);
     match expression_precedence(value) {
         Some(child_precedence)
             if child_precedence < parent
@@ -134,7 +129,8 @@ fn operand<World: 'static, Hover: Clone + 'static>(
 pub fn binary_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    input.pending.is_none().then_some(())?;
+    let fields = input.value?.as_record()?;
     let function = fields.get(&FUNCTION)?;
     let precedence = precedence(function.as_cell()?)?;
     let left = fields.get(&vocabulary::LEFT)?;
@@ -142,9 +138,19 @@ pub fn binary_display<World: 'static, Hover: Clone + 'static>(
     (fields.len() == 3).then_some(row(
         6.0,
         [
-            operand(vocabulary::LEFT, left, precedence),
-            crate::grap::shallow_descend(Step::Key(FUNCTION)),
-            operand(vocabulary::RIGHT, right, precedence),
+            operand(
+                vocabulary::LEFT,
+                left,
+                precedence,
+                &input.default_projection,
+            ),
+            crate::grap::shallow_descend(Step::Key(FUNCTION), &input.default_projection),
+            operand(
+                vocabulary::RIGHT,
+                right,
+                precedence,
+                &input.default_projection,
+            ),
         ],
     ))
 }
@@ -383,8 +389,9 @@ mod tests {
 
     fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
         ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &TestEnv,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -512,9 +519,9 @@ mod tests {
             &children[1],
             Layout::Descend {
                 step: Step::Key(field),
-                projection: Some(projection),
+                projection: Some(_),
                 ..
-            } if *field == FUNCTION && projection.len() == 1
+            } if *field == FUNCTION
         ));
         assert!(matches!(
             &children[2],

@@ -908,13 +908,13 @@ fn display<World, Hover: Clone>(
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<World, Hover>> {
     if input
-        .value
+        .value?
         .as_record()
         .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
     {
         let camera = camera(input.state);
         let drawing = leaf(Leaf::Drawing(volume_drawing(
-            input.value,
+            input.value?,
             camera,
             input.scale_factor,
             &mut renderer.borrow_mut(),
@@ -932,7 +932,7 @@ fn display<World, Hover: Clone>(
         ))
     } else {
         Some(leaf(Leaf::Drawing(slice_drawing(
-            slice_preview(input.value)?,
+            slice_preview(input.value?)?,
             input.scale_factor,
         )?)))
     }
@@ -1212,8 +1212,9 @@ mod tests {
         let renderer = RefCell::new(PreviewRenderer::default());
         let layout = display(
             &ProjectionInput {
+                default_projection: progred_display::partial(|_| None),
                 env: &NoEval,
-                value: &value,
+                value: Some(&value),
                 scale_factor: 2.0,
                 writable: false,
                 selection: None,

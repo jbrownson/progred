@@ -13,6 +13,8 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
+pub mod structure;
+
 static NEXT_SHARED_LAYOUT: AtomicUsize = AtomicUsize::new(0);
 
 /// Editor-mapped paint face a Puri leaf asks for. Libraries pick a role,
@@ -308,11 +310,27 @@ pub struct ProjectionTarget<World, Hover> {
 #[derive(Clone, Copy)]
 pub struct ProjectionTargets<'a, World, Hover> {
     at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
+    insert_after: Option<&'a dyn Fn(gid::Position) -> (Hover, ActionHandler<World>)>,
 }
 
 impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
     pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>) -> Self {
-        Self { at }
+        Self {
+            at,
+            insert_after: None,
+        }
+    }
+
+    pub fn with_insert_after(
+        mut self,
+        insert: &'a dyn Fn(gid::Position) -> (Hover, ActionHandler<World>),
+    ) -> Self {
+        self.insert_after = Some(insert);
+        self
+    }
+
+    pub fn insert_after(&self, position: gid::Position) -> Option<(Hover, ActionHandler<World>)> {
+        self.insert_after.map(|insert| insert(position))
     }
 
     pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<World, Hover> {
@@ -442,22 +460,20 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         right: Ink,
     },
-    /// Look up this step on the value being projected. Contextual
-    /// partials compose before the ambient projection when it exists;
-    /// `missing` replaces the ordinary pending layout when it does not.
+    /// Look up one step. Each omitted projection inherits the caller's
+    /// default; supplied functions replace it without implicit composition.
+    /// Missing locations reach partials as `None`, then fall back to the empty widget.
     Descend {
         step: Step,
-        projection: Option<Vec<Partial<World, Hover>>>,
-        missing: Option<Box<Layout<World, Hover>>>,
+        projection: Option<Partial<World, Hover>>,
+        default_projection: Option<Partial<World, Hover>>,
     },
     /// Project `value` at this path extended by `steps`.
     At {
         steps: Vec<Step>,
         value: Value,
-        /// Prepend contextual partial projections for this subtree.
-        /// They compose in front of the current projection; the total
-        /// structural projection remains the root.
-        projection: Option<Vec<Partial<World, Hover>>>,
+        projection: Option<Partial<World, Hover>>,
+        default_projection: Option<Partial<World, Hover>>,
     },
     Transient {
         value: Value,
@@ -609,20 +625,22 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::Descend {
                 step,
                 projection,
-                missing,
+                default_projection,
             } => Self::Descend {
                 step: step.clone(),
                 projection: projection.clone(),
-                missing: missing.clone(),
+                default_projection: default_projection.clone(),
             },
             Self::At {
                 steps,
                 value,
                 projection,
+                default_projection,
             } => Self::At {
                 steps: steps.clone(),
                 value: value.clone(),
                 projection: projection.clone(),
+                default_projection: default_projection.clone(),
             },
             Self::Transient { value, fuel } => Self::Transient {
                 value: value.clone(),
@@ -672,7 +690,11 @@ pub trait Env {
 /// store.
 pub struct ProjectionInput<'a, World, Hover> {
     pub env: &'a dyn Env,
-    pub value: &'a Value,
+    /// The composed default for child projections. Clone and compose it
+    /// explicitly when choosing a local override or a subtree scope.
+    pub default_projection: Partial<World, Hover>,
+    /// `None` is a missing location, distinct from every stored GID value.
+    pub value: Option<&'a Value>,
     /// Physical pixels per logical display unit for this projection pass.
     pub scale_factor: f64,
     /// Whether this projected location can accept a document write.
@@ -1004,19 +1026,31 @@ pub fn record_with<'a, World, Hover: Clone>(
 ) -> Layout<World, Hover> {
     let mut fields = fields.into_iter().collect::<Vec<_>>();
     fields.sort_by(|(left, _), (right, _)| order(left, right));
+    record_heads(
+        fields
+            .into_iter()
+            .map(|(key, value)| field(key, value))
+            .chain(trailing)
+            .map(|field| RecordField {
+                label: row(0.0, [field.label, dim(":")]),
+                value: field.value,
+            }),
+        [],
+    )
+}
+
+/// Shared record geometry. Heads already include punctuation and its
+/// interaction target; trailing rows can be incomplete field editors.
+pub fn record_heads<World, Hover: Clone>(
+    fields: impl IntoIterator<Item = RecordField<World, Hover>>,
+    trailing: impl IntoIterator<Item = Layout<World, Hover>>,
+) -> Layout<World, Hover> {
     let fields = fields
         .into_iter()
-        .map(|(key, value)| {
-            let field = field(key, value);
-            RecordField {
-                label: shared(field.label),
-                value: shared(field.value),
-            }
-        })
-        .chain(trailing.into_iter().map(|field| RecordField {
+        .map(|field| RecordField {
             label: shared(field.label),
             value: shared(field.value),
-        }))
+        })
         .collect::<Vec<_>>();
     let mut flat = Vec::new();
     for (index, field) in fields.iter().enumerate() {
@@ -1025,12 +1059,21 @@ pub fn record_with<'a, World, Hover: Clone>(
         }
         flat.push(row(
             0.0,
-            [field.label.clone(), dim(": "), field.value.clone()],
+            [field.label.clone(), dim(" "), field.value.clone()],
         ));
     }
-    let rows = fields
+    let mut rows = fields
         .into_iter()
-        .map(|field| hug(row(0.0, [field.label, dim(":")]), field.value, 6.0, 20.0));
+        .map(|field| hug(field.label, field.value, 6.0, 20.0))
+        .collect::<Vec<_>>();
+    for tail in trailing {
+        let tail = shared(tail);
+        if !flat.is_empty() {
+            flat.push(dim(", "));
+        }
+        flat.push(tail.clone());
+        rows.push(tail);
+    }
     bracket(
         Delim::Brace,
         alternatives([row(0.0, flat), col(0, 2.0, rows)]),
@@ -1068,34 +1111,70 @@ pub fn nest<World, Hover>(step: Step, value: &Value) -> Layout<World, Hover> {
 
 pub fn descend<World, Hover>(
     step: Step,
-    projection: Option<Vec<Partial<World, Hover>>>,
-    missing: Option<Layout<World, Hover>>,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
     Layout::Descend {
         step,
         projection,
-        missing: missing.map(Box::new),
+        default_projection,
     }
 }
 
 pub fn at<World, Hover>(steps: impl Into<Vec<Step>>, value: &Value) -> Layout<World, Hover> {
-    Layout::At {
-        steps: steps.into(),
-        value: value.clone(),
-        projection: None,
-    }
+    at_with_projection(steps, value, None, None)
 }
 
 pub fn at_with_projection<World, Hover>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
-    projection: impl IntoIterator<Item = Partial<World, Hover>>,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
     Layout::At {
         steps: steps.into(),
         value: value.clone(),
-        projection: Some(projection.into_iter().collect()),
+        projection,
+        default_projection,
     }
+}
+
+/// Try a specialization here, keeping the default for descendants.
+pub fn descend_local<World: 'static, Hover: 'static>(
+    step: Step,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    descend(
+        step,
+        Some(compose_partials([projection, default.clone()])),
+        Some(default.clone()),
+    )
+}
+
+pub fn at_local<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    at_with_projection(
+        steps,
+        value,
+        Some(compose_partials([projection, default.clone()])),
+        Some(default.clone()),
+    )
+}
+
+/// Extend the default for both this value and its descendants.
+pub fn at_scoped<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    let projection = compose_partials([projection, default.clone()]);
+    at_with_projection(steps, value, Some(projection.clone()), Some(projection))
 }
 
 pub fn project<World, Hover>(value: &Value) -> Layout<World, Hover> {
@@ -1180,8 +1259,9 @@ mod tests {
         }
 
         projection(&ProjectionInput {
+            default_projection: partial(|_| None),
             env: &NoEval,
-            value: &Value::record([]),
+            value: Some(&Value::record([])),
             scale_factor: 1.0,
             writable: false,
             selection: None,
@@ -1240,51 +1320,6 @@ mod tests {
     #[test]
     fn all_declining_partials_leave_fallback_to_the_caller() {
         assert!(run_partial(&compose_partials([partial(probe), partial(probe)])).is_none());
-    }
-
-    #[test]
-    fn descend_may_specialize_present_and_missing_children_independently() {
-        let step = Step::Key(CellId::from_u128(1));
-        assert!(matches!(
-            descend::<(), ()>(step.clone(), None, None),
-            Layout::Descend {
-                projection: None,
-                missing: None,
-                ..
-            }
-        ));
-        assert!(matches!(
-            descend(
-                step.clone(),
-                Some(vec![partial(probe)]),
-                None,
-            ),
-            Layout::Descend {
-                projection: Some(projection),
-                missing: None,
-                ..
-            } if projection.len() == 1
-        ));
-        assert!(matches!(
-            descend::<(), ()>(step.clone(), None, Some(text("missing"))),
-            Layout::Descend {
-                projection: None,
-                missing: Some(_),
-                ..
-            }
-        ));
-        assert!(matches!(
-            descend(
-                step,
-                Some(vec![partial(probe)]),
-                Some(text("missing")),
-            ),
-            Layout::Descend {
-                projection: Some(projection),
-                missing: Some(_),
-                ..
-            } if projection.len() == 1
-        ));
     }
 
     #[test]

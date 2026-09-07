@@ -72,6 +72,15 @@ a pending value, and a pending record label. Annotation records live in a
 path-keyed [`Annotations`](../progred/src/annotations.rs) trie owned by the view;
 folding is one convention in those records.
 
+Ordinary selection does not initialize editing state. Its role is derived from
+the current location: a writable missing value uses the pending picker, while
+an existing value is selected normally. An explicit pending or label payload
+can still request those modes. The picker renders an empty query by default and
+materializes its editor only on input; query, caret, choice, scroll, and expansion
+state are optional. This applies to empty roots, bare-cell definitions, missing
+record fields, and inserted list positions, without a special selection callback
+for each. Read-only locations do not enter a picker.
+
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.
 A capability replacement decodes it once into the live editor; there is no
@@ -166,7 +175,9 @@ cycles and computed callables, and does not interpret native descriptions as lam
 Filtering names and excluding existing record labels remain picker responsibilities.
 
 Root templates and root field suggestions are ordinary library providers
-checking the path, not separate editor hooks. Fidget uses the same interface
+checking the path, not separate editor hooks. The name library offers the query
+as text at a name field, including an empty string and optional surrounding
+quotes. Expanding the picker still allows other values. Fidget uses the same interface
 for shape expressions, parameter labels, and f32 parameter values, including
 through cell references, source-list items, and existing Grap constructor calls.
 Shape templates open their first missing parameter

@@ -394,11 +394,13 @@ impl Editor {
     /// scrolling. A pending's ordinary descend is its authoring row,
     /// not the out-of-flow completion card.
     pub(crate) fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
-        let reveal = self
-            .model
-            .selection
-            .as_ref()
-            .map(|s| (s.root().clone(), s.path().to_vec(), s.stage()));
+        let reveal = self.model.selection.as_ref().map(|s| {
+            (
+                s.root().clone(),
+                s.path().to_vec(),
+                s.stage(&self.sources()),
+            )
+        });
         if reveal == self.revealed {
             false
         } else {
@@ -652,12 +654,12 @@ fn projection_hooks(
             None => true,
             Some(current) => {
                 current.root() != &select_root
-                    || current.stage() == selection::Stage::Label
+                    || current.stage(&app.sources()) == selection::Stage::Label
                     || current.path() != path
             }
         };
         if fresh {
-            let next = selection::Selection::edge(&select_root, &app.sources(), path);
+            let next = selection::Selection::edge(&select_root, path);
             app.model.selection = Some(next);
         } else if let Some(line) = app
             .model
@@ -720,7 +722,7 @@ fn projection_hooks(
         scrub: Rc::new(move |app, path, handler, point, scale| {
             if app.model.selection.as_ref().is_some_and(|selection| {
                 matches!(
-                    selection.stage(),
+                    selection.stage(&app.sources()),
                     selection::Stage::Pending | selection::Stage::Label
                 )
             }) {
@@ -751,7 +753,7 @@ fn projection_hooks(
                 .model
                 .selection
                 .as_ref()
-                .is_some_and(|current| current.stage() == selection::Stage::Pending)
+                .is_some_and(|current| current.stage(&app.sources()) == selection::Stage::Pending)
             {
                 app.commit_completion(value, None, on_commit);
             }
@@ -761,15 +763,19 @@ fn projection_hooks(
                 .model
                 .selection
                 .as_ref()
-                .is_some_and(|current| current.stage() == selection::Stage::Label)
+                .is_some_and(|current| current.stage(&app.sources()) == selection::Stage::Label)
             {
                 app.commit_completion(label.into(), definition, on_commit);
             }
         }),
         set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice, everything| {
+            let sources = sources::Sources {
+                doc: &app.model.doc,
+                libraries: &app.stack.libraries,
+            };
             if let Some(selection) = app.model.selection.as_mut()
                 && selection.root() == &completion_root
-                && selection.stage() != selection::Stage::Edge
+                && selection.stage(&sources) != selection::Stage::Edge
             {
                 selection.set_completion_view(scroll, choice, everything);
             }
@@ -1123,6 +1129,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
 /// dispatch can outlive the editor by a frame — deselect, then a move
 /// in the same gesture — so absence declines rather than panics.
 pub(crate) fn edit_ctx(app: &mut Editor) -> Option<EditCtx<'_>> {
+    app.model.selection.as_ref().filter(|selection| {
+        selection.stage(&app.sources()) != selection::Stage::Edge
+            && selection::writable_at(&app.sources(), selection.path())
+    })?;
     let Editor {
         model,
         font_cx,
@@ -1133,7 +1143,7 @@ pub(crate) fn edit_ctx(app: &mut Editor) -> Option<EditCtx<'_>> {
     let state = model
         .selection
         .as_mut()
-        .and_then(selection::Selection::edit_mut)?;
+        .map(selection::Selection::edit_query_mut)?;
     Some(EditCtx {
         state,
         fonts: font_cx,
@@ -1151,6 +1161,11 @@ fn line_edit_ctx<'a>(
     if !selection::writable_at(&app.sources(), path) {
         return None;
     }
+    app.model.selection.as_ref().filter(|selected| {
+        selected.root() == root
+            && selected.path() == path
+            && selected.stage(&app.sources()) == selection::Stage::Edge
+    })?;
     let Editor {
         model,
         font_cx,
@@ -1158,11 +1173,7 @@ fn line_edit_ctx<'a>(
         text_clipboard,
         ..
     } = app;
-    let selected = model.selection.as_mut().filter(|selected| {
-        selected.root() == root
-            && selected.path() == path
-            && selected.stage() == selection::Stage::Edge
-    })?;
+    let selected = model.selection.as_mut()?;
     Some(EditCtx {
         state: selected.edit_line_mut(line),
         fonts: font_cx,

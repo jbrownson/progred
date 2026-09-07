@@ -71,13 +71,13 @@ impl number::Scrubbable for u64 {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    Some(number::layout(
+    number::layout(
         input,
-        read(input.value)?,
+        read(input.value?)?,
         vocabulary::U64,
         vocabulary::UPDATE,
         value,
-    ))
+    )
 }
 
 fn update(

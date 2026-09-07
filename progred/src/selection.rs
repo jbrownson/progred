@@ -40,8 +40,8 @@ pub struct Selection {
     editor: Option<Editor>,
 }
 
-/// The payload's stage, decoded for matching. Junk stages read as a
-/// plain edge — the malformed rule.
+/// The selection's role. Without an explicit query mode, its location
+/// determines whether it selects a value or an empty slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Edge,
@@ -100,27 +100,7 @@ impl Selection {
         }
     }
 
-    /// Select the structural edge at `path`. Projected controls may
-    /// install a richer transition on their navigation landmark; the
-    /// stock line control uses that to mount its exact editor. An
-    /// EMPTY VALUE SLOT is already authoring it — there is nothing
-    /// there to select, only something to begin, so it pends
-    /// immediately: the empty document's root, and a valueless
-    /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge(root: &workspace::Root, sources: &Sources, path: Path) -> Self {
-        let empty_slot = match path.split_last() {
-            None => sources.root().is_none(),
-            Some((Step::Follow(resolution), parent)) => sources
-                .resolve_path(parent)
-                .and_then(Value::as_cell)
-                .is_some_and(|cell| {
-                    sources.value(cell, resolution).is_none() && sources.writable(cell, resolution)
-                }),
-            _ => false,
-        };
-        if empty_slot {
-            return pending_value(root, path);
-        }
+    pub fn edge(root: &workspace::Root, path: Path) -> Self {
         edge_selection(root, path, None)
     }
 
@@ -131,7 +111,7 @@ impl Selection {
         path: Path,
         line: progred_display::LineEdit,
     ) -> Self {
-        let mut selection = Self::edge(root, sources, path);
+        let mut selection = Self::edge(root, path);
         if writable_at(sources, selection.path()) {
             selection.edit_line_mut(&line);
         }
@@ -157,7 +137,7 @@ impl Selection {
         match &self.editor {
             Some(editor) => {
                 let payload =
-                    payload::with_editor(&self.payload, &editor.line, self.stage() != Stage::Edge);
+                    payload::with_editor(&self.payload, &editor.line, editor.update.is_none());
                 match &editor.update {
                     Some(update) => payload::with_update(&payload, update),
                     None => payload,
@@ -167,12 +147,33 @@ impl Selection {
         }
     }
 
-    pub fn stage(&self) -> Stage {
+    fn explicit_stage(&self) -> Stage {
         match payload::stage(&self.payload) {
             Some(stage) if stage == payload::vocabulary::PENDING => Stage::Pending,
             Some(stage) if stage == payload::vocabulary::LABEL => Stage::Label,
             _ => Stage::Edge,
         }
+    }
+
+    pub fn stage(&self, sources: &Sources) -> Stage {
+        match self.explicit_stage() {
+            Stage::Edge
+                if sources.resolve_path(&self.path).is_none()
+                    && writable_at(sources, &self.path) =>
+            {
+                Stage::Pending
+            }
+            stage => stage,
+        }
+    }
+
+    pub(crate) fn history_path(&self) -> Option<&[Step]> {
+        (self.explicit_stage() == Stage::Edge
+            && self
+                .editor
+                .as_ref()
+                .is_none_or(|editor| editor.update.is_some()))
+        .then_some(&self.path)
     }
 
     /// The chosen completion row, including the expansion affordance;
@@ -228,6 +229,26 @@ impl Selection {
         payload::editor_line(&self.payload, text)
     }
 
+    pub(crate) fn initial_query(&self) -> LineEditState {
+        self.initial_line(payload::query(&self.payload).unwrap_or(""))
+    }
+
+    pub(crate) fn edit_query_mut(&mut self) -> &mut LineEditState {
+        let payload = &mut self.payload;
+        &mut self
+            .editor
+            .get_or_insert_with(|| {
+                let line = payload::editor_line(payload, payload::query(payload).unwrap_or(""));
+                *payload = payload::without_editor(payload);
+                Editor {
+                    line,
+                    update: None,
+                    recorded: false,
+                }
+            })
+            .line
+    }
+
     pub(crate) fn edit_line_mut(&mut self, line: &progred_display::LineEdit) -> &mut LineEditState {
         let payload = &mut self.payload;
         let editor = self.editor.get_or_insert_with(|| {
@@ -253,11 +274,10 @@ impl Selection {
     }
 
     fn query_changed(&self) -> bool {
-        self.stage() != Stage::Edge
-            && self
-                .editor
-                .as_ref()
-                .is_some_and(|editor| payload::query(&self.payload) != Some(editor.line.text()))
+        self.editor.as_ref().is_some_and(|editor| {
+            editor.update.is_none()
+                && payload::query(&self.payload).unwrap_or("") != editor.line.text()
+        })
     }
 
     fn reset_completion_for_query(&mut self) {

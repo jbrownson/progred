@@ -3,8 +3,10 @@ use super::*;
 #[test]
 fn decorative_and_pending_slots_share_the_active_query_frame() {
     let mut context = BenchContext::new();
-    context.stack.projection =
-        Projection::new([progred_display::partial(|_| Some(progred_display::slot()))]);
+    context.stack.projection = Projection::new([progred_display::partial(|input| {
+        input.value?;
+        Some(progred_display::slot())
+    })]);
     let empty = Document {
         root: None,
         cells: Cells::new(),
@@ -141,19 +143,11 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
             Step::Key(name::vocabulary::NAME),
         ]
     };
-    let sources = Sources {
-        doc: &doc,
-        libraries: &stack.libraries,
-    };
     for source in [
         gid::Resolution::Document,
         gid::Resolution::Library(name::ID),
     ] {
-        let selected = Selection::edge(
-            &crate::workspace::Root::document(),
-            &sources,
-            path(0, source),
-        );
+        let selected = Selection::edge(&crate::workspace::Root::document(), path(0, source));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .descends
@@ -205,14 +199,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         ]
     });
     let mut context = BenchContext::new();
-    let selected = Selection::edge(
-        &crate::workspace::Root::document(),
-        &Sources {
-            doc: &doc,
-            libraries: &context.stack.libraries,
-        },
-        paths[0].clone(),
-    );
+    let selected = Selection::edge(&crate::workspace::Root::document(), paths[0].clone());
     let blue = |alpha| Brush::from(Color::new([0.0, 0.48, 1.0, alpha]));
     let fills = |bench: &Bench, alpha| {
         bench

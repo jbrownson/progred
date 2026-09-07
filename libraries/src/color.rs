@@ -259,8 +259,8 @@ fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
 pub fn display<World: 'static, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let encoded = encoded(input.value)?;
-    let color = read(input.value)?;
+    let encoded = encoded(input.value?)?;
+    let color = read(input.value?)?;
     let initial_hue = hsva(encoded).hue;
     let selected_hue = picker_hue(input.selection);
     let next_selection = if selected_hue.is_some() {
@@ -283,12 +283,12 @@ pub fn display<World: 'static, Hover: Clone>(
     let swatch = if input.writable
         && let Some(hue) = selected_hue
     {
-        popover(swatch, picker(input.value, encoded, hue))
+        popover(swatch, picker(input.value?, encoded, hue))
     } else {
         swatch
     };
     let name =
-        name::read(input.value).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
+        name::read(input.value?).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
     let spelling = line_edit::layout_with_family(
         spelling(encoded),
         grap_runtime::ffi(vocabulary::UPDATE),
@@ -412,8 +412,9 @@ mod tests {
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value: &color,
+            value: Some(&color),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -458,8 +459,9 @@ mod tests {
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value: &color,
+            value: Some(&color),
             scale_factor: 1.0,
             writable: false,
             selection: Some(&selection),
@@ -491,8 +493,9 @@ mod tests {
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value: &color,
+            value: Some(&color),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -535,8 +538,9 @@ mod tests {
             hover: (),
         };
         let layout = display::<(), ()>(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value: &color,
+            value: Some(&color),
             scale_factor: 1.0,
             writable: true,
             selection: Some(&selection),

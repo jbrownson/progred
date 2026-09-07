@@ -283,6 +283,7 @@ fn key(s: &str) -> Step {
 }
 
 mod completion;
+mod declarations;
 mod drawing;
 mod fidget_cube;
 mod fidget_source;

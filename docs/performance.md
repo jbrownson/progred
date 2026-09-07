@@ -135,3 +135,9 @@ After adding the Fidget arithmetic source projections, the same IoP source
 canary measured 4.56 ms median and 4.73 ms p95 (60 frames), consistent with the
 earlier 4.52 ms baseline. This is a check for unrelated dispatch overhead, not
 a before/after measurement of the Fidget documents themselves.
+
+After the projection-scope and missing-value changes, the 1400 × 900 @1 IoP
+source canary measured 3.65 ms median and 3.80 ms p95 (60 frames). The preceding
+run before default picker selection and name suggestions was 3.62 ms median;
+this shows no material regression, not a claimed speedup. This source-only
+canary has no active selection and does not measure picker interaction latency.

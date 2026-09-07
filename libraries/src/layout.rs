@@ -603,6 +603,7 @@ fn decode_with<World: 'static, Hover: Clone>(
             steps,
             value: content.get(&vocabulary::VALUE)?.clone(),
             projection: None,
+            default_projection: None,
         });
     }
     if let Some(content) = fields.get(&vocabulary::TRANSIENT) {
@@ -938,7 +939,7 @@ fn read_step(value: &Value) -> Option<Step> {
 pub fn display<World: 'static, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    decode_with(input.value, &|| input.targets.current())
+    decode_with(input.value?, &|| input.targets.current())
 }
 
 pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {

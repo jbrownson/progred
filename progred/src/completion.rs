@@ -194,7 +194,7 @@ pub(crate) fn prepare(
     use crate::selection::{self, Stage};
     let mut document = std::rc::Rc::new(sources.doc.clone());
     let mut path = selection.path().to_vec();
-    let document_changed = match selection.stage() {
+    let document_changed = match selection.stage(sources) {
         Stage::Pending => {
             selection::set_value(&mut document, sources.libraries, &path, value).then_some(true)?
         }
@@ -283,10 +283,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .map(|offers| contextual_entries(sources, offers, request, commit))
         .unwrap_or_default();
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
-    let spelling = trimmed
-        .strip_prefix('"')
-        .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
-        .unwrap_or(query);
+    let spelling = text::query_spelling(query);
     let atom_leads = quoted || blob.is_some();
     let text_entry = blob
         .is_some()

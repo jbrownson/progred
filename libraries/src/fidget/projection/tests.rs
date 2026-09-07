@@ -29,8 +29,9 @@ fn target(path: Vec<Step>) -> ProjectionTarget<(), Vec<Step>> {
 
 fn input(value: &Value) -> ProjectionInput<'_, (), Vec<Step>> {
     ProjectionInput {
+        default_projection: progred_display::partial(|_| None),
         env: &Names,
-        value,
+        value: Some(value),
         scale_factor: 1.0,
         writable: true,
         selection: None,
@@ -123,6 +124,7 @@ fn unshown_or_incomplete_fields_decline_instead_of_disappearing() {
     let complete = unary(SIN, number(1.0));
     assert!(
         field(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             pending: Some(Pending::Field),
             ..input(&complete)
         })

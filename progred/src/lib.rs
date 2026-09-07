@@ -1478,7 +1478,7 @@ impl Editor {
                 .view
                 .root
                 .clone();
-            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
+            self.model.selection = Some(selection::Selection::edge(&root, path));
             self.refresh_title();
             true
         } else {
@@ -1609,7 +1609,7 @@ impl Editor {
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
     pub(crate) fn step_history(&mut self, back: bool) {
-        if self.model.step_history(back, &self.stack.libraries) {
+        if self.model.step_history(back) {
             self.gesture = None;
             self.refresh_title();
         }

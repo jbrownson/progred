@@ -80,7 +80,7 @@ impl Editor {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
-            Some(current) if current.stage() == selection::Stage::Edge => {
+            Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
                 // Backspacing through the value and once more to
@@ -95,8 +95,7 @@ impl Editor {
                         self.refresh_title();
                     }
                     let next = navigate::selection_after_delete(descends, Some(&root), &path);
-                    self.model.selection =
-                        Some(selection::Selection::edge(&root, &self.sources(), next));
+                    self.model.selection = Some(selection::Selection::edge(&root, next));
                     true
                 }
             }
@@ -113,7 +112,7 @@ impl Editor {
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
         let continuation = match self.model.selection.as_ref() {
             Some(current)
-                if current.stage() == selection::Stage::Label
+                if current.stage(&self.sources()) == selection::Stage::Label
                     && id.as_cell().is_some_and(|label| {
                         let path: Vec<_> = current
                             .path()
@@ -225,7 +224,7 @@ impl Editor {
         }
         if !matches!(
             &self.model.selection,
-            Some(current) if current.stage() != selection::Stage::Edge
+            Some(current) if current.stage(&self.sources()) != selection::Stage::Edge
         ) {
             return false;
         }
@@ -260,7 +259,7 @@ impl Editor {
         let Some(current) = &self.model.selection else {
             return false;
         };
-        if current.stage() != selection::Stage::Edge {
+        if current.stage(&self.sources()) != selection::Stage::Edge {
             return false;
         }
         let root = current.root().clone();
@@ -274,7 +273,7 @@ impl Editor {
         if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
             self.model.history.record(before);
             self.refresh_title();
-            self.model.selection = Some(selection::Selection::edge(&root, &self.sources(), path));
+            self.model.selection = Some(selection::Selection::edge(&root, path));
             true
         } else {
             false
@@ -302,7 +301,7 @@ impl Editor {
         event.state.is_down()
             && match &event.key {
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(current) if current.stage() != selection::Stage::Edge => {
+                    Some(current) if current.stage(&self.sources()) != selection::Stage::Edge => {
                         self.model.selection = Some(current);
                         false
                     }
@@ -330,7 +329,9 @@ impl Editor {
                 Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(current) if current.stage() == selection::Stage::Pending => {
+                        Some(current)
+                            if current.stage(&self.sources()) == selection::Stage::Pending =>
+                        {
                             let root = current.root().clone();
                             let back = navigate::selection_after_delete(
                                 descends,
@@ -342,16 +343,15 @@ impl Editor {
                             // would pend again.
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
-                            .then(|| selection::Selection::edge(&root, &self.sources(), back));
+                            .then(|| selection::Selection::edge(&root, back));
                             true
                         }
-                        Some(current) if current.stage() == selection::Stage::Label => {
+                        Some(current)
+                            if current.stage(&self.sources()) == selection::Stage::Label =>
+                        {
                             let root = current.root().clone();
-                            self.model.selection = Some(selection::Selection::edge(
-                                &root,
-                                &self.sources(),
-                                current.path().to_vec(),
-                            ));
+                            self.model.selection =
+                                Some(selection::Selection::edge(&root, current.path().to_vec()));
                             true
                         }
                         _ => false,
@@ -378,7 +378,7 @@ impl Editor {
         let Some(current) = &self.model.selection else {
             return false;
         };
-        if current.stage() != selection::Stage::Edge {
+        if current.stage(&self.sources()) != selection::Stage::Edge {
             return false;
         }
         let path = current.path().to_vec();

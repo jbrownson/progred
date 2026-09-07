@@ -23,6 +23,10 @@ pub fn edge() -> gid::Value {
     gid::Value::record([(vocabulary::STAGE, vocabulary::EDGE.into())])
 }
 
+pub fn pending() -> gid::Value {
+    gid::Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())])
+}
+
 /// A Grap continuation setting a payload at a path relative to its site.
 pub fn at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
     use gid::Value;
@@ -62,10 +66,7 @@ pub fn at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
 }
 
 pub fn pending_at(path: &[gid::Step]) -> gid::Value {
-    at(
-        path,
-        gid::Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())]),
-    )
+    at(path, pending())
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {

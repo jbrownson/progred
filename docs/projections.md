@@ -49,7 +49,7 @@ Additional fields do not invalidate a recognized facet.
 
 ## Projection composition
 
-Normal display tries an explicit ordered list of partial functions, followed
+Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial can decline; malformed shapes must
 remain accessible through a later projection or Raw. Raw uses the structural
 fallback alone. Specific domain projections precede general ones. Libraries
@@ -59,19 +59,66 @@ while presentation declarations can apply ordinary Grap callables.
 
 [`ProjectionInput`](../display/src/lib.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
-selection targets. The ambient projection is passed explicitly through
-recursion. A partial returns `Layout<World, Hover>` with measured-composition
+selection targets. Its `default_projection` is one composed partial function,
+passed explicitly through recursion. A partial returns `Layout<World, Hover>` with measured-composition
 instructions, Puri leaves, host-control requests, and callbacks.
 
-`At`/`descend` extend provenance through a GID step and can prepend contextual
-partials. They may supply a missing-child layout at the actual missing
-location, without inventing a value. Omitting these specializations uses the
-ambient projection and ordinary pending behavior.
+`At`/`descend` extend provenance and accept independent optional replacements
+for the projection at their target and the default passed to descendants.
+Omitting either inherits it; supplying one replaces it without implicit
+composition. The total structural fallback still handles a declined result.
+`descend_local`/`at_local` compose a custom partial before the default only at
+the target. `at_scoped` passes that composition both here and below, so callers
+can intentionally establish a scope. Both build ordinary `At`/`Descend` values.
+
+Partials receive `Option<&Value>`: `None` means a missing location, not a GID
+absent or an empty string. `descend` offers the resolved value or its absence to
+the chosen partial; if it declines, the fallback renders structure for `Some`
+or the standard empty picker for `None`. There is no separate `missing` parameter
+and no fabricated value. The same source-qualified location supplies selection
+and writeability in either case.
+
+The lambda-name partial shows `λ` when the name is missing and unselected.
+Activation selects that missing location for entry. Once selected, the partial
+declines and the ordinary empty picker takes over; only committing creates the
+field. Neither pointer activation nor navigation supplies picker state. The
+picker uses defaults for an ordinary selection, including an empty payload.
+The name library supplies text suggestions at name fields. Existing names
+use unquoted line editors, like parameter names. An explicitly empty name stays
+an empty editor, distinct from the missing name's `λ` marker. Ordinary string
+projections retain their quotes.
+Library completion providers still compose separately, so multiple libraries
+can contribute offers to one picker.
+
+Grap contributes a `new lambda` value completion (aliases `lambda` and `λ`) to
+the universal picker. It inserts `{params: []}` and selects the missing body.
+The lambda projection accepts that unfinished shape and descends into the body
+to show its ordinary empty picker; neither a body nor a name is fabricated.
+
+The shared `structure::list(Some(child_projection))` combinator explicitly
+applies a partial at each immediate element. Standard lists use the same
+renderer with `None`. Lambda parameters, match cases, let/where bindings, and
+do expressions each supply their element projection this way.
+`structure::record` takes a function from each field identity to an optional
+child partial. Standard records use the same renderer with no field overrides;
+record layouts also share `record_heads` geometry with ordered call arguments.
+Patterns establish an explicit binder-projection scope. Ordinary container
+recursion then finds nested binders while text and numeric facets keep their
+normal projections; no duplicate pattern-specific structural walk is needed.
+The scope does not leak to siblings outside the pattern. List separators retain
+host-provided insertion targets.
 
 The structural fallback follows cells deeply into the selected definition.
-Grap expression projections prepend shallow named-cell display at use sites.
-Binder/declaration positions and quoted data restore deep display; these
-contexts can alternate as expressions nest. Calls use a stored or inline
+Grap expression projections request shallow named-cell display at direct use
+sites. Compound forms choose their own children; inert containers, declaration
+metadata, and quoted data use the normal deep structural fallback. In lambda parameters, direct
+`let`/`where` binders, and pattern binders, a cell whose definition contains
+only a text name projects as `(name)`: the usual cell parentheses surround an
+unquoted line editor at the real `Follow` → `name` path. This contextual
+projection is not in the default stack. Extra definition fields, malformed or
+missing names, and active field insertion retain structural display. Ordinary
+cells and quoted data are unchanged; use sites remain shallow references.
+Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. This is a raw definition lookup, not evaluation of the callable.
 Normal record order is named fields alphabetically by display name, with cell
@@ -100,8 +147,9 @@ leaves the declaration as editable data. It applies the function to the source
 as data and projects the result from a transient root using the normal
 projection. An absent result reveals the stored source using that same normal
 projection. Nested declarations remain data, including inside list or record
-panes and computed results. This entry scope does not change the recursive
-scope of ordinary contextual partials. The workspace does not interpret this
+panes and computed results. Entry intentionally follows cells to the first
+non-cell; this entry policy is separate from explicit projection scopes.
+The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
 Explicit `{render: expression}` values retain their ordinary display behavior.
 

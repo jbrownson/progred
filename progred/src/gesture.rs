@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(presentation.root, &root);
         assert!(presentation.path.is_empty());
         assert_eq!(presentation.spelling, "15.0");
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(model.doc.root, original.root);
         assert!(!model.history.can_undo());
     }
@@ -383,7 +383,7 @@ mod tests {
             Some(f64::value(11.0)),
             "latest-only would produce 2"
         );
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(model.doc.root, Some(f64::value(0.0)));
         assert!(!model.history.can_undo());
     }
@@ -452,7 +452,7 @@ mod tests {
         );
         assert!(!gesture.advance(&mut model, &libraries, &[Point::new(210.0, -20.0)]));
         assert_eq!(model.selection.as_ref().unwrap().root(), &root);
-        assert!(model.step_history(true, &libraries));
+        assert!(model.step_history(true));
         assert_eq!(model.doc.root, original.root);
         assert!(!model.history.can_undo());
     }

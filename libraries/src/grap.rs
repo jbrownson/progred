@@ -11,8 +11,8 @@ use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
-    RecordField, ResolvedCell, activatable, alternatives, at_with_projection, bracket, col,
-    completion, descend, dim, faced, hug, record_with, row, shared, slot, transient,
+    RecordField, ResolvedCell, activatable, alternatives, at_local, bracket, col, completion,
+    descend_local, dim, faced, hug, record_with, row, shared, slot, transient,
 };
 
 pub mod vocabulary {
@@ -32,10 +32,10 @@ fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
 
 /// A cell as a reference, not as an invitation to inspect its value.
 /// Contextual projections use this for expression and callable references.
-fn shallow_cell<World, Hover: Clone>(
+pub(crate) fn shallow_cell<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let cell = input.value.as_cell()?;
+    let cell = input.value?.as_cell()?;
     let (spelling, face) = spelling(input.env, cell);
     let target = input.targets.current();
     Some(activatable(
@@ -45,77 +45,113 @@ fn shallow_cell<World, Hover: Clone>(
     ))
 }
 
-/// A cell as its definition. This is the structural cell form repeated
-/// as a partial so a declaration can override an enclosing shallow
-/// expression context.
-fn deep_cell<World, Hover>(
+fn declaration_cell<World: 'static, Hover: 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let cell = input.value.as_cell()?;
+    let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
     Some(bracket(
         Delim::Paren,
-        descend(Step::Follow(definition.source), None, None),
+        descend_local(
+            Step::Follow(definition.source),
+            progred_display::partial(declaration_name::<World, Hover>),
+            &input.default_projection,
+        ),
     ))
 }
 
-fn lambda_name<World, Hover>(
+fn declaration_name<World: 'static, Hover: 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    Some(crate::line_edit::layout(
-        crate::text::read(input.value)?,
-        grap_runtime::ffi(crate::text::vocabulary::UPDATE),
-        "\"",
-        "\"",
+    input.pending.is_none().then_some(())?;
+    (input.value?.as_record()?.len() == 1).then_some(())?;
+    name::read(input.value?)?;
+    Some(descend_local(
+        Step::Key(name::vocabulary::NAME),
+        progred_display::partial(|input| {
+            Some(crate::line_edit::layout(
+                crate::text::read(input.value?)?,
+                grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+                "",
+                "",
+            ))
+        }),
+        &input.default_projection,
     ))
+}
+
+fn lambda_name<World: 'static, Hover: Clone>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    Some(match input.value {
+        Some(value) => crate::line_edit::layout(
+            crate::text::read(value)?,
+            grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+            "",
+            "",
+        ),
+        None => {
+            input.selection.is_none().then_some(())?;
+            let target = input.targets.current();
+            activatable(faced("λ", Face::Name), target.hover, target.select)
+        }
+    })
 }
 
 pub fn shallow_at<World: 'static, Hover: Clone + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    at_with_projection(
+    at_local(
         steps,
         value,
-        [progred_display::partial(shallow_cell::<World, Hover>)],
+        progred_display::partial(shallow_cell::<World, Hover>),
+        default,
     )
 }
 
-/// Project an expression subtree at a real location. Cells in that
-/// subtree are references until a nested construct explicitly enters
-/// a declaration or data subtree.
+/// A direct expression reference is shallow. A compound expression's
+/// projection explicitly chooses the roles of its own children.
 pub(crate) fn expression_at<World: 'static, Hover: Clone + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    shallow_at(steps, value)
+    shallow_at(steps, value, default)
 }
 
-pub(crate) fn deep_at<World: 'static, Hover: 'static>(
+/// Declaration cells keep their parentheses, with a name-only definition
+/// shown as an unquoted editor at the real name field.
+pub(crate) fn declaration_at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    at_with_projection(
+    at_local(
         steps,
         value,
-        [progred_display::partial(deep_cell::<World, Hover>)],
+        progred_display::partial(declaration_cell::<World, Hover>),
+        default,
     )
 }
 
 pub(crate) fn shallow_descend<World: 'static, Hover: Clone + 'static>(
     step: Step,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    descend(
+    descend_local(
         step,
-        Some(vec![progred_display::partial(shallow_cell::<World, Hover>)]),
-        None,
+        progred_display::partial(shallow_cell::<World, Hover>),
+        default,
     )
 }
 
 pub(crate) fn expression_descend<World: 'static, Hover: Clone + 'static>(
     step: Step,
+    default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    shallow_descend(step)
+    shallow_descend(step, default)
 }
 
 fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
@@ -208,7 +244,7 @@ fn standard_field_order(
 pub fn call_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
     let function = fields.get(&FUNCTION)?;
     let parameters = function_parameters(function, &|cell| input.env.resolve(cell));
     let mut parameter_positions = std::collections::BTreeMap::new();
@@ -230,16 +266,16 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
             let target = input.targets.at([Step::Key(*field)]);
             vec![RecordField {
                 label: activatable(faced(spelling, face), target.hover, target.select),
-                value: descend(
+                value: descend_local(
                     Step::Key(*field),
-                    Some(vec![progred_display::partial(shallow_cell::<World, Hover>)]),
-                    Some(completion(CompletionKind::Value, None)),
+                    progred_display::partial(shallow_cell::<World, Hover>),
+                    &input.default_projection,
                 ),
             }]
         }
         _ => Vec::new(),
     };
-    let function = expression_at([Step::Key(FUNCTION)], function);
+    let function = expression_at([Step::Key(FUNCTION)], function, &input.default_projection);
     let arguments = record_with(
         fields
             .iter()
@@ -259,7 +295,7 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
             let target = input.targets.at([Step::Key(field)]);
             RecordField {
                 label: activatable(faced(spelling, face), target.hover, target.select),
-                value: expression_at([Step::Key(field)], value),
+                value: expression_at([Step::Key(field)], value, &input.default_projection),
             }
         },
         trailing,
@@ -272,30 +308,43 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
 pub fn lambda_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
+    fields
+        .keys()
+        .all(|key| matches!(*key, PARAMS | BODY) || *key == name::vocabulary::NAME)
+        .then_some(())?;
+    match &input.pending {
+        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY))) => (),
+        _ => return None,
+    }
     let params = fields.get(&PARAMS)?;
     params
         .as_list()?
         .values()
         .all(|param| param.as_cell().is_some())
         .then_some(())?;
-    let body = fields.get(&BODY)?;
-    let params = deep_at([Step::Key(PARAMS)], params);
+    let params = at_local(
+        [Step::Key(PARAMS)],
+        params,
+        progred_display::structure::list(Some(progred_display::partial(
+            declaration_cell::<World, Hover>,
+        ))),
+        &input.default_projection,
+    );
     let body_target = input.targets.at([Step::Key(BODY)]);
-    let lambda = descend(
+    let lambda = descend_local(
         Step::Key(name::vocabulary::NAME),
-        Some(vec![progred_display::partial(lambda_name::<World, Hover>)]),
-        Some(crate::line_edit::layout_with_placeholder(
-            "",
-            Some("λ"),
-            grap_runtime::ffi(crate::text::vocabulary::UPDATE),
-            "",
-            "",
-        )),
+        progred_display::partial(lambda_name::<World, Hover>),
+        &input.default_projection,
     );
     let arrow = activatable(dim("→"), body_target.hover, body_target.select);
     let head = row(3.0, [lambda, params, arrow]);
-    Some(hug(head, expression_at([Step::Key(BODY)], body), 6.0, 20.0))
+    Some(hug(
+        head,
+        expression_descend(Step::Key(BODY), &input.default_projection),
+        6.0,
+        20.0,
+    ))
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
@@ -303,17 +352,21 @@ pub fn lambda_display<World: 'static, Hover: Clone + 'static>(
 pub fn ffi_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let ffi = input.value.as_record()?.get(&FFI)?;
+    let ffi = input.value?.as_record()?.get(&FFI)?;
     ffi.as_cell()?;
-    Some(shallow_at([Step::Key(FFI)], ffi))
+    Some(shallow_at([Step::Key(FFI)], ffi, &input.default_projection))
 }
 
 pub fn evaluate_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let expression = input.value.as_record()?.get(&EVALUATE)?;
+    let expression = input.value?.as_record()?.get(&EVALUATE)?;
     let (result, fuel) = input.env.evaluate(expression);
-    let expression = shared(expression_at([Step::Key(EVALUATE)], expression));
+    let expression = shared(expression_at(
+        [Step::Key(EVALUATE)],
+        expression,
+        &input.default_projection,
+    ));
     let shaft_target = input.targets.current();
     let shaft = shared(activatable(
         dim("→"),
@@ -436,6 +489,15 @@ fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<C
         (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
             crate::completion::label(vocabulary::GRAP).with_detail(ID),
         ]),
+        (CompletionScope::Everything, CompletionKind::Value, _) => Some(vec![
+            Completion::new("new lambda", Value::record([(PARAMS, Value::list([]))]))
+                .with_aliases(["lambda", "λ"])
+                .with_detail(ID)
+                .on_commit(crate::selection::at(
+                    &[Step::Key(BODY)],
+                    crate::selection::edge(),
+                )),
+        ]),
         _ => None,
     }
 }
@@ -488,8 +550,9 @@ mod tests {
 
     fn input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a, (), ()> {
         ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -504,8 +567,9 @@ mod tests {
         value: &'a Value,
     ) -> ProjectionInput<'a, (), Vec<Step>> {
         ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -517,6 +581,94 @@ mod tests {
 
     fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
         evaluate_display(&input(env, value))
+    }
+
+    #[test]
+    fn declaration_cells_follow_their_source_and_edit_the_name_field() {
+        struct DefinitionEnv(Value, gid::Resolution);
+        impl Env for DefinitionEnv {
+            fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+                panic!("declarations do not evaluate");
+            }
+
+            fn evaluate(&self, _: &Value) -> (Value, usize) {
+                panic!("declarations do not evaluate");
+            }
+
+            fn resolve(&self, _: CellId) -> Option<ResolvedCell<'_>> {
+                Some(ResolvedCell {
+                    value: &self.0,
+                    source: self.1,
+                    native: false,
+                })
+            }
+        }
+
+        for source in [
+            gid::Resolution::Document,
+            gid::Resolution::Library(new_cell_id()),
+        ] {
+            for spelling in ["size", ""] {
+                let env = DefinitionEnv(name::record(spelling, []), source);
+                let cell = Value::from(new_cell_id());
+                let Layout::Surround { child, .. } = declaration_cell(&input(&env, &cell)).unwrap()
+                else {
+                    panic!("a declaration keeps its cell delimiters");
+                };
+                let Layout::Descend {
+                    step,
+                    projection: Some(projection),
+                    ..
+                } = *child
+                else {
+                    panic!("a declaration follows the cell definition");
+                };
+                assert_eq!(step, Step::Follow(source));
+                let Layout::Descend {
+                    step,
+                    projection: Some(projection),
+                    ..
+                } = projection(&input(&env, &env.0)).unwrap()
+                else {
+                    panic!("the compact definition descends to its actual name");
+                };
+                assert_eq!(step, Step::Key(name::vocabulary::NAME));
+                let value = env
+                    .0
+                    .as_record()
+                    .unwrap()
+                    .get(&name::vocabulary::NAME)
+                    .unwrap();
+                let Layout::LineEdit(line) = projection(&input(&env, value)).unwrap() else {
+                    panic!("a declaration name uses the stock editor");
+                };
+                assert_eq!(line.text, spelling);
+                assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
+                assert_eq!(
+                    line.update,
+                    grap_runtime::ffi(crate::text::vocabulary::UPDATE)
+                );
+                assert!(projection(&input(&env, &Value::record([]))).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn compact_declarations_decline_extra_fields_invalid_names_and_active_insertions() {
+        let env = env();
+        for value in [
+            Value::record([]),
+            name::record("size", [(new_cell_id(), Value::record([]))]),
+            Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]),
+        ] {
+            assert!(declaration_name(&input(&env, &value)).is_none());
+        }
+        let value = name::record("size", []);
+        let mut input = input(&env, &value);
+        input.pending = Some(Pending::Field);
+        assert!(declaration_name(&input).is_none());
+        input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
+        assert!(declaration_name(&input).is_none());
     }
 
     #[test]
@@ -692,6 +844,7 @@ mod tests {
         assert_eq!(env.0.get(), 0);
         assert!(
             call_display(&ProjectionInput {
+                default_projection: progred_display::partial(|_| None),
                 pending: Some(Pending::Field),
                 ..input(&env, &value)
             })
@@ -827,10 +980,10 @@ mod tests {
             Layout::At {
                 steps,
                 value,
-                projection: Some(projection),
+                projection: Some(_),
+                ..
             } if *steps == [Step::Key(FUNCTION)]
                 && *value == Value::from(function)
-                && projection.len() == 1
         ));
     }
 
@@ -872,7 +1025,10 @@ mod tests {
         let Layout::Row { children, .. } = &children[0] else {
             panic!("argument has a label and value");
         };
-        let Layout::OnHover { child, hover } = unshared(&children[0]) else {
+        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+            panic!("field head contains its label and colon");
+        };
+        let Layout::OnHover { child, hover } = &head[0] else {
             panic!("the label targets its argument");
         };
         assert_eq!(hover.as_deref(), Some(&[Step::Key(argument)][..]));
@@ -983,18 +1139,17 @@ mod tests {
             &head[0],
             Layout::Descend {
                 step: Step::Key(key),
-                projection: Some(projection),
-                missing: Some(_),
+                projection: Some(_),
                 ..
-            } if *key == name::vocabulary::NAME && projection.len() == 1
+            } if *key == name::vocabulary::NAME
         ));
         assert!(matches!(
             &head[1],
             Layout::At {
                 steps,
-                projection: Some(projection),
+                projection: Some(_),
                 ..
-            } if *steps == [Step::Key(PARAMS)] && projection.len() == 1
+            } if *steps == [Step::Key(PARAMS)]
         ));
         let Layout::OnHover { child, hover } = &head[2] else {
             panic!("lambda arrow targets its body");
@@ -1003,14 +1158,36 @@ mod tests {
         assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
         assert!(matches!(
             unshared(&children[1]),
-            Layout::At {
-                steps,
-                value,
-                projection: Some(projection),
-            } if *steps == [Step::Key(BODY)]
-                && *value == Value::from(parameter)
-                && projection.len() == 1
+            Layout::Descend {
+                step: Step::Key(BODY),
+                projection: Some(_),
+                ..
+            }
         ));
+    }
+
+    #[test]
+    fn an_unfinished_lambda_keeps_its_missing_body_visible() {
+        let env = env();
+        let definition = Value::record([(PARAMS, Value::list([]))]);
+        let mut input = relative_input(&env, &definition);
+        assert!(lambda_display(&input).is_some());
+        input.pending = Some(Pending::Child(Step::Key(BODY)));
+        assert!(lambda_display(&input).is_some());
+        input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
+        assert!(lambda_display(&input).is_none());
+
+        for malformed in [
+            Value::record([]),
+            Value::record([(PARAMS, Value::record([]))]),
+            Value::record([(PARAMS, Value::list([crate::text::value("not a cell")]))]),
+            Value::record([
+                (PARAMS, Value::list([])),
+                (new_cell_id(), Value::record([])),
+            ]),
+        ] {
+            assert!(lambda_display(&relative_input(&env, &malformed)).is_none());
+        }
     }
 
     #[test]
@@ -1032,7 +1209,6 @@ mod tests {
         let Layout::Descend {
             step: Step::Key(key),
             projection: Some(projection),
-            missing: Some(_),
             ..
         } = &head[0]
         else {
@@ -1044,40 +1220,30 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Layout::LineEdit(line) = projection[0](&relative_input(&env(), value)).unwrap() else {
+        let Layout::LineEdit(line) = projection(&relative_input(&env(), value)).unwrap() else {
             panic!("lambda name uses the stock line editor");
         };
-        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("\"", "\""));
+        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
     }
 
     #[test]
-    fn an_anonymous_lambda_projects_an_empty_name_with_a_lambda_placeholder() {
-        let definition = Value::record([(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))]);
-        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
-        let Layout::Alternatives(options) = layout else {
-            panic!("lambda has responsive forms");
-        };
-        let Layout::Row { children, .. } = &options[0] else {
-            panic!("flat lambda first");
-        };
-        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
-            panic!("lambda has a syntax head");
-        };
-        let Layout::Descend {
-            step: Step::Key(key),
-            projection: Some(projection),
-            missing: Some(missing),
-            ..
-        } = &head[0]
-        else {
-            panic!("lambda name is projected contextually");
-        };
-        assert_eq!(*key, name::vocabulary::NAME);
-        assert_eq!(projection.len(), 1);
-        let Layout::LineEdit(line) = missing.as_ref() else {
-            panic!("an absent name uses the stock line editor");
-        };
-        assert_eq!(line.placeholder.as_deref(), Some("λ"));
+    fn the_lambda_name_partial_handles_only_unselected_missing_names_or_text() {
+        let env = env();
+        let value = Value::record([]);
+        let mut input = input(&env, &value);
+        input.value = None;
+        assert!(lambda_name(&input).is_some());
+
+        let selected = crate::selection::pending();
+        input.selection = Some(&selected);
+        assert!(lambda_name(&input).is_none());
+        input.selection = None;
+        input.value = Some(&value);
+        assert!(lambda_name(&input).is_none());
+
+        let absent = crate::absent::value();
+        input.value = Some(&absent);
+        assert!(lambda_name(&input).is_none());
     }
 
     #[test]
@@ -1108,12 +1274,12 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Layout::LineEdit(line) = projection[0](&relative_input(&env(), value)).unwrap() else {
+        let Layout::LineEdit(line) = projection(&relative_input(&env(), value)).unwrap() else {
             panic!("lambda name uses the stock line editor");
         };
         assert_eq!(line.text, "");
         assert_eq!(line.placeholder, None);
-        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("\"", "\""));
+        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
     }
 
     #[test]

@@ -29,13 +29,13 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let displayed = Rc::new(std::cell::RefCell::new(Vec::new()));
     let observe = displayed.clone();
     context.stack.projection = Projection {
-        partials: [progred_display::partial(move |input| {
-            observe.borrow_mut().push(input.value.clone());
-            None
-        })]
-        .into_iter()
-        .chain(context.stack.pane_projection.partials.iter().cloned())
-        .collect(),
+        partial: progred_display::compose_partials([
+            progred_display::partial(move |input| {
+                observe.borrow_mut().push(input.value?.clone());
+                None
+            }),
+            context.stack.pane_projection.partial.clone(),
+        ]),
         ..context.stack.pane_projection.clone()
     };
     let arguments = [

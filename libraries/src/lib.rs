@@ -460,8 +460,9 @@ mod tests {
                         hover: (),
                     };
                     projection(&ProjectionInput {
+                        default_projection: progred_display::partial(|_| None),
                         env: &NoEval,
-                        value: &value,
+                        value: Some(&value),
                         scale_factor: 1.0,
                         writable: true,
                         selection: None,

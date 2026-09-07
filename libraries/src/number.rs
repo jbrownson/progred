@@ -79,7 +79,8 @@ pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
     representation: CellId,
     update: CellId,
     encode: fn(N) -> Value,
-) -> Layout<World, Hover> {
+) -> Option<Layout<World, Hover>> {
+    let original = input.value?;
     let line = row(
         2.0,
         [
@@ -95,11 +96,11 @@ pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
         ],
     );
     if !number.scrubbable() {
-        return line;
+        return Some(line);
     }
-    let original = input.value.clone();
+    let original = original.clone();
     let target = input.targets.current();
-    on_scrub(
+    Some(on_scrub(
         line,
         target.hover,
         Rc::new(move || {
@@ -113,7 +114,7 @@ pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
                 }
             })
         }),
-    )
+    ))
 }
 
 struct Scrubbed<N> {

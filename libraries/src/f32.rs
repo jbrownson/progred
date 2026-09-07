@@ -72,13 +72,13 @@ impl number::Scrubbable for f32 {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    Some(number::layout(
+    number::layout(
         input,
-        read(input.value)?,
+        read(input.value?)?,
         vocabulary::F32,
         vocabulary::UPDATE,
         value,
-    ))
+    )
 }
 
 fn update(

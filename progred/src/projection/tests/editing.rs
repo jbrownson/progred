@@ -34,15 +34,14 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     );
     // Missing fields and links carry no editor.
     assert!(
-        make_selection(
-            &doc,
-            &lib,
-            vec![Step::Follow(gid::Resolution::Document), key("missing")]
-        )
+        make_selection(vec![
+            Step::Follow(gid::Resolution::Document),
+            key("missing")
+        ])
         .edit()
         .is_none()
     );
-    assert!(make_selection(&doc, &lib, vec![]).edit().is_none());
+    assert!(make_selection(vec![]).edit().is_none());
     Rc::make_mut(&mut doc).cells.set_value(
         cell,
         Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
@@ -114,7 +113,7 @@ fn a_plain_selection_accepts_first_input_using_the_line_default() {
             cells: Cells::new(),
         };
         let mut world = EditingWorld::new(&doc, &libraries);
-        world.selection = Some(make_selection(&doc, &libraries, vec![]));
+        world.selection = Some(make_selection(vec![]));
         let frame = editing_frame(&mut world, false);
         assert!(world.selection.as_ref().unwrap().edit().is_none());
         assert!(frame.handler.unwrap().dispatch_key(
@@ -155,7 +154,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
     };
     for ime in [false, true] {
         let mut world = EditingWorld::new(&doc, &libraries);
-        world.selection = Some(make_selection(&doc, &libraries, vec![]));
+        world.selection = Some(make_selection(vec![]));
         world.clipboard.0 = Some(" world".into());
         let handler = editing_frame(&mut world, false).handler.unwrap();
         assert!(if ime {
@@ -270,30 +269,22 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     let second = vec![Step::Element(positions[1].clone())];
     let mut model = crate::model::Model::new(doc.clone());
     let root = model.workspace.document_root().clone();
-    model.selection = Some(Selection::edge(
-        &root,
-        &src(&doc, &libraries),
-        first.clone(),
-    ));
+    model.selection = Some(Selection::edge(&root, first.clone()));
     model.history.record(model.snapshot());
     let mut world = EditingWorld::new(&doc, &libraries);
     let frame = editing_frame(&mut world, false);
     assert!(delete_edge(&mut model.doc, &libraries, &first));
     let next = crate::navigate::selection_after_delete(&frame.descends, None, &first);
     assert_eq!(next, second);
-    model.selection = Some(Selection::edge(&root, &src(&model.doc, &libraries), next));
+    model.selection = Some(Selection::edge(&root, next));
     for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
         if undo {
-            assert!(model.step_history(true, &libraries));
+            assert!(model.step_history(true));
         }
         let selected = model.selection.as_ref().unwrap();
         assert!(selected.edit().is_none());
         world.doc = model.doc.clone();
-        world.selection = Some(make_selection(
-            &world.doc,
-            &libraries,
-            selected.path().to_vec(),
-        ));
+        world.selection = Some(make_selection(selected.path().to_vec()));
         assert!(
             editing_frame(&mut world, false)
                 .handler
@@ -337,7 +328,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
             cells: Cells::new(),
         };
         let mut world = EditingWorld::new(&doc, &libraries);
-        world.selection = Some(make_selection(&doc, &libraries, path));
+        world.selection = Some(make_selection(path));
         let frame = editing_frame(&mut world, raw);
         assert!(!frame.handler.is_some_and(|handler| handler.dispatch_key(
             &mut world,
@@ -417,11 +408,10 @@ fn edits_write_through_to_the_field() {
         Some(&crate::test_values::text("new"))
     );
     // A selection without an editor writes nothing.
-    let mut plain = make_selection(
-        &doc,
-        &lib,
-        vec![Step::Follow(gid::Resolution::Document), key("missing")],
-    );
+    let mut plain = make_selection(vec![
+        Step::Follow(gid::Resolution::Document),
+        key("missing"),
+    ]);
     assert!(!write_through(&mut doc, &lib, &mut plain));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
@@ -1126,7 +1116,7 @@ fn selecting_an_empty_value_slot_pends() {
     // A writable valueless cell's Follow slot is already
     // authoring: selecting it (the rendered placeholder) pends.
     assert_eq!(
-        make_selection(&doc, &lib, vec![Step::Follow(gid::Resolution::Document)]).stage(),
+        make_selection(vec![Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Pending
     );
     // Valued, it selects normally.
@@ -1134,18 +1124,19 @@ fn selecting_an_empty_value_slot_pends() {
         .cells
         .set_value(bare, crate::test_values::text("v"));
     assert_eq!(
-        make_selection(&doc, &lib, vec![Step::Follow(gid::Resolution::Document)]).stage(),
+        make_selection(vec![Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Edge
     );
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
     Rc::make_mut(&mut doc).root = Some(Value::from(lib_cell));
-    let external = make_selection(
-        &doc,
-        &lib,
-        vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
+    let external = make_selection(vec![Step::Follow(gid::Resolution::Library(
+        CellId::from_u128(1),
+    ))]);
+    assert_eq!(
+        external.stage(&src(&doc, &lib)),
+        crate::selection::Stage::Edge
     );
-    assert_eq!(external.stage(), crate::selection::Stage::Edge);
     assert!(external.edit().is_none());
     // The empty document's root is the same rule.
     let empty = Document {
@@ -1153,7 +1144,7 @@ fn selecting_an_empty_value_slot_pends() {
         cells: Cells::new(),
     };
     assert_eq!(
-        make_selection(&empty, &lib, vec![]).stage(),
+        make_selection(vec![]).stage(&src(&empty, &lib)),
         crate::selection::Stage::Pending
     );
 }
@@ -1203,13 +1194,70 @@ fn a_simple_name_is_an_ordinary_editable_field() {
             .and_then(Value::as_record)
             .is_some_and(|fields| fields.contains_key(&crate::test_values::label("x")))
     );
-    assert!(make_selection(&doc, &lib, path).edit().is_none());
+    assert!(make_selection(path).edit().is_none());
 }
 
 #[test]
-fn editing_an_anonymous_lambdas_placeholder_creates_its_name_field() {
+fn missing_controls_default_without_mutating_selection_until_input() {
+    let libraries = core_libraries();
+    let cell = new_cell_id();
+    let field = new_cell_id();
+    let position = gid::position::between(None, None).unwrap();
+    for (value, path) in [
+        (None, vec![]),
+        (
+            Some(Value::from(cell)),
+            vec![Step::Follow(gid::Resolution::Document)],
+        ),
+        (Some(Value::record([])), vec![Step::Key(field)]),
+        (Some(Value::list([])), vec![Step::Element(position)]),
+    ] {
+        let doc = Document {
+            root: value,
+            cells: Cells::new(),
+        };
+        for payload in [Value::record([]), progred_libraries::selection::edge()] {
+            let mut world = EditingWorld::new(&doc, &libraries);
+            world.selection = Some(Selection::from_payload(
+                &crate::workspace::Root::document(),
+                &src(&doc, &libraries),
+                path.clone(),
+                payload.clone(),
+            ));
+            let original = world.doc.clone();
+            let frame = editing_frame(&mut world, false);
+            assert!(frame.completion.is_some());
+            let selected = world.selection.as_ref().unwrap();
+            assert!(selected.edit().is_none());
+            assert_eq!(selected.payload(), payload);
+            assert!(frame.handler.unwrap().dispatch_key(
+                &mut world,
+                &KeyboardEvent {
+                    key: Key::Character("new name".into()),
+                    ..arrow(NamedKey::End)
+                }
+            ));
+            assert_eq!(
+                world.selection.as_ref().unwrap().edit().unwrap().text(),
+                "new name"
+            );
+            assert!(!write_through(
+                &mut world.doc,
+                &libraries,
+                world.selection.as_mut().unwrap()
+            ));
+            assert!(Rc::ptr_eq(&world.doc, &original));
+            world.selection = None;
+            assert!(editing_frame(&mut world, false).completion.is_none());
+            assert!(Rc::ptr_eq(&world.doc, &original));
+        }
+    }
+}
+
+#[test]
+fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let lib = core_libraries();
-    let (mut doc, cell) = doc_of(vec![
+    let (doc, cell) = doc_of(vec![
         (grap::vocabulary::PARAMS, Value::list([])),
         (grap::vocabulary::BODY, Value::from(vec![1])),
     ]);
@@ -1217,16 +1265,160 @@ fn editing_an_anonymous_lambdas_placeholder_creates_its_name_field() {
         Step::Follow(gid::Resolution::Document),
         Step::Key(name::vocabulary::NAME),
     ];
-    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
-
-    assert_eq!(selection.edit().map(LineEditState::text), Some(""));
-    selection.edit_mut().unwrap().set_text("tree");
-    assert!(write_through(&mut doc, &lib, &mut selection,));
-    assert_eq!(doc.cells.value(cell).and_then(name::read), Some("tree"));
+    let mut world = EditingWorld::new(&doc, &lib);
+    let idle = editing_frame(&mut world, false);
+    let original = world.doc.clone();
+    let marker = idle
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == path)
+        .unwrap();
+    let point = marker.rect.center();
+    let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&path).and_then(text::read),
+        idle.probe(point, None, 0.0),
+        Some(puri::hover::Claim::Direct(target.clone()))
+    );
+    let mut state = PointerState::default();
+    state.position.x = point.x;
+    state.position.y = point.y;
+    assert!(idle.handler.unwrap().dispatch_pointer_down_with(
+        &mut world,
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state,
+        },
+        &mut placed::DispatchContext::new(None, Some(target)),
+    ));
+    assert_eq!(world.selection.as_ref().unwrap().path(), path);
+    assert_eq!(
+        world
+            .selection
+            .as_ref()
+            .unwrap()
+            .stage(&src(&world.doc, &lib)),
+        Stage::Pending
+    );
+    assert!(world.selection.as_ref().unwrap().edit().is_none());
+    assert_eq!(
+        world.selection.as_ref().unwrap().payload(),
+        crate::selection::payload::edge()
+    );
+    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(!write_through(
+        &mut world.doc,
+        &lib,
+        world.selection.as_mut().unwrap()
+    ));
+    assert!(src(&world.doc, &lib).resolve_path(&path).is_none());
+
+    world.selection = None;
+    assert!(editing_frame(&mut world, false).completion.is_none());
+    assert!(Rc::ptr_eq(&world.doc, &original));
+
+    // Keyboard navigation enters the same missing location.
+    world.selection = Some(make_projected_selection(&doc, &lib, path.clone()));
+    assert!(!write_through(
+        &mut world.doc,
+        &lib,
+        world.selection.as_mut().unwrap()
+    ));
+    assert!(src(&world.doc, &lib).resolve_path(&path).is_none());
+    let frame = editing_frame(&mut world, false);
+    assert!(frame.completion.is_some());
+    assert!(
+        frame
+            .handler
+            .as_ref()
+            .unwrap()
+            .dispatch_key(&mut world, &arrow(NamedKey::End))
+    );
+    assert!(!write_through(
+        &mut world.doc,
+        &lib,
+        world.selection.as_mut().unwrap()
+    ));
+    assert!(src(&world.doc, &lib).resolve_path(&path).is_none());
+    assert!(frame.handler.unwrap().dispatch_key(
+        &mut world,
+        &KeyboardEvent {
+            key: Key::Character("\"tree\"".into()),
+            ..arrow(NamedKey::End)
+        }
+    ));
+    let selected = world.selection.as_mut().unwrap();
+    assert_eq!(selected.stage(&src(&world.doc, &lib)), Stage::Pending);
+    assert_eq!(selected.edit().unwrap().text(), "\"tree\"");
+    assert!(!write_through(&mut world.doc, &lib, selected));
+    assert!(src(&world.doc, &lib).resolve_path(&path).is_none());
+
+    let prepared = crate::completion::prepare(
+        &src(&world.doc, &lib),
+        world.selection.as_ref().unwrap(),
+        &Annotations::default(),
+        text::value("tree"),
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(prepared.document_changed);
+    assert_eq!(prepared.path, path);
+    assert_eq!(
+        prepared.document.cells.value(cell).and_then(name::read),
         Some("tree")
     );
+    assert_eq!(
+        make_projected_editing_selection(&prepared.document, &lib, path)
+            .edit()
+            .map(LineEditState::text),
+        Some("tree")
+    );
+}
+
+#[test]
+fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
+    let cell = new_cell_id();
+    let library = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(cell, grap::lambda([], Value::from(vec![1])));
+    let mut libraries = core_libraries();
+    libraries.insert(
+        library,
+        progred_libraries::Definitions::from_parts(cells, Default::default()),
+    );
+    let doc = Document {
+        root: Some(cell.into()),
+        cells: Cells::new(),
+    };
+    let path = vec![
+        Step::Follow(gid::Resolution::Library(library)),
+        Step::Key(name::vocabulary::NAME),
+    ];
+    let mut world = EditingWorld::new(&doc, &libraries);
+    world.selection = Some(make_projected_selection(&doc, &libraries, path));
+    let original = world.doc.clone();
+    assert_eq!(
+        world
+            .selection
+            .as_ref()
+            .unwrap()
+            .stage(&src(&doc, &libraries)),
+        Stage::Edge
+    );
+    assert!(world.selection.as_ref().unwrap().edit().is_none());
+    let selected = editing_frame(&mut world, false);
+    assert!(selected.completion.is_none());
+    assert!(!write_through(
+        &mut world.doc,
+        &libraries,
+        world.selection.as_mut().unwrap()
+    ));
+    assert!(Rc::ptr_eq(&world.doc, &original));
 }
 
 #[test]

@@ -41,12 +41,84 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         crate::Definitions::from_parts(cells, Default::default()),
         progred_display::partial(|_| None),
     )
+    .with_completions(completions)
+}
+
+fn completions(
+    request: &progred_display::CompletionRequest<'_>,
+) -> Option<Vec<progred_display::Completion>> {
+    use progred_display::{CompletionKind, CompletionScope};
+    match (request.scope, request.kind, request.path.last()) {
+        (
+            CompletionScope::Suggested,
+            CompletionKind::Value,
+            Some(gid::Step::Key(vocabulary::NAME)),
+        ) => Some(vec![text::completion(text::query_spelling(request.query))]),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use gid::new_cell_id;
+
+    #[test]
+    fn name_values_offer_text_but_leave_other_completion_contexts_alone() {
+        use progred_display::{CompletionKind, CompletionRequest, CompletionScope};
+        let path = [
+            gid::Step::Follow(gid::Resolution::Document),
+            gid::Step::Key(vocabulary::NAME),
+        ];
+        let request = CompletionRequest {
+            query: "",
+            kind: CompletionKind::Value,
+            scope: CompletionScope::Suggested,
+            path: &path,
+            value_at: &|_| None,
+            resolve: &|_| None,
+        };
+        for (query, expected) in [
+            ("", ""),
+            ("tree", "tree"),
+            ("123", "123"),
+            ("\"tree", "tree"),
+            ("\"tree\"", "tree"),
+        ] {
+            let offers = completions(&CompletionRequest { query, ..request }).unwrap();
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].value.instantiate(), text::value(expected));
+            assert!(offers[0].on_commit.is_some());
+        }
+        assert!(
+            completions(&CompletionRequest {
+                kind: CompletionKind::Field,
+                ..request
+            })
+            .is_none()
+        );
+        assert!(
+            completions(&CompletionRequest {
+                scope: CompletionScope::Everything,
+                ..request
+            })
+            .is_none()
+        );
+        assert!(
+            completions(&CompletionRequest {
+                path: &[],
+                ..request
+            })
+            .is_none()
+        );
+        assert!(
+            completions(&CompletionRequest {
+                path: &[gid::Step::Key(new_cell_id())],
+                ..request
+            })
+            .is_none()
+        );
+    }
 
     #[test]
     fn names_are_extensible_ordinary_record_data() {

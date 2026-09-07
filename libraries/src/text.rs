@@ -43,6 +43,14 @@ pub fn completion(spelling: &str) -> progred_display::Completion {
     ))
 }
 
+pub fn query_spelling(query: &str) -> &str {
+    query
+        .trim()
+        .strip_prefix('"')
+        .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
+        .unwrap_or(query)
+}
+
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
@@ -69,7 +77,7 @@ pub fn functions() -> ForeignFunctions {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let content = read(input.value)?;
+    let content = read(input.value?)?;
     Some(line_edit::layout(
         content,
         grap_runtime::ffi(vocabulary::UPDATE),
@@ -142,8 +150,9 @@ mod tests {
             hover: (),
         };
         let display = (library::<(), ()>().projection)(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value: &value("hi"),
+            value: Some(&value("hi")),
             scale_factor: 1.0,
             writable: true,
             selection: None,

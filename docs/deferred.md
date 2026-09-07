@@ -11,6 +11,11 @@ The general interaction and presentation policy needs dedicated design work.
 Do not hide a fallback policy in reusable widgets or infer it by inspecting a
 render tree. This was explicitly set aside for another day.
 
+The shared list/record combinators preserve immediate pending children. Compact
+Grap lambdas, cases, binding clauses, and control/operator calls now decline when
+they cannot show an active insertion. That fixes those specific projections;
+it is not a general fallback policy for arbitrary facets such as line controls.
+
 ## Selection destinations and history
 
 Plain selections now work with line controls' missing-state defaults, so paste,
@@ -20,9 +25,12 @@ undo restores an edge location, not its prior caret or pending query. Preserving
 those states is a separate UX decision, not necessary to make restored selections
 usable. Never resurrect active drags or IME composition from history.
 
-`Selection::edge` still implicitly starts a pending query for an empty root or
-bare-cell definition. Review this policy when generalizing missing-value controls;
-do not add domain-specific recognition to the selection core.
+Line-editor conversion runs after every accepted event, including caret
+movement; equal results already skip document writes. Avoiding unnecessary
+conversion is a separate optimization. Projections must not rely on that
+optimization to keep a missing value absent: a direct line control offers its
+spelling for write-through. Lambda names instead use the completion picker,
+which stages input until commit.
 
 ## Duplicate-definition inspection
 

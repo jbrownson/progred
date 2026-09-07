@@ -51,32 +51,32 @@ type SharedPath = Rc<[Step]>;
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
 pub struct Projection<World> {
-    partials: Rc<[progred_display::Partial<World, Hover>]>,
+    partial: progred_display::Partial<World, Hover>,
     entry: Option<progred_display::Partial<World, Hover>>,
 }
 
 impl<World> Clone for Projection<World> {
     fn clone(&self) -> Self {
         Self {
-            partials: self.partials.clone(),
+            partial: self.partial.clone(),
             entry: self.entry.clone(),
         }
     }
 }
 
-impl<World> Default for Projection<World> {
+impl<World: 'static> Default for Projection<World> {
     fn default() -> Self {
         Self {
-            partials: Rc::new([]),
+            partial: progred_display::partial(|_| None),
             entry: None,
         }
     }
 }
 
-impl<World> Projection<World> {
+impl<World: 'static> Projection<World> {
     pub fn new(partials: impl IntoIterator<Item = progred_display::Partial<World, Hover>>) -> Self {
         Self {
-            partials: partials.into_iter().collect(),
+            partial: progred_display::compose_partials(partials),
             entry: None,
         }
     }
@@ -92,7 +92,7 @@ impl<World> Projection<World> {
 
     fn without_entry(&self) -> Self {
         Self {
-            partials: self.partials.clone(),
+            partial: self.partial.clone(),
             entry: None,
         }
     }
@@ -102,9 +102,9 @@ impl<World> Projection<World> {
         input: &progred_display::ProjectionInput<'_, World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
         self.entry
-            .iter()
-            .chain(self.partials.iter())
-            .find_map(|partial| partial(input))
+            .as_ref()
+            .and_then(|entry| entry(input))
+            .or_else(|| (self.partial)(input))
     }
 }
 
@@ -205,7 +205,7 @@ fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
 #[allow(clippy::too_many_arguments)]
 fn prepare<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Traversal,
@@ -460,8 +460,8 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
         }
         progred_display::Layout::Descend {
             step,
-            projection: contextual_partials,
-            missing,
+            projection: current_projection,
+            default_projection,
         } => prepare_descend(
             cx,
             projection,
@@ -470,15 +470,16 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             ancestors,
             value,
             step,
-            contextual_partials,
-            missing.map(|missing| *missing),
+            current_projection,
+            default_projection,
             hooks,
             build,
         ),
         progred_display::Layout::At {
             steps,
             value: nested,
-            projection: override_partials,
+            projection: current_projection,
+            default_projection,
         } => prepare_at(
             cx,
             projection,
@@ -487,7 +488,8 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             ancestors,
             steps,
             nested,
-            override_partials,
+            current_projection,
+            default_projection,
             hooks,
             build,
         ),
@@ -541,13 +543,14 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
 
 fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Traversal,
     steps: Vec<Step>,
     nested: Value,
-    override_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
+    current_projection: Option<progred_display::Partial<C, Hover>>,
+    default_projection: Option<progred_display::Partial<C, Hover>>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
@@ -562,32 +565,18 @@ fn prepare_at<C: 'static, Cv: Canvas + 'static>(
         }
         path.push(step.clone());
     }
-    let override_projection = contextual_projection(projection, override_partials);
-    prepare_present_value(
+    prepare_value(
         cx,
-        override_projection.as_ref().or(projection),
+        projection,
+        current_projection.as_ref(),
+        default_projection.as_ref(),
         tcx,
         &path,
         &follow_ancestors,
-        &nested,
+        Some(&nested),
         hooks,
         build,
     )
-}
-
-fn contextual_projection<C>(
-    ambient: Option<&Projection<C>>,
-    contextual: Option<Vec<progred_display::Partial<C, Hover>>>,
-) -> Option<Projection<C>> {
-    contextual.map(|partials| {
-        Projection::new(
-            partials.into_iter().chain(
-                ambient
-                    .into_iter()
-                    .flat_map(|projection| projection.partials.iter().cloned()),
-            ),
-        )
-    })
 }
 
 fn realize_pick_with<C: 'static, Cv: Canvas + 'static>(
@@ -682,7 +671,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let writable = !cx.source.transient() && writable_at(&cx.sources, path);
     let selected = cx.selection.filter(|selection| {
-        writable && selection.stage() == Stage::Edge && selection.path() == path
+        writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
     });
     let default = selected
         .filter(|selection| selection.edit().is_none())
@@ -877,28 +866,29 @@ impl Cx<'_> {
     /// selected there, something is being authored inside; the
     /// pending row carries the highlight itself.
     fn selected(&self, path: &[Step]) -> bool {
-        self.selection
-            .is_some_and(|current| current.stage() != Stage::Label && current.path() == path)
+        self.selection.is_some_and(|current| {
+            current.path() == path && current.stage(&self.sources) != Stage::Label
+        })
     }
 
     /// The pending child step under `path`, when the selection is
     /// authoring one there.
     fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
         let current = self.selection?;
-        (current.stage() == Stage::Pending
-            && current
-                .path()
-                .split_last()
-                .is_some_and(|(_, parent)| parent == path))
-        .then(|| current.path().last().cloned())
-        .flatten()
+        (current
+            .path()
+            .split_last()
+            .is_some_and(|(_, parent)| parent == path)
+            && current.stage(&self.sources) == Stage::Pending)
+            .then(|| current.path().last().cloned())
+            .flatten()
     }
 
     /// The label query of a new field being authored on the record at
     /// `path`.
     fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         let current = self.selection?;
-        (current.stage() == Stage::Label && current.path() == path)
+        (current.path() == path && current.stage(&self.sources) == Stage::Label)
             .then(|| Some((current.edit()?, current.choice())))
             .flatten()
     }
@@ -1080,7 +1070,7 @@ fn primary_highlight_stroke(scale: f64) -> Stroke {
 /// The selected location shared by repeated projections of a cell.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Secondary> {
     match selection? {
-        current if current.stage() == Stage::Edge => {
+        current if current.stage(sources) == Stage::Edge => {
             let path: SharedPath = Rc::from(current.path());
             sources
                 .resolve_path(&path)
@@ -1129,6 +1119,7 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
         width,
         projection,
     } = description;
+    let projection = projection.cloned().unwrap_or_default();
     let cx = Cx {
         sources,
         raw,
@@ -1157,12 +1148,12 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
     }
     let layout = prepare_location(
         &cx,
-        projection,
+        &projection,
         tcx,
         root_path,
         &traversal,
         Location::Root(root),
-        projection,
+        None,
         None,
         &hooks,
         &mut build,
@@ -1321,7 +1312,7 @@ fn secondary_highlight<P: Canvas>(scale: f64, p: &mut P, outline: RoundedRect, s
 /// children remain read-only and have no document paths of their own.
 fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
     tcx: &mut TextCtx,
     path: &[Step],
     result: Value,
@@ -1329,8 +1320,8 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
-    let ordinary_projection = projection.map(Projection::without_entry);
-    let projection = ordinary_projection.as_ref();
+    let ordinary_projection = projection.without_entry();
+    let projection = &ordinary_projection;
     let origin = path.to_vec();
     let select = hooks.select.clone();
     let select_origin = origin.clone();
@@ -1377,7 +1368,7 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         path,
         &Traversal::default(),
         Location::Root(Some(&result)),
-        projection,
+        None,
         None,
         &result_hooks,
         build,
@@ -1385,27 +1376,24 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
 }
 
 /// Adds one GID step to the active source and resolves that location.
-/// Contextual partials precede the ambient projection for a present
-/// child. A concrete missing layout replaces the ordinary pending
-/// view without inventing a value at that location.
+/// Current and descendant projections are independent replacements.
+/// Missing locations use the standard empty picker, without a value.
 #[allow(clippy::too_many_arguments)]
 fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &Traversal,
     parent: Option<&Value>,
     step: Step,
-    contextual_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
-    missing: Option<progred_display::Layout<C, Hover>>,
+    current_projection: Option<progred_display::Partial<C, Hover>>,
+    default_projection: Option<progred_display::Partial<C, Hover>>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
-    let contextual_projection = contextual_projection(projection, contextual_partials);
-    let child_projection = contextual_projection.as_ref().or(projection);
     if let Step::Follow(source) = &step
         && let Some(parent) = parent
     {
@@ -1416,20 +1404,20 @@ fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
         }
         prepare_location(
             cx,
-            child_projection,
+            projection,
             tcx,
             &path,
             &ancestors,
             Location::Child { parent, step },
-            projection,
-            missing,
+            current_projection.as_ref(),
+            default_projection.as_ref(),
             hooks,
             build,
         )
     } else {
         prepare_location(
             cx,
-            child_projection,
+            projection,
             tcx,
             &path,
             ancestors,
@@ -1437,8 +1425,8 @@ fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
                 Some(parent) => Location::Child { parent, step },
                 None => Location::Root(None),
             },
-            projection,
-            missing,
+            current_projection.as_ref(),
+            default_projection.as_ref(),
             hooks,
             build,
         )
@@ -1448,192 +1436,189 @@ fn prepare_descend<C: 'static, Cv: Canvas + 'static>(
 #[allow(clippy::too_many_arguments)]
 fn prepare_location<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    present_projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Traversal,
     location: Location<'_>,
-    missing_projection: Option<&Projection<C>>,
-    missing: Option<progred_display::Layout<C, Hover>>,
+    current_projection: Option<&progred_display::Partial<C, Hover>>,
+    default_projection: Option<&progred_display::Partial<C, Hover>>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
-    match location.value(|cell, resolution| cx.sources.value(cell, resolution)) {
-        Some(value) => prepare_present_value(
-            cx,
-            present_projection,
-            tcx,
-            path,
-            ancestors,
-            value,
-            hooks,
-            build,
-        ),
-        None => match missing {
-            Some(layout) => prepare_missing_layout(
-                cx,
-                missing_projection,
-                tcx,
-                path,
-                ancestors,
-                hooks,
-                layout,
-                build,
-            ),
-            None => prepare(
-                cx,
-                present_projection,
-                tcx,
-                path,
-                ancestors,
-                hooks,
-                None,
-                progred_display::completion(progred_display::CompletionKind::Value, None),
-                build,
-            ),
-        },
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn prepare_missing_layout<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    projection: Option<&Projection<C>>,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &Traversal,
-    hooks: &Hooks<C>,
-    layout: progred_display::Layout<C, Hover>,
-    build: &mut ChoiceBuild<Placed<C, Cv>>,
-) -> ChoiceLayout<Placed<C, Cv>> {
-    let inner = prepare(
-        cx, projection, tcx, path, ancestors, hooks, None, layout, build,
-    );
-    let landmark: SharedPath = Rc::from(path);
-    let transient = cx.source.transient();
-    let selected = cx.selected(path);
-    let scale = cx.styles.scale;
-    let select = navigation_select_handler(landmark.clone(), hooks);
-    let delete = hooks.delete.clone();
-    ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(
-            transient, selected, scale, landmark, None, select, delete, inner,
-        )
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn prepare_present_value<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    projection: Option<&Projection<C>>,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &Traversal,
-    value: &Value,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C, Cv>>,
-) -> ChoiceLayout<Placed<C, Cv>> {
-    let layout = present_layout(cx, projection, path, ancestors, value, hooks);
-    let ordinary_projection = projection
-        .filter(|projection| projection.entry.is_some() && !matches!(value, Value::Cell(_)))
-        .map(Projection::without_entry);
-    let inner = prepare(
+    prepare_value(
         cx,
-        ordinary_projection.as_ref().or(projection),
+        projection,
+        current_projection,
+        default_projection,
         tcx,
         path,
         ancestors,
+        location.value(|cell, resolution| cx.sources.value(cell, resolution)),
         hooks,
-        Some(value),
-        layout,
         build,
-    );
-    let landmark_path: SharedPath = Rc::from(path);
-    // Other projections of the selected location carry the secondary
-    // mark; the selected one has the primary highlight.
-    let secondary = (!cx.selected(path)).then(|| {
-        let secondary = Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
-        let strong = cx.secondary.as_ref() == Some(&secondary);
-        (secondary, strong)
-    });
-    // A landmark, not a target: highlight and keyboard reach span
-    // the full bounds, while clicks belong to the content each arm
-    // claimed above — structural whitespace deselects.
-    let transient = cx.source.transient();
-    let selected = cx.selected(path);
-    let scale = cx.styles.scale;
-    let select = navigation_select_handler(landmark_path.clone(), hooks);
-    let delete = hooks.delete.clone();
-    let landmark = landmark_path.clone();
-    let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(
-            transient, selected, scale, landmark, secondary, select, delete, inner,
-        )
-    });
-    let grounded = match ground_decoration(cx, path, value) {
-        Some((scale, color)) => {
-            ChoiceLayout::map(placed, 0.0, move |placed| ground_with(scale, color, placed))
-        }
-        None => placed,
-    };
-    let target_path = landmark_path.clone();
-    let target_value = value.clone();
-    let pick = hooks.pick.clone();
-    let select = hooks.select.clone();
-    ChoiceLayout::map(grounded, 0.0, move |grounded| {
-        pick_target_with(target_path, target_value, pick, select, grounded)
-    })
+    )
 }
 
-fn present_layout<C: 'static>(
+#[allow(clippy::too_many_arguments)]
+fn prepare_value<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    projection: &Projection<C>,
+    current_projection: Option<&progred_display::Partial<C, Hover>>,
+    default_projection: Option<&progred_display::Partial<C, Hover>>,
+    tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Traversal,
-    value: &Value,
+    value: Option<&Value>,
     hooks: &Hooks<C>,
-) -> progred_display::Layout<C, Hover> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
+    let child_projection = default_projection
+        .map(|partial| Projection {
+            partial: partial.clone(),
+            entry: None,
+        })
+        .or_else(|| {
+            (projection.entry.is_some() && !matches!(value, Some(Value::Cell(_))))
+                .then(|| projection.without_entry())
+        });
+    let child_projection = child_projection.as_ref().unwrap_or(projection);
+    let layout = value_layout(
+        cx,
+        projection,
+        current_projection,
+        &child_projection.partial,
+        path,
+        ancestors,
+        value,
+        hooks,
+    );
+    match layout {
+        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None, hooks)),
+        Some(layout) => {
+            let inner = prepare(
+                cx,
+                child_projection,
+                tcx,
+                path,
+                ancestors,
+                hooks,
+                value,
+                layout,
+                build,
+            );
+            let landmark_path: SharedPath = Rc::from(path);
+            // Other projections of the selected location carry the secondary
+            // mark; the selected one has the primary highlight.
+            let secondary = value.filter(|_| !cx.selected(path)).map(|value| {
+                let secondary =
+                    Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
+                let strong = cx.secondary.as_ref() == Some(&secondary);
+                (secondary, strong)
+            });
+            // A landmark, not a target: highlight and keyboard reach span
+            // the full bounds, while clicks belong to the content each arm
+            // claimed above — structural whitespace deselects.
+            let transient = cx.source.transient();
+            let selected = cx.selected(path);
+            let scale = cx.styles.scale;
+            let select = navigation_select_handler(landmark_path.clone(), hooks);
+            let delete = hooks.delete.clone();
+            let landmark = landmark_path.clone();
+            let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
+                descend_landmark_with(
+                    transient, selected, scale, landmark, secondary, select, delete, inner,
+                )
+            });
+            let grounded = match value.and_then(|value| ground_decoration(cx, path, value)) {
+                Some((scale, color)) => {
+                    ChoiceLayout::map(placed, 0.0, move |placed| ground_with(scale, color, placed))
+                }
+                None => placed,
+            };
+            match value {
+                Some(value) => {
+                    let target_path = landmark_path;
+                    let target_value = value.clone();
+                    let pick = hooks.pick.clone();
+                    let select = hooks.select.clone();
+                    ChoiceLayout::map(grounded, 0.0, move |grounded| {
+                        pick_target_with(target_path, target_value, pick, select, grounded)
+                    })
+                }
+                None => grounded,
+            }
+        }
+    }
+}
+
+fn value_layout<C: 'static>(
+    cx: &Cx,
+    projection: &Projection<C>,
+    current_projection: Option<&progred_display::Partial<C, Hover>>,
+    default_projection: &progred_display::Partial<C, Hover>,
+    path: &[Step],
+    ancestors: &Traversal,
+    value: Option<&Value>,
+    hooks: &Hooks<C>,
+) -> Option<progred_display::Layout<C, Hover>> {
     // Traversal has already accumulated the cells crossed by Follow
     // edges. A repeated cell is the graph cycle; re-resolving this
     // path and all its prefixes here made every frame walk from the
     // root once per projected value.
     let in_cycle = value
-        .as_cell()
+        .and_then(Value::as_cell)
         .is_some_and(|cell| ancestors.cells.contains(&cell));
-    if crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
-        .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
+    if let Some(value) = value
+        && crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
+            .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
     {
-        return collapsed;
+        return Some(collapsed);
     }
-    projection
-        .and_then(|projection| {
-            // Editor state arrives positionally: the payload only at
-            // the selected path, the annotations only at this one.
-            let selection = cx
-                .selection
-                .filter(|current| current.path() == path)
-                .map(Selection::payload);
-            let pending = if cx.pending_edge_under(path).is_some() {
-                Some(progred_display::Pending::Field)
-            } else {
-                cx.pending_child_of(path)
-                    .map(progred_display::Pending::Child)
-            };
-            let state = cx.annotations.at(path);
-            let target = |steps| projection_target(path, hooks, steps);
-            projection.apply(&progred_display::ProjectionInput {
-                env: &ProjectEnv { cx },
-                value,
-                scale_factor: cx.styles.scale,
-                writable: !cx.source.transient() && writable_at(&cx.sources, path),
-                selection: selection.as_ref(),
-                pending,
-                state,
-                targets: progred_display::ProjectionTargets::new(&target),
-            })
-        })
-        .unwrap_or_else(|| structure::of(cx, path, value, hooks))
+    let selection = cx
+        .selection
+        .filter(|current| current.path() == path)
+        .map(Selection::payload);
+    let pending = if cx.pending_edge_under(path).is_some() {
+        Some(progred_display::Pending::Field)
+    } else {
+        cx.pending_child_of(path)
+            .map(progred_display::Pending::Child)
+    };
+    let state = cx.annotations.at(path);
+    let target = |steps| projection_target(path, hooks, steps);
+    let insert = |position| {
+        let target: SharedPath = Rc::from(
+            path.iter()
+                .cloned()
+                .chain([Step::Element(position)])
+                .collect::<Path>(),
+        );
+        let insert = hooks.insert.clone();
+        let destination = target.clone();
+        let action: progred_display::ActionHandler<C> = Rc::new(move |world| {
+            insert(world, destination.to_vec());
+            true
+        });
+        (Hover::Insert(target), action)
+    };
+    let input = progred_display::ProjectionInput {
+        env: &ProjectEnv { cx },
+        default_projection: default_projection.clone(),
+        value,
+        scale_factor: cx.styles.scale,
+        writable: !cx.source.transient() && writable_at(&cx.sources, path),
+        selection: selection.as_ref(),
+        pending,
+        state,
+        targets: progred_display::ProjectionTargets::new(&target).with_insert_after(&insert),
+    };
+    match current_projection {
+        Some(current) => current(&input),
+        None => projection.apply(&input),
+    }
+    .or_else(|| value.map(|value| structure::of(cx, path, value, hooks, &input)))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

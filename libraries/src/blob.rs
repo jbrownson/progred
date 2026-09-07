@@ -59,7 +59,7 @@ pub fn display<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     Some(line_edit::layout_with_family(
-        gid::hex_string(input.value.as_blob()?),
+        gid::hex_string(input.value?.as_blob()?),
         grap_runtime::ffi(vocabulary::UPDATE),
         "0x",
         "",

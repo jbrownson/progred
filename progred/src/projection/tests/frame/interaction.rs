@@ -64,7 +64,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         Hooks {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|world: &mut ClickWorld, path| {
-                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
+                world.selection = Some(make_selection(path));
             }),
             select_payload: Rc::new(|_, _, _| {}),
             edit_line: Rc::new(|_, _, _| None),

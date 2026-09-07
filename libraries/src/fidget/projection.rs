@@ -116,9 +116,9 @@ pub(super) fn field<World: 'static, Hover: Clone + 'static>(
 ) -> Option<Layout<World, Hover>> {
     // An active new field needs the structural record's insertion control.
     input.pending.is_none().then_some(())?;
-    let (marker, content) = form(input.value)?;
+    let (marker, content) = form(input.value?)?;
     let body = if marker == AXIS {
-        crate::grap::shallow_at([Step::Key(AXIS)], content)
+        crate::grap::shallow_at([Step::Key(AXIS)], content, &input.default_projection)
     } else {
         let target = input.targets.current();
         let (spelling, face) = match input.env.name(marker) {
@@ -144,7 +144,7 @@ pub(super) fn field<World: 'static, Hover: Clone + 'static>(
         }
     };
     Some(
-        match input.value.as_record()?.get(&name::vocabulary::NAME) {
+        match input.value?.as_record()?.get(&name::vocabulary::NAME) {
             Some(name) => hug(
                 row(
                     6.0,

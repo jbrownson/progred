@@ -24,24 +24,6 @@ use ui_events::pointer::{
     PointerType, PointerUpdate,
 };
 
-fn contextual_probe(
-    _: &progred_display::ProjectionInput<'_, (), Hover>,
-) -> Option<progred_display::Layout<(), Hover>> {
-    Some(progred_display::text("contextual"))
-}
-
-fn ambient_probe(
-    _: &progred_display::ProjectionInput<'_, (), Hover>,
-) -> Option<progred_display::Layout<(), Hover>> {
-    Some(progred_display::text("ambient"))
-}
-
-fn declining_probe(
-    _: &progred_display::ProjectionInput<'_, (), Hover>,
-) -> Option<progred_display::Layout<(), Hover>> {
-    None
-}
-
 fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
@@ -117,12 +99,8 @@ fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
     Sources { doc, libraries }
 }
 
-fn make_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    Selection::edge(
-        &crate::workspace::Root::document(),
-        &src(doc, libraries),
-        path,
-    )
+fn make_selection(path: Path) -> Selection {
+    Selection::edge(&crate::workspace::Root::document(), path)
 }
 
 #[derive(Default)]
@@ -163,6 +141,14 @@ impl EditingWorld {
 }
 
 fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, crate::frame::Paint> {
+    editing_frame_with_projection(world, raw, None)
+}
+
+fn editing_frame_with_projection(
+    world: &mut EditingWorld,
+    raw: bool,
+    projection: Option<&Projection<EditingWorld>>,
+) -> Placed<EditingWorld, crate::frame::Paint> {
     let stack = crate::stack::load::<EditingWorld>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -188,13 +174,13 @@ fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, cr
             styles: &styles,
             width: 500.0,
 
-            projection: (!raw).then_some(&stack.projection),
+            projection: (!raw).then_some(projection.unwrap_or(&stack.projection)),
         },
         &mut tcx,
         Hooks {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|world, path| {
-                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
+                world.selection = Some(make_selection(path));
             }),
             select_payload: Rc::new(|world, path, payload| {
                 world.selection = Some(Selection::from_payload(
@@ -209,7 +195,8 @@ fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, cr
                     return None;
                 }
                 let selected = world.selection.as_mut().filter(|selected| {
-                    selected.path() == path && selected.stage() == Stage::Edge
+                    selected.path() == path
+                        && selected.stage(&src(&world.doc, &world.libraries)) == Stage::Edge
                 })?;
                 Some(EditCtx {
                     state: selected.edit_line_mut(line),
@@ -221,8 +208,11 @@ fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, cr
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             edit: Rc::new(|world| {
+                let selected = world.selection.as_mut().filter(|selected| {
+                    selected.stage(&src(&world.doc, &world.libraries)) != Stage::Edge
+                })?;
                 Some(EditCtx {
-                    state: world.selection.as_mut()?.edit_mut()?,
+                    state: selected.edit_query_mut(),
                     fonts: &mut world.fonts,
                     layouts: &mut world.layouts,
                     clipboard: &mut world.clipboard,
@@ -259,9 +249,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
     {
         (target.select)(&mut world, None);
     }
-    world
-        .selection
-        .unwrap_or_else(|| make_selection(doc, libraries, path))
+    world.selection.unwrap_or_else(|| make_selection(path))
 }
 
 fn make_projected_editing_selection(
@@ -301,8 +289,9 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
             hover: Hover::Value(Rc::from(path.clone())),
         };
         stack.projection.apply(&progred_display::ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,

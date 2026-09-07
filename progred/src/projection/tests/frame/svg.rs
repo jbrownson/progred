@@ -200,7 +200,12 @@ fn svg_bench_renders_numeric_type_labels() {
     };
     render(&doc, None, 400.0, "numeric_type_labels.svg");
     let selection = make_projected_selection(&doc, &core_libraries(), vec![key("radius")]);
-    render(&doc, Some(&selection), 400.0, "numeric_type_labels_editing.svg");
+    render(
+        &doc,
+        Some(&selection),
+        400.0,
+        "numeric_type_labels_editing.svg",
+    );
 }
 
 #[test]
@@ -275,15 +280,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::test_values::text("")),
         cells: Cells::new(),
     };
-    let stack = crate::stack::load::<World>();
-    let sel = Selection::edge(
-        &crate::workspace::Root::document(),
-        &Sources {
-            doc: &empty_string,
-            libraries: &stack.libraries,
-        },
-        Vec::new(),
-    );
+    let sel = Selection::edge(&crate::workspace::Root::document(), Vec::new());
     render(
         &empty_string,
         Some(&sel),
@@ -305,7 +302,10 @@ fn svg_bench_renders_a_pending_edge() {
         vec![Step::Key(crate::test_values::label("shape"))],
     )
     .unwrap();
-    assert_eq!(edge.stage(), crate::selection::Stage::Label);
+    assert_eq!(
+        edge.stage(&src(&doc, &library)),
+        crate::selection::Stage::Label
+    );
     let typing = edge.with_query("na");
     render(&doc, Some(&typing), 560.0, "raw_pending_edge.svg");
 

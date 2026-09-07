@@ -36,7 +36,7 @@ pub fn viewport_display<World, Hover>(
     width: f64,
     height: f64,
 ) -> Option<Layout<World, Hover>> {
-    let (value, function) = viewport(input.value)?;
+    let (value, function) = viewport(input.value?)?;
     if width <= 0.0 || height <= 0.0 {
         return Some(progred_display::row(0.0, []));
     }
@@ -58,7 +58,7 @@ pub fn viewport_display<World, Hover>(
 pub fn display<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
     let expression = fields.get(&vocabulary::RENDER)?;
     let evaluated = expression.as_record().and_then(|fields| {
         let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
@@ -75,7 +75,7 @@ pub fn display<World, Hover>(
 pub fn projected_display<World, Hover>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
     let value = fields.get(&vocabulary::VALUE)?;
     let function = fields.get(&vocabulary::PROJECTION)?;
     let (result, fuel) = input
@@ -177,8 +177,9 @@ mod tests {
             hover: (),
         };
         projection(&ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,

@@ -109,14 +109,6 @@ fn command_a_selects_the_current_views_root() {
     let pane = crate::workspace::Root::pane(pane_path.clone());
     let other_pane = crate::workspace::Root::pane(pane_path.clone());
     let child_path = vec![key("pane"), key("child")];
-    let doc = Document {
-        root: Some(Value::record([(
-            crate::test_values::label("pane"),
-            Value::record([(crate::test_values::label("child"), Value::record([]))]),
-        )])),
-        cells: Cells::new(),
-    };
-    let libraries = Libraries::default();
     let descends: Vec<_> = [
         (&document, child_path.clone()),
         (&document, pane_path.clone()),
@@ -141,7 +133,7 @@ fn command_a_selects_the_current_views_root() {
         ..arrow(NamedKey::ArrowDown)
     };
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
-        let selection = Selection::edge(root, &src(&doc, &libraries), child_path.clone());
+        let selection = Selection::edge(root, child_path.clone());
         for selection in [None, Some(&selection)] {
             let target = step_selection(&descends, Some(root), selection, LINE, &event)
                 .expect("Select All reaches the view root");

@@ -925,8 +925,6 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
 #[test]
 fn completion_activation_precedes_the_real_editor_it_covers() {
     struct ClickWorld {
-        doc: Document,
-        libraries: Libraries,
         selection: Option<Selection>,
         applied: Option<Path>,
     }
@@ -969,7 +967,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         Hooks {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|world: &mut ClickWorld, path| {
-                world.selection = Some(make_selection(&world.doc, &world.libraries, path));
+                world.selection = Some(make_selection(path));
             }),
             select_payload: Rc::new(|_, _, _| {}),
             edit_line: Rc::new(|_, _, _| None),
@@ -1049,8 +1047,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         state,
     };
     let mut world = ClickWorld {
-        doc: doc.clone(),
-        libraries: stack.libraries.clone(),
         selection: None,
         applied: None,
     };

@@ -6,7 +6,7 @@ fn a_data_event_realizes_the_apply_hook() {
         input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
     ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
         use progred_libraries::layout as data;
-        input.value.as_blob()?;
+        input.value?.as_blob()?;
         let target = input.targets.current();
         data::decode(
             &data::on(

@@ -36,10 +36,16 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    let engaged = cx
-        .selection
-        .filter(|current| current.stage() == Stage::Pending && current.path() == path.as_slice())
-        .and_then(Selection::edit);
+    let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, &path);
+    let selected = cx.selection.filter(|current| {
+        writable
+            && current.path() == path.as_slice()
+            && current.stage(&cx.sources) == Stage::Pending
+    });
+    let default = selected
+        .filter(|current| current.edit().is_none())
+        .map(Selection::initial_query);
+    let engaged = selected.and_then(Selection::edit).or(default.as_ref());
     let content = placeholder(cx, tcx, &path, engaged, false, completions, hooks);
     // Selection draws the same outline as the inactive frame.
     pending_target(cx, path, hooks, content)

@@ -14,8 +14,8 @@ use grap_runtime::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
 use progred_display::{
-    Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
-    hug, row, shared,
+    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_local, centered_row,
+    col, dim, faced, hug, record_with, row, shared,
 };
 use std::rc::Rc;
 
@@ -505,7 +505,8 @@ fn matches_pattern(
 pub fn match_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 3 && input.pending.is_none()).then_some(())?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::MATCH).then_some(())?;
     let subject = fields.get(&vocabulary::VALUE)?;
@@ -514,26 +515,83 @@ pub fn match_display<World: 'static, Hover: Clone + 'static>(
     let head = row(
         4.0,
         [
-            crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
-            crate::grap::expression_at([Step::Key(vocabulary::VALUE)], subject),
+            crate::grap::shallow_at(
+                [Step::Key(grap_runtime::vocabulary::FUNCTION)],
+                function,
+                &input.default_projection,
+            ),
+            crate::grap::expression_at(
+                [Step::Key(vocabulary::VALUE)],
+                subject,
+                &input.default_projection,
+            ),
         ],
     );
     Some(hug(
         head,
-        at_with_projection(
+        at_local(
             [Step::Key(vocabulary::CASES)],
             cases,
-            [progred_display::partial(case_display::<World, Hover>)],
+            progred_display::structure::list(Some(progred_display::partial(
+                case_display::<World, Hover>,
+            ))),
+            &input.default_projection,
         ),
         4.0,
         20.0,
     ))
 }
 
+fn pattern_at<World: 'static, Hover: Clone + 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+    default: &progred_display::Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    progred_display::at_scoped(
+        steps,
+        value,
+        progred_display::partial(pattern_binder::<World, Hover>),
+        default,
+    )
+}
+
+fn pattern_binder<World: 'static, Hover: Clone + 'static>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    input.pending.is_none().then_some(())?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 1).then_some(())?;
+    fields.get(&vocabulary::BIND)?.as_cell()?;
+    Some(record_with(
+        fields.iter().map(|(key, value)| (*key, value)),
+        CellId::cmp,
+        |key, value| {
+            let target = input.targets.at([Step::Key(key)]);
+            RecordField {
+                label: activatable(
+                    match input.env.name(key) {
+                        Some(name) => faced(name, Face::Label),
+                        None => faced(name::short_id(key), Face::Id),
+                    },
+                    target.hover,
+                    target.select,
+                ),
+                value: crate::grap::declaration_at(
+                    [Step::Key(key)],
+                    value,
+                    &input.default_projection,
+                ),
+            }
+        },
+        [],
+    ))
+}
+
 fn case_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let (pattern, expression) = case_parts(input.value)?;
+    (input.value?.as_record()?.len() == 2 && input.pending.is_none()).then_some(())?;
+    let (pattern, expression) = case_parts(input.value?)?;
     let expression_target = input
         .targets
         .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
@@ -542,13 +600,18 @@ fn case_display<World: 'static, Hover: Clone + 'static>(
         centered_row(
             6.0,
             [
-                crate::grap::deep_at([Step::Key(vocabulary::PATTERN)], pattern),
+                pattern_at(
+                    [Step::Key(vocabulary::PATTERN)],
+                    pattern,
+                    &input.default_projection,
+                ),
                 arrow,
             ],
         ),
         crate::grap::expression_at(
             [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
             expression,
+            &input.default_projection,
         ),
         6.0,
         20.0,
@@ -575,7 +638,8 @@ enum BindingForm {
 pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 3 && input.pending.is_none()).then_some(())?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
     let form = match function.as_cell()? {
         vocabulary::LET => BindingForm::Let,
@@ -585,18 +649,23 @@ pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
     let bindings = fields.get(&vocabulary::BINDINGS)?;
     bindings.as_list()?;
     let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
-    let bindings = shared(at_with_projection(
+    let bindings = shared(at_local(
         [Step::Key(vocabulary::BINDINGS)],
         bindings,
-        [progred_display::partial(binding_display::<World, Hover>)],
+        progred_display::structure::list(Some(progred_display::partial(
+            binding_display::<World, Hover>,
+        ))),
+        &input.default_projection,
     ));
     let function = shared(crate::grap::shallow_at(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
         function,
+        &input.default_projection,
     ));
     let expression = shared(crate::grap::expression_at(
         [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
         expression,
+        &input.default_projection,
     ));
     match form {
         BindingForm::Let => {
@@ -641,16 +710,25 @@ pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
 fn binding_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
     let left = match (
         fields.get(&vocabulary::BIND),
         fields.get(&vocabulary::PATTERN),
     ) {
         (Some(binder), None) => {
             binder.as_cell()?;
-            crate::grap::deep_at([Step::Key(vocabulary::BIND)], binder)
+            crate::grap::declaration_at(
+                [Step::Key(vocabulary::BIND)],
+                binder,
+                &input.default_projection,
+            )
         }
-        (None, Some(pattern)) => crate::grap::deep_at([Step::Key(vocabulary::PATTERN)], pattern),
+        (None, Some(pattern)) => pattern_at(
+            [Step::Key(vocabulary::PATTERN)],
+            pattern,
+            &input.default_projection,
+        ),
         _ => return None,
     };
     let value = fields.get(&vocabulary::VALUE)?;
@@ -658,7 +736,11 @@ fn binding_display<World: 'static, Hover: Clone + 'static>(
     let equals = activatable(dim("="), value_target.hover, value_target.select);
     Some(hug(
         centered_row(6.0, [left, equals]),
-        crate::grap::expression_at([Step::Key(vocabulary::VALUE)], value),
+        crate::grap::expression_at(
+            [Step::Key(vocabulary::VALUE)],
+            value,
+            &input.default_projection,
+        ),
         6.0,
         20.0,
     ))
@@ -667,7 +749,7 @@ fn binding_display<World: 'static, Hover: Clone + 'static>(
 fn quote_marker<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
+    (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let target = input.targets.current();
         activatable(dim("\""), target.hover, target.select)
     })
@@ -679,21 +761,22 @@ fn quote_marker<World, Hover: Clone>(
 pub fn quote_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
-    (fields.len() == 2).then_some(())?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
     let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
-    let marker = at_with_projection(
+    let marker = at_local(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
         function,
-        [progred_display::partial(quote_marker::<World, Hover>)],
+        progred_display::partial(quote_marker::<World, Hover>),
+        &input.default_projection,
     );
     Some(row(
         2.0,
         [
             marker,
-            crate::grap::deep_at(
+            progred_display::at(
                 [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
                 expression,
             ),
@@ -706,8 +789,8 @@ pub fn quote_display<World: 'static, Hover: Clone + 'static>(
 pub fn do_display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
-    (fields.len() == 2).then_some(())?;
+    let fields = input.value?.as_record()?;
+    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::DO).then_some(())?;
     let expressions = fields.get(&vocabulary::EXPRESSIONS)?;
@@ -715,8 +798,19 @@ pub fn do_display<World: 'static, Hover: Clone + 'static>(
     Some(row(
         4.0,
         [
-            crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
-            crate::grap::shallow_at([Step::Key(vocabulary::EXPRESSIONS)], expressions),
+            crate::grap::shallow_at(
+                [Step::Key(grap_runtime::vocabulary::FUNCTION)],
+                function,
+                &input.default_projection,
+            ),
+            at_local(
+                [Step::Key(vocabulary::EXPRESSIONS)],
+                expressions,
+                progred_display::structure::list(Some(progred_display::partial(
+                    crate::grap::shallow_cell::<World, Hover>,
+                ))),
+                &input.default_projection,
+            ),
         ],
     ))
 }
@@ -800,8 +894,9 @@ mod tests {
 
     fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
         ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -813,8 +908,9 @@ mod tests {
 
     fn relative_projection_input(value: &Value) -> ProjectionInput<'_, (), Vec<Step>> {
         ProjectionInput {
+            default_projection: progred_display::partial(|_| None),
             env: &NoEval,
-            value,
+            value: Some(value),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -967,14 +1063,13 @@ mod tests {
         };
         let Layout::At {
             steps,
-            projection: Some(projection),
+            projection: Some(_),
             ..
         } = marker
         else {
             panic!("the marker retains the function-field location");
         };
         assert_eq!(steps, &[Step::Key(grap::vocabulary::FUNCTION)]);
-        assert_eq!(projection.len(), 1);
 
         let Layout::At { steps, value, .. } = body else {
             panic!("the expression retains its field location");
@@ -1420,14 +1515,13 @@ mod tests {
         };
         let Layout::At {
             steps,
-            projection: Some(projection),
+            projection: Some(_),
             ..
         } = bindings.as_ref()
         else {
             panic!("let descends to its bindings list");
         };
         assert_eq!(steps, &[Step::Key(vocabulary::BINDINGS)]);
-        assert_eq!(projection.len(), 1);
 
         let where_layout = bindings_display(&relative_projection_input(&where_call)).unwrap();
         let Layout::Alternatives(where_options) = where_layout else {
@@ -1472,9 +1566,9 @@ mod tests {
             &children[0],
             Layout::At {
                 steps,
-                projection: Some(projection),
+                projection: Some(_),
                 ..
-            } if *steps == [Step::Key(vocabulary::BIND)] && projection.len() == 1
+            } if *steps == [Step::Key(vocabulary::BIND)]
         ));
     }
 
@@ -1501,7 +1595,7 @@ mod tests {
         }
         let Layout::At {
             steps,
-            projection: Some(projection),
+            projection: Some(_),
             value: cases,
             ..
         } = arms
@@ -1509,7 +1603,6 @@ mod tests {
             panic!("match descends to its cases list");
         };
         assert_eq!(steps, &[Step::Key(vocabulary::CASES)]);
-        assert_eq!(projection.len(), 1);
 
         assert!(case_display(&relative_projection_input(cases)).is_none());
         let case = cases
