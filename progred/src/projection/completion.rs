@@ -20,20 +20,20 @@ use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-use puri::{Canvas, Placement, Point};
+use puri::{Placement, Point};
 use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::Key;
 
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
-pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
+pub(super) fn pending_view<C: 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
         writable
@@ -49,12 +49,12 @@ pub(super) fn pending_view<C: 'static, Cv: Canvas + 'static>(
     pending_target(cx, path, hooks, content)
 }
 
-fn pending_target<C: 'static, Cv: Canvas + 'static>(
+fn pending_target<C: 'static>(
     cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
-    child: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
+    child: Measured<Placed<C>>,
+) -> Measured<Placed<C>> {
     let (path, transient): (SharedPath, bool) = match cx.source {
         Source::Transient { owner } if owner != path.as_slice() => return child,
         Source::Transient { owner } => (Rc::from(owner), true),
@@ -102,7 +102,7 @@ fn pending_target<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-fn placeholder<C: 'static, Cv: Canvas + 'static>(
+fn placeholder<C: 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
@@ -110,7 +110,7 @@ fn placeholder<C: 'static, Cv: Canvas + 'static>(
     labels: bool,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     match engaged {
         Some(query) => query_content(cx, tcx, path, query, labels, completions, hooks),
         None => placeholder_box(tcx, cx.styles),
@@ -120,7 +120,7 @@ fn placeholder<C: 'static, Cv: Canvas + 'static>(
 /// A focused completion query: the editor plus an ordinary floating
 /// card. Serves both pending stages — a value and a new field's label
 /// (`labels` narrows the offers there).
-fn query_content<C: 'static, Cv: Canvas + 'static>(
+fn query_content<C: 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
@@ -128,7 +128,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
     labels: bool,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     // The card and keyboard commit must answer from one list.
     let everything = cx.selection.is_some_and(Selection::completion_everything);
     let commit = if labels {
@@ -279,7 +279,7 @@ pub(super) fn completion_placement(
     })
 }
 
-pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
+pub(super) fn completion_card<C: 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     entries: &[Entry<C>],
@@ -287,7 +287,7 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
     scroll: f64,
     everything: bool,
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     let entries = entries
         .iter()
         .enumerate()
@@ -297,16 +297,16 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
                 detail: entry.detail.as_deref(),
                 matches: &entry.matches,
                 style: face_style(styles, entry.face),
-                target: Hover::Entry(index),
+                target: Hovered::Tree(Hover::Entry(index)),
                 activate: entry.activate.clone(),
             },
         )
         .collect::<Vec<_>>();
-    super::native_fragment(progred_display::widget::completion::card(
+    progred_display::widget::completion::card(
         tcx,
         styles,
         &entries,
-        Hover::MoreCompletions,
+        Hovered::Tree(Hover::MoreCompletions),
         progred_display::widget::completion::State {
             choice,
             scroll,
@@ -314,7 +314,7 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
         },
         move |world, state| set_view(world, state.scroll, state.choice, state.everything),
         crate::modifiers::command,
-    ))
+    )
 }
 
 /// The new-field label stage engaged, its query wearing the primary
@@ -322,14 +322,14 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
 /// [`descend`] to mark, and the ring spans the QUERY frame alone, the
 /// way a value pending's does. Clicks inside belong to the query's
 /// own caret target; clicks beside fall through like any pending's.
-pub(super) fn label_query<C: 'static, Cv: Canvas + 'static>(
+pub(super) fn label_query<C: 'static>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
     query: &LineEditState,
     completions: Option<&progred_display::CompletionProvider>,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, path, Some(query), true, completions, hooks);
     let ringed = decorate(content, move |p, rect| {

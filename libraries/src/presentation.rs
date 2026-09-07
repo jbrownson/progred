@@ -31,7 +31,7 @@ pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
 
 /// A viewport function receives its assigned logical size, not a size
 /// inferred from its output. Its result uses the ordinary layout and handlers.
-pub fn viewport_display<World, Hover>(
+pub fn viewport_display<World: 'static, Hover: 'static>(
     input: &ProjectionInput<'_, World, Hover>,
     width: f64,
     height: f64,
@@ -55,7 +55,7 @@ pub fn viewport_display<World, Hover>(
     })
 }
 
-pub fn display<World, Hover>(
+pub fn display<World: 'static, Hover: 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -72,7 +72,7 @@ pub fn display<World, Hover>(
 
 /// Opt-in presentation of a declaration; not part of the library's
 /// ordinary authoring projection.
-pub fn projected_display<World, Hover>(
+pub fn projected_display<World: 'static, Hover: 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -110,6 +110,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 mod tests {
     use super::*;
     use gid::{CellId, Value};
+    use progred_display::test_support::{ProjectionCall, inspect};
     use progred_display::{Env, ProjectionTargets};
     use std::rc::Rc;
 
@@ -141,10 +142,11 @@ mod tests {
         ]);
         assert!(projected(&declaration, &CheckArguments, display).is_none());
         assert!(matches!(
-            projected(&declaration, &CheckArguments, |input| viewport_display(
+            (projected(&declaration, &CheckArguments, |input| viewport_display(
                 input, 420.5, 160.25
-            )),
-            Some(Layout::Transient { fuel: 17, .. })
+            )))
+            .map(|layout| inspect(&layout)),
+            Some(ProjectionCall::Transient { fuel: 17, .. })
         ));
         assert!(matches!(
             projected(&declaration, &CheckArguments, |input| viewport_display(
@@ -208,16 +210,17 @@ mod tests {
         let result = Value::from(b"projected".to_vec());
         assert!(projected(&value, &NoEvaluation, display).is_none());
         assert!(
-            matches!(projected(&value, &EvaluateTo(result.clone()), projected_display),
-            Some(Layout::Transient { value, fuel: 17 }) if value == result)
+            matches!((projected(&value, &EvaluateTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),
+            Some(ProjectionCall::Transient { value, fuel: 17 }) if value == result)
         );
         assert!(matches!(
-            projected(
+            (projected(
                 &value,
                 &EvaluateTo(absent::with_reason(LEFT_VALUE)),
                 projected_display
-            ),
-            Some(Layout::Descend {
+            ))
+            .map(|layout| inspect(&layout)),
+            Some(ProjectionCall::Descend {
                 step: Step::Key(vocabulary::VALUE),
                 ..
             })
@@ -236,9 +239,10 @@ mod tests {
     fn render_projects_only_the_transient_evaluation_result() {
         let result = Value::from(b"picture".to_vec());
         let value = Value::record([(vocabulary::RENDER, Value::from(LEFT_VALUE))]);
-        assert!(matches!(
-            projected(&value, &EvaluateTo(result.clone()), display),
-            Some(Layout::Transient { value, fuel: 17 }) if value == result
-        ));
+        assert!(
+            matches!((projected(&value, &EvaluateTo(result.clone()), display)).map(|layout| inspect(&layout)),
+                Some(ProjectionCall::Transient { value, fuel: 17 }) if value == result
+            )
+        );
     }
 }

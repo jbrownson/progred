@@ -31,7 +31,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::TextCache::default();
-    let measured = project::<Vec<(Path, Value)>, crate::frame::Paint>(
+    let measured = project::<Vec<(Path, Value)>>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,
@@ -101,8 +101,8 @@ fn native_annotation_handler_retains_the_projected_site() {
 #[test]
 fn a_data_event_realizes_the_apply_hook() {
     fn probe(
-        input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
-    ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
+        input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hovered>,
+    ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hovered>> {
         use progred_libraries::layout as data;
         input.value?.as_blob()?;
         let target = input.targets.current();
@@ -133,7 +133,7 @@ fn a_data_event_realizes_the_apply_hook() {
         cache: &mut cache,
     };
     let empty = Annotations::default();
-    let measured = project::<Vec<(Path, Value, Value)>, crate::frame::Paint>(
+    let measured = project::<Vec<(Path, Value, Value)>>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,

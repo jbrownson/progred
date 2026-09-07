@@ -13,7 +13,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let contribution = |name: &'static str| {
         let log = log.clone();
         Box::new(
-            move |output: &mut progred_display::widget::Fragment<(), Hover>, _: Placement| {
+            move |output: &mut progred_display::widget::Fragment<(), Hovered>, _: Placement| {
                 let during_paint = log.clone();
                 output.render(move |_, _| during_paint.borrow_mut().push(name));
                 output.handler().on_key(move |_, _| {
@@ -21,17 +21,19 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
                     false
                 });
             },
-        ) as progred_display::widget::Place<(), Hover>
+        ) as progred_display::widget::Place<(), Hovered>
     };
     let extent = Extent {
         width: 40.0,
         ascent: 10.0,
         descent: 5.0,
     };
-    let child = native_fragment(progred_display::widget::leaf(extent, contribution("child")));
-    let decorated = placed::after(
-        native_before(child, contribution("before")),
-        native_contribution(contribution("after")),
+    let child = progred_display::widget::leaf(extent, contribution("child"));
+    let before = contribution("before");
+    let after = contribution("after");
+    let decorated = measured::after_into(
+        measured::before_into(child, move |placement, output| before(output, placement)),
+        move |placement, output| after(output, placement),
     );
     assert_eq!(decorated.extent, extent);
     let output = measured::place_top_left(decorated, Point::ZERO);
@@ -59,12 +61,12 @@ struct Bench {
 }
 
 /// Probe with the pointer, then render and unpack the placed frame.
-fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
+fn settle(placed: Placed<World>, pointer: Option<Point>) -> Bench {
     settle_with_sources(placed, pointer, None)
 }
 
 fn settle_with_sources(
-    placed: Placed<World, Bench>,
+    placed: Placed<World>,
     pointer: Option<Point>,
     sources: Option<&Sources>,
 ) -> Bench {
@@ -99,33 +101,27 @@ fn settle_with_sources(
     bench
 }
 
-impl Canvas for Bench {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl puri::draw::CanvasSink for Bench {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.list.image(image, transform);
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         self.list.fill(shape, brush, transform);
     }
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         self.list.stroke(shape, style, brush, transform);
     }
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         self.list.glyph_run(run);
     }
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        let _ = (shape.into(), transform);
+        let _ = (shape, transform);
         content(self);
     }
 }
@@ -281,7 +277,7 @@ impl BenchContext {
         let start = std::time::Instant::now();
         let root_path = root;
         let root = sources.resolve_path(root_path);
-        let node = project::<World, Bench>(
+        let node = project::<World>(
             ProjectDescription {
                 sources,
                 root,

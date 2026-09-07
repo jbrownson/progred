@@ -16,9 +16,21 @@ pub enum Direction {
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 
 pub struct Landmark<World> {
+    pub root: Option<super::view::Root>,
     pub path: Rc<[Step]>,
     pub rect: Rect,
     pub select: Select<World>,
+}
+
+impl<World> Clone for Landmark<World> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root.clone(),
+            path: self.path.clone(),
+            rect: self.rect,
+            select: self.select.clone(),
+        }
+    }
 }
 
 pub trait Navigation<World>: Output {
@@ -38,6 +50,7 @@ pub fn landmark<World: 'static, O: Navigation<World> + 'static>(
         let select = output.landmark_select().take().unwrap_or(select);
         *output.landmark_select() = outer_select;
         output.push_landmark(Landmark {
+            root: None,
             path,
             rect: placement.rect,
             select,
@@ -86,7 +99,7 @@ mod tests {
         let placement = Placement::root(Rect::new(15.0, 30.0, 25.0, 40.0));
         let output = place(child, placement);
         let mut log = vec![];
-        for landmark in output.landmarks {
+        for landmark in output.descends {
             assert_eq!(landmark.rect, placement.rect);
             (landmark.select)(&mut log, Some(Direction::Left));
         }
@@ -108,7 +121,7 @@ mod tests {
         let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
         let output = place(measured::row(0.0, vec![first, second]), placement);
         let mut log = vec![];
-        for landmark in output.landmarks {
+        for landmark in output.descends {
             (landmark.select)(&mut log, None);
         }
         assert_eq!(log, vec![("first", None), ("second", None)]);
@@ -120,7 +133,7 @@ mod tests {
         let child = landmark(control(Some(select("control"))), path(), select("unused"));
         let child = measured::around(child, |_, _| Frame::empty());
         let output = place(child, Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)));
-        assert!(output.landmarks.is_empty());
+        assert!(output.descends.is_empty());
         assert!(output.landmark_select.is_none());
     }
 }

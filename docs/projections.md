@@ -166,8 +166,10 @@ back to normal projection.
 
 ## Lowering and interaction
 
-The [projection runtime](../progred/src/projection/mod.rs) adapts display
-layouts to measured boxes and Puri handlers. Its supporting modules separate
+The [projection runtime](../progred/src/projection/mod.rs) resolves document
+locations and supplies scoped widget capabilities. The
+[box interpreter](../display/src/measure.rs) composes measurements without
+interpreting document traversal or control requests. Supporting modules separate
 [structural fallback](../progred/src/projection/structure.rs),
 [Grap event adaptation](../libraries/src/layout/events.rs),
 [completion](../progred/src/projection/completion.rs), and
@@ -178,11 +180,14 @@ only supplies offers, query state, document callbacks, and popup placement.
 The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.
 
-Grap traversal descriptions (`descend` and `at`) use the
-[path library](../libraries/src/path.rs)'s GID encoding, also used by site and
-selection capabilities. Field keys, list positions, and source-qualified
-definition follows have one encoder/decoder; layout has no parallel step
-vocabulary.
+Grap's `descend` and `at` forms decode through the
+[path library](../libraries/src/path.rs), also used by site and selection
+capabilities. Field keys, list positions, and source-qualified definition
+follows have one encoder/decoder. They produce ordinary preparation functions
+using an explicit projection scope; layout has no parallel path vocabulary or
+traversal opcodes. Preparation interleaves descendant projection and measurement
+before choices resolve. Shared children prepare once per frame, and only chosen
+placement continuations contribute interaction and ink.
 
 Puri leaves carry text or canvas drawing operations. They do not acquire
 selection paths, document editing rules, names, or completion providers.
@@ -196,7 +201,12 @@ state and capabilities; its [line adapter](../progred/src/projection/line_contro
 only applies editing operations, conversion, and undo grouping. The current
 handler owns conversion, not the selection payload. The line library adapts
 Grap conversions explicitly; native controls do not round-trip through Grap.
-Completion remains a host-control request pending the same migration.
+Completion uses an ordinary native widget factory with explicit kind/provider
+inputs. The scoped app adapter constructs document-specific offers and pending
+state; the reusable card owns row ink, navigation, and scrolling. Drawing-program
+widgets similarly request evaluation/source attribution from the app. Both
+return the same measured `Fragment` as other widgets, not control opcodes.
+The app's `Placed` is an alias for that shared output.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
 Delimiter handles use ordinary [side widgets](../display/src/widget/delimiter.rs).

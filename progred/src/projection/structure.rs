@@ -3,6 +3,7 @@
 //! tree; `realize` is the only interpreter.
 
 use super::{Cx, Hooks, select_handler};
+use crate::frame::Hovered;
 use crate::hover::Hover;
 use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
@@ -11,14 +12,14 @@ use progred_display::{
 };
 use std::rc::Rc;
 
-type View<World> = Layout<World, Hover>;
+type View<World> = Layout<World, Hovered>;
 
 pub fn of<World: 'static>(
     cx: &Cx,
     path: &[Step],
     value: &Value,
     hooks: &Hooks<World>,
-    input: &ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hovered>,
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
@@ -89,14 +90,14 @@ fn selectable<World: 'static>(
     claim_hover: bool,
 ) -> View<World> {
     let path: Rc<[Step]> = Rc::from(path);
-    let target = Hover::Value(path.clone());
+    let target = Hovered::Tree(Hover::Value(path.clone()));
     let clicked = on_activate(
         pickable(child, target.clone(), value.clone()),
         target,
         select_handler(path.clone(), hooks),
     );
     if claim_hover {
-        on_hover(clicked, Hover::Value(path))
+        on_hover(clicked, Hovered::Tree(Hover::Value(path)))
     } else {
         clicked
     }
@@ -106,8 +107,8 @@ fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World
     let target: Rc<[Step]> = Rc::from(path);
     let toggle = hooks.toggle.clone();
     activatable(
-        progred_display::hover_highlight(child, Hover::Toggle(target.clone())),
-        Hover::Toggle(target.clone()),
+        progred_display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
+        Hovered::Tree(Hover::Toggle(target.clone())),
         Rc::new(move |world| {
             toggle(world, target.to_vec());
             true

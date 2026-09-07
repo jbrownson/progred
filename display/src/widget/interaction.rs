@@ -34,7 +34,7 @@ pub fn target_action<World: 'static, Hover: 'static>(
                         puri::interact::is_primary_contact(event)
                             && picking(event) == pick
                             && hovered
-                                .as_ref()
+                                .hovered()
                                 .is_some_and(|hover| same_target(hover, &target))
                             && handler(world)
                     });
@@ -168,17 +168,25 @@ mod tests {
                 );
                 let handler = output.handler.unwrap();
                 let mut world = 0;
-                for (mut hovered, expected) in
+                for (hovered, expected) in
                     [(None, false), (Some(8), false), (Some(7), pick == picking)]
                 {
                     assert_eq!(
-                        handler.dispatch_pointer_down_with(&mut world, &press(25.0), &mut hovered),
+                        handler.dispatch_pointer_down_with(
+                            &mut world,
+                            &press(25.0),
+                            &mut crate::widget::frame::DispatchContext::new(None, hovered)
+                        ),
                         expected
                     );
                 }
                 let mut secondary = press(5.0);
                 secondary.button = Some(PointerButton::Secondary);
-                assert!(!handler.dispatch_pointer_down_with(&mut world, &secondary, &mut Some(7)));
+                assert!(!handler.dispatch_pointer_down_with(
+                    &mut world,
+                    &secondary,
+                    &mut crate::widget::frame::DispatchContext::new(None, Some(7))
+                ));
                 assert_eq!(world, usize::from(pick == picking));
             }
         }

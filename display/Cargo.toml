@@ -3,6 +3,9 @@ name = "progred-display"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+test-support = []
+
 [dependencies]
 gid.workspace = true
 measured = { path = "../ui/measured" }

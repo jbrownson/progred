@@ -180,7 +180,7 @@ impl TextClipboard for SystemTextClipboard {
 pub(crate) struct PendingPaint {
     pub(crate) scale: f64,
     pub(crate) viewport: Size,
-    pub(crate) renders: Vec<placed::Render<Paint>>,
+    pub(crate) renders: Vec<placed::Render>,
     pub(crate) hovered_secondary: Option<hover::Secondary>,
     pub(crate) hovered_trace: Option<hover::SourceTrace>,
 }

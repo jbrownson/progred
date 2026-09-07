@@ -507,6 +507,7 @@ mod tests {
     use super::*;
     use gid::new_cell_id;
     use progred_display::Env;
+    use progred_display::test_support::{ProjectionCall, inspect};
 
     struct TestEnv {
         result: Value,
@@ -615,24 +616,24 @@ mod tests {
                 else {
                     panic!("a declaration keeps its cell delimiters");
                 };
-                let Layout::Descend {
+                let ProjectionCall::Descend {
                     step,
                     projection: Some(projection),
                     ..
-                } = *child
+                } = &inspect(&(*child))
                 else {
                     panic!("a declaration follows the cell definition");
                 };
-                assert_eq!(step, Step::Follow(source));
-                let Layout::Descend {
+                assert_eq!(*step, Step::Follow(source));
+                let ProjectionCall::Descend {
                     step,
                     projection: Some(projection),
                     ..
-                } = projection(&input(&env, &env.0)).unwrap()
+                } = &inspect(&(projection(&input(&env, &env.0)).unwrap()))
                 else {
                     panic!("the compact definition descends to its actual name");
                 };
-                assert_eq!(step, Step::Key(name::vocabulary::NAME));
+                assert_eq!(*step, Step::Key(name::vocabulary::NAME));
                 let value = env
                     .0
                     .as_record()
@@ -896,7 +897,7 @@ mod tests {
                 let Layout::Row { children, .. } = argument else {
                     panic!("argument has a label and value");
                 };
-                let Layout::At { steps, .. } = unshared(&children[2]) else {
+                let ProjectionCall::At { steps, .. } = &inspect(&(unshared(&children[2]))) else {
                     panic!("argument value retains its path");
                 };
                 let [Step::Key(field)] = steps.as_slice() else {
@@ -912,14 +913,12 @@ mod tests {
         let expression = Value::from(vec![0]);
         let layout = projected(&env(), &wrapper(expression.clone(), [])).unwrap();
         let (shown, result) = arms(&layout);
-        assert!(matches!(
-            shown,
-            Layout::At { steps, value, .. }
+        assert!(matches!(&inspect(&(shown)),
+            ProjectionCall::At { steps, value, .. }
                 if *steps == [Step::Key(EVALUATE)] && *value == expression
         ));
-        assert!(matches!(
-            result,
-            Layout::Transient { value, fuel: 7 } if *value == Value::from(vec![1])
+        assert!(matches!(&inspect(&(result)),
+            ProjectionCall::Transient { value, fuel: 7 } if *value == Value::from(vec![1])
         ));
     }
 
@@ -949,15 +948,13 @@ mod tests {
         )
         .unwrap();
         let (_, shown) = arms(&layout);
-        assert!(matches!(
-            shown,
-            Layout::Transient { value, fuel: 7 } if *value == result
+        assert!(matches!(&inspect(&(shown)),
+            ProjectionCall::Transient { value, fuel: 7 } if *value == result
         ));
         let layout = projected(&env(), &result).unwrap();
         let (nested, _) = arms(&layout);
-        assert!(matches!(
-            nested,
-            Layout::At { steps, value, .. }
+        assert!(matches!(&inspect(&(nested)),
+            ProjectionCall::At { steps, value, .. }
                 if *steps == [Step::Key(EVALUATE)] && *value == inner
         ));
     }
@@ -977,9 +974,8 @@ mod tests {
         let Layout::Row { children, .. } = &options[0] else {
             panic!("flat call first");
         };
-        assert!(matches!(
-            unshared(&children[0]),
-            Layout::At {
+        assert!(matches!(&inspect(&(unshared(&children[0]))),
+            ProjectionCall::At {
                 steps,
                 value,
                 projection: Some(_),
@@ -1136,17 +1132,15 @@ mod tests {
         let Layout::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
-        assert!(matches!(
-            &head[0],
-            Layout::Descend {
+        assert!(matches!(&inspect(&(&head[0])),
+            ProjectionCall::Descend {
                 step: Step::Key(key),
                 projection: Some(_),
                 ..
             } if *key == name::vocabulary::NAME
         ));
-        assert!(matches!(
-            &head[1],
-            Layout::At {
+        assert!(matches!(&inspect(&(&head[1])),
+            ProjectionCall::At {
                 steps,
                 projection: Some(_),
                 ..
@@ -1161,8 +1155,8 @@ mod tests {
         );
         assert!(matches!(child.as_ref(), Layout::Before { .. }));
         assert!(matches!(
-            unshared(&children[1]),
-            Layout::Descend {
+            &inspect(&(unshared(&children[1]))),
+            ProjectionCall::Descend {
                 step: Step::Key(BODY),
                 projection: Some(_),
                 ..
@@ -1210,11 +1204,11 @@ mod tests {
         let Layout::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
-        let Layout::Descend {
+        let ProjectionCall::Descend {
             step: Step::Key(key),
             projection: Some(projection),
             ..
-        } = &head[0]
+        } = &inspect(&(&head[0]))
         else {
             panic!("lambda name is projected contextually");
         };
@@ -1268,10 +1262,10 @@ mod tests {
         let Layout::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
-        let Layout::Descend {
+        let ProjectionCall::Descend {
             projection: Some(projection),
             ..
-        } = &head[0]
+        } = &inspect(&(&head[0]))
         else {
             panic!("lambda name is projected contextually");
         };

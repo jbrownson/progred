@@ -1186,7 +1186,7 @@ fn projected_completion_entries_with(
         scale: 1.0,
         cache: &mut cache,
     };
-    let measured = project::<CompletionResult, crate::frame::Paint>(
+    let measured = project::<CompletionResult>(
         ProjectDescription {
             sources: src(doc, &stack.libraries),
             root: doc.root.as_ref(),

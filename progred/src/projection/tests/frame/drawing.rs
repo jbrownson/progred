@@ -319,7 +319,7 @@ fn drawing_frame(
     libraries: &Libraries,
     shape_function: CellId,
     select_source: Rc<dyn Fn(&mut (), &[crate::navigate::Descend<()>], &SourceTrace)>,
-) -> Measured<Placed<(), Bench>> {
+) -> Measured<Placed<()>> {
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let cx = Cx {

@@ -6,7 +6,6 @@ use gid::{Path, Step};
 use kurbo::Rect;
 use progred_libraries::name;
 use std::collections::HashMap;
-use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 pub use progred_display::widget::{Direction, Select};
@@ -28,45 +27,7 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
     })
 }
 
-/// A projected value's settled position: the path it stands for and the
-/// rect it occupied, collected fresh every frame in placement order.
-/// [`step_selection`] reads it to move the selection by keyboard;
-/// clicks go through each descend's own handler, not this list.
-pub struct Descend<World> {
-    /// The editor view that produced this occurrence. Paths may be
-    /// projected in more than one pane at once.
-    pub root: Option<Root>,
-    pub path: Rc<[Step]>,
-    /// The settled rect, for scroll-to-selection.
-    pub rect: Rect,
-    /// The projection-installed transition for landing here. This is
-    /// usually ordinary edge selection, but a projected control may
-    /// mount its own editing state without the shell inspecting the
-    /// projected layout to rediscover it.
-    pub select: Select<World>,
-}
-
-impl<World> From<progred_display::widget::navigation::Landmark<World>> for Descend<World> {
-    fn from(landmark: progred_display::widget::navigation::Landmark<World>) -> Self {
-        Self {
-            root: None,
-            path: landmark.path,
-            rect: landmark.rect,
-            select: landmark.select,
-        }
-    }
-}
-
-impl<World> Clone for Descend<World> {
-    fn clone(&self) -> Self {
-        Self {
-            root: self.root.clone(),
-            path: self.path.clone(),
-            rect: self.rect,
-            select: self.select.clone(),
-        }
-    }
-}
+pub use progred_display::widget::navigation::Landmark as Descend;
 
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending

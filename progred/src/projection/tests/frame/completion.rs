@@ -45,7 +45,7 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
         cache: &mut cache,
     };
     let mut frame = |state: &State, doc: &Document| {
-        let node = project::<State, Bench>(
+        let node = project::<State>(
             ProjectDescription {
                 sources: src(doc, &stack.libraries),
                 root: doc.root.as_ref(),
@@ -236,7 +236,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         cache: &mut cache,
     };
     let card = measured::place_top_left(
-        completion_card::<usize, Bench>(
+        completion_card::<usize>(
             &mut tcx,
             &crate::styles::editor(1.0),
             &entries,
@@ -282,15 +282,8 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
         for above in [false, true] {
             let y = if above { 450.0 } else { 30.0 } * scale;
             let field = Rect::new(50.0 * scale, y, 150.0 * scale, y + 20.0 * scale);
-            let card = completion_card::<(), Bench>(
-                &mut tcx,
-                &styles,
-                &entries,
-                0,
-                0.0,
-                true,
-                |_, _, _, _| {},
-            );
+            let card =
+                completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
             let placement =
                 completion_placement(Placement::new(field, bounds), card.extent, scale).unwrap();
             let mut painted = settle(measured::place(card, placement), None);
@@ -360,15 +353,8 @@ fn completion_details_share_the_cards_right_edge() {
                 .metrics()
                 .width
         });
-        let card = completion_card::<(), Bench>(
-            &mut tcx,
-            &styles,
-            &entries,
-            0,
-            0.0,
-            true,
-            |_, _, _, _| {},
-        );
+        let card =
+            completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
         let origin = Point::new(37.0, 59.0);
         let right = origin.x + card.extent.width - (4.0 + 8.0) * scale;
         let bench = settle(measured::place_top_left(card, origin), None);
@@ -418,7 +404,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             scale: 1.0,
             cache: &mut cache,
         };
-        let card = completion_card::<World, Bench>(
+        let card = completion_card::<World>(
             &mut tcx,
             &crate::styles::editor(1.0),
             &entries,
@@ -477,7 +463,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     };
     let mut frame = |(scroll, choice, everything)| {
         measured::place_top_left(
-            completion_card::<(f64, usize, bool), Bench>(
+            completion_card::<(f64, usize, bool)>(
                 &mut tcx,
                 &styles,
                 &entries,
@@ -624,7 +610,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         scale: 1.0,
     };
     let mut frame = |state: &State, clip: Option<Rect>| {
-        let card = completion_card::<State, DrawList>(
+        let card = completion_card::<State>(
             &mut tcx,
             &context.styles,
             &entries,
@@ -636,7 +622,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         let rect = card.extent.rect_at(Point::ZERO);
         measured::place(card, puri::Placement::new(rect, clip.unwrap_or(rect)))
     };
-    let row_point = |placed: &Placed<State, DrawList>, hover: Hover| {
+    let row_point = |placed: &Placed<State>, hover: Hover| {
         (0..160)
             .map(|y| Point::new(10.0, y as f64))
             .find(|point| {
@@ -644,7 +630,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             })
             .unwrap()
     };
-    let highlight = |placed: Placed<State, DrawList>, hovered, selected_point| {
+    let highlight = |placed: Placed<State>, hovered, selected_point| {
         let mut drawing = DrawList::new();
         let hovered = Hovered::Tree(hovered);
         for render in placed.renders {
@@ -807,7 +793,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     };
     let mut frame = |state: &State, entries: &[Entry<State>]| {
         measured::place_top_left(
-            completion_card::<State, Bench>(
+            completion_card::<State>(
                 &mut tcx,
                 &styles,
                 entries,
@@ -946,7 +932,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let node = project::<ClickWorld, Bench>(
+    let node = project::<ClickWorld>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,
@@ -1007,7 +993,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         .expect("color descend")
         .rect
         .center();
-    let card = completion_card::<ClickWorld, Bench>(
+    let card = completion_card::<ClickWorld>(
         &mut tcx,
         &styles,
         &[Entry {

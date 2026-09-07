@@ -1,6 +1,5 @@
-//! Projection composition and editor-facing native widgets. Native widgets
-//! return opaque measurement/placement continuations; the remaining traversal
-//! and event request nodes are being migrated through that same boundary.
+//! Projection composition, box descriptions, and editor-facing native widgets.
+//! Document recursion is a projection operation; boxes compose opaque continuations.
 
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
@@ -10,8 +9,12 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
+mod measure;
 pub mod structure;
 pub mod widget;
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 static NEXT_SHARED_LAYOUT: AtomicUsize = AtomicUsize::new(0);
 
@@ -261,26 +264,12 @@ impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
     }
 }
 
-/// Unevaluated layout: grouping, walk, and leaves. Distinct from
-/// Progred's measured boxes (those have extents and place closures).
+/// Box descriptions with opaque preparation and placement programs.
+/// No document paths, selection policy, or host-control opcodes.
 pub enum Layout<World, Hover> {
     Leaf(Leaf<Paint>),
-    /// A Grap program rendered into a fixed leaf-local canvas. The
-    /// consumer chooses its evaluation and replay strategy.
-    DrawingProgram {
-        width: f64,
-        ascent: f64,
-        descent: f64,
-        fuel: usize,
-        program: Value,
-    },
-    /// One explicit host control request, lowered through the reusable
-    /// Puri completion widget. The projection placing the pending field
-    /// or value supplies its vocabulary directly.
-    Completion {
-        kind: CompletionKind,
-        provider: Option<CompletionProvider>,
-    },
+    /// Prepare a subtree, possibly contributing ordered alternatives.
+    Program(widget::Program<World, Hover>),
     /// An ordinary native measurement program, producing opaque placement output.
     Widget(widget::Widget<World, Hover>),
     /// Add ordinary placement outputs before a child, without changing its geometry.
@@ -330,25 +319,6 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         right: widget::Side<World, Hover>,
     },
-    /// Look up one step. Each omitted projection inherits the caller's
-    /// default; supplied functions replace it without implicit composition.
-    /// Missing locations reach partials as `None`, then fall back to the empty widget.
-    Descend {
-        step: Step,
-        projection: Option<Partial<World, Hover>>,
-        default_projection: Option<Partial<World, Hover>>,
-    },
-    /// Project `value` at this path extended by `steps`.
-    At {
-        steps: Vec<Step>,
-        value: Value,
-        projection: Option<Partial<World, Hover>>,
-        default_projection: Option<Partial<World, Hover>>,
-    },
-    Transient {
-        value: Value,
-        fuel: usize,
-    },
     /// One projected child used by mutually exclusive layout forms.
     /// The editor measures the shared child once and the selected
     /// form consumes it once. This is local layout sharing, not value
@@ -365,27 +335,11 @@ pub enum Layout<World, Hover> {
     Alternatives(Vec<Layout<World, Hover>>),
 }
 
-impl<World, Hover: Clone> Clone for Layout<World, Hover> {
+impl<World, Hover> Clone for Layout<World, Hover> {
     fn clone(&self) -> Self {
         match self {
             Self::Leaf(display) => Self::Leaf(display.clone()),
-            Self::DrawingProgram {
-                width,
-                ascent,
-                descent,
-                fuel,
-                program,
-            } => Self::DrawingProgram {
-                width: *width,
-                ascent: *ascent,
-                descent: *descent,
-                fuel: *fuel,
-                program: program.clone(),
-            },
-            Self::Completion { kind, provider } => Self::Completion {
-                kind: *kind,
-                provider: provider.clone(),
-            },
+            Self::Program(program) => Self::Program(program.clone()),
             Self::Widget(widget) => Self::Widget(widget.clone()),
             Self::Before { child, before } => Self::Before {
                 child: child.clone(),
@@ -442,30 +396,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 left: left.clone(),
                 child: child.clone(),
                 right: right.clone(),
-            },
-            Self::Descend {
-                step,
-                projection,
-                default_projection,
-            } => Self::Descend {
-                step: step.clone(),
-                projection: projection.clone(),
-                default_projection: default_projection.clone(),
-            },
-            Self::At {
-                steps,
-                value,
-                projection,
-                default_projection,
-            } => Self::At {
-                steps: steps.clone(),
-                value: value.clone(),
-                projection: projection.clone(),
-                default_projection: default_projection.clone(),
-            },
-            Self::Transient { value, fuel } => Self::Transient {
-                value: value.clone(),
-                fuel: *fuel,
             },
             Self::Shared { id, child } => Self::Shared {
                 id: *id,
@@ -597,11 +527,13 @@ pub fn subscript<World, Hover>(text: impl Into<String>, face: Face) -> Layout<Wo
     })
 }
 
-pub fn completion<World, Hover>(
+pub fn completion<World: 'static, Hover: 'static>(
     kind: CompletionKind,
     provider: Option<CompletionProvider>,
 ) -> Layout<World, Hover> {
-    Layout::Completion { kind, provider }
+    Layout::Widget(Rc::new(move |context| {
+        (context.completion)(context.text, kind, provider.as_ref())
+    }))
 }
 
 pub fn slot<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
@@ -818,38 +750,51 @@ pub fn shared<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover>
     }
 }
 
-pub fn nest<World, Hover>(step: Step, value: &Value) -> Layout<World, Hover> {
+pub fn nest<World: 'static, Hover: 'static>(step: Step, value: &Value) -> Layout<World, Hover> {
     at([step], value)
 }
 
-pub fn descend<World, Hover>(
+pub fn descend<World: 'static, Hover: 'static>(
     step: Step,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Descend {
-        step,
-        projection,
-        default_projection,
-    }
+    Layout::Program(Rc::new(move |context, build| {
+        context.project.descend(
+            context.text,
+            build,
+            step.clone(),
+            projection.clone(),
+            default_projection.clone(),
+        )
+    }))
 }
 
-pub fn at<World, Hover>(steps: impl Into<Vec<Step>>, value: &Value) -> Layout<World, Hover> {
+pub fn at<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+) -> Layout<World, Hover> {
     at_with_projection(steps, value, None, None)
 }
 
-pub fn at_with_projection<World, Hover>(
+pub fn at_with_projection<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::At {
-        steps: steps.into(),
-        value: value.clone(),
-        projection,
-        default_projection,
-    }
+    let steps = steps.into();
+    let value = value.clone();
+    Layout::Program(Rc::new(move |context, build| {
+        context.project.at(
+            context.text,
+            build,
+            steps.clone(),
+            value.clone(),
+            projection.clone(),
+            default_projection.clone(),
+        )
+    }))
 }
 
 /// Try a specialization here, keeping the default for descendants.
@@ -890,15 +835,20 @@ pub fn at_scoped<World: 'static, Hover: 'static>(
     at_with_projection(steps, value, Some(projection.clone()), Some(projection))
 }
 
-pub fn project<World, Hover>(value: &Value) -> Layout<World, Hover> {
+pub fn project<World: 'static, Hover: 'static>(value: &Value) -> Layout<World, Hover> {
     at([], value)
 }
 
-pub fn transient<World, Hover>(value: &Value, fuel: usize) -> Layout<World, Hover> {
-    Layout::Transient {
-        value: value.clone(),
-        fuel,
-    }
+pub fn transient<World: 'static, Hover: 'static>(
+    value: &Value,
+    fuel: usize,
+) -> Layout<World, Hover> {
+    let value = value.clone();
+    Layout::Program(Rc::new(move |context, build| {
+        context
+            .project
+            .transient(context.text, build, value.clone(), fuel)
+    }))
 }
 
 pub fn alternatives<World, Hover>(
@@ -925,6 +875,7 @@ pub fn overlay_value(current: &Value, patch: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{ProjectionCall, inspect};
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
         while let Layout::Shared { child, .. } = layout {
@@ -1042,9 +993,8 @@ mod tests {
         else {
             panic!("a flat field keeps its label and value together");
         };
-        assert!(matches!(
-            unshared(&first[2]),
-            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
+        assert!(matches!(&inspect(&(unshared(&first[2]))),
+            ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
         let Layout::Row {
             children: second, ..
@@ -1052,9 +1002,8 @@ mod tests {
         else {
             panic!("a flat field keeps its label and value together");
         };
-        assert!(matches!(
-            unshared(&second[2]),
-            Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
+        assert!(matches!(&inspect(&(unshared(&second[2]))),
+            ProjectionCall::At { steps, .. } if *steps == [Step::Key(FIRST)]
         ));
         let Layout::Col { children, .. } = &forms[1] else {
             panic!("the second form is a column");
@@ -1068,9 +1017,8 @@ mod tests {
         else {
             panic!("a field first stays inline");
         };
-        assert!(matches!(
-            unshared(&inline[1]),
-            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
+        assert!(matches!(&inspect(&(unshared(&inline[1]))),
+            ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
         let Layout::Col {
             children: broken, ..
@@ -1081,9 +1029,18 @@ mod tests {
         let Layout::Pad { child, .. } = &broken[1] else {
             panic!("a broken value is indented");
         };
-        assert!(matches!(
-            unshared(child),
-            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
+        assert!(matches!(&inspect(&(unshared(child))),
+            ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
     }
+}
+
+pub fn drawing_program<W: 'static, H: 'static>(
+    extent: measured::Extent,
+    fuel: usize,
+    program: Value,
+) -> Layout<W, H> {
+    Layout::Widget(Rc::new(move |context| {
+        (context.drawing)(extent, fuel, program.clone())
+    }))
 }

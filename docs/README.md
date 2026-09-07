@@ -22,8 +22,8 @@ Start with:
 [Deferred work](deferred.md) records the unresolved items set aside during the
 review. [Historical notes](history/README.md) preserve earlier models and
 proposals separately; they are not required reading for ordinary changes.
-[Layout continuations](layout-continuations.md) tracks the current staged
-cleanup; its remaining steps are plans, not descriptions of shipped interfaces.
+[Layout continuations](layout-continuations.md) describes the box/widget
+boundary, the frame stages, and their verification.
 
 [Performance checks](performance.md) describes the shared headless frame harness
 and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a

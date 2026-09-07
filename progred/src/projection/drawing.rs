@@ -94,7 +94,7 @@ impl Recorded {
             .map(|hit| Hovered::Tree(Hover::Drawing(hit.source.clone())))
     }
 
-    fn highlight<C: Canvas>(
+    fn highlight<C: Canvas + ?Sized>(
         &self,
         canvas: &mut C,
         outer: Affine,
@@ -104,7 +104,7 @@ impl Recorded {
         self.highlight_where(canvas, outer, brush, |hit| hit == source);
     }
 
-    fn highlight_where<C: Canvas>(
+    fn highlight_where<C: Canvas + ?Sized>(
         &self,
         canvas: &mut C,
         outer: Affine,
@@ -339,7 +339,7 @@ fn record_program(
                     None => {
                         let source = context
                             .source_origin(call)
-                            .map(|origin| SourceTrace::from_grap(origin, input));
+                            .map(|origin| crate::hover::from_grap(origin, input));
                         origins.borrow_mut().push((call, source.clone()));
                         source
                     }
@@ -373,7 +373,7 @@ fn record_program(
     }
 }
 
-pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
+pub(super) fn program_leaf<C: 'static>(
     cx: &Cx,
     path: &[Step],
     width: f64,
@@ -382,7 +382,7 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
     fuel: usize,
     program: Value,
     select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     let scale = cx.styles.scale;
     let extent = Extent {
         width: width * scale,
@@ -430,7 +430,7 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
                 false
             }
         });
-        builder.ink(move |canvas: &mut Cv, ink| {
+        builder.ink(move |canvas: &mut dyn puri::draw::CanvasSink, ink| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
                 outer,

@@ -42,7 +42,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let node = project::<ClickWorld, Bench>(
+    let node = project::<ClickWorld>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,
@@ -149,7 +149,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         scale: 1.0,
         cache: &mut frame_cache,
     };
-    let active = project::<ClickWorld, Bench>(
+    let active = project::<ClickWorld>(
         ProjectDescription {
             sources: Sources {
                 doc: &world.doc,
@@ -259,12 +259,12 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         descent: 20.0,
     };
     for (accepts, covered) in [(true, false), (false, false), (true, true)] {
-        let drag = native_before(
-            leaf::<Vec<&str>, Bench>(extent, |_, _| {}),
+        let drag = with_placement(
+            leaf::<Vec<&str>>(extent, |_, _| {}),
             gesture_place(
                 progred_display::on_state_drag(
                     progred_display::row(0.0, []),
-                    target.clone(),
+                    Hovered::Tree(target.clone()),
                     Rc::new(move |log: &mut Vec<&str>| {
                         log.push("select");
                         accepts
@@ -278,10 +278,10 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                 None,
             ),
         );
-        let node = native_before(
+        let node = with_placement(
             drag,
             progred_display::widget::interaction::target_action(
-                target.clone(),
+                Hovered::Tree(target.clone()),
                 Rc::new(|log: &mut Vec<&str>| {
                     log.push("outer selection");
                     true
@@ -294,7 +294,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         let mut placed = measured::place(node, placement);
         if covered {
-            let cover = leaf::<Vec<&str>, Bench>(extent, |p, placement| {
+            let cover = leaf::<Vec<&str>>(extent, |p, placement| {
                 p.occlude(placement);
             });
             placed = measured::Output::over(placed, measured::place(cover, placement));
@@ -340,8 +340,8 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
 
     let target = Hover::Value(Rc::from([]));
     let root = crate::workspace::Root::document();
-    let node = native_before(
-        leaf::<usize, Bench>(
+    let node = with_placement(
+        leaf::<usize>(
             Extent {
                 width: 20.0,
                 ascent: 0.0,
@@ -352,7 +352,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
         gesture_place(
             progred_display::on_state_drag(
                 progred_display::row(0.0, []),
-                target.clone(),
+                Hovered::Tree(target.clone()),
                 Rc::new(|_| true),
                 Rc::new(|| Box::new(|_, _| Value::record([]))),
             ),
@@ -464,8 +464,8 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
         (false, false, false, 5.0, false, true, None),
         (false, false, false, 5.0, true, false, None),
     ] {
-        let scrub = native_before(
-            leaf::<World, Bench>(extent, move |p, _| {
+        let scrub = with_placement(
+            leaf::<World>(extent, move |p, _| {
                 p.handler().on_pointer_down(move |world, _| {
                     if raw {
                         world.log.push("raw");
@@ -476,7 +476,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
             gesture_place(
                 progred_display::on_scrub(
                     progred_display::row(0.0, []),
-                    target.clone(),
+                    Hovered::Tree(target.clone()),
                     Rc::new(|| {
                         Box::new(|_| progred_display::ScrubUpdate {
                             value: f64_convention::value(13.0),
@@ -502,10 +502,10 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
                 })),
             ),
         );
-        let node = native_before(
+        let node = with_placement(
             scrub,
             progred_display::widget::interaction::target_action(
-                target.clone(),
+                Hovered::Tree(target.clone()),
                 Rc::new(move |world: &mut World| {
                     if world.pending {
                         world.log.push("pending pick");
@@ -575,7 +575,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
     for layout in [
         progred_display::on_scrub(
             progred_display::row(0.0, []),
-            target.clone(),
+            Hovered::Tree(target.clone()),
             Rc::new(|| panic!("read-only scrub cannot construct a domain continuation")),
         ),
         progred_display::on_point(
@@ -591,7 +591,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
             None,
         );
         let mut fragment =
-            <progred_display::widget::Fragment<(), Hover> as measured::Output>::empty();
+            <progred_display::widget::Fragment<(), Hovered> as measured::Output>::empty();
         place(
             &mut fragment,
             Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -608,16 +608,20 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         event.state.modifiers =
             ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
         assert!(!fragment.handler.is_some_and(|handler| {
-            handler.dispatch_pointer_down_with(&mut (), &event, &mut Some(target.clone()))
+            handler.dispatch_pointer_down_with(
+                &mut (),
+                &event,
+                &mut placed::DispatchContext::new(None, Some(Hovered::Tree(target.clone()))),
+            )
         }));
     }
 }
 
 fn gesture_place<World: 'static>(
-    layout: progred_display::Layout<World, Hover>,
+    layout: progred_display::Layout<World, Hovered>,
     start: progred_display::widget::gesture::Start<World>,
     edit: Option<progred_display::widget::gesture::BeginEdit<World>>,
-) -> progred_display::widget::Place<World, Hover> {
+) -> progred_display::widget::Place<World, Hovered> {
     let progred_display::Layout::Before { before, .. } = layout else {
         panic!("expected an ordinary widget wrapper");
     };
@@ -625,6 +629,9 @@ fn gesture_place<World: 'static>(
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::TextCache::default();
     before(&mut progred_display::widget::Context {
+        project: &progred_display::test_support::NoProject,
+        completion: &|_, _, _| panic!("unexpected completion control"),
+        drawing: &|_, _, _| panic!("unexpected drawing control"),
         text: &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
@@ -644,4 +651,11 @@ fn gesture_place<World: 'static>(
         same_target: PartialEq::eq,
         primary_edit: |_| true,
     })
+}
+
+fn with_placement<C: 'static>(
+    child: Measured<Placed<C>>,
+    place: progred_display::widget::Place<C, Hovered>,
+) -> Measured<Placed<C>> {
+    measured::before_into(child, move |placement, output| place(output, placement))
 }

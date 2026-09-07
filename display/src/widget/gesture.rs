@@ -92,7 +92,7 @@ pub fn targeted<World: 'static, Hover: 'static>(
                     && picking(event) == pick
                     && placement.contains(point)
                     && hovered
-                        .as_ref()
+                        .hovered()
                         .is_some_and(|hover| same_target(hover, &target))
                     && start(world, point)
             });

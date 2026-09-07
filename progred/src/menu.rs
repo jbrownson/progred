@@ -285,11 +285,11 @@ mod view {
         BAR_HEIGHT * scale
     }
 
-    fn activatable<C: 'static, Cv: Canvas + 'static>(
+    fn activatable<C: 'static>(
         hover: Hover,
-        content: Measured<Placed<C, Cv>>,
+        content: Measured<Placed<C>>,
         action: impl Fn(&mut C) -> bool + 'static,
-    ) -> Measured<Placed<C, Cv>> {
+    ) -> Measured<Placed<C>> {
         let action = Rc::new(action);
         placed::before(content, move |p, placement| {
             let target = Hovered::Menu(hover);
@@ -300,7 +300,7 @@ mod view {
         })
     }
 
-    fn heading<C: 'static, Cv: Canvas + 'static>(
+    fn heading<C: 'static>(
         tcx: &mut TextCtx,
         style: &TextStyle,
         index: usize,
@@ -308,13 +308,13 @@ mod view {
         active: bool,
         scale: f64,
         toggle: Rc<dyn Fn(&mut C, usize)>,
-    ) -> Measured<Placed<C, Cv>> {
+    ) -> Measured<Placed<C>> {
         let content = measured::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
             crate::render::text(tcx, label, style),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv: &mut Cv, ink| {
+            p.ink(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
                 let hovered =
                     matches!(ink.hovered, Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
                 if active || hovered {
@@ -328,10 +328,7 @@ mod view {
         })
     }
 
-    fn separator<C: 'static, Cv: Canvas + 'static>(
-        scale: f64,
-        width: f64,
-    ) -> Measured<Placed<C, Cv>> {
+    fn separator<C: 'static>(scale: f64, width: f64) -> Measured<Placed<C>> {
         placed::leaf(
             Extent {
                 width,
@@ -354,7 +351,7 @@ mod view {
         )
     }
 
-    fn item<C: 'static, Cv: Canvas + 'static>(
+    fn item<C: 'static>(
         tcx: &mut TextCtx,
         styles: &Styles,
         command: Command,
@@ -365,7 +362,7 @@ mod view {
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Command)>,
-    ) -> Measured<Placed<C, Cv>> {
+    ) -> Measured<Placed<C>> {
         let style = if enabled {
             &styles.text
         } else {
@@ -393,7 +390,7 @@ mod view {
             measured::row(gap, vec![label, shortcut]),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv: &mut Cv, ink| {
+            p.ink(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
                 let hovered = matches!(
                     ink.hovered,
                     Some(Hovered::Menu(Hover::Item(c))) if *c == command
@@ -413,13 +410,13 @@ mod view {
         }
     }
 
-    fn popup<C: 'static, Cv: Canvas + 'static>(
+    fn popup<C: 'static>(
         tcx: &mut TextCtx,
         styles: &Styles,
         description: &Description,
         menu_entries: &[Entry],
         select: Rc<dyn Fn(&mut C, Command)>,
-    ) -> Measured<Placed<C, Cv>> {
+    ) -> Measured<Placed<C>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let mut command_index = 0;
@@ -467,11 +464,11 @@ mod view {
         )
     }
 
-    pub fn view<C: 'static, Cv: Canvas + 'static>(
+    pub fn view<C: 'static>(
         tcx: &mut TextCtx,
         description: Description,
         hooks: Hooks<C>,
-    ) -> View<Placed<C, Cv>> {
+    ) -> View<Placed<C>> {
         let styles = styles();
         let definition = definition();
         let mut x = 0.0;

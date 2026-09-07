@@ -9,30 +9,9 @@ use progred_display::{
     CompletionText, CompletionValue, Face,
 };
 use progred_libraries::{blob, name, text};
-use std::ops::Range;
 use std::rc::Rc;
 
-pub struct Entry<C> {
-    pub display: String,
-    pub detail: Option<String>,
-    pub matches: Vec<Range<usize>>,
-    pub face: Face,
-    pub source: Option<CellId>,
-    pub activate: Rc<dyn Fn(&mut C)>,
-}
-
-impl<C> Clone for Entry<C> {
-    fn clone(&self) -> Self {
-        Self {
-            display: self.display.clone(),
-            detail: self.detail.clone(),
-            matches: self.matches.clone(),
-            face: self.face,
-            source: self.source,
-            activate: self.activate.clone(),
-        }
-    }
-}
+pub use progred_display::widget::offers::{Entry, Offers};
 
 /// The insertion capability supplied by the active completion site.
 pub enum Commit<C> {
@@ -80,44 +59,49 @@ impl<C: 'static> Commit<C> {
     }
 }
 
-impl<C: 'static> Entry<C> {
-    fn completion(sources: &Sources, offer: Completion, commit: &Commit<C>) -> Option<Self> {
-        Self::offered(
-            completion_text(sources, &offer.display),
-            offer
-                .detail
-                .as_ref()
-                .map(|detail| completion_text(sources, detail)),
-            offer.value,
-            offer.on_commit,
-            commit,
-        )
-    }
+fn completion_entry<C: 'static>(
+    sources: &Sources,
+    offer: Completion,
+    commit: &Commit<C>,
+) -> Option<Entry<C>> {
+    offered_entry(
+        completion_text(sources, &offer.display),
+        offer
+            .detail
+            .as_ref()
+            .map(|detail| completion_text(sources, detail)),
+        offer.value,
+        offer.on_commit,
+        commit,
+    )
+}
 
-    fn value(
-        display: String,
-        detail: Option<String>,
-        value: Value,
-        on_commit: Value,
-        commit: &Commit<C>,
-    ) -> Option<Self> {
-        Self::offered(
-            display,
-            detail,
-            CompletionValue::Literal(value),
-            Some(on_commit),
-            commit,
-        )
-    }
+fn value_entry<C: 'static>(
+    display: String,
+    detail: Option<String>,
+    value: Value,
+    on_commit: Value,
+    commit: &Commit<C>,
+) -> Option<Entry<C>> {
+    offered_entry(
+        display,
+        detail,
+        CompletionValue::Literal(value),
+        Some(on_commit),
+        commit,
+    )
+}
 
-    fn offered(
-        display: String,
-        detail: Option<String>,
-        value: CompletionValue,
-        on_commit: Option<Value>,
-        commit: &Commit<C>,
-    ) -> Option<Self> {
-        commit.value(value.clone(), on_commit).map(|activate| Self {
+fn offered_entry<C: 'static>(
+    display: String,
+    detail: Option<String>,
+    value: CompletionValue,
+    on_commit: Option<Value>,
+    commit: &Commit<C>,
+) -> Option<Entry<C>> {
+    commit
+        .value(value.clone(), on_commit)
+        .map(|activate| Entry {
             display,
             detail,
             matches: Vec::new(),
@@ -131,12 +115,6 @@ impl<C: 'static> Entry<C> {
             source: value.literal().and_then(Value::as_cell),
             activate,
         })
-    }
-}
-
-/// Retained in the placed frame for attribution to the exact visible offers.
-pub struct Offers<C> {
-    pub entries: Vec<Entry<C>>,
 }
 
 pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'static str, Entry<C>)> {
@@ -158,7 +136,7 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
         ]
         .into_iter()
         .filter_map(|(key, display, value)| {
-            Entry::value(
+            value_entry(
                 display.to_string(),
                 None,
                 value,
@@ -287,7 +265,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let atom_leads = quoted || blob.is_some();
     let text_entry = blob
         .is_some()
-        .then(|| Entry::completion(sources, text::completion(query), commit))
+        .then(|| completion_entry(sources, text::completion(query), commit))
         .flatten();
     let atom_entry = match commit {
         Commit::Label(commit) => {
@@ -309,7 +287,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 }),
             }
         }
-        Commit::Value(_) => Entry::completion(
+        Commit::Value(_) => completion_entry(
             sources,
             blob.map(blob::completion)
                 .unwrap_or_else(|| text::completion(spelling)),
@@ -339,7 +317,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
             let source = definition
                 .map(|value| value.source)
                 .or_else(|| sources.contributors(cell).next());
-            let mut entry = Entry::value(
+            let mut entry = value_entry(
                 name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
                 source.map(|source| source_name(sources, source)),
                 Value::from(cell),
@@ -437,7 +415,7 @@ fn contextual_entries<C: 'static>(
     .into_iter()
     .filter_map(|ranked| {
         let (display, completion) = ranked.item;
-        Entry::offered(
+        offered_entry(
             display,
             completion
                 .detail

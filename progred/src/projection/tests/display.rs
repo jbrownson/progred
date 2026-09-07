@@ -26,7 +26,10 @@ fn projection_target_appends_relative_steps() {
     let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
     assert_eq!(
         target.hover,
-        Hover::Value(Rc::from(vec![Step::Key(parent), Step::Key(field)]))
+        Hovered::Tree(Hover::Value(Rc::from(vec![
+            Step::Key(parent),
+            Step::Key(field)
+        ])))
     );
     let mut selections = Vec::new();
     assert!((target.select)(&mut selections));
@@ -53,7 +56,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
             let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
             let calls = seen.clone();
             let local = partial(
-                move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+                move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
                     calls.borrow_mut().push(input.value?.clone());
                     accepts.then(|| descend(Step::Key(child), None, None))
                 },
@@ -116,7 +119,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_tr
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let calls = seen.clone();
         let local = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
                     0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
@@ -189,7 +192,7 @@ fn descents_replace_current_and_default_projections_independently() {
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let current_seen = seen.clone();
         let current = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 current_seen
                     .borrow_mut()
                     .push(("current", input.value?.clone()));
@@ -198,7 +201,7 @@ fn descents_replace_current_and_default_projections_independently() {
         );
         let child_seen = seen.clone();
         let children = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 child_seen
                     .borrow_mut()
                     .push(("children", input.value?.clone()));
@@ -266,7 +269,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
     let special = partial(
-        move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+        move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
             input.value?.as_blob()?;
             calls.borrow_mut().push(input.value?.clone());
             Some(dim("scoped"))
@@ -318,7 +321,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
     let observe = |key| {
         let seen = seen.clone();
         partial(
-            move |_: &progred_display::ProjectionInput<'_, EditingWorld, Hover>| {
+            move |_: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 seen.borrow_mut().push(key);
                 Some(dim("field"))
             },
@@ -532,8 +535,8 @@ fn partials_receive_selection_and_annotations_positionally() {
     // positionally: the payload only at the selected path, the
     // annotation record only at its own.
     fn probe(
-        input: &progred_display::ProjectionInput<'_, (), Hover>,
-    ) -> Option<progred_display::Layout<(), Hover>> {
+        input: &progred_display::ProjectionInput<'_, (), Hovered>,
+    ) -> Option<progred_display::Layout<(), Hovered>> {
         input.value?.as_blob()?;
         Some(progred_display::dim(
             match (input.selection.is_some(), input.state.is_some()) {
@@ -560,7 +563,7 @@ fn partials_receive_selection_and_annotations_positionally() {
             scale: 1.0,
             cache: &mut cache,
         };
-        project::<(), crate::frame::Paint>(
+        project::<()>(
             ProjectDescription {
                 sources: Sources {
                     doc: &doc,
@@ -656,8 +659,8 @@ fn a_projection_defined_as_data_realizes() {
     // intents and realized through the ordinary pipeline — the same
     // boundary a Grap-backed library projection can use.
     fn probe(
-        input: &progred_display::ProjectionInput<'_, (), Hover>,
-    ) -> Option<progred_display::Layout<(), Hover>> {
+        input: &progred_display::ProjectionInput<'_, (), Hovered>,
+    ) -> Option<progred_display::Layout<(), Hovered>> {
         use progred_libraries::layout as data;
         input.value?.as_blob()?;
         let target = input.targets.current();
@@ -690,7 +693,7 @@ fn a_projection_defined_as_data_realizes() {
         cache: &mut cache,
     };
     let empty = Annotations::default();
-    let measured = project::<(), crate::frame::Paint>(
+    let measured = project::<()>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,

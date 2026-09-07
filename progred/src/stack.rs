@@ -1,6 +1,6 @@
 //! The editor's ordered composition of Progred libraries.
 
-use crate::hover::Hover;
+use crate::frame::Hovered;
 use crate::projection::Projection;
 use progred_libraries::{
     Libraries, Library, absent, blob, color, control, f32, f64, fidget, geometry,
@@ -40,7 +40,7 @@ pub fn load<World: 'static>() -> Stack<World> {
     }
 }
 
-fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library<World, Hover>)> {
+fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library<World, Hovered>)> {
     [
         (name::ID, name::library()),
         (text::ID, text::library()),

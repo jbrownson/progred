@@ -586,21 +586,16 @@ fn decode_with<World: 'static, Hover: Clone + 'static>(
     if let Some(content) = fields.get(&vocabulary::AT) {
         let content = content.as_record()?;
         let steps = crate::path::read(content.get(&vocabulary::STEPS)?)?;
-        return Some(Layout::At {
-            steps,
-            value: content.get(&vocabulary::VALUE)?.clone(),
-            projection: None,
-            default_projection: None,
-        });
+        return Some(progred_display::at(steps, content.get(&vocabulary::VALUE)?));
     }
     if let Some(content) = fields.get(&vocabulary::TRANSIENT) {
         let content = content.as_record()?;
         let fuel = read_number(content.get(&vocabulary::FUEL)?)?;
         (fuel >= 0.0 && fuel.fract() == 0.0).then_some(())?;
-        return Some(Layout::Transient {
-            value: content.get(&vocabulary::VALUE)?.clone(),
-            fuel: fuel as usize,
-        });
+        return Some(progred_display::transient(
+            content.get(&vocabulary::VALUE)?,
+            fuel as usize,
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::TEXT) {
         let content = content.as_record()?;
@@ -628,13 +623,15 @@ fn decode_with<World: 'static, Hover: Clone + 'static>(
         if let Some(program) = content.get(&vocabulary::PROGRAM) {
             let fuel = read_nonnegative(content.get(&vocabulary::FUEL)?)?;
             (fuel.fract() == 0.0).then_some(())?;
-            return Some(Layout::DrawingProgram {
-                width,
-                ascent,
-                descent,
-                fuel: fuel as usize,
-                program: program.clone(),
-            });
+            return Some(progred_display::drawing_program(
+                progred_display::widget::Extent {
+                    width,
+                    ascent,
+                    descent,
+                },
+                fuel as usize,
+                program.clone(),
+            ));
         }
         let commands = content
             .get(&vocabulary::COMMANDS)?
@@ -1055,6 +1052,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::test_support::{ProjectionCall, inspect};
     use std::rc::Rc;
 
     fn decoded(value: &Value) -> Option<Layout<(), ()>> {
@@ -1071,10 +1069,11 @@ mod tests {
             Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
         ];
         for step in &steps {
-            assert!(matches!(
-                decoded(&descend_step(step.clone())),
-                Some(Layout::Descend { step: decoded, .. }) if decoded == *step
-            ));
+            assert!(
+                matches!((decoded(&descend_step(step.clone()))).map(|layout| inspect(&layout)),
+                    Some(ProjectionCall::Descend { step: decoded, .. }) if decoded == *step
+                )
+            );
         }
         let child = text::value("child");
         let value = node(
@@ -1084,9 +1083,8 @@ mod tests {
                 (vocabulary::VALUE, child.clone()),
             ]),
         );
-        assert!(matches!(
-            decoded(&value),
-            Some(Layout::At { steps: decoded, value, .. }) if decoded == steps && value == child
+        assert!(matches!((decoded(&value)).map(|layout| inspect(&layout)),
+            Some(ProjectionCall::At { steps: decoded, value, .. }) if decoded == steps && value == child
         ));
     }
 
@@ -1142,9 +1140,8 @@ mod tests {
                 evaluation.result
             );
         };
-        assert!(matches!(
-            child.as_ref(),
-            Layout::Transient { value, .. }
+        assert!(matches!(&inspect(&(child.as_ref())),
+            ProjectionCall::Transient { value, .. }
                 if value == &Value::record([(vocabulary::DRAWING, configuration)])
         ));
     }
@@ -1202,9 +1199,8 @@ mod tests {
                 ..
             }) if text == "shape"
         ));
-        assert!(matches!(
-            &children[1],
-            Layout::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
+        assert!(matches!(&inspect(&(&children[1])),
+            ProjectionCall::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
         ));
         let Layout::Surround { left, child, right } = &forms[1] else {
             panic!("bracket decodes to side widgets around its child");
@@ -1215,8 +1211,8 @@ mod tests {
             panic!("col inside");
         };
         assert!(matches!(
-            &children[0],
-            Layout::Descend {
+            &inspect(&(&children[0])),
+            ProjectionCall::Descend {
                 step: Step::Follow(gid::Resolution::Document),
                 ..
             }

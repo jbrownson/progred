@@ -331,6 +331,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 mod tests {
     use super::*;
     use gid::new_cell_id;
+    use progred_display::test_support::{ProjectionCall, inspect};
     use progred_display::{Env, RowAlignment};
 
     #[test]
@@ -515,12 +516,11 @@ mod tests {
             panic!("named color projection is one row")
         };
 
-        assert!(matches!(
-            children[1],
-            Layout::Descend {
+        assert!(matches!(&inspect(&(children[1])),
+            ProjectionCall::Descend {
                 step: Step::Key(field),
                 ..
-            } if field == name::vocabulary::NAME
+            } if *field == name::vocabulary::NAME
         ));
         assert!(matches!(
             crate::test_widgets::line(&children[2]),

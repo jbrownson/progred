@@ -84,9 +84,10 @@ whose result places a `Fragment` of deferred ink, handlers, hover claims,
 navigation declarations, and floating subtrees. `LineEdit` uses this path, with no control-specific
 layout constructor. Native handlers receive the current settled hover as an
 explicit dispatch input; the host suppresses that target outside its owning view.
-`CanvasSink` is an object-safe bridge to the existing
-canvas interpreter, allowing native render closures to outlive measurement
-without fixing a rendering backend or constructing GID drawing data.
+`CanvasSink` is the object-safe primitive drawing interface implemented by
+Vello, Canvas2D, and recorders; `Canvas` adds generic convenience methods.
+Native render closures outlive measurement without fixing a rendering backend
+or constructing GID drawing data.
 Document-aware widgets explicitly request the current site state and scoped
 edit/selection capabilities. Ordinary decorations do not resolve paths, inspect
 selection, or allocate those callbacks. A fragment is not a Canvas: it retains
@@ -96,8 +97,8 @@ hover settles, rather than allocating a deferred closure per drawing operation.
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
 The [container combinators](../display/src/widget/container.rs) share scrolling
-and out-of-flow placement between native fragments and the editor's transitional
-output. `Layers` supplies clipping and floater attachment, while `HasHandler`
+and out-of-flow placement over the shared `Fragment` output. The editor's
+`Placed` is an alias for that same type, with no translation layer. `Layers` supplies clipping and floater attachment, while `HasHandler`
 supplies input composition. The editor adds view ownership separately and raises
 floaters once at the frame boundary. Clips do not capture floating subtrees.
 
@@ -126,9 +127,12 @@ It encodes events and installs one native handler; the editor supplies the
 site-scoped interpreter when requested. Ordinary native widgets do not touch
 this interpreter. Layout has no Grap-event constructor or interpretation arm.
 
-The upper `progred_display::Layout` still mixes boxes with other deferred
-editor requests. Separating that remaining layer is an
-[in-progress migration](layout-continuations.md), not a completed boundary.
+The [box interpreter](../display/src/measure.rs) belongs to `progred-display`.
+Projection recursion uses ordinary preparation functions with an explicit
+source scope, not path-bearing Layout variants. Native widgets and the editor
+share one placement output; there is no editor-side Layout interpreter.
+See [layout and widget continuations](layout-continuations.md) for the complete
+chain and the distinction between preparation and placement.
 
 Pane sizing precedes content projection. Ordinary document panes scroll over
 content-sized output; explicit viewport panes pass their assigned size to a

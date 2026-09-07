@@ -862,6 +862,7 @@ mod tests {
     use super::*;
     use gid::new_cell_id;
     use progred_display::Env;
+    use progred_display::test_support::{ProjectionCall, inspect};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct NoEval;
@@ -1061,17 +1062,17 @@ mod tests {
         let [marker, body] = children.as_slice() else {
             panic!("quote has a marker and expression");
         };
-        let Layout::At {
+        let ProjectionCall::At {
             steps,
             projection: Some(_),
             ..
-        } = marker
+        } = &inspect(&(marker))
         else {
             panic!("the marker retains the function-field location");
         };
         assert_eq!(steps, &[Step::Key(grap::vocabulary::FUNCTION)]);
 
-        let Layout::At { steps, value, .. } = body else {
+        let ProjectionCall::At { steps, value, .. } = &inspect(&(body)) else {
             panic!("the expression retains its field location");
         };
         assert_eq!(steps, &[Step::Key(grap::vocabulary::EXPRESSION)]);
@@ -1512,11 +1513,11 @@ mod tests {
         else {
             panic!("let shares its bindings");
         };
-        let Layout::At {
+        let ProjectionCall::At {
             steps,
             projection: Some(_),
             ..
-        } = bindings.as_ref()
+        } = &inspect(&(bindings.as_ref()))
         else {
             panic!("let descends to its bindings list");
         };
@@ -1532,9 +1533,8 @@ mod tests {
         let Layout::Shared { child, .. } = &children[0] else {
             panic!("where starts with its body");
         };
-        assert!(matches!(
-            child.as_ref(),
-            Layout::At { steps, value, .. }
+        assert!(matches!(&inspect(&(child.as_ref())),
+            ProjectionCall::At { steps, value, .. }
                 if *steps == [Step::Key(grap::vocabulary::EXPRESSION)] && *value == body
         ));
     }
@@ -1561,9 +1561,8 @@ mod tests {
         else {
             panic!("a binding head is vertically centered");
         };
-        assert!(matches!(
-            &children[0],
-            Layout::At {
+        assert!(matches!(&inspect(&(&children[0])),
+            ProjectionCall::At {
                 steps,
                 projection: Some(_),
                 ..
@@ -1592,12 +1591,12 @@ mod tests {
         while let Layout::Shared { child, .. } = arms {
             arms = child.as_ref();
         }
-        let Layout::At {
+        let ProjectionCall::At {
             steps,
             projection: Some(_),
             value: cases,
             ..
-        } = arms
+        } = &inspect(&(arms))
         else {
             panic!("match descends to its cases list");
         };

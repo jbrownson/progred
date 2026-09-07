@@ -77,3 +77,15 @@ fn line_family(family: crate::TextFamily) -> GenericFamily {
         crate::TextFamily::Monospace => GenericFamily::Monospace,
     }
 }
+
+pub fn face_style(styles: &Styles, face: crate::Face) -> &TextStyle {
+    match face {
+        crate::Face::Name => &styles.name,
+        crate::Face::String => &styles.string,
+        crate::Face::Dim => &styles.dim,
+        crate::Face::Label => &styles.label,
+        crate::Face::Id => &styles.id,
+        crate::Face::AccentWash => &styles.accent_wash,
+        crate::Face::Ink => &styles.ink,
+    }
+}

@@ -23,6 +23,9 @@ fn with_interpreter<Hover: Default, R>(
     let mut layouts = LayoutContext::new();
     let mut cache = TextCache::default();
     run(&mut widget::Context {
+        project: &progred_display::test_support::NoProject,
+        completion: &|_, _, _| panic!("unexpected completion control"),
+        drawing: &|_, _, _| panic!("unexpected drawing control"),
         text: &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
@@ -106,6 +109,9 @@ pub fn point_update(
     let mut layouts = LayoutContext::new();
     let mut cache = TextCache::default();
     let place = before(&mut widget::Context {
+        project: &progred_display::test_support::NoProject,
+        completion: &|_, _, _| panic!("unexpected completion control"),
+        drawing: &|_, _, _| panic!("unexpected drawing control"),
         text: &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
@@ -146,12 +152,11 @@ pub fn point_update(
     };
     event.state.position.x = 50.0;
     event.state.position.y = 50.0;
-    assert!(
-        fragment
-            .handler
-            .unwrap()
-            .dispatch_pointer_down_with(&mut (), &event, &mut None)
-    );
+    assert!(fragment.handler.unwrap().dispatch_pointer_down_with(
+        &mut (),
+        &event,
+        &mut Default::default()
+    ));
     progred_display::PointUpdate {
         value: value.take().expect("initial contact writes"),
         selection: selection.take(),
@@ -191,7 +196,7 @@ pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
             },
             state: Default::default(),
         },
-        &mut Some(()),
+        &mut widget::frame::DispatchContext::new(None, Some(())),
     );
     picked.take()
 }
@@ -207,7 +212,7 @@ pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
     let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
     place(&mut fragment, placement);
     fragment
-        .claims
+        .probes
         .iter()
         .rev()
         .find_map(|probe| probe.answer(placement.rect.center(), None, 0.0))
@@ -249,7 +254,7 @@ pub fn assert_delimiter<Hover: Default + 'static>(
     let fragment = widget::place(measured, placement);
     let mut canvas = DrawList::new();
     for render in fragment.renders {
-        render(&mut canvas, None);
+        render(&mut canvas, Default::default());
     }
     let mut expected = DrawList::new();
     puri::draw::draw(

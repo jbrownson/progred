@@ -19,11 +19,14 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                             ascent: 0.0,
                             descent: height,
                         },
-                        move |output: &mut widget::Fragment<EditingWorld, Hover>, placement| {
+                        move |output: &mut widget::Fragment<EditingWorld, Hovered>, placement| {
                             placements.borrow_mut().push((id, placement.rect));
                             output
-                                .claims
-                                .push(puri::hover::Probe::exact(placement, Hover::Entry(id)));
+                                .probes
+                                .push(progred_display::widget::frame::Probe::exact(
+                                    placement,
+                                    Hovered::Tree(Hover::Entry(id)),
+                                ));
                             output.handler().on_pointer_down(move |world, event| {
                                 placement.contains(Point::new(
                                     event.state.position.x,
@@ -196,7 +199,7 @@ fn surrounding_widgets_receive_only_the_chosen_child_span() {
         input.value?;
         let measured_log = measured_log.clone();
         let placed_log = placed_log.clone();
-        let side: widget::Side<(), Hover> = Rc::new(move |_| {
+        let side: widget::Side<(), Hovered> = Rc::new(move |_| {
             let measured_log = measured_log.clone();
             let placed_log = placed_log.clone();
             MeasuredSide {

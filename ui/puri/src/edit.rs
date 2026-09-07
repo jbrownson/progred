@@ -833,34 +833,28 @@ mod tests {
         handler: Handler<()>,
     }
 
-    impl Canvas for DrawFrame {
-        fn image(&mut self, image: ImageData, transform: Affine) {
+    impl crate::draw::CanvasSink for DrawFrame {
+        fn draw_image(&mut self, image: ImageData, transform: Affine) {
             self.list.image(image, transform);
         }
 
-        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+        fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
             self.list.fill(shape, brush, transform);
         }
 
-        fn stroke(
-            &mut self,
-            shape: impl Into<Shape>,
-            style: Stroke,
-            brush: impl Into<Brush>,
-            transform: Affine,
-        ) {
+        fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
             self.list.stroke(shape, style, brush, transform);
         }
 
-        fn glyph_run(&mut self, run: GlyphRun) {
+        fn draw_glyphs(&mut self, run: GlyphRun) {
             self.list.glyph_run(run);
         }
 
-        fn clip(
+        fn with_clip(
             &mut self,
-            shape: impl Into<Shape>,
+            shape: Shape,
             transform: Affine,
-            content: impl FnOnce(&mut Self),
+            content: Box<dyn FnOnce(&mut dyn crate::draw::CanvasSink) + '_>,
         ) {
             let outer = std::mem::take(&mut self.list.0);
             content(self);

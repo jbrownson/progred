@@ -365,6 +365,7 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 mod tests {
     use super::*;
     use gid::new_cell_id;
+    use progred_display::test_support::{ProjectionCall, inspect};
 
     struct TestEnv;
 
@@ -507,24 +508,21 @@ mod tests {
         let Layout::Row { children, .. } = layout else {
             panic!("binary notation is a row");
         };
-        assert!(matches!(
-            &children[0],
-            Layout::Descend {
+        assert!(matches!(&inspect(&(&children[0])),
+            ProjectionCall::Descend {
                 step: Step::Key(field),
                 ..
             } if *field == vocabulary::LEFT
         ));
-        assert!(matches!(
-            &children[1],
-            Layout::Descend {
+        assert!(matches!(&inspect(&(&children[1])),
+            ProjectionCall::Descend {
                 step: Step::Key(field),
                 projection: Some(_),
                 ..
             } if *field == FUNCTION
         ));
-        assert!(matches!(
-            &children[2],
-            Layout::Descend {
+        assert!(matches!(&inspect(&(&children[2])),
+            ProjectionCall::Descend {
                 step: Step::Key(field),
                 ..
             } if *field == vocabulary::RIGHT

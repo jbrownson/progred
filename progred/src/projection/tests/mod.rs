@@ -145,7 +145,7 @@ impl EditingWorld {
     }
 }
 
-fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld, crate::frame::Paint> {
+fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld> {
     editing_frame_with_projection(world, raw, None)
 }
 
@@ -153,7 +153,7 @@ fn editing_frame_with_projection(
     world: &mut EditingWorld,
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
-) -> Placed<EditingWorld, crate::frame::Paint> {
+) -> Placed<EditingWorld> {
     let stack = crate::stack::load::<EditingWorld>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -163,7 +163,7 @@ fn editing_frame_with_projection(
         scale: 1.0,
         cache: &mut world.cache,
     };
-    let measured = project::<EditingWorld, crate::frame::Paint>(
+    let measured = project::<EditingWorld>(
         ProjectDescription {
             sources: Sources {
                 doc: &world.doc,
@@ -310,7 +310,7 @@ fn projected_line(
         let target = |_| progred_display::ProjectionTarget {
             select: Rc::new(|_: &mut ()| false),
             select_with: Rc::new(|_: &mut (), _| false),
-            hover: Hover::Value(Rc::from(path)),
+            hover: Hovered::Tree(Hover::Value(Rc::from(path))),
         };
         stack.projection.apply(&progred_display::ProjectionInput {
             default_projection: progred_display::partial(|_| None),
@@ -341,7 +341,7 @@ fn projected_line(
 }
 
 fn placed_line_description(
-    widget: &progred_display::widget::Widget<(), Hover>,
+    widget: &progred_display::widget::Widget<(), Hovered>,
 ) -> Option<progred_display::LineEdit> {
     use std::cell::RefCell;
     let mut fonts = parley::FontContext::new();
@@ -350,6 +350,9 @@ fn placed_line_description(
     let captured = Rc::new(RefCell::new(None));
     let output = captured.clone();
     let measured = widget(&mut progred_display::widget::Context {
+        project: &progred_display::test_support::NoProject,
+        completion: &|_, _, _| panic!("unexpected completion control"),
+        drawing: &|_, _, _| panic!("unexpected drawing control"),
         text: &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
@@ -371,7 +374,7 @@ fn placed_line_description(
                 editing: None,
                 spelling: None,
                 initial_text: &crate::selection::line_edit,
-                target: Hover::Value(Rc::from([])),
+                target: Hovered::Tree(Hover::Value(Rc::from([]))),
                 value: None,
                 select: Rc::new(|_| true),
                 edit: Rc::new(move |_, description, _| {

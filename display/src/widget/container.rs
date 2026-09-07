@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(log, ["down", "scroll", "up", "key"]);
         let mut drawing = DrawList::new();
         for render in frame.renders {
-            render(&mut drawing, None);
+            render(&mut drawing, Default::default());
         }
         assert!(
             matches!(&drawing.0[..], [DrawCmd::Clip { shape: Shape::Rect(rect), children, .. }]

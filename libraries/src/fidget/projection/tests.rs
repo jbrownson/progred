@@ -1,5 +1,6 @@
 use super::*;
 use crate::fidget::{binary, node, unary};
+use progred_display::test_support::{ProjectionCall, inspect};
 use progred_display::{Env, Pending, ProjectionTarget, ProjectionTargets};
 use std::rc::Rc;
 
@@ -62,8 +63,10 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
         panic!()
     };
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
-        assert!(matches!(unshared(child), Layout::At { steps, .. }
-            if *steps == [Step::Key(SUM), Step::Key(key)]));
+        assert!(
+            matches!(&inspect(&(unshared(child))), ProjectionCall::At { steps, .. }
+            if *steps == [Step::Key(SUM), Step::Key(key)])
+        );
     }
     assert_eq!(
         crate::test_widgets::claim(unshared(&children[1])),
@@ -136,7 +139,7 @@ fn unshown_or_incomplete_fields_decline_instead_of_disappearing() {
 fn coordinates_are_shallow_and_names_remain_editable_data() {
     let axis = node(AXIS, X.into());
     assert!(
-        matches!(field(&input(&axis)), Some(Layout::At { steps, projection: Some(_), .. })
+        matches!((field(&input(&axis))).map(|layout| inspect(&layout)), Some(ProjectionCall::At { steps, projection: Some(_), .. })
         if steps == [Step::Key(AXIS)])
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
@@ -150,6 +153,6 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
         panic!()
     };
     assert!(
-        matches!(&head[0], Layout::At { steps, .. } if *steps == [Step::Key(name::vocabulary::NAME)])
+        matches!(&inspect(&(&head[0])), ProjectionCall::At { steps, .. } if *steps == [Step::Key(name::vocabulary::NAME)])
     );
 }

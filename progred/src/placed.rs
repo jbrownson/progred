@@ -7,324 +7,40 @@
 
 use crate::completion::Offers;
 use crate::frame::Hovered;
-use crate::hover::Secondary;
 use crate::navigate::Descend;
 use crate::workspace::Root;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};
-use measured::{Extent, Measured, Output};
-use peniko::{Brush, Color, ImageData};
+#[cfg(test)]
+use measured::Output;
+use measured::{Extent, Measured};
+use peniko::{Brush, ImageData};
 use progred_display::widget::container::{self, Layers};
-use progred_display::widget::navigation::{Landmark, Navigation, Select};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
+use puri::handler::{Handler, HasHandler, ScrollOutcome};
+#[cfg(test)]
 use puri::hover::Claim;
 use puri::text::TextMetrics;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use uig::Placement;
 
-pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
-
-fn from_fragment<C: 'static, Cv: Canvas + 'static>(
-    fragment: progred_display::widget::Fragment<C, crate::hover::Hover>,
-) -> Placed<C, Cv> {
-    let mut placed = Placed::empty();
-    placed.probes = fragment
-        .claims
-        .into_iter()
-        .map(|probe| Probe::new(probe.map(Hovered::Tree)))
-        .collect();
-    placed.landmark_select = fragment.landmark_select;
-    placed.descends = fragment.landmarks.into_iter().map(Descend::from).collect();
-    placed.floaters = fragment
-        .floaters
-        .into_iter()
-        .map(|floater| Box::new(from_fragment(*floater)))
-        .collect();
-    placed.handler = fragment.handler.map(|handler| {
-        Handler::from_function(move |world, event, pointer: &mut DispatchContext<C>| {
-            let mut hovered = match &pointer.hovered {
-                Some(Hovered::Tree(target)) if !pointer.outside_view => Some(target.clone()),
-                _ => None,
-            };
-            handler.dispatch(world, event, &mut hovered)
-        })
-    });
-    if !fragment.renders.is_empty() {
-        placed.renders.push(Box::new(move |canvas, ink| {
-            let hover = match ink.hovered {
-                Some(Hovered::Tree(target)) => Some(target),
-                _ => None,
-            };
-            for render in fragment.renders {
-                render(canvas, hover);
-            }
-        }));
-    }
-    placed
-}
-
-impl<C: 'static, Cv: Canvas + 'static> Builder<'_, C, Cv> {
-    pub fn fragment(
-        &mut self,
-        fragment: progred_display::widget::Fragment<C, crate::hover::Hover>,
-    ) {
-        let before = std::mem::replace(self.placed, Placed::empty());
-        *self.placed = before.over(from_fragment(fragment));
-    }
-}
-
-/// A native hover region scoped to its editor view.
-pub struct Probe {
-    root: Option<Root>,
-    region: puri::hover::Probe<Hovered>,
-}
-
-impl Probe {
-    fn new(region: puri::hover::Probe<Hovered>) -> Self {
-        Self { root: None, region }
-    }
-
-    pub fn retaining(placement: Placement, target: Hovered) -> Self {
-        Self::new(puri::hover::Probe::retaining(placement, target))
-    }
-
-    pub fn exact(placement: Placement, target: Hovered) -> Self {
-        Self::new(puri::hover::Probe::exact(placement, target))
-    }
-
-    pub fn occludes(placement: Placement) -> Self {
-        Self::new(puri::hover::Probe::occludes(placement))
-    }
-
-    pub fn dynamic(
-        placement: Placement,
-        target: impl Fn(Point) -> Option<Hovered> + 'static,
-    ) -> Self {
-        Self::new(puri::hover::Probe::dynamic(placement, target))
-    }
-}
-
-/// The settled target is an explicit dispatch input, never an input to
-/// description or placement. Accepted handlers perform their own actions.
-pub struct DispatchContext<C> {
-    pub descends: std::rc::Rc<[Descend<C>]>,
-    pub root: Option<Root>,
-    pub hovered: Option<Hovered>,
-    outside_view: bool,
-}
-
-impl<C> Default for DispatchContext<C> {
-    fn default() -> Self {
-        Self {
-            descends: Default::default(),
-            root: None,
-            hovered: None,
-            outside_view: false,
-        }
-    }
-}
-
-impl<C> DispatchContext<C> {
-    pub fn new(root: Option<Root>, hovered: Option<Hovered>) -> Self {
-        Self {
-            root,
-            hovered,
-            ..Self::default()
-        }
-    }
-
-    fn matches(&self, target: &Hovered) -> bool {
-        !self.outside_view && self.hovered.as_ref() == Some(target)
-    }
-}
-
-/// An editor view's settled geometry. Fixed viewports have zero scroll
-/// maxima; scrolling views use them for pointer scroll and selection reveal.
-pub struct ViewRegion {
-    pub root: Root,
-    pub rect: Rect,
-    pub maximum: Vec2,
-}
-
-/// What ink may condition on: the frame's RESOLVED hover, decided
-/// from this same pass's geometry before any render runs.
-#[derive(Clone, Copy)]
-pub struct Ink<'a> {
-    pub hovered: Option<&'a Hovered>,
-    /// The cell-relative location the hover refers to; its other
-    /// projections carry the faint secondary mark.
-    pub hovered_secondary: Option<&'a Secondary>,
-    /// The actual structural source under the pointer, independent of
-    /// value-equivalence highlighting.
-    pub hovered_trace: Option<&'a crate::hover::SourceTrace>,
-    /// Draw each leaf's honest placement rectangle after its own ink.
-    pub debug_geometry: bool,
-}
-
-pub struct Placed<C, Cv> {
-    pub probes: Vec<Probe>,
-    /// `None` until something registers: combining empty frames must
-    /// not deepen the dispatch chain.
-    pub handler: Option<Handler<C, DispatchContext<C>>>,
-    pub descends: Vec<Descend<C>>,
-    pub view_regions: Vec<ViewRegion>,
-    /// A projected control may override how the nearest enclosing
-    /// navigation landmark is selected. The landmark consumes this
-    /// while placing, so it never leaks into an ancestor.
-    pub landmark_select: Option<crate::navigate::Select<C>>,
-    pub completion: Option<Offers<C>>,
-    /// Out-of-flow subtrees gathered during placement and raised over
-    /// the completed frame before hover resolution.
-    pub floaters: Vec<Box<Placed<C, Cv>>>,
-    pub renders: Vec<Render<Cv>>,
-}
-
-/// Preserve the destination's ordering while avoiding an allocation
-/// and element moves when an empty parent can simply take ownership of
-/// its first child's buffer.
-fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
-    if above.is_empty() {
-        return;
-    }
-    if base.is_empty() {
-        *base = above;
-    } else {
-        base.append(&mut above);
-    }
-}
-
-impl<C: 'static, Cv> Output for Placed<C, Cv> {
-    fn empty() -> Self {
-        Self {
-            probes: Vec::new(),
-            handler: None,
-            descends: Vec::new(),
-            view_regions: Vec::new(),
-            landmark_select: None,
-            completion: None,
-            floaters: Vec::new(),
-            renders: Vec::new(),
-        }
-    }
-
-    fn over(mut self, above: Self) -> Self {
-        append(&mut self.probes, above.probes);
-        self.handler = match (self.handler, above.handler) {
-            (base, None) => base,
-            (None, above) => above,
-            (Some(base), Some(above)) => Some(base.over(above)),
-        };
-        append(&mut self.descends, above.descends);
-        append(&mut self.view_regions, above.view_regions);
-        self.landmark_select = above.landmark_select.or(self.landmark_select);
-        self.completion = above.completion.or(self.completion);
-        append(&mut self.floaters, above.floaters);
-        append(&mut self.renders, above.renders);
-        self
-    }
-}
-
-impl<C: 'static, Cv> Placed<C, Cv> {
-    pub fn raise_floaters(mut self) -> Self {
-        for floater in std::mem::take(&mut self.floaters) {
-            self = self.over(floater.raise_floaters());
-        }
-        self
-    }
-
-    fn root_navigation(&mut self, root: &Root) {
-        for probe in &mut self.probes {
-            probe.root = Some(root.clone());
-        }
-        for descend in &mut self.descends {
-            descend.root = Some(root.clone());
-        }
-        if let Some(handler) = &mut self.handler {
-            let root = root.clone();
-            let inner = std::mem::take(handler);
-            *handler =
-                Handler::from_function(move |ctx, event, pointer: &mut DispatchContext<C>| {
-                    if matches!(event, Event::PointerDown(_)) {
-                        let outside = pointer.outside_view;
-                        pointer.outside_view = pointer.root.as_ref() != Some(&root);
-                        let outcome = inner.dispatch(ctx, event, pointer);
-                        pointer.outside_view = outside;
-                        outcome
-                    } else {
-                        inner.dispatch(ctx, event, pointer)
-                    }
-                });
-        }
-        for floater in &mut self.floaters {
-            floater.root_navigation(root);
-        }
-    }
-
-    /// What the pointer at `point` rests on. A direct answer or
-    /// occluder wins immediately in placement order; an extension of
-    /// `prior` is remembered only in case every real region is air.
-    #[cfg(test)]
-    pub fn probe(
-        &self,
-        point: Point,
-        prior: Option<&Hovered>,
-        reach: f64,
-    ) -> Option<Claim<Hovered>> {
-        self.probe_scoped(point, prior, reach)
-            .map(|(_, claim)| claim)
-    }
-
-    pub fn probe_scoped(
-        &self,
-        point: Point,
-        prior: Option<&Hovered>,
-        reach: f64,
-    ) -> Option<(Option<Root>, Claim<Hovered>)> {
-        let mut retained = None;
-        for probe in self.probes.iter().rev() {
-            match probe.region.answer(point, prior, reach) {
-                Some(claim @ (Claim::Direct(_) | Claim::Occludes)) => {
-                    return Some((probe.root.clone(), claim));
-                }
-                Some(Claim::Extended(target)) => {
-                    retained = Some((probe.root.clone(), Claim::Extended(target)));
-                }
-                _ => {}
-            }
-        }
-        retained
-    }
-
-    pub fn extended_rects(&self, target: &Hovered, reach: f64) -> Vec<Rect> {
-        self.probes
-            .iter()
-            .filter_map(|probe| probe.region.extended_rect(target, reach))
-            .collect()
-    }
-
-    pub fn handler_mut(&mut self) -> &mut Handler<C, DispatchContext<C>> {
-        self.handler.get_or_insert_with(Handler::new)
-    }
-
-    /// Run the deferred ink into a canvas, with the resolved hover.
-    pub fn render(renders: Vec<Render<Cv>>, canvas: &mut Cv, ink: Ink<'_>) {
-        for render in renders {
-            render(canvas, ink);
-        }
-    }
-}
+pub type Placed<C> = progred_display::widget::Fragment<C, Hovered>;
+pub type DispatchContext<C> = progred_display::widget::frame::DispatchContext<C, Hovered>;
+pub type Ink<'a> = progred_display::widget::frame::Ink<'a, Hovered>;
+pub type Render = progred_display::widget::frame::Render<Hovered>;
+pub type Probe = progred_display::widget::frame::Probe<Hovered>;
+pub use progred_display::widget::frame::ViewRegion;
 
 /// The leaf-construction context: today's placement-pass interface,
 /// accumulating a [`Placed`] instead of drawing and registering
 /// against live machinery. Ink defers; everything else settles here.
-pub struct Builder<'a, C: 'static, Cv> {
-    placed: &'a mut Placed<C, Cv>,
+pub(crate) struct Builder<'a, C: 'static> {
+    placed: &'a mut Placed<C>,
     visible: bool,
 }
 
-impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
-    fn new(placed: &'builder mut Placed<C, Cv>, placement: Placement) -> Self {
+impl<'builder, C: 'static> Builder<'builder, C> {
+    fn new(placed: &'builder mut Placed<C>, placement: Placement) -> Self {
         Self {
             placed,
             visible: !placement.clipped_out(),
@@ -433,15 +149,18 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
 
     /// Contribute ink that reads the resolved hover — the only paint
     /// that may differ under the pointer.
-    pub fn ink(&mut self, render: impl for<'ink> FnOnce(&mut Cv, Ink<'ink>) + 'static) {
+    pub fn ink(
+        &mut self,
+        render: impl for<'ink> FnOnce(&mut dyn puri::draw::CanvasSink, Ink<'ink>) + 'static,
+    ) {
         if self.visible {
             self.placed.renders.push(Box::new(render));
         }
     }
 }
 
-impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl<C: 'static> puri::draw::CanvasSink for Builder<'_, C> {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if self.visible {
             self.placed
                 .renders
@@ -449,31 +168,23 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
         }
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         if self.visible {
-            let (shape, brush) = (shape.into(), brush.into());
             self.placed
                 .renders
                 .push(Box::new(move |cv, _| cv.fill(shape, brush, transform)));
         }
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         if self.visible {
-            let (shape, brush) = (shape.into(), brush.into());
             self.placed.renders.push(Box::new(move |cv, _| {
                 cv.stroke(shape, style, brush, transform)
             }));
         }
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         if self.visible {
             self.placed
                 .renders
@@ -481,44 +192,26 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
         }
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
         if self.visible {
-            let shape = shape.into();
             let render_start = self.placed.renders.len();
             content(self);
             let renders = self.placed.renders.split_off(render_start);
-            self.placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-                cv.clip(shape, transform, |cv| {
-                    Placed::<C, Cv>::render(renders, cv, ink)
-                })
-            }));
+            self.placed
+                .renders
+                .push(Box::new(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
+                    cv.clip(shape, transform, |cv| Placed::<C>::paint(renders, cv, ink))
+                }));
         }
     }
 }
 
-impl<C: 'static, Cv> HasHandler<C> for Placed<C, Cv> {
-    type Input = DispatchContext<C>;
-    fn handler(&mut self) -> &mut Handler<C, Self::Input> {
-        self.handler_mut()
-    }
-}
-
-impl<C: 'static, Cv: 'static> Navigation<C> for Placed<C, Cv> {
-    fn landmark_select(&mut self) -> &mut Option<Select<C>> {
-        &mut self.landmark_select
-    }
-
-    fn push_landmark(&mut self, landmark: Landmark<C>) {
-        self.descends.push(landmark.into());
-    }
-}
-
-impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
+impl<C: 'static> HasHandler<C> for Builder<'_, C> {
     type Input = DispatchContext<C>;
 
     fn handler(&mut self) -> &mut Handler<C, DispatchContext<C>> {
@@ -526,52 +219,30 @@ impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
     }
 }
 
-impl<C: 'static, Cv> Builder<'_, C, Cv> {
+impl<C: 'static> Builder<'_, C> {
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
         &mut self.placed.completion
     }
 }
 
-fn built_into<C: 'static, Cv: 'static>(
-    f: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
-) -> impl FnOnce(Placement, &mut Placed<C, Cv>) + 'static {
+fn built_into<C: 'static>(
+    f: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
+) -> impl FnOnce(Placement, &mut Placed<C>) + 'static {
     move |placement, placed| f(&mut Builder::new(placed, placement), placement)
 }
 
-pub fn leaf<C: 'static, Cv: Canvas + 'static>(
+pub fn leaf<C: 'static>(
     extent: Extent,
-    place: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
-) -> Measured<Placed<C, Cv>> {
-    let place = built_into(place);
-    measured::leaf_into(extent, move |placement, placed: &mut Placed<C, Cv>| {
-        place(placement, placed);
-        if !placement.clipped_out() {
-            placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-                if ink.debug_geometry {
-                    cv.stroke(
-                        placement.rect,
-                        Stroke::new(0.75),
-                        Color::new([0.0, 0.65, 1.0, 0.36]),
-                        Affine::IDENTITY,
-                    );
-                }
-            }));
-        }
-    })
+    place: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
+) -> Measured<Placed<C>> {
+    progred_display::widget::debug_geometry(measured::leaf_into(extent, built_into(place)))
 }
 
-pub fn before<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    place_before: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
-) -> Measured<Placed<C, Cv>> {
+pub fn before<C: 'static>(
+    child: Measured<Placed<C>>,
+    place_before: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
+) -> Measured<Placed<C>> {
     measured::before_into(child, built_into(place_before))
-}
-
-pub fn after<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    place_after: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
-) -> Measured<Placed<C, Cv>> {
-    measured::after_into(child, built_into(place_after))
 }
 
 /// Add `content` as an out-of-flow subtree without contributing its
@@ -579,17 +250,17 @@ pub fn after<C: 'static, Cv: 'static>(
 /// together.
 pub use progred_display::widget::container::floating;
 
-pub fn decorate<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    draw: impl FnOnce(&mut Builder<'_, C, Cv>, Rect) + 'static,
-) -> Measured<Placed<C, Cv>> {
+pub fn decorate<C: 'static>(
+    child: Measured<Placed<C>>,
+    draw: impl FnOnce(&mut Builder<'_, C>, Rect) + 'static,
+) -> Measured<Placed<C>> {
     before(child, move |p, placement| draw(p, placement.rect))
 }
 
-pub fn on_key<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
+pub fn on_key<C: 'static>(
+    child: Measured<Placed<C>>,
     action: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     before(child, move |p, _| {
         p.handler().on_key(action);
     })
@@ -604,12 +275,12 @@ pub fn on_key<C: 'static, Cv: 'static>(
 /// A scroll viewport tagged as an editor view. The settled region is frame
 /// output, not retained widget state; input and keyboard reveal use
 /// it to update the same caller-owned view.
-pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
-    child: Measured<Placed<C, Cv>>,
+pub fn scrolled_at<C: 'static>(
+    child: Measured<Placed<C>>,
     offset: Vec2,
     owner: Option<(Root, f64)>,
     on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
-) -> Measured<Placed<C, Cv>> {
+) -> Measured<Placed<C>> {
     let extent = child.extent;
     let scrolled = container::scrolled(child, offset, on_scroll);
     before(scrolled, move |output, placement| {
@@ -627,10 +298,7 @@ pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
 }
 
 /// An assigned-size editor view, with no content scrolling or padding.
-pub fn viewport<C: 'static, Cv: Canvas + 'static>(
-    child: Measured<Placed<C, Cv>>,
-    root: Root,
-) -> Measured<Placed<C, Cv>> {
+pub fn viewport<C: 'static>(child: Measured<Placed<C>>, root: Root) -> Measured<Placed<C>> {
     measured::around(child, move |placement, inner| {
         let child_rect = inner.extent().rect_at(placement.rect.origin());
         let child_placement = measured::child_placement(
@@ -647,32 +315,10 @@ pub fn viewport<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-impl<C: 'static, Cv: Canvas + 'static> Layers for Placed<C, Cv> {
-    fn clipped(mut self, placement: Placement) -> Self {
-        let renders = std::mem::take(&mut self.renders);
-        self.renders.push(Box::new(move |cv: &mut Cv, ink| {
-            cv.clip(placement.rect, Affine::IDENTITY, |cv| {
-                Placed::<C, Cv>::render(renders, cv, ink)
-            })
-        }));
-        self.handler = self
-            .handler
-            .map(|handler| container::gate_starts(handler, placement));
-        self
-    }
-
-    fn float(&mut self, above: Self) {
-        self.floaters.push(Box::new(above));
-    }
-}
-
 /// Associate every navigation occurrence produced by `child` with
 /// one editor view. This happens after projection and placement, so
 /// the projection language remains unaware of panes.
-pub fn in_view<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    root: Root,
-) -> Measured<Placed<C, Cv>> {
+pub fn in_view<C: 'static>(child: Measured<Placed<C>>, root: Root) -> Measured<Placed<C>> {
     measured::around(child, move |placement, inner| {
         let mut placed = inner.place_at(placement);
         placed.root_navigation(&root);
@@ -700,36 +346,29 @@ mod tests {
 
     struct TestCanvas(DrawList);
 
-    impl Canvas for TestCanvas {
-        fn image(&mut self, image: ImageData, transform: Affine) {
+    impl puri::draw::CanvasSink for TestCanvas {
+        fn draw_image(&mut self, image: ImageData, transform: Affine) {
             self.0.image(image, transform);
         }
 
-        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+        fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
             self.0.fill(shape, brush, transform);
         }
 
-        fn stroke(
-            &mut self,
-            shape: impl Into<Shape>,
-            style: Stroke,
-            brush: impl Into<Brush>,
-            transform: Affine,
-        ) {
+        fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
             self.0.stroke(shape, style, brush, transform);
         }
 
-        fn glyph_run(&mut self, run: GlyphRun) {
+        fn draw_glyphs(&mut self, run: GlyphRun) {
             self.0.glyph_run(run);
         }
 
-        fn clip(
+        fn with_clip(
             &mut self,
-            shape: impl Into<Shape>,
+            shape: Shape,
             transform: Affine,
-            content: impl FnOnce(&mut Self),
+            content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
         ) {
-            let shape = shape.into();
             let mut inner = TestCanvas(DrawList::new());
             content(&mut inner);
             self.0.0.push(DrawCmd::Clip {
@@ -777,7 +416,7 @@ mod tests {
         scale: f64,
         span: Extent,
         side: puri::delim::Side,
-    ) -> Measured<Placed<Vec<&'static str>, TestCanvas>> {
+    ) -> Measured<Placed<Vec<&'static str>>> {
         use progred_display::widget;
         use std::rc::Rc;
         let mut fonts = puri::text::FontContext::new();
@@ -791,6 +430,9 @@ mod tests {
             side
         };
         let prepared = side(&mut widget::Context {
+            project: &progred_display::test_support::NoProject,
+            completion: &|_, _, _| panic!("unexpected completion control"),
+            drawing: &|_, _, _| panic!("unexpected drawing control"),
             text: &mut puri::TextCtx {
                 fonts: &mut fonts,
                 layouts: &mut layouts,
@@ -810,7 +452,7 @@ mod tests {
                 editing: None,
                 spelling: None,
                 initial_text: &|text| puri::LineEditState::new(text),
-                target: crate::hover::Hover::Value(Rc::from([])),
+                target: Hovered::Tree(crate::hover::Hover::Value(Rc::from([]))),
                 value: Some(&value),
                 select: Rc::new(|log: &mut Vec<&'static str>| {
                     log.push("select");
@@ -829,7 +471,7 @@ mod tests {
         let native = (prepared.measure)(span);
         assert!(native.extent.width <= prepared.maximum_width);
         measured::leaf(native.extent, move |placement| {
-            from_fragment(measured::place(native, placement))
+            measured::place(native, placement)
         })
     }
 
@@ -863,11 +505,7 @@ mod tests {
                     assert!(interactive.handler.is_some());
                     let outlines = [inert, interactive].map(|placed| {
                         let mut canvas = TestCanvas(DrawList::new());
-                        Placed::<Vec<&str>, TestCanvas>::render(
-                            placed.renders,
-                            &mut canvas,
-                            no_ink(),
-                        );
+                        Placed::<Vec<&str>>::paint(placed.renders, &mut canvas, no_ink());
                         let [
                             DrawCmd::Fill {
                                 shape: Shape::Path(path),
@@ -971,7 +609,7 @@ mod tests {
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-        let mut placed: Placed<Vec<&'static str>, TestCanvas> = Placed::empty();
+        let mut placed: Placed<Vec<&'static str>> = Placed::empty();
         let mut p = Builder::new(&mut placed, placement);
         p.handler().on_pointer_down(|log, _| {
             log.push("raw below");
@@ -1003,24 +641,18 @@ mod tests {
             ascent: 5.0,
             descent: 5.0,
         };
-        let lower = leaf(
-            extent,
-            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
-                p.handler().on_pointer_down(|log, _| {
-                    log.push("lower");
-                    true
-                });
-            },
-        );
-        let upper = leaf(
-            extent,
-            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
-                p.handler().on_pointer_down(|log, _| {
-                    log.push("upper");
-                    false
-                });
-            },
-        );
+        let lower = leaf(extent, |p: &mut Builder<'_, Vec<&'static str>>, _| {
+            p.handler().on_pointer_down(|log, _| {
+                log.push("lower");
+                true
+            });
+        });
+        let upper = leaf(extent, |p: &mut Builder<'_, Vec<&'static str>>, _| {
+            p.handler().on_pointer_down(|log, _| {
+                log.push("upper");
+                false
+            });
+        });
         let placed = measured::place_top_left(measured::layers(vec![lower, upper]), Point::ZERO);
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
@@ -1037,7 +669,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 10.0,
             },
-            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+            |p: &mut Builder<'_, ()>, placement| {
                 p.fill(placement.rect, Color::BLACK, Affine::IDENTITY);
             },
         );
@@ -1047,7 +679,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 20.0,
             },
-            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+            |p: &mut Builder<'_, ()>, placement| {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
@@ -1068,7 +700,7 @@ mod tests {
         assert_eq!(placed.floaters.len(), 1);
 
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<(), TestCanvas>::render(placed.raise_floaters().renders, &mut canvas, no_ink());
+        Placed::<()>::paint(placed.raise_floaters().renders, &mut canvas, no_ink());
         assert!(matches!(
             &canvas.0.0[..],
             [
@@ -1093,14 +725,14 @@ mod tests {
                 ascent: 4.0,
                 descent: 6.0,
             },
-            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+            |p: &mut Builder<'_, ()>, placement| {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
         let rect = Rect::new(3.0, 5.0, 15.0, 15.0);
         let placed = measured::place(child, Placement::root(rect));
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<(), TestCanvas>::render(
+        Placed::<()>::paint(
             placed.renders,
             &mut canvas,
             Ink {
@@ -1135,7 +767,7 @@ mod tests {
                 ascent: 5.0,
                 descent: 5.0,
             },
-            move |p: &mut Builder<'_, (), TestCanvas>, placement| {
+            move |p: &mut Builder<'_, ()>, placement| {
                 p.claim(placement, target.clone());
                 p.activate(target.clone(), |_| true);
                 p.pick(target, |_| true);
@@ -1164,7 +796,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 300.0,
             },
-            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+            |p: &mut Builder<'_, ()>, placement| {
                 assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
                 p.fill(
                     Rect::new(
@@ -1188,7 +820,7 @@ mod tests {
             ),
         );
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<(), TestCanvas>::render(placed.renders, &mut canvas, no_ink());
+        Placed::<()>::paint(placed.renders, &mut canvas, no_ink());
         let [
             DrawCmd::Clip {
                 shape: Shape::Rect(clip),
@@ -1220,7 +852,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 30.0,
             },
-            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
+            |p: &mut Builder<'_, Vec<&'static str>>, _| {
                 p.handler().on_pointer_down(|log, _| {
                     log.push("down");
                     true
@@ -1267,7 +899,7 @@ mod tests {
     }
     #[test]
     fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
-        let mut placed: Placed<Vec<&'static str>, TestCanvas> = Placed::empty();
+        let mut placed: Placed<Vec<&'static str>> = Placed::empty();
         let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         let mut p = Builder::new(&mut placed, full);
         p.handler().on_pointer_down(|log, _| {
@@ -1311,7 +943,7 @@ mod tests {
             let target = target.clone();
             leaf(
                 extent,
-                move |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, placement| {
+                move |p: &mut Builder<'_, Vec<&'static str>>, placement| {
                     p.claim(placement, target.clone());
                     p.activate(target.clone(), move |log| {
                         log.push(label);
@@ -1328,10 +960,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let owner_view = in_view(
             floating(
-                leaf(
-                    extent,
-                    |_: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {},
-                ),
+                leaf(extent, |_: &mut Builder<'_, Vec<&'static str>>, _| {}),
                 row("popup"),
                 move |_, _| Some(Placement::new(popup_rect, bounds)),
             ),
@@ -1373,8 +1002,8 @@ mod tests {
         use progred_display::widget;
         let owner = Root::document();
         let other = Root::pane(vec![]);
-        let target = crate::hover::Hover::Entry(0);
-        let expected = Hovered::Tree(target.clone());
+        let target = Hovered::Tree(crate::hover::Hover::Entry(0));
+        let expected = target.clone();
         let rect = Rect::new(50.0, 0.0, 70.0, 20.0);
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let popup = widget::leaf(
@@ -1385,12 +1014,15 @@ mod tests {
             },
             move |output: &mut widget::Fragment<usize, _>, placement| {
                 output
-                    .claims
-                    .push(puri::hover::Probe::retaining(placement, target.clone()));
+                    .probes
+                    .push(progred_display::widget::frame::Probe::retaining(
+                        placement,
+                        target.clone(),
+                    ));
                 output
                     .handler()
                     .on_pointer_down_with(move |count, _, hovered| {
-                        hovered.as_ref() == Some(&target) && {
+                        hovered.hovered() == Some(&target) && {
                             *count += 1;
                             true
                         }
@@ -1411,9 +1043,9 @@ mod tests {
             move |_, _| Some(Placement::new(rect, bounds)),
         );
         let native = measured::leaf(widget.extent, move |placement| {
-            from_fragment(measured::place(widget, placement))
+            measured::place(widget, placement)
         });
-        let native: Placed<usize, DrawList> =
+        let native: Placed<usize> =
             measured::place(in_view(native, owner.clone()), Placement::root(bounds));
         let covered = measured::place(
             in_view(
@@ -1464,7 +1096,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 30.0,
             },
-            move |p: &mut Builder<'_, usize, TestCanvas>, placement| {
+            move |p: &mut Builder<'_, usize>, placement| {
                 p.claim(placement, claimed.clone());
                 p.activate(claimed, |count| {
                     *count += 1;
@@ -1493,7 +1125,7 @@ mod tests {
         ));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         for covered in [false, true] {
-            let mut placed: Placed<usize, TestCanvas> = Placed::empty();
+            let mut placed: Placed<usize> = Placed::empty();
             let mut p = Builder::new(&mut placed, placement);
             p.handler()
                 .on_pointer_down(|_, _| panic!("covered raw handler"));

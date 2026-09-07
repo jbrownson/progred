@@ -47,7 +47,7 @@ pub(crate) struct Dispatch {
 /// pass deferred — run it into a [`Paint`] or drop it silently.
 pub(crate) struct Frame {
     pub(crate) dispatch: Dispatch,
-    pub(crate) renders: Vec<placed::Render<Paint>>,
+    pub(crate) renders: Vec<placed::Render>,
     /// The cell-relative location the resolved hover refers to, for
     /// the render pass's secondary marks.
     pub(crate) hovered_secondary: Option<hover::Secondary>,
@@ -75,36 +75,29 @@ pub(crate) struct Paint {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl Canvas for Paint {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl puri::draw::CanvasSink for Paint {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         VelloCanvas(&mut self.scene).image(image, transform);
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         VelloCanvas(&mut self.scene).fill(shape, brush, transform);
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         VelloCanvas(&mut self.scene).stroke(shape, style, brush, transform);
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         VelloCanvas(&mut self.scene).glyph_run(run);
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        let shape = shape.into();
         VelloCanvas(&mut self.scene).push_clip(&shape, transform);
         content(self);
         VelloCanvas(&mut self.scene).pop_clip();
@@ -118,36 +111,29 @@ pub(crate) struct Paint {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl Canvas for Paint {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl puri::draw::CanvasSink for Paint {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.canvas.image(image, transform);
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         self.canvas.fill(shape, brush, transform);
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         self.canvas.stroke(shape, style, brush, transform);
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         self.canvas.glyph_run(run);
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        let shape = shape.into();
         self.canvas.push_clip(&shape, transform);
         content(self);
         self.canvas.pop_clip();
@@ -251,8 +237,8 @@ pub(crate) use progred_display::widget::scroll::offset as scroll_offset;
 /// direct claim under the pointer answers outright, an extension may
 /// retain only the prior target, and an occluder blocks both. A
 /// pressed gesture keeps the hover it began with.
-pub(crate) fn derive_hover<C: 'static, Cv>(
-    placed: &Placed<C, Cv>,
+pub(crate) fn derive_hover<C: 'static>(
+    placed: &Placed<C>,
     prior: Option<Hovered>,
     pointer: Option<Point>,
     pressed: bool,
@@ -293,7 +279,7 @@ pub(crate) struct FrameResources<'a> {
 /// The frame as one measured value, plus the scroll maxima its
 /// measurement settled.
 struct AppView {
-    view: measured::Measured<Placed<Editor, Paint>>,
+    view: measured::Measured<Placed<Editor>>,
 }
 
 impl Editor {
@@ -740,7 +726,7 @@ fn project_workspace_view(
     scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<Editor, Paint>> {
+) -> measured::Measured<Placed<Editor>> {
     let raw = view.projection == workspace::Projection::Raw;
     let viewport = match view.root.target() {
         workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
@@ -853,7 +839,7 @@ fn project_workspace(
     scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<Editor, Paint>> {
+) -> measured::Measured<Placed<Editor>> {
     let geometry = model.workspace.geometry(size, scale);
     let mut body = placed::leaf(
         measured::Extent {
@@ -1747,7 +1733,7 @@ mod frame_tests {
     fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
-        let mut placed: Placed<Editor, Paint> = Placed::empty();
+        let mut placed: Placed<Editor> = Placed::empty();
         placed.probes.push(placed::Probe::retaining(
             Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
             target(0),
@@ -1846,7 +1832,7 @@ mod frame_tests {
     #[test]
     fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
         let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
-        let mut placed: Placed<Editor, Paint> = Placed::empty();
+        let mut placed: Placed<Editor> = Placed::empty();
         placed.probes.push(placed::Probe::exact(
             Placement::new(
                 Rect::new(0.0, 0.0, 10.0, 10.0),

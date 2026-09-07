@@ -1,10 +1,10 @@
 //! Completion interaction is a native widget; callers supply offers and own state.
 
+use super::frame::Probe;
 use super::{Fragment, container, extent, leaf, scroll, style::Styles};
 use measured::{Extent, Measured, col, pad};
 use peniko::kurbo::Insets;
 use puri::handler::{HasHandler, Key, Modifiers, NamedKey, PointerType};
-use puri::hover::Probe;
 use puri::text::{TextCtx, TextStyle};
 use puri::{Color, Point, Size, Stroke, Vec2};
 use puri_widgets::panel::Panel;
@@ -185,7 +185,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     measured::before_into(card, move |placement, output| {
         if !placement.clipped_out() {
             output.render(move |canvas, _| panel.place(canvas, placement));
-            output.claims.push(Probe::occludes(placement));
+            output.probes.push(Probe::occludes(placement));
             output.handler().on_pointer_down(move |_, event| {
                 placement.contains(Point::new(event.state.position.x, event.state.position.y))
             });
@@ -232,7 +232,7 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
     leaf(extent(row.metrics()), move |output, placement| {
         if !placement.clipped_out() {
             output
-                .claims
+                .probes
                 .push(Probe::retaining(placement, hover.clone()));
             output.handler().on_pointer_move(move |world, event| {
                 if event.pointer.pointer_type == PointerType::Mouse
@@ -252,7 +252,7 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
                 .handler()
                 .on_pointer_down_with(move |world, event, hovered| {
                     puri::interact::is_primary_contact(event)
-                        && hovered.as_ref() == Some(&hover)
+                        && hovered.hovered() == Some(&hover)
                         && {
                             activate(world);
                             true

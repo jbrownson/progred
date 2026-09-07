@@ -222,63 +222,50 @@ pub struct GlyphRun {
 /// The drawing interface widgets and projections write to. Backends
 /// stream (puri-vello), recorders capture (`DrawList`), tests interpret
 /// however the assertion wants.
-pub trait Canvas {
-    /// Draw an image at its natural pixel size before applying `transform`.
-    fn image(&mut self, image: ImageData, transform: Affine);
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine);
+pub trait Canvas: CanvasSink {
+    fn image(&mut self, image: ImageData, transform: Affine) {
+        self.draw_image(image, transform);
+    }
+    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+        self.fill_shape(shape.into(), brush.into(), transform);
+    }
     fn stroke(
         &mut self,
         shape: impl Into<Shape>,
         style: Stroke,
         brush: impl Into<Brush>,
         transform: Affine,
-    );
-    fn glyph_run(&mut self, run: GlyphRun);
-    /// Draw `content` clipped to `shape`; the clip scope is the
-    /// closure, so unbalanced push/pop is unrepresentable.
-    fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self));
+    ) {
+        self.stroke_shape(shape.into(), style, brush.into(), transform);
+    }
+    fn glyph_run(&mut self, run: GlyphRun) {
+        self.draw_glyphs(run);
+    }
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut dyn CanvasSink),
+    ) {
+        self.with_clip(shape.into(), transform, Box::new(content));
+    }
 }
+impl<C: CanvasSink + ?Sized> Canvas for C {}
 
-/// Object-safe destination for native drawing continuations. This forwards
-/// operations immediately; it is not a command recording or another language.
+/// Object-safe canvas primitives implemented by drawing backends and recorders.
 pub trait CanvasSink {
+    /// Draw at natural pixel size before applying the transform.
     fn draw_image(&mut self, image: ImageData, transform: Affine);
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine);
     fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine);
     fn draw_glyphs(&mut self, run: GlyphRun);
+    /// The callback scopes the clip, keeping push/pop paired.
     fn with_clip(
         &mut self,
         shape: Shape,
         transform: Affine,
         content: Box<dyn FnOnce(&mut dyn CanvasSink) + '_>,
     );
-}
-
-impl<C: Canvas> CanvasSink for C {
-    fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        Canvas::image(self, image, transform);
-    }
-
-    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
-        Canvas::fill(self, shape, brush, transform);
-    }
-
-    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
-        Canvas::stroke(self, shape, style, brush, transform);
-    }
-
-    fn draw_glyphs(&mut self, run: GlyphRun) {
-        Canvas::glyph_run(self, run);
-    }
-
-    fn with_clip(
-        &mut self,
-        shape: Shape,
-        transform: Affine,
-        content: Box<dyn FnOnce(&mut dyn CanvasSink) + '_>,
-    ) {
-        Canvas::clip(self, shape, transform, move |canvas| content(canvas));
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -316,49 +303,43 @@ impl DrawList {
     }
 }
 
-impl Canvas for DrawList {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl CanvasSink for DrawList {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.0.push(DrawCmd::Image { image, transform });
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         self.0.push(DrawCmd::Fill {
-            shape: shape.into(),
-            brush: brush.into(),
+            shape,
+            brush,
             transform,
         });
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         self.0.push(DrawCmd::Stroke {
-            shape: shape.into(),
+            shape,
             style,
-            brush: brush.into(),
+            brush,
             transform,
         });
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         self.0.push(DrawCmd::GlyphRun(run));
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn crate::draw::CanvasSink) + '_>,
     ) {
         let outer = std::mem::take(&mut self.0);
         content(self);
         let children = std::mem::replace(&mut self.0, outer);
         self.0.push(DrawCmd::Clip {
-            shape: shape.into(),
+            shape,
             transform,
             children,
         });
@@ -366,16 +347,16 @@ impl Canvas for DrawList {
 }
 
 /// Play a recording back into any canvas.
-pub fn replay(list: &DrawList, canvas: &mut impl Canvas) {
+pub fn replay(list: &DrawList, canvas: &mut (impl Canvas + ?Sized)) {
     replay_at(list, canvas, Affine::IDENTITY);
 }
 
 /// Play a leaf-local recording at `outer` into any canvas.
-pub fn replay_at(list: &DrawList, canvas: &mut impl Canvas, outer: Affine) {
+pub fn replay_at(list: &DrawList, canvas: &mut (impl Canvas + ?Sized), outer: Affine) {
     replay_cmds(&list.0, canvas, outer);
 }
 
-fn replay_cmds<C: Canvas>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
+fn replay_cmds<C: Canvas + ?Sized>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
     for cmd in cmds {
         match cmd {
             DrawCmd::Image { image, transform } => canvas.image(image.clone(), outer * *transform),

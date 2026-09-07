@@ -1,20 +1,19 @@
 //! The vello backend: a `Canvas` streaming into a `vello::Scene`.
 
-use puri::draw::{Canvas, GlyphRun, Shape};
+use puri::draw::{GlyphRun, Shape};
 use vello::Scene;
 use vello::kurbo::{Affine, Stroke};
 use vello::peniko::{Brush, Fill, ImageData};
 
 pub struct VelloCanvas<'a>(pub &'a mut Scene);
 
-impl Canvas for VelloCanvas<'_> {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl puri::draw::CanvasSink for VelloCanvas<'_> {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.0.draw_image(&image, transform);
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        let brush = brush.into();
-        match shape.into() {
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
+        match shape {
             Shape::Rect(s) => self.0.fill(Fill::NonZero, transform, &brush, None, &s),
             Shape::RoundedRect(s) => self.0.fill(Fill::NonZero, transform, &brush, None, &s),
             Shape::Circle(s) => self.0.fill(Fill::NonZero, transform, &brush, None, &s),
@@ -23,15 +22,8 @@ impl Canvas for VelloCanvas<'_> {
         }
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
-        let brush = brush.into();
-        match shape.into() {
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
+        match shape {
             Shape::Rect(s) => self.0.stroke(&style, transform, &brush, None, &s),
             Shape::RoundedRect(s) => self.0.stroke(&style, transform, &brush, None, &s),
             Shape::Circle(s) => self.0.stroke(&style, transform, &brush, None, &s),
@@ -40,7 +32,7 @@ impl Canvas for VelloCanvas<'_> {
         }
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         self.0
             .draw_glyphs(&run.font)
             .font_size(run.size)
@@ -59,13 +51,13 @@ impl Canvas for VelloCanvas<'_> {
             );
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        self.push_clip(&shape.into(), transform);
+        self.push_clip(&shape, transform);
         content(self);
         self.pop_clip();
     }

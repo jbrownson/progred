@@ -114,8 +114,8 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
             output.landmark_select = Some(navigation);
             if !placement.clipped_out() {
                 output
-                    .claims
-                    .push(puri::hover::Probe::retaining(placement, target));
+                    .probes
+                    .push(super::frame::Probe::retaining(placement, target));
             }
             output.handler().on_pointer_down(move |world, event| {
                 primary_edit(event)

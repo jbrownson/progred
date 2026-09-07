@@ -6,7 +6,7 @@ use js_sys::Array;
 use kurbo::{Affine, Cap, Join, PathEl, Shape as KurboShape, Stroke};
 use peniko::color::Srgb;
 use peniko::{Brush, GradientKind, ImageAlphaType, ImageData, ImageFormat};
-use puri::draw::{Canvas, GlyphRun, Shape};
+use puri::draw::{GlyphRun, Shape};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
@@ -134,8 +134,8 @@ impl WebCanvas {
     }
 }
 
-impl Canvas for WebCanvas {
-    fn image(&mut self, image: ImageData, transform: Affine) {
+impl puri::draw::CanvasSink for WebCanvas {
+    fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if let Some(source) = image_canvas(&image) {
             self.with_transform(transform, |canvas| {
                 let _ = canvas
@@ -145,24 +145,16 @@ impl Canvas for WebCanvas {
         }
     }
 
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        let path = path(&shape.into());
-        let brush = brush.into();
+    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
+        let path = path(&shape);
         self.with_transform(transform, |canvas| {
             canvas.set_fill_style(&brush);
             canvas.0.fill_with_path_2d(&path);
         });
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
-        let path = path(&shape.into());
-        let brush = brush.into();
+    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
+        let path = path(&shape);
         self.with_transform(transform, |canvas| {
             canvas.set_stroke(&style);
             canvas.set_stroke_style(&brush);
@@ -170,7 +162,7 @@ impl Canvas for WebCanvas {
         });
     }
 
-    fn glyph_run(&mut self, run: GlyphRun) {
+    fn draw_glyphs(&mut self, run: GlyphRun) {
         let Ok(font) = FontRef::from_index(run.font.data.as_ref(), run.font.index) else {
             return;
         };
@@ -203,13 +195,13 @@ impl Canvas for WebCanvas {
         }
     }
 
-    fn clip(
+    fn with_clip(
         &mut self,
-        shape: impl Into<Shape>,
+        shape: Shape,
         transform: Affine,
-        content: impl FnOnce(&mut Self),
+        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        self.push_clip(&shape.into(), transform);
+        self.push_clip(&shape, transform);
         content(self);
         self.pop_clip();
     }
