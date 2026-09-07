@@ -7,6 +7,48 @@ use puri::hover::Claim;
 
 type World = ();
 
+#[test]
+fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
+    let log = Rc::new(std::cell::RefCell::new(vec![]));
+    let contribution = |name: &'static str| {
+        let log = log.clone();
+        Box::new(
+            move |output: &mut progred_display::widget::Fragment<(), Hover>, _: Placement| {
+                let during_paint = log.clone();
+                output.render(move |_, _| during_paint.borrow_mut().push(name));
+                output.handler().on_key(move |_, _| {
+                    log.borrow_mut().push(name);
+                    false
+                });
+            },
+        ) as progred_display::widget::Place<(), Hover>
+    };
+    let extent = Extent {
+        width: 40.0,
+        ascent: 10.0,
+        descent: 5.0,
+    };
+    let child = native_fragment(progred_display::widget::leaf(extent, contribution("child")));
+    let decorated = placed::after(
+        native_before(child, contribution("before")),
+        native_contribution(contribution("after")),
+    );
+    assert_eq!(decorated.extent, extent);
+    let output = measured::place_top_left(decorated, Point::ZERO);
+    assert!(log.borrow().is_empty());
+    assert!(
+        !output
+            .handler
+            .as_ref()
+            .unwrap()
+            .dispatch_key(&mut (), &KeyboardEvent::default())
+    );
+    assert_eq!(&*log.borrow(), &["after", "child", "before"]);
+    log.borrow_mut().clear();
+    settle(output, None);
+    assert_eq!(&*log.borrow(), &["before", "child", "after"]);
+}
+
 struct Bench {
     list: DrawList,
     descends: Vec<Descend<World>>,

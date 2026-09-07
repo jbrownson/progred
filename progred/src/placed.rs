@@ -559,6 +559,13 @@ pub fn before<C: 'static, Cv: 'static>(
     measured::before_into(child, built_into(place_before))
 }
 
+pub fn after<C: 'static, Cv: 'static>(
+    child: Measured<Placed<C, Cv>>,
+    place_after: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
+) -> Measured<Placed<C, Cv>> {
+    measured::after_into(child, built_into(place_after))
+}
+
 /// Add `content` as an out-of-flow subtree without contributing its
 /// extent to `base`. The completed frame raises all such subtrees
 /// together.

@@ -286,7 +286,12 @@ pub enum Layout<World, Hover> {
     /// Add ordinary placement outputs before a child, without changing its geometry.
     Before {
         child: Box<Layout<World, Hover>>,
-        before: widget::Before<World, Hover>,
+        before: widget::Decoration<World, Hover>,
+    },
+    /// Add ordinary placement outputs after a child, without changing its geometry.
+    After {
+        child: Box<Layout<World, Hover>>,
+        after: widget::Decoration<World, Hover>,
     },
     Row {
         alignment: RowAlignment,
@@ -314,11 +319,6 @@ pub enum Layout<World, Hover> {
         top: f64,
         right: f64,
         bottom: f64,
-        child: Box<Layout<World, Hover>>,
-    },
-    /// Paint the standard projection border over the child's settled
-    /// bounds without changing its extent or interaction behavior.
-    Border {
         child: Box<Layout<World, Hover>>,
     },
     /// Measure `child`, then measure and place two side widgets against
@@ -389,6 +389,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 before: before.clone(),
             },
+            Self::After { child, after } => Self::After {
+                child: child.clone(),
+                after: after.clone(),
+            },
             Self::Row {
                 alignment,
                 gap,
@@ -425,9 +429,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 top: *top,
                 right: *right,
                 bottom: *bottom,
-                child: child.clone(),
-            },
-            Self::Border { child } => Self::Border {
                 child: child.clone(),
             },
             Self::Surround { left, child, right } => Self::Surround {
@@ -681,11 +682,7 @@ pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World
     }
 }
 
-pub fn border<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover> {
-    Layout::Border {
-        child: Box::new(child),
-    }
-}
+pub use widget::border;
 
 pub fn surround<World, Hover>(
     left: widget::Side<World, Hover>,

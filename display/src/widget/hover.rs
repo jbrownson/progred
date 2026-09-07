@@ -84,8 +84,9 @@ mod tests {
         let mut fonts = puri::text::FontContext::new();
         let mut layouts = puri::text::LayoutContext::new();
         let mut cache = TextCache::default();
-        let Layout::Before { before, .. } = layout else {
-            panic!("native decorator");
+        let before = match layout {
+            Layout::Before { before, .. } | Layout::After { after: before, .. } => before,
+            _ => panic!("native decorator"),
         };
         let mut output = Fragment::empty();
         before(&mut Context {
@@ -109,6 +110,29 @@ mod tests {
             primary_edit: |_| true,
         })(&mut output, placement);
         output
+    }
+
+    #[test]
+    fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities() {
+        let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
+        let output = place(crate::widget::border(crate::text("inside")), placement);
+        assert!(output.handler.is_none());
+        assert!(output.claims.is_empty());
+        assert!(output.select.is_none());
+        let mut drawing = DrawList::new();
+        for render in output.renders {
+            render(&mut drawing, None);
+        }
+        assert!(
+            matches!(&drawing.0[..], [puri::DrawCmd::Stroke { shape: puri::Shape::Rect(rect), style, .. }]
+            if *rect == placement.rect.inset(-0.5) && style.width == 1.0)
+        );
+        let clipped = Placement::new(placement.rect, Rect::new(80.0, 80.0, 90.0, 90.0));
+        assert!(
+            place(crate::widget::border(crate::text("inside")), clipped)
+                .renders
+                .is_empty()
+        );
     }
 
     #[test]

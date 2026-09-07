@@ -17,6 +17,7 @@ use gid::Position;
 use gid::{Cells, Document, new_cell_id};
 use kurbo::Rect;
 use measured::Extent;
+use peniko::Brush;
 use progred_libraries::layout as layout_data;
 use progred_libraries::{Libraries, f64, fidget, name, text};
 use puri::edit::EditCtx;

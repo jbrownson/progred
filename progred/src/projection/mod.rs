@@ -25,7 +25,7 @@ use kurbo::{Affine, Insets, Point, RoundedRect, Stroke};
 use location::Location;
 use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
 use measured::{Measured, row};
-use peniko::{Brush, Color};
+use peniko::Color;
 use progred_display::widget::style::highlight_outline;
 use puri::draw::Canvas;
 use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
@@ -252,6 +252,15 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             );
             ChoiceLayout::map(inner, 0.0, move |inner| native_before(inner, before))
         }
+        progred_display::Layout::After { child, after } => {
+            let after = with_widget_context(cx, tcx, path, value, hooks, |context| after(context));
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                placed::after(inner, native_contribution(after))
+            })
+        }
         progred_display::Layout::Row {
             alignment,
             gap,
@@ -327,14 +336,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                     cx, projection, tcx, path, ancestors, hooks, value, *child, build,
                 ),
             )
-        }
-        progred_display::Layout::Border { child } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let scale = cx.styles.scale;
-            let brush = cx.styles.dim.brush.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| bordered(scale, brush, inner))
         }
         progred_display::Layout::Surround { left, child, right } => {
             let (left, right) = with_widget_context(cx, tcx, path, value, hooks, |context| {
@@ -735,12 +736,18 @@ fn native_before<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
     place: progred_display::widget::Place<C, Hover>,
 ) -> Measured<Placed<C, Cv>> {
-    before(child, move |output, placement| {
+    before(child, native_contribution(place))
+}
+
+fn native_contribution<C: 'static, Cv: Canvas + 'static>(
+    place: progred_display::widget::Place<C, Hover>,
+) -> impl FnOnce(&mut placed::Builder<'_, C, Cv>, Placement) {
+    move |output, placement| {
         let mut fragment =
             <progred_display::widget::Fragment<C, Hover> as measured::Output>::empty();
         place(&mut fragment, placement);
         output.fragment(fragment);
-    })
+    }
 }
 
 fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
@@ -753,28 +760,6 @@ fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
         progred_display::Face::AccentWash => &styles.accent_wash,
         progred_display::Face::Ink => &styles.ink,
     }
-}
-
-fn bordered<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    brush: Brush,
-    child: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    let panel = Panel {
-        fill: None,
-        border: Some((Stroke::new(scale), brush)),
-        radius: 0.0,
-    };
-    measured::around(child, move |placement, inner| {
-        let mut placed = inner.place();
-        if !placement.clipped_out() {
-            let placement = Placement::new(placement.rect.inset(-0.5 * scale), placement.clip_rect);
-            placed
-                .renders
-                .push(Box::new(move |cv, _| panel.place(cv, placement)));
-        }
-        placed
-    })
 }
 
 fn placeholder_box<C: 'static, Cv: Canvas + 'static>(

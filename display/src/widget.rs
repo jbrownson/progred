@@ -39,7 +39,7 @@ pub type EventInterpreter<World> = Rc<dyn Fn(&mut World, &Value, Value) -> bool>
 pub type Annotate<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
 pub type Render<Hover> = Box<dyn FnOnce(&mut dyn CanvasSink, Option<&Hover>)>;
 pub type Place<World, Hover> = Box<dyn FnOnce(&mut Fragment<World, Hover>, Placement)>;
-pub type Before<World, Hover> =
+pub type Decoration<World, Hover> =
     Rc<dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> Place<World, Hover>>;
 
 pub struct Context<'a, 'fonts, World, Hover> {
@@ -80,12 +80,44 @@ pub type Widget<World, Hover> = Rc<
 /// Contribute outputs before the child places, without inspecting its widget type.
 pub fn before<World, Hover>(
     child: Layout<World, Hover>,
-    before: Before<World, Hover>,
+    before: Decoration<World, Hover>,
 ) -> Layout<World, Hover> {
     Layout::Before {
         child: Box::new(child),
         before,
     }
+}
+
+pub fn after<World, Hover>(
+    child: Layout<World, Hover>,
+    after: Decoration<World, Hover>,
+) -> Layout<World, Hover> {
+    Layout::After {
+        child: Box::new(child),
+        after,
+    }
+}
+
+pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> Layout<World, Hover> {
+    after(
+        child,
+        Rc::new(|context| {
+            let stroke = puri::Stroke::new(context.styles.scale);
+            let brush = context.styles.dim.brush.clone();
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    output.render(move |canvas, _| {
+                        canvas.stroke_shape(
+                            placement.rect.inset(-stroke.width / 2.0).into(),
+                            stroke,
+                            brush,
+                            puri::Affine::IDENTITY,
+                        );
+                    });
+                }
+            })
+        }),
+    )
 }
 
 /// A side box whose final measurement depends on the enclosed box's span.

@@ -33,6 +33,13 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Borders are native paint decorators. `Layout::Border` and its rendering arm
+  are gone; ordinary `after` contributes above a child's output just as `before`
+  contributes below it. Both derive from the existing measured `around`
+  combinator and share native output adaptation. Border ink uses the settled
+  extent and current style, with no site/handler capability requests and no
+  change to measurement, hover, selection, or paint order.
+
 - Completion cards are native measured widgets returning `Fragment`: row ink,
   hover, click/pick, keyboard navigation, and scrolling no longer build the
   editor's `Placed` output directly. Providers remain lazy; the app supplies
@@ -155,8 +162,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 20 `progred-display`,
-161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 267 `progred`
+The affected library tests pass: 22 `measured`, 21 `progred-display`,
+161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 268 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -294,3 +301,11 @@ The seven serial release canaries, with 60 measured frames each, report source
 4.59 ms (p95 4.91 ms), picture 23.58 ms, Fidget 10.07 ms, Torus 7.74 ms,
 Tanglecube 46.53 ms, Gyroid 31.24 ms, and Cube 15.37 ms. These remain in the
 preceding runs' range; no performance improvement is claimed.
+
+The border follow-up adds two regressions, bringing the affected total to 529:
+native decoration preserves input/paint ordering and the child's extent, and
+border preparation never requests site or event capabilities. All seven release
+canaries still pass; source is 4.54 ms (p95 4.90 ms), picture 24.19 ms, Fidget
+9.67 ms, Torus 7.76 ms, Tanglecube 47.31 ms, Gyroid 31.26 ms, and Cube 16.94 ms.
+A separate Cube repeat measured 16.08 ms. Native/web and formatting checks
+pass, with only the two unchanged web menu warnings.

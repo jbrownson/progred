@@ -212,6 +212,9 @@ Click, activation, and picking likewise compose ordinary
 [native interaction functions](../display/src/widget/interaction.rs).
 `widget::before` prepares a placement continuation, which can contribute ink,
 claims, or handlers before any child; the layout interpreter only composes it.
+`widget::after` contributes after the child through the same output interface.
+The standard border is an ordinary native `after` decorator, with no border
+opcode in layout or border rendering rule in the interpreter.
 There are no click/activate/pick enum cases. Existing Grap layout constructors
 decode to these same functions. The current site's value and the host's pick
 capability are separate inputs, so an explicit pick target need not equal the

@@ -1136,7 +1136,7 @@ mod tests {
             &library.functions(),
             50,
         );
-        let Some(Layout::Border { child }) = decoded(&evaluation.result) else {
+        let Some(Layout::After { child, .. }) = decoded(&evaluation.result) else {
             panic!(
                 "the composed projection returns a border: {:?}",
                 evaluation.result
@@ -1152,7 +1152,7 @@ mod tests {
     #[test]
     fn border_wraps_any_decoded_layout() {
         let value = bordered(text_leaf("inside", vocabulary::NAME_FACE));
-        let Some(Layout::Border { child }) = decoded(&value) else {
+        let Some(Layout::After { child, .. }) = decoded(&value) else {
             panic!("border decodes");
         };
         assert!(matches!(

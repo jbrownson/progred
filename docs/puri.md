@@ -97,16 +97,18 @@ output. `Layers` supplies clipping and floater attachment, while `HasHandler`
 supplies input composition. The editor adds view ownership separately and raises
 floaters once at the frame boundary. Clips do not capture floating subtrees.
 
-`widget::before` contributes the same native outputs before an arbitrary
-child places. Its preparation function captures current inputs, then returns
-an opaque placement callback; `Layout::Before` knows neither the control nor
+`widget::before` and `widget::after` contribute the same native outputs below
+or above an arbitrary child. Their preparation functions capture current inputs,
+then return an opaque placement callback; layout knows neither the control nor
 its event policy. Click, activation, and picking are ordinary functions built
 on this combinator. Hover claims, occlusion, and optional hover feedback are
 ordinary decorators too. Generic Puri probes own settled hit geometry and
 retention; the editor adds the owning view. Insert and collapse handles request
 feedback explicitly, not through a target-type switch in the interpreter.
-Child handlers remain in front of their enclosing handlers,
-and only the chosen alternative invokes its placement callbacks.
+Interaction wrappers use `before`, keeping child handlers in front of enclosing
+handlers. `after` reverses that order when requested; borders use it to paint
+above content without installing handlers. Only the chosen alternative invokes
+its placement callbacks.
 
 `libraries::layout::on_event` is the Grap adapter over that same interface.
 It encodes events and installs one native handler; the editor supplies the
