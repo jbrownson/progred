@@ -12,7 +12,7 @@ use grap_runtime::vocabulary::FUNCTION;
 use grap_runtime::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
-use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, row};
+use progred_display::{Delim, Layout, ProjectionInput, overlay_value, row, selectable_bracket};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -120,7 +120,7 @@ fn operand<World: 'static, Hover: Clone + 'static>(
                 || (child_precedence == parent
                     && (field == vocabulary::RIGHT || parent == Precedence::Comparison)) =>
         {
-            bracket(Delim::Paren, child)
+            selectable_bracket(Delim::Paren, child)
         }
         _ => child,
     }

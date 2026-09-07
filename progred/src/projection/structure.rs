@@ -6,8 +6,8 @@ use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
 use gid::{CellId, Resolution, Step, Value, hex_string};
 use progred_display::{
-    Delim, Layout, ProjectionInput, activatable, bracket, descend, dim, id, on_activate, on_hover,
-    pickable,
+    Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover, pickable,
+    selectable_bracket,
 };
 use std::rc::Rc;
 
@@ -65,7 +65,7 @@ pub(super) fn collapsed_layout<World: 'static>(
         _ => return None,
     };
     Some(selectable(
-        bracket(delim, toggle(dim("…"), path, hooks)),
+        selectable_bracket(delim, toggle(dim("…"), path, hooks)),
         path,
         value,
         hooks,
@@ -78,7 +78,7 @@ fn cell_layout<World: 'static>(cx: &Cx, cell: CellId) -> View<World> {
         .sources
         .resolve(cell)
         .map_or(Resolution::Document, |value| value.source);
-    bracket(Delim::Paren, descend(Step::Follow(source), None, None))
+    selectable_bracket(Delim::Paren, descend(Step::Follow(source), None, None))
 }
 
 fn selectable<World: 'static>(

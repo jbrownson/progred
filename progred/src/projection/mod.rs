@@ -29,9 +29,8 @@ use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use location::Location;
 use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
-use measured::{Extent, Measured, pad, row};
+use measured::{Measured, row};
 use peniko::{Brush, Color};
-use puri::delim;
 use puri::draw::Canvas;
 use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
 use puri::geometry::Placement;
@@ -243,9 +242,14 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 .map(|(query, _)| label_query(cx, tcx, path, query, provider.as_ref(), hooks))
                 .unwrap_or_else(|| render::text(tcx, "…", &cx.styles.dim)),
         }),
-        progred_display::Layout::Widget(widget) => {
-            ChoiceLayout::fixed(native_widget(cx, tcx, path, hooks, &widget))
-        }
+        progred_display::Layout::Widget(widget) => ChoiceLayout::fixed(with_widget_context(
+            cx,
+            tcx,
+            path,
+            value,
+            hooks,
+            |context| native_fragment(widget(context)),
+        )),
         progred_display::Layout::OnClick { child, handler } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
@@ -437,19 +441,27 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             ChoiceLayout::map(inner, 0.0, move |inner| bordered(scale, brush, inner))
         }
         progred_display::Layout::Surround { left, child, right } => {
-            let gap = 2.0 * scale;
-            let reserved = side_advance(scale, &left) + side_advance(scale, &right) + 2.0 * gap;
+            let (left, right) = with_widget_context(cx, tcx, path, value, hooks, |context| {
+                (left(context), right(context))
+            });
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            let path = path.to_vec();
-            let target = value.cloned();
-            let dim = cx.styles.dim.brush.clone();
-            let select = hooks.select.clone();
-            let pick = hooks.pick.clone();
-            ChoiceLayout::map(inner, reserved, move |inner| {
-                surround_sides(scale, dim, path, target, select, pick, left, inner, right)
-            })
+            ChoiceLayout::map(
+                inner,
+                left.maximum_width + right.maximum_width,
+                move |inner| {
+                    let span = inner.extent;
+                    row(
+                        0.0,
+                        vec![
+                            native_fragment((left.measure)(span)),
+                            inner,
+                            native_fragment((right.measure)(span)),
+                        ],
+                    )
+                },
+            )
         }
         progred_display::Layout::Descend {
             step,
@@ -783,13 +795,14 @@ fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
     LineEditPresentation::new(style.size, style.brush.clone())
 }
 
-fn native_widget<C: 'static, Cv: Canvas + 'static>(
+fn with_widget_context<C: 'static, Result>(
     cx: &Cx,
     text: &mut TextCtx,
     path: &[Step],
+    value: Option<&Value>,
     hooks: &Hooks<C>,
-    widget: &progred_display::widget::Widget<C, Hover>,
-) -> Measured<Placed<C, Cv>> {
+    widget: impl FnOnce(&mut progred_display::widget::Context<'_, '_, C, Hover>) -> Result,
+) -> Result {
     let writable = !cx.source.transient() && writable_at(&cx.sources, path);
     let selected = cx.selection.filter(|selection| {
         writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
@@ -802,7 +815,7 @@ fn native_widget<C: 'static, Cv: Canvas + 'static>(
     let edit = hooks.edit_line.clone();
     let site: SharedPath = Rc::from(path);
     let edit_path = site.clone();
-    let measured = widget(&mut progred_display::widget::Context {
+    widget(&mut progred_display::widget::Context {
         text,
         styles: cx.styles,
         writable,
@@ -815,22 +828,29 @@ fn native_widget<C: 'static, Cv: Canvas + 'static>(
             .map(|(_, text)| text),
         target: Hover::Value(site.clone()),
         select: select_handler(site, hooks),
+        pick: value.map(|value| {
+            let value = value.clone();
+            let pick = hooks.pick.clone();
+            Rc::new(move |world: &mut C| pick(world, value.clone()))
+                as progred_display::ActionHandler<C>
+        }),
+        picking: |event| crate::modifiers::pick(&event.state.modifiers),
+        same_target: PartialEq::eq,
         edit: Rc::new(move |world, description, operation| {
             edit(world, &edit_path, description, operation)
         }),
         primary_edit: |event| {
             is_primary_contact(event) && !crate::modifiers::pick(&event.state.modifiers)
         },
-    });
-    placed::leaf(measured.extent, move |output, placement| {
-        output.fragment(measured::place(measured, placement));
     })
 }
 
-fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
-    match ink {
-        progred_display::Ink::Delim { delim, .. } => delim::maximum_advance(*delim, 14.0 * scale),
-    }
+fn native_fragment<C: 'static, Cv: Canvas + 'static>(
+    measured: Measured<progred_display::widget::Fragment<C, Hover>>,
+) -> Measured<Placed<C, Cv>> {
+    placed::leaf(measured.extent, move |output, placement| {
+        output.fragment(measured::place(measured, placement));
+    })
 }
 
 fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
@@ -842,27 +862,6 @@ fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
         progred_display::Face::Id => &styles.id,
         progred_display::Face::AccentWash => &styles.accent_wash,
         progred_display::Face::Ink => &styles.ink,
-    }
-}
-
-fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    brush: Brush,
-    ink: progred_display::Ink,
-    content: Extent,
-) -> Measured<Placed<C, Cv>> {
-    match ink {
-        progred_display::Ink::Delim { delim, side } => render::drawing(
-            delim::stretched(
-                delim,
-                side,
-                14.0 * scale,
-                content.ascent,
-                content.descent,
-                brush,
-            ),
-            1.0,
-        ),
     }
 }
 
@@ -886,52 +885,6 @@ fn bordered<C: 'static, Cv: Canvas + 'static>(
         }
         placed
     })
-}
-
-/// Place `left` and `right` in the side columns of `content`: same
-/// height as the child, with their width grown from that height. The
-/// display nodes paint; this only allocates and keeps the sides as
-/// handles.
-fn surround_sides<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    brush: Brush,
-    path: Path,
-    target: Option<Value>,
-    select: Rc<dyn Fn(&mut C, Path)>,
-    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    left: progred_display::Ink,
-    content: Measured<Placed<C, Cv>>,
-    right: progred_display::Ink,
-) -> Measured<Placed<C, Cv>> {
-    let extent = content.extent;
-    let gap = 2.0 * scale;
-    let path: SharedPath = Rc::from(path);
-    row(
-        0.0,
-        vec![
-            select_target_with(
-                path.clone(),
-                target.clone(),
-                select.clone(),
-                pick.clone(),
-                pad(
-                    Insets::new(0.0, 0.0, gap, 0.0),
-                    ink_leaf(scale, brush.clone(), left, extent),
-                ),
-            ),
-            content,
-            select_target_with(
-                path,
-                target,
-                select,
-                pick,
-                pad(
-                    Insets::new(gap, 0.0, 0.0, 0.0),
-                    ink_leaf(scale, brush, right, extent),
-                ),
-            ),
-        ],
-    )
 }
 
 fn placeholder_box<C: 'static, Cv: Canvas + 'static>(
@@ -1601,56 +1554,4 @@ fn atom_content<C: 'static, Cv: Canvas + 'static>(
         }
         None => fallback,
     }
-}
-
-/// An Activate-to-select target for `path` — for parts like labels
-/// and the cell star. When present, `value` is also offered to an open
-/// pending by Pick.
-fn select_target_with<C: 'static, Cv: Canvas + 'static>(
-    path: SharedPath,
-    value: Option<Value>,
-    select: Rc<dyn Fn(&mut C, Path)>,
-    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    content: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    let claimed = hover_target(path.clone(), content);
-    quiet_select_target_with(path, value, select, pick, claimed)
-}
-
-/// Name the value at `path` for the pointer over this ink, adding no
-/// action of its own — the hover half of [`select_target`], and the
-/// flat literal's delimiter dress.
-fn hover_target<C: 'static, Cv: Canvas + 'static>(
-    path: SharedPath,
-    content: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    before(content, move |p, placement| {
-        hover_claim(p, placement, Hover::Value(path.clone()));
-    })
-}
-
-/// [`select_target`] minus the pointer claim — for a container's
-/// one-line literal, whose interior air belongs to the landmark's
-/// hold and whose delimiter ink names the container through
-/// [`hover_target`].
-fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
-    path: SharedPath,
-    value: Option<Value>,
-    select: Rc<dyn Fn(&mut C, Path)>,
-    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    content: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    before(content, move |p, _| {
-        let select = select.clone();
-        let pick = pick.clone();
-        let target = path.clone();
-        let action_target = Hovered::Tree(Hover::Value(target.clone()));
-        p.activate(action_target.clone(), move |ctx| {
-            select(ctx, target.to_vec());
-            true
-        });
-        if let Some(value) = value.clone() {
-            p.pick(action_target, move |ctx| pick(ctx, value.clone()));
-        }
-    })
 }

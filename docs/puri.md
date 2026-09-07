@@ -78,7 +78,9 @@ position, occlusion, and raising remain Progred policy.
 Native widgets use `progred_display::widget::Widget`: a measurement function
 whose result places a `Fragment` of deferred ink, handlers, hover claims, and
 navigation declarations. `LineEdit` uses this path, with no control-specific
-layout constructor. `CanvasSink` is an object-safe bridge to the existing
+layout constructor. Native handlers receive the current settled hover as an
+explicit dispatch input; the host suppresses that target outside its owning view.
+`CanvasSink` is an object-safe bridge to the existing
 canvas interpreter, allowing native render closures to outlive measurement
 without fixing a rendering backend or constructing GID drawing data.
 The editor supplies the current text state and edit/selection capabilities;
@@ -179,8 +181,14 @@ use this for muted representation labels outside the editable digits.
 Puri's delimiter widget accepts a vertical span and text size and returns the
 existing `Drawing` description with its metrics. It owns minimum glyph height,
 baseline trimming, side bearings, and width growth. Progred reserves its maximum
-advance while choosing layouts, then composes the final delimiters beside the
-child and attaches selection/picking behavior.
+advance while choosing layouts. `Surround` receives opaque side widgets with
+width bounds, measures them against the chosen child's extent, and places the
+three boxes on one baseline. It knows neither delimiters nor editor actions.
+The ordinary `widget::delimiter` functions supply the ink and gap padding.
+`bracket` is inert; `selectable_bracket` explicitly composes `selectable_side`,
+which uses the same `selectable` measured-widget decorator available to other
+controls. Structural cell/list/record and expression projections opt into that
+behavior; Grap's low-level bracket layout is inert unless explicitly wrapped.
 
 `puri-widgets::panel` supplies the common fill/border painter for popup cards
 and projection borders. Colors, stroke, radius, placement, paint order, and

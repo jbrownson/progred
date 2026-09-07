@@ -196,6 +196,15 @@ Grap conversions explicitly; native controls do not round-trip through Grap.
 Completion remains a host-control request pending the same migration.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
+Delimiter handles use ordinary [side widgets](../display/src/widget/delimiter.rs).
+`Surround` lays out opaque sides around the chosen child's span; selection and
+picking are explicit `selectable_side` composition, not interpreter behavior.
+The standard record/list/cell projections request `selectable_bracket`. The
+low-level `bracket` constructor, including its Grap layout encoding, contributes
+only ink and geometry. The same settled hover drives native handler activation,
+so retained hover still selects the highlighted target rather than re-hit-testing
+the click position.
+
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)

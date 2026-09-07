@@ -52,7 +52,7 @@ pub fn list_layout<World: 'static, Hover: Clone + 'static>(
         }
         flat.push(layout.clone());
     }
-    Some(bracket(
+    Some(selectable_bracket(
         Delim::Bracket,
         alternatives([row(0.0, flat), col(0, 4.0, children)]),
     ))

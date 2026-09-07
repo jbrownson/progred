@@ -33,6 +33,16 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Delimiters are ordinary native side widgets. `Surround` now owns only the
+  baseline composition and the sides' width budgets; opaque callbacks measure
+  the two sides against the chosen child's span. The interpreter no longer
+  knows delimiter ink, document targets, or selection/picking rules.
+  `bracket` is inert, and `selectable_bracket` composes the generic `selectable`
+  measured-widget decorator through `selectable_side`. Existing structural
+  and expression projections opt in explicitly. The low-level Grap bracket
+  constructor is intentionally inert; no checked-in example relied on its
+  previous implicit selection. Native handlers now receive settled hover at
+  dispatch, respecting owning views and the existing pointer propagation order.
 - Puri handlers compose as one function over `Event`, with acceptance and an
   optional remainder. Typed registration helpers use the same composition.
   Progred's view and clipping wrappers forward this function rather than
@@ -70,9 +80,8 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Make geometric delimiters purely geometric. Attach their hover, selection,
-   and picking through explicit editor combinators with unchanged hit targets.
-   Migrate other event and control wrappers through the same interface.
+1. Migrate remaining event and control wrappers through the native widget
+   interface. Completion and its navigation/offer outputs remain host requests.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
    and project it during description; contribute navigation and interactions
    from placement continuations so discarded alternatives register nothing.
@@ -89,7 +98,7 @@ Check each slice with pure interaction/placement tests and the existing
 ## Verification
 
 The affected library tests pass: 22 `measured`, 8 `progred-display`,
-160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 261 `progred`
+160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 265 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -146,3 +155,16 @@ Generic output tests verify deferred painting, explicit hover input, navigation
 and handler outputs, nested canvas clips, and discarded layout alternatives
 contributing no placement output. Existing line interaction tests still cover
 selection defaults, conversion, undo, caret movement, and reminted callbacks.
+
+The delimiter slice adds tests for inert/selectable ink and extent equivalence,
+bounded width growth, retained-hover activation/picking, owning-view isolation,
+clipped sides contributing nothing, and arbitrary side widgets seeing only the
+chosen alternative's span. Existing cell-interior, padded-handle, and editable
+path tests pass. IoP source measured 4.12 ms (p95 4.67 ms), against the preceding
+3.87 ms checkpoint; the final serial canary run measured 3.90 ms (p95 4.09 ms).
+This is within the variation of these short runs, not a claimed speedup. The
+same serial run measured IoP picture 23.58 ms, Fidget 10.79 ms, Torus 6.67 ms,
+Tanglecube 48.38 ms, Gyroid 34.01 ms, and Cube 15.11 ms. GPU-oriented canaries
+vary more; they are not a controlled attribution of cost to this interface.
+No cache or layout-search change was introduced. Native/web checks and format
+checks pass, with only the previously noted web menu warnings.

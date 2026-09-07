@@ -34,7 +34,13 @@ fn from_fragment<C: 'static, Cv: Canvas + 'static>(
         .collect();
     placed.landmark_select = fragment.select;
     placed.handler = fragment.handler.map(|handler| {
-        Handler::from_function(move |world, event, _| handler.dispatch(world, event, &mut ()))
+        Handler::from_function(move |world, event, pointer: &mut DispatchContext<C>| {
+            let mut hovered = match &pointer.hovered {
+                Some(Hovered::Tree(target)) if !pointer.outside_view => Some(target.clone()),
+                _ => None,
+            };
+            handler.dispatch(world, event, &mut hovered)
+        })
     });
     if !fragment.renders.is_empty() {
         placed.renders.push(Box::new(move |canvas, ink| {
@@ -871,6 +877,168 @@ mod tests {
             pointer: pointer(),
             state: state_at(x, y),
         }
+    }
+
+    fn native_delimiter(
+        interactive: bool,
+        scale: f64,
+        span: Extent,
+        side: puri::delim::Side,
+    ) -> Measured<Placed<Vec<&'static str>, TestCanvas>> {
+        use progred_display::widget;
+        use std::rc::Rc;
+        let mut fonts = puri::text::FontContext::new();
+        let mut layouts = puri::text::LayoutContext::new();
+        let mut cache = puri::TextCache::default();
+        let side = widget::delimiter::side(puri::Delim::Bracket, side);
+        let side = if interactive {
+            widget::selectable_side(side)
+        } else {
+            side
+        };
+        let prepared = side(&mut widget::Context {
+            text: &mut puri::TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                cache: &mut cache,
+                scale: scale as f32,
+            },
+            styles: &widget::style::editor(scale),
+            writable: false,
+            selected: false,
+            editing: None,
+            spelling: None,
+            initial_text: &|text| puri::LineEditState::new(text),
+            target: crate::hover::Hover::Value(Rc::from([])),
+            select: Rc::new(|log: &mut Vec<&'static str>| {
+                log.push("select");
+                true
+            }),
+            pick: Some(Rc::new(|log| {
+                log.push("pick");
+                true
+            })),
+            picking: |event| crate::modifiers::pick(&event.state.modifiers),
+            same_target: PartialEq::eq,
+            edit: Rc::new(|_, _, _| false),
+            primary_edit: |_| false,
+        });
+        let native = (prepared.measure)(span);
+        assert!(native.extent.width <= prepared.maximum_width);
+        measured::leaf(native.extent, move |placement| {
+            from_fragment(measured::place(native, placement))
+        })
+    }
+
+    #[test]
+    fn delimiter_interaction_is_opt_in_without_changing_ink_or_extent() {
+        use kurbo::Shape as _;
+        for scale in [1.0, 2.0] {
+            for span in [
+                Extent::default(),
+                Extent {
+                    width: 40.0,
+                    ascent: 80.0,
+                    descent: 50.0,
+                },
+            ] {
+                for side in [puri::delim::Side::Open, puri::delim::Side::Close] {
+                    let inert = native_delimiter(false, scale, span, side);
+                    let interactive = native_delimiter(true, scale, span, side);
+                    assert_eq!(inert.extent, interactive.extent);
+                    let placement = Placement::root(inert.extent.rect_at(Point::new(20.0, 30.0)));
+                    let inert = measured::place(inert, placement);
+                    let interactive = measured::place(interactive, placement);
+                    assert!(inert.probes.is_empty() && inert.handler.is_none());
+                    assert_eq!(interactive.probes.len(), 1);
+                    assert_eq!(interactive.probes[0].placement, placement);
+                    assert!(interactive.handler.is_some());
+                    let outlines = [inert, interactive].map(|placed| {
+                        let mut canvas = TestCanvas(DrawList::new());
+                        Placed::<Vec<&str>, TestCanvas>::render(
+                            placed.renders,
+                            &mut canvas,
+                            no_ink(),
+                        );
+                        let [
+                            DrawCmd::Fill {
+                                shape: Shape::Path(path),
+                                transform,
+                                ..
+                            },
+                        ] = &canvas.0.0[..]
+                        else {
+                            panic!("delimiter outline")
+                        };
+                        let bounds = transform.transform_rect_bbox(path.bounding_box());
+                        assert!(bounds.x0 >= placement.rect.x0 && bounds.x1 <= placement.rect.x1);
+                        assert!((bounds.y0 - placement.rect.y0).abs() < 1e-6);
+                        assert!((bounds.y1 - placement.rect.y1).abs() < 1e-6);
+                        (path.clone(), *transform)
+                    });
+                    assert_eq!(outlines[0], outlines[1]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
+        let owner = Root::document();
+        let other = Root::document();
+        let measured = in_view(
+            native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Open),
+            owner.clone(),
+        );
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
+        let placed = measured::place(measured, Placement::new(rect, bounds));
+        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+        let point = Point::new(rect.x1 + 1.0, rect.center().y);
+        assert!(matches!(
+            placed.probe(point, Some(&target), 3.0),
+            Some(Claim::Extended(_))
+        ));
+        for (root, hovered, picking, expected) in [
+            (
+                Some(owner.clone()),
+                Some(target.clone()),
+                false,
+                Some("select"),
+            ),
+            (
+                Some(owner.clone()),
+                Some(target.clone()),
+                true,
+                Some("pick"),
+            ),
+            (Some(other), Some(target.clone()), false, None),
+            (Some(owner), None, false, None),
+        ] {
+            let mut event = down_at(point.x, point.y);
+            if picking {
+                event.state.modifiers =
+                    ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
+            }
+            let mut log = Vec::new();
+            let handled = placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+                &mut log,
+                &event,
+                &mut DispatchContext::new(root, hovered),
+            );
+            assert_eq!(handled, expected.is_some());
+            assert_eq!(log, expected.into_iter().collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn clipped_native_delimiters_add_no_ink_hover_or_actions() {
+        let measured = native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Close);
+        let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
+        let placed = measured::place(measured, Placement::new(rect, Rect::ZERO));
+        assert!(placed.renders.is_empty());
+        assert!(placed.probes.is_empty());
+        assert!(placed.handler.is_none());
     }
 
     fn move_at(x: f64, y: f64) -> PointerUpdate {

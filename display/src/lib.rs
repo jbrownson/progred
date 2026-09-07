@@ -46,11 +46,7 @@ pub enum Paint {
 
 pub use widget::line::{LineEdit, LineUpdate, layout as line_edit};
 
-/// A delimiter whose Puri metrics and ink depend on the enclosed span.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Ink {
-    Delim { delim: Delim, side: Side },
-}
+pub use widget::delimiter::{bracket, selectable_bracket};
 
 pub use measured::RowAlignment;
 
@@ -442,12 +438,12 @@ pub enum Layout<World, Hover> {
     Border {
         child: Box<Layout<World, Hover>>,
     },
-    /// Measure `child`, then place delimiter widgets beside its vertical
-    /// span. Their metrics include the full ink width and side bearings.
+    /// Measure `child`, then measure and place two side widgets against
+    /// its chosen span. The sides own their ink and interactions.
     Surround {
-        left: Ink,
+        left: widget::Side<World, Hover>,
         child: Box<Layout<World, Hover>>,
-        right: Ink,
+        right: widget::Side<World, Hover>,
     },
     /// Look up one step. Each omitted projection inherits the caller's
     /// default; supplied functions replace it without implicit composition.
@@ -958,29 +954,15 @@ pub fn border<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover>
 }
 
 pub fn surround<World, Hover>(
-    left: Ink,
+    left: widget::Side<World, Hover>,
     child: Layout<World, Hover>,
-    right: Ink,
+    right: widget::Side<World, Hover>,
 ) -> Layout<World, Hover> {
     Layout::Surround {
         left,
         child: Box::new(child),
         right,
     }
-}
-
-pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layout<World, Hover> {
-    surround(
-        Ink::Delim {
-            delim,
-            side: Side::Open,
-        },
-        child,
-        Ink::Delim {
-            delim,
-            side: Side::Close,
-        },
-    )
 }
 
 /// Project record-shaped fields in a caller-supplied order. The
@@ -992,7 +974,7 @@ pub struct RecordField<World, Hover> {
     pub value: Layout<World, Hover>,
 }
 
-pub fn record<'a, World, Hover: Clone>(
+pub fn record<'a, World: 'static, Hover: Clone + 'static>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
     field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
@@ -1003,7 +985,7 @@ pub fn record<'a, World, Hover: Clone>(
 /// The record layout with explicit trailing fields, such as the one
 /// pending field currently being authored. They participate in both
 /// responsive forms but not in sorting the stored fields.
-pub fn record_with<'a, World, Hover: Clone>(
+pub fn record_with<'a, World: 'static, Hover: Clone + 'static>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
     mut field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
@@ -1026,7 +1008,7 @@ pub fn record_with<'a, World, Hover: Clone>(
 
 /// Shared record geometry. Heads already include punctuation and its
 /// interaction target; trailing rows can be incomplete field editors.
-pub fn record_heads<World, Hover: Clone>(
+pub fn record_heads<World: 'static, Hover: Clone + 'static>(
     fields: impl IntoIterator<Item = RecordField<World, Hover>>,
     trailing: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
@@ -1059,7 +1041,7 @@ pub fn record_heads<World, Hover: Clone>(
         flat.push(tail.clone());
         rows.push(tail);
     }
-    bracket(
+    selectable_bracket(
         Delim::Brace,
         alternatives([row(0.0, flat), col(0, 2.0, rows)]),
     )

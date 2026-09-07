@@ -14,6 +14,7 @@ use crate::selection::{
 };
 use gid::Position;
 use gid::{Cells, Document, new_cell_id};
+use measured::Extent;
 use progred_libraries::layout as layout_data;
 use progred_libraries::{Libraries, f64, fidget, name, text};
 use puri::edit::EditCtx;
@@ -361,6 +362,9 @@ fn placed_line_description(
         initial_text: &crate::selection::line_edit,
         target: Hover::Value(Rc::from([])),
         select: Rc::new(|_| true),
+        pick: None,
+        picking: |_| false,
+        same_target: |_, _| false,
         edit: Rc::new(move |_, description, _| {
             output.replace(Some(description.clone()));
             true

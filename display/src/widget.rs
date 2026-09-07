@@ -11,6 +11,7 @@ use puri::text::{TextCtx, TextMetrics};
 use puri::{Affine, Brush, ImageData, Placement, Stroke};
 use std::rc::Rc;
 
+pub mod delimiter;
 pub mod line;
 pub mod style;
 
@@ -36,6 +37,9 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub spelling: Option<&'a str>,
     pub target: Hover,
     pub select: ActionHandler<World>,
+    pub pick: Option<ActionHandler<World>>,
+    pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
+    pub same_target: fn(&Hover, &Hover) -> bool,
     pub edit: Edit<World>,
     pub primary_edit: fn(&puri::handler::PointerButtonEvent) -> bool,
 }
@@ -46,14 +50,71 @@ pub type Widget<World, Hover> = Rc<
     ) -> Measured<Fragment<World, Hover>>,
 >;
 
+/// A side box whose final measurement depends on the enclosed box's span.
+/// Prepare borrowed inputs now; measure against the chosen child later.
+pub type Side<World, Hover> = Rc<
+    dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> MeasuredSide<World, Hover>,
+>;
+
+pub struct MeasuredSide<World, Hover> {
+    pub maximum_width: f64,
+    pub measure: Box<dyn FnOnce(Extent) -> Measured<Fragment<World, Hover>>>,
+}
+
+pub fn selectable<World: 'static, Hover: Clone + 'static>(
+    context: &Context<'_, '_, World, Hover>,
+) -> impl FnOnce(Measured<Fragment<World, Hover>>) -> Measured<Fragment<World, Hover>> + 'static {
+    let target = context.target.clone();
+    let select = context.select.clone();
+    let pick = context.pick.clone();
+    let picking = context.picking;
+    let same_target = context.same_target;
+    move |child| {
+        measured::before_into(
+            child,
+            move |placement, output: &mut Fragment<World, Hover>| {
+                if !placement.clipped_out() {
+                    output.claims.push((placement, target.clone()));
+                    output
+                        .handler()
+                        .on_pointer_down_with(move |world, event, hovered| {
+                            puri::interact::is_primary_contact(event)
+                                && hovered
+                                    .as_ref()
+                                    .is_some_and(|hovered| same_target(hovered, &target))
+                                && if picking(event) {
+                                    pick.as_ref().is_some_and(|pick| pick(world))
+                                } else {
+                                    select(world)
+                                }
+                        });
+                }
+            },
+        )
+    }
+}
+
+pub fn selectable_side<World: 'static, Hover: Clone + 'static>(
+    side: Side<World, Hover>,
+) -> Side<World, Hover> {
+    Rc::new(move |context| {
+        let side = side(context);
+        let decorate = selectable(context);
+        MeasuredSide {
+            maximum_width: side.maximum_width,
+            measure: Box::new(move |span| decorate((side.measure)(span))),
+        }
+    })
+}
+
 pub struct Fragment<World, Hover> {
     pub renders: Vec<Render<Hover>>,
-    pub handler: Option<Handler<World>>,
+    pub handler: Option<Handler<World, Option<Hover>>>,
     pub claims: Vec<(Placement, Hover)>,
     pub select: Option<Select<World>>,
 }
 
-impl<World: 'static, Hover> Output for Fragment<World, Hover> {
+impl<World: 'static, Hover: 'static> Output for Fragment<World, Hover> {
     fn empty() -> Self {
         Self {
             renders: vec![],
@@ -76,9 +137,9 @@ impl<World: 'static, Hover> Output for Fragment<World, Hover> {
     }
 }
 
-impl<World, Hover> HasHandler<World> for Fragment<World, Hover> {
-    type Input = ();
-    fn handler(&mut self) -> &mut Handler<World> {
+impl<World, Hover: 'static> HasHandler<World> for Fragment<World, Hover> {
+    type Input = Option<Hover>;
+    fn handler(&mut self) -> &mut Handler<World, Option<Hover>> {
         self.handler.get_or_insert_with(Handler::new)
     }
 }

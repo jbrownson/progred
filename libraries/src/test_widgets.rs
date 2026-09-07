@@ -3,16 +3,14 @@ use progred_display::{Layout, LineEdit, widget};
 use puri::text::{FontContext, LayoutContext, TextCache, TextCtx};
 use std::{cell::RefCell, rc::Rc};
 
-pub fn line<Hover: Default>(layout: &Layout<(), Hover>) -> Option<LineEdit> {
-    let Layout::Widget(widget) = layout else {
-        return None;
-    };
+fn with_context<Hover: Default, R>(
+    edit: widget::Edit<()>,
+    run: impl FnOnce(&mut widget::Context<'_, '_, (), Hover>) -> R,
+) -> R {
     let mut fonts = FontContext::new();
     let mut layouts = LayoutContext::new();
     let mut cache = TextCache::default();
-    let captured = Rc::new(RefCell::new(None));
-    let output = captured.clone();
-    let measured = widget(&mut widget::Context {
+    run(&mut widget::Context {
         text: &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
@@ -27,16 +25,89 @@ pub fn line<Hover: Default>(layout: &Layout<(), Hover>) -> Option<LineEdit> {
         initial_text: &|spelling| puri::LineEditState::new(spelling).with_cursor_at_end(),
         target: Hover::default(),
         select: Rc::new(|_| true),
-        edit: Rc::new(move |_, description, _| {
+        pick: None,
+        picking: |_| false,
+        same_target: |_, _| false,
+        edit,
+        primary_edit: |_| true,
+    })
+}
+
+pub fn line<Hover: Default + 'static>(layout: &Layout<(), Hover>) -> Option<LineEdit> {
+    let Layout::Widget(widget) = layout else {
+        return None;
+    };
+    let captured = Rc::new(RefCell::new(None));
+    let output = captured.clone();
+    let measured = with_context(
+        Rc::new(move |_, description, _| {
             output.replace(Some(description.clone()));
             true
         }),
-        primary_edit: |_| true,
-    });
+        |context| widget(context),
+    );
     let placement = puri::Placement::root(measured.extent.rect_at(puri::Point::ZERO));
     let placed = widget::place(measured, placement);
     placed
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()
+}
+
+pub fn assert_delimiter<Hover: Default + 'static>(
+    widget: &widget::Side<(), Hover>,
+    delim: puri::delim::Delim,
+    side: puri::delim::Side,
+) {
+    use puri::{Affine, DrawCmd, DrawList, Placement, Point};
+    let prepared = with_context(Rc::new(|_, _, _| false), |context| widget(context));
+    let measured = (prepared.measure)(Default::default());
+    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
+    let fragment = widget::place(measured, placement);
+    let mut canvas = DrawList::new();
+    for render in fragment.renders {
+        render(&mut canvas, None);
+    }
+    let mut expected = DrawList::new();
+    puri::draw::draw(
+        puri::delim::stretched(
+            delim,
+            side,
+            14.0,
+            0.0,
+            0.0,
+            widget::style::editor(1.0).dim.brush,
+        ),
+        &mut expected,
+        Affine::translate((
+            if side == puri::delim::Side::Close {
+                2.0
+            } else {
+                0.0
+            },
+            0.0,
+        )),
+        Clone::clone,
+    );
+    let (
+        [
+            DrawCmd::Fill {
+                shape: puri::Shape::Path(shape),
+                transform,
+                ..
+            },
+        ],
+        [
+            DrawCmd::Fill {
+                shape: puri::Shape::Path(wanted),
+                transform: wanted_transform,
+                ..
+            },
+        ],
+    ) = (&canvas.0[..], &expected.0[..])
+    else {
+        panic!("one delimiter outline")
+    };
+    assert_eq!(shape, wanted);
+    assert_eq!(transform, wanted_transform);
 }

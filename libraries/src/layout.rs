@@ -506,7 +506,7 @@ pub fn bordered(child: Value) -> Value {
 /// Decode a layout value into the display language, attaching the
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
-pub fn decode<World: 'static, Hover: Clone>(
+pub fn decode<World: 'static, Hover: Clone + 'static>(
     value: &Value,
     select: &ActionHandler<World>,
     hover: &Hover,
@@ -521,7 +521,7 @@ pub fn decode<World: 'static, Hover: Clone>(
     })
 }
 
-fn decode_with<World: 'static, Hover: Clone>(
+fn decode_with<World: 'static, Hover: Clone + 'static>(
     value: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Layout<World, Hover>> {
@@ -680,7 +680,7 @@ fn decode_with<World: 'static, Hover: Clone>(
     None
 }
 
-fn children<World: 'static, Hover: Clone>(
+fn children<World: 'static, Hover: Clone + 'static>(
     list: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Vec<Layout<World, Hover>>> {
@@ -903,7 +903,7 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-pub fn display<World: 'static, Hover: Clone>(
+pub fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     decode_with(input.value?, &|| input.targets.current())
@@ -1203,22 +1203,11 @@ mod tests {
             &children[1],
             Layout::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
         ));
-        let Layout::Surround {
-            left:
-                progred_display::Ink::Delim {
-                    delim: Delim::Brace,
-                    side: progred_display::Side::Open,
-                },
-            child,
-            right:
-                progred_display::Ink::Delim {
-                    delim: Delim::Brace,
-                    side: progred_display::Side::Close,
-                },
-        } = &forms[1]
-        else {
-            panic!("bracket decodes to a surround of delim ink");
+        let Layout::Surround { left, child, right } = &forms[1] else {
+            panic!("bracket decodes to side widgets around its child");
         };
+        crate::test_widgets::assert_delimiter(left, Delim::Brace, progred_display::Side::Open);
+        crate::test_widgets::assert_delimiter(right, Delim::Brace, progred_display::Side::Close);
         let Layout::Col { children, .. } = child.as_ref() else {
             panic!("col inside");
         };

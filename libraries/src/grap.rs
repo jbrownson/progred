@@ -11,8 +11,8 @@ use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
-    RecordField, ResolvedCell, activatable, alternatives, at_local, bracket, col, completion,
-    descend_local, dim, faced, hug, record_with, row, shared, slot, transient,
+    RecordField, ResolvedCell, activatable, alternatives, at_local, col, completion, descend_local,
+    dim, faced, hug, record_with, row, selectable_bracket, shared, slot, transient,
 };
 
 pub mod vocabulary {
@@ -50,7 +50,7 @@ fn declaration_cell<World: 'static, Hover: Clone + 'static>(
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
-    Some(bracket(
+    Some(selectable_bracket(
         Delim::Paren,
         descend_local(
             Step::Follow(definition.source),
@@ -1004,20 +1004,16 @@ mod tests {
         let Layout::Surround { left, child, right } = unshared(&children[1]) else {
             panic!("arguments are record-delimited");
         };
-        assert!(matches!(
+        crate::test_widgets::assert_delimiter(
             left,
-            progred_display::Ink::Delim {
-                delim: progred_display::Delim::Brace,
-                side: progred_display::Side::Open,
-            }
-        ));
-        assert!(matches!(
+            progred_display::Delim::Brace,
+            progred_display::Side::Open,
+        );
+        crate::test_widgets::assert_delimiter(
             right,
-            progred_display::Ink::Delim {
-                delim: progred_display::Delim::Brace,
-                side: progred_display::Side::Close,
-            }
-        ));
+            progred_display::Delim::Brace,
+            progred_display::Side::Close,
+        );
         let Layout::Alternatives(argument_options) = child.as_ref() else {
             panic!("arguments have responsive forms");
         };

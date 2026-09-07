@@ -2,8 +2,8 @@ use super::{one_marker, parameters, vocabulary::*};
 use crate::name;
 use gid::{CellId, Step, Value};
 use progred_display::{
-    Delim, Face, Layout, ProjectionInput, activatable, alternatives, at, bracket, col, dim, faced,
-    hug, row, shared,
+    Delim, Face, Layout, ProjectionInput, activatable, alternatives, at, col, dim, faced, hug, row,
+    selectable_bracket, shared,
 };
 
 #[cfg(test)]
@@ -43,7 +43,11 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     Some((marker, content))
 }
 
-fn operand<World, Hover>(marker: CellId, key: CellId, value: &Value) -> Layout<World, Hover> {
+fn operand<World: 'static, Hover: Clone + 'static>(
+    marker: CellId,
+    key: CellId,
+    value: &Value,
+) -> Layout<World, Hover> {
     let child = at([Step::Key(marker), Step::Key(key)], value);
     let needs_group = value
         .as_record()
@@ -56,13 +60,13 @@ fn operand<World, Hover>(marker: CellId, key: CellId, value: &Value) -> Layout<W
             _ => false,
         };
     if needs_group {
-        bracket(Delim::Paren, child)
+        selectable_bracket(Delim::Paren, child)
     } else {
         child
     }
 }
 
-fn infix<World, Hover: Clone>(
+fn infix<World: 'static, Hover: Clone + 'static>(
     marker: CellId,
     left: &Value,
     right: &Value,
@@ -77,11 +81,11 @@ fn infix<World, Hover: Clone>(
     ])
 }
 
-fn arguments<World, Hover: Clone>(
+fn arguments<World: 'static, Hover: Clone + 'static>(
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
     let children: Vec<_> = children.into_iter().map(shared).collect();
-    bracket(
+    selectable_bracket(
         Delim::Paren,
         match children.as_slice() {
             [child] => child.clone(),

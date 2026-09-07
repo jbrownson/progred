@@ -1,6 +1,94 @@
 use super::*;
 
 #[test]
+fn surrounding_widgets_receive_only_the_chosen_child_span() {
+    use progred_display::widget::{self, MeasuredSide};
+    use std::cell::RefCell;
+    let measured_spans = Rc::new(RefCell::new(Vec::new()));
+    let placed_spans = Rc::new(RefCell::new(Vec::new()));
+    let measured_log = measured_spans.clone();
+    let placed_log = placed_spans.clone();
+    let mut context = BenchContext::new();
+    context.stack.projection = Projection::new([progred_display::partial(move |input| {
+        input.value?;
+        let measured_log = measured_log.clone();
+        let placed_log = placed_log.clone();
+        let side: widget::Side<(), Hover> = Rc::new(move |_| {
+            let measured_log = measured_log.clone();
+            let placed_log = placed_log.clone();
+            MeasuredSide {
+                maximum_width: 5.0,
+                measure: Box::new(move |span| {
+                    measured_log.borrow_mut().push(span);
+                    widget::leaf(Extent { width: 5.0, ..span }, move |_, placement| {
+                        placed_log.borrow_mut().push(placement);
+                    })
+                }),
+            }
+        });
+        let box_at = |width, ascent| {
+            progred_display::Layout::Widget(Rc::new(move |_| {
+                widget::leaf(
+                    Extent {
+                        width,
+                        ascent,
+                        descent: 3.0,
+                    },
+                    |_, _| {},
+                )
+            }))
+        };
+        Some(progred_display::surround(
+            side.clone(),
+            progred_display::alternatives([box_at(100.0, 10.0), box_at(20.0, 40.0)]),
+            side,
+        ))
+    })]);
+    let doc = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    for (width, expected) in [
+        (
+            200.0,
+            Extent {
+                width: 100.0,
+                ascent: 10.0,
+                descent: 3.0,
+            },
+        ),
+        (
+            60.0,
+            Extent {
+                width: 20.0,
+                ascent: 40.0,
+                descent: 3.0,
+            },
+        ),
+    ] {
+        measured_spans.borrow_mut().clear();
+        placed_spans.borrow_mut().clear();
+        let (_, extent) =
+            context.place(&doc, None, &Annotations::default(), width, None, None, None);
+        assert_eq!(&*measured_spans.borrow(), &[expected, expected]);
+        assert_eq!(
+            extent,
+            Extent {
+                width: expected.width + 10.0,
+                ..expected
+            }
+        );
+        let placements = placed_spans.borrow();
+        assert_eq!(placements.len(), 2);
+        assert_eq!(placements[0].rect.height(), expected.height());
+        assert_eq!(
+            placements[1].rect.x0 - placements[0].rect.x1,
+            expected.width
+        );
+    }
+}
+
+#[test]
 fn decorative_and_pending_slots_share_the_active_query_frame() {
     let mut context = BenchContext::new();
     context.stack.projection = Projection::new([progred_display::partial(|input| {
