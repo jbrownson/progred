@@ -1,54 +1,40 @@
-//! The frame's second output: a `Handler` — one composed dispatch
-//! function per event kind — collected during placement. The caller
-//! retains it and dispatches events into it; because it is a pure
-//! function of the state its pass read, it is single-shot: the first
-//! handled (mutating) event spends it, and the caller mints a
-//! successor from the mutated state before the next event dispatches.
-//! Unhandled events leave it standing. Dispatch geometry therefore
-//! always matches the presented frame, and dispatches must decline on
-//! absent state for any window where mutation happens outside
-//! dispatch.
-//!
-//! Dispatches receive the caller's context `C` by `&mut` (state is
-//! passed in, never closed over) and do their effects directly. The
-//! pass itself stays read-only; all mutation happens in dispatch,
-//! after placement completes. Composition is function composition:
-//! `on_*` wraps the existing function so the newest dispatch tries
-//! first and declines fall through. Widgets gate by their own settled
-//! rects inline — there is no region registry — and a parent scopes
-//! its children with [`capture`], receiving their handler as a value
-//! (destructure it to wrap the channels) it can call, wrap with
-//! before/after behavior, transform events for, or drop.
+//! One composable function over input events. Later handlers run first;
+//! unconsumed input continues to earlier handlers. Widgets close over their
+//! description and receive caller-owned state and dispatch inputs explicitly.
 
+use std::borrow::Cow;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerUpdate};
 
-/// The part of a scroll event not accepted by this handler, plus
-/// whether this handler accepted input, independently of state changes.
+/// Acceptance is independent of whether state changed. The remainder can
+/// represent part of an input, or the entire input when it was declined.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScrollOutcome<Delta = ScrollDelta> {
-    pub remaining: Delta,
+pub struct Outcome<Remainder> {
+    pub remaining: Remainder,
     handled: bool,
 }
 
-impl<Delta> ScrollOutcome<Delta> {
-    pub fn with_remainder(delta: Delta) -> Self {
+pub type ScrollOutcome<Delta = ScrollDelta> = Outcome<Delta>;
+pub type EventOutcome<'a> = Outcome<Option<Event<'a>>>;
+
+impl<Remainder> Outcome<Remainder> {
+    pub fn with_remainder(remaining: Remainder) -> Self {
         Self {
-            remaining: delta,
+            remaining,
             handled: true,
         }
     }
 
-    pub fn unhandled(delta: Delta) -> Self {
+    pub fn unhandled(remaining: Remainder) -> Self {
         Self {
-            remaining: delta,
+            remaining,
             handled: false,
         }
     }
 
-    pub fn map<Mapped>(self, map: impl FnOnce(Delta) -> Mapped) -> ScrollOutcome<Mapped> {
-        ScrollOutcome {
+    pub fn map<Mapped>(self, map: impl FnOnce(Remainder) -> Mapped) -> Outcome<Mapped> {
+        Outcome {
             remaining: map(self.remaining),
             handled: self.handled,
         }
@@ -56,11 +42,6 @@ impl<Delta> ScrollOutcome<Delta> {
 
     pub fn handled(&self) -> bool {
         self.handled
-    }
-
-    pub fn followed_by(self, mut next: Self) -> Self {
-        next.handled |= self.handled;
-        next
     }
 }
 
@@ -90,8 +71,7 @@ impl ScrollOutcome {
     }
 }
 
-/// Text composition events, mirroring winit's `Ime` (which bypasses
-/// ui-events); the shell converts.
+/// Text composition events, mirroring winit's Ime.
 pub enum ImeEvent {
     Enabled,
     Disabled,
@@ -99,62 +79,46 @@ pub enum ImeEvent {
     Commit(String),
 }
 
-/// `P` is optional caller-owned dispatch input. Pointer starts and keys
-/// may use settled frame data without changing ordinary widgets.
-pub struct Handler<C, P = ()> {
-    pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent, &mut P) -> bool>,
-    pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
-    pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
-    pub pointer_cancel: Box<dyn Fn(&mut C, &PointerInfo) -> bool>,
-    pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
-    pub key: Box<dyn Fn(&mut C, &KeyboardEvent, &mut P) -> bool>,
-    pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
+/// Input, not editor actions. A scroll remainder may own its adjusted packet;
+/// ordinary dispatch borrows the platform packet without copying it.
+#[derive(Clone)]
+pub enum Event<'a> {
+    PointerDown(&'a PointerButtonEvent),
+    PointerMove(&'a PointerUpdate),
+    PointerUp(&'a PointerButtonEvent),
+    PointerCancel(&'a PointerInfo),
+    Scroll(Cow<'a, PointerScrollEvent>),
+    Key(&'a KeyboardEvent),
+    Ime(&'a ImeEvent),
 }
 
-impl<C, P> Default for Handler<C, P> {
-    fn default() -> Self {
-        Self {
-            pointer_down: Box::new(|_, _, _| false),
-            pointer_move: Box::new(|_, _| false),
-            pointer_up: Box::new(|_, _| false),
-            pointer_cancel: Box::new(|_, _| false),
-            scroll: Box::new(|_, event| ScrollOutcome::pass(event)),
-            key: Box::new(|_, _, _| false),
-            ime: Box::new(|_, _| false),
+impl<'a> EventOutcome<'a> {
+    pub fn decline(event: Event<'a>) -> Self {
+        Self::unhandled(Some(event))
+    }
+
+    pub fn accept() -> Self {
+        Self::with_remainder(None)
+    }
+
+    pub fn from_handled(event: Event<'a>, handled: bool) -> Self {
+        if handled {
+            Self::accept()
+        } else {
+            Self::decline(event)
         }
     }
 }
 
-/// Wrap `slot` so `dispatch` tries first and declines fall through.
-fn compose<C: 'static, E: 'static>(
-    slot: &mut Box<dyn Fn(&mut C, &E) -> bool>,
-    dispatch: impl Fn(&mut C, &E) -> bool + 'static,
-) {
-    let rest = std::mem::replace(slot, Box::new(|_, _| false));
-    *slot = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
-}
+type Dispatch<C, P> = Box<dyn for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a>>;
 
-fn compose_with<C: 'static, E: 'static, P: 'static>(
-    slot: &mut Box<dyn Fn(&mut C, &E, &mut P) -> bool>,
-    dispatch: impl Fn(&mut C, &E, &mut P) -> bool + 'static,
-) {
-    let rest = std::mem::replace(slot, Box::new(|_, _, _| false));
-    *slot =
-        Box::new(move |ctx, event, input| dispatch(ctx, event, input) || rest(ctx, event, input));
-}
+/// P is caller-owned frame data, supplied at dispatch rather than captured.
+pub struct Handler<C, P = ()>(Dispatch<C, P>);
 
-fn compose_scroll<C: 'static>(
-    slot: &mut Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
-    dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
-) {
-    let rest = std::mem::replace(slot, Box::new(|_, event| ScrollOutcome::pass(event)));
-    *slot = Box::new(move |ctx, event| {
-        let outcome = dispatch(ctx, event);
-        match outcome.event(event) {
-            Some(event) => outcome.followed_by(rest(ctx, &event)),
-            None => outcome,
-        }
-    });
+impl<C, P> Default for Handler<C, P> {
+    fn default() -> Self {
+        Self(Box::new(|_, event, _| EventOutcome::decline(event)))
+    }
 }
 
 impl<C, P> Handler<C, P> {
@@ -162,86 +126,14 @@ impl<C, P> Handler<C, P> {
         Self::default()
     }
 
-    /// Compose a dispatch in front: it tries first; on decline the
-    /// event falls through to what was already registered. A dispatch
-    /// returning `false` should leave the context unchanged.
-    pub fn on_pointer_down(
-        &mut self,
-        dispatch: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-    ) where
-        C: 'static,
-        P: 'static,
-    {
-        self.on_pointer_down_with(move |ctx, event, _| dispatch(ctx, event));
+    pub fn from_function(
+        dispatch: impl for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a> + 'static,
+    ) -> Self {
+        Self(Box::new(dispatch))
     }
 
-    /// Register with explicit caller-owned pointer dispatch context. This
-    /// composes in exactly the same order as an ordinary pointer handler.
-    pub fn on_pointer_down_with(
-        &mut self,
-        dispatch: impl Fn(&mut C, &PointerButtonEvent, &mut P) -> bool + 'static,
-    ) where
-        C: 'static,
-        P: 'static,
-    {
-        compose_with(&mut self.pointer_down, dispatch);
-    }
-
-    pub fn on_key(&mut self, dispatch: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static)
-    where
-        C: 'static,
-        P: 'static,
-    {
-        self.on_key_with(move |ctx, event, _| dispatch(ctx, event));
-    }
-
-    pub fn on_key_with(
-        &mut self,
-        dispatch: impl Fn(&mut C, &KeyboardEvent, &mut P) -> bool + 'static,
-    ) where
-        C: 'static,
-        P: 'static,
-    {
-        compose_with(&mut self.key, dispatch);
-    }
-
-    pub fn on_pointer_move(&mut self, dispatch: impl Fn(&mut C, &PointerUpdate) -> bool + 'static)
-    where
-        C: 'static,
-    {
-        compose(&mut self.pointer_move, dispatch);
-    }
-
-    pub fn on_pointer_up(
-        &mut self,
-        dispatch: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-    ) where
-        C: 'static,
-    {
-        compose(&mut self.pointer_up, dispatch);
-    }
-
-    pub fn on_pointer_cancel(&mut self, dispatch: impl Fn(&mut C, &PointerInfo) -> bool + 'static)
-    where
-        C: 'static,
-    {
-        compose(&mut self.pointer_cancel, dispatch);
-    }
-
-    pub fn on_scroll(
-        &mut self,
-        dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
-    ) where
-        C: 'static,
-    {
-        compose_scroll(&mut self.scroll, dispatch);
-    }
-
-    pub fn on_ime(&mut self, dispatch: impl Fn(&mut C, &ImeEvent) -> bool + 'static)
-    where
-        C: 'static,
-    {
-        compose(&mut self.ime, dispatch);
+    pub fn dispatch<'a>(&self, ctx: &mut C, event: Event<'a>, input: &mut P) -> EventOutcome<'a> {
+        (self.0)(ctx, event, input)
     }
 
     pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
@@ -255,25 +147,45 @@ impl<C, P> Handler<C, P> {
         &self,
         ctx: &mut C,
         event: &PointerButtonEvent,
-        pointer: &mut P,
+        input: &mut P,
     ) -> bool {
-        (self.pointer_down)(ctx, event, pointer)
+        self.dispatch(ctx, Event::PointerDown(event), input)
+            .handled()
     }
 
-    pub fn dispatch_pointer_move(&self, ctx: &mut C, event: &PointerUpdate) -> bool {
-        (self.pointer_move)(ctx, event)
+    pub fn dispatch_pointer_move(&self, ctx: &mut C, event: &PointerUpdate) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch(ctx, Event::PointerMove(event), &mut P::default())
+            .handled()
     }
 
-    pub fn dispatch_pointer_up(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool {
-        (self.pointer_up)(ctx, event)
+    pub fn dispatch_pointer_up(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch(ctx, Event::PointerUp(event), &mut P::default())
+            .handled()
     }
 
-    pub fn dispatch_pointer_cancel(&self, ctx: &mut C, event: &PointerInfo) -> bool {
-        (self.pointer_cancel)(ctx, event)
+    pub fn dispatch_pointer_cancel(&self, ctx: &mut C, event: &PointerInfo) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch(ctx, Event::PointerCancel(event), &mut P::default())
+            .handled()
     }
 
-    pub fn dispatch_scroll(&self, ctx: &mut C, event: &PointerScrollEvent) -> ScrollOutcome {
-        (self.scroll)(ctx, event)
+    pub fn dispatch_scroll<'a>(
+        &self,
+        ctx: &mut C,
+        event: &'a PointerScrollEvent,
+    ) -> EventOutcome<'a>
+    where
+        P: Default,
+    {
+        self.dispatch(ctx, Event::Scroll(Cow::Borrowed(event)), &mut P::default())
     }
 
     pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool
@@ -284,33 +196,151 @@ impl<C, P> Handler<C, P> {
     }
 
     pub fn dispatch_key_with(&self, ctx: &mut C, event: &KeyboardEvent, input: &mut P) -> bool {
-        (self.key)(ctx, event, input)
+        self.dispatch(ctx, Event::Key(event), input).handled()
     }
 
-    pub fn dispatch_ime(&self, ctx: &mut C, event: &ImeEvent) -> bool {
-        (self.ime)(ctx, event)
+    pub fn dispatch_ime(&self, ctx: &mut C, event: &ImeEvent) -> bool
+    where
+        P: Default,
+    {
+        self.dispatch(ctx, Event::Ime(event), &mut P::default())
+            .handled()
     }
 }
 
-/// Implemented by placement contexts that carry a handler, so widgets
-/// can scope their children with [`capture`].
+impl<C: 'static, P: 'static> Handler<C, P> {
+    /// Later contributions run first, in the same order as painting.
+    pub fn over(self, above: Self) -> Self {
+        Self::from_function(move |ctx, event, input| {
+            let outcome = above.dispatch(ctx, event, input);
+            match outcome.remaining {
+                Some(event) => {
+                    let next = self.dispatch(ctx, event, input);
+                    Outcome {
+                        handled: outcome.handled || next.handled,
+                        ..next
+                    }
+                }
+                None => outcome,
+            }
+        })
+    }
+
+    pub fn on(
+        &mut self,
+        dispatch: impl for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a> + 'static,
+    ) {
+        *self = std::mem::take(self).over(Self::from_function(dispatch));
+    }
+
+    pub fn on_pointer_down(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+    ) {
+        self.on_pointer_down_with(move |ctx, event, _| dispatch(ctx, event));
+    }
+
+    pub fn on_pointer_down_with(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerButtonEvent, &mut P) -> bool + 'static,
+    ) {
+        self.on(move |ctx, event, input| match event {
+            Event::PointerDown(pointer) => EventOutcome::from_handled(
+                Event::PointerDown(pointer),
+                dispatch(ctx, pointer, input),
+            ),
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_key(&mut self, dispatch: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static) {
+        self.on_key_with(move |ctx, event, _| dispatch(ctx, event));
+    }
+
+    pub fn on_key_with(
+        &mut self,
+        dispatch: impl Fn(&mut C, &KeyboardEvent, &mut P) -> bool + 'static,
+    ) {
+        self.on(move |ctx, event, input| match event {
+            Event::Key(key) => {
+                EventOutcome::from_handled(Event::Key(key), dispatch(ctx, key, input))
+            }
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_pointer_move(&mut self, dispatch: impl Fn(&mut C, &PointerUpdate) -> bool + 'static) {
+        self.on(move |ctx, event, _| match event {
+            Event::PointerMove(pointer) => {
+                EventOutcome::from_handled(Event::PointerMove(pointer), dispatch(ctx, pointer))
+            }
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_pointer_up(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+    ) {
+        self.on(move |ctx, event, _| match event {
+            Event::PointerUp(pointer) => {
+                EventOutcome::from_handled(Event::PointerUp(pointer), dispatch(ctx, pointer))
+            }
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_pointer_cancel(&mut self, dispatch: impl Fn(&mut C, &PointerInfo) -> bool + 'static) {
+        self.on(move |ctx, event, _| match event {
+            Event::PointerCancel(pointer) => {
+                EventOutcome::from_handled(Event::PointerCancel(pointer), dispatch(ctx, pointer))
+            }
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_scroll(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
+    ) {
+        self.on(move |ctx, event, _| match event {
+            Event::Scroll(scroll) => {
+                let outcome = dispatch(ctx, &scroll);
+                if outcome.remaining == ScrollOutcome::consume(&scroll).remaining {
+                    outcome.map(|_| None)
+                } else if outcome.remaining == scroll.delta {
+                    outcome.map(|_| Some(Event::Scroll(scroll)))
+                } else {
+                    let remaining = outcome.event(&scroll);
+                    outcome.map(|_| remaining.map(|event| Event::Scroll(Cow::Owned(event))))
+                }
+            }
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_ime(&mut self, dispatch: impl Fn(&mut C, &ImeEvent) -> bool + 'static) {
+        self.on(move |ctx, event, _| match event {
+            Event::Ime(ime) => EventOutcome::from_handled(Event::Ime(ime), dispatch(ctx, ime)),
+            other => EventOutcome::decline(other),
+        });
+    }
+}
+
+/// A placement output may expose its handler for widget composition.
 pub trait HasHandler<C> {
     type Input: 'static;
-
     fn handler(&mut self) -> &mut Handler<C, Self::Input>;
 }
 
 impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
     type Input = P;
-
     fn handler(&mut self) -> &mut Handler<C, P> {
         self
     }
 }
 
-/// Runs `place_children`, capturing everything it registers into a
-/// fresh handler returned as a value. The caller decides how — and
-/// whether — the captured dispatches ever run.
+/// Capture child handlers as an ordinary value which a wrapper can transform.
 pub fn capture<C, P: HasHandler<C> + ?Sized>(
     p: &mut P,
     place_children: impl FnOnce(&mut P),
@@ -408,7 +438,7 @@ mod tests {
         let mut log = Vec::new();
         let outcome = handler.dispatch_scroll(&mut log, &event);
         assert!(outcome.handled());
-        assert_eq!(outcome.remaining, ScrollDelta::LineDelta(0.0, 0.0));
+        assert!(outcome.remaining.is_none());
         assert_eq!(log, [("inner", 4.0), ("outer", 2.0)]);
     }
 
@@ -452,6 +482,142 @@ mod tests {
     }
 
     #[test]
+    fn a_generic_wrapper_forwards_every_event_and_current_input() {
+        let mut child: Handler<Vec<usize>, usize> = Handler::new();
+        child.on_key_with(|log, _, input| {
+            log.push(*input);
+            true
+        });
+        child.on_ime(|log, _| {
+            log.push(99);
+            true
+        });
+        let wrapper = Handler::from_function(move |log: &mut Vec<usize>, event, input| {
+            log.push(1);
+            let result = child.dispatch(log, event, input);
+            log.push(2);
+            result
+        });
+        let mut log = vec![];
+        assert!(wrapper.dispatch_key_with(&mut log, &KeyboardEvent::default(), &mut 7));
+        assert!(wrapper.dispatch_ime(&mut log, &ImeEvent::Commit("hello".into())));
+        assert_eq!(log, [1, 7, 2, 1, 99, 2]);
+    }
+
+    #[test]
+    fn composition_preserves_acceptance_and_the_last_remainder() {
+        let mut inner: Handler<Vec<f32>> = Handler::new();
+        inner.on_scroll(|log, event| {
+            let ScrollDelta::LineDelta(x, y) = event.delta else {
+                panic!("expected lines")
+            };
+            log.push(y);
+            ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+        });
+        let mut outer = Handler::new();
+        outer.on_scroll(|log: &mut Vec<f32>, event| {
+            let ScrollDelta::LineDelta(_, y) = event.delta else {
+                panic!("expected lines")
+            };
+            log.push(y);
+            ScrollOutcome::pass(event)
+        });
+        let mut log = vec![];
+        let event = scroll(8.0);
+        let result = outer.over(inner).dispatch_scroll(&mut log, &event);
+        assert!(result.handled());
+        assert!(matches!(result.remaining, Some(Event::Scroll(rest))
+            if rest.delta == ScrollDelta::LineDelta(0.0, 4.0)));
+        assert_eq!(log, [8.0, 4.0]);
+    }
+
+    #[test]
+    fn consumed_scroll_never_reaches_the_next_handler_even_for_zero_input() {
+        let mut handler: Handler<()> = Handler::new();
+        handler.on_scroll(|_, _| panic!("consumed input propagated"));
+        handler.on_scroll(|_, event| ScrollOutcome::consume(event));
+        for delta in [0.0, 4.0] {
+            let event = scroll(delta);
+            let result = handler.dispatch_scroll(&mut (), &event);
+            assert!(result.handled());
+            assert!(result.remaining.is_none());
+        }
+    }
+
+    #[test]
+    fn handler_composition_is_associative_and_empty_is_identity() {
+        fn contribution(id: usize) -> Handler<Vec<usize>> {
+            Handler::from_function(move |log: &mut Vec<usize>, event, _| {
+                log.push(id);
+                match event {
+                    Event::Key(_) if id == 2 => EventOutcome::accept(),
+                    other => EventOutcome::decline(other),
+                }
+            })
+        }
+        let left = contribution(1).over(contribution(2)).over(contribution(3));
+        let right = contribution(1).over(contribution(2).over(contribution(3)));
+        for handler in [left, right] {
+            let handler = Handler::new().over(handler).over(Handler::new());
+            let mut log = vec![];
+            assert!(handler.dispatch_key(&mut log, &KeyboardEvent::default()));
+            assert_eq!(log, [3, 2]);
+            log.clear();
+            assert!(!handler.dispatch_ime(&mut log, &ImeEvent::Enabled));
+            assert_eq!(log, [3, 2, 1]);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn handler_dispatch_profile() {
+        use std::{hint::black_box, time::Instant};
+        let start = Instant::now();
+        let mut handler: Handler<usize> = Handler::new();
+        for _ in 0..512 {
+            handler.on_pointer_down(|state, _| {
+                black_box(state);
+                false
+            });
+            handler.on_pointer_move(|state, _| {
+                black_box(state);
+                false
+            });
+            handler.on_pointer_up(|state, _| {
+                black_box(state);
+                false
+            });
+            handler.on_key(|state, _| {
+                black_box(state);
+                false
+            });
+            handler.on_ime(|state, _| {
+                black_box(state);
+                false
+            });
+            handler.on_scroll(|state, event| {
+                black_box(state);
+                ScrollOutcome::pass(event)
+            });
+        }
+        let build = start.elapsed();
+        let pointer = down_at(0.0, 0.0);
+        let key = KeyboardEvent::default();
+        let wheel = scroll(1.0);
+        let mut state = 0;
+        let start = Instant::now();
+        for _ in 0..1000 {
+            black_box(handler.dispatch_pointer_down(&mut state, &pointer));
+            black_box(handler.dispatch_key(&mut state, &key));
+            black_box(handler.dispatch_scroll(&mut state, &wheel));
+        }
+        eprintln!(
+            "512 widgets, 6 event registrations each: build {build:?}, dispatch {:?}/event",
+            start.elapsed() / 3000
+        );
+    }
+
+    #[test]
     fn captured_children_dispatch_through_their_wrapper() {
         let mut handler: Handler<Vec<&'static str>> = Handler::new();
         handler.on_pointer_down(gated(Rect::new(0.0, 0.0, 200.0, 200.0), |log| {
@@ -463,13 +629,9 @@ mod tests {
                 log.push("child");
             }));
         });
-        let Handler {
-            pointer_down: inner_pointer,
-            ..
-        } = inner;
         handler.on_pointer_down(move |log, event| {
             log.push("before");
-            let handled = inner_pointer(log, event, &mut ());
+            let handled = inner.dispatch_pointer_down(log, event);
             log.push("after");
             handled
         });

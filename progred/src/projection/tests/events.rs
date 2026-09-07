@@ -44,14 +44,14 @@ fn state_scroll_acceptance_does_not_depend_on_a_changed_value() {
         let outcome = placed.handler.unwrap().dispatch_scroll(&mut writes, &event);
         assert_eq!(outcome.handled(), accepts);
         assert_eq!(writes, usize::from(accepts));
-        assert_eq!(
-            outcome.remaining,
-            if accepts {
-                ScrollDelta::LineDelta(0.0, 0.0)
-            } else {
-                event.delta
+        match outcome.remaining {
+            None => assert!(accepts),
+            Some(puri::handler::Event::Scroll(remaining)) => {
+                assert!(!accepts);
+                assert_eq!(remaining.delta, event.delta);
             }
-        );
+            _ => panic!("unexpected scroll remainder"),
+        }
     }
 }
 
@@ -114,8 +114,11 @@ fn state_scroll_preserves_partial_consumption_and_units() {
         let placed = measured::place(layout, Placement::root(Rect::new(0.0, 0.0, 20.0, 30.0)));
         let outcome = placed.handler.unwrap().dispatch_scroll(&mut (), &event);
         assert!(outcome.handled());
+        let Some(puri::handler::Event::Scroll(remaining)) = outcome.remaining else {
+            panic!("expected unconsumed scroll")
+        };
         assert_eq!(
-            outcome.remaining,
+            remaining.delta,
             match delta {
                 ScrollDelta::LineDelta(..) => ScrollDelta::LineDelta(2.0, 2.0),
                 ScrollDelta::PageDelta(..) => ScrollDelta::PageDelta(2.0, 2.0),

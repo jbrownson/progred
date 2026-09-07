@@ -91,11 +91,14 @@ consumer's layout composition, not to a Puri widget's return type.
 
 ## Dispatch and hover
 
-[`Handler`](../ui/puri/src/handler.rs) composes one function per typed event
-channel. Later registrations are tried first; a declined event continues to
-the next handler. Widgets test their own geometry and receive mutable caller
-state only at dispatch. Scroll handlers can consume part of a delta and pass
-the remainder along.
+[`Handler`](../ui/puri/src/handler.rs) is one function over the input `Event`
+enum. It receives mutable caller state and explicit dispatch inputs, returning
+acceptance plus any unconsumed event. `over` tries the later contribution first
+and passes its remainder to the earlier contribution. Scroll may leave part of
+its delta; acceptance is preserved even when the next handler declines.
+The typed `on_key`, `on_scroll`, and pointer helpers are ordinary combinators
+over this interface. Wrappers forward the handler without unpacking channels.
+Widgets test their own geometry; Puri does not infer acceptance from state changes.
 
 Progred activation, picking, and raw pointer-down handlers use that same
 front-to-back chain. The dispatch context supplies the settled hover target,

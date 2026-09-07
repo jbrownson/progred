@@ -14,7 +14,7 @@ use kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
 use measured::{Extent, Measured, Output};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::handler::{Handler, HasHandler, ScrollOutcome};
+use puri::handler::{Event, EventOutcome, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::text::TextMetrics;
 use ui_events::keyboard::KeyboardEvent;
@@ -217,7 +217,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
-            (Some(base), Some(above)) => Some(handler_over(base, above)),
+            (Some(base), Some(above)) => Some(base.over(above)),
         };
         append(&mut self.descends, above.descends);
         append(&mut self.view_regions, above.view_regions);
@@ -246,14 +246,19 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         }
         if let Some(handler) = &mut self.handler {
             let root = root.clone();
-            let dispatch = std::mem::replace(&mut handler.pointer_down, Box::new(|_, _, _| false));
-            handler.pointer_down = Box::new(move |ctx, event, pointer| {
-                let outside = pointer.outside_view;
-                pointer.outside_view = pointer.root.as_ref() != Some(&root);
-                let handled = dispatch(ctx, event, pointer);
-                pointer.outside_view = outside;
-                handled
-            });
+            let inner = std::mem::take(handler);
+            *handler =
+                Handler::from_function(move |ctx, event, pointer: &mut DispatchContext<C>| {
+                    if matches!(event, Event::PointerDown(_)) {
+                        let outside = pointer.outside_view;
+                        pointer.outside_view = pointer.root.as_ref() != Some(&root);
+                        let outcome = inner.dispatch(ctx, event, pointer);
+                        pointer.outside_view = outside;
+                        outcome
+                    } else {
+                        inner.dispatch(ctx, event, pointer)
+                    }
+                });
         }
         for floater in &mut self.floaters {
             floater.root_navigation(root);
@@ -325,22 +330,6 @@ impl<C: 'static, Cv> Builder<'_, C, Cv> {
     pub fn select_landmark(&mut self, action: crate::navigate::Select<C>) {
         self.placed.landmark_select = Some(action);
     }
-}
-
-/// Stack `above`'s dispatch over `base`'s: above tries first, declines
-/// fall through — placement order as precedence, same as paint.
-fn handler_over<C: 'static>(
-    mut base: Handler<C, DispatchContext<C>>,
-    above: Handler<C, DispatchContext<C>>,
-) -> Handler<C, DispatchContext<C>> {
-    base.on_pointer_down_with(above.pointer_down);
-    base.on_pointer_move(above.pointer_move);
-    base.on_pointer_up(above.pointer_up);
-    base.on_pointer_cancel(above.pointer_cancel);
-    base.on_scroll(above.scroll);
-    base.on_key_with(above.key);
-    base.on_ime(above.ime);
-    base
 }
 
 /// The leaf-construction context: today's placement-pass interface,
@@ -749,35 +738,18 @@ fn gate_starts<C: 'static>(
     child: Handler<C, DispatchContext<C>>,
     placement: Placement,
 ) -> Handler<C, DispatchContext<C>> {
-    let Handler {
-        pointer_down,
-        pointer_move,
-        pointer_up,
-        pointer_cancel,
-        scroll,
-        key,
-        ime,
-    } = child;
-    let mut gated = Handler::new();
-    if !placement.clipped_out() {
-        gated.on_pointer_down_with(move |ctx, event: &PointerButtonEvent, pointer| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && pointer_down(ctx, event, pointer)
-        });
-        gated.on_scroll(move |ctx, event| {
-            if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
-                scroll(ctx, event)
-            } else {
-                ScrollOutcome::pass(event)
-            }
-        });
-    }
-    gated.on_pointer_move(pointer_move);
-    gated.on_pointer_up(pointer_up);
-    gated.on_pointer_cancel(pointer_cancel);
-    gated.on_key_with(key);
-    gated.on_ime(ime);
-    gated
+    Handler::from_function(move |ctx, event, input| {
+        let position = match &event {
+            Event::PointerDown(event) => Some(event.state.position),
+            Event::Scroll(event) => Some(event.state.position),
+            _ => None,
+        };
+        if position.is_some_and(|point| !placement.contains(Point::new(point.x, point.y))) {
+            EventOutcome::decline(event)
+        } else {
+            child.dispatch(ctx, event, input)
+        }
+    })
 }
 
 pub fn metrics_extent(metrics: TextMetrics) -> Extent {

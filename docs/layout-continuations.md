@@ -1,6 +1,6 @@
 # Layout continuation cleanup
 
-Implementation checkpoint, 2026-09-06. The direction is agreed; the remaining
+Implementation checkpoint, 2026-09-07. The direction is agreed; the remaining
 steps below are not yet implemented.
 
 ## Boundary
@@ -23,8 +23,21 @@ Recover that boundary, not the Clay algorithm. Preserve the current baseline
 boxes, ordered alternatives, within-frame sharing, and explicit projection
 scopes. Do not reintroduce an implicit ambient projection or cross-frame cache.
 
+The sibling `puri-roc` reference reinforces this: `package/Frame.roc` combines
+placement output with a handler, `package/Handler.roc` composes one function over
+input events, and `package/ScrollView.roc` is an ordinary widget wrapping a child
+placement continuation. Its Roclay bridge inserts widgets as leaves and wraps
+them with `around`, not widget-specific layout constructors. Keep Progred's
+separate settled-geometry hover pass; the older prototypes are references for
+composition, not replacements for that stage.
+
 ## Done in this checkpoint
 
+- Puri handlers compose as one function over `Event`, with acceptance and an
+  optional remainder. Typed registration helpers use the same composition.
+  Progred's view and clipping wrappers forward this function rather than
+  reconstructing seven channels. Clipping still gates starts and scroll, not
+  active motion/release or keyboard/IME. Hover and rendering stages are unchanged.
 - Layout's GID traversal descriptions now use the path library, including list
   elements and source-qualified follows. The duplicate encoding is removed.
 - State-scroll handlers use the same partial-consumption `ScrollOutcome` as
@@ -94,3 +107,22 @@ This is a regression check, not evidence of a speedup from moving code. The
 selection algorithm is unchanged and the short runs have ordinary timing
 variation. These are headless frame-to-DrawList measurements under the build
 sandbox, not GPU presentation or interactive frame-rate measurements.
+
+The unified-handler slice was checked separately against its immediate baseline:
+
+| Workload | Before | Unified handler |
+| --- | ---: | ---: |
+| IoP source | 4.19 ms | 3.70 ms |
+| IoP picture | 24.68 ms | 24.57 ms |
+| Fidget orbit | 10.43 ms | 9.21 ms |
+| Torus | 8.43 ms | 8.07 ms |
+| Tanglecube | 51.51 ms | 46.69 ms |
+| Gyroid | 32.29 ms | 30.47 ms |
+| Fidget cube | 15.62 ms | 14.24 ms |
+
+No whole-frame regression appeared. A separate synthetic full traversal of
+512 widgets with six event registrations each took approximately 57 µs/event,
+versus 7 µs for the old separate-channel handler. A unified chain visits
+unrelated event registrations too. This is a deliberate interface tradeoff,
+not a dispatch speedup; the absolute cost is small against these frame workloads.
+The opt-in `puri` test `handler_dispatch_profile` retains that check.
