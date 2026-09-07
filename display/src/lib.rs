@@ -111,14 +111,22 @@ pub type StateDragGesture = Box<dyn FnMut(StateDragEvent, &[StateDragEvent]) -> 
 pub type StateDragHandler = Rc<dyn Fn() -> StateDragGesture>;
 
 /// Scroll displacement over a projection-local control, normalized to
-/// logical pixels by the host. Returning `None` declines the event.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// logical pixels by the host. The handler returns the unconsumed
+/// displacement using the same contract as Puri's scroll containers.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct StateScrollEvent {
     pub delta_x: f64,
     pub delta_y: f64,
 }
 
-pub type StateScrollHandler = Rc<dyn Fn(StateScrollEvent) -> Option<Value>>;
+pub type StateScrollHandler = Rc<
+    dyn Fn(
+        StateScrollEvent,
+    ) -> (
+        Option<Value>,
+        puri::handler::ScrollOutcome<StateScrollEvent>,
+    ),
+>;
 
 /// A position inside a continuous two-dimensional control, normalized
 /// to its settled rectangle. The host owns pointer capture and writes
@@ -404,8 +412,8 @@ pub enum Layout<World, Hover> {
         on_press: ActionHandler<World>,
         handler: StateDragHandler,
     },
-    /// A scroll whose result replaces this projection site's annotation
-    /// value. Unlike a document scroll container, it may decline.
+    /// A scroll handler with an optional annotation update. Unconsumed
+    /// displacement propagates to enclosing handlers.
     OnStateScroll {
         child: Box<Layout<World, Hover>>,
         handler: StateScrollHandler,

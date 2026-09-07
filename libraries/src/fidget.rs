@@ -602,8 +602,23 @@ fn zoom_handler(state: Option<&Value>) -> progred_display::StateScrollHandler {
     let state = state.cloned();
     let initial = camera(state.as_ref());
     Rc::new(move |event| {
-        let zoom = (initial.zoom * (event.delta_y as f32 * 0.0025).exp()).clamp(0.05, 20.0);
-        (zoom != initial.zoom).then(|| with_camera(state.as_ref(), Camera { zoom, ..initial }))
+        let requested = initial.zoom * (event.delta_y as f32 * 0.0025).exp();
+        let zoom = requested.clamp(0.05, 20.0);
+        if zoom == initial.zoom {
+            (None, puri::handler::ScrollOutcome::unhandled(event))
+        } else {
+            (
+                Some(with_camera(state.as_ref(), Camera { zoom, ..initial })),
+                puri::handler::ScrollOutcome::with_remainder(progred_display::StateScrollEvent {
+                    delta_x: event.delta_x,
+                    delta_y: if zoom == requested {
+                        0.0
+                    } else {
+                        event.delta_y - (f64::from(zoom) / f64::from(initial.zoom)).ln() / 0.0025
+                    },
+                }),
+            )
+        }
     })
 }
 
@@ -1390,6 +1405,7 @@ mod tests {
             delta_x: 0.0,
             delta_y: 100.0,
         })
+        .0
         .expect("vertical scroll zooms");
         assert!((camera(Some(&state)).zoom - 0.25_f32.exp()).abs() < 0.0001);
     }
@@ -1429,6 +1445,7 @@ mod tests {
                 delta_x: 10.0,
                 delta_y: 0.0,
             })
+            .0
             .is_none()
         );
     }
@@ -1448,6 +1465,7 @@ mod tests {
                     delta_x: 0.0,
                     delta_y,
                 })
+                .0
                 .is_none()
             );
             assert!(
@@ -1455,9 +1473,38 @@ mod tests {
                     delta_x: 0.0,
                     delta_y: -delta_y,
                 })
+                .0
                 .is_some()
             );
         }
+    }
+
+    #[test]
+    fn camera_zoom_passes_unused_scroll_to_its_parent() {
+        for (delta_y, limit) in [(2000.0, 20.0), (-2000.0, 0.05)] {
+            let (state, outcome) = zoom_handler(None)(progred_display::StateScrollEvent {
+                delta_x: 8.0,
+                delta_y,
+            });
+            let zoom = camera(state.as_ref()).zoom;
+            assert_eq!(zoom, limit);
+            assert!(outcome.handled());
+            assert_eq!(outcome.remaining.delta_x, 8.0);
+            assert_eq!(outcome.remaining.delta_y.signum(), delta_y.signum());
+            let consumed = delta_y - outcome.remaining.delta_y;
+            assert!(((consumed * 0.0025).exp() - f64::from(zoom)).abs() < 0.0001);
+        }
+        let (_, outcome) = zoom_handler(None)(progred_display::StateScrollEvent {
+            delta_x: 8.0,
+            delta_y: 10.0,
+        });
+        assert_eq!(
+            outcome.remaining,
+            progred_display::StateScrollEvent {
+                delta_x: 8.0,
+                delta_y: 0.0,
+            }
+        );
     }
 
     struct NoEval;

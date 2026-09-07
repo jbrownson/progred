@@ -22,7 +22,16 @@ fn state_scroll_acceptance_does_not_depend_on_a_changed_value() {
         );
         let layout = events::realize_state_scroll(
             vec![],
-            Rc::new(move |_| accepts.then(|| Value::record([]))),
+            Rc::new(move |event| {
+                (
+                    accepts.then(|| Value::record([])),
+                    if accepts {
+                        puri::handler::ScrollOutcome::with_remainder(Default::default())
+                    } else {
+                        puri::handler::ScrollOutcome::unhandled(event)
+                    },
+                )
+            }),
             Rc::new(|writes, _, _| {
                 *writes += 1;
                 false
@@ -41,6 +50,76 @@ fn state_scroll_acceptance_does_not_depend_on_a_changed_value() {
                 ScrollDelta::LineDelta(0.0, 0.0)
             } else {
                 event.delta
+            }
+        );
+    }
+}
+
+#[test]
+fn state_scroll_preserves_partial_consumption_and_units() {
+    use progred_display::StateScrollEvent;
+    use puri::handler::ScrollOutcome;
+
+    for delta in [
+        ScrollDelta::LineDelta(2.0, 4.0),
+        ScrollDelta::PageDelta(2.0, 4.0),
+        ScrollDelta::PixelDelta((2.0, 4.0).into()),
+    ] {
+        let event = PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState::default(),
+            delta,
+        };
+        let expected = match delta {
+            ScrollDelta::LineDelta(..) => StateScrollEvent {
+                delta_x: 80.0,
+                delta_y: 160.0,
+            },
+            ScrollDelta::PageDelta(..) => StateScrollEvent {
+                delta_x: 20.0,
+                delta_y: 60.0,
+            },
+            ScrollDelta::PixelDelta(..) => StateScrollEvent {
+                delta_x: 1.0,
+                delta_y: 2.0,
+            },
+        };
+        let layout = events::realize_state_scroll(
+            vec![],
+            Rc::new(move |input| {
+                assert_eq!(input, expected);
+                (
+                    None,
+                    ScrollOutcome::with_remainder(StateScrollEvent {
+                        delta_x: input.delta_x,
+                        delta_y: input.delta_y / 2.0,
+                    }),
+                )
+            }),
+            Rc::new(|_: &mut (), _, _| panic!("acceptance does not require a state write")),
+            2.0,
+            leaf::<(), crate::frame::Paint>(
+                Extent {
+                    width: 20.0,
+                    ascent: 15.0,
+                    descent: 15.0,
+                },
+                |_, _| {},
+            ),
+        );
+        let placed = measured::place(layout, Placement::root(Rect::new(0.0, 0.0, 20.0, 30.0)));
+        let outcome = placed.handler.unwrap().dispatch_scroll(&mut (), &event);
+        assert!(outcome.handled());
+        assert_eq!(
+            outcome.remaining,
+            match delta {
+                ScrollDelta::LineDelta(..) => ScrollDelta::LineDelta(2.0, 2.0),
+                ScrollDelta::PageDelta(..) => ScrollDelta::PageDelta(2.0, 2.0),
+                ScrollDelta::PixelDelta(..) => ScrollDelta::PixelDelta((2.0, 2.0).into()),
             }
         );
     }

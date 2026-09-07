@@ -27,9 +27,10 @@ scopes. Do not reintroduce an implicit ambient projection or cross-frame cache.
 
 - Layout's GID traversal descriptions now use the path library, including list
   elements and source-qualified follows. The duplicate encoding is removed.
-- A state-scroll handler's `Some(state)` accepts the event even if the state is
-  unchanged. Fidget explicitly declines outward zoom at its limits. Ordinary
-  scroll containers already pass unused delta through `ScrollOutcome`.
+- State-scroll handlers use the same partial-consumption `ScrollOutcome` as
+  ordinary scroll containers, independent of whether they update state. The
+  adapter converts the remainder back to the incoming units. Fidget passes
+  horizontal scrolling and any displacement beyond its zoom limits outward.
 - Ordered choice resolution lives in `measured::choices`, generic over placement
   output. Its builder owns slot bookkeeping; popover policy remains outside it.
   Placement tests cover chosen alternatives, shared children, clipping,
@@ -59,9 +60,7 @@ scopes. Do not reintroduce an implicit ambient projection or cross-frame cache.
    Do not retain a compatibility interpreter or replace each variant with an
    equivalent method on one giant host interface.
 
-The current state-scroll adapter remains all-or-nothing. When migrating its
-handler boundary, use the existing partial-consumption contract rather than
-inventing another scrolling protocol. Completion ranking remains independently
+Completion ranking remains independently
 [deferred](deferred.md#completion-ranking).
 
 Check each slice with pure interaction/placement tests and the existing
@@ -70,7 +69,9 @@ Check each slice with pure interaction/placement tests and the existing
 ## Verification
 
 The affected library tests pass: 22 `measured`, 5 `progred-display`,
-159 `progred-libraries`, 47 `puri`, and 260 `progred` (seven opt-in profiles excluded).
+160 `progred-libraries`, 47 `puri`, and 261 `progred` (seven opt-in profiles excluded).
+Scroll regressions cover acceptance without writes, pixel/line/page unit
+round-tripping, and unused input at the camera's zoom limits.
 Line-control regressions cover a different conversion after reminting, no
 conversion on caret movement, and native/Grap conversion equivalence for text,
 blob, f32, f64, u64, and color, including invalid spellings and extra metadata.

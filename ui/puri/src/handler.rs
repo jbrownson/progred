@@ -25,26 +25,48 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerUpdate};
 
 /// The part of a scroll event not accepted by this handler, plus
-/// whether accepting any part changed its context.
+/// whether this handler accepted input, independently of state changes.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScrollOutcome {
-    pub remaining: ScrollDelta,
+pub struct ScrollOutcome<Delta = ScrollDelta> {
+    pub remaining: Delta,
     handled: bool,
 }
 
-impl ScrollOutcome {
-    pub fn with_remainder(delta: ScrollDelta) -> Self {
+impl<Delta> ScrollOutcome<Delta> {
+    pub fn with_remainder(delta: Delta) -> Self {
         Self {
             remaining: delta,
             handled: true,
         }
     }
 
-    pub fn pass(event: &PointerScrollEvent) -> Self {
+    pub fn unhandled(delta: Delta) -> Self {
         Self {
-            remaining: event.delta,
+            remaining: delta,
             handled: false,
         }
+    }
+
+    pub fn map<Mapped>(self, map: impl FnOnce(Delta) -> Mapped) -> ScrollOutcome<Mapped> {
+        ScrollOutcome {
+            remaining: map(self.remaining),
+            handled: self.handled,
+        }
+    }
+
+    pub fn handled(&self) -> bool {
+        self.handled
+    }
+
+    pub fn followed_by(self, mut next: Self) -> Self {
+        next.handled |= self.handled;
+        next
+    }
+}
+
+impl ScrollOutcome {
+    pub fn pass(event: &PointerScrollEvent) -> Self {
+        Self::unhandled(event.delta)
     }
 
     pub fn consume(event: &PointerScrollEvent) -> Self {
@@ -53,10 +75,6 @@ impl ScrollOutcome {
             ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(0.0, 0.0),
             ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(Default::default()),
         })
-    }
-
-    pub fn handled(self) -> bool {
-        self.handled
     }
 
     pub fn event(self, original: &PointerScrollEvent) -> Option<PointerScrollEvent> {
@@ -69,11 +87,6 @@ impl ScrollOutcome {
             delta: self.remaining,
             state: original.state.clone(),
         })
-    }
-
-    pub fn followed_by(self, mut next: Self) -> Self {
-        next.handled |= self.handled;
-        next
     }
 }
 
