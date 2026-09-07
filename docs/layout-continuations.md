@@ -33,6 +33,17 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Native preparation keeps document-site state and editing capabilities behind
+  an explicit request. Inert widgets and pointer/hover wrappers do not resolve
+  a path or construct text-editing callbacks. Prepared text controls, delimiters,
+  and empty outlines retain whole-widget render callbacks; `Fragment` no longer
+  implements Canvas by recording one closure per operation.
+- Hover claims, occlusion, and hover feedback are ordinary native decorators.
+  `OnHover` is removed. Puri owns identity-parametric settled hover probes; the
+  editor adds owning-view scope without duplicating the probe policy. Insert
+  and collapse handles explicitly request their wash rather than letting the
+  interpreter infer it from their target type. `EmptySlot` is removed too;
+  `slot` and pending views use the same native empty-outline widget.
 - Click, activation, and picking are ordinary native interaction functions,
   not Layout variants or app interpreter cases. One generic `widget::before`
   prepares a placement callback returning the same native outputs as a leaf;
@@ -87,7 +98,7 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Migrate hover, Grap-event, gesture, and remaining control wrappers through
+1. Migrate Grap-event, gesture, and remaining control wrappers through
    the native widget interface. Completion and its navigation/offer outputs
    remain host requests.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
@@ -105,8 +116,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 10 `progred-display`,
-160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 266 `progred`
+The affected library tests pass: 22 `measured`, 14 `progred-display`,
+160 `progred-libraries`, 52 `puri`, 3 `puri-widgets`, and 266 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -186,3 +197,11 @@ measured IoP source 4.05 ms (p95 4.20 ms), IoP picture 22.83 ms, Fidget 10.01 ms
 Torus 6.81 ms, Tanglecube 45.82 ms, Gyroid 31.71 ms, and Cube 13.91 ms. Source
 is slightly above the preceding 3.90 ms checkpoint; this interface change is
 not a performance optimization. No caching or event-relevance rules were added.
+
+The native hover/empty-outline and render-granularity slice measured IoP source
+4.15 ms (p95 4.32 ms), against 4.05 ms (p95 4.20 ms). The other medians were
+IoP picture 22.56 ms, Fidget 9.28 ms, Torus 7.14 ms, Tanglecube 46.64 ms, Gyroid
+30.84 ms, and Cube 14.59 ms. Tests cover per-widget deferred drawing, inert
+wrappers never requesting site state, independent hover claims and feedback,
+mapped retaining/exact/dynamic/occluding probes, clipping, and releases passing
+occluders. These are regression checks, not a claimed speedup.

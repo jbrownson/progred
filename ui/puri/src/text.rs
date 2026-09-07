@@ -2,7 +2,7 @@
 //! Styles are in logical units; metrics come out in physical pixels
 //! via the context's display scale.
 
-use crate::draw::{Canvas, Glyph, GlyphRun};
+use crate::draw::{CanvasSink, Glyph, GlyphRun};
 use crate::geometry::Placement;
 use kurbo::{Affine, Line, Point, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
@@ -100,7 +100,7 @@ impl Text {
         self.metrics
     }
 
-    pub fn place(self, canvas: &mut impl Canvas, placement: Placement) {
+    pub fn place(self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
         draw_layout(
             canvas,
             &self.layout,
@@ -226,7 +226,11 @@ fn measured_text(layout: Rc<Layout<Brush>>, include_trailing_whitespace: bool) -
     Text { layout, metrics }
 }
 
-pub fn draw_layout(canvas: &mut impl Canvas, layout: &Layout<Brush>, transform: Affine) {
+pub fn draw_layout(
+    canvas: &mut (impl CanvasSink + ?Sized),
+    layout: &Layout<Brush>,
+    transform: Affine,
+) {
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
@@ -238,11 +242,12 @@ pub fn draw_layout(canvas: &mut impl Canvas, layout: &Layout<Brush>, transform: 
                 let offset = underline.offset.unwrap_or(run_metrics.underline_offset);
                 let width = underline.size.unwrap_or(run_metrics.underline_size);
                 let y = glyph_run.baseline() - offset + width / 2.0;
-                canvas.stroke(
+                canvas.stroke_shape(
                     Line::new(
                         (glyph_run.offset() as f64, y as f64),
                         ((glyph_run.offset() + glyph_run.advance()) as f64, y as f64),
-                    ),
+                    )
+                    .into(),
                     Stroke::new(width.into()),
                     underline.brush.clone(),
                     transform,
@@ -255,7 +260,7 @@ pub fn draw_layout(canvas: &mut impl Canvas, layout: &Layout<Brush>, transform: 
                 .synthesis()
                 .skew()
                 .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0));
-            canvas.glyph_run(GlyphRun {
+            canvas.draw_glyphs(GlyphRun {
                 font: run.font().clone(),
                 size: run.font_size(),
                 glyphs: glyph_run

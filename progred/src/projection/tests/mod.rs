@@ -5,6 +5,7 @@ use crate::completion::{Commit, Entry, Offers};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::navigate::{projected_name_owner, step_selection};
+use crate::placed::leaf;
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
 use crate::selection::{
@@ -14,6 +15,7 @@ use crate::selection::{
 };
 use gid::Position;
 use gid::{Cells, Document, new_cell_id};
+use kurbo::Rect;
 use measured::Extent;
 use progred_libraries::layout as layout_data;
 use progred_libraries::{Libraries, f64, fidget, name, text};
@@ -355,21 +357,26 @@ fn placed_line_description(
             scale: 1.0,
         },
         styles: &crate::styles::editor(1.0),
-        writable: true,
-        selected: true,
-        editing: None,
-        spelling: None,
-        initial_text: &crate::selection::line_edit,
-        target: Hover::Value(Rc::from([])),
-        value: None,
-        select: Rc::new(|_| true),
+        site: &|| {
+            let output = output.clone();
+            progred_display::widget::Site {
+                writable: true,
+                selected: true,
+                editing: None,
+                spelling: None,
+                initial_text: &crate::selection::line_edit,
+                target: Hover::Value(Rc::from([])),
+                value: None,
+                select: Rc::new(|_| true),
+                edit: Rc::new(move |_, description, _| {
+                    output.replace(Some(description.clone()));
+                    true
+                }),
+            }
+        },
         pick: Rc::new(|_, _| false),
         picking: |_| false,
         same_target: |_, _| false,
-        edit: Rc::new(move |_, description, _| {
-            output.replace(Some(description.clone()));
-            true
-        }),
         primary_edit: |_| true,
     });
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));

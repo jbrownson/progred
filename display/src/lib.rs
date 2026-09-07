@@ -347,7 +347,6 @@ pub enum Layout<World, Hover> {
     /// An ordinary native measurement program, producing opaque placement output.
     Widget(widget::Widget<World, Hover>),
     /// An inert empty text frame, measured with the host's text style.
-    EmptySlot,
     /// Add ordinary placement outputs before a child, without changing its geometry.
     Before {
         child: Box<Layout<World, Hover>>,
@@ -383,10 +382,6 @@ pub enum Layout<World, Hover> {
     OnPoint {
         child: Box<Layout<World, Hover>>,
         handler: PointHandler,
-    },
-    OnHover {
-        child: Box<Layout<World, Hover>>,
-        hover: Option<Hover>,
     },
     Row {
         alignment: RowAlignment,
@@ -485,7 +480,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 provider: provider.clone(),
             },
             Self::Widget(widget) => Self::Widget(widget.clone()),
-            Self::EmptySlot => Self::EmptySlot,
             Self::Before { child, before } => Self::Before {
                 child: child.clone(),
                 before: before.clone(),
@@ -521,10 +515,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::OnPoint { child, handler } => Self::OnPoint {
                 child: child.clone(),
                 handler: handler.clone(),
-            },
-            Self::OnHover { child, hover } => Self::OnHover {
-                child: child.clone(),
-                hover: hover.clone(),
             },
             Self::Row {
                 alignment,
@@ -733,14 +723,17 @@ pub fn completion<World, Hover>(
     Layout::Completion { kind, provider }
 }
 
-pub fn slot<World, Hover>() -> Layout<World, Hover> {
-    Layout::EmptySlot
+pub fn slot<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
+    Layout::Widget(Rc::new(|context| {
+        widget::empty(context.text, context.styles)
+    }))
 }
 
 pub fn leaf<World, Hover>(leaf: Leaf<Paint>) -> Layout<World, Hover> {
     Layout::Leaf(leaf)
 }
 
+pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, on_click, pickable};
 
 pub fn activatable<World: 'static, Hover: Clone + 'static>(
@@ -801,20 +794,6 @@ pub fn on_point<World, Hover>(
     Layout::OnPoint {
         child: Box::new(child),
         handler,
-    }
-}
-
-pub fn on_hover<World, Hover>(child: Layout<World, Hover>, hover: Hover) -> Layout<World, Hover> {
-    Layout::OnHover {
-        child: Box::new(child),
-        hover: Some(hover),
-    }
-}
-
-pub fn block_hover<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover> {
-    Layout::OnHover {
-        child: Box::new(child),
-        hover: None,
     }
 }
 
@@ -1153,12 +1132,12 @@ mod tests {
     fn empty_partial_composition_is_an_identity() {
         let empty = compose_partials([]);
         assert!(run_partial(&empty).is_none());
-        let success = partial(|_| Some(Layout::EmptySlot));
+        let success = partial(|_| Some(slot()));
         for projection in [
             compose_partials([empty.clone(), success.clone()]),
             compose_partials([success, empty]),
         ] {
-            assert!(matches!(run_partial(&projection), Some(Layout::EmptySlot)));
+            assert!(run_partial(&projection).is_some());
         }
     }
 
@@ -1169,7 +1148,7 @@ mod tests {
             let visited = visited.clone();
             partial(move |_| {
                 visited.borrow_mut().push(index);
-                succeeds.then_some(Layout::EmptySlot)
+                succeeds.then(slot)
             })
         };
         let first = projection(1, false);
@@ -1190,7 +1169,7 @@ mod tests {
             compose_partials([first, compose_partials([second, third, unreachable])]),
         ] {
             visited.borrow_mut().clear();
-            assert!(matches!(run_partial(&combined), Some(Layout::EmptySlot)));
+            assert!(run_partial(&combined).is_some());
             assert_eq!(*visited.borrow(), [1, 2, 3]);
         }
     }

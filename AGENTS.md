@@ -72,6 +72,7 @@ EOF
 - Masonry is a quarry, not a foundation: vendor high-value files (text input first) with attribution and purify in place; rewrite trivial widgets; never inherit its tree, pods, or ctx protocol.
 - Keep the Puri runtime separate from widget catalogs. Reusable composed widgets belong in the sibling `puri-widgets` package and remain pure consumers of Puri; Progred owns document adaptation, layout, and popup policy.
 - Extend Puri only as Progred needs it.
+- Native widget preparation requests document-site state only when needed; inert decorators must not construct editing state or capabilities. Defer drawing at widget granularity, then call the canvas directly after hover settles. Do not implement the placement output as a Canvas that allocates a closure for every drawing operation. Hover claims and visual feedback are independent, explicitly composed decorators.
 
 ## Key Design Rules
 

@@ -20,13 +20,15 @@ pub fn side<World: 'static, Hover: 'static>(delim: Delim, side: delim::Side) -> 
                     ascent: drawing.ascent,
                     descent: drawing.descent,
                 };
-                let ink = leaf(extent, move |canvas, placement| {
-                    puri::draw::draw(
-                        drawing,
-                        canvas,
-                        Affine::translate((placement.rect.x0, placement.rect.y0)),
-                        Clone::clone,
-                    );
+                let ink = leaf(extent, move |output, placement| {
+                    output.render(move |canvas, _| {
+                        puri::draw::draw(
+                            drawing,
+                            canvas,
+                            Affine::translate((placement.rect.x0, placement.rect.y0)),
+                            Clone::clone,
+                        )
+                    });
                 });
                 pad(
                     match side {

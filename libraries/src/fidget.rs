@@ -911,7 +911,7 @@ fn volume_drawing(
     ))
 }
 
-fn display<World, Hover: Clone>(
+fn display<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<World, Hover>> {

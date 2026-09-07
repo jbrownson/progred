@@ -7,4 +7,5 @@ edition = "2024"
 gid.workspace = true
 measured = { path = "../ui/measured" }
 puri.workspace = true
+puri-widgets.workspace = true
 peniko.workspace = true

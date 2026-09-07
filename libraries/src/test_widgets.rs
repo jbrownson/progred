@@ -18,18 +18,20 @@ fn with_context<Hover: Default, R>(
             scale: 1.0,
         },
         styles: &widget::style::editor(1.0),
-        writable: true,
-        selected: true,
-        editing: None,
-        spelling: None,
-        initial_text: &|spelling| puri::LineEditState::new(spelling).with_cursor_at_end(),
-        target: Hover::default(),
-        value: None,
-        select: Rc::new(|_| true),
+        site: &|| widget::Site {
+            writable: true,
+            selected: true,
+            editing: None,
+            spelling: None,
+            initial_text: &|spelling| puri::LineEditState::new(spelling).with_cursor_at_end(),
+            target: Hover::default(),
+            value: None,
+            select: Rc::new(|_| true),
+            edit: edit.clone(),
+        },
         pick: Rc::new(|_, _| false),
         picking: |_| false,
         same_target: |_, _| false,
-        edit,
         primary_edit: |_| true,
     })
 }
@@ -96,6 +98,28 @@ pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
         &mut Some(()),
     );
     picked.take()
+}
+
+pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
+    layout: &Layout<(), Hover>,
+) -> Option<puri::hover::Claim<Hover>> {
+    let Layout::Before { before, .. } = layout else {
+        return None;
+    };
+    let place = with_context(Rc::new(|_, _, _| false), |context| before(context));
+    let mut fragment = widget::Fragment {
+        renders: vec![],
+        handler: None,
+        claims: vec![],
+        select: None,
+    };
+    let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
+    place(&mut fragment, placement);
+    fragment
+        .claims
+        .iter()
+        .rev()
+        .find_map(|probe| probe.answer(placement.rect.center(), None, 0.0))
 }
 
 pub fn assert_delimiter<Hover: Default + 'static>(

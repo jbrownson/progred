@@ -1232,17 +1232,18 @@ mod tests {
             ),
             Some(Value::Cell(vocabulary::GAP))
         );
-        assert!(matches!(
-            decoded(&hoverable(text_leaf("h", vocabulary::LABEL_FACE))),
-            Some(Layout::OnHover {
-                hover: Some(()),
-                ..
-            })
-        ));
-        assert!(matches!(
-            decoded(&hover_block(node(vocabulary::SLOT, Value::record([])))),
-            Some(Layout::OnHover { hover: None, .. })
-        ));
+        assert_eq!(
+            crate::test_widgets::claim(
+                &decoded(&hoverable(text_leaf("h", vocabulary::LABEL_FACE))).unwrap()
+            ),
+            Some(puri::hover::Claim::Direct(()))
+        );
+        assert_eq!(
+            crate::test_widgets::claim(
+                &decoded(&hover_block(node(vocabulary::SLOT, Value::record([])))).unwrap()
+            ),
+            Some(puri::hover::Claim::Occludes)
+        );
         let handler = Value::Cell(vocabulary::HANDLER);
         assert!(matches!(
             decoded(&on(

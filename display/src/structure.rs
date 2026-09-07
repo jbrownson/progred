@@ -45,7 +45,9 @@ pub fn list_layout<World: 'static, Hover: Clone + 'static>(
                     .then(|| input.targets.insert_after(previous.clone()))
                     .flatten()
                 {
-                    Some((hover, action)) => activatable(separator, hover, action),
+                    Some((hover, action)) => {
+                        activatable(hover_highlight(separator, hover.clone()), hover, action)
+                    }
                     None => separator,
                 },
             );

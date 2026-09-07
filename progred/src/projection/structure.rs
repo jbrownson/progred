@@ -106,7 +106,7 @@ fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World
     let target: Rc<[Step]> = Rc::from(path);
     let toggle = hooks.toggle.clone();
     activatable(
-        child,
+        progred_display::hover_highlight(child, Hover::Toggle(target.clone())),
         Hover::Toggle(target.clone()),
         Rc::new(move |world| {
             toggle(world, target.to_vec());

@@ -5,14 +5,16 @@ use crate::{ActionHandler, Layout, LineEdit};
 use gid::Value;
 pub use measured::place;
 use measured::{Extent, Measured, Output};
-use puri::draw::{Canvas, CanvasSink, GlyphRun, Shape};
+use puri::Placement;
+use puri::draw::CanvasSink;
 use puri::edit::{EditOperation, LineEditState};
 use puri::handler::{Handler, HasHandler};
+use puri::hover::Probe;
 use puri::text::{TextCtx, TextMetrics};
-use puri::{Affine, Brush, ImageData, Placement, Stroke};
 use std::rc::Rc;
 
 pub mod delimiter;
+pub mod hover;
 pub mod interaction;
 pub mod line;
 pub mod style;
@@ -36,6 +38,15 @@ pub type Before<World, Hover> =
 pub struct Context<'a, 'fonts, World, Hover> {
     pub text: &'a mut TextCtx<'fonts>,
     pub styles: &'a style::Styles,
+    pub site: &'a dyn Fn() -> Site<'a, World, Hover>,
+    pub pick: Pick<World>,
+    pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
+    pub same_target: fn(&Hover, &Hover) -> bool,
+    pub primary_edit: fn(&puri::handler::PointerButtonEvent) -> bool,
+}
+
+/// Site state and capabilities are requested only by document-aware widgets.
+pub struct Site<'a, World, Hover> {
     pub writable: bool,
     pub selected: bool,
     pub editing: Option<&'a LineEditState>,
@@ -44,11 +55,7 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub target: Hover,
     pub value: Option<&'a Value>,
     pub select: ActionHandler<World>,
-    pub pick: Pick<World>,
-    pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
-    pub same_target: fn(&Hover, &Hover) -> bool,
     pub edit: Edit<World>,
-    pub primary_edit: fn(&puri::handler::PointerButtonEvent) -> bool,
 }
 
 pub type Widget<World, Hover> = Rc<
@@ -82,10 +89,11 @@ pub struct MeasuredSide<World, Hover> {
 pub fn selectable<World: 'static, Hover: Clone + 'static>(
     context: &Context<'_, '_, World, Hover>,
 ) -> impl FnOnce(Measured<Fragment<World, Hover>>) -> Measured<Fragment<World, Hover>> + 'static {
-    let target = context.target.clone();
-    let select = context.select.clone();
+    let site = (context.site)();
+    let target = site.target;
+    let select = site.select;
     let pick = context.pick.clone();
-    let value = context.value.cloned();
+    let value = site.value.cloned();
     let picking = context.picking;
     let same_target = context.same_target;
     move |child| {
@@ -93,7 +101,9 @@ pub fn selectable<World: 'static, Hover: Clone + 'static>(
             child,
             move |placement, output: &mut Fragment<World, Hover>| {
                 if !placement.clipped_out() {
-                    output.claims.push((placement, target.clone()));
+                    output
+                        .claims
+                        .push(Probe::retaining(placement, target.clone()));
                     output
                         .handler()
                         .on_pointer_down_with(move |world, event, hovered| {
@@ -131,7 +141,7 @@ pub fn selectable_side<World: 'static, Hover: Clone + 'static>(
 pub struct Fragment<World, Hover> {
     pub renders: Vec<Render<Hover>>,
     pub handler: Option<Handler<World, Option<Hover>>>,
-    pub claims: Vec<(Placement, Hover)>,
+    pub claims: Vec<Probe<Hover>>,
     pub select: Option<Select<World>>,
 }
 
@@ -165,64 +175,27 @@ impl<World, Hover: 'static> HasHandler<World> for Fragment<World, Hover> {
     }
 }
 
-impl<World, Hover: 'static> Canvas for Fragment<World, Hover> {
-    fn image(&mut self, image: ImageData, transform: Affine) {
-        self.renders.push(Box::new(move |canvas, _| {
-            canvas.draw_image(image, transform)
-        }));
-    }
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        let (shape, brush) = (shape.into(), brush.into());
-        self.renders.push(Box::new(move |canvas, _| {
-            canvas.fill_shape(shape, brush, transform)
-        }));
-    }
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
-        let (shape, brush) = (shape.into(), brush.into());
-        self.renders.push(Box::new(move |canvas, _| {
-            canvas.stroke_shape(shape, style, brush, transform)
-        }));
-    }
-    fn glyph_run(&mut self, run: GlyphRun) {
-        self.renders
-            .push(Box::new(move |canvas, _| canvas.draw_glyphs(run)));
-    }
-    fn clip(
-        &mut self,
-        shape: impl Into<Shape>,
-        transform: Affine,
-        content: impl FnOnce(&mut Self),
-    ) {
-        let outer = std::mem::take(&mut self.renders);
-        content(self);
-        let children = std::mem::replace(&mut self.renders, outer);
-        let shape = shape.into();
-        self.renders.push(Box::new(move |canvas, hover| {
-            canvas.with_clip(
-                shape,
-                transform,
-                Box::new(move |canvas| {
-                    for render in children {
-                        render(canvas, hover);
-                    }
-                }),
-            );
-        }));
+impl<World, Hover: 'static> Fragment<World, Hover> {
+    pub fn render(&mut self, render: impl FnOnce(&mut dyn CanvasSink, Option<&Hover>) + 'static) {
+        self.renders.push(Box::new(render));
     }
 }
-
 pub fn extent(metrics: TextMetrics) -> Extent {
     Extent {
         width: metrics.width,
         ascent: metrics.ascent,
         descent: metrics.descent,
     }
+}
+
+pub fn empty<World: 'static, Hover: 'static>(
+    text: &mut TextCtx,
+    styles: &style::Styles,
+) -> Measured<Fragment<World, Hover>> {
+    let frame = puri_widgets::text_frame::empty(text, &styles.label, styles.dim.brush.clone());
+    leaf(extent(frame.metrics()), move |output, placement| {
+        output.render(move |canvas, _| frame.place(canvas, placement));
+    })
 }
 
 pub fn leaf<World: 'static, Hover: 'static>(
@@ -244,7 +217,8 @@ pub fn leaf<World: 'static, Hover: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use puri::{Color, DrawCmd, DrawList, Point, Rect};
+    use puri::draw::Shape;
+    use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
 
     #[test]
     fn placement_hover_render_and_dispatch_are_distinct_stages() {
@@ -258,7 +232,7 @@ mod tests {
             },
             move |output: &mut Fragment<Vec<&str>, usize>, placement| {
                 during_place.borrow_mut().push("place");
-                output.claims.push((placement, 7));
+                output.claims.push(Probe::retaining(placement, 7));
                 let during_render = during_place.clone();
                 output.renders.push(Box::new(move |canvas, hover| {
                     during_render.borrow_mut().push("render");
@@ -279,7 +253,11 @@ mod tests {
         let placement = Placement::root(Rect::new(10.0, 20.0, 30.0, 30.0));
         let output = place(measured, placement);
         assert_eq!(&*calls.borrow(), &["place"]);
-        assert_eq!(output.claims, [(placement, 7)]);
+        assert_eq!(output.claims.len(), 1);
+        assert_eq!(
+            output.claims[0].answer(placement.rect.center(), None, 0.0),
+            Some(puri::hover::Claim::Direct(7))
+        );
         let mut canvas = DrawList::new();
         for render in output.renders {
             render(&mut canvas, Some(&7));
@@ -303,12 +281,28 @@ mod tests {
     fn native_canvas_clip_streams_to_the_selected_interpreter() {
         let mut output: Fragment<(), ()> = Fragment::empty();
         let clip = Rect::new(0.0, 0.0, 20.0, 10.0);
-        output.clip(clip, Affine::IDENTITY, |canvas| {
-            canvas.fill(clip, Color::BLACK, Affine::IDENTITY);
-            canvas.clip(clip, Affine::translate((2.0, 0.0)), |canvas| {
-                canvas.stroke(clip, Stroke::new(1.0), Color::WHITE, Affine::IDENTITY);
-            });
+        output.render(move |canvas, _| {
+            canvas.with_clip(
+                clip.into(),
+                Affine::IDENTITY,
+                Box::new(move |canvas| {
+                    canvas.fill_shape(clip.into(), Color::BLACK.into(), Affine::IDENTITY);
+                    canvas.with_clip(
+                        clip.into(),
+                        Affine::translate((2.0, 0.0)),
+                        Box::new(move |canvas| {
+                            canvas.stroke_shape(
+                                clip.into(),
+                                Stroke::new(1.0),
+                                Color::WHITE.into(),
+                                Affine::IDENTITY,
+                            );
+                        }),
+                    );
+                }),
+            )
         });
+        assert_eq!(output.renders.len(), 1);
         let mut canvas = DrawList::new();
         for render in output.renders {
             render(&mut canvas, None);
@@ -323,6 +317,88 @@ mod tests {
     }
 
     #[test]
+    fn render_is_one_continuation_regardless_of_drawing_count() {
+        let calls = Rc::new(std::cell::Cell::new(0));
+        let during_render = calls.clone();
+        let mut output = Fragment::<(), ()>::empty();
+        output.render(move |canvas, _| {
+            for _ in 0..100 {
+                during_render.set(during_render.get() + 1);
+                canvas.fill_shape(
+                    Rect::new(0.0, 0.0, 1.0, 1.0).into(),
+                    Color::BLACK.into(),
+                    Affine::IDENTITY,
+                );
+            }
+        });
+        assert_eq!(calls.get(), 0);
+        assert_eq!(output.renders.len(), 1);
+        let mut canvas = DrawList::new();
+        for render in output.renders {
+            render(&mut canvas, None);
+        }
+        assert_eq!(calls.get(), 100);
+        assert_eq!(canvas.0.len(), 100);
+    }
+
+    #[test]
+    fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
+        let mut fonts = puri::text::FontContext::new();
+        let mut layouts = puri::text::LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let mut context = Context::<(), ()> {
+            text: &mut TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                cache: &mut cache,
+                scale: 1.0,
+            },
+            styles: &style::editor(1.0),
+            site: &|| panic!("unrelated site input requested"),
+            pick: Rc::new(|_, _| true),
+            picking: |_| false,
+            same_target: PartialEq::eq,
+            primary_edit: |_| true,
+        };
+        let side = delimiter::side(crate::Delim::Bracket, crate::Side::Open)(&mut context);
+        let measured = (side.measure)(Extent {
+            width: 20.0,
+            ascent: 10.0,
+            descent: 2.0,
+        });
+        let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
+        assert_eq!(place(measured, placement).renders.len(), 1);
+        for layout in [
+            interaction::on_click(crate::text("click"), Rc::new(|_| true)),
+            interaction::on_activate(crate::text("activate"), (), Rc::new(|_| true)),
+            interaction::pickable(crate::text("pick"), (), Value::record([])),
+        ] {
+            let Layout::Before { before, .. } = layout else {
+                panic!("leading callback");
+            };
+            let mut output = Fragment::empty();
+            before(&mut context)(&mut output, placement);
+            assert!(output.handler.is_some());
+        }
+        for layout in [
+            hover::on_hover(crate::text("claim"), ()),
+            hover::block_hover(crate::text("occluder")),
+            hover::hover_highlight(crate::text("highlight"), ()),
+        ] {
+            let Layout::Before { before, .. } = layout else {
+                panic!("leading callback");
+            };
+            before(&mut context)(&mut Fragment::empty(), placement);
+        }
+        assert_eq!(
+            place(empty::<(), ()>(context.text, context.styles), placement)
+                .renders
+                .len(),
+            1
+        );
+    }
+
+    #[test]
     fn discarded_layout_alternatives_do_not_place_widget_outputs() {
         use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
         let widget = |width, target| {
@@ -333,7 +409,7 @@ mod tests {
                     descent: 0.0,
                 },
                 move |output: &mut Fragment<(), usize>, placement| {
-                    output.claims.push((placement, target))
+                    output.claims.push(Probe::retaining(placement, target))
                 },
             ))
         };
@@ -342,6 +418,10 @@ mod tests {
         let measured = resolve_choices(choices.finish(layout), 50.0, false);
         let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
         let output = place(measured, placement);
-        assert_eq!(output.claims, [(placement, 2)]);
+        assert_eq!(output.claims.len(), 1);
+        assert_eq!(
+            output.claims[0].answer(placement.rect.center(), None, 0.0),
+            Some(puri::hover::Claim::Direct(2))
+        );
     }
 }

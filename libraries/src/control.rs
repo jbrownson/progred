@@ -1078,7 +1078,7 @@ mod tests {
         assert_eq!(value, &expression);
 
         let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
-        let Layout::OnHover { child, .. } = marker else {
+        let Layout::Before { child, .. } = marker else {
             panic!("the marker claims hover");
         };
         let Layout::Before { child, .. } = *child else {
@@ -1499,12 +1499,11 @@ mod tests {
         let Layout::Shared { child, .. } = &let_children[2] else {
             panic!("let shares its in marker");
         };
-        let Layout::OnHover { hover, .. } = child.as_ref() else {
-            panic!("in targets the body");
-        };
         assert_eq!(
-            hover.as_deref(),
-            Some(&[Step::Key(grap::vocabulary::EXPRESSION)][..])
+            crate::test_widgets::claim(child.as_ref()),
+            Some(puri::hover::Claim::Direct(vec![Step::Key(
+                grap::vocabulary::EXPRESSION
+            )]))
         );
 
         let Layout::Shared {
@@ -1622,12 +1621,14 @@ mod tests {
         let Layout::Row { children, .. } = child.as_ref() else {
             panic!("a case head contains its pattern and arrow");
         };
-        let Layout::OnHover { child, hover } = &children[1] else {
+        let Layout::Before { child, .. } = &children[1] else {
             panic!("the arrow claims the case hover");
         };
         assert_eq!(
-            hover.as_deref(),
-            Some(&[Step::Key(grap::vocabulary::EXPRESSION)][..])
+            crate::test_widgets::claim(&children[1]),
+            Some(puri::hover::Claim::Direct(vec![Step::Key(
+                grap::vocabulary::EXPRESSION
+            )]))
         );
         assert!(matches!(child.as_ref(), Layout::Before { .. }));
     }

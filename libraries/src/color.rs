@@ -438,7 +438,7 @@ mod tests {
         assert!(matches!(alignment, RowAlignment::Center));
         assert!(matches!(
             children[0],
-            Layout::OnHover { ref child, .. }
+            Layout::Before { ref child, .. }
                 if matches!(child.as_ref(), Layout::Before { child, .. }
                     if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_))))
         ));
@@ -479,7 +479,7 @@ mod tests {
 
         assert!(matches!(
             children[0],
-            Layout::OnHover { ref child, .. }
+            Layout::Before { ref child, .. }
                 if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_)))
         ));
     }

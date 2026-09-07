@@ -31,13 +31,14 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
     context: &mut Context<'_, '_, World, Hover>,
     mut line: LineEdit,
 ) -> Measured<Fragment<World, Hover>> {
-    if let Some(spelling) = context.spelling {
+    let site = (context.site)();
+    if let Some(spelling) = site.spelling {
         line.text = spelling.to_owned();
     }
-    let active = context.writable && context.selected;
-    let default = (active && context.editing.is_none()).then(|| (context.initial_text)(&line.text));
+    let active = site.writable && site.selected;
+    let default = (active && site.editing.is_none()).then(|| (site.initial_text)(&line.text));
     let editing = active
-        .then_some(context.editing.or(default.as_ref()))
+        .then_some(site.editing.or(default.as_ref()))
         .flatten();
     let style = context.styles.line_style(&line);
     let placeholder_style = TextStyle {
@@ -59,15 +60,13 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
                 },
                 context.text,
             );
-            let edit = context.edit.clone();
+            let edit = site.edit.clone();
             let line = line.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
-                if !placement.clipped_out() {
-                    widget.draw(output, placement);
-                }
                 widget.install(output, placement, move |world, operation| {
                     edit(world, &line, operation)
                 });
+                output.render(move |canvas, _| widget.draw(canvas, placement));
             })
         }
         None => {
@@ -87,15 +86,13 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
                 },
             );
             leaf(extent(text.metrics()), move |output, placement| {
-                if !placement.clipped_out() {
-                    text.place(output, placement);
-                }
+                output.render(move |canvas, _| text.place(canvas, placement));
             })
         }
     };
-    if context.writable {
-        let select = context.select.clone();
-        let edit = context.edit.clone();
+    if site.writable {
+        let select = site.select.clone();
+        let edit = site.edit.clone();
         let description = line.clone();
         let navigation: Select<World> = Rc::new(move |world, direction| {
             select(world);
@@ -109,14 +106,16 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
         });
         let presentation = context.styles.line_presentation(&line);
         let scale = context.styles.scale as f32;
-        let select = context.select.clone();
-        let edit = context.edit.clone();
-        let target = context.target.clone();
+        let select = site.select;
+        let edit = site.edit;
+        let target = site.target;
         let primary_edit = context.primary_edit;
         measured::before_into(content, move |placement: Placement, output| {
             output.select = Some(navigation);
             if !placement.clipped_out() {
-                output.claims.push((placement, target));
+                output
+                    .claims
+                    .push(puri::hover::Probe::retaining(placement, target));
             }
             output.handler().on_pointer_down(move |world, event| {
                 primary_edit(event)

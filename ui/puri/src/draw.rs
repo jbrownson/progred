@@ -117,7 +117,7 @@ impl<Paint> Command<Paint> {
 
 /// Interpret an initially encoded drawing into any Puri canvas. `outer`
 /// places the leaf; command transforms remain local to it.
-pub fn draw<Paint, C: Canvas>(
+pub fn draw<Paint, C: CanvasSink + ?Sized>(
     drawing: Drawing<Paint>,
     canvas: &mut C,
     outer: Affine,
@@ -126,7 +126,7 @@ pub fn draw<Paint, C: Canvas>(
     draw_commands(drawing.commands, canvas, outer, &resolve);
 }
 
-fn draw_commands<Paint, C: Canvas>(
+fn draw_commands<Paint, C: CanvasSink + ?Sized>(
     commands: Vec<Command<Paint>>,
     canvas: &mut C,
     outer: Affine,
@@ -134,25 +134,27 @@ fn draw_commands<Paint, C: Canvas>(
 ) {
     for command in commands {
         match command {
-            Command::Image { image, transform } => canvas.image(image, outer * transform),
+            Command::Image { image, transform } => canvas.draw_image(image, outer * transform),
             Command::Fill {
                 shape,
                 paint,
                 transform,
-            } => canvas.fill(shape, resolve(&paint), outer * transform),
+            } => canvas.fill_shape(shape, resolve(&paint), outer * transform),
             Command::Stroke {
                 shape,
                 style,
                 paint,
                 transform,
-            } => canvas.stroke(shape, style, resolve(&paint), outer * transform),
+            } => canvas.stroke_shape(shape, style, resolve(&paint), outer * transform),
             Command::Clip {
                 shape,
                 transform,
                 children,
-            } => canvas.clip(shape, outer * transform, |canvas| {
-                draw_commands(children, canvas, outer, resolve)
-            }),
+            } => canvas.with_clip(
+                shape,
+                outer * transform,
+                Box::new(|canvas| draw_commands(children, canvas, outer, resolve)),
+            ),
         }
     }
 }

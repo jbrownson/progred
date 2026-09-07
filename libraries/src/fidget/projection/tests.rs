@@ -65,9 +65,9 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
         assert!(matches!(unshared(child), Layout::At { steps, .. }
             if *steps == [Step::Key(SUM), Step::Key(key)]));
     }
-    assert!(
-        matches!(unshared(&children[1]), Layout::OnHover { hover: Some(path), .. }
-        if path.is_empty())
+    assert_eq!(
+        crate::test_widgets::claim(unshared(&children[1])),
+        Some(puri::hover::Claim::Direct(vec![]))
     );
 }
 

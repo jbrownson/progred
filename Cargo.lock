@@ -2447,6 +2447,7 @@ dependencies = [
  "measured",
  "peniko",
  "puri",
+ "puri-widgets",
 ]
 
 [[package]]

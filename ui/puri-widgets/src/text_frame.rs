@@ -1,7 +1,8 @@
 //! A text-sized empty frame and the outline shared with filled frames.
 
+use puri::draw::CanvasSink;
 use puri::text::{TextCtx, TextMetrics, TextStyle, text};
-use puri::{Affine, Brush, Canvas, Placement, Rect, RoundedRect, Stroke};
+use puri::{Affine, Brush, Placement, Rect, RoundedRect, Stroke};
 
 pub struct EmptyFrame {
     metrics: TextMetrics,
@@ -14,9 +15,9 @@ impl EmptyFrame {
         self.metrics
     }
 
-    pub fn place(self, canvas: &mut impl Canvas, placement: Placement) {
-        canvas.stroke(
-            outline(self.scale, placement.rect),
+    pub fn place(self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
+        canvas.stroke_shape(
+            outline(self.scale, placement.rect).into(),
             Stroke::new(self.scale),
             self.brush,
             Affine::IDENTITY,

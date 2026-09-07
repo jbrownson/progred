@@ -213,6 +213,12 @@ There are no click/activate/pick enum cases. Existing Grap layout constructors
 decode to these same functions. The current site's value and the host's pick
 capability are separate inputs, so an explicit pick target need not equal the
 value being projected. Neither path changes pointer-handler precedence.
+Hover claims and occlusion use the same native decorator interface. Hover
+feedback is an explicit, independent decorator used by insert/collapse handles,
+not a hidden policy selected by inspecting the target's enum variant. Native
+widgets request site state only when needed and retain a whole-widget rendering
+callback, not one deferred allocation per canvas operation. Empty outlines also
+use a native widget rather than an interpreter case.
 
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap

@@ -83,14 +83,21 @@ explicit dispatch input; the host suppresses that target outside its owning view
 `CanvasSink` is an object-safe bridge to the existing
 canvas interpreter, allowing native render closures to outlive measurement
 without fixing a rendering backend or constructing GID drawing data.
-The editor supplies the current text state and edit/selection capabilities;
-the generic layout adapter does not parse or render line-editor props.
+Document-aware widgets explicitly request the current site state and scoped
+edit/selection capabilities. Ordinary decorations do not resolve paths, inspect
+selection, or allocate those callbacks. A fragment is not a Canvas: it retains
+whole-widget render continuations, then executes their draw calls directly after
+hover settles, rather than allocating a deferred closure per drawing operation.
 
 `widget::before` contributes the same native outputs before an arbitrary
 child places. Its preparation function captures current inputs, then returns
 an opaque placement callback; `Layout::Before` knows neither the control nor
 its event policy. Click, activation, and picking are ordinary functions built
-on this combinator. Child handlers remain in front of their enclosing handlers,
+on this combinator. Hover claims, occlusion, and optional hover feedback are
+ordinary decorators too. Generic Puri probes own settled hit geometry and
+retention; the editor adds the owning view. Insert and collapse handles request
+feedback explicitly, not through a target-type switch in the interpreter.
+Child handlers remain in front of their enclosing handlers,
 and only the chosen alternative invokes its placement callbacks.
 
 The upper `progred_display::Layout` still mixes boxes with other deferred
@@ -203,9 +210,9 @@ whether the surface blocks input are supplied by the host. Panel drawing owns
 no child layout, popup policy, or document state.
 
 `puri-widgets::text_frame` measures empty frames using the caller's font and
-supplies the outline geometry used around text. Progred lowers the inert
-`Layout::EmptySlot` request through it, and uses it for pending values and their
-selection outlines. Completion behavior and the meaning of an empty slot remain
+supplies the outline geometry used around text. The ordinary `widget::empty`
+function and `slot` combinator use it, as do pending values and their selection
+outlines; there is no empty-slot layout opcode. Completion behavior and the meaning of an empty slot remain
 in Progred; the widget owns only metrics and drawing.
 
 Tests can drive pure descriptions and handlers without a window. Projection

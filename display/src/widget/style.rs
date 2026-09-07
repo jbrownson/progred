@@ -4,6 +4,15 @@ use peniko::{Brush, Color};
 use puri::edit::{EditStyle, LineEditPresentation};
 use puri::text::GenericFamily;
 use puri::text::TextStyle;
+use puri::{Rect, RoundedRect};
+
+pub fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
+    RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
+}
+
+pub fn hover_wash() -> Color {
+    Color::new([0.0, 0.48, 1.0, 0.08])
+}
 
 pub struct Styles {
     pub label: TextStyle,

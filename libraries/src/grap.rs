@@ -1026,10 +1026,13 @@ mod tests {
         let Layout::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("field head contains its label and colon");
         };
-        let Layout::OnHover { child, hover } = &head[0] else {
+        let Layout::Before { child, .. } = &head[0] else {
             panic!("the label targets its argument");
         };
-        assert_eq!(hover.as_deref(), Some(&[Step::Key(argument)][..]));
+        assert_eq!(
+            crate::test_widgets::claim(&head[0]),
+            Some(puri::hover::Claim::Direct(vec![Step::Key(argument)]))
+        );
         assert!(matches!(child.as_ref(), Layout::Before { .. }));
     }
 
@@ -1149,10 +1152,13 @@ mod tests {
                 ..
             } if *steps == [Step::Key(PARAMS)]
         ));
-        let Layout::OnHover { child, hover } = &head[2] else {
+        let Layout::Before { child, .. } = &head[2] else {
             panic!("lambda arrow targets its body");
         };
-        assert_eq!(hover.as_deref(), Some(&[Step::Key(BODY)][..]));
+        assert_eq!(
+            crate::test_widgets::claim(&head[2]),
+            Some(puri::hover::Claim::Direct(vec![Step::Key(BODY)]))
+        );
         assert!(matches!(child.as_ref(), Layout::Before { .. }));
         assert!(matches!(
             unshared(&children[1]),

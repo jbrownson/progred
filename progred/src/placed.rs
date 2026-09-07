@@ -30,7 +30,7 @@ fn from_fragment<C: 'static, Cv: Canvas + 'static>(
     placed.probes = fragment
         .claims
         .into_iter()
-        .map(|(placement, target)| Probe::retaining(placement, Hovered::Tree(target)))
+        .map(|probe| Probe::new(probe.map(Hovered::Tree)))
         .collect();
     placed.landmark_select = fragment.select;
     placed.handler = fragment.handler.map(|handler| {
@@ -66,89 +66,34 @@ impl<C: 'static, Cv: Canvas + 'static> Builder<'_, C, Cv> {
     }
 }
 
-enum ProbeTarget {
-    Retains(Hovered),
-    Exact(Hovered),
-    Dynamic(Box<dyn Fn(Point) -> Option<Hovered>>),
-    Occludes,
-}
-
-/// One settled hover region. Its real placement can establish hover;
-/// ordinary named probes may also retain the same target through their
-/// expanded visible rectangle.
+/// A native hover region scoped to its editor view.
 pub struct Probe {
     root: Option<Root>,
-    placement: Placement,
-    target: ProbeTarget,
+    region: puri::hover::Probe<Hovered>,
 }
 
 impl Probe {
+    fn new(region: puri::hover::Probe<Hovered>) -> Self {
+        Self { root: None, region }
+    }
+
     pub fn retaining(placement: Placement, target: Hovered) -> Self {
-        Self {
-            root: None,
-            placement,
-            target: ProbeTarget::Retains(target),
-        }
+        Self::new(puri::hover::Probe::retaining(placement, target))
     }
 
     pub fn exact(placement: Placement, target: Hovered) -> Self {
-        Self {
-            root: None,
-            placement,
-            target: ProbeTarget::Exact(target),
-        }
+        Self::new(puri::hover::Probe::exact(placement, target))
     }
 
     pub fn occludes(placement: Placement) -> Self {
-        Self {
-            root: None,
-            placement,
-            target: ProbeTarget::Occludes,
-        }
+        Self::new(puri::hover::Probe::occludes(placement))
     }
 
     pub fn dynamic(
         placement: Placement,
-        target_at: impl Fn(Point) -> Option<Hovered> + 'static,
+        target: impl Fn(Point) -> Option<Hovered> + 'static,
     ) -> Self {
-        Self {
-            root: None,
-            placement,
-            target: ProbeTarget::Dynamic(Box::new(target_at)),
-        }
-    }
-
-    fn extended_rect(&self, reach: f64) -> Option<Rect> {
-        if self.placement.clipped_out() {
-            return None;
-        }
-        let rect = self
-            .placement
-            .visible_rect()
-            .inflate(reach, reach)
-            .intersect(self.placement.clip_rect);
-        (rect.width() > 0.0 && rect.height() > 0.0).then_some(rect)
-    }
-
-    fn answer(&self, point: Point, prior: Option<&Hovered>, reach: f64) -> Option<Claim<Hovered>> {
-        if self.placement.contains(point) {
-            return Some(match &self.target {
-                ProbeTarget::Retains(target) | ProbeTarget::Exact(target) => {
-                    Claim::Direct(target.clone())
-                }
-                ProbeTarget::Dynamic(target_at) => {
-                    return target_at(point).map(Claim::Direct);
-                }
-                ProbeTarget::Occludes => Claim::Occludes,
-            });
-        }
-        match &self.target {
-            ProbeTarget::Retains(target) if prior == Some(target) => self
-                .extended_rect(reach)
-                .filter(|rect| rect.contains(point))
-                .map(|_| Claim::Extended(target.clone())),
-            _ => None,
-        }
+        Self::new(puri::hover::Probe::dynamic(placement, target))
     }
 }
 
@@ -330,7 +275,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
     ) -> Option<(Option<Root>, Claim<Hovered>)> {
         let mut retained = None;
         for probe in self.probes.iter().rev() {
-            match probe.answer(point, prior, reach) {
+            match probe.region.answer(point, prior, reach) {
                 Some(claim @ (Claim::Direct(_) | Claim::Occludes)) => {
                     return Some((probe.root.clone(), claim));
                 }
@@ -346,12 +291,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
     pub fn extended_rects(&self, target: &Hovered, reach: f64) -> Vec<Rect> {
         self.probes
             .iter()
-            .filter_map(|probe| match &probe.target {
-                ProbeTarget::Retains(candidate) if candidate == target => {
-                    probe.extended_rect(reach)
-                }
-                _ => None,
-            })
+            .filter_map(|probe| probe.region.extended_rect(target, reach))
             .collect()
     }
 
@@ -890,6 +830,7 @@ mod tests {
         let mut fonts = puri::text::FontContext::new();
         let mut layouts = puri::text::LayoutContext::new();
         let mut cache = puri::TextCache::default();
+        let value = gid::Value::record([]);
         let side = widget::delimiter::side(puri::Delim::Bracket, side);
         let side = if interactive {
             widget::selectable_side(side)
@@ -904,24 +845,26 @@ mod tests {
                 scale: scale as f32,
             },
             styles: &widget::style::editor(scale),
-            writable: false,
-            selected: false,
-            editing: None,
-            spelling: None,
-            initial_text: &|text| puri::LineEditState::new(text),
-            target: crate::hover::Hover::Value(Rc::from([])),
-            value: Some(&gid::Value::record([])),
-            select: Rc::new(|log: &mut Vec<&'static str>| {
-                log.push("select");
-                true
-            }),
+            site: &|| widget::Site {
+                writable: false,
+                selected: false,
+                editing: None,
+                spelling: None,
+                initial_text: &|text| puri::LineEditState::new(text),
+                target: crate::hover::Hover::Value(Rc::from([])),
+                value: Some(&value),
+                select: Rc::new(|log: &mut Vec<&'static str>| {
+                    log.push("select");
+                    true
+                }),
+                edit: Rc::new(|_, _, _| false),
+            },
             pick: Rc::new(|log, _| {
                 log.push("pick");
                 true
             }),
             picking: |event| crate::modifiers::pick(&event.state.modifiers),
             same_target: PartialEq::eq,
-            edit: Rc::new(|_, _, _| false),
             primary_edit: |_| false,
         });
         let native = (prepared.measure)(span);
@@ -952,7 +895,12 @@ mod tests {
                     let interactive = measured::place(interactive, placement);
                     assert!(inert.probes.is_empty() && inert.handler.is_none());
                     assert_eq!(interactive.probes.len(), 1);
-                    assert_eq!(interactive.probes[0].placement, placement);
+                    assert_eq!(
+                        interactive.probe(placement.rect.center(), None, 0.0),
+                        Some(Claim::Direct(Hovered::Tree(crate::hover::Hover::Value(
+                            std::rc::Rc::from([])
+                        ))))
+                    );
                     assert!(interactive.handler.is_some());
                     let outlines = [inert, interactive].map(|placed| {
                         let mut canvas = TestCanvas(DrawList::new());

@@ -18,7 +18,7 @@
 //! pointer methods; the widget registers keyboard and IME dispatch
 //! only while focused.
 
-use crate::draw::Canvas;
+use crate::draw::{Canvas, CanvasSink};
 use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
@@ -642,11 +642,11 @@ impl LineEdit {
     }
 
     /// The paint half: selection, ghost, content, caret.
-    pub fn draw(&self, canvas: &mut impl Canvas, placement: Placement) {
+    pub fn draw(&self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
         let at = Point::new(placement.rect.x0, placement.rect.y0 + self.metrics.ascent);
         let transform = Affine::translate((at.x, at.y - self.layout_baseline));
         for rect in &self.selection {
-            canvas.fill(*rect, self.selection_brush.clone(), transform);
+            canvas.fill_shape((*rect).into(), self.selection_brush.clone(), transform);
         }
         if let Some(ghost) = &self.ghost {
             draw_layout(canvas, ghost, transform);
@@ -655,8 +655,8 @@ impl LineEdit {
             draw_layout(canvas, layout, transform);
         }
         if let Some(cursor) = self.cursor {
-            canvas.fill(
-                cursor,
+            canvas.fill_shape(
+                cursor.into(),
                 self.cursor_brush.clone(),
                 Affine::translate((at.x, at.y - self.editor_baseline)),
             );

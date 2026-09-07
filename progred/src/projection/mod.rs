@@ -15,7 +15,7 @@ use crate::annotations::Annotations;
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::navigate::Descend;
-use crate::placed::{self, Placed, before, decorate, leaf};
+use crate::placed::{self, Placed, before, decorate};
 use crate::render;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
@@ -25,11 +25,12 @@ use events::{
     realize_event_with, realize_point, realize_scrub, realize_state_drag, realize_state_scroll,
 };
 use gid::{CellId, Path, Step, Value};
-use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
+use kurbo::{Affine, Insets, Point, RoundedRect, Stroke};
 use location::Location;
 use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
 use measured::{Measured, row};
 use peniko::{Brush, Color};
+use progred_display::widget::style::highlight_outline;
 use puri::draw::Canvas;
 use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
 use puri::geometry::Placement;
@@ -37,7 +38,6 @@ use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
 use puri_widgets::panel::Panel;
-use puri_widgets::text_frame;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -215,7 +215,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
         progred_display::Layout::Leaf(content) => {
             ChoiceLayout::fixed(leaf_display(cx.styles, tcx, content))
         }
-        progred_display::Layout::EmptySlot => ChoiceLayout::fixed(placeholder_box(tcx, cx.styles)),
         progred_display::Layout::DrawingProgram {
             width,
             ascent,
@@ -325,12 +324,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                     inner
                 }
             })
-        }
-        progred_display::Layout::OnHover { child, hover } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            ChoiceLayout::map(inner, 0.0, move |inner| realize_hover(scale, hover, inner))
         }
         progred_display::Layout::Row {
             alignment,
@@ -543,40 +536,6 @@ fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     )
 }
 
-fn realize_hover<C: 'static, Cv: Canvas + 'static>(
-    scale: f64,
-    hover: Option<Hover>,
-    inner: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    let highlight = matches!(hover.as_ref(), Some(Hover::Toggle(_) | Hover::Insert(_)));
-    before(inner, move |p, placement| match hover {
-        Some(hover) => {
-            if highlight {
-                light_hover(p, placement, hover, scale);
-            } else {
-                hover_claim(p, placement, hover);
-            }
-        }
-        None => hover_block(p, placement),
-    })
-}
-
-/// Claim `hover` and, when it is the resolved hover, wash the box.
-fn light_hover<C: 'static, Cv: Canvas + 'static>(
-    p: &mut placed::Builder<'_, C, Cv>,
-    placement: Placement,
-    hover: Hover,
-    scale: f64,
-) {
-    let mine = hover.clone();
-    p.ink(move |cv, ink| {
-        if tree_hovered(ink) == Some(&mine) {
-            hover_highlight(cv, highlight_outline(scale, placement.rect));
-        }
-    });
-    hover_claim(p, placement, hover);
-}
-
 /// The resolved hover's tree identity, for ink that lights its own
 /// claim.
 fn tree_hovered<'a>(ink: placed::Ink<'a>) -> Option<&'a Hover> {
@@ -766,38 +725,44 @@ fn with_widget_context<C: 'static, Result>(
     hooks: &Hooks<C>,
     widget: impl FnOnce(&mut progred_display::widget::Context<'_, '_, C, Hover>) -> Result,
 ) -> Result {
-    let writable = !cx.source.transient() && writable_at(&cx.sources, path);
-    let selected = cx.selection.filter(|selection| {
-        writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
-    });
     let initial_text = |spelling: &str| {
-        selected
+        cx.selection
+            .filter(|selection| selection.path() == path)
             .map(|selection| selection.initial_line(spelling))
             .unwrap_or_else(|| LineEditState::new(spelling).with_cursor_at_end())
     };
-    let edit = hooks.edit_line.clone();
-    let site: SharedPath = Rc::from(path);
-    let edit_path = site.clone();
+    let site = || {
+        let writable = !cx.source.transient() && writable_at(&cx.sources, path);
+        let selected = cx.selection.filter(|selection| {
+            writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
+        });
+        let edit = hooks.edit_line.clone();
+        let path: SharedPath = Rc::from(path);
+        let edit_path = path.clone();
+        progred_display::widget::Site {
+            writable,
+            selected: selected.is_some(),
+            editing: selected.and_then(Selection::edit),
+            initial_text: &initial_text,
+            spelling: cx
+                .scrub_spelling
+                .filter(|(site, _)| *site == path.as_ref())
+                .map(|(_, text)| text),
+            target: Hover::Value(path.clone()),
+            select: select_handler(path, hooks),
+            value,
+            edit: Rc::new(move |world, description, operation| {
+                edit(world, &edit_path, description, operation)
+            }),
+        }
+    };
     widget(&mut progred_display::widget::Context {
         text,
         styles: cx.styles,
-        writable,
-        selected: selected.is_some(),
-        editing: selected.and_then(Selection::edit),
-        initial_text: &initial_text,
-        spelling: cx
-            .scrub_spelling
-            .filter(|(site, _)| *site == path)
-            .map(|(_, text)| text),
-        target: Hover::Value(site.clone()),
-        select: select_handler(site, hooks),
-        value,
+        site: &site,
         pick: hooks.pick.clone(),
         picking: |event| crate::modifiers::pick(&event.state.modifiers),
         same_target: PartialEq::eq,
-        edit: Rc::new(move |world, description, operation| {
-            edit(world, &edit_path, description, operation)
-        }),
         primary_edit: |event| {
             is_primary_contact(event) && !crate::modifiers::pick(&event.state.modifiers)
         },
@@ -862,11 +827,7 @@ fn placeholder_box<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
 ) -> Measured<Placed<C, Cv>> {
-    let frame = text_frame::empty(tcx, &styles.label, styles.dim.brush.clone());
-    leaf(
-        placed::metrics_extent(frame.metrics()),
-        move |p, placement| frame.place(p, placement),
-    )
+    native_fragment(progred_display::widget::empty(tcx, styles))
 }
 
 /// The pointer over this settled rect names `key`, with the visible
@@ -886,15 +847,11 @@ fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<'_, C, Cv>, plac
     p.occlude(placement);
 }
 
-fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
-    RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
-}
-
 /// The pointer's preview of a click's meaning, washed faint.
 fn hover_highlight<P: Canvas>(p: &mut P, outline: RoundedRect) {
     p.fill(
         outline,
-        Color::new([0.0, 0.48, 1.0, 0.08]),
+        progred_display::widget::style::hover_wash(),
         Affine::IDENTITY,
     );
 }
