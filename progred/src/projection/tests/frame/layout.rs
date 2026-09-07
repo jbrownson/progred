@@ -1,6 +1,78 @@
 use super::*;
 
 #[test]
+fn native_leading_continuations_place_only_for_the_chosen_alternative() {
+    use progred_display::widget;
+    use std::cell::RefCell;
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let projection_log = log.clone();
+    let mut context = BenchContext::new();
+    context.stack.projection = Projection::new([progred_display::partial(move |input| {
+        input.value?;
+        let alternative = |width, before_name, child_name| {
+            let child_log = projection_log.clone();
+            let before_log = projection_log.clone();
+            widget::before(
+                progred_display::Layout::Widget(Rc::new(move |_| {
+                    let log = child_log.clone();
+                    widget::leaf(
+                        Extent {
+                            width,
+                            ascent: 12.0,
+                            descent: 3.0,
+                        },
+                        move |_, placement| {
+                            log.borrow_mut().push((child_name, placement));
+                        },
+                    )
+                })),
+                Rc::new(move |_| {
+                    let log = before_log.clone();
+                    Box::new(move |_, placement| {
+                        log.borrow_mut().push((before_name, placement));
+                    })
+                }),
+            )
+        };
+        Some(progred_display::alternatives([
+            alternative(100.0, "before wide", "wide"),
+            alternative(20.0, "before narrow", "narrow"),
+        ]))
+    })]);
+    let doc = Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    };
+    for (available, expected_width, names) in [
+        (200.0, 100.0, ["before wide", "wide"]),
+        (60.0, 20.0, ["before narrow", "narrow"]),
+    ] {
+        log.borrow_mut().clear();
+        let (_, extent) = context.place(
+            &doc,
+            None,
+            &Annotations::default(),
+            available,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(
+            extent,
+            Extent {
+                width: expected_width,
+                ascent: 12.0,
+                descent: 3.0
+            }
+        );
+        let log = log.borrow();
+        assert_eq!(log.iter().map(|(name, _)| *name).collect::<Vec<_>>(), names);
+        assert_eq!(log[0].1, log[1].1);
+        assert_eq!(log[0].1.rect.width(), expected_width);
+    }
+}
+
+#[test]
 fn surrounding_widgets_receive_only_the_chosen_child_span() {
     use progred_display::widget::{self, MeasuredSide};
     use std::cell::RefCell;

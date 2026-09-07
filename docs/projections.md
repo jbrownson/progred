@@ -205,6 +205,15 @@ only ink and geometry. The same settled hover drives native handler activation,
 so retained hover still selects the highlighted target rather than re-hit-testing
 the click position.
 
+Click, activation, and picking likewise compose ordinary
+[native interaction functions](../display/src/widget/interaction.rs).
+`widget::before` prepares a placement continuation, which can contribute ink,
+claims, or handlers before any child; the layout interpreter only composes it.
+There are no click/activate/pick enum cases. Existing Grap layout constructors
+decode to these same functions. The current site's value and the host's pick
+capability are separate inputs, so an explicit pick target need not equal the
+value being projected. Neither path changes pointer-handler precedence.
+
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)

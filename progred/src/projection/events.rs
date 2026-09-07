@@ -16,30 +16,6 @@ use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerScrollEvent, PointerType, PointerUpdate,
 };
 
-pub(super) fn realize_click<C: 'static, Cv: Canvas + 'static>(
-    handler: progred_display::ActionHandler<C>,
-    inner: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, placement| {
-        p.handler().on_pointer_down(move |world, event| {
-            is_primary_contact(event)
-                && !crate::modifiers::pick(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && handler(world)
-        });
-    })
-}
-
-pub(super) fn realize_activate<C: 'static, Cv: Canvas + 'static>(
-    target: Hover,
-    handler: progred_display::ActionHandler<C>,
-    inner: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, _| {
-        p.activate(Hovered::Tree(target), move |world| handler(world));
-    })
-}
-
 pub(super) fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     function: Value,

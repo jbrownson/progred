@@ -33,6 +33,13 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Click, activation, and picking are ordinary native interaction functions,
+  not Layout variants or app interpreter cases. One generic `widget::before`
+  prepares a placement callback returning the same native outputs as a leaf;
+  it can wrap any child without inspecting or converting that child's widgets.
+  The callback runs only when the chosen child places, before the child's
+  outputs, preserving child-first event acceptance. Explicit pick values use
+  the caller-supplied pick capability, rather than an editor-interpreted opcode.
 - Delimiters are ordinary native side widgets. `Surround` now owns only the
   baseline composition and the sides' width budgets; opaque callbacks measure
   the two sides against the chosen child's span. The interpreter no longer
@@ -80,8 +87,9 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Migrate remaining event and control wrappers through the native widget
-   interface. Completion and its navigation/offer outputs remain host requests.
+1. Migrate hover, Grap-event, gesture, and remaining control wrappers through
+   the native widget interface. Completion and its navigation/offer outputs
+   remain host requests.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
    and project it during description; contribute navigation and interactions
    from placement continuations so discarded alternatives register nothing.
@@ -97,8 +105,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 8 `progred-display`,
-160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 265 `progred`
+The affected library tests pass: 22 `measured`, 10 `progred-display`,
+160 `progred-libraries`, 51 `puri`, 3 `puri-widgets`, and 266 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -168,3 +176,13 @@ Tanglecube 48.38 ms, Gyroid 34.01 ms, and Cube 15.11 ms. GPU-oriented canaries
 vary more; they are not a controlled attribution of cost to this interface.
 No cache or layout-search change was introduced. Native/web checks and format
 checks pass, with only the previously noted web menu warnings.
+
+The native pointer-action slice adds regressions for live-world callbacks,
+clipped raw clicks, retained-hover activation/picking, child-first acceptance,
+and arbitrary leading continuations placing only in the chosen alternative.
+Existing gesture tests now compose the native action callbacks, preserving
+pending-pick precedence, occlusion, and view ownership. The serial frame run
+measured IoP source 4.05 ms (p95 4.20 ms), IoP picture 22.83 ms, Fidget 10.01 ms,
+Torus 6.81 ms, Tanglecube 45.82 ms, Gyroid 31.71 ms, and Cube 13.91 ms. Source
+is slightly above the preceding 3.90 ms checkpoint; this interface change is
+not a performance optimization. No caching or event-relevance rules were added.

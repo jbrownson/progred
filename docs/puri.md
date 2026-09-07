@@ -86,6 +86,13 @@ without fixing a rendering backend or constructing GID drawing data.
 The editor supplies the current text state and edit/selection capabilities;
 the generic layout adapter does not parse or render line-editor props.
 
+`widget::before` contributes the same native outputs before an arbitrary
+child places. Its preparation function captures current inputs, then returns
+an opaque placement callback; `Layout::Before` knows neither the control nor
+its event policy. Click, activation, and picking are ordinary functions built
+on this combinator. Child handlers remain in front of their enclosing handlers,
+and only the chosen alternative invokes its placement callbacks.
+
 The upper `progred_display::Layout` still mixes boxes with other deferred
 editor requests. Separating that remaining layer is an
 [in-progress migration](layout-continuations.md), not a completed boundary.

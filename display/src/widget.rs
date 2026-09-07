@@ -1,7 +1,8 @@
 //! Native widget continuations and their editor-facing inputs/outputs.
 //! Layout measures and places these without interpreting a widget description.
 
-use crate::{ActionHandler, LineEdit};
+use crate::{ActionHandler, Layout, LineEdit};
+use gid::Value;
 pub use measured::place;
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, CanvasSink, GlyphRun, Shape};
@@ -12,6 +13,7 @@ use puri::{Affine, Brush, ImageData, Placement, Stroke};
 use std::rc::Rc;
 
 pub mod delimiter;
+pub mod interaction;
 pub mod line;
 pub mod style;
 
@@ -25,7 +27,11 @@ pub enum Direction {
 
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 pub type Edit<World> = Rc<dyn Fn(&mut World, &LineEdit, &EditOperation<'_>) -> bool>;
+pub type Pick<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
 pub type Render<Hover> = Box<dyn FnOnce(&mut dyn CanvasSink, Option<&Hover>)>;
+pub type Place<World, Hover> = Box<dyn FnOnce(&mut Fragment<World, Hover>, Placement)>;
+pub type Before<World, Hover> =
+    Rc<dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> Place<World, Hover>>;
 
 pub struct Context<'a, 'fonts, World, Hover> {
     pub text: &'a mut TextCtx<'fonts>,
@@ -36,8 +42,9 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub initial_text: &'a dyn Fn(&str) -> LineEditState,
     pub spelling: Option<&'a str>,
     pub target: Hover,
+    pub value: Option<&'a Value>,
     pub select: ActionHandler<World>,
-    pub pick: Option<ActionHandler<World>>,
+    pub pick: Pick<World>,
     pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
     pub same_target: fn(&Hover, &Hover) -> bool,
     pub edit: Edit<World>,
@@ -49,6 +56,17 @@ pub type Widget<World, Hover> = Rc<
         &mut Context<'a, 'fonts, World, Hover>,
     ) -> Measured<Fragment<World, Hover>>,
 >;
+
+/// Contribute outputs before the child places, without inspecting its widget type.
+pub fn before<World, Hover>(
+    child: Layout<World, Hover>,
+    before: Before<World, Hover>,
+) -> Layout<World, Hover> {
+    Layout::Before {
+        child: Box::new(child),
+        before,
+    }
+}
 
 /// A side box whose final measurement depends on the enclosed box's span.
 /// Prepare borrowed inputs now; measure against the chosen child later.
@@ -67,6 +85,7 @@ pub fn selectable<World: 'static, Hover: Clone + 'static>(
     let target = context.target.clone();
     let select = context.select.clone();
     let pick = context.pick.clone();
+    let value = context.value.cloned();
     let picking = context.picking;
     let same_target = context.same_target;
     move |child| {
@@ -83,7 +102,9 @@ pub fn selectable<World: 'static, Hover: Clone + 'static>(
                                     .as_ref()
                                     .is_some_and(|hovered| same_target(hovered, &target))
                                 && if picking(event) {
-                                    pick.as_ref().is_some_and(|pick| pick(world))
+                                    value
+                                        .as_ref()
+                                        .is_some_and(|value| pick(world, value.clone()))
                                 } else {
                                     select(world)
                                 }

@@ -5,7 +5,10 @@
 use std::borrow::Cow;
 use ui_events::ScrollDelta;
 pub use ui_events::keyboard::KeyboardEvent;
-pub use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerUpdate};
+pub use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerState, PointerType,
+    PointerUpdate,
+};
 
 /// Acceptance is independent of whether state changed. The remainder can
 /// represent part of an input, or the entire input when it was declined.

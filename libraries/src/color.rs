@@ -439,7 +439,7 @@ mod tests {
         assert!(matches!(
             children[0],
             Layout::OnHover { ref child, .. }
-                if matches!(child.as_ref(), Layout::OnActivate { child, .. }
+                if matches!(child.as_ref(), Layout::Before { child, .. }
                     if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_))))
         ));
         assert!(matches!(

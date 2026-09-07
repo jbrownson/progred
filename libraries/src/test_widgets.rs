@@ -24,8 +24,9 @@ fn with_context<Hover: Default, R>(
         spelling: None,
         initial_text: &|spelling| puri::LineEditState::new(spelling).with_cursor_at_end(),
         target: Hover::default(),
+        value: None,
         select: Rc::new(|_| true),
-        pick: None,
+        pick: Rc::new(|_, _| false),
         picking: |_| false,
         same_target: |_, _| false,
         edit,
@@ -52,6 +53,49 @@ pub fn line<Hover: Default + 'static>(layout: &Layout<(), Hover>) -> Option<Line
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()
+}
+
+pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
+    use puri::handler::{PointerButton, PointerButtonEvent, PointerInfo, PointerType};
+    use puri::{Placement, Rect};
+    let Layout::Before { before, .. } = layout else {
+        return None;
+    };
+    let picked = Rc::new(RefCell::new(None));
+    let capture = picked.clone();
+    let place = with_context(Rc::new(|_, _, _| false), |context| {
+        context.pick = Rc::new(move |_, value| {
+            capture.replace(Some(value));
+            true
+        });
+        context.picking = |_| true;
+        context.same_target = |_, _| true;
+        before(context)
+    });
+    let mut fragment = widget::Fragment {
+        renders: vec![],
+        handler: None,
+        claims: vec![],
+        select: None,
+    };
+    place(
+        &mut fragment,
+        Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
+    );
+    fragment.handler?.dispatch_pointer_down_with(
+        &mut (),
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: Default::default(),
+        },
+        &mut Some(()),
+    );
+    picked.take()
 }
 
 pub fn assert_delimiter<Hover: Default + 'static>(

@@ -32,7 +32,7 @@ fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
 
 /// A cell as a reference, not as an invitation to inspect its value.
 /// Contextual projections use this for expression and callable references.
-pub(crate) fn shallow_cell<World, Hover: Clone>(
+pub(crate) fn shallow_cell<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value?.as_cell()?;
@@ -1030,7 +1030,7 @@ mod tests {
             panic!("the label targets its argument");
         };
         assert_eq!(hover.as_deref(), Some(&[Step::Key(argument)][..]));
-        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
+        assert!(matches!(child.as_ref(), Layout::Before { .. }));
     }
 
     #[test]
@@ -1153,7 +1153,7 @@ mod tests {
             panic!("lambda arrow targets its body");
         };
         assert_eq!(hover.as_deref(), Some(&[Step::Key(BODY)][..]));
-        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
+        assert!(matches!(child.as_ref(), Layout::Before { .. }));
         assert!(matches!(
             unshared(&children[1]),
             Layout::Descend {

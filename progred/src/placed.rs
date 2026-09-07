@@ -910,14 +910,15 @@ mod tests {
             spelling: None,
             initial_text: &|text| puri::LineEditState::new(text),
             target: crate::hover::Hover::Value(Rc::from([])),
+            value: Some(&gid::Value::record([])),
             select: Rc::new(|log: &mut Vec<&'static str>| {
                 log.push("select");
                 true
             }),
-            pick: Some(Rc::new(|log| {
+            pick: Rc::new(|log, _| {
                 log.push("pick");
                 true
-            })),
+            }),
             picking: |event| crate::modifiers::pick(&event.state.modifiers),
             same_target: PartialEq::eq,
             edit: Rc::new(|_, _, _| false),

@@ -746,7 +746,7 @@ fn binding_display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn quote_marker<World, Hover: Clone>(
+fn quote_marker<World: 'static, Hover: Clone + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
@@ -1081,7 +1081,7 @@ mod tests {
         let Layout::OnHover { child, .. } = marker else {
             panic!("the marker claims hover");
         };
-        let Layout::OnActivate { child, .. } = *child else {
+        let Layout::Before { child, .. } = *child else {
             panic!("the marker remains selectable");
         };
         let Layout::Leaf(puri::Leaf::Text {
@@ -1629,7 +1629,7 @@ mod tests {
             hover.as_deref(),
             Some(&[Step::Key(grap::vocabulary::EXPRESSION)][..])
         );
-        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
+        assert!(matches!(child.as_ref(), Layout::Before { .. }));
     }
 
     #[test]

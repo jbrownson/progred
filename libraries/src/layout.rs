@@ -1184,7 +1184,7 @@ mod tests {
             panic!("alternatives decode");
         };
         assert_eq!(forms.len(), 2);
-        let Layout::OnActivate { child, .. } = &forms[0] else {
+        let Layout::Before { child, .. } = &forms[0] else {
             panic!("selectable attaches the provided select");
         };
         let Layout::Row { gap, children, .. } = child.as_ref() else {
@@ -1222,13 +1222,16 @@ mod tests {
 
     #[test]
     fn intents_and_leaves_decode() {
-        assert!(matches!(
-            decoded(&pick_target(
-                text_leaf("k", vocabulary::ID_FACE),
-                Value::Cell(vocabulary::GAP),
-            )),
-            Some(Layout::OnPick { value, .. }) if value == Value::Cell(vocabulary::GAP)
-        ));
+        assert_eq!(
+            crate::test_widgets::picked(
+                &decoded(&pick_target(
+                    text_leaf("k", vocabulary::ID_FACE),
+                    Value::Cell(vocabulary::GAP),
+                ))
+                .unwrap()
+            ),
+            Some(Value::Cell(vocabulary::GAP))
+        );
         assert!(matches!(
             decoded(&hoverable(text_leaf("h", vocabulary::LABEL_FACE))),
             Some(Layout::OnHover {

@@ -280,13 +280,18 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             2.0,
             leaf::<Vec<&str>, Bench>(extent, |_, _| {}),
         );
-        let node = realize_activate(
-            target.clone(),
-            Rc::new(|log: &mut Vec<&str>| {
-                log.push("outer selection");
-                true
-            }),
+        let node = native_before(
             drag,
+            progred_display::widget::interaction::target_action(
+                target.clone(),
+                Rc::new(|log: &mut Vec<&str>| {
+                    log.push("outer selection");
+                    true
+                }),
+                false,
+                |event| crate::modifiers::pick(&event.state.modifiers),
+                PartialEq::eq,
+            ),
         );
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         let mut placed = measured::place(node, placement);
@@ -443,7 +448,6 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
     let path = vec![Step::Key(new_cell_id())];
     let target = Hover::Value(Rc::from(path.clone()));
     let root = crate::workspace::Root::document();
-    let value = f64_convention::value(12.0);
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,
@@ -493,18 +497,20 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
                 });
             }),
         );
-        let picked = value.clone();
-        let node = realize_pick_with(
-            target.clone(),
-            value.clone(),
-            Rc::new(move |world: &mut World, value| {
-                assert_eq!(value, picked);
-                if world.pending {
-                    world.log.push("pending pick");
-                }
-                world.pending
-            }),
+        let node = native_before(
             scrub,
+            progred_display::widget::interaction::target_action(
+                target.clone(),
+                Rc::new(move |world: &mut World| {
+                    if world.pending {
+                        world.log.push("pending pick");
+                    }
+                    world.pending
+                }),
+                true,
+                |event| crate::modifiers::pick(&event.state.modifiers),
+                PartialEq::eq,
+            ),
         );
         let placement = Placement::new(
             Rect::new(0.0, 0.0, 20.0, 20.0),

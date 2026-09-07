@@ -50,10 +50,8 @@ pub use widget::delimiter::{bracket, selectable_bracket};
 
 pub use measured::RowAlignment;
 
-/// A coordinate-free action on the subtree that owns the handler.
-/// The language carries no pointer geometry or modifiers; those stay
-/// in [`Layout::OnEvent`]; the editor lowers this action into the same
-/// pointer dispatch order as raw event handlers.
+/// A coordinate-free action. Interaction combinators decide which input
+/// invokes it, in the same handler chain as raw pointer events.
 pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
 /// A semantic two-dimensional scrub, recognized by the editor from
@@ -350,25 +348,10 @@ pub enum Layout<World, Hover> {
     Widget(widget::Widget<World, Hover>),
     /// An inert empty text frame, measured with the host's text style.
     EmptySlot,
-    OnClick {
+    /// Add ordinary placement outputs before a child, without changing its geometry.
+    Before {
         child: Box<Layout<World, Hover>>,
-        handler: ActionHandler<World>,
-    },
-    /// A coordinate-free editor action addressed by the same target
-    /// used for hover. The host composes it in visual order with raw
-    /// pointer handlers.
-    OnActivate {
-        child: Box<Layout<World, Hover>>,
-        target: Hover,
-        handler: ActionHandler<World>,
-    },
-    /// The value a Pick action here commits into an open pending — any
-    /// value, not only a cell; the editor narrows where a stage demands
-    /// (labels take cells). Data, not a callback.
-    OnPick {
-        child: Box<Layout<World, Hover>>,
-        target: Hover,
-        value: Value,
+        before: widget::Before<World, Hover>,
     },
     /// Apply a Grap callable when an event reaches the subtree.
     /// The editor supplies the event value and a capability overlay
@@ -503,27 +486,9 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             },
             Self::Widget(widget) => Self::Widget(widget.clone()),
             Self::EmptySlot => Self::EmptySlot,
-            Self::OnClick { child, handler } => Self::OnClick {
+            Self::Before { child, before } => Self::Before {
                 child: child.clone(),
-                handler: handler.clone(),
-            },
-            Self::OnActivate {
-                child,
-                target,
-                handler,
-            } => Self::OnActivate {
-                child: child.clone(),
-                target: target.clone(),
-                handler: handler.clone(),
-            },
-            Self::OnPick {
-                child,
-                target,
-                value,
-            } => Self::OnPick {
-                child: child.clone(),
-                target: target.clone(),
-                value: value.clone(),
+                before: before.clone(),
             },
             Self::OnEvent { child, handler } => Self::OnEvent {
                 child: child.clone(),
@@ -776,46 +741,14 @@ pub fn leaf<World, Hover>(leaf: Leaf<Paint>) -> Layout<World, Hover> {
     Layout::Leaf(leaf)
 }
 
-pub fn on_click<World, Hover>(
-    child: Layout<World, Hover>,
-    handler: ActionHandler<World>,
-) -> Layout<World, Hover> {
-    Layout::OnClick {
-        child: Box::new(child),
-        handler,
-    }
-}
+pub use widget::interaction::{on_activate, on_click, pickable};
 
-pub fn on_activate<World, Hover>(
-    child: Layout<World, Hover>,
-    target: Hover,
-    handler: ActionHandler<World>,
-) -> Layout<World, Hover> {
-    Layout::OnActivate {
-        child: Box::new(child),
-        target,
-        handler,
-    }
-}
-
-pub fn activatable<World, Hover: Clone>(
+pub fn activatable<World: 'static, Hover: Clone + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
     handler: ActionHandler<World>,
 ) -> Layout<World, Hover> {
     on_hover(on_activate(child, target.clone(), handler), target)
-}
-
-pub fn pickable<World, Hover>(
-    child: Layout<World, Hover>,
-    target: Hover,
-    value: Value,
-) -> Layout<World, Hover> {
-    Layout::OnPick {
-        child: Box::new(child),
-        target,
-        value,
-    }
 }
 
 pub fn on_event<World, Hover>(child: Layout<World, Hover>, handler: Value) -> Layout<World, Hover> {
@@ -1185,28 +1118,6 @@ mod tests {
             layout = child.as_ref();
         }
         layout
-    }
-
-    #[test]
-    fn click_handlers_receive_the_live_world() {
-        #[derive(Default)]
-        struct World {
-            clicks: usize,
-        }
-
-        let layout: Layout<World, ()> = on_click(
-            text("click me"),
-            Rc::new(|world| {
-                world.clicks += 1;
-                true
-            }),
-        );
-        let Layout::OnClick { handler, .. } = layout else {
-            panic!("on_click builds an interaction node");
-        };
-        let mut world = World::default();
-        assert!(handler(&mut world));
-        assert_eq!(world.clicks, 1);
     }
 
     fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {

@@ -361,8 +361,9 @@ fn placed_line_description(
         spelling: None,
         initial_text: &crate::selection::line_edit,
         target: Hover::Value(Rc::from([])),
+        value: None,
         select: Rc::new(|_| true),
-        pick: None,
+        pick: Rc::new(|_, _| false),
         picking: |_| false,
         same_target: |_, _| false,
         edit: Rc::new(move |_, description, _| {

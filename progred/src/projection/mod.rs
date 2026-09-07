@@ -22,8 +22,7 @@ use crate::sources::Sources;
 use crate::styles::Styles;
 use completion::{label_query, pending_view};
 use events::{
-    realize_activate, realize_click, realize_event_with, realize_point, realize_scrub,
-    realize_state_drag, realize_state_scroll,
+    realize_event_with, realize_point, realize_scrub, realize_state_drag, realize_state_scroll,
 };
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
@@ -250,36 +249,13 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             hooks,
             |context| native_fragment(widget(context)),
         )),
-        progred_display::Layout::OnClick { child, handler } => {
+        progred_display::Layout::Before { child, before } => {
+            let before =
+                with_widget_context(cx, tcx, path, value, hooks, |context| before(context));
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            ChoiceLayout::map(inner, 0.0, move |inner| realize_click(handler, inner))
-        }
-        progred_display::Layout::OnActivate {
-            child,
-            target,
-            handler,
-        } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_activate(target, handler, inner)
-            })
-        }
-        progred_display::Layout::OnPick {
-            child,
-            target,
-            value: picked,
-        } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let pick = hooks.pick.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_pick_with(target, picked, pick, inner)
-            })
+            ChoiceLayout::map(inner, 0.0, move |inner| native_before(inner, before))
         }
         progred_display::Layout::OnEvent { child, handler } => {
             let inner = prepare(
@@ -567,19 +543,6 @@ fn prepare_at<C: 'static, Cv: Canvas + 'static>(
     )
 }
 
-fn realize_pick_with<C: 'static, Cv: Canvas + 'static>(
-    target: Hover,
-    picked: Value,
-    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    inner: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, _| {
-        p.pick(Hovered::Tree(target), move |world| {
-            pick(world, picked.clone())
-        });
-    })
-}
-
 fn realize_hover<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     hover: Option<Hover>,
@@ -828,12 +791,8 @@ fn with_widget_context<C: 'static, Result>(
             .map(|(_, text)| text),
         target: Hover::Value(site.clone()),
         select: select_handler(site, hooks),
-        pick: value.map(|value| {
-            let value = value.clone();
-            let pick = hooks.pick.clone();
-            Rc::new(move |world: &mut C| pick(world, value.clone()))
-                as progred_display::ActionHandler<C>
-        }),
+        value,
+        pick: hooks.pick.clone(),
         picking: |event| crate::modifiers::pick(&event.state.modifiers),
         same_target: PartialEq::eq,
         edit: Rc::new(move |world, description, operation| {
@@ -850,6 +809,18 @@ fn native_fragment<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     placed::leaf(measured.extent, move |output, placement| {
         output.fragment(measured::place(measured, placement));
+    })
+}
+
+fn native_before<C: 'static, Cv: Canvas + 'static>(
+    child: Measured<Placed<C, Cv>>,
+    place: progred_display::widget::Place<C, Hover>,
+) -> Measured<Placed<C, Cv>> {
+    before(child, move |output, placement| {
+        let mut fragment =
+            <progred_display::widget::Fragment<C, Hover> as measured::Output>::empty();
+        place(&mut fragment, placement);
+        output.fragment(fragment);
     })
 }
 
