@@ -32,6 +32,9 @@ fn with_interpreter<Hover: Default, R>(
         styles: &widget::style::editor(1.0),
         event_interpreter: &|| interpret.clone(),
         annotate: &|| panic!("unexpected annotation request"),
+        start_gesture: &|| panic!("unexpected gesture startup request"),
+        value_edit: &|| panic!("unexpected value edit request"),
+        drag_threshold: 3.0,
         command: |_| false,
         site: &|| widget::Site {
             writable: true,
@@ -70,6 +73,94 @@ pub fn line<Hover: Default + 'static>(layout: &Layout<(), Hover>) -> Option<Line
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()
+}
+
+pub fn point_update(
+    layout: &Layout<(), ()>,
+    point: progred_display::PointEvent,
+) -> progred_display::PointUpdate {
+    use progred_display::widget::gesture::{BeginEdit, ValueEdit};
+    use puri::handler::{PointerButton, PointerButtonEvent, PointerInfo, PointerType};
+    let Layout::Before { before, .. } = layout else {
+        panic!("expected a point-control wrapper");
+    };
+    let value = Rc::new(RefCell::new(None));
+    let selection = Rc::new(RefCell::new(None));
+    let write = value.clone();
+    let payload = selection.clone();
+    let edit: BeginEdit<()> = Rc::new(move || {
+        let write = write.clone();
+        let payload = payload.clone();
+        ValueEdit {
+            select: Rc::new(|_| panic!("point controls do not change the selected site")),
+            write: Box::new(move |_, value| {
+                write.replace(Some(value));
+                true
+            }),
+            selection: Rc::new(move |_, value| {
+                payload.replace(Some(value));
+            }),
+        }
+    });
+    let mut fonts = FontContext::new();
+    let mut layouts = LayoutContext::new();
+    let mut cache = TextCache::default();
+    let place = before(&mut widget::Context {
+        text: &mut TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            cache: &mut cache,
+            scale: 1.0,
+        },
+        styles: &widget::style::editor(1.0),
+        site: &|| panic!("point control does not request text editing"),
+        event_interpreter: &|| panic!("native point control does not interpret Grap"),
+        annotate: &|| panic!("point control does not change annotations"),
+        value_edit: &|| Some(edit.clone()),
+        start_gesture: &|| {
+            Rc::new(move |world, mut gesture, samples| {
+                gesture.advance(world, samples);
+                gesture.advance(world, &[puri::Point::new(point.x * 100.0, point.y * 100.0)]);
+            })
+        },
+        drag_threshold: 3.0,
+        command: |_| false,
+        pick: Rc::new(|_, _| false),
+        picking: |_| false,
+        same_target: |_, _| false,
+        primary_edit: |_| true,
+    });
+    let mut fragment = widget::Fragment {
+        renders: vec![],
+        handler: None,
+        claims: vec![],
+        select: None,
+    };
+    place(
+        &mut fragment,
+        puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
+    );
+    let mut event = PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: Default::default(),
+    };
+    event.state.position.x = 50.0;
+    event.state.position.y = 50.0;
+    assert!(
+        fragment
+            .handler
+            .unwrap()
+            .dispatch_pointer_down_with(&mut (), &event, &mut None)
+    );
+    progred_display::PointUpdate {
+        value: value.take().expect("initial contact writes"),
+        selection: selection.take(),
+    }
 }
 
 pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {

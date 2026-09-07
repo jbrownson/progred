@@ -3,7 +3,6 @@
 
 mod completion;
 mod drawing;
-mod events;
 pub(crate) mod line_control;
 mod location;
 mod structure;
@@ -21,7 +20,6 @@ use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
 use completion::{label_query, pending_view};
-use events::{realize_point, realize_scrub, realize_state_drag};
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, RoundedRect, Stroke};
 use location::Location;
@@ -253,55 +251,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
             ChoiceLayout::map(inner, 0.0, move |inner| native_before(inner, before))
-        }
-        progred_display::Layout::OnScrub {
-            child,
-            target,
-            handler,
-        } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let path = path.to_vec();
-            let writable = !cx.source.transient() && writable_at(&cx.sources, &path);
-            let start = hooks.scrub.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                if writable {
-                    realize_scrub(path, target, handler, start, scale, inner)
-                } else {
-                    inner
-                }
-            })
-        }
-        progred_display::Layout::OnStateDrag {
-            child,
-            target,
-            on_press,
-            handler,
-        } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let path = path.to_vec();
-            let start = hooks.state_drag.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_state_drag(path, target, on_press, handler, start, scale, inner)
-            })
-        }
-        progred_display::Layout::OnPoint { child, handler } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let path = path.to_vec();
-            let point = hooks.point.clone();
-            let writable = !cx.source.transient() && writable_at(&cx.sources, &path);
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                if writable {
-                    realize_point(path, handler, point, inner)
-                } else {
-                    inner
-                }
-            })
         }
         progred_display::Layout::Row {
             alignment,
@@ -593,12 +542,9 @@ pub struct Hooks<C> {
     /// Apply a Grap event handler at `path` with the event as data and
     /// capabilities closed over that site.
     pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
-    /// Begin a continuous point control at its settled placement.
-    pub point: Rc<dyn Fn(&mut C, Path, Placement, progred_display::PointHandler, Point) -> bool>,
-    /// Begin a projection state drag in this hook's owning view.
-    pub state_drag: Rc<dyn Fn(&mut C, Path, progred_display::StateDragHandler, Point, f64)>,
-    /// Select and begin a value scrub, declining while a pending is active.
-    pub scrub: Rc<dyn Fn(&mut C, Path, progred_display::ScrubHandler, Point, f64) -> bool>,
+    pub start_gesture:
+        Rc<dyn Fn(&mut C, Path, Box<dyn progred_display::widget::gesture::Gesture<C>>, &[Point])>,
+    pub value_edit: Rc<dyn Fn(Path) -> progred_display::widget::gesture::ValueEdit<C>>,
     /// Commit one of the exact offers shown by an engaged pending.
     pub commit_value: Rc<dyn Fn(&mut C, Value, Option<Value>)>,
     pub commit_label: Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>)>,
@@ -753,6 +699,20 @@ fn with_widget_context<C: 'static, Result>(
         site: &site,
         event_interpreter: &event_interpreter,
         annotate: &annotate,
+        start_gesture: &|| {
+            let start = hooks.start_gesture.clone();
+            let path = path.to_vec();
+            Rc::new(move |world, gesture, samples| start(world, path.clone(), gesture, samples))
+        },
+        value_edit: &|| {
+            (!cx.source.transient() && writable_at(&cx.sources, path)).then(|| {
+                let edit = hooks.value_edit.clone();
+                let path = path.to_vec();
+                Rc::new(move || edit(path.clone()))
+                    as progred_display::widget::gesture::BeginEdit<C>
+            })
+        },
+        drag_threshold: crate::gesture::DRAG_THRESHOLD,
         command: crate::modifiers::command,
         pick: hooks.pick.clone(),
         picking: |event| crate::modifiers::pick(&event.state.modifiers),
@@ -1143,9 +1103,8 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_, _| false),
         apply: hooks.apply.clone(),
-        point: hooks.point.clone(),
-        state_drag: hooks.state_drag.clone(),
-        scrub: hooks.scrub.clone(),
+        start_gesture: hooks.start_gesture.clone(),
+        value_edit: hooks.value_edit.clone(),
         commit_value: hooks.commit_value.clone(),
         commit_label: hooks.commit_label.clone(),
         set_completion_view: hooks.set_completion_view.clone(),

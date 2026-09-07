@@ -172,7 +172,11 @@ fn hsva(encoded: Encoded) -> Hsva {
     Hsva::from_rgba8(rgba)
 }
 
-fn picker<World, Hover>(original: &Value, encoded: Encoded, hue: f64) -> Layout<World, Hover> {
+fn picker<World: 'static, Hover: 'static>(
+    original: &Value,
+    encoded: Encoded,
+    hue: f64,
+) -> Layout<World, Hover> {
     let color = Hsva {
         hue,
         ..hsva(encoded)
@@ -561,10 +565,8 @@ mod tests {
         let Layout::Col { children, .. } = content.as_ref() else {
             panic!("picker controls are stacked")
         };
-        let Layout::OnPoint { handler, .. } = &children[0] else {
-            panic!("saturation/value is a point control")
-        };
-        let updated = handler(PointEvent { x: 1.0, y: 0.0 });
+        let updated =
+            crate::test_widgets::point_update(&children[0], PointEvent { x: 1.0, y: 0.0 });
 
         assert_eq!(
             updated.value.as_record().unwrap().get(&extra),
@@ -573,10 +575,8 @@ mod tests {
         assert!(matches!(encoded(&updated.value), Some(Encoded::Rgb(_))));
         assert!(updated.selection.is_none());
 
-        let Layout::OnPoint { handler, .. } = &children[1] else {
-            panic!("hue is a point control")
-        };
-        let updated = handler(PointEvent { x: 0.25, y: 0.0 });
+        let updated =
+            crate::test_widgets::point_update(&children[1], PointEvent { x: 0.25, y: 0.0 });
         assert_eq!(picker_hue(updated.selection.as_ref()), Some(0.25));
     }
 

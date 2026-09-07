@@ -69,9 +69,8 @@ fn native_annotation_handler_retains_the_projected_site() {
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
             apply: Rc::new(|_, _, _, _| panic!("native scroll does not interpret Grap")),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),
@@ -168,9 +167,8 @@ fn a_data_event_realizes_the_apply_hook() {
                 events.push((path, handler, event));
                 true
             }),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),

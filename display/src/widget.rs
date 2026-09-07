@@ -14,6 +14,7 @@ use puri::text::{TextCtx, TextMetrics};
 use std::rc::Rc;
 
 pub mod delimiter;
+pub mod gesture;
 pub mod hover;
 pub mod interaction;
 pub mod line;
@@ -45,6 +46,9 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub site: &'a dyn Fn() -> Site<'a, World, Hover>,
     pub event_interpreter: &'a dyn Fn() -> EventInterpreter<World>,
     pub annotate: &'a dyn Fn() -> Annotate<World>,
+    pub start_gesture: &'a dyn Fn() -> gesture::Start<World>,
+    pub value_edit: &'a dyn Fn() -> Option<gesture::BeginEdit<World>>,
+    pub drag_threshold: f64,
     pub command: fn(&puri::handler::Modifiers) -> bool,
     pub pick: Pick<World>,
     pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
@@ -364,6 +368,9 @@ mod tests {
             site: &|| panic!("unrelated site input requested"),
             event_interpreter: &|| panic!("unrelated Grap interpreter requested"),
             annotate: &|| panic!("unrelated annotation capability requested"),
+            start_gesture: &|| panic!("unexpected gesture startup request"),
+            value_edit: &|| panic!("unexpected value edit request"),
+            drag_threshold: 3.0,
             command: |_| false,
             pick: Rc::new(|_, _| true),
             picking: |_| false,

@@ -6,17 +6,17 @@ use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Step, Value};
-use kurbo::{Point, Rect, Vec2};
-use progred_display::{PointHandler, ScrubHandler, StateDragHandler};
+use kurbo::Point;
+use progred_display::widget::gesture::{Gesture, ValueEdit};
 use progred_libraries::Libraries;
 
-pub(crate) trait Gesture {
-    /// Returns whether the document changed, for the window's save indicator.
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool;
+// Logical pixels; replace when the input adapter exposes the platform threshold.
+pub(crate) const DRAG_THRESHOLD: f64 = 3.0;
 
-    fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
-        None
-    }
+pub(crate) struct Active<World> {
+    root: Root,
+    path: Path,
+    continuation: Box<dyn Gesture<World>>,
 }
 
 pub(crate) struct ScrubSpelling<'a> {
@@ -25,77 +25,21 @@ pub(crate) struct ScrubSpelling<'a> {
     pub spelling: &'a str,
 }
 
-struct Drag {
-    origin: Point,
-    previous: Point,
-    scale: f64,
-    dragging: bool,
-}
-
-struct Motion {
-    movement: Vec2,
-    distance: Vec2,
-}
-
-impl Drag {
-    fn new(origin: Point, scale: f64) -> Self {
+impl<World> Active<World> {
+    pub(crate) fn new(root: Root, path: Path, continuation: Box<dyn Gesture<World>>) -> Self {
         Self {
-            origin,
-            previous: origin,
-            scale,
-            dragging: false,
+            root,
+            path,
+            continuation,
         }
     }
 
-    fn advance(&mut self, point: Point) -> Option<Motion> {
-        let distance = (point - self.origin) / self.scale;
-        let movement = if self.dragging {
-            (point - self.previous) / self.scale
-        } else {
-            distance
-        };
-        // Logical pixels; replace when the input adapter exposes the platform threshold.
-        self.dragging |= distance.hypot() >= 3.0;
-        self.previous = point;
-        self.dragging.then_some(Motion { movement, distance })
-    }
-}
-
-struct Scrub {
-    drag: Drag,
-    root: Root,
-    path: Path,
-    gesture: progred_display::ScrubGesture,
-    recorded: bool,
-    spelling: Option<String>,
-}
-
-pub(crate) fn scrub(
-    origin: Point,
-    scale: f64,
-    root: Root,
-    path: Path,
-    handler: ScrubHandler,
-) -> Box<dyn Gesture> {
-    Box::new(Scrub {
-        drag: Drag::new(origin, scale),
-        root,
-        path,
-        gesture: handler(),
-        recorded: false,
-        spelling: None,
-    })
-}
-
-impl Gesture for Scrub {
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool {
-        samples.iter().fold(false, |changed, point| {
-            self.advance_point(model, libraries, *point) || changed
-        })
+    pub(crate) fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool {
+        self.continuation.advance(world, samples)
     }
 
-    fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
-        self.spelling.as_deref().map(|spelling| ScrubSpelling {
+    pub(crate) fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
+        self.continuation.spelling().map(|spelling| ScrubSpelling {
             root: &self.root,
             path: &self.path,
             spelling,
@@ -103,128 +47,41 @@ impl Gesture for Scrub {
     }
 }
 
-impl Scrub {
-    fn advance_point(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
-        self.drag.advance(point).is_some_and(|motion| {
-            let update = (self.gesture)(progred_display::ScrubEvent {
-                movement_x: motion.movement.x,
-                distance_y: motion.distance.y,
-            });
-            self.spelling = update.spelling;
-            write_value(
-                model,
-                libraries,
-                &self.path,
-                update.value,
-                &mut self.recorded,
-            )
-        })
-    }
-}
-
-struct StateDrag {
-    drag: Drag,
+pub(crate) fn value_edit<World: 'static>(
     root: Root,
     path: Path,
-    gesture: progred_display::StateDragGesture,
-}
-
-pub(crate) fn state_drag(
-    origin: Point,
-    scale: f64,
-    root: Root,
-    path: Path,
-    handler: StateDragHandler,
-) -> Box<dyn Gesture> {
-    Box::new(StateDrag {
-        drag: Drag::new(origin, scale),
-        root,
-        path,
-        gesture: handler(),
-    })
-}
-
-impl Gesture for StateDrag {
-    fn advance(&mut self, model: &mut Model, _: &Libraries, samples: &[Point]) -> bool {
-        let samples: Vec<_> = samples
-            .iter()
-            .filter_map(|point| self.drag.advance(*point))
-            .map(|motion| progred_display::StateDragEvent {
-                delta_x: motion.distance.x,
-                delta_y: motion.distance.y,
-            })
-            .collect();
-        if let Some((current, coalesced)) = samples.split_last() {
-            let state = (self.gesture)(*current, coalesced);
-            if let Some(view) = model.workspace.view_mut(&self.root)
-                && view.annotations.at(&self.path) != Some(&state)
-            {
-                view.annotations.set(&self.path, Some(state));
-            }
-        }
-        false
-    }
-}
-
-struct PointControl {
-    root: Root,
-    path: Path,
-    rect: Rect,
-    handler: PointHandler,
-    recorded: bool,
-}
-
-pub(crate) fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Box<dyn Gesture> {
-    Box::new(PointControl {
-        root,
-        path,
-        rect,
-        handler,
-        recorded: false,
-    })
-}
-
-impl Gesture for PointControl {
-    fn advance(&mut self, model: &mut Model, libraries: &Libraries, samples: &[Point]) -> bool {
-        samples.iter().fold(false, |changed, point| {
-            self.advance_point(model, libraries, *point) || changed
-        })
-    }
-}
-
-impl PointControl {
-    fn advance_point(&mut self, model: &mut Model, libraries: &Libraries, point: Point) -> bool {
-        let update = (self.handler)(progred_display::PointEvent {
-            x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
-            y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
-        });
-        let wrote = write_value(
-            model,
-            libraries,
-            &self.path,
-            update.value,
-            &mut self.recorded,
-        );
-        if let Some(payload) = update.selection
-            && let Some(recorded) = model
+    select: progred_display::ActionHandler<World>,
+    access: fn(&mut World) -> (&mut Model, &Libraries),
+) -> ValueEdit<World> {
+    let write_path = path.clone();
+    let mut recorded = false;
+    ValueEdit {
+        select,
+        write: Box::new(move |world, value| {
+            let (model, libraries) = access(world);
+            write_value(model, libraries, &write_path, value, &mut recorded)
+        }),
+        selection: std::rc::Rc::new(move |world, payload| {
+            let (model, libraries) = access(world);
+            if let Some(recorded) = model
                 .selection
                 .as_ref()
-                .filter(|selection| selection.root() == &self.root && selection.path() == self.path)
+                .filter(|selection| selection.root() == &root && selection.path() == path)
                 .map(Selection::recorded)
-        {
-            let mut next = Selection::from_payload(
-                &self.root,
-                &Sources {
-                    doc: &model.doc,
-                    libraries,
-                },
-                self.path.clone(),
-                payload,
-            );
-            next.preserve_recorded(recorded);
-            model.selection = Some(next);
-        }
-        wrote
+            {
+                let mut next = Selection::from_payload(
+                    &root,
+                    &Sources {
+                        doc: &model.doc,
+                        libraries,
+                    },
+                    path.clone(),
+                    payload,
+                );
+                next.preserve_recorded(recorded);
+                model.selection = Some(next);
+            }
+        }),
     }
 }
 
@@ -260,11 +117,118 @@ mod tests {
     use progred_libraries::f64;
     use std::rc::Rc;
 
-    fn model(value: Value) -> Model {
-        Model::new(gid::Document {
-            root: Some(value),
-            cells: gid::Cells::new(),
+    use kurbo::Rect;
+    use progred_display::widget::gesture as native;
+    use progred_display::{PointHandler, ScrubHandler, StateDragHandler};
+    use puri::drag::Drag;
+
+    struct World {
+        model: Model,
+        libraries: Libraries,
+    }
+    impl std::ops::Deref for World {
+        type Target = Model;
+        fn deref(&self) -> &Model {
+            &self.model
+        }
+    }
+    impl std::ops::DerefMut for World {
+        fn deref_mut(&mut self) -> &mut Model {
+            &mut self.model
+        }
+    }
+
+    fn model(value: Value) -> World {
+        World {
+            model: Model::new(gid::Document {
+                root: Some(value),
+                cells: gid::Cells::new(),
+            }),
+            libraries: Libraries::default(),
+        }
+    }
+
+    fn edit(root: Root, path: Path) -> ValueEdit<World> {
+        value_edit(root, path, Rc::new(|_| true), |world| {
+            (&mut world.model, &world.libraries)
         })
+    }
+
+    fn scrub(
+        origin: Point,
+        scale: f64,
+        root: Root,
+        path: Path,
+        handler: ScrubHandler,
+    ) -> Active<World> {
+        let edit = edit(root.clone(), path.clone());
+        Active::new(
+            root,
+            path,
+            native::scrub(
+                Drag::new(origin, scale, DRAG_THRESHOLD),
+                handler(),
+                edit.write,
+            ),
+        )
+    }
+
+    fn state_drag(
+        origin: Point,
+        scale: f64,
+        root: Root,
+        path: Path,
+        handler: StateDragHandler,
+    ) -> Active<World> {
+        let state_root = root.clone();
+        let state_path = path.clone();
+        Active::new(
+            root,
+            path,
+            native::state_drag(
+                Drag::new(origin, scale, DRAG_THRESHOLD),
+                handler(),
+                Rc::new(move |world: &mut World, value| {
+                    if let Some(view) = world.workspace.view_mut(&state_root) {
+                        view.annotations.set(&state_path, Some(value));
+                        true
+                    } else {
+                        false
+                    }
+                }),
+            ),
+        )
+    }
+
+    fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Active<World> {
+        let edit = edit(root.clone(), path.clone());
+        Active::new(root, path, native::point(rect, handler, edit))
+    }
+
+    #[test]
+    fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
+        let mut world = model(f64::value(10.0));
+        let original = world.doc.clone();
+        let root = world.workspace.document_root().clone();
+        let other_path = vec![Step::Key(gid::new_cell_id())];
+        world.selection = Some(selection::bare_edge(&root, other_path.clone()));
+        let mut edit = value_edit(
+            root,
+            vec![],
+            Rc::new(|_: &mut World| panic!("creating or writing an edit does not select")),
+            |world| (&mut world.model, &world.libraries),
+        );
+        assert!(Rc::ptr_eq(&original, &world.doc));
+        assert!(!(edit.write)(&mut world, f64::value(10.0)));
+        assert!(Rc::ptr_eq(&original, &world.doc));
+        assert!(!world.history.can_undo());
+        (edit.selection)(&mut world, selection::payload::edge());
+        assert_eq!(world.selection.as_ref().unwrap().path(), other_path);
+        assert!((edit.write)(&mut world, f64::value(11.0)));
+        assert!((edit.write)(&mut world, f64::value(12.0)));
+        assert!(world.step_history(true));
+        assert!(Rc::ptr_eq(&original, &world.doc));
+        assert!(!world.history.can_undo());
     }
 
     #[test]
@@ -272,7 +236,6 @@ mod tests {
         let mut model = model(f64::value(10.0));
         let original = model.doc.clone();
         let root = model.workspace.document_root().clone();
-        let libraries = Libraries::default();
         let mut gesture = scrub(
             Point::new(100.0, 200.0),
             2.0,
@@ -290,15 +253,15 @@ mod tests {
                 })
             }),
         );
-        assert!(!gesture.advance(&mut model, &libraries, &[Point::new(102.0, 202.0)]));
+        assert!(!gesture.advance(&mut model, &[Point::new(102.0, 202.0)]));
         assert!(!model.history.can_undo());
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(108.0, 206.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(108.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(14.0)));
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(110.0, 206.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(110.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(15.0)));
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(-20.0, 206.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(-20.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(-50.0)));
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(110.0, 206.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(110.0, 206.0)]));
         assert_eq!(model.doc.root, Some(f64::value(15.0)));
         let presentation = gesture.scrub_spelling().unwrap();
         assert_eq!(presentation.root, &root);
@@ -314,7 +277,6 @@ mod tests {
         let mut model = model(Value::record([]));
         let root = model.workspace.document_root().clone();
         let path = vec![Step::Key(gid::new_cell_id())];
-        let libraries = Libraries::default();
         let mut gesture = state_drag(
             Point::ZERO,
             2.0,
@@ -326,7 +288,7 @@ mod tests {
                 })
             }),
         );
-        gesture.advance(&mut model, &libraries, &[Point::new(5.0, 0.0)]);
+        gesture.advance(&mut model, &[Point::new(5.0, 0.0)]);
         assert!(
             model
                 .workspace
@@ -336,8 +298,8 @@ mod tests {
                 .at(&path)
                 .is_none()
         );
-        gesture.advance(&mut model, &libraries, &[Point::new(8.0, 12.0)]);
-        gesture.advance(&mut model, &libraries, &[Point::new(10.0, 12.0)]);
+        gesture.advance(&mut model, &[Point::new(8.0, 12.0)]);
+        gesture.advance(&mut model, &[Point::new(10.0, 12.0)]);
         assert_eq!(
             model.workspace.view(&root).unwrap().annotations.at(&path),
             Some(&Value::list([f64::value(5.0), f64::value(6.0)]))
@@ -348,7 +310,6 @@ mod tests {
 
     #[test]
     fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
-        let libraries = Libraries::default();
         let mut model = model(f64::value(0.0));
         let root = model.workspace.document_root().clone();
         let samples = [
@@ -376,7 +337,7 @@ mod tests {
                 })
             }),
         );
-        assert!(gesture.advance(&mut model, &libraries, &samples));
+        assert!(gesture.advance(&mut model, &samples));
         assert_eq!(*received.borrow(), [(10.0, 0.0), (0.0, 10.0), (10.0, 10.0)]);
         assert_eq!(
             model.doc.root,
@@ -407,11 +368,7 @@ mod tests {
                 })
             }),
         );
-        gesture.advance(
-            &mut model,
-            &Libraries::default(),
-            &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)],
-        );
+        gesture.advance(&mut model, &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)]);
         let sample = |x| progred_display::StateDragEvent {
             delta_x: x,
             delta_y: 0.0,
@@ -430,7 +387,6 @@ mod tests {
         let original = model.doc.clone();
         let root = model.workspace.document_root().clone();
         model.selection = Some(selection::bare_edge(&root, vec![]));
-        let libraries = Libraries::default();
         let mut gesture = point(
             root.clone(),
             vec![],
@@ -440,17 +396,17 @@ mod tests {
                 selection: Some(selection::payload::edge()),
             }),
         );
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(30.0, 40.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(30.0, 40.0)]));
         assert_eq!(
             model.doc.root,
             Some(Value::list([f64::value(0.2), f64::value(0.2)]))
         );
-        assert!(gesture.advance(&mut model, &libraries, &[Point::new(210.0, -20.0)]));
+        assert!(gesture.advance(&mut model, &[Point::new(210.0, -20.0)]));
         assert_eq!(
             model.doc.root,
             Some(Value::list([f64::value(1.0), f64::value(0.0)]))
         );
-        assert!(!gesture.advance(&mut model, &libraries, &[Point::new(210.0, -20.0)]));
+        assert!(!gesture.advance(&mut model, &[Point::new(210.0, -20.0)]));
         assert_eq!(model.selection.as_ref().unwrap().root(), &root);
         assert!(model.step_history(true));
         assert_eq!(model.doc.root, original.root);

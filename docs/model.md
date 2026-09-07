@@ -360,10 +360,14 @@ saved state. The GID document and its on-disk representation remain unchanged.
 
 A line's first write records its undo step; subsequent writes in that edit run
 coalesce. Saving or recording a fold breaks the run. Projection gestures have one
-caller-owned continuation in [`gesture`](../progred/src/gesture.rs). The accepting
-handler starts it; the continuation owns domain updates, undo grouping, release,
-and cancellation. Replacing/restoring the document, saving, or recording a fold
-ends it.
+caller-owned slot in [`gesture`](../progred/src/gesture.rs). An ordinary native
+widget's accepting handler supplies the continuation; the slot does not
+distinguish number, camera, or color controls. Widgets process pointer samples,
+closing over document-edit runs or view-annotation setters supplied by the
+editor. An edit run groups its successful writes into one undo step. Creating
+the run, moving the caret, and writing an equal value do not write the document.
+Release, cancellation, replacing/restoring the document, saving, or recording
+a fold ends the gesture.
 
 The platform supplies persistence and clipboard capabilities. macOS uses its
 native atomic write API. Linux writes a unique sibling temporary file,

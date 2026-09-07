@@ -847,6 +847,9 @@ mod tests {
             styles: &widget::style::editor(scale),
             event_interpreter: &|| panic!("delimiter does not interpret Grap"),
             annotate: &|| panic!("delimiter does not request annotation writes"),
+            start_gesture: &|| panic!("unexpected gesture startup request"),
+            value_edit: &|| panic!("unexpected value edit request"),
+            drag_threshold: 3.0,
             command: |_| false,
             site: &|| widget::Site {
                 writable: false,

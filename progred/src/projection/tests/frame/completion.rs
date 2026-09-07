@@ -81,9 +81,8 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                 insert: Rc::new(|_, _| {}),
                 delete: Rc::new(|_, _| false),
                 apply: Rc::new(|_, _, _, _| false),
-                point: Rc::new(|_, _, _, _, _| false),
-                state_drag: Rc::new(|_, _, _, _, _| {}),
-                scrub: Rc::new(|_, _, _, _, _| false),
+                start_gesture: Rc::new(|_, _, _, _| {}),
+                value_edit: Rc::new(|_| panic!("unexpected value edit")),
                 select_source: Rc::new(|_, _, _| {}),
                 commit_value: Rc::new(|state, value, _| state.committed.push(value)),
                 commit_label: Rc::new(|state, cell, _, _| state.committed.push(Value::from(cell))),
@@ -986,9 +985,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
                 world.applied = Some(path);
                 true
             }),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),

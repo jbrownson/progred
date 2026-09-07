@@ -54,55 +54,10 @@ pub use measured::RowAlignment;
 /// invokes it, in the same handler chain as raw pointer events.
 pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
-/// A semantic two-dimensional scrub, recognized by the editor from
-/// raw pointer input. The projection owns how displacement changes
-/// its value; buttons, modifiers, and click/drag recognition stay in
-/// the host.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScrubEvent {
-    pub movement_x: f64,
-    pub distance_y: f64,
-}
-
-pub struct ScrubUpdate {
-    pub value: Value,
-    pub spelling: Option<String>,
-}
-
-pub type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
-pub type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
-
-/// Displacement from the start of a host-recognized drag, in logical
-/// display units. The host owns the click/drag threshold and pointer
-/// capture; the projection owns the resulting per-site state.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct StateDragEvent {
-    pub delta_x: f64,
-    pub delta_y: f64,
-}
-
-/// The latest displacement and earlier samples in order. A handler may
-/// use just the latest displacement or integrate the complete path.
-pub type StateDragGesture = Box<dyn FnMut(StateDragEvent, &[StateDragEvent]) -> Value>;
-pub type StateDragHandler = Rc<dyn Fn() -> StateDragGesture>;
-
-/// A position inside a continuous two-dimensional control, normalized
-/// to its settled rectangle. The host owns pointer capture and writes
-/// the returned value through the projected location.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PointEvent {
-    pub x: f64,
-    pub y: f64,
-}
-
-pub struct PointUpdate {
-    pub value: Value,
-    /// Optional replacement for the selected location's transient
-    /// payload. This is control state, not document data.
-    pub selection: Option<Value>,
-}
-
-pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
+pub use widget::gesture::{
+    PointEvent, PointHandler, PointUpdate, ScrubEvent, ScrubGesture, ScrubHandler, ScrubUpdate,
+    StateDragEvent, StateDragGesture, StateDragHandler,
+};
 
 /// One value a projection suggests at an explicit completion control.
 /// The host owns filtering and presentation; the projection owns the
@@ -333,24 +288,6 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         before: widget::Before<World, Hover>,
     },
-    OnScrub {
-        child: Box<Layout<World, Hover>>,
-        target: Hover,
-        handler: ScrubHandler,
-    },
-    /// A drag whose result replaces this projection site's annotation
-    /// value rather than document data. An accepted press performs
-    /// `on_press` and begins the drag as one interaction.
-    OnStateDrag {
-        child: Box<Layout<World, Hover>>,
-        target: Hover,
-        on_press: ActionHandler<World>,
-        handler: StateDragHandler,
-    },
-    OnPoint {
-        child: Box<Layout<World, Hover>>,
-        handler: PointHandler,
-    },
     Row {
         alignment: RowAlignment,
         gap: f64,
@@ -451,30 +388,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::Before { child, before } => Self::Before {
                 child: child.clone(),
                 before: before.clone(),
-            },
-            Self::OnScrub {
-                child,
-                target,
-                handler,
-            } => Self::OnScrub {
-                child: child.clone(),
-                target: target.clone(),
-                handler: handler.clone(),
-            },
-            Self::OnStateDrag {
-                child,
-                target,
-                on_press,
-                handler,
-            } => Self::OnStateDrag {
-                child: child.clone(),
-                target: target.clone(),
-                on_press: on_press.clone(),
-                handler: handler.clone(),
-            },
-            Self::OnPoint { child, handler } => Self::OnPoint {
-                child: child.clone(),
-                handler: handler.clone(),
             },
             Self::Row {
                 alignment,
@@ -704,41 +617,7 @@ pub fn activatable<World: 'static, Hover: Clone + 'static>(
     on_hover(on_activate(child, target.clone(), handler), target)
 }
 
-pub fn on_scrub<World, Hover>(
-    child: Layout<World, Hover>,
-    target: Hover,
-    handler: ScrubHandler,
-) -> Layout<World, Hover> {
-    Layout::OnScrub {
-        child: Box::new(child),
-        target,
-        handler,
-    }
-}
-
-pub fn on_state_drag<World, Hover>(
-    child: Layout<World, Hover>,
-    target: Hover,
-    on_press: ActionHandler<World>,
-    handler: StateDragHandler,
-) -> Layout<World, Hover> {
-    Layout::OnStateDrag {
-        child: Box::new(child),
-        target,
-        on_press,
-        handler,
-    }
-}
-
-pub fn on_point<World, Hover>(
-    child: Layout<World, Hover>,
-    handler: PointHandler,
-) -> Layout<World, Hover> {
-    Layout::OnPoint {
-        child: Box::new(child),
-        handler,
-    }
-}
+pub use widget::gesture::{on_point, on_scrub, on_state_drag};
 
 pub fn row<World, Hover>(
     gap: f64,

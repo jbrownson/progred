@@ -6,6 +6,7 @@
 //! See `docs/puri.md`.
 
 pub mod delim;
+pub mod drag;
 pub mod draw;
 pub mod edit;
 pub mod geometry;

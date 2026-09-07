@@ -624,10 +624,9 @@ fn projection_hooks(
     let toggle_root = root.clone();
     let insert_root = root.clone();
     let apply_root = root.clone();
-    let point_root = root.clone();
+    let gesture_root = root.clone();
     let completion_root = root.clone();
-    let drag_root = root.clone();
-    let scrub_root = root.clone();
+    let value_edit_root = root.clone();
     let state_root = root;
     let select: Rc<dyn Fn(&mut Editor, gid::Path)> = Rc::new(move |app, path| {
         let fresh = match app.model.selection.as_ref() {
@@ -690,43 +689,35 @@ fn projection_hooks(
         apply: Rc::new(move |app, path, function, event| {
             crate::site::apply_event(app, apply_root.clone(), path, function, event)
         }),
-        state_drag: Rc::new(move |app, path, handler, point, scale| {
-            app.gesture = Some(crate::gesture::state_drag(
-                point,
-                scale,
-                drag_root.clone(),
+        start_gesture: Rc::new(move |app, path, gesture, samples| {
+            app.gesture = Some(crate::gesture::Active::new(
+                gesture_root.clone(),
                 path,
-                handler,
+                gesture,
             ));
+            app.advance_gesture(samples);
         }),
-        scrub: Rc::new(move |app, path, handler, point, scale| {
-            if app.model.selection.as_ref().is_some_and(|selection| {
-                matches!(
-                    selection.stage(&app.sources()),
-                    selection::Stage::Pending | selection::Stage::Label
-                )
-            }) {
-                false
-            } else {
-                select(app, path.clone());
-                app.gesture = Some(crate::gesture::scrub(
-                    point,
-                    scale,
-                    scrub_root.clone(),
-                    path,
-                    handler,
-                ));
-                true
-            }
-        }),
-        point: Rc::new(move |app, path, placement, handler, point| {
-            app.gesture = Some(crate::gesture::point(
-                point_root.clone(),
+        value_edit: Rc::new(move |path| {
+            let select = select.clone();
+            let select_path = path.clone();
+            crate::gesture::value_edit(
+                value_edit_root.clone(),
                 path,
-                placement.rect,
-                handler,
-            ));
-            app.advance_gesture(&[point])
+                Rc::new(move |app: &mut Editor| {
+                    if app.model.selection.as_ref().is_some_and(|selection| {
+                        matches!(
+                            selection.stage(&app.sources()),
+                            selection::Stage::Pending | selection::Stage::Label
+                        )
+                    }) {
+                        false
+                    } else {
+                        select(app, select_path.clone());
+                        true
+                    }
+                }),
+                |app| (&mut app.model, &app.stack.libraries),
+            )
         }),
         commit_value: Rc::new(|app: &mut Editor, value, on_commit| {
             if app

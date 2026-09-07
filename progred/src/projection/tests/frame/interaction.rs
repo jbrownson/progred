@@ -81,9 +81,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 world.applied = Some(path);
                 true
             }),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),
@@ -213,9 +212,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
             apply: Rc::new(|_, _, _, _| false),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),
@@ -255,30 +253,30 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
     };
 
     let target = Hover::Value(Rc::from([]));
-    let path = vec![Step::Key(gid::new_cell_id())];
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,
         descent: 20.0,
     };
     for (accepts, covered) in [(true, false), (false, false), (true, true)] {
-        let captured_path = path.clone();
-        let drag = realize_state_drag(
-            path.clone(),
-            target.clone(),
-            Rc::new(move |log: &mut Vec<&str>| {
-                log.push("select");
-                accepts
-            }),
-            Rc::new(|| Box::new(|_, _| Value::record([]))),
-            Rc::new(move |log, path, _, point, scale| {
-                assert_eq!(path, captured_path);
-                assert_eq!(point, Point::new(5.0, 5.0));
-                assert_eq!(scale, 2.0);
-                log.push("start drag");
-            }),
-            2.0,
+        let drag = native_before(
             leaf::<Vec<&str>, Bench>(extent, |_, _| {}),
+            gesture_place(
+                progred_display::on_state_drag(
+                    progred_display::row(0.0, []),
+                    target.clone(),
+                    Rc::new(move |log: &mut Vec<&str>| {
+                        log.push("select");
+                        accepts
+                    }),
+                    Rc::new(|| Box::new(|_, _| Value::record([]))),
+                ),
+                Rc::new(|log, _, samples| {
+                    assert!(samples.is_empty());
+                    log.push("start drag");
+                }),
+                None,
+            ),
         );
         let node = native_before(
             drag,
@@ -342,13 +340,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
 
     let target = Hover::Value(Rc::from([]));
     let root = crate::workspace::Root::document();
-    let node = realize_state_drag(
-        Vec::new(),
-        target.clone(),
-        Rc::new(|_| true),
-        Rc::new(|| Box::new(|_, _| Value::record([]))),
-        Rc::new(|starts: &mut usize, _, _, _, _| *starts += 1),
-        1.0,
+    let node = native_before(
         leaf::<usize, Bench>(
             Extent {
                 width: 20.0,
@@ -356,6 +348,16 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
                 descent: 20.0,
             },
             |_, _| {},
+        ),
+        gesture_place(
+            progred_display::on_state_drag(
+                progred_display::row(0.0, []),
+                target.clone(),
+                Rc::new(|_| true),
+                Rc::new(|| Box::new(|_, _| Value::record([]))),
+            ),
+            Rc::new(|starts, _, _| *starts += 1),
+            None,
         ),
     );
     let placed = measured::place(
@@ -442,7 +444,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
     struct World {
         pending: bool,
         log: Vec<&'static str>,
-        scrub: Option<Box<dyn crate::gesture::Gesture>>,
+        scrub: Option<Box<dyn progred_display::widget::gesture::Gesture<World>>>,
     }
 
     let path = vec![Step::Key(new_cell_id())];
@@ -462,32 +464,7 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
         (false, false, false, 5.0, false, true, None),
         (false, false, false, 5.0, true, false, None),
     ] {
-        let captured_root = root.clone();
-        let scrub = realize_scrub(
-            path.clone(),
-            target.clone(),
-            Rc::new(|| {
-                Box::new(|_| progred_display::ScrubUpdate {
-                    value: f64_convention::value(13.0),
-                    spelling: Some("13".into()),
-                })
-            }),
-            Rc::new(move |world: &mut World, path, handler, point, scale| {
-                if world.pending {
-                    false
-                } else {
-                    world.log.push("scrub");
-                    world.scrub = Some(crate::gesture::scrub(
-                        point,
-                        scale,
-                        captured_root.clone(),
-                        path,
-                        handler,
-                    ));
-                    true
-                }
-            }),
-            2.0,
+        let scrub = native_before(
             leaf::<World, Bench>(extent, move |p, _| {
                 p.handler().on_pointer_down(move |world, _| {
                     if raw {
@@ -496,6 +473,34 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
                     raw
                 });
             }),
+            gesture_place(
+                progred_display::on_scrub(
+                    progred_display::row(0.0, []),
+                    target.clone(),
+                    Rc::new(|| {
+                        Box::new(|_| progred_display::ScrubUpdate {
+                            value: f64_convention::value(13.0),
+                            spelling: Some("13".into()),
+                        })
+                    }),
+                ),
+                Rc::new(|world, gesture, samples| {
+                    assert!(samples.is_empty());
+                    world.scrub = Some(gesture);
+                }),
+                Some(Rc::new(|| progred_display::widget::gesture::ValueEdit {
+                    select: Rc::new(|world: &mut World| {
+                        if world.pending {
+                            false
+                        } else {
+                            world.log.push("scrub");
+                            true
+                        }
+                    }),
+                    write: Box::new(|_, _| false),
+                    selection: Rc::new(|_, _| {}),
+                })),
+            ),
         );
         let node = native_before(
             scrub,
@@ -559,4 +564,84 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
         assert_eq!(world.log, expected.into_iter().collect::<Vec<_>>());
         assert_eq!(world.scrub.is_some(), expected == Some("scrub"));
     }
+}
+
+#[test]
+fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
+    use progred_display::widget::gesture;
+    use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerType};
+
+    let target = Hover::Value(Rc::from([]));
+    for layout in [
+        progred_display::on_scrub(
+            progred_display::row(0.0, []),
+            target.clone(),
+            Rc::new(|| panic!("read-only scrub cannot construct a domain continuation")),
+        ),
+        progred_display::on_point(
+            progred_display::row(0.0, []),
+            Rc::new(|_| panic!("read-only point control cannot produce a write")),
+        ),
+    ] {
+        let place = gesture_place::<()>(
+            layout,
+            Rc::new(|_, _: Box<dyn gesture::Gesture<()>>, _| {
+                panic!("read-only control cannot start")
+            }),
+            None,
+        );
+        let mut fragment =
+            <progred_display::widget::Fragment<(), Hover> as measured::Output>::empty();
+        place(
+            &mut fragment,
+            Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
+        );
+        let mut event = PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: Default::default(),
+        };
+        event.state.modifiers =
+            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
+        assert!(!fragment.handler.is_some_and(|handler| {
+            handler.dispatch_pointer_down_with(&mut (), &event, &mut Some(target.clone()))
+        }));
+    }
+}
+
+fn gesture_place<World: 'static>(
+    layout: progred_display::Layout<World, Hover>,
+    start: progred_display::widget::gesture::Start<World>,
+    edit: Option<progred_display::widget::gesture::BeginEdit<World>>,
+) -> progred_display::widget::Place<World, Hover> {
+    let progred_display::Layout::Before { before, .. } = layout else {
+        panic!("expected an ordinary widget wrapper");
+    };
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::TextCache::default();
+    before(&mut progred_display::widget::Context {
+        text: &mut TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            cache: &mut cache,
+            scale: 2.0,
+        },
+        styles: &crate::styles::editor(2.0),
+        site: &|| panic!("gesture startup does not request text editing"),
+        event_interpreter: &|| panic!("native gestures do not interpret Grap"),
+        annotate: &|| Rc::new(|_, _| false),
+        start_gesture: &|| start.clone(),
+        value_edit: &|| edit.clone(),
+        drag_threshold: crate::gesture::DRAG_THRESHOLD,
+        command: crate::modifiers::command,
+        pick: Rc::new(|_, _| false),
+        picking: |event| crate::modifiers::pick(&event.state.modifiers),
+        same_target: PartialEq::eq,
+        primary_edit: |_| true,
+    })
 }

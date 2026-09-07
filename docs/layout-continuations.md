@@ -33,6 +33,18 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Scrubbing, annotation drags, and point controls are ordinary native widgets.
+  Their three Layout variants and the app's gesture interpreter are removed.
+  They install handlers with `before` and request one generic capability to
+  retain a continuation; the editor slot does not inspect the control type.
+  The shared Puri drag recognizer receives scale and threshold explicitly.
+  Widgets own sample processing, while a fresh caller-supplied value-edit run
+  owns document writes and undo grouping. Read-only sites offer no edit run;
+  the run is constructed on contact, not for every number in every frame.
+  Annotation changes use the same capability as scrolling. Initial point
+  contact, pending-pick precedence, per-view attribution, unbounded active
+  motion, and scrub spelling remain unchanged. Native controls use no Grap
+  interpreter or text-editing capability.
 - State scrolling is an ordinary native placement callback. `OnStateScroll`,
   its interpreter arm, and its special state-result/event types are removed.
   Fidget explicitly writes its camera annotation through a lazily requested
@@ -51,7 +63,7 @@ composition, not replacements for that stage.
   preserving partial input and suppressing empty remainders without inventing
   acceptance.
 - Native preparation keeps document-site state and editing capabilities behind
-  an explicit request. Inert widgets and pointer/hover wrappers do not resolve
+  an explicit request. Inert widgets and ordinary click/hover wrappers do not resolve
   a path or construct text-editing callbacks. Prepared text controls, delimiters,
   and empty outlines retain whole-widget render callbacks; `Fragment` no longer
   implements Canvas by recording one closure per operation.
@@ -111,9 +123,9 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Migrate gesture and remaining control wrappers through
-   the native widget interface. Completion and its navigation/offer outputs
-   remain host requests.
+1. Migrate remaining control and drawing-program requests through the native
+   widget interface. Completion and its navigation/offer outputs remain host
+   requests.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
    and project it during description; contribute navigation and interactions
    from placement continuations so discarded alternatives register nothing.
@@ -130,7 +142,7 @@ Check each slice with pure interaction/placement tests and the existing
 ## Verification
 
 The affected library tests pass: 22 `measured`, 18 `progred-display`,
-161 `progred-libraries`, 53 `puri`, 3 `puri-widgets`, and 264 `progred`
+161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 266 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -237,3 +249,23 @@ and Cube 15.19 ms. Earlier checks of this slice measured source at 4.07 and
 variation rather than a clear speedup; the final source median is slightly
 higher. Native tests, the web check, formatting, and whitespace checks pass;
 the web check retains the same two menu warnings.
+
+The native-gesture slice retains all existing interaction tests and adds checks
+for caller-supplied radial thresholds, read-only controls, lazy edit-run
+construction, no-op writes retaining document identity, and selection payloads
+not retargeting another site. The color test now drives actual placed pointer
+handlers instead of unpacking a point-control Layout variant. There are 524
+passing affected tests; native/web and formatting checks pass with the same
+unchanged web menu warnings.
+
+Initial 60-frame runs measured source at 4.85 and 5.38 ms, so the preceding
+`1a7aeeb` checkpoint was built in a temporary detached worktree and measured
+again on the same machine. That baseline measured source at 4.59 ms (p95
+4.87 ms), picture at 25.00 ms, Fidget at 10.66 ms, Torus at 8.19 ms, Tanglecube
+at 50.82 ms, Gyroid at 32.46 ms, and Cube at 16.05 ms. A final 180-frame run of
+the refactor measured source at 4.52 ms (p95 4.84 ms), picture at 24.57 ms,
+Fidget at 9.62 ms, Torus at 7.82 ms, Tanglecube at 46.42 ms, Gyroid at 30.37 ms,
+and Cube at 15.70 ms. There is no consistent regression in these runs, nor a
+claimed speedup; they demonstrate why old wall-clock numbers alone were not a
+sufficient baseline. The temporary worktree was removed. No cache, layout
+search policy, or input-relevance rule changed.

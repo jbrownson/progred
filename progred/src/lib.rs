@@ -374,7 +374,7 @@ pub(crate) struct Editor {
     /// and the latest in `current`, including during a drag.
     pending_pointer: Option<PendingPointer>,
     /// The continuation installed by the accepting projection handler.
-    gesture: Option<Box<dyn gesture::Gesture>>,
+    gesture: Option<gesture::Active<Editor>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
@@ -1243,8 +1243,10 @@ impl Editor {
     }
 
     fn advance_gesture(&mut self, samples: &[Point]) -> bool {
-        if let Some(gesture) = &mut self.gesture {
-            if gesture.advance(&mut self.model, &self.stack.libraries, samples) {
+        if let Some(mut gesture) = self.gesture.take() {
+            let changed = gesture.advance(self, samples);
+            self.gesture = Some(gesture);
+            if changed {
                 self.refresh_title();
             }
             true

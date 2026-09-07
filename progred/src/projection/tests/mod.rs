@@ -235,9 +235,8 @@ fn editing_frame_with_projection(
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
             apply: Rc::new(|_, _, _, _| false),
-            point: Rc::new(|_, _, _, _, _| false),
-            state_drag: Rc::new(|_, _, _, _, _| {}),
-            scrub: Rc::new(|_, _, _, _, _| false),
+            start_gesture: Rc::new(|_, _, _, _| {}),
+            value_edit: Rc::new(|_| panic!("unexpected value edit")),
             select_source: Rc::new(|_, _, _| {}),
             commit_value: Rc::new(|_, _, _| {}),
             commit_label: Rc::new(|_, _, _, _| {}),
@@ -325,7 +324,7 @@ fn projected_line(
         })
     }?;
     let layout = match layout {
-        progred_display::Layout::OnScrub { child, .. } => *child,
+        progred_display::Layout::Before { child, .. } => *child,
         layout => layout,
     };
     match layout {
@@ -359,6 +358,9 @@ fn placed_line_description(
         styles: &crate::styles::editor(1.0),
         event_interpreter: &|| panic!("native line does not interpret Grap"),
         annotate: &|| panic!("native line does not request annotation writes"),
+        start_gesture: &|| panic!("unexpected gesture startup request"),
+        value_edit: &|| panic!("unexpected value edit request"),
+        drag_threshold: 3.0,
         command: |_| false,
         site: &|| {
             let output = output.clone();
