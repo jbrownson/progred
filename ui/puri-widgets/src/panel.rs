@@ -1,4 +1,5 @@
-use puri::{Affine, Brush, Canvas, Placement, RoundedRect, Shape, Stroke};
+use puri::draw::CanvasSink;
+use puri::{Affine, Brush, Placement, RoundedRect, Shape, Stroke};
 
 pub struct Panel {
     pub fill: Option<Brush>,
@@ -7,17 +8,17 @@ pub struct Panel {
 }
 
 impl Panel {
-    pub fn place(&self, canvas: &mut impl Canvas, placement: Placement) {
+    pub fn place(&self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
         let shape = if self.radius == 0.0 {
             Shape::Rect(placement.rect)
         } else {
             Shape::RoundedRect(RoundedRect::from_rect(placement.rect, self.radius))
         };
         if let Some(fill) = &self.fill {
-            canvas.fill(shape.clone(), fill.clone(), Affine::IDENTITY);
+            canvas.fill_shape(shape.clone(), fill.clone(), Affine::IDENTITY);
         }
         if let Some((stroke, brush)) = &self.border {
-            canvas.stroke(shape, stroke.clone(), brush.clone(), Affine::IDENTITY);
+            canvas.stroke_shape(shape, stroke.clone(), brush.clone(), Affine::IDENTITY);
         }
     }
 }

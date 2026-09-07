@@ -33,6 +33,18 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- Completion cards are native measured widgets returning `Fragment`: row ink,
+  hover, click/pick, keyboard navigation, and scrolling no longer build the
+  editor's `Placed` output directly. Providers remain lazy; the app supplies
+  the exact offered callbacks and owns insertion, query state, attribution,
+  and popup positioning. The card requests no site or Grap capabilities.
+- Scroll and floating containers now share one output-parametric implementation.
+  Native fragments can carry floating subtrees; the editor adapter preserves
+  their view ownership and raises them with its other overlays. Clipping and
+  start-event gating are shared; active input remains unbounded. View-region
+  attribution wraps scrolling separately. No additional scroll policy, cache,
+  or per-draw-operation recording was introduced.
+
 - Scrubbing, annotation drags, and point controls are ordinary native widgets.
   Their three Layout variants and the app's gesture interpreter are removed.
   They install handlers with `before` and request one generic capability to
@@ -124,8 +136,10 @@ composition, not replacements for that stage.
 ## Remaining migration
 
 1. Migrate remaining control and drawing-program requests through the native
-   widget interface. Completion and its navigation/offer outputs remain host
-   requests.
+   widget interface. The completion card is native, but the pending/query-site
+   request and its document navigation/offer outputs still need the traversal
+   boundary below; replacing that request with a same-shaped host callback
+   would not complete the separation.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
    and project it during description; contribute navigation and interactions
    from placement continuations so discarded alternatives register nothing.
@@ -141,8 +155,8 @@ Check each slice with pure interaction/placement tests and the existing
 
 ## Verification
 
-The affected library tests pass: 22 `measured`, 18 `progred-display`,
-161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 266 `progred`
+The affected library tests pass: 22 `measured`, 20 `progred-display`,
+161 `progred-libraries`, 54 `puri`, 3 `puri-widgets`, and 267 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -269,3 +283,14 @@ and Cube at 15.70 ms. There is no consistent regression in these runs, nor a
 claimed speedup; they demonstrate why old wall-clock numbers alone were not a
 sufficient baseline. The temporary worktree was removed. No cache, layout
 search policy, or input-relevance rule changed.
+
+The native-completion/container slice has 527 passing affected tests. Existing
+picker tests retain click/pick, keyboard reveal, one-way expansion, query/card
+alignment, IME behavior, and live offer attribution. New tests cover native
+scroll clipping with unbounded active input, skipped out-of-flow placement,
+and floater view ownership after bridging to the editor output. Native/web,
+formatting, and whitespace checks pass (the two existing web warnings remain).
+The seven serial release canaries, with 60 measured frames each, report source
+4.59 ms (p95 4.91 ms), picture 23.58 ms, Fidget 10.07 ms, Torus 7.74 ms,
+Tanglecube 46.53 ms, Gyroid 31.24 ms, and Cube 15.37 ms. These remain in the
+preceding runs' range; no performance improvement is claimed.

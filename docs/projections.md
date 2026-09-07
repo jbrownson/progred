@@ -169,9 +169,12 @@ back to normal projection.
 The [projection runtime](../progred/src/projection/mod.rs) adapts display
 layouts to measured boxes and Puri handlers. Its supporting modules separate
 [structural fallback](../progred/src/projection/structure.rs),
-[events](../progred/src/projection/events.rs),
+[Grap event adaptation](../libraries/src/layout/events.rs),
 [completion](../progred/src/projection/completion.rs), and
 [drawing](../progred/src/projection/drawing.rs).
+The [native completion card](../display/src/widget/completion.rs) owns its
+row interaction, keyboard navigation, and scroll composition. The app adapter
+only supplies offers, query state, document callbacks, and popup placement.
 The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.
 

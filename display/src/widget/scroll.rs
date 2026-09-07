@@ -2,6 +2,32 @@ use super::Place;
 use puri::handler::{HasHandler, ScrollOutcome};
 use puri::{Point, Size, Vec2};
 
+pub fn offset(
+    stored: Vec2,
+    update: &puri::handler::PointerScrollEvent,
+    scale: f64,
+    viewport: Size,
+    maximum: Vec2,
+) -> (Vec2, ScrollOutcome) {
+    let mut next = stored;
+    let outcome = units(scale, viewport).handle(update.delta, |delta| {
+        let current = Vec2::new(
+            stored.x.clamp(0.0, maximum.x),
+            stored.y.clamp(0.0, maximum.y),
+        );
+        next = Vec2::new(
+            (current.x - delta.x).clamp(0.0, maximum.x),
+            (current.y - delta.y).clamp(0.0, maximum.y),
+        );
+        if next != stored {
+            ScrollOutcome::with_remainder(delta - (current - next))
+        } else {
+            ScrollOutcome::unhandled(delta)
+        }
+    });
+    (next, outcome)
+}
+
 pub fn units(scale: f64, viewport: Size) -> puri::scroll::Units {
     puri::scroll::Units {
         scale,

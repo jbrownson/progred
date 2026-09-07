@@ -9,23 +9,22 @@ use crate::completion::{Commit, Entry, Offers, completion_entries_with, construc
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::navigate::Descend;
-use crate::placed::{self, Placed, before, decorate, leaf, on_key};
+use crate::placed::{self, Placed, before, decorate, on_key};
 use crate::render::text;
 use crate::selection::{Selection, Stage};
 use crate::styles::Styles;
 use gid::Path;
 use kurbo::{Insets, Size};
-use measured::{Extent, Measured, col, min_width, pad};
+use measured::{Extent, Measured, min_width, pad};
+use progred_display::widget::completion::border as completion_border;
 use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-use puri::{Canvas, Color, Placement, Point, Stroke, Vec2};
-use puri_widgets::panel::Panel;
+use puri::{Canvas, Placement, Point};
 use puri_widgets::text_frame;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, NamedKey};
-use ui_events::pointer::PointerType;
+use ui_events::keyboard::Key;
 
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
@@ -279,13 +278,6 @@ pub(super) fn completion_placement(
     })
 }
 
-fn completion_border(scale: f64) -> Stroke {
-    Stroke::new(scale)
-}
-
-/// Completion offers and expansion share row navigation. Each row's
-/// callback handles both clicks and Enter. The raised card swallows
-/// other clicks so nothing lands on content underneath.
 pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
@@ -295,225 +287,33 @@ pub(super) fn completion_card<C: 'static, Cv: Canvas + 'static>(
     everything: bool,
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    let scale = styles.scale;
-    let widget_entries = entries
+    let entries = entries
         .iter()
-        .map(|entry| puri_widgets::completion::Entry {
-            display: &entry.display,
-            detail: entry.detail.as_deref(),
-            matches: &entry.matches,
-            style: face_style(styles, entry.face),
-        })
+        .enumerate()
+        .map(
+            |(index, entry)| progred_display::widget::completion::Entry {
+                display: &entry.display,
+                detail: entry.detail.as_deref(),
+                matches: &entry.matches,
+                style: face_style(styles, entry.face),
+                target: Hover::Entry(index),
+                activate: entry.activate.clone(),
+            },
+        )
         .collect::<Vec<_>>();
-    let widget = puri_widgets::completion::Completion::new(
+    super::native_fragment(progred_display::widget::completion::card(
         tcx,
-        &widget_entries,
-        !everything,
-        puri_widgets::completion::Style {
-            detail: &styles.detail,
-            more: &styles.dim,
-            scale,
-            chosen: Color::new([0.0, 0.48, 1.0, 0.14]),
+        styles,
+        &entries,
+        Hover::MoreCompletions,
+        progred_display::widget::completion::State {
+            choice,
+            scroll,
+            everything,
         },
-    );
-    let set_view = Rc::new(set_view);
-    let expand: Rc<dyn Fn(&mut C)> = {
-        let set_view = set_view.clone();
-        Rc::new(move |world| {
-            set_view(world, scroll, choice, true);
-        })
-    };
-    let items = widget
-        .rows
-        .into_iter()
-        .zip(entries)
-        .enumerate()
-        .map(|(index, (row, entry))| (row, Hover::Entry(index), entry.activate.clone()))
-        .chain(
-            widget
-                .more
-                .map(|row| (row, Hover::MoreCompletions, expand.clone())),
-        )
-        .collect::<Vec<_>>();
-    let count = items.len();
-    let choice = choice.min(count.saturating_sub(1));
-    let activate = items.get(choice).map(|(_, _, activate)| activate.clone());
-    let rows = items
-        .into_iter()
-        .enumerate()
-        .map(|(index, (row, hover, activate))| {
-            let set_view = set_view.clone();
-            completion_row(
-                row,
-                hover,
-                index == choice,
-                move |world| set_view(world, scroll, index, everything),
-                move |world| activate(world),
-            )
-        })
-        .collect::<Vec<_>>();
-    let gap = 2.0 * scale;
-    let row_spans = completion_row_spans(&rows, gap, scale);
-    let content = col(0, gap, rows);
-    let viewport_height = completion_viewport_height(&row_spans);
-    let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
-    let scroll = scroll.clamp(0.0, maximum);
-    let viewport_extent = Extent {
-        width: content.extent.width,
-        ascent: content.extent.ascent.min(viewport_height * scale),
-        descent: (viewport_height * scale - content.extent.ascent).max(0.0),
-    };
-    let scroll_view = set_view.clone();
-    let scrolled = placed::scrolled_at(
-        content,
-        Vec2::new(0.0, scroll * scale),
-        None,
-        move |world, event| {
-            let (next, outcome) = crate::frame::scroll_offset(
-                Vec2::new(0.0, scroll),
-                event,
-                scale,
-                Size::new(viewport_extent.width, viewport_extent.height()),
-                Vec2::new(0.0, maximum),
-            );
-            if next.y != scroll {
-                scroll_view(world, next.y, choice, everything);
-            }
-            outcome
-        },
-    );
-    let viewport = measured::overlay(
-        leaf(viewport_extent, |_, _| {}),
-        scrolled,
-        move |placement, _, _| Some(placement),
-    );
-    let card = pad(Insets::uniform(4.0 * scale), viewport);
-    let card = on_key(card, move |world, event| {
-        if event.state.is_down() {
-            match event.key {
-                Key::Named(NamedKey::Enter) => activate.as_ref().is_some_and(|activate| {
-                    activate(world);
-                    true
-                }),
-                Key::Named(key @ (NamedKey::Tab | NamedKey::ArrowDown))
-                    if !everything
-                        && !crate::modifiers::command(&event.modifiers)
-                        && (key == NamedKey::Tab || choice == count.saturating_sub(1)) =>
-                {
-                    expand(world);
-                    true
-                }
-                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                    if !crate::modifiers::command(&event.modifiers) =>
-                {
-                    let next = match direction {
-                        NamedKey::ArrowUp => choice.saturating_sub(1),
-                        _ => choice.saturating_add(1).min(count.saturating_sub(1)),
-                    };
-                    set_view(
-                        world,
-                        reveal_completion(scroll, next, &row_spans, viewport_height)
-                            .clamp(0.0, maximum),
-                        next,
-                        everything,
-                    );
-                    true
-                }
-                _ => false,
-            }
-        } else {
-            false
-        }
-    });
-    let panel = Panel {
-        fill: Some(Color::WHITE.into()),
-        border: Some((
-            completion_border(scale),
-            Color::new([0.75, 0.77, 0.81, 1.0]).into(),
-        )),
-        radius: 6.0 * scale,
-    };
-    before(card, move |p, placement| {
-        panel.place(p, placement);
-        hover_block(p, placement);
-    })
-}
-
-fn completion_row_spans<C, Cv>(
-    rows: &[Measured<Placed<C, Cv>>],
-    gap: f64,
-    scale: f64,
-) -> Vec<(f64, f64)> {
-    rows.iter()
-        .scan(0.0, |top, row| {
-            let span = (*top, *top + row.extent.height() / scale);
-            *top = span.1 + gap / scale;
-            Some(span)
-        })
-        .collect()
-}
-
-fn completion_viewport_height(spans: &[(f64, f64)]) -> f64 {
-    const VISIBLE_ROWS: usize = 8;
-    spans
-        .get(
-            VISIBLE_ROWS
-                .saturating_sub(1)
-                .min(spans.len().saturating_sub(1)),
-        )
-        .map_or(0.0, |(_, bottom)| *bottom)
-}
-
-fn reveal_completion(
-    scroll: f64,
-    choice: usize,
-    spans: &[(f64, f64)],
-    viewport_height: f64,
-) -> f64 {
-    match spans.get(choice) {
-        Some((top, _)) if *top < scroll => *top,
-        Some((_, bottom)) if *bottom > scroll + viewport_height => *bottom - viewport_height,
-        _ => scroll,
-    }
-}
-
-fn completion_row<C: 'static, Cv: Canvas + 'static>(
-    row: puri_widgets::completion::Row,
-    hover: Hover,
-    chosen: bool,
-    choose: impl Fn(&mut C) + 'static,
-    activate: impl Fn(&mut C) + Clone + 'static,
-) -> Measured<Placed<C, Cv>> {
-    leaf(
-        placed::metrics_extent(row.metrics()),
-        move |p, placement| {
-            hover_claim(p, placement, hover.clone());
-            p.handler().on_pointer_move(move |world, event| {
-                if event.pointer.pointer_type == PointerType::Mouse
-                    && event.current.buttons.is_empty()
-                    && placement.contains(Point::new(
-                        event.current.position.x,
-                        event.current.position.y,
-                    ))
-                {
-                    choose(world);
-                    true
-                } else {
-                    false
-                }
-            });
-            let target = Hovered::Tree(hover.clone());
-            let accept = move |world: &mut C| {
-                activate(world);
-                true
-            };
-            p.activate(target.clone(), accept.clone());
-            p.pick(target, accept);
-            p.ink(move |canvas, _| {
-                row.draw(canvas, placement, chosen);
-            });
-        },
-    )
+        move |world, state| set_view(world, state.scroll, state.choice, state.everything),
+        crate::modifiers::command,
+    ))
 }
 
 /// The new-field label stage engaged, its query wearing the primary

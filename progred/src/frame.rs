@@ -245,32 +245,7 @@ fn drawing_source_target<World>(
         .and_then(|descend| descend.root.clone().map(|root| (root, descend.rect)))
 }
 
-pub(crate) fn scroll_offset(
-    stored: Vec2,
-    update: &ui_events::pointer::PointerScrollEvent,
-    scale: f64,
-    viewport: Size,
-    maximum: Vec2,
-) -> (Vec2, ScrollOutcome) {
-    let mut next = stored;
-    let outcome =
-        progred_display::widget::scroll::units(scale, viewport).handle(update.delta, |delta| {
-            let current = Vec2::new(
-                stored.x.clamp(0.0, maximum.x),
-                stored.y.clamp(0.0, maximum.y),
-            );
-            next = Vec2::new(
-                (current.x - delta.x).clamp(0.0, maximum.x),
-                (current.y - delta.y).clamp(0.0, maximum.y),
-            );
-            if next != stored {
-                ScrollOutcome::with_remainder(delta - (current - next))
-            } else {
-                ScrollOutcome::unhandled(delta)
-            }
-        });
-    (next, outcome)
-}
+pub(crate) use progred_display::widget::scroll::offset as scroll_offset;
 
 /// The frame's hover, derived from this pass's settled geometry: a
 /// direct claim under the pointer answers outright, an extension may

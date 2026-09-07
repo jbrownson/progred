@@ -130,12 +130,7 @@ pub fn point_update(
         same_target: |_, _| false,
         primary_edit: |_| true,
     });
-    let mut fragment = widget::Fragment {
-        renders: vec![],
-        handler: None,
-        claims: vec![],
-        select: None,
-    };
+    let mut fragment = widget::Fragment::default();
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
@@ -180,12 +175,7 @@ pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
         context.same_target = |_, _| true;
         before(context)
     });
-    let mut fragment = widget::Fragment {
-        renders: vec![],
-        handler: None,
-        claims: vec![],
-        select: None,
-    };
+    let mut fragment = widget::Fragment::default();
     place(
         &mut fragment,
         Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -213,12 +203,7 @@ pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
         return None;
     };
     let place = with_context(Rc::new(|_, _, _| false), |context| before(context));
-    let mut fragment = widget::Fragment {
-        renders: vec![],
-        handler: None,
-        claims: vec![],
-        select: None,
-    };
+    let mut fragment = widget::Fragment::default();
     let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
     place(&mut fragment, placement);
     fragment
@@ -241,12 +226,7 @@ pub fn event_handler(layout: &Layout<(), ()>) -> Option<gid::Value> {
     let place = with_interpreter(Rc::new(|_, _, _| false), interpret, |context| {
         before(context)
     });
-    let mut fragment = widget::Fragment {
-        renders: vec![],
-        handler: None,
-        claims: vec![],
-        select: None,
-    };
+    let mut fragment = widget::Fragment::default();
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),

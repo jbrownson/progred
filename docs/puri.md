@@ -76,8 +76,8 @@ the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
 
 Native widgets use `progred_display::widget::Widget`: a measurement function
-whose result places a `Fragment` of deferred ink, handlers, hover claims, and
-navigation declarations. `LineEdit` uses this path, with no control-specific
+whose result places a `Fragment` of deferred ink, handlers, hover claims,
+navigation declarations, and floating subtrees. `LineEdit` uses this path, with no control-specific
 layout constructor. Native handlers receive the current settled hover as an
 explicit dispatch input; the host suppresses that target outside its owning view.
 `CanvasSink` is an object-safe bridge to the existing
@@ -88,6 +88,14 @@ edit/selection capabilities. Ordinary decorations do not resolve paths, inspect
 selection, or allocate those callbacks. A fragment is not a Canvas: it retains
 whole-widget render continuations, then executes their draw calls directly after
 hover settles, rather than allocating a deferred closure per drawing operation.
+
+The native completion card uses those same outputs. Its rows draw directly
+through `CanvasSink`; it never needs a document resolver or Grap interpreter.
+The [container combinators](../display/src/widget/container.rs) share scrolling
+and out-of-flow placement between native fragments and the editor's transitional
+output. `Layers` supplies clipping and floater attachment, while `HasHandler`
+supplies input composition. The editor adds view ownership separately and raises
+floaters once at the frame boundary. Clips do not capture floating subtrees.
 
 `widget::before` contributes the same native outputs before an arbitrary
 child places. Its preparation function captures current inputs, then returns

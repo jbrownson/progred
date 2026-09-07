@@ -250,9 +250,13 @@ value on activation, so reusing an offer creates independent cells.
 
 The placed frame retains the exact visible offers. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.
-The reusable Puri widget draws rows; Progred owns the document operations,
-query state, scrolling, and floating card. See [offer construction](../progred/src/completion.rs)
-and [completion presentation](../progred/src/projection/completion.rs).
+The reusable Puri widget shapes and draws rows. Progred's
+[native card widget](../display/src/widget/completion.rs) composes navigation,
+interaction, and the shared scroll container. Its caller supplies state and
+activation callbacks; the widget knows nothing about paths, insertion, or Grap.
+The editor owns document operations, query state, and popup placement. See
+[offer construction](../progred/src/completion.rs) and
+[document adaptation](../progred/src/projection/completion.rs).
 The card meets the query's painted frame, accounting for the frame outline and
 both border widths. Placement uses those same drawing parameters above or below
 the query, and includes the card's stroke when keeping it within the viewport.

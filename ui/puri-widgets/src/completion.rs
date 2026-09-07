@@ -1,9 +1,8 @@
 //! Shaped completion rows. The consumer composes them with its layout,
 //! scroll container, hover targets, and popup policy.
 
-use puri::{
-    Affine, Canvas, Color, Placement, Rect, RoundedRect, Text, TextCtx, TextMetrics, TextStyle,
-};
+use puri::draw::CanvasSink;
+use puri::{Affine, Color, Placement, Rect, RoundedRect, Text, TextCtx, TextMetrics, TextStyle};
 
 use std::ops::Range;
 
@@ -48,7 +47,7 @@ impl Line {
         }
     }
 
-    fn draw(self, canvas: &mut impl Canvas, x: f64, baseline: f64, clip: Rect) {
+    fn draw(self, canvas: &mut (impl CanvasSink + ?Sized), x: f64, baseline: f64, clip: Rect) {
         self.segments.into_iter().fold(x, |x, segment| {
             let metrics = segment.metrics();
             segment.place(
@@ -103,11 +102,11 @@ impl Row {
         self.metrics
     }
 
-    pub fn draw(self, canvas: &mut impl Canvas, placement: Placement, chosen: bool) {
+    pub fn draw(self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement, chosen: bool) {
         if chosen {
-            canvas.fill(
-                RoundedRect::from_rect(placement.rect, 4.0 * self.scale),
-                self.chosen,
+            canvas.fill_shape(
+                RoundedRect::from_rect(placement.rect, 4.0 * self.scale).into(),
+                self.chosen.into(),
                 Affine::IDENTITY,
             );
         }
@@ -150,14 +149,14 @@ fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &
 }
 
 impl Completion {
-    pub fn new(
+    pub fn new<'a>(
         tcx: &mut TextCtx,
-        entries: &[Entry<'_>],
+        entries: impl IntoIterator<Item = Entry<'a>>,
         show_more: bool,
         style: Style<'_>,
     ) -> Self {
         let mut rows = entries
-            .iter()
+            .into_iter()
             .map(|entry| {
                 let display = highlighted(tcx, entry.display, entry.matches, entry.style);
                 let detail = entry

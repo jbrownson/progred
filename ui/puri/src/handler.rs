@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 pub use ui_events::ScrollDelta;
-pub use ui_events::keyboard::{KeyState, KeyboardEvent, Modifiers};
+pub use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 pub use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerType, PointerUpdate,

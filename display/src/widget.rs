@@ -13,6 +13,8 @@ use puri::hover::Probe;
 use puri::text::{TextCtx, TextMetrics};
 use std::rc::Rc;
 
+pub mod completion;
+pub mod container;
 pub mod delimiter;
 pub mod gesture;
 pub mod hover;
@@ -154,21 +156,30 @@ pub struct Fragment<World, Hover> {
     pub handler: Option<Handler<World, Option<Hover>>>,
     pub claims: Vec<Probe<Hover>>,
     pub select: Option<Select<World>>,
+    pub floaters: Vec<Box<Self>>,
 }
 
-impl<World: 'static, Hover: 'static> Output for Fragment<World, Hover> {
-    fn empty() -> Self {
+impl<World, Hover> Default for Fragment<World, Hover> {
+    fn default() -> Self {
         Self {
             renders: vec![],
             handler: None,
             claims: vec![],
             select: None,
+            floaters: vec![],
         }
+    }
+}
+
+impl<World: 'static, Hover: 'static> Output for Fragment<World, Hover> {
+    fn empty() -> Self {
+        Self::default()
     }
 
     fn over(mut self, mut above: Self) -> Self {
         self.renders.append(&mut above.renders);
         self.claims.append(&mut above.claims);
+        self.floaters.append(&mut above.floaters);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -183,6 +194,31 @@ impl<World, Hover: 'static> HasHandler<World> for Fragment<World, Hover> {
     type Input = Option<Hover>;
     fn handler(&mut self) -> &mut Handler<World, Option<Hover>> {
         self.handler.get_or_insert_with(Handler::new)
+    }
+}
+
+impl<World: 'static, Hover: 'static> container::Layers for Fragment<World, Hover> {
+    fn clipped(mut self, placement: Placement) -> Self {
+        let renders = std::mem::take(&mut self.renders);
+        self.render(move |canvas, hovered| {
+            canvas.with_clip(
+                placement.rect.into(),
+                puri::Affine::IDENTITY,
+                Box::new(move |canvas| {
+                    for render in renders {
+                        render(canvas, hovered);
+                    }
+                }),
+            );
+        });
+        self.handler = self
+            .handler
+            .map(|handler| container::gate_starts(handler, placement));
+        self
+    }
+
+    fn float(&mut self, above: Self) {
+        self.floaters.push(Box::new(above));
     }
 }
 
