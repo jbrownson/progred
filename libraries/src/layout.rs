@@ -15,7 +15,7 @@ pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
-    alternatives, block_hover, border, bracket, descend, leaf, on_activate, on_event, on_hover,
+    alternatives, block_hover, border, bracket, descend, leaf, on_activate, on_hover,
     overlay as layout_overlay, pickable, slot,
 };
 use puri::{
@@ -24,6 +24,9 @@ use puri::{
 };
 
 const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
+
+mod events;
+pub use events::on_event;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -1245,16 +1248,12 @@ mod tests {
             Some(puri::hover::Claim::Occludes)
         );
         let handler = Value::Cell(vocabulary::HANDLER);
-        assert!(matches!(
-            decoded(&on(
-                text_leaf("go", vocabulary::NAME_FACE),
-                handler.clone(),
-            )),
-            Some(Layout::OnEvent {
-                handler: decoded,
-                ..
-            }) if decoded == handler
-        ));
+        assert_eq!(
+            crate::test_widgets::event_handler(
+                &decoded(&on(text_leaf("go", vocabulary::NAME_FACE), handler.clone())).unwrap()
+            ),
+            Some(handler)
+        );
     }
 
     #[test]

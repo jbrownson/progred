@@ -3,11 +3,11 @@
 //! description and receive caller-owned state and dispatch inputs explicitly.
 
 use std::borrow::Cow;
-use ui_events::ScrollDelta;
-pub use ui_events::keyboard::KeyboardEvent;
+pub use ui_events::ScrollDelta;
+pub use ui_events::keyboard::{KeyState, KeyboardEvent, Modifiers};
 pub use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerState, PointerType,
-    PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
+    PointerType, PointerUpdate,
 };
 
 /// Acceptance is independent of whether state changed. The remainder can
@@ -49,6 +49,17 @@ impl<Remainder> Outcome<Remainder> {
 }
 
 impl ScrollOutcome {
+    pub fn into_event<'a>(self, original: Cow<'a, PointerScrollEvent>) -> EventOutcome<'a> {
+        if self.remaining == Self::consume(&original).remaining {
+            self.map(|_| None)
+        } else if self.remaining == original.delta {
+            self.map(|_| Some(Event::Scroll(original)))
+        } else {
+            let remaining = self.event(&original);
+            self.map(|_| remaining.map(|event| Event::Scroll(Cow::Owned(event))))
+        }
+    }
+
     pub fn pass(event: &PointerScrollEvent) -> Self {
         Self::unhandled(event.delta)
     }
@@ -307,17 +318,7 @@ impl<C: 'static, P: 'static> Handler<C, P> {
         dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
     ) {
         self.on(move |ctx, event, _| match event {
-            Event::Scroll(scroll) => {
-                let outcome = dispatch(ctx, &scroll);
-                if outcome.remaining == ScrollOutcome::consume(&scroll).remaining {
-                    outcome.map(|_| None)
-                } else if outcome.remaining == scroll.delta {
-                    outcome.map(|_| Some(Event::Scroll(scroll)))
-                } else {
-                    let remaining = outcome.event(&scroll);
-                    outcome.map(|_| remaining.map(|event| Event::Scroll(Cow::Owned(event))))
-                }
-            }
+            Event::Scroll(scroll) => dispatch(ctx, &scroll).into_event(scroll),
             other => EventOutcome::decline(other),
         });
     }
@@ -387,6 +388,28 @@ mod tests {
             delta: ScrollDelta::LineDelta(0.0, y),
             state: PointerState::default(),
         }
+    }
+
+    #[test]
+    fn scroll_event_conversion_preserves_acceptance_without_a_phantom_remainder() {
+        let zero = scroll(0.0);
+        let outcome = ScrollOutcome::pass(&zero).into_event(Cow::Borrowed(&zero));
+        assert!(!outcome.handled());
+        assert!(outcome.remaining.is_none());
+        let event = scroll(4.0);
+        let outcome = ScrollOutcome::pass(&event).into_event(Cow::Borrowed(&event));
+        assert!(!outcome.handled());
+        assert!(matches!(
+            outcome.remaining,
+            Some(Event::Scroll(Cow::Borrowed(_)))
+        ));
+        let outcome = ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 2.0))
+            .into_event(Cow::Borrowed(&event));
+        assert!(outcome.handled());
+        assert!(
+            matches!(outcome.remaining, Some(Event::Scroll(Cow::Owned(remaining)))
+            if remaining.delta == ScrollDelta::LineDelta(0.0, 2.0))
+        );
     }
 
     fn gated(

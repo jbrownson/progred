@@ -21,9 +21,7 @@ use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
 use completion::{label_query, pending_view};
-use events::{
-    realize_event_with, realize_point, realize_scrub, realize_state_drag, realize_state_scroll,
-};
+use events::{realize_point, realize_scrub, realize_state_drag, realize_state_scroll};
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, RoundedRect, Stroke};
 use location::Location;
@@ -255,16 +253,6 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
             ChoiceLayout::map(inner, 0.0, move |inner| native_before(inner, before))
-        }
-        progred_display::Layout::OnEvent { child, handler } => {
-            let inner = prepare(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
-            );
-            let apply = hooks.apply.clone();
-            let path = path.to_vec();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_event_with(path, handler, apply, scale, inner)
-            })
         }
         progred_display::Layout::OnScrub {
             child,
@@ -756,10 +744,19 @@ fn with_widget_context<C: 'static, Result>(
             }),
         }
     };
+    let event_interpreter = || {
+        let apply = hooks.apply.clone();
+        let path = path.to_vec();
+        Rc::new(move |world: &mut C, function: &Value, event| {
+            apply(world, path.clone(), function.clone(), event)
+        }) as progred_display::widget::EventInterpreter<C>
+    };
     widget(&mut progred_display::widget::Context {
         text,
         styles: cx.styles,
         site: &site,
+        event_interpreter: &event_interpreter,
+        command: crate::modifiers::command,
         pick: hooks.pick.clone(),
         picking: |event| crate::modifiers::pick(&event.state.modifiers),
         same_target: PartialEq::eq,

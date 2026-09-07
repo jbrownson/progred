@@ -220,6 +220,12 @@ widgets request site state only when needed and retain a whole-widget rendering
 callback, not one deferred allocation per canvas operation. Empty outlines also
 use a native widget rather than an interpreter case.
 
+Grap's `on_event` adapter belongs to the layout library and builds an ordinary
+`before` decorator too; there is no `Layout::OnEvent`. One handler encodes the
+incoming Puri event and calls the supplied site-scoped interpreter. The adapter
+owns the event vocabulary; the app owns staging and committing effects. Native
+widgets bypass that interpretation and use their callbacks directly.
+
 Callbacks receive mutable world state at dispatch; no projection-action enum
 or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)

@@ -845,6 +845,8 @@ mod tests {
                 scale: scale as f32,
             },
             styles: &widget::style::editor(scale),
+            event_interpreter: &|| panic!("delimiter does not interpret Grap"),
+            command: |_| false,
             site: &|| widget::Site {
                 writable: false,
                 selected: false,

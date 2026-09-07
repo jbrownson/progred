@@ -352,13 +352,6 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         before: widget::Before<World, Hover>,
     },
-    /// Apply a Grap callable when an event reaches the subtree.
-    /// The editor supplies the event value and a capability overlay
-    /// closed over the current projection site.
-    OnEvent {
-        child: Box<Layout<World, Hover>>,
-        handler: Value,
-    },
     OnScrub {
         child: Box<Layout<World, Hover>>,
         target: Hover,
@@ -483,10 +476,6 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::Before { child, before } => Self::Before {
                 child: child.clone(),
                 before: before.clone(),
-            },
-            Self::OnEvent { child, handler } => Self::OnEvent {
-                child: child.clone(),
-                handler: handler.clone(),
             },
             Self::OnScrub {
                 child,
@@ -742,13 +731,6 @@ pub fn activatable<World: 'static, Hover: Clone + 'static>(
     handler: ActionHandler<World>,
 ) -> Layout<World, Hover> {
     on_hover(on_activate(child, target.clone(), handler), target)
-}
-
-pub fn on_event<World, Hover>(child: Layout<World, Hover>, handler: Value) -> Layout<World, Hover> {
-    Layout::OnEvent {
-        child: Box::new(child),
-        handler,
-    }
 }
 
 pub fn on_scrub<World, Hover>(

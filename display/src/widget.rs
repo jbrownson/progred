@@ -30,6 +30,8 @@ pub enum Direction {
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 pub type Edit<World> = Rc<dyn Fn(&mut World, &LineEdit, &EditOperation<'_>) -> bool>;
 pub type Pick<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
+/// Interpret a Grap handler with caller-supplied capabilities at this site.
+pub type EventInterpreter<World> = Rc<dyn Fn(&mut World, &Value, Value) -> bool>;
 pub type Render<Hover> = Box<dyn FnOnce(&mut dyn CanvasSink, Option<&Hover>)>;
 pub type Place<World, Hover> = Box<dyn FnOnce(&mut Fragment<World, Hover>, Placement)>;
 pub type Before<World, Hover> =
@@ -39,6 +41,8 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub text: &'a mut TextCtx<'fonts>,
     pub styles: &'a style::Styles,
     pub site: &'a dyn Fn() -> Site<'a, World, Hover>,
+    pub event_interpreter: &'a dyn Fn() -> EventInterpreter<World>,
+    pub command: fn(&puri::handler::Modifiers) -> bool,
     pub pick: Pick<World>,
     pub picking: fn(&puri::handler::PointerButtonEvent) -> bool,
     pub same_target: fn(&Hover, &Hover) -> bool,
@@ -355,6 +359,8 @@ mod tests {
             },
             styles: &style::editor(1.0),
             site: &|| panic!("unrelated site input requested"),
+            event_interpreter: &|| panic!("unrelated Grap interpreter requested"),
+            command: |_| false,
             pick: Rc::new(|_, _| true),
             picking: |_| false,
             same_target: PartialEq::eq,

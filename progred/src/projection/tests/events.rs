@@ -356,4 +356,71 @@ fn a_data_event_realizes_the_apply_hook() {
             .and_then(Value::as_cell),
         Some(progred_libraries::layout::vocabulary::SCROLL),
     );
+
+    use progred_libraries::layout::vocabulary as event_fields;
+    let mut key = KeyboardEvent::default();
+    key.modifiers = if cfg!(target_os = "macos") {
+        Modifiers::META
+    } else {
+        Modifiers::CONTROL
+    };
+    assert!(handler.dispatch_key(&mut events, &key));
+    let key_fields = events[7].2.as_record().unwrap();
+    assert_eq!(
+        key_fields.get(&event_fields::EVENT_KIND),
+        Some(&Value::Cell(event_fields::KEY))
+    );
+    assert_eq!(
+        key_fields.get(&event_fields::MODIFIERS),
+        Some(&Value::list([Value::Cell(event_fields::COMMAND)]))
+    );
+
+    assert!(handler.dispatch_ime(
+        &mut events,
+        &puri::handler::ImeEvent::Commit("entered".into())
+    ));
+    let ime_fields = events[8].2.as_record().unwrap();
+    assert_eq!(
+        ime_fields.get(&event_fields::EVENT_KIND),
+        Some(&Value::Cell(event_fields::IME))
+    );
+    assert_eq!(
+        ime_fields.get(&event_fields::CONTENT),
+        Some(&text::value("entered"))
+    );
+
+    let outside = PointerState {
+        position: (-100.0, -100.0).into(),
+        ..Default::default()
+    };
+    let button = PointerButtonEvent {
+        pointer: touch,
+        button: None,
+        state: outside.clone(),
+    };
+    assert!(!handler.dispatch_pointer_down(&mut events, &button));
+    assert!(
+        !handler
+            .dispatch_scroll(
+                &mut events,
+                &PointerScrollEvent {
+                    pointer: touch,
+                    state: outside.clone(),
+                    delta: ScrollDelta::LineDelta(0.0, 1.0),
+                }
+            )
+            .handled()
+    );
+    assert_eq!(events.len(), 9);
+    assert!(handler.dispatch_pointer_move(
+        &mut events,
+        &PointerUpdate {
+            pointer: touch,
+            current: outside,
+            coalesced: vec![],
+            predicted: vec![],
+        }
+    ));
+    assert!(handler.dispatch_pointer_up(&mut events, &button));
+    assert_eq!(events.len(), 11);
 }

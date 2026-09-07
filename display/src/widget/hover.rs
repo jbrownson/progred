@@ -97,6 +97,8 @@ mod tests {
             },
             styles: &style::editor(1.0),
             site: &|| panic!("hover decoration does not read the document"),
+            event_interpreter: &|| panic!("hover does not interpret Grap"),
+            command: |_| false,
             pick: Rc::new(|_, _| false),
             picking: |_| false,
             same_target: PartialEq::eq,

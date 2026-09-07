@@ -33,6 +33,15 @@ composition, not replacements for that stage.
 
 ## Done in this checkpoint
 
+- The Grap event adapter is an ordinary library widget using `before`.
+  `OnEvent` and its app interpreter arm are removed. The adapter owns GID event
+  encoding and installs one function over `Event`, not seven closures with
+  repeated path/function captures. The editor supplies its scoped interpreter
+  on request, independently of text state; native widgets never request it.
+  The platform command-modifier policy is also an explicit input. Puri shares
+  scroll-outcome conversion between typed registration and generic adapters,
+  preserving partial input and suppressing empty remainders without inventing
+  acceptance.
 - Native preparation keeps document-site state and editing capabilities behind
   an explicit request. Inert widgets and pointer/hover wrappers do not resolve
   a path or construct text-editing callbacks. Prepared text controls, delimiters,
@@ -98,7 +107,7 @@ composition, not replacements for that stage.
 
 ## Remaining migration
 
-1. Migrate Grap-event, gesture, and remaining control wrappers through
+1. Migrate gesture and remaining control wrappers through
    the native widget interface. Completion and its navigation/offer outputs
    remain host requests.
 2. Move traversal/evaluation out of the layout interpreter. Resolve a location
@@ -117,7 +126,7 @@ Check each slice with pure interaction/placement tests and the existing
 ## Verification
 
 The affected library tests pass: 22 `measured`, 14 `progred-display`,
-160 `progred-libraries`, 52 `puri`, 3 `puri-widgets`, and 266 `progred`
+161 `progred-libraries`, 53 `puri`, 3 `puri-widgets`, and 265 `progred`
 (seven frame profiles and one handler microbenchmark excluded).
 Scroll regressions cover acceptance without writes, pixel/line/page unit
 round-tripping, and unused input at the camera's zoom limits.
@@ -205,3 +214,9 @@ IoP picture 22.56 ms, Fidget 9.28 ms, Torus 7.14 ms, Tanglecube 46.64 ms, Gyroid
 wrappers never requesting site state, independent hover claims and feedback,
 mapped retaining/exact/dynamic/occluding probes, clipping, and releases passing
 occluders. These are regression checks, not a claimed speedup.
+
+After the Grap event migration, IoP source again measured 4.15 ms (p95 4.57 ms).
+Its batch-encoding test moved from the app to the owning library; app integration
+coverage now also checks keyboard/IME data, the supplied command-modifier policy,
+and outside-rectangle motion/release versus bounded starts/scroll. Native/web
+checks pass, with only the unchanged web menu warnings.

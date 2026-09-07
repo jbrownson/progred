@@ -7,6 +7,18 @@ fn with_context<Hover: Default, R>(
     edit: widget::Edit<()>,
     run: impl FnOnce(&mut widget::Context<'_, '_, (), Hover>) -> R,
 ) -> R {
+    with_interpreter(
+        edit,
+        Rc::new(|_, _, _| panic!("unexpected Grap interpretation")),
+        run,
+    )
+}
+
+fn with_interpreter<Hover: Default, R>(
+    edit: widget::Edit<()>,
+    interpret: widget::EventInterpreter<()>,
+    run: impl FnOnce(&mut widget::Context<'_, '_, (), Hover>) -> R,
+) -> R {
     let mut fonts = FontContext::new();
     let mut layouts = LayoutContext::new();
     let mut cache = TextCache::default();
@@ -18,6 +30,8 @@ fn with_context<Hover: Default, R>(
             scale: 1.0,
         },
         styles: &widget::style::editor(1.0),
+        event_interpreter: &|| interpret.clone(),
+        command: |_| false,
         site: &|| widget::Site {
             writable: true,
             selected: true,
@@ -120,6 +134,35 @@ pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
         .iter()
         .rev()
         .find_map(|probe| probe.answer(placement.rect.center(), None, 0.0))
+}
+
+pub fn event_handler(layout: &Layout<(), ()>) -> Option<gid::Value> {
+    let Layout::Before { before, .. } = layout else {
+        return None;
+    };
+    let captured = Rc::new(RefCell::new(None));
+    let capture = captured.clone();
+    let interpret: widget::EventInterpreter<()> = Rc::new(move |_, function, _| {
+        capture.replace(Some(function.clone()));
+        true
+    });
+    let place = with_interpreter(Rc::new(|_, _, _| false), interpret, |context| {
+        before(context)
+    });
+    let mut fragment = widget::Fragment {
+        renders: vec![],
+        handler: None,
+        claims: vec![],
+        select: None,
+    };
+    place(
+        &mut fragment,
+        puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
+    );
+    fragment
+        .handler?
+        .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
+    captured.take()
 }
 
 pub fn assert_delimiter<Hover: Default + 'static>(

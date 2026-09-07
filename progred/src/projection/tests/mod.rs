@@ -357,6 +357,8 @@ fn placed_line_description(
             scale: 1.0,
         },
         styles: &crate::styles::editor(1.0),
+        event_interpreter: &|| panic!("native line does not interpret Grap"),
+        command: |_| false,
         site: &|| {
             let output = output.clone();
             progred_display::widget::Site {

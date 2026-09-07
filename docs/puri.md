@@ -100,6 +100,11 @@ feedback explicitly, not through a target-type switch in the interpreter.
 Child handlers remain in front of their enclosing handlers,
 and only the chosen alternative invokes its placement callbacks.
 
+`libraries::layout::on_event` is the Grap adapter over that same interface.
+It encodes events and installs one native handler; the editor supplies the
+site-scoped interpreter when requested. Ordinary native widgets do not touch
+this interpreter. Layout has no Grap-event constructor or interpretation arm.
+
 The upper `progred_display::Layout` still mixes boxes with other deferred
 editor requests. Separating that remaining layer is an
 [in-progress migration](layout-continuations.md), not a completed boundary.
