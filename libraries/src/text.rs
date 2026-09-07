@@ -36,6 +36,14 @@ pub fn read(value: &Value) -> Option<&str> {
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
 
+pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
+    Some(
+        current
+            .map(|current| overlay_value(current, value(spelling)))
+            .unwrap_or_else(|| value(spelling)),
+    )
+}
+
 pub fn completion(spelling: &str) -> progred_display::Completion {
     crate::completion::select(progred_display::Completion::new(
         format!("\"{spelling}\""),
@@ -63,13 +71,9 @@ pub fn functions() -> ForeignFunctions {
                 .map(|current| context.eval(current, environment))
                 .transpose()?;
             let input = context.eval(input, environment)?;
-            Ok(match read(&input) {
-                Some(text) => current
-                    .as_ref()
-                    .map(|current| overlay_value(current, value(text)))
-                    .unwrap_or_else(|| value(text)),
-                None => crate::absent::value(),
-            })
+            Ok(read(&input)
+                .and_then(|text| edit(text, current.as_ref()))
+                .unwrap_or_else(crate::absent::value))
         }),
     )
 }
@@ -80,7 +84,7 @@ pub fn display<World, Hover: Clone>(
     let content = read(input.value?)?;
     Some(line_edit::layout(
         content,
-        grap_runtime::ffi(vocabulary::UPDATE),
+        line_edit::native(edit),
         "\"",
         "\"",
     ))

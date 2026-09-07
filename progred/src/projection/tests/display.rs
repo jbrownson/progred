@@ -8,10 +8,10 @@ fn projection_target_appends_relative_steps() {
         completions: None,
         select: Rc::new(|selections, path| selections.push(path)),
         select_payload: Rc::new(|selections, path, _| selections.push(path)),
-        edit_line: Rc::new(|_, _, _| None),
+        edit_line: Rc::new(|_, _, _, _| false),
         toggle: Rc::new(|_, _| {}),
         update_state: Rc::new(|_, _, _| false),
-        edit: Rc::new(|_| None),
+        edit: Rc::new(|_, _| false),
         pick: Rc::new(|_, _| false),
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_, _| false),
@@ -584,10 +584,10 @@ fn partials_receive_selection_and_annotations_positionally() {
                 completions: None,
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
-                edit_line: Rc::new(|_, _, _| None),
+                edit_line: Rc::new(|_, _, _, _| false),
                 toggle: Rc::new(|_, _| {}),
                 update_state: Rc::new(|_, _, _| false),
-                edit: Rc::new(|_| None),
+                edit: Rc::new(|_, _| false),
                 pick: Rc::new(|_, _| false),
                 insert: Rc::new(|_, _| {}),
                 delete: Rc::new(|_, _| false),
@@ -623,11 +623,6 @@ fn partials_receive_selection_and_annotations_positionally() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut doc = Rc::new(Document {
-        root: None,
-        cells: Cells::new(),
-    });
-    let lib = core_libraries();
     for everything in [false, true] {
         let mut pending = crate::selection::pending_with_query(
             &crate::workspace::Root::document(),
@@ -636,9 +631,7 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
         );
         pending.set_completion_view(24.0, 2, everything);
         pending
-            .edit_mut()
-            .unwrap()
-            .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
+            .edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
         assert_eq!(pending.choice(), 0);
         assert_eq!(pending.completion_scroll(), 0.0);
         assert_eq!(pending.completion_everything(), everything);
@@ -647,11 +640,13 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
             selection_payload::completion_everything(&pending.payload()),
             everything
         );
-        write_through(&mut doc, &lib, &mut pending);
         assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
         assert_eq!(pending.choice(), 0);
         assert_eq!(pending.completion_everything(), everything);
-        pending.edit_mut().unwrap().set_text("");
+        pending.edit_query(|line| {
+            line.set_text("");
+            true
+        });
         assert_eq!(pending.choice(), 0);
         assert_eq!(pending.completion_everything(), everything);
     }
@@ -720,10 +715,10 @@ fn a_projection_defined_as_data_realizes() {
             completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _| None),
+            edit_line: Rc::new(|_, _, _, _| false),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|_| None),
+            edit: Rc::new(|_, _| false),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),

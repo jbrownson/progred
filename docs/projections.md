@@ -169,16 +169,26 @@ back to normal projection.
 The [projection runtime](../progred/src/projection/mod.rs) adapts display
 layouts to measured boxes and Puri handlers. Its supporting modules separate
 [structural fallback](../progred/src/projection/structure.rs),
-[layout choices](../progred/src/projection/choices.rs),
 [events](../progred/src/projection/events.rs),
 [completion](../progred/src/projection/completion.rs), and
 [drawing](../progred/src/projection/drawing.rs).
+The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
+`measured`, independently of those editor adaptations.
+
+Grap traversal descriptions (`descend` and `at`) use the
+[path library](../libraries/src/path.rs)'s GID encoding, also used by site and
+selection capabilities. Field keys, list positions, and source-qualified
+definition follows have one encoder/decoder; layout has no parallel step
+vocabulary.
 
 Puri leaves carry text or canvas drawing operations. They do not acquire
 selection paths, document editing rules, names, or completion providers.
 `LineEdit` and `Completion` are explicit host-control requests above that leaf
 boundary. Text and f64 projections supply the stock line control's spelling,
-affixes, and Grap write-back function. Progred adapts document operations;
+affixes, and a native conversion callback. The line library offers a separate
+adapter for Grap conversions; native controls do not round-trip through Grap.
+The current handler owns conversion, not the selection payload.
+Progred's [line control](../progred/src/projection/line_control.rs) adapts document operations;
 reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
 Callbacks receive mutable world state at dispatch; no projection-action enum

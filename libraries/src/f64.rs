@@ -80,7 +80,7 @@ pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let number = read(input.value?)?;
-    number::layout(input, number, vocabulary::F64, vocabulary::UPDATE, value)
+    number::layout(input, number, vocabulary::F64, value)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -169,8 +169,7 @@ pub fn functions() -> ForeignFunctions {
                 let current = context.eval(current, environment)?;
                 let input = context.eval(input, environment)?;
                 Ok(crate::text::read(&input)
-                    .and_then(|text| text.trim().parse::<f64>().ok())
-                    .map(|number| overlay_value(&current, value(number)))
+                    .and_then(|text| number::edit(text, Some(&current), value))
                     .unwrap_or_else(crate::absent::value))
             }),
         )

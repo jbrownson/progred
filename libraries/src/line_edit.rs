@@ -1,12 +1,31 @@
 //! The stock Rust line-edit control shared by atomic-value libraries.
-//! A library supplies spelling, affixes, and a Grap write-back rule;
+//! A library supplies spelling, affixes, and a conversion callback;
 //! Progred lowers the description through Puri.
 
 use crate::{Library, name};
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x26b5394bf7beb5dce00140f9e03bc465);
-use progred_display::{Layout, LineEdit, TextFamily, line_edit};
+use progred_display::{Layout, LineEdit, LineUpdate, TextFamily, line_edit};
+use std::rc::Rc;
+
+pub fn native(update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static) -> LineUpdate {
+    Rc::new(move |_, spelling, current| update(spelling, current))
+}
+
+pub fn grap(function: Value) -> LineUpdate {
+    Rc::new(move |env, spelling, current| {
+        let arguments = std::iter::once((vocabulary::INPUT, crate::text::value(spelling)))
+            .chain(
+                current
+                    .cloned()
+                    .map(|current| (vocabulary::CURRENT, current)),
+            )
+            .collect::<Vec<_>>();
+        let (result, _) = env.apply(&function, &arguments);
+        (!crate::absent::is_absent(&result)).then_some(result)
+    })
+}
 
 pub mod vocabulary {
     use gid::CellId;
@@ -18,7 +37,7 @@ pub mod vocabulary {
 
 pub fn layout<World, Hover>(
     text: impl Into<String>,
-    update: Value,
+    update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
 ) -> Layout<World, Hover> {
@@ -27,7 +46,7 @@ pub fn layout<World, Hover>(
 
 pub fn layout_with_family<World, Hover>(
     text: impl Into<String>,
-    update: Value,
+    update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
     family: TextFamily,
@@ -38,7 +57,7 @@ pub fn layout_with_family<World, Hover>(
 pub fn layout_with_placeholder<World, Hover>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
-    update: Value,
+    update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
 ) -> Layout<World, Hover> {
@@ -55,7 +74,7 @@ pub fn layout_with_placeholder<World, Hover>(
 fn description<World, Hover>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
-    update: Value,
+    update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
     family: TextFamily,
@@ -88,14 +107,14 @@ mod tests {
 
     #[test]
     fn layout_describes_the_host_line_editor() {
-        let update = Value::from(gid::new_cell_id());
+        let update = native(|spelling, _| Some(crate::text::value(spelling)));
         let layout = layout::<(), ()>("42", update.clone(), "(", ")");
         let Layout::LineEdit(line) = layout else {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.text, "42");
         assert_eq!(line.placeholder, None);
-        assert_eq!(line.update, update);
+        assert!(Rc::ptr_eq(&line.update, &update));
         assert_eq!(line.prefix, "(");
         assert_eq!(line.suffix, ")");
         assert_eq!(line.family, TextFamily::SystemUi);
@@ -105,7 +124,7 @@ mod tests {
     fn layout_can_request_a_monospace_editor() {
         let Layout::LineEdit(line) = layout_with_family::<(), ()>(
             "b4e0fe",
-            Value::from(gid::new_cell_id()),
+            native(|_, _| None),
             "#",
             "",
             TextFamily::Monospace,
@@ -117,13 +136,9 @@ mod tests {
 
     #[test]
     fn layout_exposes_a_placeholder() {
-        let Layout::LineEdit(line) = layout_with_placeholder::<(), ()>(
-            "",
-            Some("λ"),
-            Value::from(gid::new_cell_id()),
-            "",
-            "",
-        ) else {
+        let Layout::LineEdit(line) =
+            layout_with_placeholder::<(), ()>("", Some("λ"), native(|_, _| None), "", "")
+        else {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.placeholder.as_deref(), Some("λ"));

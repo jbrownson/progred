@@ -227,11 +227,14 @@ fn functions() -> ForeignFunctions {
             let current = context.eval(current, environment)?;
             let input = context.eval(input, environment)?;
             Ok(text::read(&input)
-                .and_then(parse)
-                .and_then(|color| replace_color(&current, color))
+                .and_then(|spelling| edit(spelling, Some(&current)))
                 .unwrap_or_else(crate::absent::value))
         }),
     )
+}
+
+pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
+    replace_color(current?, parse(spelling)?)
 }
 
 fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
@@ -291,7 +294,7 @@ pub fn display<World: 'static, Hover: Clone>(
         name::read(input.value?).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
     let spelling = line_edit::layout_with_family(
         spelling(encoded),
-        grap_runtime::ffi(vocabulary::UPDATE),
+        line_edit::native(edit),
         "#",
         "",
         TextFamily::Monospace,

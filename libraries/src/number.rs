@@ -73,18 +73,22 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
     fn spelling(self, precision: f64) -> String;
 }
 
-pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
+pub(crate) fn layout<World, Hover: Clone, N: Scrubbable + std::str::FromStr>(
     input: &ProjectionInput<'_, World, Hover>,
     number: N,
     representation: CellId,
-    update: CellId,
     encode: fn(N) -> Value,
 ) -> Option<Layout<World, Hover>> {
     let original = input.value?;
     let line = row(
         2.0,
         [
-            line_edit::layout(number.to_string(), grap_runtime::ffi(update), "", ""),
+            line_edit::layout(
+                number.to_string(),
+                line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+                "",
+                "",
+            ),
             subscript(
                 input
                     .env
@@ -115,6 +119,19 @@ pub(crate) fn layout<World, Hover: Clone, N: Scrubbable>(
             })
         }),
     ))
+}
+
+pub(crate) fn edit<N: std::str::FromStr>(
+    spelling: &str,
+    current: Option<&Value>,
+    encode: fn(N) -> Value,
+) -> Option<Value> {
+    let value = encode(spelling.trim().parse().ok()?);
+    Some(
+        current
+            .map(|current| overlay_value(current, value.clone()))
+            .unwrap_or(value),
+    )
 }
 
 struct Scrubbed<N> {

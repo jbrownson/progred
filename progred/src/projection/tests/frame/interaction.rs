@@ -67,13 +67,13 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 world.selection = Some(make_selection(path));
             }),
             select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _| None),
+            edit_line: Rc::new(|_, _, _, _| false),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             // A selection transition must consume the click even if
             // retained dispatch cannot recover an edit context for
             // the optional caret-placement follow-up.
-            edit: Rc::new(|_| None),
+            edit: Rc::new(|_, _| false),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
@@ -173,13 +173,16 @@ fn sample_text_line_click_mounts_its_own_editor() {
             completions: Some(stack.completions.clone()),
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|world: &mut ClickWorld, path, line| {
-                let selected = world
+            edit_line: Rc::new(|world: &mut ClickWorld, path, line, operation| {
+                let Some(selected) = world
                     .selection
                     .as_mut()
-                    .filter(|selected| selected.path() == path)?;
-                Some(EditCtx {
-                    state: selected.edit_line_mut(line),
+                    .filter(|selected| selected.path() == path)
+                else {
+                    return false;
+                };
+                operation(EditCtx {
+                    state: selected.edit_line_mut(&line.text),
                     fonts: &mut world.fonts,
                     layouts: &mut world.layouts,
                     clipboard: &mut world.clipboard,
@@ -187,7 +190,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             }),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|world: &mut ClickWorld| {
+            edit: Rc::new(|world: &mut ClickWorld, operation| {
                 let ClickWorld {
                     selection,
                     fonts,
@@ -195,11 +198,15 @@ fn sample_text_line_click_mounts_its_own_editor() {
                     clipboard,
                     ..
                 } = world;
-                Some(puri::edit::EditCtx {
-                    state: selection.as_mut()?.edit_mut()?,
-                    fonts,
-                    layouts,
-                    clipboard,
+                selection.as_mut().is_some_and(|selection| {
+                    selection.edit_query(|state| {
+                        operation(puri::edit::EditCtx {
+                            state,
+                            fonts,
+                            layouts,
+                            clipboard,
+                        })
+                    })
                 })
             }),
             pick: Rc::new(|_, _| false),

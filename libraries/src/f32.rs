@@ -7,7 +7,7 @@ use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf8daecede6e48de724408cfb0e3090f8);
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Layout, ProjectionInput, overlay_value};
+use progred_display::{Layout, ProjectionInput};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -72,13 +72,7 @@ impl number::Scrubbable for f32 {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    number::layout(
-        input,
-        read(input.value?)?,
-        vocabulary::F32,
-        vocabulary::UPDATE,
-        value,
-    )
+    number::layout(input, read(input.value?)?, vocabulary::F32, value)
 }
 
 fn update(
@@ -94,15 +88,9 @@ fn update(
         .map(|current| context.eval(current, environment))
         .transpose()?;
     let input = context.eval(input, environment)?;
-    Ok(
-        match crate::text::read(&input).and_then(|text| text.trim().parse().ok()) {
-            Some(number) => current
-                .as_ref()
-                .map(|current| overlay_value(current, value(number)))
-                .unwrap_or_else(|| value(number)),
-            None => absent::value(),
-        },
-    )
+    Ok(crate::text::read(&input)
+        .and_then(|text| number::edit(text, current.as_ref(), value))
+        .unwrap_or_else(absent::value))
 }
 
 fn binary(

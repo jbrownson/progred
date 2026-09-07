@@ -44,7 +44,7 @@ pub fn step_value(step: &Step) -> Value {
     }])
 }
 
-fn read_step(value: &Value) -> Option<Step> {
+pub fn read_step(value: &Value) -> Option<Step> {
     use vocabulary::*;
     let fields = value.as_record()?;
     match (fields.get(&KEY), fields.get(&ELEMENT), fields.get(&FOLLOW)) {

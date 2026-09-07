@@ -194,7 +194,7 @@ fn query_content<C: 'static, Cv: Canvas + 'static>(
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && edit(ctx).is_some_and(|edit| {
+                && edit(ctx, &|edit| {
                     edit.state.pointer_down(
                         &presentation,
                         edit.fonts,

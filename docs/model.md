@@ -103,12 +103,22 @@ an error. Only the complete editor operation is staged,
 with no per-call snapshots or rollback. Tests can replace these foreign functions
 with a recording interpreter.
 
-The projection supplies a line's spelling, presentation, and Grap write-back
-function. The function receives the current value and input text as data.
-A non-absent changed result writes through to the stored location; an absent
-leaves the document alone. Invalid intermediate text can therefore remain in
-the editor while the last valid value remains in the document. Loaded library
-values decline writes. Projections decide how unrelated fields survive an edit.
+The projection supplies a line's spelling, presentation, and conversion callback.
+The current line handler owns the callback; selection retains neither a Rust
+callback nor a Grap callable. Progred's [line control](../progred/src/projection/line_control.rs)
+runs an editing operation, then converts only when the accepted operation changed
+the text. The callback receives the live value and spelling; `None` declines a
+write. An equal result does not rewrite the document. Invalid intermediate text
+can remain in the editor while the last valid value remains in the document.
+Loaded library values decline writes. Projections decide how unrelated fields
+survive an edit. Native atomic libraries use native conversion functions; the
+line library's `grap` adapter calls a Grap conversion with text and current value
+as data, mapping absent to `None`.
+
+The line control groups the first document write into undo and coalesces later
+writes in that editing run. The shell no longer runs a general post-event
+conversion step. Query editing similarly resets its completion choice and scroll
+at the editing operation, not after unrelated events.
 
 In the normal projection, blobs use a monospace hex line with a fixed `0x`
 prefix. The buffer contains the full hex digits, including for blobs longer
@@ -120,7 +130,7 @@ Navigation landmarks contain their selection callbacks. A selected, writable
 line with no editing state uses its current projected spelling with the caret
 at the end. Rendering and input use the same default; projection does not store
 it just because the line is selected. On an editing interaction, the line control
-materializes state from that default and its current write-back rule. Existing
+materializes state from that default. Its current handler supplies conversion. Existing
 caret, in-progress spelling, and IME state take precedence. Raw and read-only
 views do not acquire an editor from a plain selection.
 

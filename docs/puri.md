@@ -18,6 +18,12 @@ affixes, focus, placeholder, and chrome for this description. `EditCtx` supplies
 mutable state, Parley contexts, and a clipboard capability at dispatch. The
 focused editor emits a caret rectangle for the platform IME.
 
+The caller runs each `EditOperation` with that `EditCtx` rather than lending
+the editor out to a handler. This lets the caller finish the state/service
+borrows, then apply a document conversion and record undo as one interaction.
+Puri does not know about those document operations. Progred captures conversion
+in the current line handler, never in persistent selection state.
+
 At Progred's line-control boundary, missing editing state has a defined default:
 the current spelling with the caret at its end. The frame uses that state without
 persisting it; dispatch materializes it on access for an editing interaction.
@@ -30,7 +36,7 @@ The package boundaries are:
 | --- | --- |
 | [puri](../ui/puri/src/lib.rs) | Canvas and text vocabulary, placement geometry, typed handlers, pure widget descriptions |
 | [puri-widgets](../ui/puri-widgets/src/lib.rs) | Reusable composed widgets, including completion rows |
-| [measured](../ui/measured/src/lib.rs) | Measurement and box composition with opaque placement outputs |
+| [measured](../ui/measured/src/lib.rs) | Box composition and ordered alternatives with opaque placement outputs |
 | [uig](../ui/uig/src/lib.rs) | Shared geometry vocabulary (`Placement`), re-exported by Puri |
 | [puri-vello](../ui/puri-vello/src/lib.rs) | Native Vello canvas backend |
 | [puri-web](../ui/puri-web/src/lib.rs) | Browser Canvas2D backend |
@@ -54,12 +60,24 @@ clip. Clipping does not in itself remove navigation or active handlers.
 
 Progred composes boxes by width, ascent, and descent. Rows align baselines or
 centers; columns choose a baseline; wrappers pad, overlay, or decorate the
-result. [`projection/choices`](../progred/src/projection/choices.rs) settles
+result. [`measured::choices`](../ui/measured/src/choices.rs) settles
 ordered alternatives over already measured leaves. The first preferred form
 whose natural width fits wins; otherwise the last form accommodates the
 available width. Selection does not reshape text or rerun projections.
 Shared layout nodes belong to this one frame and are consumed by the selected
 form.
+
+The choice engine has no GID, editor, or Puri dependency. `ChoiceBuild` owns
+per-frame sharing and choice bookkeeping; `resolve_choices` returns a
+`Measured<Out>`. Its leaves own opaque placement continuations, and wrappers
+compose those continuations without interpreting their output. Out-of-flow
+content uses `attach`: only the base contributes to surrounding width, and
+the consumer supplies how the two settled subtrees place. Popover styling,
+position, occlusion, and raising remain Progred policy.
+
+The upper `progred_display::Layout` still mixes these boxes with deferred
+editor requests. Separating that remaining layer is an
+[in-progress migration](layout-continuations.md), not a completed boundary.
 
 Pane sizing precedes content projection. Ordinary document panes scroll over
 content-sized output; explicit viewport panes pass their assigned size to a

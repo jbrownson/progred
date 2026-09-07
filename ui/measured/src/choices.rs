@@ -1,11 +1,11 @@
 //! Settle ordered layout alternatives over already measured leaves.
 
+use crate::{Measured, centered_row, col, layers, pad, row};
 use kurbo::Insets;
-use measured::{Measured, centered_row, col, layers, pad, row};
 use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
-pub(super) struct Widths {
+struct Widths {
     preferred: f64,
     minimum: f64,
 }
@@ -30,8 +30,8 @@ impl Widths {
 /// Fixed leaves already own their placement continuations; selecting
 /// forms therefore combines widths only and never remeasures text
 /// or reruns a projection.
-pub(super) struct ChoiceLayout<Out> {
-    pub(super) widths: Widths,
+pub struct ChoiceLayout<Out> {
+    widths: Widths,
     kind: ChoiceKind<Out>,
 }
 
@@ -46,7 +46,7 @@ enum ChoiceKind<Out> {
         width_add: f64,
     },
     Row {
-        alignment: progred_display::RowAlignment,
+        alignment: crate::RowAlignment,
         gap: f64,
         children: Vec<ChoiceLayout<Out>>,
     },
@@ -58,7 +58,7 @@ enum ChoiceKind<Out> {
     Overlay {
         children: Vec<ChoiceLayout<Out>>,
     },
-    Popover {
+    Attached {
         trigger: Box<ChoiceLayout<Out>>,
         content: Box<ChoiceLayout<Out>>,
         map: Box<dyn FnOnce(Measured<Out>, Measured<Out>) -> Measured<Out>>,
@@ -73,10 +73,10 @@ enum ChoiceKind<Out> {
     },
 }
 
-pub(super) struct ChoiceBuild<Out> {
-    pub(super) next_choice: usize,
-    pub(super) shared_ids: HashMap<usize, usize>,
-    pub(super) shared: Vec<Option<ChoiceLayout<Out>>>,
+pub struct ChoiceBuild<Out> {
+    next_choice: usize,
+    shared_ids: HashMap<usize, usize>,
+    shared: Vec<Option<ChoiceLayout<Out>>>,
 }
 
 impl<Out> Default for ChoiceBuild<Out> {
@@ -89,10 +89,53 @@ impl<Out> Default for ChoiceBuild<Out> {
     }
 }
 
-pub(super) struct ChoiceGraph<Out> {
-    pub(super) root: ChoiceLayout<Out>,
-    pub(super) shared: Vec<Option<ChoiceLayout<Out>>>,
-    pub(super) choice_count: usize,
+pub struct ChoiceGraph<Out> {
+    root: ChoiceLayout<Out>,
+    shared: Vec<Option<ChoiceLayout<Out>>>,
+    choice_count: usize,
+}
+
+impl<Out: crate::Output + 'static> ChoiceBuild<Out> {
+    /// Reuse one measured child across mutually exclusive forms. The
+    /// caller's key identifies its shared description, not a layout slot.
+    /// A settled form must use each shared child at most once.
+    pub fn shared(
+        &mut self,
+        key: usize,
+        prepare: impl FnOnce(&mut Self) -> ChoiceLayout<Out>,
+    ) -> ChoiceLayout<Out> {
+        match self.shared_ids.get(&key).copied() {
+            Some(id) => ChoiceLayout::used(
+                id,
+                self.shared[id]
+                    .as_ref()
+                    .expect("a shared layout is prepared before reuse")
+                    .widths,
+            ),
+            None => {
+                let child = prepare(self);
+                let id = self.shared.len();
+                let widths = child.widths;
+                self.shared.push(Some(child));
+                self.shared_ids.insert(key, id);
+                ChoiceLayout::used(id, widths)
+            }
+        }
+    }
+
+    pub fn alternatives(&mut self, options: Vec<ChoiceLayout<Out>>) -> ChoiceLayout<Out> {
+        let id = self.next_choice;
+        self.next_choice += 1;
+        ChoiceLayout::alternatives(id, options)
+    }
+
+    pub fn finish(self, root: ChoiceLayout<Out>) -> ChoiceGraph<Out> {
+        ChoiceGraph {
+            root,
+            shared: self.shared,
+            choice_count: self.next_choice,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -106,22 +149,22 @@ struct LayoutTrace {
     deepest_selected_fallback: usize,
 }
 
-impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
-    pub(super) fn fixed(measured: Measured<Out>) -> Self {
+impl<Out: crate::Output + 'static> ChoiceLayout<Out> {
+    pub fn fixed(measured: Measured<Out>) -> Self {
         Self {
             widths: Widths::fixed(measured.extent.width),
             kind: ChoiceKind::Fixed(measured),
         }
     }
 
-    pub(super) fn used(id: usize, widths: Widths) -> Self {
+    fn used(id: usize, widths: Widths) -> Self {
         Self {
             widths,
             kind: ChoiceKind::Use(id),
         }
     }
 
-    pub(super) fn map(
+    pub fn map(
         child: Self,
         width_add: f64,
         map: impl FnOnce(Measured<Out>) -> Measured<Out> + 'static,
@@ -136,11 +179,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn aligned_row(
-        alignment: progred_display::RowAlignment,
-        gap: f64,
-        children: Vec<Self>,
-    ) -> Self {
+    pub fn aligned_row(alignment: crate::RowAlignment, gap: f64, children: Vec<Self>) -> Self {
         let gaps = gap * children.len().saturating_sub(1) as f64;
         let widths = Widths {
             preferred: children
@@ -164,7 +203,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn col(baseline: usize, gap: f64, children: Vec<Self>) -> Self {
+    pub fn col(baseline: usize, gap: f64, children: Vec<Self>) -> Self {
         let widths = Widths {
             preferred: children
                 .iter()
@@ -185,7 +224,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn overlay(children: Vec<Self>) -> Self {
+    pub fn overlay(children: Vec<Self>) -> Self {
         let widths = Widths {
             preferred: children
                 .iter()
@@ -202,14 +241,16 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn popover(
+    /// Settle an out-of-flow child without adding its width to the base.
+    /// The consumer combines their placement continuations.
+    pub fn attach(
         trigger: Self,
         content: Self,
         map: impl FnOnce(Measured<Out>, Measured<Out>) -> Measured<Out> + 'static,
     ) -> Self {
         Self {
             widths: trigger.widths,
-            kind: ChoiceKind::Popover {
+            kind: ChoiceKind::Attached {
                 trigger: Box::new(trigger),
                 content: Box::new(content),
                 map: Box::new(map),
@@ -217,7 +258,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn pad(insets: Insets, child: Self) -> Self {
+    pub fn pad(insets: Insets, child: Self) -> Self {
         let widths = child.widths.plus(insets.x0 + insets.x1);
         Self {
             widths,
@@ -228,7 +269,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub(super) fn alternatives(id: usize, options: Vec<Self>) -> Self {
+    fn alternatives(id: usize, options: Vec<Self>) -> Self {
         let widths = match options.first() {
             Some(first) => Widths {
                 preferred: first.widths.preferred,
@@ -272,7 +313,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .iter()
                 .map(|child| child.select(choices, shared, available))
                 .fold(0.0_f64, f64::max),
-            ChoiceKind::Popover {
+            ChoiceKind::Attached {
                 trigger, content, ..
             } => {
                 content.select(choices, shared, available);
@@ -335,7 +376,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     child.inspect(depth + 1, trace);
                 }
             }
-            ChoiceKind::Popover {
+            ChoiceKind::Attached {
                 trigger, content, ..
             } => {
                 trigger.inspect(depth + 1, trace);
@@ -379,7 +420,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     child.inspect_selection(choices, shared, depth + 1, trace);
                 }
             }
-            ChoiceKind::Popover {
+            ChoiceKind::Attached {
                 trigger, content, ..
             } => {
                 trigger.inspect_selection(choices, shared, depth + 1, trace);
@@ -416,8 +457,8 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     .map(|child| child.settle(choices, shared))
                     .collect();
                 match alignment {
-                    progred_display::RowAlignment::Baseline => row(gap, children),
-                    progred_display::RowAlignment::Center => centered_row(gap, children),
+                    crate::RowAlignment::Baseline => row(gap, children),
+                    crate::RowAlignment::Center => centered_row(gap, children),
                 }
             }
             ChoiceKind::Col {
@@ -438,7 +479,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                     .map(|child| child.settle(choices, shared))
                     .collect(),
             ),
-            ChoiceKind::Popover {
+            ChoiceKind::Attached {
                 trigger,
                 content,
                 map,
@@ -457,16 +498,16 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
     }
 }
 
-pub(super) fn resolve_choices<Out: measured::Output + 'static>(
+pub fn resolve_choices<Out: crate::Output + 'static>(
     graph: ChoiceGraph<Out>,
     available: f64,
+    tracing: bool,
 ) -> Measured<Out> {
     let ChoiceGraph {
         root: layout,
         mut shared,
         choice_count,
     } = graph;
-    let tracing = std::env::var_os("PROGRED_LAYOUT_TRACE").is_some();
     let mut trace = LayoutTrace::default();
     if tracing {
         layout.inspect(0, &mut trace);
@@ -502,12 +543,152 @@ pub(super) fn resolve_choices<Out: measured::Output + 'static>(
 #[cfg(test)]
 mod choice_tests {
     use super::*;
-    use measured::Extent;
+    use crate::Extent;
+    use kurbo::{Point, Rect};
+    use std::{cell::Cell, rc::Rc};
+    use uig::Placement;
+
+    #[derive(Debug, Default, PartialEq)]
+    struct Recording(Vec<(&'static str, Placement)>);
+
+    impl crate::Output for Recording {
+        fn empty() -> Self {
+            Self::default()
+        }
+
+        fn over(mut self, above: Self) -> Self {
+            self.0.extend(above.0);
+            self
+        }
+    }
+
+    fn recording(label: &'static str, width: f64) -> ChoiceLayout<Recording> {
+        ChoiceLayout::fixed(crate::leaf_into(
+            Extent {
+                width,
+                ascent: 3.0,
+                descent: 1.0,
+            },
+            move |placement, out: &mut Recording| out.0.push((label, placement)),
+        ))
+    }
+
+    #[test]
+    fn only_the_selected_form_places_and_wrappers_keep_settled_geometry() {
+        let placements = Rc::new(Cell::new(0));
+        let child = ChoiceLayout::map(recording("chosen", 10.0), 0.0, {
+            let placements = placements.clone();
+            move |child| {
+                crate::after_into(
+                    crate::before_into(child, |p, out| out.0.push(("before", p))),
+                    move |p, out| {
+                        placements.set(placements.get() + 1);
+                        out.0.push(("after", p));
+                    },
+                )
+            }
+        });
+        let mut build = ChoiceBuild::default();
+        let root = build.alternatives(vec![
+            recording("discarded", 100.0),
+            ChoiceLayout::pad(Insets::new(5.0, 6.0, 7.0, 8.0), child),
+        ]);
+        let layout = resolve_choices(build.finish(root), 30.0, false);
+        assert_eq!(placements.get(), 0);
+        assert_eq!(layout.extent.width, 22.0);
+        assert_eq!(layout.extent.height(), 18.0);
+
+        let clip = Rect::new(26.0, 37.0, 100.0, 100.0);
+        let placement = Placement::new(layout.extent.rect_at(Point::new(20.0, 30.0)), clip);
+        let out = crate::place(layout, placement);
+        let child = Placement::new(Rect::new(25.0, 36.0, 35.0, 40.0), clip);
+        assert_eq!(placements.get(), 1);
+        assert_eq!(
+            out,
+            Recording(vec![("before", child), ("chosen", child), ("after", child)])
+        );
+    }
+
+    #[test]
+    fn shared_children_prepare_once_and_place_in_the_chosen_form() {
+        for available in [30.0, 100.0] {
+            let mut build = ChoiceBuild::default();
+            let prepared = Cell::new(0);
+            let wide = build.shared(42, |_| {
+                prepared.set(prepared.get() + 1);
+                recording("shared", 20.0)
+            });
+            let narrow = build.shared(42, |_| panic!("shared description prepared twice"));
+            let root = build.alternatives(vec![
+                ChoiceLayout::aligned_row(
+                    crate::RowAlignment::Baseline,
+                    5.0,
+                    vec![recording("prefix", 60.0), wide],
+                ),
+                ChoiceLayout::col(0, 2.0, vec![recording("prefix", 10.0), narrow]),
+            ]);
+            let layout = resolve_choices(build.finish(root), available, false);
+            assert_eq!(prepared.get(), 1);
+            let placement = Placement::new(
+                layout.extent.rect_at(Point::ORIGIN),
+                Rect::new(0.0, 0.0, 200.0, 200.0),
+            );
+            let Recording(out) = crate::place(layout, placement);
+            assert_eq!(
+                out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+                ["prefix", "shared"]
+            );
+            assert_eq!(
+                out[1].1.rect,
+                if available == 30.0 {
+                    Rect::new(0.0, 6.0, 20.0, 10.0)
+                } else {
+                    Rect::new(65.0, 0.0, 85.0, 4.0)
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn attached_content_is_settled_but_its_placement_remains_the_consumers_choice() {
+        for show in [false, true] {
+            let mut build = ChoiceBuild::default();
+            let attached =
+                build.alternatives(vec![recording("wide", 100.0), recording("narrow", 20.0)]);
+            let root =
+                ChoiceLayout::attach(recording("base", 10.0), attached, move |base, layer| {
+                    crate::overlay(base, layer, move |p, extent, _| {
+                        show.then(|| {
+                            Placement::new(
+                                extent.rect_at(Point::new(p.rect.x0, p.rect.y1)),
+                                p.clip_rect,
+                            )
+                        })
+                    })
+                });
+            let layout = resolve_choices(build.finish(root), 30.0, false);
+            assert_eq!(layout.extent.width, 10.0);
+            assert_eq!(layout.extent.height(), 4.0);
+            let placement = Placement::new(
+                layout.extent.rect_at(Point::ORIGIN),
+                Rect::new(0.0, 0.0, 200.0, 200.0),
+            );
+            let Recording(out) = crate::place(layout, placement);
+            assert_eq!(
+                out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+                if show {
+                    vec!["base", "narrow"]
+                } else {
+                    vec!["base"]
+                }
+            );
+        }
+    }
 
     #[derive(Clone, Copy)]
     struct Output;
 
-    impl measured::Output for Output {
+    impl crate::Output for Output {
         fn empty() -> Self {
             Self
         }
@@ -518,7 +699,7 @@ mod choice_tests {
     }
 
     fn fixed(width: f64) -> ChoiceLayout<Output> {
-        ChoiceLayout::fixed(measured::leaf(
+        ChoiceLayout::fixed(crate::leaf(
             Extent {
                 width,
                 ascent: 1.0,
@@ -559,7 +740,7 @@ mod choice_tests {
     fn accommodating_form_receives_the_real_allocation() {
         let nested = ChoiceLayout::alternatives(1, vec![fixed(60.0), fixed(20.0)]);
         let accommodating = ChoiceLayout::aligned_row(
-            progred_display::RowAlignment::Baseline,
+            crate::RowAlignment::Baseline,
             0.0,
             vec![nested, fixed(40.0)],
         );
@@ -575,7 +756,7 @@ mod choice_tests {
     fn a_row_reserves_its_siblings_minimum_widths() {
         let choice = ChoiceLayout::alternatives(0, vec![fixed(90.0), fixed(50.0)]);
         let layout = ChoiceLayout::aligned_row(
-            progred_display::RowAlignment::Baseline,
+            crate::RowAlignment::Baseline,
             0.0,
             vec![choice, fixed(40.0)],
         );

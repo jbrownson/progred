@@ -70,6 +70,10 @@ pub struct EditStyle {
     pub cursor: Brush,
 }
 
+/// The caller lends editing state for one operation and may interpret
+/// its result after those borrows end (for example, updating a model).
+pub type EditOperation<'a> = dyn Fn(EditCtx<'_>) -> bool + 'a;
+
 /// Presentation inputs used to construct a transient Parley editor.
 /// They belong to the current widget description, not durable cursor,
 /// selection, drag, or IME state.
@@ -624,12 +628,14 @@ impl LineEdit {
 
     /// Draw and register this description at its caller-supplied
     /// settled placement. Dispatch can outlive the editor represented
-    /// by the frame, so `with` returns `None` when it has gone away.
+    /// by the frame, so the caller declines when it has gone away.
+    /// `with` runs the editing operation and can process its result
+    /// after the state and platform-service borrows end.
     pub fn place<C: 'static, P: Canvas + HasHandler<C>>(
         self,
         p: &mut P,
         placement: Placement,
-        with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
+        with: impl Fn(&mut C, &EditOperation<'_>) -> bool + Clone + 'static,
     ) {
         self.draw(p, placement);
         self.install(p, placement, with);
@@ -663,7 +669,7 @@ impl LineEdit {
         &self,
         p: &mut P,
         placement: Placement,
-        with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
+        with: impl Fn(&mut C, &EditOperation<'_>) -> bool + Clone + 'static,
     ) {
         let scale = self.scale;
         let presentation = self.presentation.clone();
@@ -673,52 +679,41 @@ impl LineEdit {
             let with_key = with.clone();
             let key_presentation = presentation.clone();
             p.handler().on_key(move |ctx, event| {
-                with_key(ctx).is_some_and(
-                    |EditCtx {
-                         state,
-                         fonts,
-                         layouts,
-                         clipboard,
-                     }| {
-                        state.handle_key(&key_presentation, fonts, layouts, clipboard, event)
-                    },
-                )
+                with_key(ctx, &|edit| {
+                    edit.state.handle_key(
+                        &key_presentation,
+                        edit.fonts,
+                        edit.layouts,
+                        edit.clipboard,
+                        event,
+                    )
+                })
             });
             let with_move = with.clone();
             let move_presentation = presentation.clone();
             p.handler().on_pointer_move(move |ctx, update| {
                 is_primary_contact_move(update)
-                    && with_move(ctx).is_some_and(
-                        |EditCtx {
-                             state,
-                             fonts,
-                             layouts,
-                             ..
-                         }| {
-                            state.pointer_move(
-                                &move_presentation,
-                                fonts,
-                                layouts,
-                                scale,
-                                Point::new(
-                                    update.current.position.x - text_origin.x,
-                                    update.current.position.y - text_origin.y,
-                                ),
-                            )
-                        },
-                    )
+                    && with_move(ctx, &|edit| {
+                        edit.state.pointer_move(
+                            &move_presentation,
+                            edit.fonts,
+                            edit.layouts,
+                            scale,
+                            Point::new(
+                                update.current.position.x - text_origin.x,
+                                update.current.position.y - text_origin.y,
+                            ),
+                        )
+                    })
             });
             let with_up = with.clone();
-            p.handler().on_pointer_up(move |ctx, _| {
-                with_up(ctx).is_some_and(|edit| edit.state.pointer_up())
-            });
+            p.handler()
+                .on_pointer_up(move |ctx, _| with_up(ctx, &|edit| edit.state.pointer_up()));
             let with_cancel = with.clone();
-            p.handler().on_pointer_cancel(move |ctx, _| {
-                with_cancel(ctx).is_some_and(|edit| edit.state.pointer_up())
-            });
-            p.handler().on_ime(move |ctx, event| {
-                with(ctx).is_some_and(|edit| edit.state.handle_ime(event))
-            });
+            p.handler()
+                .on_pointer_cancel(move |ctx, _| with_cancel(ctx, &|edit| edit.state.pointer_up()));
+            p.handler()
+                .on_ime(move |ctx, event| with(ctx, &|edit| edit.state.handle_ime(event)));
         }
     }
 }
@@ -1369,7 +1364,7 @@ mod tests {
                 20.0 + metrics.width,
                 30.0 + metrics.ascent + metrics.descent,
             )),
-            |_| None,
+            |_, _| false,
         );
         let fills: Vec<Rect> = frame
             .list

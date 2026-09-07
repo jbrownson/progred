@@ -209,11 +209,8 @@ pub(super) fn realize_state_scroll<C: 'static, Cv: Canvas + 'static>(
             };
             match handler(progred_display::StateScrollEvent { delta_x, delta_y }) {
                 Some(state) => {
-                    if update_state(world, path.clone(), state) {
-                        ScrollOutcome::consume(event)
-                    } else {
-                        ScrollOutcome::pass(event)
-                    }
+                    update_state(world, path.clone(), state);
+                    ScrollOutcome::consume(event)
                 }
                 None => ScrollOutcome::pass(event),
             }

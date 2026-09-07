@@ -1035,9 +1035,6 @@ impl App {
                     }
                     _ => false,
                 };
-                if handled {
-                    editor.finish_handled_event();
-                }
                 match frame_disposition(handled, frame_input_changed) {
                     FrameDisposition::Retain => editor.dispatch = Some(dispatch),
                     FrameDisposition::Remint { reveal_selection } => {
@@ -1245,18 +1242,6 @@ impl Editor {
         }
     }
 
-    fn finish_handled_event(&mut self) {
-        let libraries = &self.stack.libraries;
-        let model = &mut self.model;
-        let before = model.snapshot();
-        if let Some(selection) = &mut model.selection {
-            if selection::write_through(&mut model.doc, libraries, selection) {
-                model.history.record(before);
-                self.refresh_title();
-            }
-        }
-    }
-
     fn advance_gesture(&mut self, samples: &[Point]) -> bool {
         if let Some(gesture) = &mut self.gesture {
             if gesture.advance(&mut self.model, &self.stack.libraries, samples) {
@@ -1277,7 +1262,6 @@ impl Editor {
             Some(dispatch) => {
                 let outcome = dispatch.handler.dispatch_scroll(self, &pending.event);
                 if outcome.handled() {
-                    self.finish_handled_event();
                     self.retain_dispatch(pending.scale, pending.viewport, true);
                     true
                 } else {
@@ -1333,7 +1317,6 @@ impl Editor {
                     )
                     .handled());
         if handled {
-            self.finish_handled_event();
             self.retain_dispatch(pending.scale, pending.viewport, true);
             true
         } else {

@@ -481,7 +481,7 @@ mod tests {
             progred_display::LineEdit {
                 text: "a".into(),
                 placeholder: None,
-                update: grap::ffi(text::vocabulary::UPDATE),
+                update: progred_libraries::line_edit::native(text::edit),
                 prefix: "\"".into(),
                 suffix: "\"".into(),
                 family: Default::default(),
@@ -491,7 +491,12 @@ mod tests {
             let before = model.snapshot();
             let selection = model.selection.as_mut().unwrap();
             selection.edit_mut().unwrap().set_text(text);
-            if selection::write_through(&mut model.doc, &libraries, selection) {
+            if crate::projection::line_control::commit(
+                &mut model.doc,
+                &libraries,
+                selection,
+                &progred_libraries::line_edit::native(progred_libraries::text::edit),
+            ) {
                 model.history.record(before);
             }
         };

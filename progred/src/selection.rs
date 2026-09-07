@@ -7,18 +7,16 @@ use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
-use progred_libraries::{Libraries, absent, blob, f64 as f64_convention, text};
+use progred_libraries::{Libraries, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
 /// Tier-2 editing state beside the selection: the live line editor
 /// (caret, anchor, IME preedit, drag — and the text in motion), plus
-/// the write-through wiring only edge editors have.
+/// whether that state is a query and its undo grouping.
 pub(crate) struct Editor {
     pub(crate) line: LineEditState,
-    /// The write-back rule as data: a grap callable, evaluated with
-    /// the stack's foreign functions at the write-through point.
-    update: Option<Value>,
+    query: bool,
     /// Whether this editor's write-through run has recorded its undo
     /// step: the run is the editor's lifetime, so the first write
     /// records and the rest coalesce by staying silent.
@@ -65,7 +63,7 @@ impl Selection {
         path: Path,
         payload: Value,
     ) -> Self {
-        match payload::stage(&payload) {
+        let mut selection = match payload::stage(&payload) {
             Some(stage) if stage == payload::vocabulary::PENDING => {
                 query_selection(root, path, payload)
             }
@@ -73,18 +71,12 @@ impl Selection {
                 query_selection(root, path, payload)
             }
             _ => {
-                let editor = payload
-                    .as_record()
-                    .and_then(|fields| fields.get(&payload::vocabulary::UPDATE))
-                    .cloned()
+                let editor = payload::editor_text(&payload)
                     .filter(|_| writable_at(sources, &path))
-                    .and_then(|update| {
-                        let fallback = payload::editor_text(&payload)?.to_owned();
-                        Some(Editor {
-                            line: payload::editor_line(&payload, &fallback),
-                            update: Some(update),
-                            recorded: false,
-                        })
+                    .map(|fallback| Editor {
+                        line: payload::editor_line(&payload, &fallback),
+                        query: sources.resolve_path(&path).is_none(),
+                        recorded: false,
                     });
                 Self {
                     root: root.clone(),
@@ -97,7 +89,9 @@ impl Selection {
                     editor,
                 }
             }
-        }
+        };
+        selection.reset_completion_for_query();
+        selection
     }
 
     pub fn edge(root: &workspace::Root, path: Path) -> Self {
@@ -113,7 +107,7 @@ impl Selection {
     ) -> Self {
         let mut selection = Self::edge(root, path);
         if writable_at(sources, selection.path()) {
-            selection.edit_line_mut(&line);
+            selection.edit_line_mut(&line.text);
         }
         selection
     }
@@ -135,14 +129,7 @@ impl Selection {
     /// The selection as data — what a projection at this path receives.
     pub fn payload(&self) -> Value {
         match &self.editor {
-            Some(editor) => {
-                let payload =
-                    payload::with_editor(&self.payload, &editor.line, editor.update.is_none());
-                match &editor.update {
-                    Some(update) => payload::with_update(&payload, update),
-                    None => payload,
-                }
-            }
+            Some(editor) => payload::with_editor(&self.payload, &editor.line, editor.query),
             None => self.payload.clone(),
         }
     }
@@ -169,10 +156,7 @@ impl Selection {
 
     pub(crate) fn history_path(&self) -> Option<&[Step]> {
         (self.explicit_stage() == Stage::Edge
-            && self
-                .editor
-                .as_ref()
-                .is_none_or(|editor| editor.update.is_some()))
+            && self.editor.as_ref().is_none_or(|editor| !editor.query))
         .then_some(&self.path)
     }
 
@@ -221,6 +205,13 @@ impl Selection {
         self.editor.as_ref().map(|editor| &editor.line)
     }
 
+    pub(crate) fn value_edit(&self) -> Option<&LineEditState> {
+        self.editor
+            .as_ref()
+            .filter(|editor| !editor.query)
+            .map(|editor| &editor.line)
+    }
+
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
         self.editor.as_mut().map(|editor| &mut editor.line)
     }
@@ -233,7 +224,16 @@ impl Selection {
         self.initial_line(payload::query(&self.payload).unwrap_or(""))
     }
 
-    pub(crate) fn edit_query_mut(&mut self) -> &mut LineEditState {
+    pub(crate) fn edit_query(
+        &mut self,
+        operation: impl FnOnce(&mut LineEditState) -> bool,
+    ) -> bool {
+        let handled = operation(self.edit_query_mut());
+        self.reset_completion_for_query();
+        handled
+    }
+
+    fn edit_query_mut(&mut self) -> &mut LineEditState {
         let payload = &mut self.payload;
         &mut self
             .editor
@@ -242,21 +242,21 @@ impl Selection {
                 *payload = payload::without_editor(payload);
                 Editor {
                     line,
-                    update: None,
+                    query: true,
                     recorded: false,
                 }
             })
             .line
     }
 
-    pub(crate) fn edit_line_mut(&mut self, line: &progred_display::LineEdit) -> &mut LineEditState {
+    pub(crate) fn edit_line_mut(&mut self, spelling: &str) -> &mut LineEditState {
         let payload = &mut self.payload;
         let editor = self.editor.get_or_insert_with(|| {
-            let state = payload::editor_line(payload, &line.text);
+            let state = payload::editor_line(payload, spelling);
             *payload = payload::without_editor(payload);
             Editor {
                 line: state,
-                update: Some(line.update.clone()),
+                query: false,
                 recorded: false,
             }
         });
@@ -275,8 +275,7 @@ impl Selection {
 
     fn query_changed(&self) -> bool {
         self.editor.as_ref().is_some_and(|editor| {
-            editor.update.is_none()
-                && payload::query(&self.payload).unwrap_or("") != editor.line.text()
+            editor.query && payload::query(&self.payload).unwrap_or("") != editor.line.text()
         })
     }
 
@@ -431,7 +430,7 @@ fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Select
         payload: payload::without_editor(&payload),
         editor: Some(Editor {
             line,
-            update: None,
+            query: true,
             recorded: false,
         }),
     }
@@ -778,66 +777,6 @@ pub(crate) fn collapse_default_for_value(
         .map(|_| in_cycle)
 }
 
-/// Writes the selection's editor text through to its location after
-/// every handled event — the graph is the source of truth.
-/// The projection that mounted the line supplies its update, and
-/// valid intermediate values write every keystroke. Everything funnels
-/// through [`set_value`], so an element edit rebuilds its list at
-/// the owning cell and a location that no longer takes the write
-/// drops it silently — the malformed-graph rule at the mutation
-/// boundary. Returns whether this write OPENED an undo step: true
-/// exactly on the first write of the mounted editor's life, so a
-/// typing run is one step and history stays a dumb stack.
-pub fn write_through(
-    doc: &mut Rc<Document>,
-    libraries: &Libraries,
-    selection: &mut Selection,
-) -> bool {
-    selection.reset_completion_for_query();
-    let Selection { path, editor, .. } = selection;
-    let Some(editor) = editor else {
-        return false;
-    };
-    let Some(update) = editor.update.clone() else {
-        return false;
-    };
-    let typed = editor.line.text().to_string();
-    let wrote = {
-        let (current, next) = {
-            let sources = Sources {
-                doc: &*doc,
-                libraries,
-            };
-            let current = sources.resolve_path(path).cloned();
-            let next = {
-                let arguments =
-                    std::iter::once((
-                        progred_libraries::line_edit::vocabulary::INPUT,
-                        text::value(&typed),
-                    ))
-                    .chain(current.clone().map(|current| {
-                        (progred_libraries::line_edit::vocabulary::CURRENT, current)
-                    }));
-                // `apply`, not `call` + `evaluate`: the current value
-                // is data even when it is code-shaped.
-                let evaluation = grap::apply(&update, arguments, &sources, grap::DEFAULT_FUEL);
-                (!absent::is_absent(&evaluation.result)).then_some(evaluation.result)
-            };
-            (current, next)
-        };
-        match next {
-            Some(next) => current.as_ref() != Some(&next) && set_value(doc, libraries, path, next),
-            None => false,
-        }
-    };
-    if wrote {
-        let first = !editor.recorded;
-        editor.recorded = true;
-        return first;
-    }
-    false
-}
-
 /// Breaks the open edit run: the next write records a fresh undo
 /// step. Runs must not straddle a save or a view-history step.
 pub fn break_edit_run(selection: Option<&mut Selection>) {
@@ -877,8 +816,6 @@ pub mod payload {
         pub const PREEDIT: CellId = CellId::from_u128(0x1c84f0b6d97325ea40d6b18c53e29f74);
         pub const START: CellId = CellId::from_u128(0xf27b950e13a8d64c26f9e30a71d45b8c);
         pub const END: CellId = CellId::from_u128(0x60d3e94a852f17bd39c2a45f08e61d73);
-        /// The edge editor's write-back rule: a grap callable.
-        pub const UPDATE: CellId = CellId::from_u128(0xcd06f18e4a72359bd6084c3f92e17ab4);
         /// The editor's in-motion text. For a pending this mirrors
         /// QUERY; for an edge it preserves text until write-through.
         pub const EDITOR_TEXT: CellId = CellId::from_u128(0x3b3544bd8a2fc3a83a08edb6766fad4a);
@@ -935,10 +872,6 @@ pub mod payload {
             == Some(logic::vocabulary::TRUE)
     }
 
-    pub fn with_update(payload: &Value, update: &Value) -> Value {
-        with_field(payload, vocabulary::UPDATE, update.clone())
-    }
-
     pub fn with_completion_query(payload: &Value, query: &str) -> Value {
         if self::query(payload) == Some(query) {
             payload.clone()
@@ -974,7 +907,6 @@ pub mod payload {
             vocabulary::FOCUS,
             vocabulary::PREEDIT,
             vocabulary::DRAG,
-            vocabulary::UPDATE,
         ] {
             fields.remove(&field);
         }

@@ -682,8 +682,8 @@ fn projection_hooks(
                 payload,
             ));
         }),
-        edit_line: Rc::new(move |app: &mut Editor, path, line| {
-            line_edit_ctx(app, &edit_root, path, line)
+        edit_line: Rc::new(move |app: &mut Editor, path, line, operation| {
+            edit_line(app, &edit_root, path, line, operation)
         }),
         toggle: Rc::new(move |app: &mut Editor, path| {
             app.collapse(&toggle_root, &path, None);
@@ -699,7 +699,7 @@ fn projection_hooks(
                 true
             }
         }),
-        edit: Rc::new(edit_ctx),
+        edit: Rc::new(edit_query),
         pick: Rc::new(|app: &mut Editor, id| app.pick_identity(id)),
         insert: Rc::new(move |app: &mut Editor, path| {
             if let Some(pending) = selection::pending_after(&insert_root, &app.sources(), &path) {
@@ -1128,58 +1128,86 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
 /// Dispatch-time access to the selection's editor. Retained-frame
 /// dispatch can outlive the editor by a frame — deselect, then a move
 /// in the same gesture — so absence declines rather than panics.
-pub(crate) fn edit_ctx(app: &mut Editor) -> Option<EditCtx<'_>> {
-    app.model.selection.as_ref().filter(|selection| {
-        selection.stage(&app.sources()) != selection::Stage::Edge
-            && selection::writable_at(&app.sources(), selection.path())
-    })?;
+fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation<'_>) -> bool {
     let Editor {
         model,
+        stack,
         font_cx,
         layout_cx,
         text_clipboard,
         ..
     } = app;
-    let state = model
+    let sources = sources::Sources {
+        doc: &model.doc,
+        libraries: &stack.libraries,
+    };
+    model
         .selection
         .as_mut()
-        .map(selection::Selection::edit_query_mut)?;
-    Some(EditCtx {
-        state,
-        fonts: font_cx,
-        layouts: layout_cx,
-        clipboard: text_clipboard,
-    })
+        .filter(|selection| {
+            selection.stage(&sources) != selection::Stage::Edge
+                && selection::writable_at(&sources, selection.path())
+        })
+        .is_some_and(|selection| {
+            selection.edit_query(|state| {
+                operation(EditCtx {
+                    state,
+                    fonts: font_cx,
+                    layouts: layout_cx,
+                    clipboard: text_clipboard,
+                })
+            })
+        })
 }
 
-fn line_edit_ctx<'a>(
-    app: &'a mut Editor,
+fn edit_line(
+    app: &mut Editor,
     root: &Root,
     path: &[gid::Step],
     line: &progred_display::LineEdit,
-) -> Option<EditCtx<'a>> {
-    if !selection::writable_at(&app.sources(), path) {
-        return None;
-    }
-    app.model.selection.as_ref().filter(|selected| {
-        selected.root() == root
-            && selected.path() == path
-            && selected.stage(&app.sources()) == selection::Stage::Edge
-    })?;
+    operation: &puri::edit::EditOperation<'_>,
+) -> bool {
+    let before = app.model.snapshot();
     let Editor {
         model,
+        stack,
         font_cx,
         layout_cx,
         text_clipboard,
         ..
     } = app;
-    let selected = model.selection.as_mut()?;
-    Some(EditCtx {
-        state: selected.edit_line_mut(line),
-        fonts: font_cx,
-        layouts: layout_cx,
-        clipboard: text_clipboard,
-    })
+    let sources = sources::Sources {
+        doc: &model.doc,
+        libraries: &stack.libraries,
+    };
+    let selected = model.selection.as_mut().filter(|selected| {
+        selected.root() == root
+            && selected.path() == path
+            && selected.stage(&sources) == selection::Stage::Edge
+            && selection::writable_at(&sources, path)
+    });
+    let (handled, record) = match selected {
+        Some(selected) => projection::line_control::edit(
+            &mut model.doc,
+            &stack.libraries,
+            selected,
+            line,
+            |state| {
+                operation(EditCtx {
+                    state,
+                    fonts: font_cx,
+                    layouts: layout_cx,
+                    clipboard: text_clipboard,
+                })
+            },
+        ),
+        None => (false, false),
+    };
+    if record {
+        model.history.record(before);
+        app.refresh_title();
+    }
+    handled
 }
 
 #[cfg(test)]

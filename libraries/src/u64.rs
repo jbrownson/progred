@@ -5,7 +5,7 @@ use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Layout, ProjectionInput, overlay_value};
+use progred_display::{Layout, ProjectionInput};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -71,13 +71,7 @@ impl number::Scrubbable for u64 {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    number::layout(
-        input,
-        read(input.value?)?,
-        vocabulary::U64,
-        vocabulary::UPDATE,
-        value,
-    )
+    number::layout(input, read(input.value?)?, vocabulary::U64, value)
 }
 
 fn update(
@@ -94,8 +88,7 @@ fn update(
     let current = context.eval(current, environment)?;
     let input = context.eval(input, environment)?;
     Ok(crate::text::read(&input)
-        .and_then(|text| text.trim().parse::<u64>().ok())
-        .map(|number| overlay_value(&current, value(number)))
+        .and_then(|text| number::edit(text, Some(&current), value))
         .unwrap_or_else(absent::value))
 }
 

@@ -64,15 +64,17 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                 completions: Some(stack.completions.clone()),
                 select: Rc::new(|_, _| {}),
                 select_payload: Rc::new(|_, _, _| {}),
-                edit_line: Rc::new(|_, _, _| None),
+                edit_line: Rc::new(|_, _, _, _| false),
                 toggle: Rc::new(|_, _| {}),
                 update_state: Rc::new(|_, _, _| false),
-                edit: Rc::new(|state: &mut State| {
-                    Some(puri::edit::EditCtx {
-                        state: state.selection.edit_mut()?,
-                        fonts: &mut state.fonts,
-                        layouts: &mut state.layouts,
-                        clipboard: &mut state.clipboard,
+                edit: Rc::new(|state: &mut State, operation| {
+                    state.selection.edit_query(|line| {
+                        operation(puri::edit::EditCtx {
+                            state: line,
+                            fonts: &mut state.fonts,
+                            layouts: &mut state.layouts,
+                            clipboard: &mut state.clipboard,
+                        })
                     })
                 }),
                 pick: Rc::new(|_, _| false),
@@ -970,13 +972,13 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
                 world.selection = Some(make_selection(path));
             }),
             select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _| None),
+            edit_line: Rc::new(|_, _, _, _| false),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
             // A selection transition must consume the click even if
             // retained dispatch cannot recover an edit context for
             // the optional caret-placement follow-up.
-            edit: Rc::new(|_| None),
+            edit: Rc::new(|_, _| false),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),

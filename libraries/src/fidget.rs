@@ -602,15 +602,8 @@ fn zoom_handler(state: Option<&Value>) -> progred_display::StateScrollHandler {
     let state = state.cloned();
     let initial = camera(state.as_ref());
     Rc::new(move |event| {
-        (event.delta_y != 0.0).then(|| {
-            with_camera(
-                state.as_ref(),
-                Camera {
-                    zoom: (initial.zoom * (event.delta_y as f32 * 0.0025).exp()).clamp(0.05, 20.0),
-                    ..initial
-                },
-            )
-        })
+        let zoom = (initial.zoom * (event.delta_y as f32 * 0.0025).exp()).clamp(0.05, 20.0);
+        (zoom != initial.zoom).then(|| with_camera(state.as_ref(), Camera { zoom, ..initial }))
     })
 }
 
@@ -1438,6 +1431,33 @@ mod tests {
             })
             .is_none()
         );
+    }
+
+    #[test]
+    fn camera_zoom_declines_at_its_limits() {
+        for (zoom, delta_y) in [(0.05, -10.0), (20.0, 10.0)] {
+            let state = with_camera(
+                None,
+                Camera {
+                    zoom,
+                    ..Camera::default()
+                },
+            );
+            assert!(
+                zoom_handler(Some(&state))(progred_display::StateScrollEvent {
+                    delta_x: 0.0,
+                    delta_y,
+                })
+                .is_none()
+            );
+            assert!(
+                zoom_handler(Some(&state))(progred_display::StateScrollEvent {
+                    delta_x: 0.0,
+                    delta_y: -delta_y,
+                })
+                .is_some()
+            );
+        }
     }
 
     struct NoEval;

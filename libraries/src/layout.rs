@@ -4,7 +4,7 @@
 //! and numbers the f64 convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
 //! data. Event dispatch supplies a capability overlay closed over the
-//! projection site, so document paths never enter layout data.
+//! projection site. Traversal uses the path library's step convention.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
@@ -154,11 +154,6 @@ pub mod vocabulary {
     pub const PAREN: CellId = CellId::from_u128(0x0af59c27b1e4d68318f4a06c9d7325eb);
     pub const SQUARE: CellId = CellId::from_u128(0x9e61d40b7f3ca258745c1e9b02d8f6a3);
     pub const CURLY: CellId = CellId::from_u128(0x63b8f5a2c90e17d4e12489d5b6a0c73f);
-
-    /// A walk step following the value's link — the one step that is
-    /// not a field key.
-    pub const FOLLOW: CellId = CellId::from_u128(0xdc27a94e6b105f83b0562f8ea19d34c7);
-    pub const DOCUMENT: CellId = CellId::from_u128(0x1dcf7dbaaf1ff3416fce048ea8993c7b);
 }
 
 fn node(key: CellId, content: Value) -> Value {
@@ -280,23 +275,17 @@ pub fn options(options: impl IntoIterator<Item = Value>) -> Value {
 }
 
 pub fn descend_key(key: CellId) -> Value {
-    node(
-        vocabulary::DESCEND,
-        Value::record([(vocabulary::STEP, Value::Cell(key))]),
-    )
+    descend_step(Step::Key(key))
 }
 
 pub fn descend_follow(resolution: gid::Resolution) -> Value {
-    let source = match resolution {
-        gid::Resolution::Document => vocabulary::DOCUMENT,
-        gid::Resolution::Library(library) => library,
-    };
+    descend_step(Step::Follow(resolution))
+}
+
+pub fn descend_step(step: Step) -> Value {
     node(
         vocabulary::DESCEND,
-        Value::record([(
-            vocabulary::STEP,
-            Value::record([(vocabulary::FOLLOW, Value::Cell(source))]),
-        )]),
+        Value::record([(vocabulary::STEP, crate::path::step_value(&step))]),
     )
 }
 
@@ -588,17 +577,12 @@ fn decode_with<World: 'static, Hover: Clone>(
         return Some(alternatives(children(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::DESCEND) {
-        let step = read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
+        let step = crate::path::read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
         return Some(descend(step, None, None));
     }
     if let Some(content) = fields.get(&vocabulary::AT) {
         let content = content.as_record()?;
-        let steps = content
-            .get(&vocabulary::STEPS)?
-            .as_list()?
-            .values()
-            .map(read_step)
-            .collect::<Option<Vec<Step>>>()?;
+        let steps = crate::path::read(content.get(&vocabulary::STEPS)?)?;
         return Some(Layout::At {
             steps,
             value: content.get(&vocabulary::VALUE)?.clone(),
@@ -919,23 +903,6 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-/// A walk step: the FOLLOW marker, or a field key's cell. List
-/// positions have no data form yet; element walks stay Rust.
-fn read_step(value: &Value) -> Option<Step> {
-    match value {
-        Value::Cell(cell) => Some(Step::Key(*cell)),
-        Value::Record(fields) => {
-            let source = fields.get(&vocabulary::FOLLOW)?.as_cell()?;
-            Some(Step::Follow(if source == vocabulary::DOCUMENT {
-                gid::Resolution::Document
-            } else {
-                gid::Resolution::Library(source)
-            }))
-        }
-        Value::Blob(_) | Value::List(_) => None,
-    }
-}
-
 pub fn display<World: 'static, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
@@ -1056,8 +1023,6 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::PAREN, "paren"),
         (vocabulary::SQUARE, "square"),
         (vocabulary::CURLY, "curly"),
-        (vocabulary::FOLLOW, "follow"),
-        (vocabulary::DOCUMENT, "document"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -1092,6 +1057,34 @@ mod tests {
     fn decoded(value: &Value) -> Option<Layout<(), ()>> {
         let select: ActionHandler<()> = Rc::new(|_| false);
         decode(value, &select, &())
+    }
+
+    #[test]
+    fn traversal_uses_the_path_library_for_every_step() {
+        let steps = vec![
+            Step::Key(gid::new_cell_id()),
+            Step::Element(gid::position::between(None, None).unwrap()),
+            Step::Follow(gid::Resolution::Document),
+            Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
+        ];
+        for step in &steps {
+            assert!(matches!(
+                decoded(&descend_step(step.clone())),
+                Some(Layout::Descend { step: decoded, .. }) if decoded == *step
+            ));
+        }
+        let child = text::value("child");
+        let value = node(
+            vocabulary::AT,
+            Value::record([
+                (vocabulary::STEPS, crate::path::value(&steps)),
+                (vocabulary::VALUE, child.clone()),
+            ]),
+        );
+        assert!(matches!(
+            decoded(&value),
+            Some(Layout::At { steps: decoded, value, .. }) if decoded == steps && value == child
+        ));
     }
 
     #[test]

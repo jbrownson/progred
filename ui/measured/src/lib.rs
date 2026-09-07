@@ -17,6 +17,14 @@
 use kurbo::{Insets, Point, Rect, Size};
 use uig::Placement;
 
+pub mod choices;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum RowAlignment {
+    Baseline,
+    Center,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Extent {
     pub width: f64,

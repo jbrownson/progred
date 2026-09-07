@@ -54,13 +54,15 @@ pub struct LineEdit {
     pub text: String,
     /// Ghost text shown only while the editable text is empty.
     pub placeholder: Option<String>,
-    /// The Grap write-back rule applied to typed INPUT and, when the
-    /// location already exists, its live CURRENT value.
-    pub update: Value,
+    /// Convert the current spelling against the live value. This belongs
+    /// to this description's handlers, never durable selection state.
+    pub update: LineUpdate,
     pub prefix: String,
     pub suffix: String,
     pub family: TextFamily,
 }
+
+pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
 
 /// A delimiter whose Puri metrics and ink depend on the enclosed span.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,11 +70,7 @@ pub enum Ink {
     Delim { delim: Delim, side: Side },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum RowAlignment {
-    Baseline,
-    Center,
-}
+pub use measured::RowAlignment;
 
 /// A coordinate-free action on the subtree that owns the handler.
 /// The language carries no pointer geometry or modifiers; those stay

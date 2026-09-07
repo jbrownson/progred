@@ -71,7 +71,7 @@ fn declaration_name<World: 'static, Hover: 'static>(
         progred_display::partial(|input| {
             Some(crate::line_edit::layout(
                 crate::text::read(input.value?)?,
-                grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+                crate::line_edit::native(crate::text::edit),
                 "",
                 "",
             ))
@@ -86,7 +86,7 @@ fn lambda_name<World: 'static, Hover: Clone>(
     Some(match input.value {
         Some(value) => crate::line_edit::layout(
             crate::text::read(value)?,
-            grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+            crate::line_edit::native(crate::text::edit),
             "",
             "",
         ),
@@ -645,8 +645,8 @@ mod tests {
                 assert_eq!(line.text, spelling);
                 assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
                 assert_eq!(
-                    line.update,
-                    grap_runtime::ffi(crate::text::vocabulary::UPDATE)
+                    (line.update)(&env, "next", Some(value)),
+                    Some(crate::text::value("next"))
                 );
                 assert!(projection(&input(&env, &Value::record([]))).is_none());
             }

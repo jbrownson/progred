@@ -19,6 +19,35 @@ pub struct Sources<'a> {
     pub libraries: &'a Libraries,
 }
 
+impl progred_display::Env for Sources<'_> {
+    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
+        let result = grap::apply(
+            function,
+            arguments.iter().cloned(),
+            self,
+            grap::DEFAULT_FUEL,
+        );
+        (result.result, result.remaining_fuel)
+    }
+
+    fn evaluate(&self, expression: &Value) -> (Value, usize) {
+        self.evaluate_with_fuel(expression, grap::DEFAULT_FUEL)
+    }
+
+    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> (Value, usize) {
+        let result = grap::evaluate(expression, self, fuel);
+        (result.result, result.remaining_fuel)
+    }
+
+    fn name(&self, cell: CellId) -> Option<&str> {
+        Sources::name(self, cell)
+    }
+
+    fn resolve(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'_>> {
+        self.definition(cell)
+    }
+}
+
 impl<'a> Sources<'a> {
     pub fn definition(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'a>> {
         self.doc

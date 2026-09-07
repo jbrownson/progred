@@ -10,12 +10,13 @@ use crate::selection::payload as selection_payload;
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge, pending_follow,
     pending_insert, pending_into, pending_value, resolve_query, set_collapse, set_value,
-    to_clipboard, toggle_collapse, write_through,
+    to_clipboard, toggle_collapse,
 };
 use gid::Position;
 use gid::{Cells, Document, new_cell_id};
 use progred_libraries::layout as layout_data;
 use progred_libraries::{Libraries, f64, fidget, name, text};
+use puri::edit::EditCtx;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{KeyState, Modifiers};
@@ -190,32 +191,41 @@ fn editing_frame_with_projection(
                     payload,
                 ));
             }),
-            edit_line: Rc::new(|world, path, line| {
+            edit_line: Rc::new(|world, path, line, operation| {
                 if !writable_at(&src(&world.doc, &world.libraries), path) {
-                    return None;
+                    return false;
                 }
-                let selected = world.selection.as_mut().filter(|selected| {
+                let Some(selected) = world.selection.as_mut().filter(|selected| {
                     selected.path() == path
                         && selected.stage(&src(&world.doc, &world.libraries)) == Stage::Edge
-                })?;
-                Some(EditCtx {
-                    state: selected.edit_line_mut(line),
-                    fonts: &mut world.fonts,
-                    layouts: &mut world.layouts,
-                    clipboard: &mut world.clipboard,
+                }) else {
+                    return false;
+                };
+                line_control::edit(&mut world.doc, &world.libraries, selected, line, |state| {
+                    operation(EditCtx {
+                        state,
+                        fonts: &mut world.fonts,
+                        layouts: &mut world.layouts,
+                        clipboard: &mut world.clipboard,
+                    })
                 })
+                .0
             }),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|world| {
-                let selected = world.selection.as_mut().filter(|selected| {
+            edit: Rc::new(|world, operation| {
+                let Some(selected) = world.selection.as_mut().filter(|selected| {
                     selected.stage(&src(&world.doc, &world.libraries)) != Stage::Edge
-                })?;
-                Some(EditCtx {
-                    state: selected.edit_query_mut(),
-                    fonts: &mut world.fonts,
-                    layouts: &mut world.layouts,
-                    clipboard: &mut world.clipboard,
+                }) else {
+                    return false;
+                };
+                selected.edit_query(|state| {
+                    operation(EditCtx {
+                        state,
+                        fonts: &mut world.fonts,
+                        layouts: &mut world.layouts,
+                        clipboard: &mut world.clipboard,
+                    })
                 })
             }),
             pick: Rc::new(|_, _| false),
@@ -267,6 +277,19 @@ fn make_projected_editing_selection(
 }
 
 fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
+    Selection::from_line(
+        &crate::workspace::Root::document(),
+        &src(doc, libraries),
+        path.clone(),
+        projected_line(doc, libraries, &path).expect("value is not line editable"),
+    )
+}
+
+fn projected_line(
+    doc: &Document,
+    libraries: &Libraries,
+    path: &[Step],
+) -> Option<progred_display::LineEdit> {
     struct NoEval;
     impl progred_display::Env for NoEval {
         fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
@@ -278,15 +301,13 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
         }
     }
 
-    let value = src(doc, libraries)
-        .resolve_path(&path)
-        .expect("selected value");
+    let value = src(doc, libraries).resolve_path(path)?;
     let stack = crate::stack::load::<()>();
     let layout = {
         let target = |_| progred_display::ProjectionTarget {
             select: Rc::new(|_: &mut ()| false),
             select_with: Rc::new(|_: &mut (), _| false),
-            hover: Hover::Value(Rc::from(path.clone())),
+            hover: Hover::Value(Rc::from(path)),
         };
         stack.projection.apply(&progred_display::ProjectionInput {
             default_projection: progred_display::partial(|_| None),
@@ -299,25 +320,28 @@ fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> 
             state: None,
             targets: progred_display::ProjectionTargets::new(&target),
         })
-    }
-    .expect("value projection");
+    }?;
     let layout = match layout {
         progred_display::Layout::OnScrub { child, .. } => *child,
         layout => layout,
     };
-    let layout = match layout {
-        progred_display::Layout::Row { children, .. } => children.into_iter().next().unwrap(),
-        layout => layout,
-    };
-    let progred_display::Layout::LineEdit(line) = layout else {
-        panic!("value is not line editable")
-    };
-    Selection::from_line(
-        &crate::workspace::Root::document(),
-        &src(doc, libraries),
-        path,
-        line,
-    )
+    match layout {
+        progred_display::Layout::LineEdit(line) => Some(line),
+        progred_display::Layout::Row { children, .. } => {
+            children.into_iter().find_map(|child| match child {
+                progred_display::Layout::LineEdit(line) => Some(line),
+                _ => None,
+            })
+        }
+        _ => None,
+    }
+}
+
+// Direct conversion tests use a fresh projection's callback, just as a
+// newly minted handler does; the selection stores no conversion.
+fn write_through(doc: &mut Rc<Document>, libraries: &Libraries, selected: &mut Selection) -> bool {
+    projected_line(doc, libraries, selected.path())
+        .is_some_and(|line| line_control::commit(doc, libraries, selected, &line.update))
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {

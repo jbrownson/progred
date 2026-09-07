@@ -1,10 +1,10 @@
 //! The editor's tree-projection runtime: interpret display layouts,
 //! retain source provenance, and fall back to total structural display.
 
-mod choices;
 mod completion;
 mod drawing;
 mod events;
+pub(crate) mod line_control;
 mod location;
 mod structure;
 #[cfg(test)]
@@ -20,7 +20,6 @@ use crate::render;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
-use choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
 use completion::{label_query, pending_view};
 use events::{
     realize_activate, realize_click, realize_event_with, realize_point, realize_scrub,
@@ -29,13 +28,12 @@ use events::{
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use location::Location;
+use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
 use measured::{Extent, Measured, pad, row};
 use peniko::{Brush, Color};
 use puri::delim;
 use puri::draw::Canvas;
-use puri::edit::{
-    EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
-};
+use puri::edit::{LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState};
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
@@ -251,7 +249,7 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             {
                 line.text = spelling.to_owned();
             }
-            ChoiceLayout::fixed(line_edit_view(cx, tcx, path, line, hooks))
+            ChoiceLayout::fixed(line_control::view(cx, tcx, path, line, hooks))
         }
         progred_display::Layout::OnClick { child, handler } => {
             let inner = prepare(
@@ -411,7 +409,7 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
                 border: Some((Stroke::new(scale), cx.styles.dim.brush.clone())),
                 radius: 6.0 * scale,
             };
-            ChoiceLayout::popover(trigger, content, move |trigger, content| {
+            ChoiceLayout::attach(trigger, content, move |trigger, content| {
                 let card = measured::pad(Insets::uniform(10.0 * scale), content);
                 let card = before(card, move |p, placement| {
                     panel.place(p, placement);
@@ -497,46 +495,29 @@ fn prepare<C: 'static, Cv: Canvas + 'static>(
             value: computed,
             fuel,
         } => prepare_transient_root(cx, projection, tcx, path, computed, fuel, hooks, build),
-        progred_display::Layout::Shared { id: key, child } => {
-            if let Some(id) = build.shared_ids.get(&key).copied() {
-                let widths = build.shared[id]
-                    .as_ref()
-                    .expect("a shared layout is prepared before reuse")
-                    .widths;
-                ChoiceLayout::used(id, widths)
-            } else {
-                let prepared = prepare(
-                    cx,
-                    projection,
-                    tcx,
-                    path,
-                    ancestors,
-                    hooks,
-                    value,
-                    child.as_ref().clone(),
-                    build,
-                );
-                let id = build.shared.len();
-                let widths = prepared.widths;
-                build.shared.push(Some(prepared));
-                build.shared_ids.insert(key, id);
-                ChoiceLayout::used(id, widths)
-            }
-        }
-        progred_display::Layout::Alternatives(options) => {
-            let id = build.next_choice;
-            build.next_choice += 1;
-            ChoiceLayout::alternatives(
-                id,
-                options
-                    .into_iter()
-                    .map(|option| {
-                        prepare(
-                            cx, projection, tcx, path, ancestors, hooks, value, option, build,
-                        )
-                    })
-                    .collect(),
+        progred_display::Layout::Shared { id: key, child } => build.shared(key, |build| {
+            prepare(
+                cx,
+                projection,
+                tcx,
+                path,
+                ancestors,
+                hooks,
+                value,
+                child.as_ref().clone(),
+                build,
             )
+        }),
+        progred_display::Layout::Alternatives(options) => {
+            let options = options
+                .into_iter()
+                .map(|option| {
+                    prepare(
+                        cx, projection, tcx, path, ancestors, hooks, value, option, build,
+                    )
+                })
+                .collect();
+            build.alternatives(options)
         }
     }
 }
@@ -659,97 +640,6 @@ fn leaf_display<C: 'static, Cv: Canvas + 'static>(
     }
 }
 
-/// A selected line interprets missing state as its current spelling
-/// with the caret at the end. Input materializes that same default;
-/// projection never writes it back merely for being selected.
-fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    line: progred_display::LineEdit,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
-    let writable = !cx.source.transient() && writable_at(&cx.sources, path);
-    let selected = cx.selection.filter(|selection| {
-        writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
-    });
-    let default = selected
-        .filter(|selection| selection.edit().is_none())
-        .map(|selection| selection.initial_line(&line.text));
-    let editing = selected.and_then(Selection::edit).or(default.as_ref());
-    let active = selected.is_some();
-    let content = match editing {
-        Some(editing) => {
-            let edit = hooks.edit_line.clone();
-            let edit_path = path.to_vec();
-            let edit_line = line.clone();
-            render::line_edit(tcx, cx.styles, &line, Some(editing), move |ctx| {
-                edit(ctx, &edit_path, &edit_line)
-            })
-        }
-        None => render::line_edit(tcx, cx.styles, &line, None, |_| None),
-    };
-
-    if !writable {
-        return content;
-    }
-
-    let path: SharedPath = Rc::from(path);
-    let select_path = path.clone();
-    let select_line = line.clone();
-    let select = hooks.select.clone();
-    let edit = hooks.edit_line.clone();
-    let select: crate::navigate::Select<C> = Rc::new(move |ctx, direction| {
-        select(ctx, select_path.to_vec());
-        if direction == Some(crate::navigate::Direction::Left)
-            && let Some(edit) = edit(ctx, &select_path, &select_line)
-        {
-            edit.state.cursor_to_start();
-        }
-        true
-    });
-    let content = before(content, move |p, _| p.select_landmark(select));
-    let presentation = cx.styles.line_presentation(&line);
-    let scale = cx.styles.scale;
-    let select = hooks.select.clone();
-    let edit = hooks.edit_line.clone();
-    before(content, move |p, placement| {
-        hover_claim(p, placement, Hover::Value(path.clone()));
-        let path = path.clone();
-        let line = line.clone();
-        let presentation = presentation.clone();
-        let select = select.clone();
-        let edit = edit.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            is_primary_contact(event)
-                && !crate::modifiers::pick(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    if !active {
-                        select(ctx, path.to_vec());
-                    }
-                    if let Some(edit) = edit(ctx, &path, &line) {
-                        edit.state.pointer_down(
-                            &presentation,
-                            edit.fonts,
-                            edit.layouts,
-                            scale as f32,
-                            LineEditPointerDown {
-                                point: Point::new(
-                                    event.state.position.x - placement.rect.x0,
-                                    event.state.position.y - placement.rect.y0,
-                                ),
-                                shift: event.state.modifiers.shift(),
-                                count: event.state.count.max(1),
-                            },
-                        );
-                    }
-                    true
-                }
-        });
-    })
-}
-
 fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     drawing: puri::Drawing<progred_display::Paint>,
@@ -774,15 +664,15 @@ pub struct Hooks<C> {
     pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
     /// Access a selected line's state, using its current description
     /// when no editing state has been stored yet.
-    pub edit_line:
-        Rc<dyn for<'a> Fn(&'a mut C, &[Step], &progred_display::LineEdit) -> Option<EditCtx<'a>>>,
+    pub edit_line: Rc<
+        dyn Fn(&mut C, &[Step], &progred_display::LineEdit, &puri::edit::EditOperation<'_>) -> bool,
+    >,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Replace the annotation value at one projection site. The
     /// concrete view root remains host-owned and closed over here.
     pub update_state: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
-    /// None when the editor is already gone — retained-frame dispatch
-    /// may fire a frame late, and absent state declines.
-    pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
+    /// Run an operation on the selected query, declining if it is gone.
+    pub edit: Rc<dyn Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool>,
     /// Commit a pointed-at value into the open pending (value or
     /// label stage); false when nothing is pending, so the click
     /// falls through to selection.
@@ -1159,12 +1049,9 @@ pub(crate) fn project<C: 'static, Cv: Canvas + 'static>(
         &mut build,
     );
     resolve_choices(
-        ChoiceGraph {
-            root: layout,
-            shared: build.shared,
-            choice_count: build.next_choice,
-        },
+        build.finish(layout),
         width,
+        std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
     )
 }
 
@@ -1334,10 +1221,10 @@ fn prepare_transient_root<C: 'static, Cv: Canvas + 'static>(
         select_payload: Rc::new(move |ctx, _, payload| {
             select_payload(ctx, payload_origin.clone(), payload)
         }),
-        edit_line: Rc::new(|_, _, _| None),
+        edit_line: Rc::new(|_, _, _, _| false),
         toggle: Rc::new(|_, _| {}),
         update_state: hooks.update_state.clone(),
-        edit: Rc::new(|_| None),
+        edit: Rc::new(|_, _| false),
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_, _| false),
@@ -1670,7 +1557,7 @@ fn atom_content<C: 'static, Cv: Canvas + 'static>(
                     placeholder,
                 },
                 tcx,
-                move |c| edit_ctx(c),
+                move |c, operation| edit_ctx(c, operation),
             )
         }
         None => fallback,

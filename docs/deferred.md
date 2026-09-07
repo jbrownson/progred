@@ -62,6 +62,16 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
+## Completion ranking
+
+Revisit how library-provided offers rank alongside built-in constructors,
+cell references, and interpretations of the query. The universal list currently
+groups library offers together; with an empty query, `new lambda` appears among
+number literals because of library order. Providers cannot express that it
+belongs with other constructors. Design that distinction through the completion
+interface rather than special-casing lambda or particular numeric libraries.
+This is deferred UX design, not a priority for the current cleanup.
+
 ## Reporting completion failures
 
 Offer construction decides applicability; activating an offered completion

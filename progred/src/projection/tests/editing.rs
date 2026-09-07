@@ -1,6 +1,193 @@
 use super::*;
 
 #[test]
+fn replacing_query_text_settles_completion_state_before_the_next_edit() {
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = core_libraries();
+    let payload = Value::record([
+        (
+            selection_payload::vocabulary::STAGE,
+            selection_payload::vocabulary::PENDING.into(),
+        ),
+        (selection_payload::vocabulary::QUERY, text::value("old")),
+        (
+            selection_payload::vocabulary::EDITOR_TEXT,
+            text::value("new"),
+        ),
+        (selection_payload::vocabulary::CHOICE, f64::value(2.0)),
+        (
+            selection_payload::vocabulary::COMPLETION_SCROLL,
+            f64::value(30.0),
+        ),
+    ]);
+    let mut selected = Selection::from_payload(
+        &crate::workspace::Root::document(),
+        &src(&doc, &libraries),
+        vec![],
+        payload,
+    );
+    assert_eq!(selected.choice(), 0);
+    assert_eq!(selected.completion_scroll(), 0.0);
+    selected.edit_query(|line| {
+        line.set_text("old");
+        true
+    });
+    assert_eq!(selected.choice(), 0);
+    assert_eq!(selected.completion_scroll(), 0.0);
+}
+
+#[test]
+fn native_line_conversions_agree_with_their_grap_entry_points() {
+    use progred_libraries::{blob, color, f32, line_edit, u64};
+
+    let libraries = core_libraries();
+    let metadata = new_cell_id();
+    for (current, function) in [
+        (text::value("old"), text::vocabulary::UPDATE),
+        (Value::from(vec![0xab]), blob::vocabulary::UPDATE),
+        (f32::value(1.0), f32::vocabulary::UPDATE),
+        (f64::value(1.0), f64::vocabulary::UPDATE),
+        (u64::value(1), u64::vocabulary::UPDATE),
+        (
+            color::value(Color::new([0.2, 0.4, 0.6, 1.0])),
+            color::vocabulary::UPDATE,
+        ),
+    ] {
+        let current = match current {
+            Value::Record(mut fields) => {
+                fields.insert(metadata, text::value("preserve me"));
+                Value::Record(fields)
+            }
+            value => value,
+        };
+        let doc = Document {
+            root: Some(current.clone()),
+            cells: Cells::new(),
+        };
+        let native = projected_line(&doc, &libraries, &[]).unwrap().update;
+        let grap = line_edit::grap(grap::ffi(function));
+        let sources = src(&doc, &libraries);
+        for spelling in ["", "invalid", "1.5", "12", "-", "0", "ff", "123456"] {
+            assert_eq!(
+                native(&sources, spelling, Some(&current)),
+                grap(&sources, spelling, Some(&current)),
+                "conversion {function} at {spelling:?}",
+            );
+        }
+    }
+}
+
+#[test]
+fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
+    fn projection(marker: CellId) -> Projection<EditingWorld> {
+        Projection::new([progred_display::partial(move |input| {
+            let spelling = text::read(input.value?)?;
+            Some(progred_libraries::line_edit::layout(
+                spelling,
+                progred_libraries::line_edit::native(move |spelling, _| {
+                    Some(Value::record([
+                        (
+                            text::vocabulary::UTF8,
+                            Value::from(spelling.as_bytes().to_vec()),
+                        ),
+                        (marker, Value::record([])),
+                    ]))
+                }),
+                "",
+                "",
+            ))
+        })])
+    }
+    let first = new_cell_id();
+    let second = new_cell_id();
+    let libraries = core_libraries();
+    let mut world = EditingWorld::new(
+        &Document {
+            root: Some(text::value("a")),
+            cells: Cells::new(),
+        },
+        &libraries,
+    );
+    world.selection = Some(make_selection(vec![]));
+    for (marker, typed, expected) in [(first, "b", "ab"), (second, "c", "abc")] {
+        let frame = editing_frame_with_projection(&mut world, false, Some(&projection(marker)));
+        assert!(frame.handler.unwrap().dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Character(typed.into()),
+                ..arrow(NamedKey::End)
+            }
+        ));
+        assert_eq!(text::read(world.doc.root.as_ref().unwrap()), Some(expected));
+        let fields = world.doc.root.as_ref().unwrap().as_record().unwrap();
+        assert!(fields.contains_key(&marker));
+        assert_eq!(fields.len(), 2);
+    }
+    let payload = world.selection.as_ref().unwrap().payload();
+    let selection = Selection::from_payload(
+        &crate::workspace::Root::document(),
+        &src(&world.doc, &libraries),
+        vec![],
+        payload.clone(),
+    );
+    assert_eq!(selection.payload(), payload);
+    assert_eq!(selection.edit().unwrap().text(), "abc");
+}
+
+#[test]
+fn caret_motion_does_not_run_a_line_conversion() {
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let projection = Projection::new([progred_display::partial({
+        let calls = calls.clone();
+        move |input| {
+            Some(progred_libraries::line_edit::layout(
+                text::read(input.value?)?,
+                progred_libraries::line_edit::native({
+                    let calls = calls.clone();
+                    move |spelling, current| {
+                        calls.set(calls.get() + 1);
+                        text::edit(spelling, current)
+                    }
+                }),
+                "",
+                "",
+            ))
+        }
+    })]);
+    let libraries = core_libraries();
+    let mut world = EditingWorld::new(
+        &Document {
+            root: Some(text::value("abc")),
+            cells: Cells::new(),
+        },
+        &libraries,
+    );
+    world.selection = Some(make_selection(vec![]));
+    let original = world.doc.clone();
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    assert!(
+        frame
+            .handler
+            .unwrap()
+            .dispatch_key(&mut world, &arrow(NamedKey::Home))
+    );
+    assert_eq!(calls.get(), 0);
+    assert!(Rc::ptr_eq(&world.doc, &original));
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    assert!(
+        frame
+            .handler
+            .unwrap()
+            .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit("x".into()))
+    );
+    assert_eq!(calls.get(), 1);
+    assert_eq!(text::read(world.doc.root.as_ref().unwrap()), Some("xabc"));
+}
+
+#[test]
 fn line_projection_descriptions_mount_the_rust_editor() {
     let lib = core_libraries();
     let (mut doc, cell) = doc_of(vec![
@@ -123,11 +310,6 @@ fn a_plain_selection_accepts_first_input_using_the_line_default() {
                 ..arrow(NamedKey::End)
             }
         ));
-        assert!(write_through(
-            &mut world.doc,
-            &libraries,
-            world.selection.as_mut().unwrap()
-        ));
         assert_eq!(world.doc.root, Some(expected));
         let selected = world.selection.as_mut().unwrap();
         selected.edit_mut().unwrap().cursor_to_start();
@@ -208,11 +390,6 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
             key: Key::Character("X".into()),
             ..arrow(NamedKey::End)
         }
-    ));
-    assert!(write_through(
-        &mut world.doc,
-        &libraries,
-        world.selection.as_mut().unwrap()
     ));
     assert_eq!(world.doc.root, Some(text::value("aXb")));
 }
@@ -1454,7 +1631,7 @@ fn custom_update_can_discard_an_absent_and_return_a_value() {
     let line = progred_display::LineEdit {
         text: "after".into(),
         placeholder: None,
-        update: function,
+        update: progred_libraries::line_edit::grap(function),
         prefix: String::new(),
         suffix: String::new(),
         family: Default::default(),
@@ -1463,12 +1640,13 @@ fn custom_update_can_discard_an_absent_and_return_a_value() {
         &crate::workspace::Root::document(),
         &src(&doc, &libraries),
         vec![],
-        line,
+        line.clone(),
     );
-    assert!(crate::selection::write_through(
+    assert!(line_control::commit(
         &mut doc,
         &libraries,
-        &mut selected
+        &mut selected,
+        &line.update,
     ));
     assert_eq!(text::read(doc.root.as_ref().unwrap()), Some("after"));
 }

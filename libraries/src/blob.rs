@@ -48,11 +48,14 @@ pub fn functions() -> ForeignFunctions {
             };
             let input = context.eval(input, environment)?;
             Ok(text::read(&input)
-                .and_then(|text| parse_hex(text.trim()))
-                .map(Value::from)
+                .and_then(|text| edit(text, None))
                 .unwrap_or_else(absent::value))
         }),
     )
+}
+
+pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
+    parse_hex(spelling.trim()).map(Value::from)
 }
 
 pub fn display<World, Hover>(
@@ -60,7 +63,7 @@ pub fn display<World, Hover>(
 ) -> Option<Layout<World, Hover>> {
     Some(line_edit::layout_with_family(
         gid::hex_string(input.value?.as_blob()?),
-        grap_runtime::ffi(vocabulary::UPDATE),
+        line_edit::native(edit),
         "0x",
         "",
         TextFamily::Monospace,

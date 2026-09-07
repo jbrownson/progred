@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn state_scroll_acceptance_does_not_depend_on_a_changed_value() {
+    let event = PointerScrollEvent {
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: PointerState::default(),
+        delta: ScrollDelta::LineDelta(0.0, 1.0),
+    };
+    for accepts in [false, true] {
+        let inner = leaf::<usize, crate::frame::Paint>(
+            Extent {
+                width: 20.0,
+                ascent: 10.0,
+                descent: 10.0,
+            },
+            |_, _| {},
+        );
+        let layout = events::realize_state_scroll(
+            vec![],
+            Rc::new(move |_| accepts.then(|| Value::record([]))),
+            Rc::new(|writes, _, _| {
+                *writes += 1;
+                false
+            }),
+            1.0,
+            inner,
+        );
+        let placed = measured::place(layout, Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)));
+        let mut writes = 0;
+        let outcome = placed.handler.unwrap().dispatch_scroll(&mut writes, &event);
+        assert_eq!(outcome.handled(), accepts);
+        assert_eq!(writes, usize::from(accepts));
+        assert_eq!(
+            outcome.remaining,
+            if accepts {
+                ScrollDelta::LineDelta(0.0, 0.0)
+            } else {
+                event.delta
+            }
+        );
+    }
+}
+
+#[test]
 fn a_data_event_realizes_the_apply_hook() {
     fn probe(
         input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
@@ -58,10 +104,10 @@ fn a_data_event_realizes_the_apply_hook() {
             completions: None,
             select: Rc::new(|_, _| {}),
             select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _| None),
+            edit_line: Rc::new(|_, _, _, _| false),
             toggle: Rc::new(|_, _| {}),
             update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|_| None),
+            edit: Rc::new(|_, _| false),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_, _| false),
