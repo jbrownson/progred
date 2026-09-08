@@ -460,3 +460,45 @@ metrics and its inset border, raster-image transforms, and paint deferral and
 clipping. Workspace tests and native all-target checks pass. The web check
 passes with its existing unused `drawn_menu` and `Quit` warnings. No cache,
 partial invalidation, event-policy change, or runtime profiling was added.
+
+## Compose value decorations before wrapping layout — 2026-09-07
+
+Baseline: `2a5b751`. Temporary finer allocation scopes split projection
+construction from its editor adaptation. An IoP source frame attributed about
+25,100 allocations to partial/fallback construction, 7,100 to its value-level
+wrappers, 3,180 to materializing widget sites, 2,736 to projection targets, and
+1,410 to appending descendant paths. Copying the cycle-detection ancestry was
+only 155 allocations. These are exclusive diagnostic scopes, not additive
+wall-time speedup estimates; the temporary scopes were removed afterward.
+
+`prepare_value` separately wrapped the same child for its navigation/highlight,
+optional reference background, and pick backstop. All three preserve its extent.
+It now applies those same functions, in the same order, inside one
+`ChoiceLayout::map`. This removes intermediate choice-graph wrappers without
+changing the callbacks, placement outputs, input order, or alternative policy.
+There is no new layout operation or special-case search optimization.
+
+Feature-free release binaries were alternated in before/after/after/before/
+before/after order, with five warm-up and 300 measured frames each, at
+1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-source-frame medians across three runs | 3.70 / 3.69 / 3.70 ms | 3.61 / 3.65 / 3.63 ms |
+| Choices + settled geometry, median | 279–283 µs | 238–246 µs |
+| Value-wrapper allocations per frame | 7,096 | 4,496 |
+
+The whole-frame gain is about 2%, with 2,600 fewer allocations. The reduced
+choice time is from visiting fewer geometry-preserving wrappers, not from
+searching less accurately or selecting different alternatives. Actual placement,
+hover, and paint retain the existing continuations. No cache or partial
+invalidation was introduced.
+
+All nine canaries passed in an additional before/after/after/before run with
+60 measured frames. IoP picture medians were 22.40 / 22.39 ms before and
+22.51 / 22.70 ms after; this pass does not improve drawing-program execution.
+Fidget CPU-fallback results remained comparable across the alternating runs.
+Workspace tests and native all-target checks pass; the browser check retains
+its two existing unused-code warnings. Fifteen of the 19 SVG fixtures are
+byte-identical. The four sample variants differ only in the dim glyph paths
+for freshly minted short cell IDs; surrounding geometry and paint order match.

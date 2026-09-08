@@ -1095,30 +1095,31 @@ fn prepare_value<C: 'static>(
             let scale = cx.styles.scale;
             let select = navigation_select_handler(landmark_path.clone(), hooks);
             let delete = hooks.delete.clone();
-            let landmark = landmark_path.clone();
-            let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
-                descend_landmark_with(
-                    transient, selected, scale, landmark, secondary, select, delete, inner,
-                )
-            });
-            let grounded = match value.and_then(|value| ground_decoration(cx, path, value)) {
-                Some((scale, color)) => {
-                    ChoiceLayout::map(placed, 0.0, move |placed| ground_with(scale, color, placed))
+            let ground = value.and_then(|value| ground_decoration(cx, path, value));
+            let target =
+                value.map(|value| (value.clone(), hooks.pick.clone(), hooks.select.clone()));
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                let placed = descend_landmark_with(
+                    transient,
+                    selected,
+                    scale,
+                    landmark_path.clone(),
+                    secondary,
+                    select,
+                    delete,
+                    inner,
+                );
+                let grounded = match ground {
+                    Some((scale, color)) => ground_with(scale, color, placed),
+                    None => placed,
+                };
+                match target {
+                    Some((value, pick, select)) => {
+                        pick_target_with(landmark_path, value, pick, select, grounded)
+                    }
+                    None => grounded,
                 }
-                None => placed,
-            };
-            match value {
-                Some(value) => {
-                    let target_path = landmark_path;
-                    let target_value = value.clone();
-                    let pick = hooks.pick.clone();
-                    let select = hooks.select.clone();
-                    ChoiceLayout::map(grounded, 0.0, move |grounded| {
-                        pick_target_with(target_path, target_value, pick, select, grounded)
-                    })
-                }
-                None => grounded,
-            }
+            })
         }
     }
 }
