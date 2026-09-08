@@ -39,22 +39,22 @@ pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
 ) -> Measured<HoverPass<World, Hover>> {
     #[cfg(feature = "profile")]
     let _profile = crate::profile::enter(crate::profile::Kind::LineEdit);
-    let site = (context.site)();
+    let site = (context.line)();
     if let Some(spelling) = site.spelling {
         line.text = spelling.to_owned();
     }
-    let active = site.writable && site.selected;
-    let default = (active && site.editing.is_none()).then(|| (site.initial_text)(&line.text));
-    let editing = active
-        .then_some(site.editing.or(default.as_ref()))
-        .flatten();
+    let active = site.input.as_ref().filter(|input| input.selected);
+    let default = active
+        .filter(|input| input.editing.is_none())
+        .map(|input| (input.initial_text)(&line.text));
+    let editing = active.and_then(|input| input.editing.or(default.as_ref()));
     let style = context.styles.line_style(&line);
     let placeholder_style = TextStyle {
         family: style.family,
         ..context.styles.dim.clone()
     };
-    let content = match editing {
-        Some(state) => {
+    let content = match active.zip(editing) {
+        Some((input, state)) => {
             let widget = puri::edit::text_edit(
                 LineEditDescription {
                     state,
@@ -68,7 +68,7 @@ pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
                 },
                 context.text,
             );
-            let edit = site.edit.clone();
+            let edit = input.edit.clone();
             let line = line.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
                 widget.install(output, placement, move |world, operation| {
@@ -98,9 +98,10 @@ pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
             })
         }
     };
-    if site.writable {
-        let select = site.select.clone();
-        let edit = site.edit.clone();
+    let active = active.is_some();
+    if let Some(input) = site.input {
+        let select = input.select.clone();
+        let edit = input.edit.clone();
         let description = line.clone();
         let navigation: Select<World> = Rc::new(move |world, direction| {
             select(world);
@@ -114,9 +115,9 @@ pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
         });
         let presentation = context.styles.line_presentation(&line);
         let scale = context.styles.scale as f32;
-        let select = site.select;
-        let edit = site.edit;
-        let target = site.target;
+        let select = input.select;
+        let edit = input.edit;
+        let target = input.target;
         let primary_edit = context.primary_edit;
         crate::widget::before_hover(content, move |placement: Placement, output| {
             output.on_arrival(Some(navigation));
@@ -153,5 +154,40 @@ pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
         })
     } else {
         content
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_only_line_needs_no_selection_or_editing_capabilities() {
+        crate::test_support::with_context::<(), (), _>(
+            &crate::test_support::NoProject,
+            |context| {
+                context.line = &|| crate::widget::LineSite {
+                    spelling: None,
+                    input: None,
+                };
+                let measured = view(
+                    context,
+                    LineEdit {
+                        text: "read only".into(),
+                        placeholder: None,
+                        update: Rc::new(|_, _, _| panic!("read-only line cannot write")),
+                        prefix: String::new(),
+                        suffix: String::new(),
+                        family: TextFamily::default(),
+                    },
+                );
+                let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
+                let output = crate::widget::place(measured, placement).run(&Default::default());
+                assert!(output.handler.is_none());
+                assert!(output.claim.is_none());
+                assert!(output.landmark_select.is_none());
+                assert_eq!(output.renders.len(), 1);
+            },
+        );
     }
 }

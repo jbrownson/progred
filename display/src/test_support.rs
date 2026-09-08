@@ -118,6 +118,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
         completion: &|_, _, _| panic!("unexpected completion control"),
         drawing: &|_, _, _| panic!("unexpected drawing control"),
         site: &|| panic!("unexpected document site"),
+        line: &|| panic!("unexpected line input"),
         event_interpreter: &|| panic!("unexpected event interpreter"),
         annotate: &|| panic!("unexpected annotation"),
         start_gesture: &|| panic!("unexpected gesture"),

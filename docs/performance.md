@@ -117,6 +117,19 @@ display synchronization, and compositor latency. They cannot detect a recurrence
 of the event scheduling bug where several expensive drag updates ran between
 paints; keep the interactive orbit/scroll check as a separate test of smoothness.
 
+Blob storage has a separate opt-in microbenchmark:
+
+```sh
+./tools/sandbox-cargo test --release -p gid --test blob_profile -- \
+  --ignored --nocapture --test-threads=1
+```
+
+It compares owned vectors, shared slices, shared vectors, and a test-only
+64-byte sharing threshold. Construction, clone/disposal, construction plus
+four clones, and editing a shared snapshot are separate workloads. Each size
+rotates implementation order over seven rounds and reports median nanoseconds
+per operation; allocation of the source fixture is outside measurement.
+
 Older dated reports used different timing scopes and document margins; start a
 new baseline rather than directly comparing their averages to these medians.
 
@@ -502,3 +515,60 @@ Workspace tests and native all-target checks pass; the browser check retains
 its two existing unused-code warnings. Fifteen of the 19 SVG fixtures are
 byte-identical. The four sample variants differ only in the dim glyph paths
 for freshly minted short cell IDs; surrounding geometry and paint order match.
+
+## Shared blobs and narrower widget capabilities — 2026-09-08
+
+Baseline: `235a5a8`. The storage experiment compared `Vec<u8>`, `Arc<[u8]>`,
+`Arc<Vec<u8>>`, and a test-only enum that shares above 64 bytes. Representative
+medians from seven interleaved rounds on the same ARM64 Mac:
+
+| Operation | Owned vector | Shared vector |
+| --- | ---: | ---: |
+| Construct/dispose 8 bytes | 13.4 ns | 28.8 ns |
+| Clone/dispose 8 bytes | 13.0 ns | 3.5 ns |
+| Construct 8 bytes, clone/dispose four times | 67.0 ns | 37.2 ns |
+| Construct/dispose 4 MiB | 49.6 µs | 49.6 µs |
+| Clone/dispose 4 MiB | 49.8 µs | about 6 ns |
+| Clone, edit, dispose a shared 4 MiB value | 50.0 µs | 50.2 µs |
+
+These are hot microbenchmarks, not frame-speedup predictions. Construction
+includes copying the input fixture into an owned vector; adopting that vector
+into `Arc<Vec<u8>>` adds only its control allocation. Converting it into
+`Arc<[u8]>` copies the payload again: the 4 MiB construction case measured
+111.8 µs. The threshold variant preserves small-vector construction cost but
+also its clone cost; there was no need to carry that second representation into
+production to retain the frame performance below.
+
+`gid::Blob` now wraps `Arc<Vec<u8>>`. Reads remain byte slices, `Value::from`
+still accepts vectors, and `make_mut` performs ordinary copy-on-write. There
+is no cutoff, byte interner, cache, or new serialization convention. Tests check
+adoption without copying, shared clones, unique/shared edits, content equality,
+hashing, and the existing GID serialization and text-bridge round trips.
+
+The separate widget change splits the former combined `Site`: selection and
+picking request only their target/value/callback; line controls request a
+`LineSite` whose `LineInput` is absent at read-only locations. The host no longer
+builds line-edit callbacks for selectable delimiters, or editing/selection
+callbacks for read-only lines. Writable line behavior, default caret placement,
+and library-value selection are unchanged. Tests make line-capability access
+panic for delimiter controls, and verify read-only lines emit no input handlers.
+
+Saved feature-free release binaries were run in baseline / blobs / both / both /
+blobs / baseline order, five warm-up and 180 measured frames per workload:
+
+| Whole-frame medians | Baseline | Shared blobs | Plus narrower capabilities |
+| --- | --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 3.93 / 3.67 ms | 3.63 / 3.65 ms | 3.60 / 3.59 ms |
+| IoP picture, 500 × 500 @1 | 23.22 / 22.92 ms | 23.07 / 23.09 ms | 23.14 / 23.35 ms |
+
+The first baseline source run was noisier (4.45 ms p95); do not attribute that
+whole difference to blobs. The source stays in its previous range, with a small
+improvement from narrower capabilities; the picture shows no meaningful change.
+An earlier baseline/blob/blob/baseline run passed all nine canaries, including
+the five Fidget CPU-fallback workloads. No native GPU/presentation claim follows
+from these headless results.
+
+The final combined build also passed all nine canaries, the full workspace test
+suite, and the native all-target check. The browser check passes with its existing
+unused `drawn_menu` and `Quit` warnings. No runtime profiling or new dependencies
+were added; storage alternatives live only in the opt-in test.

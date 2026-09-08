@@ -439,19 +439,14 @@ mod tests {
             drag_threshold: 3.0,
             command: |_| false,
             site: &|| widget::Site {
-                writable: false,
-                selected: false,
-                editing: None,
-                spelling: None,
-                initial_text: &|text| puri::LineEditState::new(text),
                 target: Hovered::Tree(crate::hover::Hover::Value(Rc::from([]))),
                 value: Some(&value),
                 select: Rc::new(|log: &mut Vec<&'static str>| {
                     log.push("select");
                     true
                 }),
-                edit: Rc::new(|_, _, _| false),
             },
+            line: &|| panic!("selectable delimiters do not request line input"),
             pick: Rc::new(|log, _| {
                 log.push("pick");
                 true

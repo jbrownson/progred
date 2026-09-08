@@ -651,6 +651,7 @@ fn gesture_place<World: 'static>(
         },
         styles: &crate::styles::editor(2.0),
         site: &|| panic!("gesture startup does not request text editing"),
+        line: &|| panic!("gesture startup does not request line input"),
         event_interpreter: &|| panic!("native gestures do not interpret Grap"),
         annotate: &|| Rc::new(|_, _| false),
         start_gesture: &|| start.clone(),

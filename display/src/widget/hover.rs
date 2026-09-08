@@ -110,6 +110,7 @@ mod tests {
             },
             styles: &style::editor(1.0),
             site: &|| panic!("hover decoration does not read the document"),
+            line: &|| panic!("hover decoration does not request line input"),
             event_interpreter: &|| panic!("hover does not interpret Grap"),
             annotate: &|| panic!("hover does not request annotation writes"),
             start_gesture: &|| panic!("unexpected gesture startup request"),

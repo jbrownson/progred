@@ -96,8 +96,11 @@ explicit dispatch input; the host suppresses that target outside its owning view
 Vello, Canvas2D, and recorders; `Canvas` adds generic convenience methods.
 Native render closures outlive measurement without fixing a rendering backend
 or constructing GID drawing data.
-Document-aware widgets explicitly request the current site state and scoped
-edit/selection capabilities. Ordinary decorations do not resolve paths, inspect
+Document-aware widgets explicitly request selection/picking through `Site`,
+or line editing through `LineSite`. A read-only line has no `LineInput`;
+the host constructs editing and selection callbacks only when that input is
+available. Selection-only widgets never request line-editing capabilities.
+Ordinary decorations do not resolve paths, inspect
 selection, or allocate those callbacks. A fragment is not a Canvas: it retains
 whole-widget render continuations, then executes their draw calls directly after
 hover settles, rather than allocating a deferred closure per drawing operation.

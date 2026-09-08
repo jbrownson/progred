@@ -506,27 +506,37 @@ fn with_widget_context<C: 'static, Result>(
             .unwrap_or_else(|| LineEditState::new(spelling).with_cursor_at_end())
     };
     let site = || {
+        let path: SharedPath = Rc::from(path);
+        progred_display::widget::Site {
+            target: Hovered::Tree(Hover::Value(path.clone())),
+            value,
+            select: select_handler(path, hooks),
+        }
+    };
+    let line = || {
         let writable = !cx.source.transient() && writable_at(&cx.sources, path);
         let selected = cx.selection.filter(|selection| {
             writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
         });
-        let edit = hooks.edit_line.clone();
-        let path: SharedPath = Rc::from(path);
-        let edit_path = path.clone();
-        progred_display::widget::Site {
-            writable,
-            selected: selected.is_some(),
-            editing: selected.and_then(Selection::edit),
-            initial_text: &initial_text,
+        progred_display::widget::LineSite {
             spelling: cx
                 .scrub_spelling
-                .filter(|(site, _)| *site == path.as_ref())
+                .filter(|(site, _)| *site == path)
                 .map(|(_, text)| text),
-            target: Hovered::Tree(Hover::Value(path.clone())),
-            select: select_handler(path, hooks),
-            value,
-            edit: Rc::new(move |world, description, operation| {
-                edit(world, &edit_path, description, operation)
+            input: writable.then(|| {
+                let edit = hooks.edit_line.clone();
+                let path: SharedPath = Rc::from(path);
+                let edit_path = path.clone();
+                progred_display::widget::LineInput {
+                    selected: selected.is_some(),
+                    editing: selected.and_then(Selection::edit),
+                    initial_text: &initial_text,
+                    target: Hovered::Tree(Hover::Value(path.clone())),
+                    select: select_handler(path, hooks),
+                    edit: Rc::new(move |world, description, operation| {
+                        edit(world, &edit_path, description, operation)
+                    }),
+                }
             }),
         }
     };
@@ -569,6 +579,7 @@ fn with_widget_context<C: 'static, Result>(
         text,
         styles: cx.styles,
         site: &site,
+        line: &line,
         event_interpreter: &event_interpreter,
         annotate: &annotate,
         start_gesture: &|| {

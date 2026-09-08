@@ -386,20 +386,21 @@ fn placed_line_description(
         value_edit: &|| panic!("unexpected value edit request"),
         drag_threshold: 3.0,
         command: |_| false,
-        site: &|| {
+        site: &|| panic!("line input does not request the generic selection site"),
+        line: &|| {
             let output = output.clone();
-            progred_display::widget::Site {
-                writable: true,
-                selected: true,
-                editing: None,
+            progred_display::widget::LineSite {
                 spelling: None,
-                initial_text: &crate::selection::line_edit,
-                target: Hovered::Tree(Hover::Value(Rc::from([]))),
-                value: None,
-                select: Rc::new(|_| true),
-                edit: Rc::new(move |_, description, _| {
-                    output.replace(Some(description.clone()));
-                    true
+                input: Some(progred_display::widget::LineInput {
+                    selected: true,
+                    editing: None,
+                    initial_text: &crate::selection::line_edit,
+                    target: Hovered::Tree(Hover::Value(Rc::from([]))),
+                    select: Rc::new(|_| true),
+                    edit: Rc::new(move |_, description, _| {
+                        output.replace(Some(description.clone()));
+                        true
+                    }),
                 }),
             }
         },

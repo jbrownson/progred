@@ -64,6 +64,7 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub text: &'a mut TextCtx<'fonts>,
     pub styles: &'a style::Styles,
     pub site: &'a dyn Fn() -> Site<'a, World, Hover>,
+    pub line: &'a dyn Fn() -> LineSite<'a, World, Hover>,
     pub event_interpreter: &'a dyn Fn() -> EventInterpreter<World>,
     pub annotate: &'a dyn Fn() -> Annotate<World>,
     pub start_gesture: &'a dyn Fn() -> gesture::Start<World>,
@@ -76,15 +77,24 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub primary_edit: fn(&puri::handler::PointerButtonEvent) -> bool,
 }
 
-/// Site state and capabilities are requested only by document-aware widgets.
+/// Selection and picking, independent of text editing.
 pub struct Site<'a, World, Hover> {
-    pub writable: bool,
+    pub target: Hover,
+    pub value: Option<&'a Value>,
+    pub select: ActionHandler<World>,
+}
+
+pub struct LineSite<'a, World, Hover> {
+    pub spelling: Option<&'a str>,
+    pub input: Option<LineInput<'a, World, Hover>>,
+}
+
+/// Absent for read-only lines; no editing or selection callbacks are needed.
+pub struct LineInput<'a, World, Hover> {
     pub selected: bool,
     pub editing: Option<&'a LineEditState>,
     pub initial_text: &'a dyn Fn(&str) -> LineEditState,
-    pub spelling: Option<&'a str>,
     pub target: Hover,
-    pub value: Option<&'a Value>,
     pub select: ActionHandler<World>,
     pub edit: Edit<World>,
 }
@@ -475,6 +485,7 @@ mod tests {
             },
             styles: &style::editor(1.0),
             site: &|| panic!("unrelated site input requested"),
+            line: &|| panic!("unrelated line input requested"),
             event_interpreter: &|| panic!("unrelated Grap interpreter requested"),
             annotate: &|| panic!("unrelated annotation capability requested"),
             start_gesture: &|| panic!("unexpected gesture startup request"),
