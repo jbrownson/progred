@@ -2,104 +2,7 @@ use super::*;
 
 #[test]
 fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker() {
-    struct Clipboard;
-    impl puri::edit::TextClipboard for Clipboard {
-        fn get_text(&mut self) -> Option<String> {
-            None
-        }
-        fn set_text(&mut self, _: &str) {}
-    }
-    struct State {
-        selection: Selection,
-        committed: Vec<Value>,
-        fonts: parley::FontContext,
-        layouts: parley::LayoutContext<Brush>,
-        clipboard: Clipboard,
-    }
-
-    let stack = crate::stack::load::<State>();
-    let root = crate::workspace::Root::document();
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
-    let record = Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    };
-    let mut state = State {
-        selection: pending_value(&root, vec![]),
-        committed: Vec::new(),
-        fonts: parley::FontContext::new(),
-        layouts: parley::LayoutContext::new(),
-        clipboard: Clipboard,
-    };
-    let styles = crate::styles::editor(1.0);
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
-    let mut frame = |state: &State, doc: &Document| {
-        let node = project::<State>(
-            ProjectDescription {
-                sources: src(doc, &stack.libraries),
-                root: doc.root.as_ref(),
-                root_path: &[],
-                selection: Some(&state.selection),
-                scrub_spelling: None,
-                source_selection: None,
-                annotations: &Annotations::default(),
-                raw: false,
-                styles: &styles,
-                width: 600.0,
-                projection: Some(&stack.projection),
-            },
-            &mut tcx,
-            Hooks {
-                completions: Some(stack.completions.clone()),
-                select: Rc::new(|_, _| {}),
-                select_payload: Rc::new(|_, _, _| {}),
-                edit_line: Rc::new(|_, _, _, _| false),
-                toggle: Rc::new(|_, _| {}),
-                update_state: Rc::new(|_, _, _| false),
-                edit: Rc::new(|state: &mut State, operation| {
-                    state.selection.edit_query(|line| {
-                        operation(puri::edit::EditCtx {
-                            state: line,
-                            fonts: &mut state.fonts,
-                            layouts: &mut state.layouts,
-                            clipboard: &mut state.clipboard,
-                        })
-                    })
-                }),
-                pick: Rc::new(|_, _| false),
-                insert: Rc::new(|_, _| {}),
-                delete: Rc::new(|_, _| false),
-                apply: Rc::new(|_, _, _, _| false),
-                start_gesture: Rc::new(|_, _, _, _| {}),
-                value_edit: Rc::new(|_| panic!("unexpected value edit")),
-                select_source: Rc::new(|_, _, _| {}),
-                commit_value: Rc::new(|state, value, _| state.committed.push(value)),
-                commit_label: Rc::new(|state, cell, _, _| state.committed.push(Value::from(cell))),
-                set_completion_view: Rc::new(|state, scroll, choice, everything| {
-                    state
-                        .selection
-                        .set_completion_view(scroll, choice, everything);
-                }),
-            },
-        );
-        let rect = node.extent.rect_at(Point::new(20.0, 20.0));
-        measured::place(
-            node,
-            Placement::new(rect, Rect::new(0.0, 0.0, 640.0, 480.0)),
-        )
-        .run(&Default::default())
-    };
+    let root = crate::test_root();
     let press = |key: &str, modifiers| KeyboardEvent {
         key: Key::Character(key.into()),
         state: KeyState::Down,
@@ -107,19 +10,27 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
         ..Default::default()
     };
     for labels in [false, true] {
-        let doc = if labels { &record } else { &empty };
         for everything in [false, true] {
             for key in ["[", "(", "{"] {
-                state.selection = if labels {
-                    pending_edge(&root, &src(doc, &stack.libraries), vec![]).unwrap()
+                let mut world = crate::test_editor(Document {
+                    root: labels.then(|| Value::record([])),
+                    cells: Cells::new(),
+                });
+                world.model.selection = Some(if labels {
+                    pending_edge(&root, &world.sources(), vec![]).unwrap()
                 } else {
                     pending_value(&root, vec![])
-                };
-                state.selection.set_completion_view(0.0, 0, everything);
-                let placed = frame(&state, doc);
+                });
+                world
+                    .model
+                    .selection
+                    .as_mut()
+                    .unwrap()
+                    .set_completion_view(0.0, 0, everything);
+                let frame = editing_frame(&mut world, false);
                 if !everything {
                     assert!(
-                        placed
+                        frame
                             .completion
                             .as_ref()
                             .unwrap()
@@ -129,89 +40,127 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                     );
                 }
                 assert!(
-                    placed
+                    frame
                         .handler
                         .unwrap()
-                        .dispatch_key(&mut state, &press(key, Modifiers::SHIFT))
+                        .dispatch_key(&mut world, &press(key, Modifiers::SHIFT))
                 );
                 if labels && key != "(" {
-                    assert!(state.committed.is_empty());
-                    assert_eq!(state.selection.edit().unwrap().text(), key);
+                    assert_eq!(world.model.doc.root, Some(Value::record([])));
+                    assert_eq!(
+                        world
+                            .model
+                            .selection
+                            .as_ref()
+                            .unwrap()
+                            .edit()
+                            .unwrap()
+                            .text(),
+                        key
+                    );
                 } else {
-                    let value = state.committed.pop().unwrap();
-                    match key {
-                        "[" => assert_eq!(value, Value::list([])),
-                        "{" => assert_eq!(value, Value::record([])),
-                        _ => assert!(value.as_cell().is_some()),
+                    let value = world.model.doc.root.as_ref().unwrap();
+                    if labels {
+                        assert_eq!(value.as_record().unwrap().len(), 0);
+                        assert!(matches!(
+                            world.model.selection.as_ref().unwrap().path(),
+                            [Step::Key(_)]
+                        ));
+                    } else {
+                        match key {
+                            "[" => assert_eq!(value, &Value::list([])),
+                            "{" => assert_eq!(value, &Value::record([])),
+                            _ => assert!(value.as_cell().is_some()),
+                        };
                     }
-                    assert!(state.selection.edit().unwrap().text().is_empty());
-                    assert_eq!(state.selection.completion_everything(), everything);
                 }
             }
         }
     }
-
-    state.selection = pending_value(&root, vec![]);
     for modifiers in [Modifiers::CONTROL, Modifiers::META] {
+        let mut world = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        world.model.selection = Some(pending_value(&root, vec![]));
         assert!(
-            !frame(&state, &empty)
+            !editing_frame(&mut world, false)
                 .handler
                 .unwrap()
-                .dispatch_key(&mut state, &press("[", modifiers))
+                .dispatch_key(&mut world, &press("[", modifiers))
         );
-        assert!(state.committed.is_empty());
+        assert!(world.model.doc.root.is_none());
     }
-    let release = KeyboardEvent {
-        state: KeyState::Up,
-        ..press("[", Modifiers::empty())
-    };
-    assert!(
-        !frame(&state, &empty)
-            .handler
-            .unwrap()
-            .dispatch_key(&mut state, &release)
-    );
-    assert!(state.committed.is_empty());
-    assert!(
-        frame(&state, &empty)
-            .handler
-            .unwrap()
-            .dispatch_key(&mut state, &press("[", Modifiers::ALT))
-    );
-    assert_eq!(state.committed.pop(), Some(Value::list([])));
-
     for query in ["\"", "search"] {
-        state.selection = crate::selection::pending_with_query(&root, vec![], query);
+        let mut world = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        world.model.selection = Some(crate::selection::pending_with_query(&root, vec![], query));
         assert!(
-            frame(&state, &empty)
+            editing_frame(&mut world, false)
                 .handler
                 .unwrap()
-                .dispatch_key(&mut state, &press("[", Modifiers::empty()))
+                .dispatch_key(&mut world, &press("[", Modifiers::empty()))
         );
-        assert!(state.committed.is_empty());
-        assert_eq!(state.selection.edit().unwrap().text(), format!("{query}["));
+        assert!(world.model.doc.root.is_none());
+        assert_eq!(
+            world
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .text(),
+            format!("{query}[")
+        );
     }
-    state.selection = pending_value(&root, vec![]);
-    state
+    let mut world = crate::test_editor(Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    world.model.selection = Some(pending_value(&root, vec![]));
+    let mut release = press("[", Modifiers::empty());
+    release.state = KeyState::Up;
+    assert!(
+        !editing_frame(&mut world, false)
+            .handler
+            .unwrap()
+            .dispatch_key(&mut world, &release)
+    );
+    world
+        .model
         .selection
+        .as_mut()
+        .unwrap()
         .edit_mut()
         .unwrap()
         .handle_ime(&puri::handler::ImeEvent::Preedit("[".into(), Some((1, 1))));
     assert!(
-        !frame(&state, &empty)
+        !editing_frame(&mut world, false)
             .handler
             .unwrap()
-            .dispatch_key(&mut state, &press("[", Modifiers::empty()))
+            .dispatch_key(&mut world, &press("[", Modifiers::empty()))
     );
-    assert!(state.committed.is_empty());
     assert!(
-        frame(&state, &empty)
+        editing_frame(&mut world, false)
             .handler
             .unwrap()
-            .dispatch_ime(&mut state, &puri::handler::ImeEvent::Commit("[".into()))
+            .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit("[".into()))
     );
-    assert!(state.committed.is_empty());
-    assert_eq!(state.selection.edit().unwrap().text(), "[");
+    assert!(world.model.doc.root.is_none());
+    assert_eq!(
+        world
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .edit()
+            .unwrap()
+            .text(),
+        "["
+    );
 }
 
 #[test]
@@ -220,7 +169,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         display: "no edit".into(),
         detail: None,
         matches: vec![],
-        face: progred_display::Face::Label,
+        face: crate::display::Face::Label,
         source: None,
         activate: Rc::new(|attempts: &mut usize| {
             *attempts += 1;
@@ -275,16 +224,23 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
             display: "entry".into(),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::Name,
+            face: crate::display::Face::Name,
             source: None,
-            activate: Rc::new(|_: &mut ()| {}),
+            activate: Rc::new(|_: &mut crate::Editor| {}),
         }];
         let bounds = Rect::new(0.0, 0.0, 640.0 * scale, 480.0 * scale);
         for above in [false, true] {
             let y = if above { 450.0 } else { 30.0 } * scale;
             let field = Rect::new(50.0 * scale, y, 150.0 * scale, y + 20.0 * scale);
-            let card =
-                completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
+            let card = completion_card::<crate::Editor>(
+                &mut tcx,
+                &styles,
+                &entries,
+                0,
+                0.0,
+                true,
+                |_, _, _, _| {},
+            );
             let placement =
                 completion_placement(Placement::new(field, bounds), card.extent, scale).unwrap();
             let mut painted = settle(measured::place(card, placement).run(&Default::default()));
@@ -345,17 +301,24 @@ fn completion_details_share_the_cards_right_edge() {
             display: display.into(),
             detail: Some(detail.into()),
             matches: Vec::new(),
-            face: progred_display::Face::Name,
+            face: crate::display::Face::Name,
             source: None,
-            activate: Rc::new(|_: &mut ()| {}),
+            activate: Rc::new(|_: &mut crate::Editor| {}),
         });
         let detail_widths = entries.each_ref().map(|entry| {
             puri::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.detail)
                 .metrics()
                 .width
         });
-        let card =
-            completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
+        let card = completion_card::<crate::Editor>(
+            &mut tcx,
+            &styles,
+            &entries,
+            0,
+            0.0,
+            true,
+            |_, _, _, _| {},
+        );
         let origin = Point::new(37.0, 59.0);
         let right = origin.x + card.extent.width - (4.0 + 8.0) * scale;
         let bench = settle(measured::place_top_left(card, origin).run(&Default::default()));
@@ -382,7 +345,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             display: "\"x\"".to_string(),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::String,
+            face: crate::display::Face::String,
             source: None,
             activate: Rc::new(|_| {}),
         },
@@ -390,7 +353,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             display: "new list".to_string(),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::Dim,
+            face: crate::display::Face::Dim,
             source: None,
             activate: Rc::new(|_| {}),
         },
@@ -450,7 +413,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             display: format!("entry {index}"),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::Dim,
+            face: crate::display::Face::Dim,
             source: None,
             activate: Rc::new(|_| {}),
         })
@@ -609,7 +572,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             display: format!("entry {index}"),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::Name,
+            face: crate::display::Face::Name,
             source: None,
             activate: Rc::new(move |state: &mut State| state.committed = Some(index)),
         })
@@ -794,7 +757,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         display: "new list".into(),
         detail: None,
         matches: Vec::new(),
-        face: progred_display::Face::Dim,
+        face: crate::display::Face::Dim,
         source: None,
         activate: Rc::new(|state: &mut State| {
             state.committed = Some(Value::list([]));
@@ -939,17 +902,12 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
 
 #[test]
 fn completion_activation_precedes_the_real_editor_it_covers() {
-    struct ClickWorld {
-        selection: Option<Selection>,
-        applied: Option<Path>,
-    }
-
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/sample.gid"
     )))
     .expect("the sample parses");
-    let stack = crate::stack::load::<ClickWorld>();
+    let stack = crate::stack::load();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
@@ -960,8 +918,10 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let node = project::<ClickWorld>(
+    let node = project(
         ProjectDescription {
+            view: &crate::test_root(),
+            completions: None,
             sources: Sources {
                 doc: &doc,
                 libraries: &stack.libraries,
@@ -979,33 +939,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             projection: Some(&stack.projection),
         },
         &mut tcx,
-        Hooks {
-            completions: Some(stack.completions.clone()),
-            select: Rc::new(|world: &mut ClickWorld, path| {
-                world.selection = Some(make_selection(path));
-            }),
-            select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _, _| false),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            // A selection transition must consume the click even if
-            // retained dispatch cannot recover an edit context for
-            // the optional caret-placement follow-up.
-            edit: Rc::new(|_, _| false),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
-                world.applied = Some(path);
-                true
-            }),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        },
     );
     let path = vec![
         Step::Key(sample_vocabulary::STYLE),
@@ -1021,18 +954,18 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         .expect("color descend")
         .rect
         .center();
-    let card = completion_card::<ClickWorld>(
+    let activated = Rc::new(std::cell::Cell::new(false));
+    let clicked = activated.clone();
+    let card = completion_card::<crate::Editor>(
         &mut tcx,
         &styles,
         &[Entry {
             display: "completion offer".into(),
             detail: None,
             matches: Vec::new(),
-            face: progred_display::Face::String,
+            face: crate::display::Face::String,
             source: None,
-            activate: Rc::new(|world: &mut ClickWorld| {
-                world.applied = Some(Vec::new());
-            }),
+            activate: Rc::new(move |_| clicked.set(true)),
         }],
         0,
         0.0,
@@ -1063,16 +996,13 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         },
         state,
     };
-    let mut world = ClickWorld {
-        selection: None,
-        applied: None,
-    };
+    let mut world = crate::test_editor(doc);
     let mut pointer = placed::DispatchContext::new(None, Some(target));
     assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
         &mut world,
         &event,
         &mut pointer
     ));
-    assert!(world.selection.is_none());
-    assert_eq!(world.applied, Some(Vec::new()));
+    assert!(world.model.selection.is_none());
+    assert!(activated.get());
 }

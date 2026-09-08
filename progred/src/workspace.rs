@@ -5,9 +5,9 @@
 //! sizing remain process state.
 
 use crate::annotations::Annotations;
+pub use crate::libraries::workspace::vocabulary;
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
-pub use progred_libraries::workspace::vocabulary;
 #[cfg(test)]
 use std::rc::Rc;
 
@@ -25,7 +25,7 @@ pub enum Side {
     Right,
 }
 
-pub use progred_display::widget::view::{Root, Target};
+pub use crate::display::widget::view::{Root, Target};
 
 pub struct View {
     pub root: Root,

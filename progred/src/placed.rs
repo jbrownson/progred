@@ -3,6 +3,7 @@
 //! before either painting or dispatch sees the frame.
 
 use crate::completion::Offers;
+use crate::display::widget::container::{self, Layers};
 use crate::frame::Hovered;
 use crate::navigate::Descend;
 use crate::workspace::Root;
@@ -11,7 +12,6 @@ use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::Output;
 use measured::{Extent, Measured};
 use peniko::{Brush, ImageData};
-use progred_display::widget::container::{self, Layers};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
 #[cfg(test)]
@@ -21,14 +21,14 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use uig::Placement;
 
-pub type Placed<C> = progred_display::widget::HoverPass<C, Hovered>;
-pub type Ready<C> = progred_display::widget::Fragment<C, Hovered>;
-pub use progred_display::widget::{HoverContext, HoverInput};
-pub type DispatchContext<C> = progred_display::widget::frame::DispatchContext<C, Hovered>;
-pub type Ink<'a> = progred_display::widget::frame::Ink<'a, Hovered>;
-pub type Render = progred_display::widget::frame::Render<Hovered>;
-pub type Probe = progred_display::widget::frame::Probe<Hovered>;
-pub use progred_display::widget::frame::ViewRegion;
+pub type Placed<C> = crate::display::widget::HoverPass<C, Hovered>;
+pub type Ready<C> = crate::display::widget::Fragment<C, Hovered>;
+pub use crate::display::widget::{HoverContext, HoverInput};
+pub type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
+pub type Ink<'a> = crate::display::widget::frame::Ink<'a, Hovered>;
+pub type Render = crate::display::widget::frame::Render<Hovered>;
+pub type Probe = crate::display::widget::frame::Probe<Hovered>;
+pub use crate::display::widget::frame::ViewRegion;
 
 /// App-facing construction inside the hover continuation. Claims are
 /// answered now; ink and handlers are returned for later execution.
@@ -223,7 +223,7 @@ pub fn leaf<C: 'static>(
     extent: Extent,
     place: impl FnOnce(&mut Builder<'_, '_, C>, Placement) + 'static,
 ) -> Measured<Placed<C>> {
-    progred_display::widget::leaf(extent, move |output, placement| {
+    crate::display::widget::leaf(extent, move |output, placement| {
         built_into(place)(placement, output)
     })
 }
@@ -232,13 +232,13 @@ pub fn before<C: 'static>(
     child: Measured<Placed<C>>,
     place_before: impl FnOnce(&mut Builder<'_, '_, C>, Placement) + 'static,
 ) -> Measured<Placed<C>> {
-    progred_display::widget::before_hover(child, built_into(place_before))
+    crate::display::widget::before_hover(child, built_into(place_before))
 }
 
 /// Add `content` as an out-of-flow subtree without contributing its
 /// extent to `base`. The completed frame raises all such subtrees
 /// together.
-pub use progred_display::widget::container::floating;
+pub use crate::display::widget::container::floating;
 
 pub fn decorate<C: 'static>(
     child: Measured<Placed<C>>,
@@ -408,12 +408,8 @@ mod tests {
         scale: f64,
         span: Extent,
         side: puri::delim::Side,
-    ) -> Measured<Placed<Vec<&'static str>>> {
-        use progred_display::widget;
-        use std::rc::Rc;
-        let mut fonts = puri::text::FontContext::new();
-        let mut layouts = puri::text::LayoutContext::new();
-        let mut cache = puri::TextCache::default();
+    ) -> Measured<Placed<crate::Editor>> {
+        use crate::display::widget;
         let value = gid::Value::record([]);
         let side = widget::delimiter::side(puri::Delim::Bracket, side);
         let side = if interactive {
@@ -421,40 +417,21 @@ mod tests {
         } else {
             side
         };
-        let native = widget::fill_height(side)(&mut widget::Context {
-            project: &progred_display::test_support::NoProject,
-            completion: &|_, _, _| panic!("unexpected completion control"),
-            drawing: &|_, _, _| panic!("unexpected drawing control"),
-            text: &mut puri::TextCtx {
-                fonts: &mut fonts,
-                layouts: &mut layouts,
-                cache: &mut cache,
-                scale: scale as f32,
+        let native = crate::display::test_support::with_context(
+            &crate::display::test_support::NoProject,
+            |context| {
+                let styles = crate::styles::editor(scale);
+                let mut inputs = context.inputs.clone();
+                inputs.styles = &styles;
+                widget::fill_height(side)(&mut widget::Context {
+                    value: Some(&value),
+                    inputs: &inputs,
+                    project: context.project,
+                    path: context.path,
+                    text: &mut *context.text,
+                })
             },
-            styles: &widget::style::editor(scale),
-            event_interpreter: &|| panic!("delimiter does not interpret Grap"),
-            annotate: &|| panic!("delimiter does not request annotation writes"),
-            start_gesture: &|| panic!("unexpected gesture startup request"),
-            value_edit: &|| panic!("unexpected value edit request"),
-            drag_threshold: 3.0,
-            command: |_| false,
-            site: &|| widget::Site {
-                target: Hovered::Tree(crate::hover::Hover::Value(Rc::from([]))),
-                value: Some(&value),
-                select: Rc::new(|log: &mut Vec<&'static str>| {
-                    log.push("select");
-                    true
-                }),
-            },
-            line: &|| panic!("selectable delimiters do not request line input"),
-            pick: Rc::new(|log, _| {
-                log.push("pick");
-                true
-            }),
-            picking: |event| crate::modifiers::pick(&event.state.modifiers),
-            same_target: PartialEq::eq,
-            primary_edit: |_| false,
-        });
+        );
         let extent = Extent {
             width: native.extent.width,
             ascent: span.ascent.max(native.extent.ascent),
@@ -496,7 +473,7 @@ mod tests {
                     assert!(interactive.handler.is_some());
                     let outlines = [inert, interactive].map(|placed| {
                         let mut canvas = TestCanvas(DrawList::new());
-                        Ready::<Vec<&str>>::paint(placed.renders, &mut canvas, no_ink());
+                        Ready::<crate::Editor>::paint(placed.renders, &mut canvas, no_ink());
                         let [
                             DrawCmd::Fill {
                                 shape: Shape::Path(path),
@@ -563,14 +540,27 @@ mod tests {
                 event.state.modifiers =
                     ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
             }
-            let mut log = Vec::new();
+            let mut world = crate::test_editor(gid::Document {
+                root: None,
+                cells: gid::Cells::new(),
+            });
+            if picking {
+                world.model.selection = Some(crate::selection::pending_value(
+                    world.model.workspace.document_root(),
+                    vec![],
+                ));
+            }
             let handled = placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
-                &mut log,
+                &mut world,
                 &event,
                 &mut DispatchContext::new(root, hovered),
             );
             assert_eq!(handled, expected.is_some());
-            assert_eq!(log, expected.into_iter().collect::<Vec<_>>());
+            match expected {
+                Some("pick") => assert_eq!(world.model.doc.root, Some(gid::Value::record([]))),
+                Some("select") => assert!(world.model.selection.is_some()),
+                _ => {}
+            }
         }
     }
 
@@ -691,7 +681,7 @@ mod tests {
             },
         );
         let popup = floating(trigger, content, |placement, extent| {
-            progred_display::widget::popover::position(placement, extent, 2.0)
+            crate::display::widget::popover::position(placement, extent, 2.0)
         });
 
         assert_eq!(popup.extent.width, 10.0);
@@ -1023,7 +1013,7 @@ mod tests {
 
     #[test]
     fn native_floaters_keep_their_view_and_raise_above_later_content() {
-        use progred_display::widget;
+        use crate::display::widget;
         let owner = Root::document();
         let other = Root::pane(vec![]);
         let target = Hovered::Tree(crate::hover::Hover::Entry(0));
@@ -1037,7 +1027,7 @@ mod tests {
                 descent: 20.0,
             },
             move |output: &mut widget::HoverContext<'_, usize, _>, placement| {
-                output.claim(progred_display::widget::frame::Probe::retaining(
+                output.claim(crate::display::widget::frame::Probe::retaining(
                     placement,
                     target.clone(),
                 ));

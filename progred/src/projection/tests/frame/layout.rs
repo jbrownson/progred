@@ -2,13 +2,13 @@ use super::*;
 
 #[test]
 fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusion() {
-    use progred_display::{Layout, widget};
+    use crate::display::{Layout, widget};
     use std::cell::RefCell;
 
     for card in [false, true] {
         let placements = Rc::new(RefCell::new(vec![]));
         let placed_boxes = placements.clone();
-        let projection = Projection::new([progred_display::partial(move |_| {
+        let projection = Projection::new([crate::display::partial(move |_| {
             let rectangle = |id, width, height| {
                 let placements = placed_boxes.clone();
                 Layout::widget(Rc::new(move |_| {
@@ -22,7 +22,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                         move |output: &mut widget::HoverContext<'_, EditingWorld, Hovered>,
                               placement| {
                             placements.borrow_mut().push((id, placement.rect));
-                            output.claim(progred_display::widget::frame::Probe::exact(
+                            output.claim(crate::display::widget::frame::Probe::exact(
                                 placement,
                                 Hovered::Tree(Hover::Entry(id)),
                             ));
@@ -31,7 +31,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                                     event.state.position.x,
                                     event.state.position.y,
                                 )) && {
-                                    world.clipboard.0 = Some(id.to_string());
+                                    world.text_clipboard.text = Some(id.to_string());
                                     true
                                 }
                             });
@@ -42,13 +42,13 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             let trigger = rectangle(0, 20.0, 20.0);
             let content = rectangle(1, 30.0, 40.0);
             let floating = if card {
-                progred_display::popover(trigger, content)
+                crate::display::popover(trigger, content)
             } else {
-                progred_display::floating(trigger, content, |scale, anchor, extent| {
+                crate::display::floating(trigger, content, |scale, anchor, extent| {
                     widget::popover::position(anchor, extent, 4.0 * scale)
                 })
             };
-            Some(progred_display::overlay([
+            Some(crate::display::overlay([
                 floating,
                 rectangle(2, 100.0, 150.0),
             ]))
@@ -57,7 +57,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             root: Some(Value::record([])),
             cells: Cells::new(),
         };
-        let mut world = EditingWorld::new(&doc, &core_libraries());
+        let mut world = editing_world(&doc, &core_libraries());
         let output = editing_frame_with_projection(&mut world, false, Some(&projection));
         let content = placements
             .borrow()
@@ -95,7 +95,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             (margin, if card { None } else { Some("2") }),
             (content.center(), Some("1")),
         ] {
-            world.clipboard.0 = None;
+            world.text_clipboard.text = None;
             assert!(handler.dispatch_pointer_down(
                 &mut world,
                 &PointerButtonEvent {
@@ -111,25 +111,25 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                     },
                 }
             ));
-            assert_eq!(world.clipboard.0.as_deref(), expected);
+            assert_eq!(world.text_clipboard.text.as_deref(), expected);
         }
     }
 }
 
 #[test]
 fn native_leading_continuations_place_only_for_the_chosen_alternative() {
-    use progred_display::widget;
+    use crate::display::widget;
     use std::cell::RefCell;
     let log = Rc::new(RefCell::new(Vec::new()));
     let projection_log = log.clone();
     let mut context = BenchContext::new();
-    context.stack.projection = Projection::new([progred_display::partial(move |input| {
+    context.stack.projection = Projection::new([crate::display::partial(move |input| {
         input.value?;
         let alternative = |width, before_name, child_name| {
             let child_log = projection_log.clone();
             let before_log = projection_log.clone();
             widget::before(
-                progred_display::Layout::widget(Rc::new(move |_| {
+                crate::display::Layout::widget(Rc::new(move |_| {
                     let log = child_log.clone();
                     widget::leaf(
                         Extent {
@@ -150,7 +150,7 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
                 }),
             )
         };
-        Some(progred_display::alternatives([
+        Some(crate::display::alternatives([
             alternative(100.0, "before wide", "wide"),
             alternative(20.0, "before narrow", "narrow"),
         ]))
@@ -190,18 +190,18 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
 
 #[test]
 fn stretching_widgets_receive_only_the_chosen_row_span() {
-    use progred_display::widget;
+    use crate::display::widget;
     use std::cell::RefCell;
     let measured_spans = Rc::new(RefCell::new(Vec::new()));
     let placed_spans = Rc::new(RefCell::new(Vec::new()));
     let measured_log = measured_spans.clone();
     let placed_log = placed_spans.clone();
     let mut context = BenchContext::new();
-    context.stack.projection = Projection::new([progred_display::partial(move |input| {
+    context.stack.projection = Projection::new([crate::display::partial(move |input| {
         input.value?;
         let measured_log = measured_log.clone();
         let placed_log = placed_log.clone();
-        let side: widget::Widget<(), Hovered> = Rc::new(move |_| {
+        let side: widget::Widget<crate::Editor, Hovered> = Rc::new(move |_| {
             let placed_log = placed_log.clone();
             let extent = Extent {
                 width: 5.0,
@@ -213,7 +213,7 @@ fn stretching_widgets_receive_only_the_chosen_row_span() {
             }))
         });
         let box_at = |width, ascent| {
-            progred_display::Layout::widget(Rc::new(move |_| {
+            crate::display::Layout::widget(Rc::new(move |_| {
                 widget::leaf(
                     Extent {
                         width,
@@ -224,12 +224,12 @@ fn stretching_widgets_receive_only_the_chosen_row_span() {
                 )
             }))
         };
-        Some(progred_display::row(
+        Some(crate::display::row(
             0.0,
             [
-                progred_display::Layout::widget(side.clone()),
-                progred_display::alternatives([box_at(100.0, 10.0), box_at(20.0, 40.0)]),
-                progred_display::Layout::widget(side),
+                crate::display::Layout::widget(side.clone()),
+                crate::display::alternatives([box_at(100.0, 10.0), box_at(20.0, 40.0)]),
+                crate::display::Layout::widget(side),
             ],
         ))
     })]);
@@ -286,9 +286,9 @@ fn stretching_widgets_receive_only_the_chosen_row_span() {
 #[test]
 fn decorative_and_pending_slots_share_the_active_query_frame() {
     let mut context = BenchContext::new();
-    context.stack.projection = Projection::new([progred_display::partial(|input| {
+    context.stack.projection = Projection::new([crate::display::partial(|input| {
         input.value?;
-        Some(progred_display::slot())
+        Some(crate::display::slot())
     })]);
     let empty = Document {
         root: None,
@@ -298,7 +298,7 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let selected = pending_value(&crate::workspace::Root::document(), Vec::new());
+    let selected = pending_value(&crate::test_root(), Vec::new());
     for (scale, size) in [(1.0, 14.0), (1.0, 22.0), (2.0, 14.0), (2.0, 22.0)] {
         context.styles = crate::styles::editor(scale);
         context.styles.label.size = size;
@@ -356,7 +356,7 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
         cells: Cells::new(),
     };
     let selected = pending_value(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         vec![Step::Follow(gid::Resolution::Document)],
     );
     let mut context = BenchContext::new();
@@ -409,7 +409,7 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
 
 #[test]
 fn secondary_marks_only_the_same_definition_in_other_occurrences() {
-    let stack = crate::stack::load::<World>();
+    let stack = crate::stack::load();
     let cell = name::vocabulary::NAME;
     let mut cells = Cells::new();
     cells.set_value(cell, stack.libraries.first_value(cell).unwrap().clone());
@@ -430,7 +430,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         gid::Resolution::Document,
         gid::Resolution::Library(name::ID),
     ] {
-        let selected = Selection::edge(&crate::workspace::Root::document(), path(0, source));
+        let selected = Selection::edge(&crate::test_root(), path(0, source));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .descends
@@ -482,7 +482,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         ]
     });
     let mut context = BenchContext::new();
-    let selected = Selection::edge(&crate::workspace::Root::document(), paths[0].clone());
+    let selected = Selection::edge(&crate::test_root(), paths[0].clone());
     let blue = |alpha| Brush::from(Color::new([0.0, 0.48, 1.0, alpha]));
     let fills = |bench: &Bench, alpha| {
         bench
@@ -597,20 +597,20 @@ fn sample_text_line_claims_its_own_hover() {
 fn custom_match_projection_uses_the_editor_fold() {
     let arm = Value::record([
         (
-            progred_libraries::control::vocabulary::PATTERN,
+            crate::libraries::control::vocabulary::PATTERN,
             Value::from(vec![1]),
         ),
         (grap::vocabulary::EXPRESSION, Value::from(vec![2])),
     ]);
     let match_expression = grap::call(
-        Value::from(progred_libraries::control::vocabulary::MATCH),
+        Value::from(crate::libraries::control::vocabulary::MATCH),
         [
             (
-                progred_libraries::control::vocabulary::VALUE,
+                crate::libraries::control::vocabulary::VALUE,
                 Value::from(vec![1]),
             ),
             (
-                progred_libraries::control::vocabulary::CASES,
+                crate::libraries::control::vocabulary::CASES,
                 Value::list([arm]),
             ),
         ],
@@ -732,9 +732,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             .expect("walk stops on placed descends")
             .rect
     };
-    let select = |path: &[Step]| {
-        crate::selection::bare_edge(&crate::workspace::Root::document(), path.to_vec())
-    };
+    let select = |path: &[Step]| crate::selection::bare_edge(&crate::test_root(), path.to_vec());
     let mut selection: Option<Selection> = None;
     let mut walk: Vec<Path> = Vec::new();
     while walk.len() < 200 {
@@ -808,7 +806,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
 fn placement_claims_the_hover_innermost_last() {
     let doc = sample_document();
     let (bench, _) = place(&doc, None, 560.0);
-    let library = crate::stack::load::<()>().libraries;
+    let library = crate::stack::load().libraries;
     let sources = Sources {
         doc: &doc,
         libraries: &library,

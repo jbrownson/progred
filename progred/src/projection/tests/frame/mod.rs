@@ -5,7 +5,7 @@ use peniko::ImageData;
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
 
-type World = ();
+type World = crate::Editor;
 
 #[test]
 fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
@@ -13,7 +13,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let contribution = |name: &'static str| {
         let log = log.clone();
         Box::new(
-            move |output: &mut progred_display::widget::HoverContext<'_, (), Hovered>,
+            move |output: &mut crate::display::widget::HoverContext<'_, crate::Editor, Hovered>,
                   _: Placement| {
                 let during_paint = log.clone();
                 output.render(move |_, _| during_paint.borrow_mut().push(name));
@@ -22,18 +22,18 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
                     false
                 });
             },
-        ) as progred_display::widget::HoverCallback<(), Hovered>
+        ) as crate::display::widget::HoverCallback<crate::Editor, Hovered>
     };
     let extent = Extent {
         width: 40.0,
         ascent: 10.0,
         descent: 5.0,
     };
-    let child = progred_display::widget::leaf(extent, contribution("child"));
+    let child = crate::display::widget::leaf(extent, contribution("child"));
     let before = contribution("before");
     let after = contribution("after");
-    let decorated = progred_display::widget::after_hover(
-        progred_display::widget::before_hover(child, move |placement, output| {
+    let decorated = crate::display::widget::after_hover(
+        crate::display::widget::before_hover(child, move |placement, output| {
             before(output, placement)
         }),
         move |placement, output| after(output, placement),
@@ -41,13 +41,13 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     assert_eq!(decorated.extent, extent);
     let output = measured::place_top_left(decorated, Point::ZERO).run(&Default::default());
     assert!(log.borrow().is_empty());
-    assert!(
-        !output
-            .handler
-            .as_ref()
-            .unwrap()
-            .dispatch_key(&mut (), &KeyboardEvent::default())
-    );
+    assert!(!output.handler.as_ref().unwrap().dispatch_key(
+        &mut crate::test_editor(Document {
+            root: None,
+            cells: Cells::new()
+        }),
+        &KeyboardEvent::default()
+    ));
     assert_eq!(&*log.borrow(), &["after", "child", "before"]);
     log.borrow_mut().clear();
     settle(output);
@@ -260,33 +260,17 @@ impl BenchContext {
             scale: styles.scale as f32,
             cache,
         };
-        let hooks = Hooks::<World> {
-            completions: Some(stack.completions.clone()),
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _, _| false),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|_, _| false),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|_, _, _, _| false),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        };
+
         // Test-only phase timings; normal frames contain no timers.
         let start = std::time::Instant::now();
         let root_path = root;
         let root = sources.resolve_path(root_path);
         #[cfg(feature = "layout-profile")]
-        let profile = progred_display::profile::enter(progred_display::profile::Kind::Projection);
-        let graph = prepare_project::<World>(
+        let profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
+        let graph = prepare_project(
             ProjectDescription {
+                view: &crate::test_root(),
+                completions: Some(&stack.completions),
                 sources,
                 root,
                 root_path,
@@ -300,14 +284,13 @@ impl BenchContext {
                 projection: Some(&stack.projection),
             },
             &mut tcx,
-            hooks,
         );
         #[cfg(feature = "layout-profile")]
         drop(profile);
         let prepare = start.elapsed();
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
-        let profile = progred_display::profile::enter(progred_display::profile::Kind::Choices);
+        let profile = crate::display::profile::enter(crate::display::profile::Kind::Choices);
         let node = resolve_choices(
             graph,
             width,
@@ -320,7 +303,7 @@ impl BenchContext {
         let extent = node.extent;
         let rect = node.extent.rect_at(origin);
         #[cfg(feature = "layout-profile")]
-        let profile = progred_display::profile::enter(progred_display::profile::Kind::Placement);
+        let profile = crate::display::profile::enter(crate::display::profile::Kind::Placement);
         let placed = measured::place(
             node,
             match viewport {
@@ -333,8 +316,8 @@ impl BenchContext {
         let placement = phase.elapsed();
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
-        let profile = progred_display::profile::enter(progred_display::profile::Kind::Hover);
-        let placed = placed.run(&progred_display::widget::HoverInput {
+        let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
+        let placed = placed.run(&crate::display::widget::HoverInput {
             pointer,
             reach: crate::frame::HOVER_REACH,
             ..Default::default()
@@ -344,7 +327,7 @@ impl BenchContext {
         let hover = phase.elapsed();
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
-        let profile = progred_display::profile::enter(progred_display::profile::Kind::Paint);
+        let profile = crate::display::profile::enter(crate::display::profile::Kind::Paint);
         let mut settled = settle_with_sources(placed, Some(&sources));
         #[cfg(feature = "layout-profile")]
         drop(profile);

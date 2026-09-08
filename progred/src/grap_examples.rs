@@ -3,8 +3,8 @@
 //! their application-level evaluation behavior.
 
 use crate::gid_text::{Binders, parse};
+use crate::libraries::{absent, f64, geometry};
 use gid::{Document, Value};
-use progred_libraries::{absent, f64, geometry};
 
 fn evaluated_expression(value: &Value) -> &Value {
     value
@@ -14,7 +14,7 @@ fn evaluated_expression(value: &Value) -> &Value {
 }
 
 fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
-    let stack = crate::stack::load::<()>();
+    let stack = crate::stack::load();
     let sources = crate::sources::Sources {
         doc,
         libraries: &stack.libraries,

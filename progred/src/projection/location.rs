@@ -1,8 +1,8 @@
 //! Unresolved projection locations and GID-step lookup.
 
-use gid::{CellId, Resolution, Step, Value};
 #[cfg(test)]
-use progred_libraries::f64;
+use crate::libraries::f64;
+use gid::{CellId, Resolution, Step, Value};
 
 /// A place a projection can begin. Children retain the parent and
 /// step rather than arriving pre-resolved, so absence is visible to

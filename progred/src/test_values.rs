@@ -1,5 +1,5 @@
+use crate::libraries::text;
 use gid::{CellId, Value, new_cell_id};
-use progred_libraries::text;
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 

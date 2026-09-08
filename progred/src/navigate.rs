@@ -1,14 +1,14 @@
 //! Keyboard navigation over a frame's settled descends.
 
+use crate::libraries::name;
 use crate::selection::Selection;
 use crate::workspace::{Root, Target};
 use gid::{Path, Step};
 use kurbo::Rect;
-use progred_libraries::name;
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
-pub use progred_display::widget::{Direction, Select};
+pub use crate::display::widget::{Direction, Select};
 
 pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
     match &event.key {
@@ -27,7 +27,7 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
     })
 }
 
-pub use progred_display::widget::navigation::Landmark as Descend;
+pub use crate::display::widget::navigation::Landmark as Descend;
 
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending

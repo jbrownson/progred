@@ -28,7 +28,7 @@ Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
 Explicit source-qualified paths still reach a particular definition; loaded
 library values remain read-only. See [Sources](../progred/src/sources.rs),
-[Library and Libraries](../libraries/src/lib.rs), and
+[Library and Libraries](../progred/src/libraries/mod.rs), and
 [Grap evaluation](projections.md#evaluation).
 
 The text bridge is a temporary import/export representation. Its binders and
@@ -251,7 +251,7 @@ value on activation, so reusing an offer creates independent cells.
 The placed frame retains the exact visible offers. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.
 The reusable Puri widget shapes and draws rows. Progred's
-[native card widget](../display/src/widget/completion.rs) composes navigation,
+[native card widget](../progred/src/display/widget/completion.rs) composes navigation,
 interaction, and the shared scroll container. Its caller supplies state and
 activation callbacks; the widget knows nothing about paths, insertion, or Grap.
 The editor owns document operations, query state, and popup placement. See

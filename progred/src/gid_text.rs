@@ -1,10 +1,10 @@
 //! Temporary text import/export for GID documents. This binder notation
 //! bridges to text-based tools; it is not GID's native representation.
 
-use gid::{CellId, Cells, Document, Value, new_cell_id};
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]
-use progred_libraries::name;
-use progred_libraries::text;
+use crate::libraries::name;
+use crate::libraries::text;
+use gid::{CellId, Cells, Document, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]

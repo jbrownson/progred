@@ -104,7 +104,7 @@ fn arrows_walk_rows_down_and_lines_across() {
 
 #[test]
 fn command_a_selects_the_current_views_root() {
-    let document = crate::workspace::Root::document();
+    let document = crate::test_root();
     let pane_path = vec![key("pane")];
     let pane = crate::workspace::Root::pane(pane_path.clone());
     let other_pane = crate::workspace::Root::pane(pane_path.clone());

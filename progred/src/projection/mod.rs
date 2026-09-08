@@ -1,8 +1,8 @@
-//! The editor's projection runtime: resolve locations, supply widget capabilities,
+//! The editor's projection runtime: resolve locations, supply borrowed widget inputs,
 //! retain source provenance, and fall back to total structural display.
 
-mod completion;
-mod drawing;
+pub(crate) mod completion;
+pub(crate) mod drawing;
 pub(crate) mod line_control;
 mod location;
 mod structure;
@@ -11,27 +11,29 @@ mod tests;
 pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
+use crate::display::widget::style::{face_style, highlight_outline};
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
+#[cfg(test)]
 use crate::navigate::Descend;
 use crate::placed::{self, Placed, before, decorate};
 use crate::render;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
 use crate::styles::Styles;
-use completion::{label_query, pending_view};
+use completion::pending_view;
 use gid::{CellId, Path, Step, Value};
-use kurbo::{Affine, Point, RoundedRect, Stroke};
+#[cfg(test)]
+use kurbo::Point;
+use kurbo::{Affine, RoundedRect, Stroke};
 use location::Location;
 use measured::Measured;
 use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
 use peniko::Color;
-use progred_display::widget::style::{face_style, highlight_outline};
 use puri::draw::Canvas;
 use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
-use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -42,8 +44,8 @@ type SharedPath = Rc<[Step]>;
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
 pub struct Projection<World> {
-    partial: progred_display::Partial<World, Hovered>,
-    entry: Option<progred_display::Partial<World, Hovered>>,
+    partial: crate::display::Partial<World, Hovered>,
+    entry: Option<crate::display::Partial<World, Hovered>>,
 }
 
 impl<World> Clone for Projection<World> {
@@ -58,7 +60,7 @@ impl<World> Clone for Projection<World> {
 impl<World: 'static> Default for Projection<World> {
     fn default() -> Self {
         Self {
-            partial: progred_display::partial(|_| None),
+            partial: crate::display::partial(|_| None),
             entry: None,
         }
     }
@@ -66,17 +68,17 @@ impl<World: 'static> Default for Projection<World> {
 
 impl<World: 'static> Projection<World> {
     pub fn new(
-        partials: impl IntoIterator<Item = progred_display::Partial<World, Hovered>>,
+        partials: impl IntoIterator<Item = crate::display::Partial<World, Hovered>>,
     ) -> Self {
         Self {
-            partial: progred_display::compose_partials(partials),
+            partial: crate::display::compose_partials(partials),
             entry: None,
         }
     }
 
     /// Prepend a partial at entry, following cells to their definitions.
     /// Its children and computed results use the ordinary projection.
-    pub fn with_entry(self, partial: progred_display::Partial<World, Hovered>) -> Self {
+    pub fn with_entry(self, partial: crate::display::Partial<World, Hovered>) -> Self {
         Self {
             entry: Some(partial),
             ..self
@@ -92,8 +94,8 @@ impl<World: 'static> Projection<World> {
 
     fn apply(
         &self,
-        input: &progred_display::ProjectionInput<'_, World, Hovered>,
-    ) -> Option<progred_display::Layout<World, Hovered>> {
+        input: &crate::display::ProjectionInput<'_, World, Hovered>,
+    ) -> Option<crate::display::Layout<World, Hovered>> {
         self.entry
             .as_ref()
             .and_then(|entry| entry(input))
@@ -102,24 +104,27 @@ impl<World: 'static> Projection<World> {
 }
 
 /// Read-only projection context threaded through every view.
-struct Cx<'a> {
+#[cfg_attr(test, derive(Clone))]
+pub(crate) struct Cx<'a> {
+    pub(crate) view: &'a crate::workspace::Root,
+    pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
-    sources: Sources<'a>,
+    pub(crate) sources: Sources<'a>,
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
-    raw: bool,
-    annotations: &'a Annotations,
-    styles: &'a Styles,
-    selection: Option<&'a Selection>,
-    scrub_spelling: Option<(&'a [Step], &'a str)>,
+    pub(crate) raw: bool,
+    pub(crate) annotations: &'a Annotations,
+    pub(crate) styles: &'a Styles,
+    pub(crate) selection: Option<&'a Selection>,
+    pub(crate) scrub_spelling: Option<(&'a [Step], &'a str)>,
     /// The selected cell-relative location whose other projections
     /// carry the secondary mark.
-    secondary: Option<Secondary>,
+    pub(crate) secondary: Option<Secondary>,
     /// The selected structural source, normalized across projections
     /// for execution-linked output.
-    selected_trace: Option<SourceTrace>,
-    source: Source<'a>,
-    fuel: std::cell::Cell<usize>,
+    pub(crate) selected_trace: Option<SourceTrace>,
+    pub(crate) source: Source<'a>,
+    pub(crate) fuel: std::cell::Cell<usize>,
 }
 
 #[derive(Clone, Default)]
@@ -131,13 +136,13 @@ struct Ancestry {
 }
 
 #[derive(Clone, Copy)]
-enum Source<'a> {
+pub(crate) enum Source<'a> {
     Stored,
     Transient { owner: &'a [Step] },
 }
 
 impl Source<'_> {
-    fn transient(self) -> bool {
+    pub(crate) fn transient(self) -> bool {
         matches!(self, Self::Transient { .. })
     }
 }
@@ -146,7 +151,7 @@ struct ProjectEnv<'a, 's> {
     cx: &'a Cx<'s>,
 }
 
-impl progred_display::Env for ProjectEnv<'_, '_> {
+impl crate::display::Env for ProjectEnv<'_, '_> {
     fn apply_scoped(
         &self,
         function: &Value,
@@ -198,7 +203,7 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         self.cx.name(cell)
     }
 
-    fn resolve(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'_>> {
+    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         self.cx.sources.definition(cell)
     }
 }
@@ -207,53 +212,55 @@ fn evaluate(cx: &Cx<'_>, expression: &Value, fuel: usize) -> grap::Evaluation {
     grap::evaluate(expression, &cx.sources, fuel)
 }
 
-/// Prepare a projection with its explicit source and widget capabilities.
+/// Prepare a projection with its explicit source and current widget inputs.
 /// Box composition itself belongs to the display measurement interpreter.
 #[allow(clippy::too_many_arguments)]
-fn prepare<C: 'static>(
+fn prepare(
     cx: &Cx,
-    projection: &Projection<C>,
+    projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
-    hooks: &Hooks<C>,
     value: Option<&Value>,
-    layout: progred_display::Layout<C, Hovered>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    layout: crate::display::Layout<crate::Editor, Hovered>,
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     let project = ProjectionScope {
         cx,
         projection,
         path,
         ancestors,
         value,
-        hooks,
     };
-    with_widget_context(cx, tcx, path, value, hooks, &project, |context| {
-        layout.measure(context, build)
-    })
+    layout.measure(
+        &mut crate::display::widget::Context {
+            project: &project,
+            text: tcx,
+            inputs: cx,
+            path,
+            value,
+        },
+        build,
+    )
 }
 
-struct ProjectionScope<'a, 's, C> {
+struct ProjectionScope<'a, 's> {
     cx: &'a Cx<'s>,
-    projection: &'a Projection<C>,
+    projection: &'a Projection<crate::Editor>,
     path: &'a [Step],
     ancestors: &'a Ancestry,
     value: Option<&'a Value>,
-    hooks: &'a Hooks<C>,
 }
 
-impl<C: 'static> progred_display::widget::project::Project<C, Hovered>
-    for ProjectionScope<'_, '_, C>
-{
+impl crate::display::widget::project::Project<crate::Editor, Hovered> for ProjectionScope<'_, '_> {
     fn descend(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<C>>,
+        build: &mut ChoiceBuild<Placed<crate::Editor>>,
         step: Step,
-        current: Option<progred_display::Partial<C, Hovered>>,
-        default: Option<progred_display::Partial<C, Hovered>>,
-    ) -> ChoiceLayout<Placed<C>> {
+        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
+        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    ) -> ChoiceLayout<Placed<crate::Editor>> {
         prepare_descend(
             self.cx,
             self.projection,
@@ -264,19 +271,18 @@ impl<C: 'static> progred_display::widget::project::Project<C, Hovered>
             step,
             current,
             default,
-            self.hooks,
             build,
         )
     }
     fn at(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<C>>,
+        build: &mut ChoiceBuild<Placed<crate::Editor>>,
         steps: Vec<Step>,
         value: Value,
-        current: Option<progred_display::Partial<C, Hovered>>,
-        default: Option<progred_display::Partial<C, Hovered>>,
-    ) -> ChoiceLayout<Placed<C>> {
+        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
+        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    ) -> ChoiceLayout<Placed<crate::Editor>> {
         prepare_at(
             self.cx,
             self.projection,
@@ -287,17 +293,16 @@ impl<C: 'static> progred_display::widget::project::Project<C, Hovered>
             value,
             current,
             default,
-            self.hooks,
             build,
         )
     }
     fn transient(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<C>>,
+        build: &mut ChoiceBuild<Placed<crate::Editor>>,
         value: Value,
         fuel: usize,
-    ) -> ChoiceLayout<Placed<C>> {
+    ) -> ChoiceLayout<Placed<crate::Editor>> {
         prepare_transient_root(
             self.cx,
             self.projection,
@@ -305,25 +310,23 @@ impl<C: 'static> progred_display::widget::project::Project<C, Hovered>
             self.path,
             value,
             fuel,
-            self.hooks,
             build,
         )
     }
 }
 
-fn prepare_at<C: 'static>(
+fn prepare_at(
     cx: &Cx,
-    projection: &Projection<C>,
+    projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
     steps: Vec<Step>,
     nested: Value,
-    current_projection: Option<progred_display::Partial<C, Hovered>>,
-    default_projection: Option<progred_display::Partial<C, Hovered>>,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     let mut path = path.to_vec();
     let mut follow_ancestors = ancestors.clone();
     for step in &steps {
@@ -344,7 +347,6 @@ fn prepare_at<C: 'static>(
         &path,
         &follow_ancestors,
         Some(&nested),
-        hooks,
         build,
     )
 }
@@ -358,88 +360,58 @@ fn tree_hovered<'a>(ink: placed::Ink<'a>) -> Option<&'a Hover> {
     }
 }
 
-/// Host callbacks for library value offers, selection, editing,
-/// and dispatch access to caller-owned state and platform services.
-pub struct Hooks<C> {
-    /// Library vocabulary used when the control does not specify its own.
-    pub completions: Option<progred_display::CompletionProvider>,
-    pub select: Rc<dyn Fn(&mut C, Path)>,
-    /// Select a visible occurrence of a drawing's structural source.
-    pub select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
-    pub select_payload: Rc<dyn Fn(&mut C, Path, Value)>,
-    /// Access a selected line's state, using its current description
-    /// when no editing state has been stored yet.
-    pub edit_line: Rc<
-        dyn Fn(&mut C, &[Step], &progred_display::LineEdit, &puri::edit::EditOperation<'_>) -> bool,
-    >,
-    pub toggle: Rc<dyn Fn(&mut C, Path)>,
-    /// Replace the annotation value at one projection site. The
-    /// concrete view root remains host-owned and closed over here.
-    pub update_state: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
-    /// Run an operation on the selected query, declining if it is gone.
-    pub edit: Rc<dyn Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool>,
-    /// Commit a pointed-at value into the open pending (value or
-    /// label stage); false when nothing is pending, so the click
-    /// falls through to selection.
-    pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    /// Open a pending sibling after the element at `path` — the flat
-    /// list separator's click.
-    pub insert: Rc<dyn Fn(&mut C, Path)>,
-    /// Delete the selected edge. Installed on the selected descend
-    /// so Raw and library projections share one handler.
-    pub delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
-    /// Apply a Grap event handler at `path` with the event as data and
-    /// capabilities closed over that site.
-    pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
-    pub start_gesture:
-        Rc<dyn Fn(&mut C, Path, Box<dyn progred_display::widget::gesture::Gesture<C>>, &[Point])>,
-    pub value_edit: Rc<dyn Fn(Path) -> progred_display::widget::gesture::ValueEdit<C>>,
-    /// Commit one of the exact offers shown by an engaged pending.
-    pub commit_value: Rc<dyn Fn(&mut C, Value, Option<Value>)>,
-    pub commit_label: Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>)>,
-    /// Retain the completion offset and choice in the pending selection.
-    pub set_completion_view: Rc<dyn Fn(&mut C, f64, usize, bool)>,
-}
-
-fn select_handler<C: 'static>(
+pub(crate) fn select_handler(
     path: SharedPath,
-    hooks: &Hooks<C>,
-) -> progred_display::ActionHandler<C> {
-    let select = hooks.select.clone();
+    cx: &Cx,
+) -> crate::display::ActionHandler<crate::Editor> {
+    let root = cx.view.clone();
+    let destination = match cx.source {
+        Source::Stored => path,
+        Source::Transient { owner } => Rc::from(owner),
+    };
     Rc::new(move |world| {
-        select(world, path.to_vec());
+        crate::editing::select(world, &root, &destination);
         true
     })
 }
 
-fn navigation_select_handler<C: 'static>(
-    path: SharedPath,
-    hooks: &Hooks<C>,
-) -> crate::navigate::Select<C> {
-    let select = hooks.select.clone();
+fn navigation_select_handler(path: SharedPath, cx: &Cx) -> crate::navigate::Select<crate::Editor> {
+    let root = cx.view.clone();
+    let destination = match cx.source {
+        Source::Stored => path,
+        Source::Transient { owner } => Rc::from(owner),
+    };
     Rc::new(move |world, _| {
-        select(world, path.to_vec());
+        crate::editing::select(world, &root, &destination);
         true
     })
 }
 
-fn projection_target<C: 'static>(
+fn projection_target(
+    cx: &Cx,
     path: &[Step],
-    hooks: &Hooks<C>,
     steps: Vec<Step>,
-) -> progred_display::ProjectionTarget<C, Hovered> {
+) -> crate::display::ProjectionTarget<crate::Editor, Hovered> {
     let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
-    let selected = path.clone();
-    let selected_with = path.clone();
-    let select = hooks.select.clone();
-    let select_payload = hooks.select_payload.clone();
-    progred_display::ProjectionTarget {
+    let root = cx.view.clone();
+    let destination = match cx.source {
+        Source::Stored => path.clone(),
+        Source::Transient { owner } => Rc::from(owner),
+    };
+    let payload_root = root.clone();
+    let payload_destination = destination.clone();
+    crate::display::ProjectionTarget {
         select: Rc::new(move |world| {
-            select(world, selected.to_vec());
+            crate::editing::select(world, &root, &destination);
             true
         }),
         select_with: Rc::new(move |world, payload| {
-            select_payload(world, selected_with.to_vec(), payload);
+            crate::editing::select_payload(
+                world,
+                &payload_root,
+                payload_destination.to_vec(),
+                payload,
+            );
             true
         }),
         hover: Hovered::Tree(Hover::Value(path)),
@@ -478,7 +450,7 @@ impl Cx<'_> {
 
     /// The label query of a new field being authored on the record at
     /// `path`.
-    fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
+    pub(crate) fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         let current = self.selection?;
         (current.path() == path && current.stage(&self.sources) == Stage::Label)
             .then(|| Some((current.edit()?, current.choice())))
@@ -490,136 +462,20 @@ fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
     LineEditPresentation::new(style.size, style.brush.clone())
 }
 
-fn with_widget_context<C: 'static, Result>(
-    cx: &Cx,
-    text: &mut TextCtx,
-    path: &[Step],
-    value: Option<&Value>,
-    hooks: &Hooks<C>,
-    project: &dyn progred_display::widget::project::Project<C, Hovered>,
-    widget: impl FnOnce(&mut progred_display::widget::Context<'_, '_, C, Hovered>) -> Result,
-) -> Result {
-    let initial_text = |spelling: &str| {
-        cx.selection
-            .filter(|selection| selection.path() == path)
-            .map(|selection| selection.initial_line(spelling))
-            .unwrap_or_else(|| LineEditState::new(spelling).with_cursor_at_end())
-    };
-    let site = || {
-        let path: SharedPath = Rc::from(path);
-        progred_display::widget::Site {
-            target: Hovered::Tree(Hover::Value(path.clone())),
-            value,
-            select: select_handler(path, hooks),
-        }
-    };
-    let line = || {
-        let writable = !cx.source.transient() && writable_at(&cx.sources, path);
-        let selected = cx.selection.filter(|selection| {
-            writable && selection.path() == path && selection.stage(&cx.sources) == Stage::Edge
-        });
-        progred_display::widget::LineSite {
-            spelling: cx
-                .scrub_spelling
-                .filter(|(site, _)| *site == path)
-                .map(|(_, text)| text),
-            input: writable.then(|| {
-                let edit = hooks.edit_line.clone();
-                let path: SharedPath = Rc::from(path);
-                let edit_path = path.clone();
-                progred_display::widget::LineInput {
-                    selected: selected.is_some(),
-                    editing: selected.and_then(Selection::edit),
-                    initial_text: &initial_text,
-                    target: Hovered::Tree(Hover::Value(path.clone())),
-                    select: select_handler(path, hooks),
-                    edit: Rc::new(move |world, description, operation| {
-                        edit(world, &edit_path, description, operation)
-                    }),
-                }
-            }),
-        }
-    };
-    let event_interpreter = || {
-        let apply = hooks.apply.clone();
-        let path = path.to_vec();
-        Rc::new(move |world: &mut C, function: &Value, event| {
-            apply(world, path.clone(), function.clone(), event)
-        }) as progred_display::widget::EventInterpreter<C>
-    };
-    let annotate = || {
-        let update = hooks.update_state.clone();
-        let path = path.to_vec();
-        Rc::new(move |world: &mut C, state| update(world, path.clone(), state))
-            as progred_display::widget::Annotate<C>
-    };
-    widget(&mut progred_display::widget::Context {
-        project,
-        completion: &|text, kind, provider| match kind {
-            progred_display::CompletionKind::Value => {
-                pending_view(cx, text, path.to_vec(), provider, hooks)
-            }
-            progred_display::CompletionKind::Field => cx
-                .pending_edge_under(path)
-                .map(|(query, _)| label_query(cx, text, path, query, provider, hooks))
-                .unwrap_or_else(|| render::text(text, "…", &cx.styles.dim)),
-        },
-        drawing: &|extent, fuel, program| {
-            drawing::program_leaf(
-                cx,
-                path,
-                extent.width,
-                extent.ascent,
-                extent.descent,
-                fuel,
-                program,
-                hooks.select_source.clone(),
-            )
-        },
-        text,
-        styles: cx.styles,
-        site: &site,
-        line: &line,
-        event_interpreter: &event_interpreter,
-        annotate: &annotate,
-        start_gesture: &|| {
-            let start = hooks.start_gesture.clone();
-            let path = path.to_vec();
-            Rc::new(move |world, gesture, samples| start(world, path.clone(), gesture, samples))
-        },
-        value_edit: &|| {
-            (!cx.source.transient() && writable_at(&cx.sources, path)).then(|| {
-                let edit = hooks.value_edit.clone();
-                let path = path.to_vec();
-                Rc::new(move || edit(path.clone()))
-                    as progred_display::widget::gesture::BeginEdit<C>
-            })
-        },
-        drag_threshold: crate::gesture::DRAG_THRESHOLD,
-        command: crate::modifiers::command,
-        pick: hooks.pick.clone(),
-        picking: |event| crate::modifiers::pick(&event.state.modifiers),
-        same_target: PartialEq::eq,
-        primary_edit: |event| {
-            is_primary_contact(event) && !crate::modifiers::pick(&event.state.modifiers)
-        },
-    })
-}
-
-fn placeholder_box<C: 'static>(tcx: &mut TextCtx, styles: &Styles) -> Measured<Placed<C>> {
-    progred_display::widget::empty(tcx, styles)
+fn placeholder_box(tcx: &mut TextCtx, styles: &Styles) -> Measured<Placed<crate::Editor>> {
+    crate::display::widget::empty(tcx, styles)
 }
 
 /// The pointer over this settled rect names `key`, with the visible
 /// ink as its footprint. Placement order is precedence: descendants
 /// and overlays contribute later and answer first.
-fn hover_claim<C: 'static>(p: &mut placed::Builder<'_, '_, C>, placement: Placement, key: Hover) {
+fn hover_claim(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placement, key: Hover) {
     p.claim(placement, Hovered::Tree(key));
 }
 
 /// An occluder: takes the pointer and names nothing, so targets
 /// beneath an overlay never light.
-fn hover_block<C: 'static>(p: &mut placed::Builder<'_, '_, C>, placement: Placement) {
+fn hover_block(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placement) {
     p.occlude(placement);
 }
 
@@ -627,7 +483,7 @@ fn hover_block<C: 'static>(p: &mut placed::Builder<'_, '_, C>, placement: Placem
 fn hover_highlight<P: Canvas + ?Sized>(p: &mut P, outline: RoundedRect) {
     p.fill(
         outline,
-        progred_display::widget::style::hover_wash(),
+        crate::display::widget::style::hover_wash(),
         Affine::IDENTITY,
     );
 }
@@ -670,7 +526,9 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
 /// `width` is the space the projection may fill. `root` and
 /// `root_path` let an editor pane begin at a value occurrence
 /// while retaining ordinary document-relative interaction paths.
-pub struct ProjectDescription<'a, World> {
+pub struct ProjectDescription<'a> {
+    pub view: &'a crate::workspace::Root,
+    pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
@@ -684,28 +542,28 @@ pub struct ProjectDescription<'a, World> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: Option<&'a Projection<World>>,
+    pub projection: Option<&'a Projection<crate::Editor>>,
 }
 
-pub(crate) fn project<C: 'static>(
-    description: ProjectDescription<'_, C>,
+pub(crate) fn project(
+    description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
-    hooks: Hooks<C>,
-) -> Measured<Placed<C>> {
+) -> Measured<Placed<crate::Editor>> {
     let width = description.width;
     resolve_choices(
-        prepare_project(description, tcx, hooks),
+        prepare_project(description, tcx),
         width,
         std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
     )
 }
 
-fn prepare_project<C: 'static>(
-    description: ProjectDescription<'_, C>,
+fn prepare_project(
+    description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
-    hooks: Hooks<C>,
-) -> ChoiceGraph<Placed<C>> {
+) -> ChoiceGraph<Placed<crate::Editor>> {
     let ProjectDescription {
+        view,
+        completions,
         sources,
         root,
         root_path,
@@ -720,6 +578,8 @@ fn prepare_project<C: 'static>(
     } = description;
     let projection = projection.cloned().unwrap_or_default();
     let cx = Cx {
+        view,
+        completions,
         sources,
         raw,
         annotations,
@@ -754,7 +614,6 @@ fn prepare_project<C: 'static>(
         Location::Root(root),
         None,
         None,
-        &hooks,
         &mut build,
     );
     build.finish(layout)
@@ -768,16 +627,15 @@ fn prepare_project<C: 'static>(
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
 #[allow(clippy::too_many_arguments)]
-fn descend_landmark_with<C: 'static>(
+fn descend_landmark_with(
     transient: bool,
     selected: bool,
     scale: f64,
     path: SharedPath,
     secondary: Option<(Secondary, bool)>,
-    select: crate::navigate::Select<C>,
-    delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
-    child: Measured<Placed<C>>,
-) -> Measured<Placed<C>> {
+    select: crate::navigate::Select<crate::Editor>,
+    child: Measured<Placed<crate::Editor>>,
+) -> Measured<Placed<crate::Editor>> {
     let highlight_path = path.clone();
     let marked = decorate(child, move |p, rect| {
         let highlight_path = highlight_path.clone();
@@ -805,18 +663,15 @@ fn descend_landmark_with<C: 'static>(
     if transient {
         return marked;
     }
-    let marked = progred_display::widget::navigation::landmark(marked, path, select);
+    let marked = crate::display::widget::navigation::landmark(marked, path, select);
     if selected {
-        bind_delete_with(delete, marked)
+        bind_delete(marked)
     } else {
         marked
     }
 }
 
-fn bind_delete_with<C: 'static>(
-    delete: Rc<dyn Fn(&mut C, &[Descend<C>]) -> bool>,
-    child: Measured<Placed<C>>,
-) -> Measured<Placed<C>> {
+fn bind_delete(child: Measured<Placed<crate::Editor>>) -> Measured<Placed<crate::Editor>> {
     before(child, move |p, _| {
         p.handler().on_key_with(move |ctx, event, input| {
             crate::modifiers::plain(&event.modifiers)
@@ -825,7 +680,7 @@ fn bind_delete_with<C: 'static>(
                     Key::Named(NamedKey::Backspace | NamedKey::Delete)
                 )
                 && event.state.is_down()
-                && delete(ctx, &input.descends)
+                && ctx.delete_selected_edge(&input.descends)
         })
     })
 }
@@ -859,11 +714,11 @@ fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Colo
     Some((scale, color))
 }
 
-fn ground_with<C: 'static>(
+fn ground_with(
     scale: f64,
     color: Color,
-    content: Measured<Placed<C>>,
-) -> Measured<Placed<C>> {
+    content: Measured<Placed<crate::Editor>>,
+) -> Measured<Placed<crate::Editor>> {
     decorate(content, move |p, rect| {
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
         p.fill(bg, color, Affine::IDENTITY);
@@ -893,45 +748,20 @@ fn secondary_highlight<P: Canvas + ?Sized>(
 /// Starts the ordinary projection at a value with no document source.
 /// Interaction attributes the transient tree to `owner`, while its
 /// children remain read-only and have no document paths of their own.
-fn prepare_transient_root<C: 'static>(
+fn prepare_transient_root(
     cx: &Cx,
-    projection: &Projection<C>,
+    projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     path: &[Step],
     result: Value,
     fuel: usize,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     let ordinary_projection = projection.without_entry();
     let projection = &ordinary_projection;
-    let origin = path.to_vec();
-    let select = hooks.select.clone();
-    let select_origin = origin.clone();
-    let select_payload = hooks.select_payload.clone();
-    let payload_origin = origin.clone();
-    let result_hooks = Hooks {
-        completions: hooks.completions.clone(),
-        select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
-        select_source: hooks.select_source.clone(),
-        select_payload: Rc::new(move |ctx, _, payload| {
-            select_payload(ctx, payload_origin.clone(), payload)
-        }),
-        edit_line: Rc::new(|_, _, _, _| false),
-        toggle: Rc::new(|_, _| {}),
-        update_state: hooks.update_state.clone(),
-        edit: Rc::new(|_, _| false),
-        pick: hooks.pick.clone(),
-        insert: Rc::new(|_, _| {}),
-        delete: Rc::new(|_, _| false),
-        apply: hooks.apply.clone(),
-        start_gesture: hooks.start_gesture.clone(),
-        value_edit: hooks.value_edit.clone(),
-        commit_value: hooks.commit_value.clone(),
-        commit_label: hooks.commit_label.clone(),
-        set_completion_view: hooks.set_completion_view.clone(),
-    };
     let result_cx = Cx {
+        view: cx.view,
+        completions: cx.completions,
         sources: cx.sources,
         raw: false,
         annotations: cx.annotations,
@@ -952,7 +782,6 @@ fn prepare_transient_root<C: 'static>(
         Location::Root(Some(&result)),
         None,
         None,
-        &result_hooks,
         build,
     )
 }
@@ -961,19 +790,18 @@ fn prepare_transient_root<C: 'static>(
 /// Current and descendant projections are independent replacements.
 /// Missing locations use the standard empty picker, without a value.
 #[allow(clippy::too_many_arguments)]
-fn prepare_descend<C: 'static>(
+fn prepare_descend(
     cx: &Cx,
-    projection: &Projection<C>,
+    projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &Ancestry,
     parent: Option<&Value>,
     step: Step,
-    current_projection: Option<progred_display::Partial<C, Hovered>>,
-    default_projection: Option<progred_display::Partial<C, Hovered>>,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
     if let Step::Follow(source) = &step
@@ -993,7 +821,6 @@ fn prepare_descend<C: 'static>(
             Location::Child { parent, step },
             current_projection.as_ref(),
             default_projection.as_ref(),
-            hooks,
             build,
         )
     } else {
@@ -1009,25 +836,23 @@ fn prepare_descend<C: 'static>(
             },
             current_projection.as_ref(),
             default_projection.as_ref(),
-            hooks,
             build,
         )
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prepare_location<C: 'static>(
+fn prepare_location(
     cx: &Cx,
-    projection: &Projection<C>,
+    projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
     location: Location<'_>,
-    current_projection: Option<&progred_display::Partial<C, Hovered>>,
-    default_projection: Option<&progred_display::Partial<C, Hovered>>,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
+    default_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     prepare_value(
         cx,
         projection,
@@ -1037,24 +862,22 @@ fn prepare_location<C: 'static>(
         path,
         ancestors,
         location.value(|cell, resolution| cx.sources.value(cell, resolution)),
-        hooks,
         build,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prepare_value<C: 'static>(
+fn prepare_value(
     cx: &Cx,
-    projection: &Projection<C>,
-    current_projection: Option<&progred_display::Partial<C, Hovered>>,
-    default_projection: Option<&progred_display::Partial<C, Hovered>>,
+    projection: &Projection<crate::Editor>,
+    current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
+    default_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
     value: Option<&Value>,
-    hooks: &Hooks<C>,
-    build: &mut ChoiceBuild<Placed<C>>,
-) -> ChoiceLayout<Placed<C>> {
+    build: &mut ChoiceBuild<Placed<crate::Editor>>,
+) -> ChoiceLayout<Placed<crate::Editor>> {
     let child_projection = default_projection
         .map(|partial| Projection {
             partial: partial.clone(),
@@ -1073,10 +896,9 @@ fn prepare_value<C: 'static>(
         path,
         ancestors,
         value,
-        hooks,
     );
     match layout {
-        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None, hooks)),
+        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None)),
         Some(layout) => {
             let inner = prepare(
                 cx,
@@ -1084,7 +906,6 @@ fn prepare_value<C: 'static>(
                 tcx,
                 path,
                 ancestors,
-                hooks,
                 value,
                 layout,
                 build,
@@ -1104,11 +925,18 @@ fn prepare_value<C: 'static>(
             let transient = cx.source.transient();
             let selected = cx.selected(path);
             let scale = cx.styles.scale;
-            let select = navigation_select_handler(landmark_path.clone(), hooks);
-            let delete = hooks.delete.clone();
+            let select = navigation_select_handler(landmark_path.clone(), cx);
             let ground = value.and_then(|value| ground_decoration(cx, path, value));
-            let target =
-                value.map(|value| (value.clone(), hooks.pick.clone(), hooks.select.clone()));
+            let target = value.map(|value| {
+                (
+                    value.clone(),
+                    cx.view.clone(),
+                    match cx.source {
+                        Source::Stored => landmark_path.clone(),
+                        Source::Transient { owner } => Rc::from(owner),
+                    },
+                )
+            });
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 let placed = descend_landmark_with(
                     transient,
@@ -1117,7 +945,6 @@ fn prepare_value<C: 'static>(
                     landmark_path.clone(),
                     secondary,
                     select,
-                    delete,
                     inner,
                 );
                 let grounded = match ground {
@@ -1125,8 +952,8 @@ fn prepare_value<C: 'static>(
                     None => placed,
                 };
                 match target {
-                    Some((value, pick, select)) => {
-                        pick_target_with(landmark_path, value, pick, select, grounded)
+                    Some((value, root, destination)) => {
+                        pick_target_with(landmark_path, value, root, destination, grounded)
                     }
                     None => grounded,
                 }
@@ -1135,18 +962,17 @@ fn prepare_value<C: 'static>(
     }
 }
 
-fn value_layout<C: 'static>(
+fn value_layout(
     cx: &Cx,
-    projection: &Projection<C>,
-    current_projection: Option<&progred_display::Partial<C, Hovered>>,
-    default_projection: &progred_display::Partial<C, Hovered>,
+    projection: &Projection<crate::Editor>,
+    current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
+    default_projection: &crate::display::Partial<crate::Editor, Hovered>,
     path: &[Step],
     ancestors: &Ancestry,
     value: Option<&Value>,
-    hooks: &Hooks<C>,
-) -> Option<progred_display::Layout<C, Hovered>> {
+) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
     #[cfg(all(test, feature = "layout-profile"))]
-    let _profile = progred_display::profile::enter(progred_display::profile::Kind::Projection);
+    let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
     // Ancestry has already accumulated the cells crossed by Follow
     // edges. A repeated cell is the graph cycle; re-resolving this
     // path and all its prefixes here made every frame walk from the
@@ -1157,7 +983,7 @@ fn value_layout<C: 'static>(
     if let Some(value) = value
         && crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
             .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
-        && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
+        && let Some(collapsed) = structure::collapsed_layout(cx, path, value)
     {
         return Some(collapsed);
     }
@@ -1166,13 +992,13 @@ fn value_layout<C: 'static>(
         .filter(|current| current.path() == path)
         .map(Selection::payload);
     let pending = if cx.pending_edge_under(path).is_some() {
-        Some(progred_display::Pending::Field)
+        Some(crate::display::Pending::Field)
     } else {
         cx.pending_child_of(path)
-            .map(progred_display::Pending::Child)
+            .map(crate::display::Pending::Child)
     };
     let state = cx.annotations.at(path);
-    let target = |steps| projection_target(path, hooks, steps);
+    let target = |steps| projection_target(cx, path, steps);
     let insert = |position| {
         let target: SharedPath = Rc::from(
             path.iter()
@@ -1180,15 +1006,18 @@ fn value_layout<C: 'static>(
                 .chain([Step::Element(position)])
                 .collect::<Path>(),
         );
-        let insert = hooks.insert.clone();
+        let root = cx.view.clone();
+        let writable = !cx.source.transient();
         let destination = target.clone();
-        let action: progred_display::ActionHandler<C> = Rc::new(move |world| {
-            insert(world, destination.to_vec());
+        let action: crate::display::ActionHandler<crate::Editor> = Rc::new(move |world| {
+            if writable {
+                crate::editing::insert(world, &root, &destination);
+            }
             true
         });
         (Hovered::Tree(Hover::Insert(target)), action)
     };
-    let input = progred_display::ProjectionInput {
+    let input = crate::display::ProjectionInput {
         env: &ProjectEnv { cx },
         default_projection: default_projection.clone(),
         value,
@@ -1197,34 +1026,32 @@ fn value_layout<C: 'static>(
         selection: selection.as_ref(),
         pending,
         state,
-        targets: progred_display::ProjectionTargets::new(&target).with_insert_after(&insert),
+        targets: crate::display::ProjectionTargets::new(&target).with_insert_after(&insert),
     };
     match current_projection {
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| value.map(|value| structure::of(cx, path, value, hooks, &input)))
+    .or_else(|| value.map(|value| structure::of(cx, path, value, &input)))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open
 /// pending, or — nothing pending — select it like Activate, so a stray
 /// modifier never deadens the gesture. Inner Pick registrations answer
 /// first and this catches what they refused.
-fn pick_target_with<C: 'static>(
+fn pick_target_with(
     path: SharedPath,
     value: Value,
-    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    select: Rc<dyn Fn(&mut C, Path)>,
-    child: Measured<Placed<C>>,
-) -> Measured<Placed<C>> {
+    root: crate::workspace::Root,
+    destination: SharedPath,
+    child: Measured<Placed<crate::Editor>>,
+) -> Measured<Placed<crate::Editor>> {
     before(child, move |p, _| {
-        let pick = pick.clone();
-        let select = select.clone();
         let path = path.clone();
         let value = value.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
-            if !pick(world, value.clone()) {
-                select(world, path.to_vec());
+            if !world.pick_identity(value.clone()) {
+                crate::editing::select(world, &root, &destination);
             }
             true
         });
@@ -1234,30 +1061,26 @@ fn pick_target_with<C: 'static>(
 /// An editable atom's content: the selection's focused editor when
 /// this atom is being edited — with `placeholder` as its ghost while
 /// empty — its static text otherwise.
-fn atom_content<C: 'static>(
+fn atom_content(
     editing: Option<&LineEditState>,
-    fallback: Measured<Placed<C>>,
+    fallback: Measured<Placed<crate::Editor>>,
     presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     styles: &Styles,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C>> {
+) -> Measured<Placed<crate::Editor>> {
     match editing {
-        Some(line) => {
-            let edit_ctx = hooks.edit.clone();
-            render::text_edit(
-                LineEditDescription {
-                    state: line,
-                    focused: true,
-                    presentation,
-                    style: &styles.edit,
-                    placeholder,
-                },
-                tcx,
-                move |c, operation| edit_ctx(c, operation),
-            )
-        }
+        Some(line) => render::text_edit(
+            LineEditDescription {
+                state: line,
+                focused: true,
+                presentation,
+                style: &styles.edit,
+                placeholder,
+            },
+            tcx,
+            crate::editing::edit_query,
+        ),
         None => fallback,
     }
 }

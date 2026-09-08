@@ -5,9 +5,9 @@ use super::*;
 /// Apply this handler's conversion and report whether it opens an undo step.
 pub(crate) fn commit(
     doc: &mut Rc<gid::Document>,
-    libraries: &progred_libraries::Libraries,
+    libraries: &crate::libraries::Libraries,
     selection: &mut Selection,
-    update: &progred_display::LineUpdate,
+    update: &crate::display::LineUpdate,
 ) -> bool {
     let sources = Sources { doc, libraries };
     let next = selection
@@ -29,9 +29,9 @@ pub(crate) fn commit(
 
 pub(crate) fn edit(
     doc: &mut Rc<gid::Document>,
-    libraries: &progred_libraries::Libraries,
+    libraries: &crate::libraries::Libraries,
     selection: &mut Selection,
-    line: &progred_display::LineEdit,
+    line: &crate::display::LineEdit,
     operation: impl FnOnce(&mut LineEditState) -> bool,
 ) -> (bool, bool) {
     let state = selection.edit_line_mut(&line.text);

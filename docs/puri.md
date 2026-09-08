@@ -82,11 +82,11 @@ content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
 The display builder's `floating` operation supplies only two boxes and a
-positioning function. The ordinary [popover widget](../display/src/widget/popover.rs)
+positioning function. The ordinary [popover widget](../progred/src/display/widget/popover.rs)
 composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 
-Native widgets use `progred_display::widget::Widget`: a measurement function
+Native widgets use `progred::display::widget::Widget`: a measurement function
 whose result places a `HoverPass`. Calling that continuation produces a
 `Fragment` of deferred ink, handlers, the hover claim, and navigation declarations.
 `LineEdit` uses this path, with no control-specific layout constructor. Native
@@ -96,18 +96,20 @@ explicit dispatch input; the host suppresses that target outside its owning view
 Vello, Canvas2D, and recorders; `Canvas` adds generic convenience methods.
 Native render closures outlive measurement without fixing a rendering backend
 or constructing GID drawing data.
-Document-aware widgets explicitly request selection/picking through `Site`,
-or line editing through `LineSite`. A read-only line has no `LineInput`;
-the host constructs editing and selection callbacks only when that input is
-available. Selection-only widgets never request line-editing capabilities.
-Ordinary decorations do not resolve paths, inspect
-selection, or allocate those callbacks. A fragment is not a Canvas: it retains
+Document-aware widgets live inside Progred. During preparation they borrow
+the current sources, selection, view, and path. Their handlers capture only
+the props and location they need, receive `&mut Editor` at dispatch, and call
+ordinary [editing helpers](../progred/src/editing.rs). There is no per-widget
+dictionary of editor callbacks. A read-only line installs no editing handlers.
+Puri's text editor remains independent of these document operations.
+Ordinary decorations do not resolve paths or inspect selection.
+A fragment is not a Canvas: it retains
 whole-widget render continuations, then executes their draw calls directly after
 hover settles, rather than allocating a deferred closure per drawing operation.
 
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
-The [container combinators](../display/src/widget/container.rs) share scrolling
+The [container combinators](../progred/src/display/widget/container.rs) share scrolling
 and out-of-flow placement over the shared `HoverPass` output. The editor's
 `Placed` aliases that continuation; `Ready` aliases its returned `Fragment`.
 `Layers` supplies clipping and floater attachment. Hover callbacks compose input
@@ -115,7 +117,7 @@ handlers through `HasHandler`. The editor adds view ownership separately;
 running the hover pass raises floaters before querying targets. Clips do not
 capture floating subtrees.
 
-The [navigation combinator](../display/src/widget/navigation.rs) similarly
+The [navigation combinator](../progred/src/display/widget/navigation.rs) similarly
 contributes a projection-declared path, settled rectangle, and arrival handler.
 It maps a child's hover continuation and consumes the control's arrival override
 only at the nearest landmark. The native output can carry complete landmarks;
@@ -137,12 +139,12 @@ above content without installing handlers. Only the chosen alternative invokes
 its placement callbacks.
 
 `libraries::layout::on_event` is the Grap adapter over that same interface.
-It encodes events and installs one native handler; the editor supplies the
-site-scoped interpreter when requested. Ordinary native widgets do not touch
+It encodes events and installs one native handler that calls the
+site-scoped interpreter directly. Ordinary native widgets do not touch
 this interpreter. Layout has no Grap-event constructor or interpretation arm.
 
-The [layout builder interface](../display/src/builder.rs) belongs to
-`progred-display`. `Layout` is a reusable program over that interface; its
+The [layout builder interface](../progred/src/display/builder.rs) belongs to
+`progred::display`. `Layout` is a reusable program over that interface; its
 production interpreter prepares the choice graph, while a test-only recorder
 retains structure for inspection. There is no production layout enum.
 Projection recursion uses ordinary preparation functions with an explicit

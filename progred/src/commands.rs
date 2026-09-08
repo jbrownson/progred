@@ -123,9 +123,9 @@ impl Editor {
                         self.sources().resolve_path(&path).is_none()
                     }) =>
             {
-                progred_libraries::selection::pending_at(&[])
+                crate::libraries::selection::pending_at(&[])
             }
-            _ => progred_libraries::selection::at(&[], progred_libraries::selection::edge()),
+            _ => crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
         };
         self.commit_completion(id, None, Some(continuation))
     }

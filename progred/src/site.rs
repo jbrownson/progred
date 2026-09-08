@@ -2,13 +2,13 @@
 //! Reads observe staged writes; a declined handler commits neither.
 
 use crate::Editor;
+use crate::libraries::{
+    absent, layout, path as path_data, selection as selection_capability, site,
+};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
-use progred_libraries::{
-    absent, layout, path as path_data, selection as selection_capability, site,
-};
 use std::cell::RefCell;
 
 pub(crate) struct PendingChanges {
@@ -218,8 +218,8 @@ fn event_foreign(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::control;
     use gid::Document;
-    use progred_libraries::control;
 
     fn quote(value: Value) -> Value {
         grap::call(
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn capabilities_read_replace_and_clear_their_own_staged_value() {
-        let stack = crate::stack::load::<()>();
+        let stack = crate::stack::load();
         let doc = Document {
             root: None,
             cells: gid::Cells::new(),
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn event_changes_commit_by_result_even_after_a_discarded_absent() {
-        let stack = crate::stack::load::<()>();
+        let stack = crate::stack::load();
         let doc = Document {
             root: None,
             cells: gid::Cells::new(),
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn declining_after_editing_discards_the_whole_editor_operation() {
-        let mut stack = crate::stack::load::<()>();
+        let mut stack = crate::stack::load();
         let function = gid::new_cell_id();
         let mut cells = gid::Cells::new();
         cells.set_value(
@@ -397,7 +397,7 @@ mod tests {
         );
         stack.libraries.insert(
             gid::new_cell_id(),
-            progred_libraries::Definitions::from_parts(fallback, Default::default()),
+            crate::libraries::Definitions::from_parts(fallback, Default::default()),
         );
         let original = Some((vec![], crate::selection::payload::edge()));
         let staged = evaluate(
@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
-        let stack = crate::stack::load::<()>();
+        let stack = crate::stack::load();
         let doc = Document {
             root: None,
             cells: gid::Cells::new(),
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn clearing_another_location_does_not_clear_the_selection() {
-        let stack = crate::stack::load::<()>();
+        let stack = crate::stack::load();
         let doc = Document {
             root: None,
             cells: gid::Cells::new(),
@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     fn malformed_paths_do_not_stage_selection_effects() {
-        let stack = crate::stack::load::<()>();
+        let stack = crate::stack::load();
         let doc = Document {
             root: None,
             cells: gid::Cells::new(),

@@ -1,18 +1,18 @@
 //! The editor's ordered composition of Progred libraries.
 
 use crate::frame::Hovered;
-use crate::projection::Projection;
-use progred_libraries::{
+use crate::libraries::{
     Libraries, Library, absent, blob, color, control, f32, f64, fidget, geometry,
     grap as grap_library, layout, line_edit, list, logic, name, number, presentation, random,
     selection, site, text, u64, workspace,
 };
+use crate::projection::Projection;
 
 pub struct Stack<World> {
     pub libraries: Libraries,
     pub projection: Projection<World>,
     pub pane_projection: Projection<World>,
-    pub completions: progred_display::CompletionProvider,
+    pub completions: crate::display::CompletionProvider,
 }
 
 impl<World> Clone for Stack<World> {
@@ -26,21 +26,21 @@ impl<World> Clone for Stack<World> {
     }
 }
 
-pub fn load<World: 'static>() -> Stack<World> {
+pub fn load() -> Stack<crate::Editor> {
     let (libraries, projections, providers) = Libraries::from_contributions(contributions());
-    let completions = progred_libraries::completion::combine(providers);
+    let completions = crate::libraries::completion::combine(providers);
     let projection = Projection::new(projections);
     Stack {
         libraries,
         pane_projection: projection
             .clone()
-            .with_entry(progred_display::partial(presentation::projected_display)),
+            .with_entry(crate::display::partial(presentation::projected_display)),
         projection,
         completions,
     }
 }
 
-fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library<World, Hovered>)> {
+fn contributions() -> impl Iterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)> {
     [
         (name::ID, name::library()),
         (text::ID, text::library()),
@@ -62,8 +62,8 @@ fn contributions<World: 'static>() -> impl Iterator<Item = (gid::CellId, Library
         (layout::ID, layout::library()),
         (selection::ID, selection::library()),
         (
-            progred_libraries::path::ID,
-            progred_libraries::path::library(),
+            crate::libraries::path::ID,
+            crate::libraries::path::library(),
         ),
         (site::ID, site::library()),
         (geometry::ID, geometry::library()),

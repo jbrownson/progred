@@ -2,30 +2,29 @@
 //! supplies collapse, names, and pending state while building the
 //! tree; `realize` is the only interpreter.
 
-use super::{Cx, Hooks, select_handler};
-use crate::frame::Hovered;
-use crate::hover::Hover;
-use gid::{CellId, Resolution, Step, Value, hex_string};
-use progred_display::{
+use super::{Cx, select_handler};
+use crate::display::{
     Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover, pickable,
     selectable_bracket,
 };
+use crate::frame::Hovered;
+use crate::hover::Hover;
+use gid::{CellId, Resolution, Step, Value, hex_string};
 use std::rc::Rc;
 
-type View<World> = Layout<World, Hovered>;
+type View = Layout<crate::Editor, Hovered>;
 
-pub fn of<World: 'static>(
+pub fn of(
     cx: &Cx,
     path: &[Step],
     value: &Value,
-    hooks: &Hooks<World>,
-    input: &ProjectionInput<'_, World, Hovered>,
-) -> View<World> {
+    input: &ProjectionInput<'_, crate::Editor, Hovered>,
+) -> View {
     match value {
-        Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
+        Value::Blob(bytes) => selectable(cx, id(blob_text(bytes)), path, value, true),
         Value::Cell(cell) => cell_layout(cx, *cell),
-        Value::List(_) => progred_display::structure::list_layout(input, None).unwrap(),
-        Value::Record(_) => progred_display::structure::record_layout(input, |_| None).unwrap(),
+        Value::List(_) => crate::display::structure::list_layout(input, None).unwrap(),
+        Value::Record(_) => crate::display::structure::record_layout(input, |_| None).unwrap(),
     }
 }
 
@@ -39,12 +38,7 @@ fn blob_text(bytes: &[u8]) -> String {
 
 /// The editor-owned folded form shared by raw and custom projections.
 /// Active structural editors keep their containing value open.
-pub(super) fn collapsed_layout<World: 'static>(
-    cx: &Cx,
-    path: &[Step],
-    value: &Value,
-    hooks: &Hooks<World>,
-) -> Option<View<World>> {
+pub(super) fn collapsed_layout(cx: &Cx, path: &[Step], value: &Value) -> Option<View> {
     let delim = match value {
         Value::Cell(cell) => {
             let value = cx.sources.resolve(*cell)?;
@@ -66,15 +60,15 @@ pub(super) fn collapsed_layout<World: 'static>(
         _ => return None,
     };
     Some(selectable(
-        selectable_bracket(delim, toggle(dim("…"), path, hooks)),
+        cx,
+        selectable_bracket(delim, toggle(dim("…"), path, cx)),
         path,
         value,
-        hooks,
         true,
     ))
 }
 
-fn cell_layout<World: 'static>(cx: &Cx, cell: CellId) -> View<World> {
+fn cell_layout(cx: &Cx, cell: CellId) -> View {
     let source = cx
         .sources
         .resolve(cell)
@@ -82,19 +76,13 @@ fn cell_layout<World: 'static>(cx: &Cx, cell: CellId) -> View<World> {
     selectable_bracket(Delim::Paren, descend(Step::Follow(source), None, None))
 }
 
-fn selectable<World: 'static>(
-    child: View<World>,
-    path: &[Step],
-    value: &Value,
-    hooks: &Hooks<World>,
-    claim_hover: bool,
-) -> View<World> {
+fn selectable(cx: &Cx, child: View, path: &[Step], value: &Value, claim_hover: bool) -> View {
     let path: Rc<[Step]> = Rc::from(path);
     let target = Hovered::Tree(Hover::Value(path.clone()));
     let clicked = on_activate(
         pickable(child, target.clone(), value.clone()),
         target,
-        select_handler(path.clone(), hooks),
+        select_handler(path.clone(), cx),
     );
     if claim_hover {
         on_hover(clicked, Hovered::Tree(Hover::Value(path)))
@@ -103,14 +91,17 @@ fn selectable<World: 'static>(
     }
 }
 
-fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World>) -> View<World> {
+fn toggle(child: View, path: &[Step], cx: &Cx) -> View {
     let target: Rc<[Step]> = Rc::from(path);
-    let toggle = hooks.toggle.clone();
+    let root = cx.view.clone();
+    let writable = !cx.source.transient();
     activatable(
-        progred_display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
+        crate::display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
         Hovered::Tree(Hover::Toggle(target.clone())),
         Rc::new(move |world| {
-            toggle(world, target.to_vec());
+            if writable {
+                world.collapse(&root, &target, None);
+            }
             true
         }),
     )

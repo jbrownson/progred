@@ -3,11 +3,11 @@
 //! there and how authoring and mutation land.
 
 use crate::annotations::{self, Annotations};
+use crate::libraries::{Libraries, blob, f64 as f64_convention, text};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
-use progred_libraries::{Libraries, blob, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
@@ -103,7 +103,7 @@ impl Selection {
         root: &workspace::Root,
         sources: &Sources,
         path: Path,
-        line: progred_display::LineEdit,
+        line: crate::display::LineEdit,
     ) -> Self {
         let mut selection = Self::edge(root, path);
         if writable_at(sources, selection.path()) {
@@ -792,16 +792,16 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// are encoded when requested and decoded when a capability supplies
 /// a replacement. They are never mirrored in the stored payload.
 pub mod payload {
+    use crate::libraries::{f64 as f64_convention, logic, text};
     use gid::{CellId, Value};
     use kurbo::Point;
-    use progred_libraries::{f64 as f64_convention, logic, text};
     use puri::edit::LineEditState;
 
     pub mod vocabulary {
-        use gid::CellId;
         #[cfg(test)]
-        pub use progred_libraries::selection::vocabulary::EDGE;
-        pub use progred_libraries::selection::vocabulary::{LABEL, PENDING, STAGE};
+        pub use crate::libraries::selection::vocabulary::EDGE;
+        pub use crate::libraries::selection::vocabulary::{LABEL, PENDING, STAGE};
+        use gid::CellId;
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
@@ -827,7 +827,7 @@ pub mod payload {
     }
 
     pub fn edge() -> Value {
-        progred_libraries::selection::edge()
+        crate::libraries::selection::edge()
     }
 
     pub fn pending(query: &str, choice: usize) -> Value {

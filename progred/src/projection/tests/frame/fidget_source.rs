@@ -1,5 +1,5 @@
 use super::*;
-use progred_libraries::fidget::vocabulary::*;
+use crate::libraries::fidget::vocabulary::*;
 
 fn sum(left: Value, right: Value) -> Value {
     Value::record([(SUM, Value::record([(LEFT, left), (RIGHT, right)]))])
@@ -10,7 +10,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let mut doc = Rc::new(Document {
         root: Some(sum(
             Value::record([(AXIS, X.into())]),
-            progred_libraries::f32::value(25.0),
+            crate::libraries::f32::value(25.0),
         )),
         cells: Cells::new(),
     });
@@ -55,7 +55,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     assert!(write_through(&mut doc, &libraries, &mut selected));
     assert_eq!(
         src(&doc, &libraries).resolve_path(&number),
-        Some(&progred_libraries::f32::value(30.0))
+        Some(&crate::libraries::f32::value(30.0))
     );
 }
 
@@ -63,8 +63,8 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
 fn fidget_alternatives_wrap_without_changing_operand_locations() {
     let doc = Document {
         root: Some(
-            (1..8).fold(progred_libraries::f32::value(0.0), |left, right| {
-                sum(left, progred_libraries::f32::value(right as f32))
+            (1..8).fold(crate::libraries::f32::value(0.0), |left, right| {
+                sum(left, crate::libraries::f32::value(right as f32))
             }),
         ),
         cells: Cells::new(),

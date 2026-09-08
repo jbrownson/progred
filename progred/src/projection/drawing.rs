@@ -4,13 +4,13 @@
 use super::Cx;
 use crate::frame::Hovered;
 use crate::hover::{Hover, SourceTrace};
+use crate::libraries::{absent, layout as layout_data};
 use crate::placed::{Placed, leaf};
 use crate::sources::Sources;
 use gid::{CellId, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
-use progred_libraries::{absent, layout as layout_data};
 use puri::draw::{Canvas, DrawList};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
@@ -38,17 +38,17 @@ impl Faces {
         }
     }
 
-    fn resolve(&self, paint: progred_display::Paint) -> Brush {
+    fn resolve(&self, paint: crate::display::Paint) -> Brush {
         match paint {
-            progred_display::Paint::Brush(brush) => brush,
-            progred_display::Paint::Face(face) => match face {
-                progred_display::Face::Name => self.name.clone(),
-                progred_display::Face::String => self.string.clone(),
-                progred_display::Face::Dim => self.dim.clone(),
-                progred_display::Face::Label => self.label.clone(),
-                progred_display::Face::Id => self.id.clone(),
-                progred_display::Face::AccentWash => self.accent_wash.clone(),
-                progred_display::Face::Ink => self.ink.clone(),
+            crate::display::Paint::Brush(brush) => brush,
+            crate::display::Paint::Face(face) => match face {
+                crate::display::Face::Name => self.name.clone(),
+                crate::display::Face::String => self.string.clone(),
+                crate::display::Face::Dim => self.dim.clone(),
+                crate::display::Face::Label => self.label.clone(),
+                crate::display::Face::Id => self.id.clone(),
+                crate::display::Face::AccentWash => self.accent_wash.clone(),
+                crate::display::Face::Ink => self.ink.clone(),
             },
         }
     }
@@ -373,7 +373,7 @@ fn record_program(
     }
 }
 
-pub(super) fn program_leaf<C: 'static>(
+pub(crate) fn program_leaf(
     cx: &Cx,
     path: &[Step],
     width: f64,
@@ -381,8 +381,7 @@ pub(super) fn program_leaf<C: 'static>(
     descent: f64,
     fuel: usize,
     program: Value,
-    select_source: Rc<dyn Fn(&mut C, &[crate::navigate::Descend<C>], &SourceTrace)>,
-) -> Measured<Placed<C>> {
+) -> Measured<Placed<crate::Editor>> {
     let scale = cx.styles.scale;
     let extent = Extent {
         width: width * scale,
@@ -421,15 +420,18 @@ pub(super) fn program_leaf<C: 'static>(
         builder.claim_dynamic(placement, move |point| {
             probe_drawing.target_at(point, outer)
         });
-        builder.pick_dynamic(placement, move |world, target, descends| {
-            if let Hovered::Tree(Hover::Drawing(source)) = target {
-                select_source(world, descends, source);
-                // The painted hit owns the pick even without a visible source occurrence.
-                true
-            } else {
-                false
-            }
-        });
+        builder.pick_dynamic(
+            placement,
+            move |world: &mut crate::Editor, target, descends| {
+                if let Hovered::Tree(Hover::Drawing(source)) = target {
+                    world.select_drawing_source(descends, source);
+                    // The painted hit owns the pick even without a visible source occurrence.
+                    true
+                } else {
+                    false
+                }
+            },
+        );
         builder.ink(move |canvas: &mut dyn puri::draw::CanvasSink, ink| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
@@ -451,13 +453,13 @@ pub(super) fn program_leaf<C: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::Libraries;
     use gid::{Cells, Resolution, new_cell_id};
-    use progred_libraries::Libraries;
 
     #[test]
     fn declining_after_drawing_discards_the_whole_recording() {
+        use crate::libraries::{control, f64};
         use layout_data::vocabulary as draw;
-        use progred_libraries::{control, f64};
         let sequence = |values| {
             grap::call(
                 control::vocabulary::DO.into(),
@@ -474,7 +476,7 @@ mod tests {
             draw::FILL.into(),
             [(
                 draw::PAINT,
-                progred_libraries::color::value(peniko::Color::BLACK),
+                crate::libraries::color::value(peniko::Color::BLACK),
             )],
         );
         let function = new_cell_id();
@@ -493,13 +495,13 @@ mod tests {
             ),
         );
         let doc = gid::Document { root: None, cells };
-        let mut stack = crate::stack::load::<()>();
+        let mut stack = crate::stack::load();
         let library = new_cell_id();
         let mut fallback = Cells::new();
         fallback.set_value(function, grap::lambda([], fill));
         stack.libraries.insert(
             library,
-            progred_libraries::Definitions::from_parts(fallback, Default::default()),
+            crate::libraries::Definitions::from_parts(fallback, Default::default()),
         );
         let drawing = record_program(
             &sequence(vec![
@@ -539,7 +541,7 @@ mod tests {
                     ),
                     (
                         layout_data::vocabulary::PAINT,
-                        progred_libraries::color::value(peniko::Color::BLACK),
+                        crate::libraries::color::value(peniko::Color::BLACK),
                     ),
                 ],
             ),
@@ -550,14 +552,14 @@ mod tests {
                 cells.set_value(function, definition.clone());
                 (
                     id,
-                    progred_libraries::Library::<(), ()>::named(
+                    crate::libraries::Library::<(), ()>::named(
                         id,
                         "drawing",
-                        progred_libraries::Definitions::from_parts(
+                        crate::libraries::Definitions::from_parts(
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        progred_display::partial(|_| None),
+                        crate::display::partial(|_| None),
                     ),
                 )
             }))

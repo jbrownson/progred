@@ -1,5 +1,5 @@
 use super::*;
-use progred_libraries::control::vocabulary as control;
+use crate::libraries::control::vocabulary as control;
 
 fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     let parameters = Value::list([binder.into()]);
@@ -144,13 +144,13 @@ fn declaration_names_do_not_hide_metadata_or_new_fields() {
     let libraries = core_libraries();
     doc.cells.set_value(binder, name::record("size", []));
     let pending = pending_edge(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         &src(&doc, &libraries),
         definition.clone(),
     )
     .unwrap();
-    let mut world = EditingWorld::new(&doc, &libraries);
-    world.selection = Some(pending);
+    let mut world = editing_world(&doc, &libraries);
+    world.model.selection = Some(pending);
     assert!(editing_frame(&mut world, false).completion.is_some());
 }
 
@@ -167,12 +167,11 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         };
         let sources = src(&doc, &libraries);
         let list_path = &binder_path[..1];
-        let pending =
-            pending_into(&crate::workspace::Root::document(), &sources, list_path).unwrap();
+        let pending = pending_into(&crate::test_root(), &sources, list_path).unwrap();
         let missing_path = pending.path().to_vec();
         assert!(sources.resolve_path(&missing_path).is_none());
-        let mut world = EditingWorld::new(&doc, &libraries);
-        world.selection = Some(pending);
+        let mut world = editing_world(&doc, &libraries);
+        world.model.selection = Some(pending);
         let frame = editing_frame(&mut world, false);
         assert!(frame.completion.is_some());
         assert!(
@@ -182,20 +181,17 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
                 .any(|d| d.path.as_ref() == missing_path)
         );
         assert!(
-            src(&world.doc, &libraries)
+            src(&world.model.doc, &libraries)
                 .resolve_path(&missing_path)
                 .is_none()
         );
 
         // A new field in a compact lambda, match, or let must not disappear.
-        world.selection = pending_edge(&crate::workspace::Root::document(), &sources, Vec::new());
+        world.model.selection = pending_edge(&crate::test_root(), &sources, Vec::new());
         assert!(editing_frame(&mut world, false).completion.is_some());
         if binder_path.len() > 2 {
-            world.selection = pending_edge(
-                &crate::workspace::Root::document(),
-                &sources,
-                binder_path[..2].to_vec(),
-            );
+            world.model.selection =
+                pending_edge(&crate::test_root(), &sources, binder_path[..2].to_vec());
             assert!(editing_frame(&mut world, false).completion.is_some());
         }
     }
@@ -390,12 +386,9 @@ fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
             cells: Cells::new(),
             root: Some(root.clone()),
         };
-        let mut world = EditingWorld::new(&doc, &libraries);
-        world.selection = pending_edge(
-            &crate::workspace::Root::document(),
-            &src(&doc, &libraries),
-            Vec::new(),
-        );
+        let mut world = editing_world(&doc, &libraries);
+        world.model.selection =
+            pending_edge(&crate::test_root(), &src(&doc, &libraries), Vec::new());
         assert!(editing_frame(&mut world, false).completion.is_some());
 
         let doc = Document {

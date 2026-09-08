@@ -1,9 +1,9 @@
 //! Progred's sample GID document used by tests and render fixtures.
 
-use gid::{Cells, Document, Value, new_cell_id};
-use progred_libraries::{
+use crate::libraries::{
     control, f64, geometry, layout, name, selection as selection_capability, site, text,
 };
+use gid::{Cells, Document, Value, new_cell_id};
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
@@ -97,7 +97,7 @@ pub fn at_display_partial() -> Value {
                             ),
                             (
                                 grap::vocabulary::EXPRESSION,
-                                progred_libraries::absent::decline(),
+                                crate::libraries::absent::decline(),
                             ),
                         ]),
                     ]),

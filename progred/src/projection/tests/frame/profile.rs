@@ -185,7 +185,7 @@ fn iop_tree_source_profile_loop() {
 }
 
 fn color_picker_fixture() -> (Document, Value) {
-    use progred_libraries::{color, f64};
+    use crate::libraries::{color, f64};
     (
         Document {
             root: Some(color::value(puri::Color::from_rgba8(
@@ -209,7 +209,7 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
     }
     .prepare(&doc);
     let selection = Selection::from_payload(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         &Sources {
             doc: &doc,
             libraries: &context.stack.libraries,
@@ -255,7 +255,7 @@ fn fidget_example() -> Document {
 }
 
 fn orbit(path: &[Step], frame: usize) -> Annotations {
-    use progred_libraries::{f32, fidget::vocabulary as f};
+    use crate::libraries::{f32, fidget::vocabulary as f};
     let mut annotations = Annotations::default();
     annotations.set_field(
         path,

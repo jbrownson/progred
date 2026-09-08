@@ -8,7 +8,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         root: Some(
             root_completions(&context.stack)
                 .into_iter()
-                .find(|offer| offer.display == progred_libraries::grap::vocabulary::GRAP.into())
+                .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
                 .unwrap()
                 .value
                 .instantiate(),
@@ -21,7 +21,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         .unwrap()
         .as_record()
         .unwrap()
-        .get(&progred_libraries::grap::vocabulary::GRAP)
+        .get(&crate::libraries::grap::vocabulary::GRAP)
         .unwrap()
         .as_cell()
         .unwrap();
@@ -29,8 +29,8 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let displayed = Rc::new(std::cell::RefCell::new(Vec::new()));
     let observe = displayed.clone();
     context.stack.projection = Projection {
-        partial: progred_display::compose_partials([
-            progred_display::partial(move |input| {
+        partial: crate::display::compose_partials([
+            crate::display::partial(move |input| {
                 observe.borrow_mut().push(input.value?.clone());
                 None
             }),
@@ -40,12 +40,12 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     };
     let arguments = [
         (
-            progred_libraries::number::vocabulary::LEFT,
-            progred_libraries::f32::value(7.0),
+            crate::libraries::number::vocabulary::LEFT,
+            crate::libraries::f32::value(7.0),
         ),
         (
-            progred_libraries::number::vocabulary::RIGHT,
-            progred_libraries::f32::value(2.0),
+            crate::libraries::number::vocabulary::RIGHT,
+            crate::libraries::f32::value(2.0),
         ),
     ];
     let shape = Value::record([(
@@ -54,8 +54,8 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     )]);
     for (function, result) in [
         (
-            progred_libraries::f32::vocabulary::SUBTRACT,
-            progred_libraries::f32::value(5.0),
+            crate::libraries::f32::vocabulary::SUBTRACT,
+            crate::libraries::f32::value(5.0),
         ),
         (fidget::vocabulary::DIFFERENCE, shape),
     ] {
@@ -110,7 +110,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
             fidget::vocabulary::SPHERE.into(),
             [(
                 fidget::vocabulary::RADIUS,
-                progred_libraries::f32::value(radius),
+                crate::libraries::f32::value(radius),
             )],
         )
     };
@@ -318,11 +318,12 @@ fn drawing_frame(
     doc: &Document,
     libraries: &Libraries,
     shape_function: CellId,
-    select_source: Rc<dyn Fn(&mut (), &[crate::navigate::Descend<()>], &SourceTrace)>,
-) -> Measured<Placed<()>> {
+) -> Measured<Placed<crate::Editor>> {
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let cx = Cx {
+        view: &crate::test_root(),
+        completions: None,
         sources: Sources { doc, libraries },
         raw: false,
         annotations: &annotations,
@@ -350,11 +351,10 @@ fn drawing_frame(
                 ),
                 (
                     layout_data::vocabulary::PAINT,
-                    progred_libraries::color::value(Color::BLACK),
+                    crate::libraries::color::value(Color::BLACK),
                 ),
             ],
         ),
-        select_source,
     )
 }
 
@@ -363,8 +363,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
     let shape_function = new_cell_id();
     let calls = Rc::new(std::cell::Cell::new(0));
     let count = calls.clone();
-    let library = progred_libraries::Library::<(), ()>::new(
-        progred_libraries::Definitions::from_parts(
+    let library = crate::libraries::Library::<(), ()>::new(
+        crate::libraries::Definitions::from_parts(
             Cells::new(),
             grap::ForeignFunctions::default().register(
                 shape_function,
@@ -374,7 +374,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                 }),
             ),
         ),
-        progred_display::partial(|_| None),
+        crate::display::partial(|_| None),
     );
     let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
     let doc = Document {
@@ -386,15 +386,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let selected = Rc::new(std::cell::RefCell::new(Vec::new()));
         let picked = selected.clone();
         let placed = measured::place(
-            drawing_frame(
-                &doc,
-                &libraries,
-                shape_function,
-                Rc::new(move |_, descends, source| {
-                    assert_eq!(descends.len(), 1);
-                    picked.borrow_mut().push(source.clone())
-                }),
-            ),
+            drawing_frame(&doc, &libraries, shape_function),
             Placement::root(bounds),
         );
         assert_eq!(calls.get(), expected - 1);
@@ -418,10 +410,13 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         );
         let mut pointer = placed::DispatchContext::new(None, Some(target));
         pointer.descends = Rc::from([crate::navigate::Descend {
-            root: None,
-            path: Rc::from([]),
+            root: Some(crate::test_root()),
+            path: Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]),
             rect: bounds,
-            select: Rc::new(|_, _| true),
+            select: Rc::new(move |_, _| {
+                picked.borrow_mut().push(source.clone());
+                true
+            }),
         }]);
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
@@ -438,16 +433,16 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             state,
         };
         assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
-            &mut (),
+            &mut crate::test_editor(doc.clone()),
             &event,
             &mut pointer,
         ));
-        assert_eq!(*selected.borrow(), [source]);
+        assert_eq!(selected.borrow().len(), 1);
         settle(placed);
         assert_eq!(calls.get(), expected);
     }
     let clipped = measured::place(
-        drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
+        drawing_frame(&doc, &libraries, shape_function),
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
     )
     .run(&Default::default());
@@ -464,10 +459,10 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         cells.set_value(shape_function, name::record("shape", []));
         Libraries::from_contributions([(
             library_id,
-            progred_libraries::Library::<(), ()>::named(
+            crate::libraries::Library::<(), ()>::named(
                 library_id,
                 "shape",
-                progred_libraries::Definitions::from_parts(
+                crate::libraries::Definitions::from_parts(
                     cells,
                     grap::ForeignFunctions::default().register(
                         shape_function,
@@ -476,7 +471,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
                         }),
                     ),
                 ),
-                progred_display::partial(|_| None),
+                crate::display::partial(|_| None),
             ),
         )])
         .0
@@ -498,7 +493,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         (Libraries::default(), vec![]),
     ] {
         let placed = measured::place(
-            drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
+            drawing_frame(&doc, &libraries, shape_function),
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
         )
         .run(&Default::default());

@@ -13,7 +13,7 @@ lambda/application, environments, callable representations, fuel, source
 origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
-The [libraries package](../libraries/src/lib.rs) contains conceptual libraries
+Progred's [libraries module](../progred/src/libraries/mod.rs) contains conceptual libraries
 as modules: names, text, f64, control, Grap's self-description, geometry,
 presentation, layout, and other domains. A `Library` carries definitions and
 one partial projection. A library with several forms composes them with
@@ -57,7 +57,7 @@ contribute these functions explicitly; composition does not depend on registerin
 them under a shared cell identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
 
-[`ProjectionInput`](../display/src/lib.rs) supplies the environment, value,
+[`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
 selection targets. Its `default_projection` is one composed partial function,
 passed explicitly through recursion. A partial returns a `Layout<World, Hover>`
@@ -169,21 +169,21 @@ back to normal projection.
 ## Lowering and interaction
 
 The [projection runtime](../progred/src/projection/mod.rs) resolves document
-locations and supplies scoped widget capabilities. The
-[box interpreter](../display/src/measure.rs) composes measurements without
+locations and supplies borrowed widget inputs. The
+[box interpreter](../progred/src/display/measure.rs) composes measurements without
 interpreting document traversal or control requests. Supporting modules separate
 [structural fallback](../progred/src/projection/structure.rs),
-[Grap event adaptation](../libraries/src/layout/events.rs),
+[Grap event adaptation](../progred/src/libraries/layout/events.rs),
 [completion](../progred/src/projection/completion.rs), and
 [drawing](../progred/src/projection/drawing.rs).
-The [native completion card](../display/src/widget/completion.rs) owns its
+The [native completion card](../progred/src/display/widget/completion.rs) owns its
 row interaction, keyboard navigation, and scroll composition. The app adapter
 only supplies offers, query state, document callbacks, and popup placement.
 The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.
 
 Grap's `descend` and `at` forms decode through the
-[path library](../libraries/src/path.rs), also used by site and selection
+[path library](../progred/src/libraries/path.rs), also used by site and selection
 capabilities. Field keys, list positions, and source-qualified definition
 follows have one encoder/decoder. They produce ordinary preparation functions
 using an explicit projection scope; layout has no parallel path vocabulary or
@@ -193,27 +193,29 @@ placement continuations contribute interaction and ink.
 
 Puri leaves carry text or canvas drawing operations. They do not acquire
 selection paths, document editing rules, names, or completion providers.
-The stock [line widget](../display/src/widget/line.rs) is an ordinary native
+The stock [line widget](../progred/src/display/widget/line.rs) is an ordinary native
 function. Text and number projections supply its spelling, affixes, and
 conversion callback; `Layout::widget` carries the resulting measurement
 program without inspecting its props. Placement returns a hover continuation;
 running it contributes native render continuations, handlers, the hover claim,
 and a navigation transition through
-the [widget output interface](../display/src/widget.rs). The editor supplies
-state and capabilities; its [line adapter](../progred/src/projection/line_control.rs)
-only applies editing operations, conversion, and undo grouping. The current
+the [widget output interface](../progred/src/display/widget.rs). These are Progred
+widgets, so their handlers receive `&mut Editor` and call ordinary
+[editing helpers](../progred/src/editing.rs); no generic-world callback dictionary
+is installed at each location. The [line adapter](../progred/src/projection/line_control.rs)
+applies editing operations and conversion, with undo grouping owned by Progred. The current
 handler owns conversion, not the selection payload. The line library adapts
 Grap conversions explicitly; native controls do not round-trip through Grap.
 Completion uses an ordinary native widget factory with explicit kind/provider
-inputs. The scoped app adapter constructs document-specific offers and pending
+inputs. The app adapter constructs document-specific offers and pending
 state; the reusable card owns row ink, navigation, and scrolling. Drawing-program
-widgets similarly request evaluation/source attribution from the app. Both
+widgets directly use the app's evaluation/source attribution helpers. Both
 return the same measured `HoverPass` as other widgets, not control opcodes.
 The app's `Placed` aliases that continuation. Running it returns `Fragment`
 (`Ready` in the app), with paint and handlers as independent outputs.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
-Delimiter handles use ordinary [side widgets](../display/src/widget/delimiter.rs).
+Delimiter handles use ordinary [side widgets](../progred/src/display/widget/delimiter.rs).
 An ordinary row lays out fixed-width sides, which adopt its available height
 during placement; selection and picking are explicit `selectable_widget`
 composition inside the stretch, not interpreter behavior.
@@ -224,7 +226,7 @@ so retained hover still selects the highlighted target rather than re-hit-testin
 the click position.
 
 Click, activation, and picking likewise compose ordinary
-[native interaction functions](../display/src/widget/interaction.rs).
+[native interaction functions](../progred/src/display/widget/interaction.rs).
 `widget::before` prepares a placement continuation, which can contribute ink,
 claims, or handlers before any child; the layout interpreter only composes it.
 `widget::after` contributes after the child through the same output interface.
@@ -259,7 +261,7 @@ or central reducer sits between a callback and its operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)
 creates temporary selection/annotation capabilities in the current document
 and view. `site path` exposes the actual projection path through the
-[path library](../libraries/src/path.rs); the local selection getter needs no
+[path library](../progred/src/libraries/path.rs); the local selection getter needs no
 address, while the setter accepts one explicitly. Writes are staged and
 committed unless the handler explicitly declines or evaluation halts. An ordinary
 absent result is still a completed result. Completion continuations
@@ -385,7 +387,7 @@ raw expression there. It is an ordinary library function.
 
 ## Control functions and absents
 
-The [control library](../libraries/src/control.rs) supplies structural matching
+The [control library](../progred/src/libraries/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
 `match` evaluates its subject once, then tries ordered cases. Record patterns
 are open; list patterns are exact and ordered; `{bind: cell}` captures a value.

@@ -229,6 +229,7 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
 
 mod view {
     use super::{Entry, Hover, State, definition, drawn_label};
+    use crate::Editor;
     use crate::command::{Availability, Command, Spec, Toggles, spec};
     use crate::frame::Hovered;
     use crate::placed::{self, Placed};
@@ -241,11 +242,6 @@ mod view {
 
     const BAR_HEIGHT: f64 = 30.0;
     const MENU_WIDTH: f64 = 230.0;
-
-    pub struct Hooks<C> {
-        pub toggle: Rc<dyn Fn(&mut C, usize)>,
-        pub select: Rc<dyn Fn(&mut C, Command)>,
-    }
 
     pub struct Description {
         pub state: State,
@@ -300,15 +296,14 @@ mod view {
         })
     }
 
-    fn heading<C: 'static>(
+    fn heading(
         tcx: &mut TextCtx,
         style: &TextStyle,
         index: usize,
         label: &'static str,
         active: bool,
         scale: f64,
-        toggle: Rc<dyn Fn(&mut C, usize)>,
-    ) -> Measured<Placed<C>> {
+    ) -> Measured<Placed<Editor>> {
         let content = measured::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
             crate::render::text(tcx, label, style),
@@ -323,7 +318,7 @@ mod view {
             });
         });
         activatable(Hover::Heading(index), content, move |app| {
-            toggle(app, index);
+            app.menu.toggle(index);
             true
         })
     }
@@ -351,7 +346,7 @@ mod view {
         )
     }
 
-    fn item<C: 'static>(
+    fn item(
         tcx: &mut TextCtx,
         styles: &Styles,
         command: Command,
@@ -361,8 +356,7 @@ mod view {
         cursored: bool,
         scale: f64,
         width: f64,
-        select: Rc<dyn Fn(&mut C, Command)>,
-    ) -> Measured<Placed<C>> {
+    ) -> Measured<Placed<Editor>> {
         let style = if enabled {
             &styles.text
         } else {
@@ -402,7 +396,7 @@ mod view {
         });
         if enabled {
             activatable(Hover::Item(command), content, move |app| {
-                select(app, command);
+                app.choose_menu(command);
                 true
             })
         } else {
@@ -410,13 +404,12 @@ mod view {
         }
     }
 
-    fn popup<C: 'static>(
+    fn popup(
         tcx: &mut TextCtx,
         styles: &Styles,
         description: &Description,
         menu_entries: &[Entry],
-        select: Rc<dyn Fn(&mut C, Command)>,
-    ) -> Measured<Placed<C>> {
+    ) -> Measured<Placed<Editor>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let mut command_index = 0;
@@ -439,7 +432,6 @@ mod view {
                         cursored,
                         description.scale,
                         width,
-                        select.clone(),
                     )
                 }
             })
@@ -464,11 +456,7 @@ mod view {
         )
     }
 
-    pub fn view<C: 'static>(
-        tcx: &mut TextCtx,
-        description: Description,
-        hooks: Hooks<C>,
-    ) -> View<Placed<C>> {
+    pub fn view(tcx: &mut TextCtx, description: Description) -> View<Placed<Editor>> {
         let styles = styles();
         let definition = definition();
         let mut x = 0.0;
@@ -487,7 +475,6 @@ mod view {
                     menu.label,
                     description.state.open() == Some(index),
                     description.scale,
-                    hooks.toggle.clone(),
                 );
                 x += node.extent.width;
                 node
@@ -497,7 +484,7 @@ mod view {
         let popup = description.state.open().and_then(|index| {
             definition
                 .get(index)
-                .map(|menu| popup(tcx, &styles, &description, &menu.entries, hooks.select))
+                .map(|menu| popup(tcx, &styles, &description, &menu.entries))
         });
         let height = bar_height(description.scale);
         let bar = placed::decorate(
@@ -537,7 +524,7 @@ mod view {
     }
 }
 
-pub use view::{Description, Hooks, bar_height, view};
+pub use view::{Description, bar_height, view};
 
 #[cfg(test)]
 mod tests {

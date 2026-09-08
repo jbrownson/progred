@@ -1,17 +1,17 @@
 //! Completion offers for pending value and label queries.
 
-use crate::filter;
-use crate::identity::short_id;
-use crate::sources::Sources;
-use gid::{CellId, Resolution, Value, new_cell_id};
-use progred_display::{
+use crate::display::{
     Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionScope,
     CompletionText, CompletionValue, Face,
 };
-use progred_libraries::{blob, name, text};
+use crate::filter;
+use crate::identity::short_id;
+use crate::libraries::{blob, name, text};
+use crate::sources::Sources;
+use gid::{CellId, Resolution, Value, new_cell_id};
 use std::rc::Rc;
 
-pub use progred_display::widget::offers::{Entry, Offers};
+pub use crate::display::widget::offers::{Entry, Offers};
 
 /// The insertion capability supplied by the active completion site.
 pub enum Commit<C> {
@@ -45,14 +45,14 @@ impl<C: 'static> Commit<C> {
             Self::Value(commit) => {
                 let commit = commit.clone();
                 let select =
-                    progred_libraries::selection::at(&[], progred_libraries::selection::edge());
+                    crate::libraries::selection::at(&[], crate::libraries::selection::edge());
                 Rc::new(move |world| {
                     commit(world, Value::from(new_cell_id()), Some(select.clone()))
                 })
             }
             Self::Label(commit) => {
                 let commit = commit.clone();
-                let select = progred_libraries::selection::pending_at(&[]);
+                let select = crate::libraries::selection::pending_at(&[]);
                 Rc::new(move |world| commit(world, new_cell_id(), None, Some(select.clone())))
             }
         }
@@ -140,7 +140,7 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
                 display.to_string(),
                 None,
                 value,
-                progred_libraries::selection::at(&[], progred_libraries::selection::edge()),
+                crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
                 commit,
             )
             .map(|mut entry| {
@@ -282,7 +282,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                         world,
                         new_cell_id(),
                         Some(name::record(&spelling, [])),
-                        Some(progred_libraries::selection::pending_at(&[])),
+                        Some(crate::libraries::selection::pending_at(&[])),
                     )
                 }),
             }
@@ -296,9 +296,9 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .unwrap(),
     };
     let reference_selection = if labels {
-        progred_libraries::selection::pending_at(&[])
+        crate::libraries::selection::pending_at(&[])
     } else {
-        progred_libraries::selection::at(&[], progred_libraries::selection::edge())
+        crate::libraries::selection::at(&[], crate::libraries::selection::edge())
     };
     let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
@@ -447,7 +447,7 @@ fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
     completion_text(
         sources,
         &CompletionText::Name(match source {
-            Resolution::Document => progred_libraries::path::vocabulary::DOCUMENT,
+            Resolution::Document => crate::libraries::path::vocabulary::DOCUMENT,
             Resolution::Library(library) => library,
         }),
     )

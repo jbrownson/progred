@@ -2,8 +2,8 @@
 //! libraries. Ordinary lookup selects the document, then the first
 //! library definition. A stored Follow step still names its source.
 
+use crate::libraries::{Libraries, name};
 use gid::{CellId, Document, Resolution, Step, Value};
-use progred_libraries::{Libraries, name};
 
 pub type DefinitionSource = Resolution;
 
@@ -19,7 +19,7 @@ pub struct Sources<'a> {
     pub libraries: &'a Libraries,
 }
 
-impl progred_display::Env for Sources<'_> {
+impl crate::display::Env for Sources<'_> {
     fn apply_scoped(
         &self,
         function: &Value,
@@ -56,17 +56,17 @@ impl progred_display::Env for Sources<'_> {
         Sources::name(self, cell)
     }
 
-    fn resolve(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'_>> {
+    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         self.definition(cell)
     }
 }
 
 impl<'a> Sources<'a> {
-    pub fn definition(&self, cell: CellId) -> Option<progred_display::ResolvedCell<'a>> {
+    pub fn definition(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'a>> {
         self.doc
             .cells
             .value(cell)
-            .map(|value| progred_display::ResolvedCell {
+            .map(|value| crate::display::ResolvedCell {
                 source: Resolution::Document,
                 value,
                 native: false,
@@ -75,7 +75,7 @@ impl<'a> Sources<'a> {
                 self.libraries.iter().find_map(|(library, definitions)| {
                     definitions
                         .get(cell)
-                        .map(|definition| progred_display::ResolvedCell {
+                        .map(|definition| crate::display::ResolvedCell {
                             source: Resolution::Library(library),
                             value: definition.value(),
                             native: matches!(definition, grap::Definition::Foreign(_)),
@@ -181,14 +181,11 @@ mod tests {
     fn libraries(id: CellId, cells: Cells) -> Libraries {
         Libraries::from_contributions([(
             id,
-            progred_libraries::Library::<(), ()>::named(
+            crate::libraries::Library::<(), ()>::named(
                 id,
                 "test",
-                progred_libraries::Definitions::from_parts(
-                    cells,
-                    grap::ForeignFunctions::default(),
-                ),
-                progred_display::partial(|_| None),
+                crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+                crate::display::partial(|_| None),
             ),
         )])
         .0
@@ -204,8 +201,8 @@ mod tests {
         let library = new_cell_id();
         let (libraries, _, _) = Libraries::from_contributions([(
             library,
-            progred_libraries::Library::<(), ()>::new(
-                progred_libraries::Definitions::from_parts(
+            crate::libraries::Library::<(), ()>::new(
+                crate::libraries::Definitions::from_parts(
                     Cells::new(),
                     grap::ForeignFunctions::default().register(
                         function,
@@ -214,7 +211,7 @@ mod tests {
                         }),
                     ),
                 ),
-                progred_display::partial(|_| None),
+                crate::display::partial(|_| None),
             ),
         )]);
         let empty = doc_of(Cells::new());
@@ -269,7 +266,7 @@ mod tests {
         let definition =
             |value| grap::lambda([], grap::call(Value::from(probe), [(result, value)]));
         let mut cells = Cells::new();
-        cells.set_value(function, definition(progred_libraries::absent::decline()));
+        cells.set_value(function, definition(crate::libraries::absent::decline()));
         let doc = doc_of(cells);
         for order in [library_ids, [library_ids[1], library_ids[0]]] {
             let libraries = Libraries::from_contributions(order.map(|id| {
@@ -277,14 +274,14 @@ mod tests {
                 cells.set_value(function, definition(Value::from(id)));
                 (
                     id,
-                    progred_libraries::Library::<(), ()>::named(
+                    crate::libraries::Library::<(), ()>::named(
                         id,
                         "source",
-                        progred_libraries::Definitions::from_parts(
+                        crate::libraries::Definitions::from_parts(
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        progred_display::partial(|_| None),
+                        crate::display::partial(|_| None),
                     ),
                 )
             }))
@@ -313,7 +310,7 @@ mod tests {
                         100,
                     )
                 };
-                assert_eq!(evaluation.result, progred_libraries::absent::decline());
+                assert_eq!(evaluation.result, crate::libraries::absent::decline());
                 assert_eq!(
                     origins.into_inner(),
                     [Resolution::Document].map(|source| {
@@ -416,14 +413,11 @@ mod tests {
         let library = |id, name| {
             let mut cells = Cells::new();
             cells.set_value(cell, crate::test_values::text(name));
-            progred_libraries::Library::<(), ()>::named(
+            crate::libraries::Library::<(), ()>::named(
                 id,
                 name,
-                progred_libraries::Definitions::from_parts(
-                    cells,
-                    grap::ForeignFunctions::default(),
-                ),
-                progred_display::partial(|_| None),
+                crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+                crate::display::partial(|_| None),
             )
         };
         let doc = Document {
@@ -450,7 +444,7 @@ mod tests {
             assert_eq!(
                 sources
                     .resolve(cell)
-                    .and_then(|value| progred_libraries::text::read(value.value)),
+                    .and_then(|value| crate::libraries::text::read(value.value)),
                 Some(first),
             );
             assert_eq!(
@@ -465,7 +459,7 @@ mod tests {
                 libraries: &left_then_right,
             }
             .resolve_path(&path)
-            .and_then(progred_libraries::text::read),
+            .and_then(crate::libraries::text::read),
             Some("right")
         );
         assert_eq!(
@@ -474,7 +468,7 @@ mod tests {
                 libraries: &right_then_left,
             }
             .resolve_path(&path)
-            .and_then(progred_libraries::text::read),
+            .and_then(crate::libraries::text::read),
             Some("right")
         );
     }

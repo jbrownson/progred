@@ -188,12 +188,12 @@ fn svg_bench_renders_numeric_type_labels() {
         root: Some(Value::record([
             (
                 crate::test_values::label("radius"),
-                progred_libraries::f32::value(24.5),
+                crate::libraries::f32::value(24.5),
             ),
             (crate::test_values::label("offset"), f64::value(-2.75)),
             (
                 crate::test_values::label("count"),
-                progred_libraries::u64::value(12),
+                crate::libraries::u64::value(12),
             ),
         ])),
         cells,
@@ -232,10 +232,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The engaged twin: same slot, same rect, selection blue.
     render(
         &empty,
-        Some(&pending_value(
-            &crate::workspace::Root::document(),
-            Vec::new(),
-        )),
+        Some(&pending_value(&crate::test_root(), Vec::new())),
         320.0,
         "raw_placeholder_engaged.svg",
     );
@@ -255,7 +252,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     render(
         &empty,
         Some(&crate::selection::pending_with_query(
-            &crate::workspace::Root::document(),
+            &crate::test_root(),
             Vec::new(),
             "\"asdf\"",
         )),
@@ -268,7 +265,7 @@ fn svg_bench_renders_the_placeholder_notation() {
             cells: Cells::new(),
         },
         Some(&crate::selection::bare_edge(
-            &crate::workspace::Root::document(),
+            &crate::test_root(),
             Vec::new(),
         )),
         320.0,
@@ -280,7 +277,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::test_values::text("")),
         cells: Cells::new(),
     };
-    let sel = Selection::edge(&crate::workspace::Root::document(), Vec::new());
+    let sel = Selection::edge(&crate::test_root(), Vec::new());
     render(
         &empty_string,
         Some(&sel),
@@ -292,9 +289,9 @@ fn svg_bench_renders_the_placeholder_notation() {
 #[test]
 fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
-    let library = crate::stack::load::<()>().libraries;
+    let library = crate::stack::load().libraries;
     let edge = pending_edge(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         &Sources {
             doc: &doc,
             libraries: &library,
@@ -314,7 +311,7 @@ fn svg_bench_renders_a_pending_edge() {
         cells: Cells::new(),
     };
     let typing = pending_edge(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         &Sources {
             doc: &doc,
             libraries: &library,

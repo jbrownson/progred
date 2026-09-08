@@ -1,37 +1,14 @@
 use super::*;
-use progred_libraries::f64 as f64_convention;
+use crate::libraries::f64 as f64_convention;
 
 #[test]
 fn sample_text_line_click_mounts_its_own_editor() {
-    #[derive(Default)]
-    struct Clipboard(Option<String>);
-
-    impl puri::edit::TextClipboard for Clipboard {
-        fn get_text(&mut self) -> Option<String> {
-            self.0.clone()
-        }
-
-        fn set_text(&mut self, text: &str) {
-            self.0 = Some(text.to_string());
-        }
-    }
-
-    struct ClickWorld {
-        doc: Document,
-        libraries: Libraries,
-        selection: Option<Selection>,
-        applied: Option<Path>,
-        fonts: parley::FontContext,
-        layouts: parley::LayoutContext<Brush>,
-        clipboard: Clipboard,
-    }
-
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/sample.gid"
     )))
     .expect("the sample parses");
-    let stack = crate::stack::load::<ClickWorld>();
+    let stack = crate::stack::load();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
@@ -42,8 +19,10 @@ fn sample_text_line_click_mounts_its_own_editor() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let node = project::<ClickWorld>(
+    let node = project(
         ProjectDescription {
+            view: &crate::test_root(),
+            completions: None,
             sources: Sources {
                 doc: &doc,
                 libraries: &stack.libraries,
@@ -61,33 +40,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             projection: Some(&stack.projection),
         },
         &mut tcx,
-        Hooks {
-            completions: Some(stack.completions.clone()),
-            select: Rc::new(|world: &mut ClickWorld, path| {
-                world.selection = Some(make_selection(path));
-            }),
-            select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _, _| false),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            // A selection transition must consume the click even if
-            // retained dispatch cannot recover an edit context for
-            // the optional caret-placement follow-up.
-            edit: Rc::new(|_, _| false),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
-                world.applied = Some(path);
-                true
-            }),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        },
     );
     let path = vec![
         Step::Key(sample_vocabulary::STYLE),
@@ -115,15 +67,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         },
         state,
     };
-    let mut world = ClickWorld {
-        doc: doc.clone(),
-        libraries: stack.libraries.clone(),
-        selection: None,
-        applied: None,
-        fonts: parley::FontContext::new(),
-        layouts: parley::LayoutContext::new(),
-        clipboard: Clipboard::default(),
-    };
+    let mut world = crate::test_editor(doc.clone());
     assert!(
         placed
             .handler
@@ -131,10 +75,13 @@ fn sample_text_line_click_mounts_its_own_editor() {
             .dispatch_pointer_down(&mut world, &event)
     );
     assert_eq!(
-        world.selection.as_ref().map(|selection| selection.path()),
+        world
+            .model
+            .selection
+            .as_ref()
+            .map(|selection| selection.path()),
         Some(path.as_slice())
     );
-    assert_eq!(world.applied, None);
 
     // The next frame's focused editor still owns pointer-down: a
     // double click selects its word, and a later single click can
@@ -149,17 +96,19 @@ fn sample_text_line_click_mounts_its_own_editor() {
         scale: 1.0,
         cache: &mut frame_cache,
     };
-    let active = project::<ClickWorld>(
+    let active = project(
         ProjectDescription {
+            view: &crate::test_root(),
+            completions: None,
             sources: Sources {
-                doc: &world.doc,
-                libraries: &world.libraries,
+                doc: &world.model.doc,
+                libraries: &world.stack.libraries,
             },
-            root: world.doc.root.as_ref(),
+            root: world.model.doc.root.as_ref(),
             root_path: &[],
-            selection: world.selection.as_ref(),
+            selection: world.model.selection.as_ref(),
             scrub_spelling: None,
-            source_selection: world.selection.as_ref(),
+            source_selection: world.model.selection.as_ref(),
             annotations: &Annotations::default(),
             raw: false,
             styles: &styles,
@@ -168,57 +117,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             projection: Some(&stack.projection),
         },
         &mut frame_tcx,
-        Hooks {
-            completions: Some(stack.completions.clone()),
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|world: &mut ClickWorld, path, line, operation| {
-                let Some(selected) = world
-                    .selection
-                    .as_mut()
-                    .filter(|selected| selected.path() == path)
-                else {
-                    return false;
-                };
-                operation(EditCtx {
-                    state: selected.edit_line_mut(&line.text),
-                    fonts: &mut world.fonts,
-                    layouts: &mut world.layouts,
-                    clipboard: &mut world.clipboard,
-                })
-            }),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|world: &mut ClickWorld, operation| {
-                let ClickWorld {
-                    selection,
-                    fonts,
-                    layouts,
-                    clipboard,
-                    ..
-                } = world;
-                selection.as_mut().is_some_and(|selection| {
-                    selection.edit_query(|state| {
-                        operation(puri::edit::EditCtx {
-                            state,
-                            fonts,
-                            layouts,
-                            clipboard,
-                        })
-                    })
-                })
-            }),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|_, _, _, _| false),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        },
     );
     let active = measured::place(active, Placement::root(rect)).run(&Default::default());
     let line = active
@@ -233,7 +131,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     double.state.count = 2;
     let handler = active.handler.expect("active line handler");
     assert!(handler.dispatch_pointer_down(&mut world, &double));
-    let selection = world.selection.as_ref().unwrap().edit().unwrap();
+    let selection = world.model.selection.as_ref().unwrap().edit().unwrap();
     let (anchor, focus) = selection.selection_offsets();
     assert_ne!(anchor, focus);
 
@@ -241,95 +139,141 @@ fn sample_text_line_click_mounts_its_own_editor() {
     single.state.position.x = line.x0 + 1.0;
     single.state.count = 1;
     assert!(handler.dispatch_pointer_down(&mut world, &single));
-    let selection = world.selection.as_ref().unwrap().edit().unwrap();
+    let selection = world.model.selection.as_ref().unwrap().edit().unwrap();
     let (anchor, focus) = selection.selection_offsets();
     assert_eq!(anchor, focus);
 }
 
-#[test]
-fn state_drag_press_composes_selection_and_start_in_pointer_order() {
-    use ui_events::pointer::{
-        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-    };
+fn target() -> Hovered {
+    crate::libraries::test_widgets::hover(vec![])
+}
 
-    let target = Hover::Value(Rc::from([]));
+fn press(x: f64, pick: bool) -> PointerButtonEvent {
+    PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: PointerState {
+            position: (x, 5.0).into(),
+            modifiers: if pick {
+                Modifiers::META | Modifiers::CONTROL
+            } else {
+                Modifiers::empty()
+            },
+            ..Default::default()
+        },
+    }
+}
+
+fn gesture_place(
+    layout: crate::display::Layout<crate::Editor, Hovered>,
+    readonly: bool,
+) -> crate::display::widget::HoverCallback<crate::Editor, Hovered> {
+    let crate::display::recording::Recorded::Before { before, .. } =
+        crate::display::recording::record(&layout)
+    else {
+        panic!("widget wrapper");
+    };
+    crate::display::test_support::with_context(
+        &crate::display::test_support::NoProject,
+        |context| {
+            let mut cx = context.inputs.clone();
+            cx.source = if readonly {
+                Source::Transient { owner: &[] }
+            } else {
+                Source::Stored
+            };
+            before(&mut crate::display::widget::Context {
+                inputs: &cx,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+                text: &mut *context.text,
+            })
+        },
+    )
+}
+
+fn drag_frame(
+    place: crate::display::widget::HoverCallback<crate::Editor, Hovered>,
+    covered: bool,
+) -> crate::placed::Ready<crate::Editor> {
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,
         descent: 20.0,
     };
+    let node =
+        crate::display::widget::before_hover(leaf(extent, |_, _| {}), move |placement, output| {
+            place(output, placement)
+        });
+    let placement = Placement::new(
+        Rect::new(0.0, 0.0, 20.0, 20.0),
+        Rect::new(0.0, 0.0, 10.0, 20.0),
+    );
+    let placed = measured::place(placed::in_view(node, crate::test_root()), placement)
+        .run(&Default::default());
+    if covered {
+        measured::Output::over(
+            placed,
+            measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement)
+                .run(&Default::default()),
+        )
+    } else {
+        placed
+    }
+}
+
+#[test]
+fn state_drag_press_composes_selection_and_start_in_pointer_order() {
     for (accepts, covered) in [(true, false), (false, false), (true, true)] {
-        let drag = with_placement(
-            leaf::<Vec<&str>>(extent, |_, _| {}),
+        let log = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let select_log = log.clone();
+        let start_log = log.clone();
+        let frame = drag_frame(
             gesture_place(
-                progred_display::on_state_drag(
-                    progred_display::row(0.0, []),
-                    Hovered::Tree(target.clone()),
-                    Rc::new(move |log: &mut Vec<&str>| {
-                        log.push("select");
+                crate::display::on_state_drag(
+                    crate::display::row(0.0, []),
+                    target(),
+                    Rc::new(move |world: &mut crate::Editor| {
+                        select_log.borrow_mut().push("select");
+                        if accepts {
+                            crate::editing::select(world, &crate::test_root(), &[]);
+                        }
                         accepts
                     }),
-                    Rc::new(|| Box::new(|_, _| Value::record([]))),
+                    Rc::new(move || {
+                        start_log.borrow_mut().push("start");
+                        Box::new(|_, _| Value::record([]))
+                    }),
                 ),
-                Rc::new(|log, _, samples| {
-                    assert!(samples.is_empty());
-                    log.push("start drag");
-                }),
-                None,
-            ),
-        );
-        let node = with_placement(
-            drag,
-            progred_display::widget::interaction::target_action(
-                Hovered::Tree(target.clone()),
-                Rc::new(|log: &mut Vec<&str>| {
-                    log.push("outer selection");
-                    true
-                }),
                 false,
-                |event| crate::modifiers::pick(&event.state.modifiers),
-                PartialEq::eq,
             ),
+            covered,
         );
-        let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-        let mut placed = measured::place(node, placement).run(&Default::default());
-        if covered {
-            let cover = leaf::<Vec<&str>>(extent, |p, placement| {
-                p.occlude(placement);
-            });
-            placed = measured::Output::over(
-                placed,
-                measured::place(cover, placement).run(&Default::default()),
-            );
-        }
-        let mut state = PointerState::default();
-        state.position.x = 5.0;
-        state.position.y = 5.0;
-        let event = PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state,
-        };
-        let mut pointer = placed::DispatchContext::new(None, Some(Hovered::Tree(target.clone())));
-        let mut log = Vec::new();
-        assert!(
-            placed
-                .handler
-                .unwrap()
-                .dispatch_pointer_down_with(&mut log, &event, &mut pointer)
+        let mut world = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+            &mut world,
+            &press(5.0, false),
+            &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),
         );
+        assert_eq!(handled, covered || accepts);
+        assert_eq!(world.gesture.is_some(), accepts && !covered);
+        assert_eq!(world.model.selection.is_some(), accepts && !covered);
         assert_eq!(
-            log,
+            *log.borrow(),
             if covered {
                 vec![]
             } else if accepts {
-                vec!["select", "start drag"]
+                vec!["select", "start"]
             } else {
-                vec!["select", "outer selection"]
+                vec!["select"]
             }
         );
     }
@@ -337,40 +281,6 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
 
 #[test]
 fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
-    use ui_events::pointer::{
-        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-    };
-
-    let target = Hover::Value(Rc::from([]));
-    let root = crate::workspace::Root::document();
-    let node = with_placement(
-        leaf::<usize>(
-            Extent {
-                width: 20.0,
-                ascent: 0.0,
-                descent: 20.0,
-            },
-            |_, _| {},
-        ),
-        gesture_place(
-            progred_display::on_state_drag(
-                progred_display::row(0.0, []),
-                Hovered::Tree(target.clone()),
-                Rc::new(|_| true),
-                Rc::new(|| Box::new(|_, _| Value::record([]))),
-            ),
-            Rc::new(|starts, _, _| *starts += 1),
-            None,
-        ),
-    );
-    let placed = measured::place(
-        placed::in_view(node, root.clone()),
-        Placement::new(
-            Rect::new(0.0, 0.0, 20.0, 20.0),
-            Rect::new(0.0, 0.0, 10.0, 20.0),
-        ),
-    )
-    .run(&Default::default());
     for (x, button, pointer_type, owns_view, expected) in [
         (
             5.0,
@@ -409,265 +319,194 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             false,
         ),
     ] {
-        let mut state = PointerState::default();
-        state.position.x = x;
-        state.position.y = 5.0;
-        let event = PointerButtonEvent {
-            button,
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type,
-            },
-            state,
-        };
-        let mut pointer = placed::DispatchContext::new(
-            owns_view.then(|| root.clone()),
-            Some(Hovered::Tree(target.clone())),
-        );
-        let mut starts = 0;
-        assert_eq!(
-            placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
-                &mut starts,
-                &event,
-                &mut pointer,
+        let frame = drag_frame(
+            gesture_place(
+                crate::display::on_state_drag(
+                    crate::display::row(0.0, []),
+                    target(),
+                    Rc::new(|_| true),
+                    Rc::new(|| Box::new(|_, _| Value::record([]))),
+                ),
+                false,
             ),
-            expected
+            false,
         );
-        assert_eq!(starts, usize::from(expected));
+        let mut world = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        let mut event = press(x, false);
+        event.button = button;
+        event.pointer.pointer_type = pointer_type;
+        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
+        );
+        assert_eq!(handled, expected);
+        assert_eq!(world.gesture.is_some(), expected);
     }
 }
 
 #[test]
-fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry() {
-    use ui_events::keyboard::Modifiers;
-    use ui_events::pointer::{
-        PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-    };
-
-    struct World {
-        pending: bool,
-        log: Vec<&'static str>,
-        scrub: Option<Box<dyn progred_display::widget::gesture::Gesture<World>>>,
-    }
-
-    let path = vec![Step::Key(new_cell_id())];
-    let target = Hover::Value(Rc::from(path.clone()));
-    let root = crate::workspace::Root::document();
-    let extent = Extent {
-        width: 20.0,
-        ascent: 0.0,
-        descent: 20.0,
-    };
-    for (pending, covered, raw, x, pick, owns_view, expected) in [
-        (false, false, false, 5.0, true, true, Some("scrub")),
-        (true, false, false, 5.0, true, true, Some("pending pick")),
-        (false, true, false, 5.0, true, true, None),
-        (false, false, true, 5.0, true, true, Some("raw")),
-        (false, false, false, 15.0, true, true, None),
-        (false, false, false, 5.0, false, true, None),
-        (false, false, false, 5.0, true, false, None),
+fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
+    for (pending, covered, x, pick, owns_view, expected) in [
+        (false, false, 5.0, true, true, true),
+        (true, false, 5.0, true, true, false),
+        (false, true, 5.0, true, true, false),
+        (false, false, 15.0, true, true, false),
+        (false, false, 5.0, false, true, false),
+        (false, false, 5.0, true, false, false),
     ] {
-        let scrub = with_placement(
-            leaf::<World>(extent, move |p, _| {
-                p.handler().on_pointer_down(move |world, _| {
-                    if raw {
-                        world.log.push("raw");
-                    }
-                    raw
-                });
-            }),
+        let frame = drag_frame(
             gesture_place(
-                progred_display::on_scrub(
-                    progred_display::row(0.0, []),
-                    Hovered::Tree(target.clone()),
+                crate::display::on_scrub(
+                    crate::display::row(0.0, []),
+                    target(),
                     Rc::new(|| {
-                        Box::new(|_| progred_display::ScrubUpdate {
+                        Box::new(|_| crate::display::ScrubUpdate {
                             value: f64_convention::value(13.0),
                             spelling: Some("13".into()),
                         })
                     }),
                 ),
-                Rc::new(|world, gesture, samples| {
-                    assert!(samples.is_empty());
-                    world.scrub = Some(gesture);
-                }),
-                Some(Rc::new(|| progred_display::widget::gesture::ValueEdit {
-                    select: Rc::new(|world: &mut World| {
-                        if world.pending {
-                            false
-                        } else {
-                            world.log.push("scrub");
-                            true
-                        }
-                    }),
-                    write: Box::new(|_, _| false),
-                    selection: Rc::new(|_, _| {}),
-                })),
+                false,
             ),
+            covered,
         );
-        let node = with_placement(
-            scrub,
-            progred_display::widget::interaction::target_action(
-                Hovered::Tree(target.clone()),
-                Rc::new(move |world: &mut World| {
-                    if world.pending {
-                        world.log.push("pending pick");
-                    }
-                    world.pending
-                }),
-                true,
-                |event| crate::modifiers::pick(&event.state.modifiers),
-                PartialEq::eq,
-            ),
-        );
-        let placement = Placement::new(
-            Rect::new(0.0, 0.0, 20.0, 20.0),
-            Rect::new(0.0, 0.0, 10.0, 20.0),
-        );
-        let mut placed = measured::place(placed::in_view(node, root.clone()), placement)
-            .run(&Default::default());
-        if covered {
-            placed = measured::Output::over(
-                placed,
-                measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement)
-                    .run(&Default::default()),
-            );
+        let mut world = crate::test_editor(Document {
+            root: Some(f64_convention::value(1.0)),
+            cells: Cells::new(),
+        });
+        if pending {
+            world.model.selection = Some(pending_value(&crate::test_root(), vec![]));
         }
-        let mut state = PointerState::default();
-        state.position.x = x;
-        state.position.y = 5.0;
-        state.modifiers = if pick {
-            Modifiers::META | Modifiers::CONTROL
+        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+            &mut world,
+            &press(x, pick),
+            &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
+        );
+        assert_eq!(handled, covered || expected);
+        assert_eq!(world.gesture.is_some(), expected);
+        if expected {
+            world.advance_gesture(&[Point::new(50.0, 5.0)]);
+            assert_eq!(world.model.doc.root, Some(f64_convention::value(13.0)));
+            assert!(world.model.history.can_undo());
+        }
+    }
+}
+
+#[test]
+fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
+    use crate::display::widget::{before_hover, interaction::target_action};
+
+    for (pending, raw) in [(false, false), (true, false), (false, true), (true, true)] {
+        let field = new_cell_id();
+        let value = f64_convention::value(1.0);
+        let mut world = crate::test_editor(Document {
+            root: Some(value.clone()),
+            cells: Cells::new(),
+        });
+        if pending {
+            world.model.selection =
+                Some(pending_value(&crate::test_root(), vec![Step::Key(field)]));
+        }
+        let before = world.model.doc.clone();
+        let raw_contacts = Rc::new(std::cell::Cell::new(0));
+        let contacts = raw_contacts.clone();
+        let scrub = gesture_place(
+            crate::display::on_scrub(
+                crate::display::row(0.0, []),
+                target(),
+                Rc::new(|| {
+                    Box::new(|_| crate::display::ScrubUpdate {
+                        value: f64_convention::value(13.0),
+                        spelling: None,
+                    })
+                }),
+            ),
+            false,
+        );
+        let pick = target_action(
+            target(),
+            Rc::new(move |world: &mut crate::Editor| world.pick_identity(value.clone())),
+            true,
+            crate::editing::picking,
+            PartialEq::eq,
+        );
+        let extent = Extent {
+            width: 20.0,
+            ascent: 0.0,
+            descent: 20.0,
+        };
+        let node = before_hover(
+            before_hover(
+                leaf(extent, move |p, _| {
+                    p.handler().on_pointer_down(move |_, _| {
+                        if raw {
+                            contacts.set(contacts.get() + 1);
+                        }
+                        raw
+                    });
+                }),
+                move |placement, output| scrub(output, placement),
+            ),
+            move |placement, output| pick(output, placement),
+        );
+        let frame = measured::place(
+            placed::in_view(node, crate::test_root()),
+            Placement::root(extent.rect_at(Point::ZERO)),
+        )
+        .run(&Default::default());
+        assert!(frame.handler.unwrap().dispatch_pointer_down_with(
+            &mut world,
+            &press(5.0, true),
+            &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),
+        ));
+        assert_eq!(raw_contacts.get(), usize::from(raw));
+        assert_eq!(world.gesture.is_some(), !pending && !raw);
+        if pending && !raw {
+            assert_eq!(
+                world.sources().resolve_path(&[Step::Key(field)]),
+                Some(&f64_convention::value(1.0))
+            );
+            let selected = world.model.selection.as_ref().unwrap();
+            assert_eq!(selected.path(), &[Step::Key(field)]);
+            assert_eq!(selected.stage(&world.sources()), Stage::Edge);
+            assert!(world.model.history.can_undo());
         } else {
-            Modifiers::empty()
-        };
-        let event = PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state,
-        };
-        let mut pointer = placed::DispatchContext::new(
-            owns_view.then(|| root.clone()),
-            Some(Hovered::Tree(target.clone())),
-        );
-        let mut world = World {
-            pending,
-            log: Vec::new(),
-            scrub: None,
-        };
-        assert_eq!(
-            placed
-                .handler
-                .unwrap()
-                .dispatch_pointer_down_with(&mut world, &event, &mut pointer),
-            covered || expected.is_some(),
-        );
-        assert_eq!(world.log, expected.into_iter().collect::<Vec<_>>());
-        assert_eq!(world.scrub.is_some(), expected == Some("scrub"));
+            assert!(Rc::ptr_eq(&before, &world.model.doc));
+        }
     }
 }
 
 #[test]
 fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
-    use progred_display::widget::gesture;
-    use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerType};
-
-    let target = Hover::Value(Rc::from([]));
     for layout in [
-        progred_display::on_scrub(
-            progred_display::row(0.0, []),
-            Hovered::Tree(target.clone()),
-            Rc::new(|| panic!("read-only scrub cannot construct a domain continuation")),
+        crate::display::on_scrub(
+            crate::display::row(0.0, []),
+            target(),
+            Rc::new(|| panic!("read-only scrub")),
         ),
-        progred_display::on_point(
-            progred_display::row(0.0, []),
-            Rc::new(|_| panic!("read-only point control cannot produce a write")),
+        crate::display::on_point(
+            crate::display::row(0.0, []),
+            Rc::new(|_| panic!("read-only point control")),
         ),
     ] {
-        let place = gesture_place::<()>(
-            layout,
-            Rc::new(|_, _: Box<dyn gesture::Gesture<()>>, _| {
-                panic!("read-only control cannot start")
-            }),
-            None,
+        let frame = drag_frame(gesture_place(layout, true), false);
+        let mut world = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        assert!(
+            !frame
+                .handler
+                .is_some_and(|handler| handler.dispatch_pointer_down_with(
+                    &mut world,
+                    &press(5.0, true),
+                    &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target()))
+                ))
         );
-        let mut frame = progred_display::widget::Fragment::default();
-        let mut fragment = progred_display::widget::HoverContext::<(), Hovered>::new(
-            Default::default(),
-            &mut frame,
-        );
-        place(
-            &mut fragment,
-            Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
-        );
-        let mut event = PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: Default::default(),
-        };
-        event.state.modifiers =
-            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
-        assert!(!frame.handler.is_some_and(|handler| {
-            handler.dispatch_pointer_down_with(
-                &mut (),
-                &event,
-                &mut placed::DispatchContext::new(None, Some(Hovered::Tree(target.clone()))),
-            )
-        }));
+        assert!(world.gesture.is_none());
     }
-}
-
-fn gesture_place<World: 'static>(
-    layout: progred_display::Layout<World, Hovered>,
-    start: progred_display::widget::gesture::Start<World>,
-    edit: Option<progred_display::widget::gesture::BeginEdit<World>>,
-) -> progred_display::widget::HoverCallback<World, Hovered> {
-    let progred_display::recording::Recorded::Before { before, .. } =
-        progred_display::recording::record(&layout)
-    else {
-        panic!("expected an ordinary widget wrapper");
-    };
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::TextCache::default();
-    before(&mut progred_display::widget::Context {
-        project: &progred_display::test_support::NoProject,
-        completion: &|_, _, _| panic!("unexpected completion control"),
-        drawing: &|_, _, _| panic!("unexpected drawing control"),
-        text: &mut TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            cache: &mut cache,
-            scale: 2.0,
-        },
-        styles: &crate::styles::editor(2.0),
-        site: &|| panic!("gesture startup does not request text editing"),
-        line: &|| panic!("gesture startup does not request line input"),
-        event_interpreter: &|| panic!("native gestures do not interpret Grap"),
-        annotate: &|| Rc::new(|_, _| false),
-        start_gesture: &|| start.clone(),
-        value_edit: &|| edit.clone(),
-        drag_threshold: crate::gesture::DRAG_THRESHOLD,
-        command: crate::modifiers::command,
-        pick: Rc::new(|_, _| false),
-        picking: |event| crate::modifiers::pick(&event.state.modifiers),
-        same_target: PartialEq::eq,
-        primary_edit: |_| true,
-    })
-}
-
-fn with_placement<C: 'static>(
-    child: Measured<Placed<C>>,
-    place: progred_display::widget::HoverCallback<C, Hovered>,
-) -> Measured<Placed<C>> {
-    progred_display::widget::before_hover(child, move |placement, output| place(output, placement))
 }

@@ -1,11 +1,11 @@
 //! Adapt completion offers and pending queries to the editor’s floating card.
 
 use super::{
-    Cx, Hooks, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block,
-    hover_claim, hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke,
-    tree_hovered,
+    Cx, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block, hover_claim,
+    hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
 use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
+use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::placed::{self, Placed, before, decorate, on_key};
@@ -15,7 +15,6 @@ use crate::styles::Styles;
 use gid::Path;
 use kurbo::{Insets, Size};
 use measured::{Extent, Measured, min_width, pad};
-use progred_display::widget::completion::border as completion_border;
 use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
@@ -25,15 +24,36 @@ use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::Key;
 
+pub(crate) fn control(
+    context: &mut crate::display::widget::Context<'_, '_, crate::Editor, Hovered>,
+    kind: crate::display::CompletionKind,
+    provider: Option<&crate::display::CompletionProvider>,
+) -> Measured<Placed<crate::Editor>> {
+    match kind {
+        crate::display::CompletionKind::Value => pending_view(
+            context.inputs,
+            context.text,
+            context.path.to_vec(),
+            provider,
+        ),
+        crate::display::CompletionKind::Field => context
+            .inputs
+            .pending_edge_under(context.path)
+            .map(|(query, _)| {
+                label_query(context.inputs, context.text, context.path, query, provider)
+            })
+            .unwrap_or_else(|| text(context.text, "…", &context.inputs.styles.dim)),
+    }
+}
+
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
-pub(super) fn pending_view<C: 'static>(
+pub(super) fn pending_view(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
-    completions: Option<&progred_display::CompletionProvider>,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C>> {
+    completions: Option<&crate::display::CompletionProvider>,
+) -> Measured<Placed<crate::Editor>> {
     let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
         writable
@@ -44,17 +64,16 @@ pub(super) fn pending_view<C: 'static>(
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = placeholder(cx, tcx, &path, engaged, false, completions, hooks);
+    let content = placeholder(cx, tcx, &path, engaged, false, completions);
     // Selection draws the same outline as the inactive frame.
-    pending_target(cx, path, hooks, content)
+    pending_target(cx, path, content)
 }
 
-fn pending_target<C: 'static>(
+fn pending_target(
     cx: &Cx,
     path: Path,
-    hooks: &Hooks<C>,
-    child: Measured<Placed<C>>,
-) -> Measured<Placed<C>> {
+    child: Measured<Placed<crate::Editor>>,
+) -> Measured<Placed<crate::Editor>> {
     let (path, transient): (SharedPath, bool) = match cx.source {
         Source::Transient { owner } if owner != path.as_slice() => return child,
         Source::Transient { owner } => (Rc::from(owner), true),
@@ -62,17 +81,17 @@ fn pending_target<C: 'static>(
     };
     let scale = cx.styles.scale;
     let selected = cx.selected(path.as_ref());
-    let select = hooks.select.clone();
+    let root = cx.view.clone();
     let child = if transient {
         child
     } else {
         let target = path.clone();
-        let select = select.clone();
-        progred_display::widget::navigation::landmark(
+        let root = root.clone();
+        crate::display::widget::navigation::landmark(
             child,
             path.clone(),
             Rc::new(move |ctx, _| {
-                select(ctx, target.to_vec());
+                crate::editing::select(ctx, &root, &target);
                 true
             }),
         )
@@ -94,25 +113,24 @@ fn pending_target<C: 'static>(
             hover_claim(p, placement, Hover::Value(path.clone()));
         }
         let target = path.clone();
-        let activate_select = select.clone();
+        let root = root.clone();
         p.activate(Hovered::Tree(Hover::Value(target.clone())), move |ctx| {
-            activate_select(ctx, target.to_vec());
+            crate::editing::select(ctx, &root, &target);
             true
         });
     })
 }
 
-fn placeholder<C: 'static>(
+fn placeholder(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
     engaged: Option<&LineEditState>,
     labels: bool,
-    completions: Option<&progred_display::CompletionProvider>,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C>> {
+    completions: Option<&crate::display::CompletionProvider>,
+) -> Measured<Placed<crate::Editor>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, path, query, labels, completions, hooks),
+        Some(query) => query_content(cx, tcx, path, query, labels, completions),
         None => placeholder_box(tcx, cx.styles),
     }
 }
@@ -120,35 +138,34 @@ fn placeholder<C: 'static>(
 /// A focused completion query: the editor plus an ordinary floating
 /// card. Serves both pending stages — a value and a new field's label
 /// (`labels` narrows the offers there).
-fn query_content<C: 'static>(
+fn query_content(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
     query: &LineEditState,
     labels: bool,
-    completions: Option<&progred_display::CompletionProvider>,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C>> {
+    completions: Option<&crate::display::CompletionProvider>,
+) -> Measured<Placed<crate::Editor>> {
     // The card and keyboard commit must answer from one list.
     let everything = cx.selection.is_some_and(Selection::completion_everything);
     let commit = if labels {
-        Commit::Label(hooks.commit_label.clone())
+        Commit::Label(Rc::new(crate::editing::commit_label))
     } else {
-        Commit::Value(hooks.commit_value.clone())
+        Commit::Value(Rc::new(crate::editing::commit_value))
     };
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
     let resolve = |cell| cx.sources.definition(cell);
-    let request = progred_display::CompletionRequest {
+    let request = crate::display::CompletionRequest {
         query: query.text(),
         kind: if labels {
-            progred_display::CompletionKind::Field
+            crate::display::CompletionKind::Field
         } else {
-            progred_display::CompletionKind::Value
+            crate::display::CompletionKind::Value
         },
         scope: if everything {
-            progred_display::CompletionScope::Everything
+            crate::display::CompletionScope::Everything
         } else {
-            progred_display::CompletionScope::Suggested
+            crate::display::CompletionScope::Suggested
         },
         path,
         value_at: &value_at,
@@ -159,7 +176,7 @@ fn query_content<C: 'static>(
         cx.raw,
         &commit,
         &request,
-        hooks.completions.as_ref(),
+        cx.completions,
         completions,
     );
     let fallback = text(tcx, "…", &cx.styles.dim);
@@ -171,14 +188,12 @@ fn query_content<C: 'static>(
         None,
         tcx,
         cx.styles,
-        hooks,
     );
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
         text_frame::empty_width(cx.styles.label.size, cx.styles.scale),
         content,
     );
-    let edit = hooks.edit.clone();
     let offers = Offers {
         entries: entries.clone(),
     };
@@ -190,11 +205,10 @@ fn query_content<C: 'static>(
         // edit hook — the selection transition is never involved, so
         // clicking what you are typing can't discard it.
         hover_block(p, placement);
-        let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && edit(ctx, &|edit| {
+                && crate::editing::edit_query(ctx, &|edit| {
                     edit.state.pointer_down(
                         &presentation,
                         edit.fonts,
@@ -218,7 +232,7 @@ fn query_content<C: 'static>(
         .selection
         .map(Selection::completion_scroll)
         .unwrap_or(0.0);
-    let set_completion_view = hooks.set_completion_view.clone();
+    let root = cx.view.clone();
     let card = completion_card(
         tcx,
         cx.styles,
@@ -227,7 +241,7 @@ fn query_content<C: 'static>(
         scroll,
         everything,
         move |world, scroll, choice, everything| {
-            set_completion_view(world, scroll, choice, everything)
+            crate::editing::completion_view(world, &root, scroll, choice, everything)
         },
     );
     let card = if query.text().is_empty() && !query.is_composing() {
@@ -263,7 +277,7 @@ pub(super) fn completion_placement(
             .rect()
             .inflate(ring_outset, ring_outset);
         let border_outset = completion_border(scale).width / 2.0;
-        let outer = progred_display::widget::popover::rect(
+        let outer = crate::display::widget::popover::rect(
             anchor,
             Size::new(
                 extent.width + 2.0 * border_outset,
@@ -291,23 +305,21 @@ pub(super) fn completion_card<C: 'static>(
     let entries = entries
         .iter()
         .enumerate()
-        .map(
-            |(index, entry)| progred_display::widget::completion::Entry {
-                display: &entry.display,
-                detail: entry.detail.as_deref(),
-                matches: &entry.matches,
-                style: face_style(styles, entry.face),
-                target: Hovered::Tree(Hover::Entry(index)),
-                activate: entry.activate.clone(),
-            },
-        )
+        .map(|(index, entry)| crate::display::widget::completion::Entry {
+            display: &entry.display,
+            detail: entry.detail.as_deref(),
+            matches: &entry.matches,
+            style: face_style(styles, entry.face),
+            target: Hovered::Tree(Hover::Entry(index)),
+            activate: entry.activate.clone(),
+        })
         .collect::<Vec<_>>();
-    progred_display::widget::completion::card(
+    crate::display::widget::completion::card(
         tcx,
         styles,
         &entries,
         Hovered::Tree(Hover::MoreCompletions),
-        progred_display::widget::completion::State {
+        crate::display::widget::completion::State {
             choice,
             scroll,
             everything,
@@ -322,16 +334,15 @@ pub(super) fn completion_card<C: 'static>(
 /// [`descend`] to mark, and the ring spans the QUERY frame alone, the
 /// way a value pending's does. Clicks inside belong to the query's
 /// own caret target; clicks beside fall through like any pending's.
-pub(super) fn label_query<C: 'static>(
+pub(super) fn label_query(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[gid::Step],
     query: &LineEditState,
-    completions: Option<&progred_display::CompletionProvider>,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C>> {
+    completions: Option<&crate::display::CompletionProvider>,
+) -> Measured<Placed<crate::Editor>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, path, Some(query), true, completions, hooks);
+    let content = placeholder(cx, tcx, path, Some(query), true, completions);
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(scale, p, text_frame::outline(scale, rect));
     });

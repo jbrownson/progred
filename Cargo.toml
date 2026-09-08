@@ -11,9 +11,7 @@ codegen-units = 1
 resolver = "3"
 members = [
     "gid",
-    "display",
     "grap",
-    "libraries",
     "progred",
     "ui/measured",
     "ui/puri",
@@ -30,7 +28,6 @@ kurbo = "0.13.1"
 parley = "0.9.0"
 peniko = "0.6.1"
 pollster = "0.4"
-progred-display = { path = "display" }
 puri = { path = "ui/puri" }
 puri-widgets = { path = "ui/puri-widgets" }
 serde = "1.0"

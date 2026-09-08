@@ -1,6 +1,6 @@
 use super::*;
 use crate::command::Example;
-use progred_libraries::{control, f32};
+use crate::libraries::{control, f32};
 
 fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     let (mut doc, names) = crate::gid_text::parse(Example::Cube.source()).unwrap();
@@ -52,7 +52,7 @@ fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     let evaluated = grap::evaluate(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
     assert!(evaluated.completed);
     assert!(
-        !progred_libraries::absent::is_absent(&evaluated.result),
+        !crate::libraries::absent::is_absent(&evaluated.result),
         "{:?}",
         evaluated.result
     );

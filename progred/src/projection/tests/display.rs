@@ -4,48 +4,32 @@ use super::*;
 fn projection_target_appends_relative_steps() {
     let parent = gid::new_cell_id();
     let field = gid::new_cell_id();
-    let hooks = Hooks::<Vec<Path>> {
-        completions: None,
-        select: Rc::new(|selections, path| selections.push(path)),
-        select_payload: Rc::new(|selections, path, _| selections.push(path)),
-        edit_line: Rc::new(|_, _, _, _| false),
-        toggle: Rc::new(|_, _| {}),
-        update_state: Rc::new(|_, _, _| false),
-        edit: Rc::new(|_, _| false),
-        pick: Rc::new(|_, _| false),
-        insert: Rc::new(|_, _| {}),
-        delete: Rc::new(|_, _| false),
-        apply: Rc::new(|_, _, _, _| false),
-        start_gesture: Rc::new(|_, _, _, _| {}),
-        value_edit: Rc::new(|_| panic!("unexpected value edit")),
-        select_source: Rc::new(|_, _, _| {}),
-        commit_value: Rc::new(|_, _, _| {}),
-        commit_label: Rc::new(|_, _, _, _| {}),
-        set_completion_view: Rc::new(|_, _, _, _| {}),
-    };
-    let target = projection_target(&[Step::Key(parent)], &hooks, vec![Step::Key(field)]);
-    assert_eq!(
-        target.hover,
-        Hovered::Tree(Hover::Value(Rc::from(vec![
-            Step::Key(parent),
-            Step::Key(field)
-        ])))
-    );
-    let mut selections = Vec::new();
-    assert!((target.select)(&mut selections));
-    assert!((target.select_with)(&mut selections, Value::record([])));
-    assert_eq!(
-        selections,
-        [
-            vec![Step::Key(parent), Step::Key(field)],
-            vec![Step::Key(parent), Step::Key(field)]
-        ]
+
+    crate::display::test_support::with_context::<crate::Editor, Hovered, _>(
+        &crate::display::test_support::NoProject,
+        |context| {
+            let target =
+                projection_target(context.inputs, &[Step::Key(parent)], vec![Step::Key(field)]);
+            let expected = vec![Step::Key(parent), Step::Key(field)];
+            assert_eq!(
+                target.hover,
+                Hovered::Tree(Hover::Value(Rc::from(expected.clone())))
+            );
+            let mut world = crate::test_editor(Document {
+                root: Some(Value::record([])),
+                cells: Cells::new(),
+            });
+            assert!((target.select)(&mut world));
+            assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
+            assert!((target.select_with)(&mut world, Value::record([])));
+            assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
+        },
     );
 }
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
-    use progred_display::{at_local, descend, descend_local, partial, row};
+    use crate::display::{at_local, descend, descend_local, partial, row};
     for use_at in [false, true] {
         for accepts in [false, true] {
             let field = new_cell_id();
@@ -56,7 +40,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
             let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
             let calls = seen.clone();
             let local = partial(
-                move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+                move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                     calls.borrow_mut().push(input.value?.clone());
                     accepts.then(|| descend(Step::Key(child), None, None))
                 },
@@ -89,7 +73,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                     )
                 })
             })]);
-            let mut world = EditingWorld::new(
+            let mut world = editing_world(
                 &Document {
                     root: Some(root),
                     cells: Cells::new(),
@@ -110,7 +94,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
 
 #[test]
 fn local_projection_receives_missing_values_without_leaking_through_follow_or_transient_roots() {
-    use progred_display::{descend, descend_local, partial, transient};
+    use crate::display::{descend, descend_local, partial, transient};
     for mode in 0..3 {
         let cell = new_cell_id();
         let field = new_cell_id();
@@ -119,7 +103,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_tr
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let calls = seen.clone();
         let local = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
                     0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
@@ -140,7 +124,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_tr
         })]);
         let mut cells = Cells::new();
         cells.set_value(cell, leaf.clone());
-        let mut world = EditingWorld::new(
+        let mut world = editing_world(
             &Document {
                 root: Some(root),
                 cells,
@@ -163,7 +147,7 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
     let definition = Value::record([(field, Value::from(vec![3]))]);
     let mut cells = Cells::new();
     cells.set_value(cell, definition.clone());
-    let mut world = EditingWorld::new(
+    let mut world = editing_world(
         &Document {
             root: Some(cell.into()),
             cells,
@@ -172,7 +156,7 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
     );
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
-    let projection = Projection::default().with_entry(progred_display::partial(move |input| {
+    let projection = Projection::default().with_entry(crate::display::partial(move |input| {
         calls.borrow_mut().push(input.value?.clone());
         None
     }));
@@ -182,7 +166,7 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
 
 #[test]
 fn descents_replace_current_and_default_projections_independently() {
-    use progred_display::{at_with_projection, descend, dim, partial, row};
+    use crate::display::{at_with_projection, descend, dim, partial, row};
     for use_at in [false, true] {
         let field = new_cell_id();
         let child = new_cell_id();
@@ -192,7 +176,7 @@ fn descents_replace_current_and_default_projections_independently() {
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let current_seen = seen.clone();
         let current = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 current_seen
                     .borrow_mut()
                     .push(("current", input.value?.clone()));
@@ -201,7 +185,7 @@ fn descents_replace_current_and_default_projections_independently() {
         );
         let child_seen = seen.clone();
         let children = partial(
-            move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 child_seen
                     .borrow_mut()
                     .push(("children", input.value?.clone()));
@@ -237,7 +221,7 @@ fn descents_replace_current_and_default_projections_independently() {
                 )
             })
         })]);
-        let mut world = EditingWorld::new(
+        let mut world = editing_world(
             &Document {
                 root: Some(root.clone()),
                 cells: Cells::new(),
@@ -259,7 +243,7 @@ fn descents_replace_current_and_default_projections_independently() {
 
 #[test]
 fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
-    use progred_display::{at_scoped, descend, dim, partial, row};
+    use crate::display::{at_scoped, descend, dim, partial, row};
     let scoped = new_cell_id();
     let ordinary = new_cell_id();
     let items = new_cell_id();
@@ -269,7 +253,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
     let special = partial(
-        move |input: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+        move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
             input.value?.as_blob()?;
             calls.borrow_mut().push(input.value?.clone());
             Some(dim("scoped"))
@@ -294,7 +278,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     })]);
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(vec![2]));
-    let mut world = EditingWorld::new(
+    let mut world = editing_world(
         &Document {
             root: Some(root),
             cells,
@@ -307,7 +291,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
 
 #[test]
 fn record_combinator_chooses_a_projection_for_each_field() {
-    use progred_display::{dim, partial, structure};
+    use crate::display::{dim, partial, structure};
     let first = new_cell_id();
     let second = new_cell_id();
     let ordinary = new_cell_id();
@@ -321,7 +305,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
     let observe = |key| {
         let seen = seen.clone();
         partial(
-            move |_: &progred_display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |_: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 seen.borrow_mut().push(key);
                 Some(dim("field"))
             },
@@ -338,7 +322,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
         }),
         default_projection,
     ]);
-    let mut world = EditingWorld::new(
+    let mut world = editing_world(
         &Document {
             root: Some(root),
             cells: Cells::new(),
@@ -426,7 +410,7 @@ fn any_valued_cell_and_any_container_collapse() {
 #[test]
 fn the_sample_document_shows_the_constructs() {
     let doc = sample_document();
-    let lib = crate::stack::load::<()>().libraries;
+    let lib = crate::stack::load().libraries;
     let sources = src(&doc, &lib);
     // The root is an inline record of roles.
     assert!(doc.root.as_ref().unwrap().as_record().is_some());
@@ -535,10 +519,10 @@ fn partials_receive_selection_and_annotations_positionally() {
     // positionally: the payload only at the selected path, the
     // annotation record only at its own.
     fn probe(
-        input: &progred_display::ProjectionInput<'_, (), Hovered>,
-    ) -> Option<progred_display::Layout<(), Hovered>> {
+        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>,
+    ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
         input.value?.as_blob()?;
-        Some(progred_display::dim(
+        Some(crate::display::dim(
             match (input.selection.is_some(), input.state.is_some()) {
                 (true, _) => "selected here",
                 (false, true) => "annotated here",
@@ -551,7 +535,7 @@ fn partials_receive_selection_and_annotations_positionally() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let projection: Projection<()> = Projection::new([progred_display::partial(probe)]);
+    let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
@@ -563,8 +547,10 @@ fn partials_receive_selection_and_annotations_positionally() {
             scale: 1.0,
             cache: &mut cache,
         };
-        project::<()>(
+        project(
             ProjectDescription {
+                view: &crate::test_root(),
+                completions: None,
                 sources: Sources {
                     doc: &doc,
                     libraries: &lib,
@@ -582,25 +568,6 @@ fn partials_receive_selection_and_annotations_positionally() {
                 projection: Some(&projection),
             },
             &mut tcx,
-            Hooks::<()> {
-                completions: None,
-                select: Rc::new(|_, _| {}),
-                select_payload: Rc::new(|_, _, _| {}),
-                edit_line: Rc::new(|_, _, _, _| false),
-                toggle: Rc::new(|_, _| {}),
-                update_state: Rc::new(|_, _, _| false),
-                edit: Rc::new(|_, _| false),
-                pick: Rc::new(|_, _| false),
-                insert: Rc::new(|_, _| {}),
-                delete: Rc::new(|_, _| false),
-                apply: Rc::new(|_, _, _, _| false),
-                start_gesture: Rc::new(|_, _, _, _| {}),
-                value_edit: Rc::new(|_| panic!("unexpected value edit")),
-                select_source: Rc::new(|_, _, _| {}),
-                commit_value: Rc::new(|_, _, _| {}),
-                commit_label: Rc::new(|_, _, _, _| {}),
-                set_completion_view: Rc::new(|_, _, _, _| {}),
-            },
         )
         .extent
         .width
@@ -609,7 +576,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let cold = width(None, &empty);
     let selected = width(
         Some(&crate::selection::bare_edge(
-            &crate::workspace::Root::document(),
+            &crate::test_root(),
             Vec::new(),
         )),
         &empty,
@@ -625,11 +592,7 @@ fn partials_receive_selection_and_annotations_positionally() {
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
     for everything in [false, true] {
-        let mut pending = crate::selection::pending_with_query(
-            &crate::workspace::Root::document(),
-            Vec::new(),
-            "",
-        );
+        let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
         pending.set_completion_view(24.0, 2, everything);
         pending
             .edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
@@ -659,9 +622,9 @@ fn a_projection_defined_as_data_realizes() {
     // intents and realized through the ordinary pipeline — the same
     // boundary a Grap-backed library projection can use.
     fn probe(
-        input: &progred_display::ProjectionInput<'_, (), Hovered>,
-    ) -> Option<progred_display::Layout<(), Hovered>> {
-        use progred_libraries::layout as data;
+        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>,
+    ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
+        use crate::libraries::layout as data;
         input.value?.as_blob()?;
         let target = input.targets.current();
         data::decode(
@@ -681,7 +644,7 @@ fn a_projection_defined_as_data_realizes() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let projection: Projection<()> = Projection::new([progred_display::partial(probe)]);
+    let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
@@ -693,8 +656,10 @@ fn a_projection_defined_as_data_realizes() {
         cache: &mut cache,
     };
     let empty = Annotations::default();
-    let measured = project::<()>(
+    let measured = project(
         ProjectDescription {
+            view: &crate::test_root(),
+            completions: None,
             sources: Sources {
                 doc: &doc,
                 libraries: &lib,
@@ -712,25 +677,6 @@ fn a_projection_defined_as_data_realizes() {
             projection: Some(&projection),
         },
         &mut tcx,
-        Hooks::<()> {
-            completions: None,
-            select: Rc::new(|_, _| {}),
-            select_payload: Rc::new(|_, _, _| {}),
-            edit_line: Rc::new(|_, _, _, _| false),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|_, _| false),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|_, _, _, _| false),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        },
     );
     assert!(measured.extent.width > 0.0);
     let placed = measured::place(
@@ -743,7 +689,7 @@ fn a_projection_defined_as_data_realizes() {
         Some(crate::frame::Hovered::Tree(Hover::Value(Rc::from([])))),
     );
     assert!(placed.handler.unwrap().dispatch_pointer_down_with(
-        &mut (),
+        &mut crate::test_editor(doc.clone()),
         &PointerButtonEvent {
             button: Some(PointerButton::Primary),
             pointer: PointerInfo {

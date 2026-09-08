@@ -4,6 +4,8 @@ use crate::annotations::Annotations;
 use crate::completion::{Commit, Entry, Offers};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
+use crate::libraries::layout as layout_data;
+use crate::libraries::{Libraries, f64, fidget, name, text};
 use crate::navigate::{projected_name_owner, step_selection};
 use crate::placed::leaf;
 use crate::sample::{sample_document, sample_vocabulary};
@@ -18,9 +20,6 @@ use gid::{Cells, Document, new_cell_id};
 use kurbo::Rect;
 use measured::Extent;
 use peniko::Brush;
-use progred_libraries::layout as layout_data;
-use progred_libraries::{Libraries, f64, fidget, name, text};
-use puri::edit::EditCtx;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{KeyState, Modifiers};
@@ -32,30 +31,30 @@ use ui_events::pointer::{
 fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
-        progred_libraries::Library::<(), ()>::named(
+        crate::libraries::Library::<(), ()>::named(
             CellId::from_u128(1),
             "test",
-            progred_libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-            progred_display::partial(|_| None),
+            crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+            crate::display::partial(|_| None),
         ),
     )])
     .0
 }
 
 fn core_libraries() -> Libraries {
-    crate::stack::load::<()>().libraries
+    crate::stack::load().libraries
 }
 
-fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<progred_display::Completion> {
+fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::display::Completion> {
     let document = Document {
         root: None,
         cells: Cells::new(),
     };
     let sources = src(&document, &stack.libraries);
-    (stack.completions)(&progred_display::CompletionRequest {
+    (stack.completions)(&crate::display::CompletionRequest {
         query: "",
-        kind: progred_display::CompletionKind::Value,
-        scope: progred_display::CompletionScope::Suggested,
+        kind: crate::display::CompletionKind::Value,
+        scope: crate::display::CompletionScope::Suggested,
         path: &[],
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
@@ -68,11 +67,11 @@ fn completion_entries_with<C: 'static>(
     raw: bool,
     commit: &Commit<C>,
     query: &str,
-    providers: Option<&progred_display::CompletionProvider>,
-    contextual: Option<&progred_display::CompletionProvider>,
+    providers: Option<&crate::display::CompletionProvider>,
+    contextual: Option<&crate::display::CompletionProvider>,
     everything: bool,
 ) -> Vec<Entry<C>> {
-    use progred_display::{CompletionKind, CompletionRequest, CompletionScope};
+    use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
     crate::completion::completion_entries_with(
         sources,
@@ -105,44 +104,15 @@ fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
 }
 
 fn make_selection(path: Path) -> Selection {
-    Selection::edge(&crate::workspace::Root::document(), path)
+    Selection::edge(&crate::test_root(), path)
 }
 
-#[derive(Default)]
-struct TestClipboard(Option<String>);
+type EditingWorld = crate::Editor;
 
-impl puri::edit::TextClipboard for TestClipboard {
-    fn get_text(&mut self) -> Option<String> {
-        self.0.clone()
-    }
-
-    fn set_text(&mut self, text: &str) {
-        self.0 = Some(text.into());
-    }
-}
-
-struct EditingWorld {
-    doc: Rc<Document>,
-    libraries: Libraries,
-    selection: Option<Selection>,
-    fonts: parley::FontContext,
-    layouts: parley::LayoutContext<Brush>,
-    cache: puri::text::TextCache,
-    clipboard: TestClipboard,
-}
-
-impl EditingWorld {
-    fn new(doc: &Document, libraries: &Libraries) -> Self {
-        Self {
-            doc: Rc::new(doc.clone()),
-            libraries: libraries.clone(),
-            selection: None,
-            fonts: parley::FontContext::new(),
-            layouts: parley::LayoutContext::new(),
-            cache: puri::text::TextCache::default(),
-            clipboard: TestClipboard::default(),
-        }
-    }
+fn editing_world(doc: &Document, libraries: &Libraries) -> EditingWorld {
+    let mut world = crate::test_editor(doc.clone());
+    world.stack.libraries = libraries.clone();
+    world
 }
 
 fn editing_frame(world: &mut EditingWorld, raw: bool) -> crate::placed::Ready<EditingWorld> {
@@ -163,26 +133,28 @@ fn editing_frame_at(
     projection: Option<&Projection<EditingWorld>>,
     pointer: Option<Point>,
 ) -> crate::placed::Ready<EditingWorld> {
-    let stack = crate::stack::load::<EditingWorld>();
+    let stack = crate::stack::load();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let mut tcx = TextCtx {
-        fonts: &mut world.fonts,
-        layouts: &mut world.layouts,
+        fonts: &mut world.font_cx,
+        layouts: &mut world.layout_cx,
         scale: 1.0,
-        cache: &mut world.cache,
+        cache: &mut world.text_cache,
     };
-    let measured = project::<EditingWorld>(
+    let measured = project(
         ProjectDescription {
+            view: &crate::test_root(),
+            completions: Some(&stack.completions),
             sources: Sources {
-                doc: &world.doc,
-                libraries: &world.libraries,
+                doc: &world.model.doc,
+                libraries: &world.stack.libraries,
             },
-            root: world.doc.root.as_ref(),
+            root: world.model.doc.root.as_ref(),
             root_path: &[],
-            selection: world.selection.as_ref(),
+            selection: world.model.selection.as_ref(),
             scrub_spelling: None,
-            source_selection: world.selection.as_ref(),
+            source_selection: world.model.selection.as_ref(),
             annotations: &annotations,
             raw,
             styles: &styles,
@@ -191,67 +163,6 @@ fn editing_frame_at(
             projection: (!raw).then_some(projection.unwrap_or(&stack.projection)),
         },
         &mut tcx,
-        Hooks {
-            completions: Some(stack.completions.clone()),
-            select: Rc::new(|world, path| {
-                world.selection = Some(make_selection(path));
-            }),
-            select_payload: Rc::new(|world, path, payload| {
-                world.selection = Some(Selection::from_payload(
-                    &crate::workspace::Root::document(),
-                    &src(&world.doc, &world.libraries),
-                    path,
-                    payload,
-                ));
-            }),
-            edit_line: Rc::new(|world, path, line, operation| {
-                if !writable_at(&src(&world.doc, &world.libraries), path) {
-                    return false;
-                }
-                let Some(selected) = world.selection.as_mut().filter(|selected| {
-                    selected.path() == path
-                        && selected.stage(&src(&world.doc, &world.libraries)) == Stage::Edge
-                }) else {
-                    return false;
-                };
-                line_control::edit(&mut world.doc, &world.libraries, selected, line, |state| {
-                    operation(EditCtx {
-                        state,
-                        fonts: &mut world.fonts,
-                        layouts: &mut world.layouts,
-                        clipboard: &mut world.clipboard,
-                    })
-                })
-                .0
-            }),
-            toggle: Rc::new(|_, _| {}),
-            update_state: Rc::new(|_, _, _| false),
-            edit: Rc::new(|world, operation| {
-                let Some(selected) = world.selection.as_mut().filter(|selected| {
-                    selected.stage(&src(&world.doc, &world.libraries)) != Stage::Edge
-                }) else {
-                    return false;
-                };
-                selected.edit_query(|state| {
-                    operation(EditCtx {
-                        state,
-                        fonts: &mut world.fonts,
-                        layouts: &mut world.layouts,
-                        clipboard: &mut world.clipboard,
-                    })
-                })
-            }),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_, _| false),
-            apply: Rc::new(|_, _, _, _| false),
-            start_gesture: Rc::new(|_, _, _, _| {}),
-            value_edit: Rc::new(|_| panic!("unexpected value edit")),
-            select_source: Rc::new(|_, _, _| {}),
-            commit_value: Rc::new(|_, _, _| {}),
-            commit_label: Rc::new(|_, _, _, _| {}),
-            set_completion_view: Rc::new(|_, _, _, _| {}),
-        },
     );
     let height = measured.extent.height().max(1.0);
     measured::place(
@@ -266,7 +177,7 @@ fn editing_frame_at(
 
 /// Select through the current projection, without an editing interaction.
 fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    let mut world = EditingWorld::new(doc, libraries);
+    let mut world = editing_world(doc, libraries);
     let placed = editing_frame(&mut world, false);
     if let Some(target) = placed
         .descends
@@ -275,7 +186,10 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
     {
         (target.select)(&mut world, None);
     }
-    world.selection.unwrap_or_else(|| make_selection(path))
+    world
+        .model
+        .selection
+        .unwrap_or_else(|| make_selection(path))
 }
 
 fn make_projected_editing_selection(
@@ -283,18 +197,18 @@ fn make_projected_editing_selection(
     libraries: &Libraries,
     path: Path,
 ) -> Selection {
-    let mut world = EditingWorld::new(doc, libraries);
-    world.selection = Some(make_projected_selection(doc, libraries, path));
+    let mut world = editing_world(doc, libraries);
+    world.model.selection = Some(make_projected_selection(doc, libraries, path));
     editing_frame(&mut world, false)
         .handler
         .unwrap()
         .dispatch_key(&mut world, &arrow(NamedKey::End));
-    world.selection.unwrap()
+    world.model.selection.unwrap()
 }
 
 fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
     Selection::from_line(
-        &crate::workspace::Root::document(),
+        &crate::test_root(),
         &src(doc, libraries),
         path.clone(),
         projected_line(doc, libraries, &path).expect("value is not line editable"),
@@ -305,9 +219,9 @@ fn projected_line(
     doc: &Document,
     libraries: &Libraries,
     path: &[Step],
-) -> Option<progred_display::LineEdit> {
+) -> Option<crate::display::LineEdit> {
     struct NoEval;
-    impl progred_display::Env for NoEval {
+    impl crate::display::Env for NoEval {
         fn apply_scoped(
             &self,
             _: &gid::Value,
@@ -323,15 +237,15 @@ fn projected_line(
     }
 
     let value = src(doc, libraries).resolve_path(path)?;
-    let stack = crate::stack::load::<()>();
+    let stack = crate::stack::load();
     let layout = {
-        let target = |_| progred_display::ProjectionTarget {
-            select: Rc::new(|_: &mut ()| false),
-            select_with: Rc::new(|_: &mut (), _| false),
+        let target = |_| crate::display::ProjectionTarget {
+            select: Rc::new(|_: &mut crate::Editor| false),
+            select_with: Rc::new(|_: &mut crate::Editor, _| false),
             hover: Hovered::Tree(Hover::Value(Rc::from(path))),
         };
-        stack.projection.apply(&progred_display::ProjectionInput {
-            default_projection: progred_display::partial(|_| None),
+        stack.projection.apply(&crate::display::ProjectionInput {
+            default_projection: crate::display::partial(|_| None),
             env: &NoEval,
             value: Some(value),
             scale_factor: 1.0,
@@ -339,18 +253,18 @@ fn projected_line(
             selection: None,
             pending: None,
             state: None,
-            targets: progred_display::ProjectionTargets::new(&target),
+            targets: crate::display::ProjectionTargets::new(&target),
         })
     }?;
-    let layout = match progred_display::recording::record(&layout) {
-        progred_display::recording::Recorded::Before { child, .. } => *child,
+    let layout = match crate::display::recording::record(&layout) {
+        crate::display::recording::Recorded::Before { child, .. } => *child,
         layout => layout,
     };
     match layout {
-        progred_display::recording::Recorded::Widget(widget) => placed_line_description(&widget),
-        progred_display::recording::Recorded::Row { children, .. } => {
+        crate::display::recording::Recorded::Widget(widget) => placed_line_description(&widget),
+        crate::display::recording::Recorded::Row { children, .. } => {
             children.into_iter().find_map(|child| match child {
-                progred_display::recording::Recorded::Widget(widget) => {
+                crate::display::recording::Recorded::Widget(widget) => {
                     placed_line_description(&widget)
                 }
                 _ => None,
@@ -361,60 +275,16 @@ fn projected_line(
 }
 
 fn placed_line_description(
-    widget: &progred_display::widget::Widget<(), Hovered>,
-) -> Option<progred_display::LineEdit> {
-    use std::cell::RefCell;
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::TextCache::default();
-    let captured = Rc::new(RefCell::new(None));
-    let output = captured.clone();
-    let measured = widget(&mut progred_display::widget::Context {
-        project: &progred_display::test_support::NoProject,
-        completion: &|_, _, _| panic!("unexpected completion control"),
-        drawing: &|_, _, _| panic!("unexpected drawing control"),
-        text: &mut TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            cache: &mut cache,
-            scale: 1.0,
+    widget: &crate::display::widget::Widget<crate::Editor, Hovered>,
+) -> Option<crate::display::LineEdit> {
+    crate::display::test_support::with_context(
+        &crate::display::test_support::NoProject,
+        |context| {
+            crate::libraries::test_widgets::record_line(|| {
+                widget(context);
+            })
         },
-        styles: &crate::styles::editor(1.0),
-        event_interpreter: &|| panic!("native line does not interpret Grap"),
-        annotate: &|| panic!("native line does not request annotation writes"),
-        start_gesture: &|| panic!("unexpected gesture startup request"),
-        value_edit: &|| panic!("unexpected value edit request"),
-        drag_threshold: 3.0,
-        command: |_| false,
-        site: &|| panic!("line input does not request the generic selection site"),
-        line: &|| {
-            let output = output.clone();
-            progred_display::widget::LineSite {
-                spelling: None,
-                input: Some(progred_display::widget::LineInput {
-                    selected: true,
-                    editing: None,
-                    initial_text: &crate::selection::line_edit,
-                    target: Hovered::Tree(Hover::Value(Rc::from([]))),
-                    select: Rc::new(|_| true),
-                    edit: Rc::new(move |_, description, _| {
-                        output.replace(Some(description.clone()));
-                        true
-                    }),
-                }),
-            }
-        },
-        pick: Rc::new(|_, _| false),
-        picking: |_| false,
-        same_target: |_, _| false,
-        primary_edit: |_| true,
-    });
-    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    measured::place(measured, placement)
-        .run(&Default::default())
-        .handler?
-        .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
-    captured.take()
+    )
 }
 
 // Direct conversion tests use a fresh projection's callback, just as a
@@ -476,8 +346,7 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 }
 
 fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
-    let selection =
-        from.map(|path| crate::selection::bare_edge(&crate::workspace::Root::document(), path));
+    let selection = from.map(|path| crate::selection::bare_edge(&crate::test_root(), path));
     step_selection(ds, None, selection.as_ref(), LINE, &arrow(named))
         .map(|descend| descend.path.to_vec())
 }

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 /// Fold override: one of two named states, absent meaning the default
 /// (collapsed inside a cycle).
-pub use progred_libraries::site::vocabulary::{EXPANDED, FOLD, FOLDED};
+pub use crate::libraries::site::vocabulary::{EXPANDED, FOLD, FOLDED};
 
 #[derive(Clone, Default)]
 pub struct Annotations {

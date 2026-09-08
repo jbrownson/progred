@@ -1,10 +1,10 @@
 //! The assigned-size pane contract, reusing ordinary projection lowering.
 
 use super::Projection;
+use crate::libraries::presentation;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
 use kurbo::Size;
-use progred_libraries::presentation;
 
 pub(crate) struct Entry<'a> {
     pub value: &'a Value,
@@ -27,10 +27,13 @@ pub(crate) fn entry<'a>(sources: Sources<'a>, path: &[Step]) -> Option<Entry<'a>
     presentation::viewport(value).map(|_| Entry { value, path })
 }
 
-pub(crate) fn projection<C: 'static>(ambient: &Projection<C>, size: Size) -> Projection<C> {
+pub(crate) fn projection(
+    ambient: &Projection<crate::Editor>,
+    size: Size,
+) -> Projection<crate::Editor> {
     ambient
         .clone()
-        .with_entry(progred_display::partial(move |input| {
+        .with_entry(crate::display::partial(move |input| {
             presentation::viewport_display(input, size.width, size.height)
         }))
 }
@@ -38,8 +41,8 @@ pub(crate) fn projection<C: 'static>(ambient: &Projection<C>, size: Size) -> Pro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::Libraries;
     use gid::{Cells, Document, Resolution, new_cell_id};
-    use progred_libraries::Libraries;
 
     #[test]
     fn only_root_declarations_followed_through_stable_definitions_are_viewports() {

@@ -2,10 +2,10 @@
 //! and history.
 
 use crate::history;
+use crate::libraries::Libraries;
 use crate::selection;
 use crate::workspace;
 use gid::{Document, Path, Step};
-use progred_libraries::Libraries;
 use std::rc::Rc;
 
 /// The View menu's frame inputs.
@@ -462,10 +462,10 @@ mod tests {
 
     #[test]
     fn saving_and_folding_break_typing_runs() {
-        use progred_libraries::text;
+        use crate::libraries::text;
         let field = gid::new_cell_id();
         let path = vec![Step::Key(field)];
-        let libraries = crate::stack::load::<()>().libraries;
+        let libraries = crate::stack::load().libraries;
         let mut model = Model::new(Document {
             root: Some(Value::record([(field, text::value("a"))])),
             cells: Cells::new(),
@@ -478,10 +478,10 @@ mod tests {
                 libraries: &libraries,
             },
             path.clone(),
-            progred_display::LineEdit {
+            crate::display::LineEdit {
                 text: "a".into(),
                 placeholder: None,
-                update: progred_libraries::line_edit::native(text::edit),
+                update: crate::libraries::line_edit::native(text::edit),
                 prefix: "\"".into(),
                 suffix: "\"".into(),
                 family: Default::default(),
@@ -495,7 +495,7 @@ mod tests {
                 &mut model.doc,
                 &libraries,
                 selection,
-                &progred_libraries::line_edit::native(progred_libraries::text::edit),
+                &crate::libraries::line_edit::native(crate::libraries::text::edit),
             ) {
                 model.history.record(before);
             }

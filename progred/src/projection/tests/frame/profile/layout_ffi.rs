@@ -1,6 +1,6 @@
 use super::*;
+use crate::libraries::{control::vocabulary as control, layout, presentation, text};
 use layout::vocabulary as l;
-use progred_libraries::{control::vocabulary as control, layout, presentation, text};
 
 const ITEM: CellId = CellId::from_u128(9001);
 const LABEL: CellId = CellId::from_u128(9002);
@@ -32,7 +32,7 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
         call(
             l::ROW,
             [
-                (l::GAP, progred_libraries::f64::value(6.0)),
+                (l::GAP, crate::libraries::f64::value(6.0)),
                 (
                     l::CHILDREN,
                     sequence([
@@ -69,7 +69,7 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
                 call(
                     l::COL,
                     [
-                        (l::GAP, progred_libraries::f64::value(2.0)),
+                        (l::GAP, crate::libraries::f64::value(2.0)),
                         (l::CHILDREN, sequence(calls)),
                     ],
                 ),
@@ -107,7 +107,7 @@ fn setup() -> (ProfileView, BenchContext) {
     context.stack.projection = context
         .stack
         .projection
-        .with_entry(progred_display::partial(presentation::projected_display));
+        .with_entry(crate::display::partial(presentation::projected_display));
     (
         ProfileView {
             size: kurbo::Size::new(1400.0, 10000.0),
@@ -157,7 +157,7 @@ fn grap_layout_ffi_profile_loop() {
                         [(presentation::vocabulary::VALUE, Value::record([]))],
                     ),
                 ),
-                (l::FUEL, progred_libraries::f64::value(100_000.0)),
+                (l::FUEL, crate::libraries::f64::value(100_000.0)),
             ]),
         )]));
         doc

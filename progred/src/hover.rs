@@ -35,8 +35,8 @@ pub enum Hover {
     MoreCompletions,
 }
 
-pub use progred_display::widget::source::{Secondary, SourceTrace};
-impl progred_display::widget::source::PathLookup for Sources<'_> {
+pub use crate::display::widget::source::{Secondary, SourceTrace};
+impl crate::display::widget::source::PathLookup for Sources<'_> {
     fn value_at(&self, path: &[Step]) -> Option<&Value> {
         self.resolve_path(path)
     }
@@ -95,17 +95,17 @@ mod tests {
             cells,
         };
         let libraries = |order: [CellId; 2]| {
-            progred_libraries::Libraries::from_contributions(order.map(|id| {
+            crate::libraries::Libraries::from_contributions(order.map(|id| {
                 (
                     id,
-                    progred_libraries::Library::<(), ()>::named(
+                    crate::libraries::Library::<(), ()>::named(
                         id,
                         "source",
-                        progred_libraries::Definitions::from_parts(
+                        crate::libraries::Definitions::from_parts(
                             doc.cells.clone(),
                             grap::ForeignFunctions::default(),
                         ),
-                        progred_display::partial(|_| None),
+                        crate::display::partial(|_| None),
                     ),
                 )
             }))
@@ -199,7 +199,7 @@ mod tests {
             root: Some(root),
             cells,
         };
-        let libraries = progred_libraries::Libraries::default();
+        let libraries = crate::libraries::Libraries::default();
         let sources = Sources {
             doc: &doc,
             libraries: &libraries,

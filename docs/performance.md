@@ -572,3 +572,30 @@ The final combined build also passed all nine canaries, the full workspace test
 suite, and the native all-target check. The browser check passes with its existing
 unused `drawn_menu` and `Quit` warnings. No runtime profiling or new dependencies
 were added; storage alternatives live only in the opt-in test.
+
+## Direct editor widget handlers — 2026-09-08
+
+Progred's display and library modules now live in the application crate.
+Document-aware widgets borrow their current inputs while preparing, then their
+handlers receive `&mut Editor` and call ordinary editing helpers. This removes
+the projection `Hooks` dictionary, the narrower `Site`/`LineSite` callback
+factories, and the drawn menu's hook bundle. Puri and the measured box algebra
+remain independent; this introduces no cache or action-dispatch layer.
+
+Feature-free release test binaries from `df8c6bf` and the refactor were run
+alternately under the same Seatbelt policy, with five warm-up and 90 measured
+frames per workload:
+
+| Whole-frame medians | Before (two runs) | After (two runs) |
+| --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 4.01 / 3.92 ms | 3.90 / 3.91 ms |
+| IoP picture, 500 × 500 @1 | 24.19 / 24.19 ms | 24.34 / 24.78 ms |
+
+Treat this as effectively neutral performance, not an optimization win. The
+picture's second after run was noisier (46.39 ms maximum); its paint/evaluator
+work remains overwhelmingly dominant. These are headless projection/recording
+checks, not measurements of native GPU presentation.
+
+After the final gesture-adapter and test cleanup, the same 90-frame checks
+measured 3.59 ms for source and 23.30 ms for picture. The full workspace suite
+passed 629 tests; native and browser builds still check successfully.

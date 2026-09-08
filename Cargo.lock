@@ -2407,11 +2407,13 @@ version = "0.1.0"
 dependencies = [
  "clipboard-rs",
  "console_error_panic_hook",
+ "fidget",
  "getrandom 0.3.4",
  "gid",
  "grap",
  "kurbo",
  "measured",
+ "nalgebra",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -2419,8 +2421,6 @@ dependencies = [
  "parley",
  "peniko",
  "pollster",
- "progred-display",
- "progred-libraries",
  "puri",
  "puri-vello",
  "puri-web",
@@ -2437,32 +2437,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "winit",
-]
-
-[[package]]
-name = "progred-display"
-version = "0.1.0"
-dependencies = [
- "gid",
- "grap",
- "measured",
- "peniko",
- "puri",
- "puri-widgets",
-]
-
-[[package]]
-name = "progred-libraries"
-version = "0.1.0"
-dependencies = [
- "fidget",
- "gid",
- "grap",
- "nalgebra",
- "pollster",
- "progred-display",
- "puri",
- "puri-widgets",
 ]
 
 [[package]]

@@ -6,6 +6,8 @@ mod annotations;
 mod command;
 mod commands;
 mod completion;
+mod display;
+mod editing;
 mod filter;
 mod frame;
 mod gesture;
@@ -17,6 +19,7 @@ mod grap_examples;
 mod history;
 mod hover;
 mod identity;
+mod libraries;
 #[cfg(target_os = "macos")]
 mod macos_surface;
 #[cfg(target_os = "macos")]
@@ -138,17 +141,17 @@ pub(crate) enum RenderState {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 pub(crate) struct SystemTextClipboard;
 
-#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+#[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
 #[derive(Default)]
 pub(crate) struct SystemTextClipboard {
     text: Option<String>,
     structure: Option<gid::Value>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
         use clipboard_rs::{Clipboard, ClipboardContext};
@@ -165,7 +168,7 @@ impl TextClipboard for SystemTextClipboard {
     }
 }
 
-#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+#[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
         self.text.clone()
@@ -378,7 +381,7 @@ pub(crate) struct Editor {
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
-    pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
 
@@ -414,7 +417,7 @@ fn new_editor(
     doc: gid::Document,
     doc_path: Option<PathBuf>,
     text_binders: gid_text::Binders,
-    proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
 ) -> Editor {
     Editor {
         drawn_menu,
@@ -424,9 +427,9 @@ fn new_editor(
         font_cx,
         layout_cx: LayoutContext::new(),
         text_cache: puri::text::TextCache::default(),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
         text_clipboard: SystemTextClipboard,
-        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
         text_clipboard: SystemTextClipboard::default(),
         stack,
         model: Model::new(doc),
@@ -660,7 +663,7 @@ impl App {
             doc,
             path,
             binders,
-            self.proxy.clone(),
+            Some(self.proxy.clone()),
         ));
         self.resume_editor(event_loop, self.editors.len() - 1);
     }
@@ -1174,7 +1177,13 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         cascade: macos_window::initial_cascade(),
         editors: vec![new_editor(
-            drawn_menu, stack, fonts, doc, doc_path, binders, proxy,
+            drawn_menu,
+            stack,
+            fonts,
+            doc,
+            doc_path,
+            binders,
+            Some(proxy),
         )],
     };
 
@@ -1508,7 +1517,9 @@ impl Editor {
         match command {
             Command::Doc(command) => self.run_doc_command(command),
             Command::App(_) => {
-                let _ = self.proxy.send_event(UserEvent::Command(command));
+                if let Some(proxy) = &self.proxy {
+                    let _ = proxy.send_event(UserEvent::Command(command));
+                }
             }
         }
     }
@@ -1897,7 +1908,7 @@ impl App {
                 ))
                 .set_parent(window.as_ref())
                 .show();
-            let proxy = editor.proxy.clone();
+            let proxy = self.proxy.clone();
             std::thread::spawn(move || {
                 let accepted = matches!(
                     pollster::block_on(sheet),
@@ -2387,4 +2398,25 @@ mod shell_tests {
             CursorIcon::RowResize
         );
     }
+}
+
+#[cfg(test)]
+pub(crate) fn test_editor(doc: gid::Document) -> Editor {
+    let mut editor = new_editor(
+        false,
+        stack::load(),
+        FontContext::new(),
+        doc,
+        None,
+        Default::default(),
+        None,
+    );
+    editor.model.workspace.document.root = test_root();
+    editor
+}
+
+#[cfg(test)]
+pub(crate) fn test_root() -> workspace::Root {
+    thread_local! { static ROOT: workspace::Root = workspace::Root::document(); }
+    ROOT.with(Clone::clone)
 }

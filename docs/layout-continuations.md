@@ -66,13 +66,13 @@ hover, handlers, or painting.
 
 ## Ownership and types
 
-[`Builder`](../display/src/builder.rs) accepts box composition and opaque
+[`Builder`](../progred/src/display/builder.rs) accepts box composition and opaque
 leaf/preparation functions. Rows, columns, overlays, padding, floating, sharing,
 and alternatives own geometry. `before` and `after` compose placement work
 without interpreting it. Floating receives a positioning function and does not
 install popover policy.
 
-[`display/src/measure.rs`](../display/src/measure.rs) implements this interface
+[`display::measure`](../progred/src/display/measure.rs) implements this interface
 with the choice graph. Its `Node` results are temporary interpreter-local slots,
 consumed by parent operations; they are not persistent identities or paths.
 Shared children use an explicit sharing key and prepare only once per frame.
@@ -81,7 +81,7 @@ the same geometry helpers as the plain `Measured` combinators; there is no
 `Measured::Kind` interpreter. Opaque wrappers receive a child's extent and
 placement callback when choices have settled.
 
-[`recording`](../display/src/recording.rs) is a test-only implementation of the
+[`recording`](../progred/src/display/recording.rs) is a test-only implementation of the
 same calls. It retains structure for inspection without executing opaque widget
 programs. Production has no parallel `Layout` enum. Layout programs are reusable
 closures, however, so their captures and the choice graph still allocate; this
@@ -98,10 +98,10 @@ width/height feedback. Leaf debug outlines use the final adopted rectangle.
 A `Widget` prepares a `Measured<HoverPass>`. A `Program` can instead prepare
 a subtree with choices, using the same per-frame `ChoiceBuild`. Neither is a
 catalogue of control variants. Puri's plain text/drawing leaves are measured by
-[`widget::drawing`](../display/src/widget/drawing.rs); they contain no document
+[`widget::drawing`](../progred/src/display/widget/drawing.rs); they contain no document
 or interaction information.
 
-[`HoverPass`](../display/src/widget/frame.rs) is the shared placement output;
+[`HoverPass`](../progred/src/display/widget/frame.rs) is the shared placement output;
 the app's `Placed` aliases it. It composes one-shot functions, using a flat
 sequence for siblings rather than a recursive call stack. `run` returns a
 `Fragment` (the app's `Ready`): the hover claim, rendering, one
@@ -116,7 +116,7 @@ back; the paint and landmark segments are reordered to preserve their ordinary
 back-to-front construction order. Scoped wrappers map a child's completed
 output, consuming navigation overrides without affecting siblings or ancestors.
 Floaters are lifted before hover and remain outside the enclosing clip/navigation
-scope. These editor-facing types belong to `progred-display`; Puri itself remains
+scope. These editor-facing types belong to `progred::display`; Puri itself remains
 layout-neutral and knows no document paths.
 
 [`CanvasSink`](../ui/puri/src/draw.rs) is the object-safe primitive drawing
@@ -129,7 +129,7 @@ initial encodings remain available where recording is intentional.
 ## Projection recursion and controls
 
 `descend`, `at`, and `transient` build ordinary preparation functions using
-an explicit [projection scope](../display/src/widget/project.rs). The app
+an explicit [projection scope](../progred/src/display/widget/project.rs). The app
 supplies source lookup, cycle detection, provenance, fuel, and the selected
 current/descendant partials. There are no corresponding Layout enum cases,
 and the editor no longer pattern-matches on Layout.
@@ -152,7 +152,7 @@ partial applies that closure with borrowed FFIs closed over a Rust output
 buffer. Box and widget calls emit native layouts into that buffer, never native
 objects or handles into Grap. Grouping calls evaluate a raw body while collecting
 its children, then emit their parent. The buffer is evaluation-local, and a halt
-or invalid builder call discards it. See [the scoped interface](../libraries/src/layout/scope.rs).
+or invalid builder call discards it. See [the scoped interface](../progred/src/libraries/layout/scope.rs).
 
 The effect boundary is explicit so existing value-returning projection
 combinators keep their semantics. For example, `border` can wrap a returned
@@ -162,14 +162,16 @@ and neither path encodes every drawing operation as GID before painting.
 
 Line editing, delimiters, pointer actions, hover feedback, scrubbing, state
 scrolling, borders, and popovers are native widget functions/combinators.
-Completion and drawing-program functions request scoped app adapters during
+Completion and drawing-program functions call app adapters during
 preparation; the adapters own document-specific offers/evaluation/source
 attribution and return the same measured widget output. They are not operations
 of the box interpreter. Completion providers remain explicit lazy inputs and
 run only for the active picker.
 
-Native widgets request site state and editing capabilities only when needed.
-Inert decorations do not construct text state or Grap interpreters. Conversion
+Progred widgets borrow site state during preparation. Their transient handlers
+receive the concrete editor at dispatch and call ordinary editing helpers;
+there is no per-site dictionary of callback factories. Puri remains independent
+of the editor. Inert decorations do not construct text state or Grap interpreters. Conversion
 callbacks belong to the current line handler, never persistent selection.
 Event acceptance is independent of whether state changed; scroll handlers return
 unused displacement explicitly. Scroll, clipping, floating, and navigation

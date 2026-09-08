@@ -1,1 +1,1 @@
-pub use progred_display::widget::style::*;
+pub use crate::display::widget::style::*;

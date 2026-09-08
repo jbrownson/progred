@@ -1,5 +1,5 @@
 use super::*;
-use progred_display::profile::{self as costs, Cost, KINDS, Kind};
+use crate::display::profile::{self as costs, Cost, KINDS, Kind};
 use std::alloc::{GlobalAlloc, Layout, System};
 
 struct CountingAllocator;

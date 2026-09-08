@@ -8,7 +8,6 @@ use crate::model::{Model, ViewFlags};
 use crate::navigate;
 use crate::placed::{self, Placed};
 use crate::projection;
-use crate::selection;
 use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
@@ -17,7 +16,6 @@ use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::EditCtx;
 use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
@@ -231,7 +229,7 @@ fn drawing_source_target<World>(
         .and_then(|descend| descend.root.clone().map(|root| (root, descend.rect)))
 }
 
-pub(crate) use progred_display::widget::scroll::offset as scroll_offset;
+pub(crate) use crate::display::widget::scroll::offset as scroll_offset;
 
 /// The frame's hover, derived from this pass's settled geometry: a
 /// direct claim under the pointer answers outright, an extension may
@@ -574,146 +572,6 @@ impl Editor {
     }
 }
 
-fn projection_hooks(
-    root: Root,
-    completions: progred_display::CompletionProvider,
-) -> projection::Hooks<Editor> {
-    let select_root = root.clone();
-    let edit_root = root.clone();
-    let payload_root = root.clone();
-    let toggle_root = root.clone();
-    let insert_root = root.clone();
-    let apply_root = root.clone();
-    let gesture_root = root.clone();
-    let completion_root = root.clone();
-    let value_edit_root = root.clone();
-    let state_root = root;
-    let select: Rc<dyn Fn(&mut Editor, gid::Path)> = Rc::new(move |app, path| {
-        let fresh = match app.model.selection.as_ref() {
-            None => true,
-            Some(current) => {
-                current.root() != &select_root
-                    || current.stage(&app.sources()) == selection::Stage::Label
-                    || current.path() != path
-            }
-        };
-        if fresh {
-            let next = selection::Selection::edge(&select_root, path);
-            app.model.selection = Some(next);
-        } else if let Some(line) = app
-            .model
-            .selection
-            .as_mut()
-            .and_then(selection::Selection::edit_mut)
-        {
-            line.cursor_to_end();
-        }
-    });
-    projection::Hooks {
-        completions: Some(completions),
-        select: select.clone(),
-        select_source: Rc::new(Editor::select_drawing_source),
-        select_payload: Rc::new(move |app: &mut Editor, path, payload| {
-            app.model.selection = Some(selection::Selection::from_payload(
-                &payload_root,
-                &app.sources(),
-                path,
-                payload,
-            ));
-        }),
-        edit_line: Rc::new(move |app: &mut Editor, path, line, operation| {
-            edit_line(app, &edit_root, path, line, operation)
-        }),
-        toggle: Rc::new(move |app: &mut Editor, path| {
-            app.collapse(&toggle_root, &path, None);
-        }),
-        update_state: Rc::new(move |app: &mut Editor, path, state| {
-            let Some(view) = app.model.workspace.view_mut(&state_root) else {
-                return false;
-            };
-            if view.annotations.at(&path) == Some(&state) {
-                false
-            } else {
-                view.annotations.set(&path, Some(state));
-                true
-            }
-        }),
-        edit: Rc::new(edit_query),
-        pick: Rc::new(|app: &mut Editor, id| app.pick_identity(id)),
-        insert: Rc::new(move |app: &mut Editor, path| {
-            if let Some(pending) = selection::pending_after(&insert_root, &app.sources(), &path) {
-                app.model.selection = Some(pending);
-            }
-        }),
-        delete: Rc::new(Editor::delete_selected_edge),
-        apply: Rc::new(move |app, path, function, event| {
-            crate::site::apply_event(app, apply_root.clone(), path, function, event)
-        }),
-        start_gesture: Rc::new(move |app, path, gesture, samples| {
-            app.gesture = Some(crate::gesture::Active::new(
-                gesture_root.clone(),
-                path,
-                gesture,
-            ));
-            app.advance_gesture(samples);
-        }),
-        value_edit: Rc::new(move |path| {
-            let select = select.clone();
-            let select_path = path.clone();
-            crate::gesture::value_edit(
-                value_edit_root.clone(),
-                path,
-                Rc::new(move |app: &mut Editor| {
-                    if app.model.selection.as_ref().is_some_and(|selection| {
-                        matches!(
-                            selection.stage(&app.sources()),
-                            selection::Stage::Pending | selection::Stage::Label
-                        )
-                    }) {
-                        false
-                    } else {
-                        select(app, select_path.clone());
-                        true
-                    }
-                }),
-                |app| (&mut app.model, &app.stack.libraries),
-            )
-        }),
-        commit_value: Rc::new(|app: &mut Editor, value, on_commit| {
-            if app
-                .model
-                .selection
-                .as_ref()
-                .is_some_and(|current| current.stage(&app.sources()) == selection::Stage::Pending)
-            {
-                app.commit_completion(value, None, on_commit);
-            }
-        }),
-        commit_label: Rc::new(|app: &mut Editor, label, definition, on_commit| {
-            if app
-                .model
-                .selection
-                .as_ref()
-                .is_some_and(|current| current.stage(&app.sources()) == selection::Stage::Label)
-            {
-                app.commit_completion(label.into(), definition, on_commit);
-            }
-        }),
-        set_completion_view: Rc::new(move |app: &mut Editor, scroll, choice, everything| {
-            let sources = sources::Sources {
-                doc: &app.model.doc,
-                libraries: &app.stack.libraries,
-            };
-            if let Some(selection) = app.model.selection.as_mut()
-                && selection.root() == &completion_root
-                && selection.stage(&sources) != selection::Stage::Edge
-            {
-                selection.set_completion_view(scroll, choice, everything);
-            }
-        }),
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
@@ -761,6 +619,8 @@ fn project_workspace_view(
     };
     let projected = projection::project(
         projection::ProjectDescription {
+            view: &view.root,
+            completions: Some(&stack.completions),
             sources,
             root,
             root_path: &root_path,
@@ -779,7 +639,6 @@ fn project_workspace_view(
             projection: (!raw).then_some(projection),
         },
         tcx,
-        projection_hooks(view.root.clone(), stack.completions.clone()),
     );
     let content = measured::pad(Insets::uniform(margin), projected);
     let root = view.root.clone();
@@ -979,10 +838,6 @@ fn app_view(
                 scale,
                 width: viewport_width,
             },
-            menu::Hooks {
-                toggle: Rc::new(|app: &mut Editor, section| app.menu.toggle(section)),
-                select: Rc::new(|app: &mut Editor, selection| app.choose_menu(selection)),
-            },
         )
     });
     let (menu_bar, menu_popup, menu_heading_width) = match application_menu {
@@ -1057,91 +912,6 @@ fn app_view(
         });
     }
     stage
-}
-
-/// Dispatch-time access to the selection's editor. Retained-frame
-/// dispatch can outlive the editor by a frame — deselect, then a move
-/// in the same gesture — so absence declines rather than panics.
-fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation<'_>) -> bool {
-    let Editor {
-        model,
-        stack,
-        font_cx,
-        layout_cx,
-        text_clipboard,
-        ..
-    } = app;
-    let sources = sources::Sources {
-        doc: &model.doc,
-        libraries: &stack.libraries,
-    };
-    model
-        .selection
-        .as_mut()
-        .filter(|selection| {
-            selection.stage(&sources) != selection::Stage::Edge
-                && selection::writable_at(&sources, selection.path())
-        })
-        .is_some_and(|selection| {
-            selection.edit_query(|state| {
-                operation(EditCtx {
-                    state,
-                    fonts: font_cx,
-                    layouts: layout_cx,
-                    clipboard: text_clipboard,
-                })
-            })
-        })
-}
-
-fn edit_line(
-    app: &mut Editor,
-    root: &Root,
-    path: &[gid::Step],
-    line: &progred_display::LineEdit,
-    operation: &puri::edit::EditOperation<'_>,
-) -> bool {
-    let before = app.model.snapshot();
-    let Editor {
-        model,
-        stack,
-        font_cx,
-        layout_cx,
-        text_clipboard,
-        ..
-    } = app;
-    let sources = sources::Sources {
-        doc: &model.doc,
-        libraries: &stack.libraries,
-    };
-    let selected = model.selection.as_mut().filter(|selected| {
-        selected.root() == root
-            && selected.path() == path
-            && selected.stage(&sources) == selection::Stage::Edge
-            && selection::writable_at(&sources, path)
-    });
-    let (handled, record) = match selected {
-        Some(selected) => projection::line_control::edit(
-            &mut model.doc,
-            &stack.libraries,
-            selected,
-            line,
-            |state| {
-                operation(EditCtx {
-                    state,
-                    fonts: font_cx,
-                    layouts: layout_cx,
-                    clipboard: text_clipboard,
-                })
-            },
-        ),
-        None => (false, false),
-    };
-    if record {
-        model.history.record(before);
-        app.refresh_title();
-    }
-    handled
 }
 
 #[cfg(test)]
@@ -1229,16 +999,16 @@ mod frame_tests {
             root: Some(Value::Cell(cell)),
             cells,
         };
-        let libraries = progred_libraries::Libraries::from_contributions([(
+        let libraries = crate::libraries::Libraries::from_contributions([(
             library_id,
-            progred_libraries::Library::<(), ()>::named(
+            crate::libraries::Library::<(), ()>::named(
                 library_id,
                 "source",
-                progred_libraries::Definitions::from_parts(
+                crate::libraries::Definitions::from_parts(
                     doc.cells.clone(),
                     grap::ForeignFunctions::default(),
                 ),
-                progred_display::partial(|_| None),
+                crate::display::partial(|_| None),
             ),
         )])
         .0;
@@ -1285,7 +1055,7 @@ mod frame_tests {
 
     #[test]
     fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
-        use progred_libraries::{Definitions, presentation};
+        use crate::libraries::{Definitions, presentation};
         use std::cell::{Cell, RefCell};
 
         let projector = CellId::from_u128(1);
@@ -1343,7 +1113,7 @@ mod frame_tests {
         );
         let calls = Rc::new(Cell::new(0));
         let result = Rc::new(RefCell::new(source.clone()));
-        let mut stack = stack::load::<Editor>();
+        let mut stack = stack::load();
         stack.libraries.insert(
             library,
             Definitions::from_parts(
@@ -1474,7 +1244,7 @@ mod frame_tests {
         for pane in &mut model.workspace.left.panes {
             pane.view.projection = workspace::Projection::Standard;
         }
-        *result.borrow_mut() = progred_libraries::absent::with_reason(projector);
+        *result.borrow_mut() = crate::libraries::absent::with_reason(projector);
         let absent = place(&model);
         assert_eq!(calls.get(), 2);
         for (pane, path) in &sources {
@@ -1492,7 +1262,7 @@ mod frame_tests {
 
     #[test]
     fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
-        use progred_libraries::{Definitions, f64, layout, presentation};
+        use crate::libraries::{Definitions, f64, layout, presentation};
         use std::cell::RefCell;
         let function = gid::new_cell_id();
         let source = Value::from(b"source".to_vec());
@@ -1535,7 +1305,7 @@ mod frame_tests {
             .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
         model.workspace.left.panes[0].view.scroll = Vec2::new(75.0, 150.0);
         let calls = Rc::new(RefCell::new(Vec::new()));
-        let mut stack = stack::load::<Editor>();
+        let mut stack = stack::load();
         stack.libraries.insert(
             gid::new_cell_id(),
             Definitions::from_parts(
@@ -1676,7 +1446,7 @@ mod frame_tests {
             .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
         let upper = model.workspace.left.panes[0].view.root.clone();
         let lower = model.workspace.left.panes[1].view.root.clone();
-        let stack = crate::stack::load::<Editor>();
+        let stack = crate::stack::load();
         let styles = crate::styles::editor(1.0);
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
