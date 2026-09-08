@@ -2,102 +2,87 @@
 //! press installs one; it owns motion until release or cancellation.
 
 use crate::Editor;
-use crate::display::widget::gesture::{Gesture, ValueEdit};
+use crate::display::widget::gesture::Gesture;
 use crate::libraries::Libraries;
 use crate::model::Model;
 use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Step, Value};
+#[cfg(test)]
 use kurbo::Point;
 
 // Logical pixels; replace when the input adapter exposes the platform threshold.
 pub(crate) const DRAG_THRESHOLD: f64 = 3.0;
 
-pub(crate) struct Active<World> {
+pub(crate) type Active<World> = Box<dyn Gesture<World>>;
+
+pub(crate) struct EditRun {
     root: Root,
     path: Path,
-    continuation: Box<dyn Gesture<World>>,
+    recorded: bool,
 }
 
-pub(crate) struct ScrubSpelling<'a> {
-    pub root: &'a Root,
-    pub path: &'a [Step],
-    pub spelling: &'a str,
+pub(crate) fn value_edit(root: Root, path: Path) -> EditRun {
+    EditRun {
+        root,
+        path,
+        recorded: false,
+    }
 }
 
-impl<World> Active<World> {
-    pub(crate) fn new(root: Root, path: Path, continuation: Box<dyn Gesture<World>>) -> Self {
-        Self {
-            root,
-            path,
-            continuation,
+impl EditRun {
+    pub(crate) fn selected<'a>(&self, app: &'a mut Editor) -> Option<&'a mut Selection> {
+        app.model
+            .selection
+            .as_mut()
+            .filter(|s| s.root() == &self.root && s.path() == self.path)
+    }
+    pub(crate) fn select(&self, app: &mut Editor) -> bool {
+        if app.model.selection.as_ref().is_some_and(|selection| {
+            matches!(
+                selection.stage(&app.sources()),
+                selection::Stage::Pending | selection::Stage::Label
+            )
+        }) {
+            false
+        } else {
+            crate::editing::select(app, &self.root, &self.path);
+            true
         }
     }
 
-    pub(crate) fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool {
-        self.continuation.advance(world, samples)
+    pub(crate) fn write(&mut self, app: &mut Editor, value: Value) -> bool {
+        write_value(
+            &mut app.model,
+            &app.stack.libraries,
+            &self.path,
+            value,
+            &mut self.recorded,
+        )
     }
 
-    pub(crate) fn scrub_spelling(&self) -> Option<ScrubSpelling<'_>> {
-        self.continuation.spelling().map(|spelling| ScrubSpelling {
-            root: &self.root,
-            path: &self.path,
-            spelling,
-        })
-    }
-}
-
-pub(crate) fn value_edit(root: Root, path: Path) -> ValueEdit<Editor> {
-    let select_root = root.clone();
-    let select_path = path.clone();
-    let write_path = path.clone();
-    let mut recorded = false;
-    ValueEdit {
-        select: std::rc::Rc::new(move |app| {
-            if app.model.selection.as_ref().is_some_and(|selection| {
-                matches!(
-                    selection.stage(&app.sources()),
-                    selection::Stage::Pending | selection::Stage::Label
-                )
-            }) {
-                false
-            } else {
-                crate::editing::select(app, &select_root, &select_path);
-                true
-            }
-        }),
-        write: Box::new(move |app, value| {
-            write_value(
-                &mut app.model,
-                &app.stack.libraries,
-                &write_path,
-                value,
-                &mut recorded,
-            )
-        }),
-        selection: std::rc::Rc::new(move |app, payload| {
-            let model = &mut app.model;
-            let libraries = &app.stack.libraries;
-            if let Some(recorded) = model
-                .selection
-                .as_ref()
-                .filter(|selection| selection.root() == &root && selection.path() == path)
-                .map(Selection::recorded)
-            {
-                let mut next = Selection::from_payload(
-                    &root,
-                    &Sources {
-                        doc: &model.doc,
-                        libraries,
-                    },
-                    path.clone(),
-                    payload,
-                );
-                next.preserve_recorded(recorded);
-                model.selection = Some(next);
-            }
-        }),
+    pub(crate) fn selection(&self, app: &mut Editor, payload: Value) {
+        let model = &mut app.model;
+        let libraries = &app.stack.libraries;
+        if let Some(recorded) = model
+            .selection
+            .as_ref()
+            .filter(|selection| selection.root() == &self.root && selection.path() == self.path)
+            .map(Selection::recorded)
+        {
+            let mut next = Selection::from_payload(
+                &self.root,
+                &Sources {
+                    doc: &model.doc,
+                    libraries,
+                },
+                self.path.clone(),
+                payload,
+            );
+            next.preserve_recorded(recorded);
+            model.selection = Some(next);
+        }
     }
 }
 
@@ -117,9 +102,9 @@ fn write_value(
     {
         false
     } else {
-        let before = model.snapshot();
+        let before = (!*recorded).then(|| model.snapshot());
         let wrote = selection::set_value(&mut model.doc, libraries, path, replacement);
-        if wrote && !*recorded {
+        if wrote && let Some(before) = before {
             model.history.record(before);
             *recorded = true;
         }
@@ -134,7 +119,8 @@ mod tests {
     use std::rc::Rc;
 
     use crate::display::widget::gesture as native;
-    use crate::display::{PointHandler, ScrubHandler, StateDragHandler};
+    use crate::display::{PointHandler, StateDragHandler};
+    use crate::libraries::number::scrub::{ScrubHandler, ScrubUpdate};
     use kurbo::Rect;
     use puri::drag::Drag;
 
@@ -153,14 +139,10 @@ mod tests {
         handler: ScrubHandler,
     ) -> Active<Editor> {
         let edit = value_edit(root.clone(), path.clone());
-        Active::new(
-            root,
-            path,
-            native::scrub(
-                Drag::new(origin, scale, DRAG_THRESHOLD),
-                handler(),
-                edit.write,
-            ),
+        crate::libraries::number::scrub::scrub(
+            Drag::new(origin, scale, DRAG_THRESHOLD),
+            handler(),
+            edit,
         )
     }
 
@@ -173,27 +155,23 @@ mod tests {
     ) -> Active<Editor> {
         let state_root = root.clone();
         let state_path = path.clone();
-        Active::new(
-            root,
-            path,
-            native::state_drag(
-                Drag::new(origin, scale, DRAG_THRESHOLD),
-                handler(),
-                Rc::new(move |world: &mut Editor, value| {
-                    if let Some(view) = world.model.workspace.view_mut(&state_root) {
-                        view.annotations.set(&state_path, Some(value));
-                        true
-                    } else {
-                        false
-                    }
-                }),
-            ),
+        native::state_drag(
+            Drag::new(origin, scale, DRAG_THRESHOLD),
+            handler(),
+            Rc::new(move |world: &mut Editor, value| {
+                if let Some(view) = world.model.workspace.view_mut(&state_root) {
+                    view.annotations.set(&state_path, Some(value));
+                    true
+                } else {
+                    false
+                }
+            }),
         )
     }
 
     fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Active<Editor> {
         let edit = value_edit(root.clone(), path.clone());
-        Active::new(root, path, native::point(rect, handler, edit))
+        native::point(rect, handler, edit)
     }
 
     #[test]
@@ -205,13 +183,13 @@ mod tests {
         world.model.selection = Some(selection::bare_edge(&root, other_path.clone()));
         let mut edit = value_edit(root, vec![]);
         assert!(Rc::ptr_eq(&original, &world.model.doc));
-        assert!(!(edit.write)(&mut world, f64::value(10.0)));
+        assert!(!edit.write(&mut world, f64::value(10.0)));
         assert!(Rc::ptr_eq(&original, &world.model.doc));
         assert!(!world.model.history.can_undo());
-        (edit.selection)(&mut world, selection::payload::edge());
+        edit.selection(&mut world, selection::payload::edge());
         assert_eq!(world.model.selection.as_ref().unwrap().path(), other_path);
-        assert!((edit.write)(&mut world, f64::value(11.0)));
-        assert!((edit.write)(&mut world, f64::value(12.0)));
+        assert!(edit.write(&mut world, f64::value(11.0)));
+        assert!(edit.write(&mut world, f64::value(12.0)));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), other_path);
         assert!(world.model.step_history(true));
         assert!(Rc::ptr_eq(&original, &world.model.doc));
@@ -219,10 +197,92 @@ mod tests {
     }
 
     #[test]
+    fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
+        let mut world = model(f64::value(1.0));
+        let root = world.model.workspace.document_root().clone();
+        let marker = gid::new_cell_id();
+        let payload = Value::record([(marker, Value::from(vec![7]))]);
+        world.model.selection = Some(Selection::from_payload(
+            &root,
+            &world.sources(),
+            vec![],
+            payload.clone(),
+        ));
+        let gesture = || {
+            scrub(
+                Point::ZERO,
+                1.0,
+                root.clone(),
+                vec![],
+                Rc::new(|| {
+                    Box::new(|_| ScrubUpdate {
+                        value: f64::value(2.0),
+                        spelling: Some("2.0".into()),
+                    })
+                }),
+            )
+        };
+        let mut active = gesture();
+        active.advance(&mut world, &[Point::new(10.0, 0.0)]);
+        assert_eq!(
+            world
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .text(),
+            "2.0"
+        );
+        active.finish(&mut world);
+        assert_eq!(world.model.selection.as_ref().unwrap().payload(), payload);
+        let mut active = gesture();
+        active.advance(&mut world, &[Point::new(10.0, 0.0)]);
+        let other = vec![Step::Key(gid::new_cell_id())];
+        world.model.selection = Some(Selection::edge(&root, other.clone()));
+        active.finish(&mut world);
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
+    }
+
+    #[test]
+    fn gesture_finalization_runs_before_replacement_and_history_restore() {
+        struct Finish(Rc<std::cell::RefCell<Vec<Option<Value>>>>);
+        impl Gesture<Editor> for Finish {
+            fn advance(&mut self, _: &mut Editor, _: &[Point]) -> bool {
+                false
+            }
+            fn finish(&mut self, world: &mut Editor) {
+                self.0.borrow_mut().push(world.model.doc.root.clone());
+            }
+        }
+        let mut world = model(f64::value(1.0));
+        let log = Rc::new(std::cell::RefCell::new(Vec::new()));
+        world.gesture = Some(Box::new(Finish(log.clone())));
+        world.adopt_model(
+            gid::Document {
+                root: Some(f64::value(2.0)),
+                cells: gid::Cells::new(),
+            },
+            None,
+            Default::default(),
+        );
+        assert!(world.gesture.is_none());
+        world.gesture = Some(Box::new(Finish(log.clone())));
+        world.step_history(true);
+        assert!(world.gesture.is_none());
+        assert_eq!(
+            *log.borrow(),
+            [Some(f64::value(1.0)), Some(f64::value(2.0))]
+        );
+    }
+
+    #[test]
     fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
         let mut model = model(f64::value(10.0));
         let original = model.model.doc.clone();
         let root = model.model.workspace.document_root().clone();
+        model.model.selection = Some(Selection::edge(&root, vec![]));
         let mut gesture = scrub(
             Point::new(100.0, 200.0),
             2.0,
@@ -233,7 +293,7 @@ mod tests {
                 Box::new(move |event| {
                     assert_eq!(event.distance_y, 3.0);
                     value += event.movement_x;
-                    crate::display::ScrubUpdate {
+                    ScrubUpdate {
                         value: f64::value(value),
                         spelling: Some(format!("{value:.1}")),
                     }
@@ -250,10 +310,19 @@ mod tests {
         assert_eq!(model.model.doc.root, Some(f64::value(-50.0)));
         assert!(gesture.advance(&mut model, &[Point::new(110.0, 206.0)]));
         assert_eq!(model.model.doc.root, Some(f64::value(15.0)));
-        let presentation = gesture.scrub_spelling().unwrap();
-        assert_eq!(presentation.root, &root);
-        assert!(presentation.path.is_empty());
-        assert_eq!(presentation.spelling, "15.0");
+        assert_eq!(
+            model
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .text(),
+            "15.0"
+        );
+        gesture.finish(&mut model);
+        assert!(model.model.selection.as_ref().unwrap().edit().is_none());
         assert!(model.model.step_history(true));
         assert_eq!(model.model.doc.root, original.root);
         assert!(!model.model.history.can_undo());
@@ -324,7 +393,7 @@ mod tests {
                 Box::new(move |event| {
                     log.borrow_mut().push((event.movement_x, event.distance_y));
                     value += event.movement_x * if event.distance_y == 0.0 { 1.0 } else { 0.1 };
-                    crate::display::ScrubUpdate {
+                    ScrubUpdate {
                         value: f64::value(value),
                         spelling: None,
                     }

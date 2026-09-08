@@ -993,7 +993,7 @@ impl App {
                         editor.pointer =
                             window_pointer(position, Size::new(size.width as f64, viewport));
                         editor.pressed = true;
-                        editor.gesture = None;
+                        editor.finish_gesture();
                         frame_input_changed = true;
                         let mut pointer = placed::DispatchContext::new(
                             dispatch.pointer_root.clone(),
@@ -1016,7 +1016,7 @@ impl App {
                             window_pointer(position, Size::new(size.width as f64, viewport));
                         editor.pressed = false;
                         frame_input_changed = true;
-                        editor.gesture.take().is_some()
+                        editor.finish_gesture()
                             || dispatch.handler.dispatch_pointer_up(editor, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
@@ -1033,7 +1033,7 @@ impl App {
                         frame_input_changed = true;
                         let handled = dispatch.handler.dispatch_pointer_cancel(editor, &pointer);
                         let resize_cancelled = editor.model.workspace.cancel_resize();
-                        let gesture_cancelled = editor.gesture.take().is_some();
+                        let gesture_cancelled = editor.finish_gesture();
                         handled || resize_cancelled || gesture_cancelled
                     }
                     _ => false,
@@ -1258,6 +1258,15 @@ impl Editor {
             if changed {
                 self.refresh_title();
             }
+            true
+        } else {
+            false
+        }
+    }
+
+    fn finish_gesture(&mut self) -> bool {
+        if let Some(mut gesture) = self.gesture.take() {
+            gesture.finish(self);
             true
         } else {
             false
@@ -1605,8 +1614,8 @@ impl Editor {
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
     pub(crate) fn step_history(&mut self, back: bool) {
+        self.finish_gesture();
         if self.model.step_history(back) {
-            self.gesture = None;
             self.refresh_title();
         }
     }
@@ -1633,7 +1642,7 @@ impl Editor {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
                 Ok(()) => {
                     self.model.mark_saved();
-                    self.gesture = None;
+                    self.finish_gesture();
                     self.adopt_doc_path(canonical(path));
                 }
                 Err(error) => {
@@ -1652,6 +1661,7 @@ impl Editor {
         path: Option<PathBuf>,
         text_binders: gid_text::Binders,
     ) {
+        self.finish_gesture();
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
             drawn_menu: _,
@@ -1678,14 +1688,13 @@ impl Editor {
             pending_paint,
             pending_scroll,
             pending_pointer,
-            gesture,
+            gesture: _,
             reducer: _,
             proxy: _,
             pending_discard,
         } = self;
         #[cfg(target_os = "macos")]
         let changed_path = *doc_path != path;
-        *gesture = None;
         *dispatch = None;
         *pending_paint = None;
         *pending_scroll = None;

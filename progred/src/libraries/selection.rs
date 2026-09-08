@@ -16,7 +16,6 @@ pub mod vocabulary {
     pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
     pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
     pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
-    pub use crate::libraries::site::vocabulary::VALUE;
 }
 
 pub fn edge() -> gid::Value {
@@ -27,48 +26,15 @@ pub fn pending() -> gid::Value {
     gid::Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())])
 }
 
-/// A Grap continuation setting a payload at a path relative to its site.
-pub fn at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
-    use ::grap::{call, vocabulary as g};
-    use gid::Value;
-    Value::record([(
-        g::CLOSURE,
-        Value::record([
-            (g::PARAMS, Value::list([])),
-            (
-                g::ENVIRONMENT,
-                Value::record([(vocabulary::VALUE, payload)]),
-            ),
-            (
-                g::BODY,
-                call(
-                    vocabulary::SET.into(),
-                    [
-                        (
-                            vocabulary::PATH,
-                            call(
-                                crate::libraries::list::vocabulary::CONCAT.into(),
-                                [
-                                    (
-                                        crate::libraries::number::vocabulary::LEFT,
-                                        call(crate::libraries::site::vocabulary::PATH.into(), []),
-                                    ),
-                                    (
-                                        crate::libraries::number::vocabulary::RIGHT,
-                                        crate::libraries::path::value(path),
-                                    ),
-                                ],
-                            ),
-                        ),
-                        (vocabulary::VALUE, vocabulary::VALUE.into()),
-                    ],
-                ),
-            ),
-        ]),
-    )])
+pub fn at(path: &[gid::Step], payload: gid::Value) -> crate::site::Continuation {
+    let path = path.to_vec();
+    std::rc::Rc::new(move |_, site, staged| {
+        staged.select(site.iter().chain(&path).cloned().collect(), payload.clone());
+        true
+    })
 }
 
-pub fn pending_at(path: &[gid::Step]) -> gid::Value {
+pub fn pending_at(path: &[gid::Step]) -> crate::site::Continuation {
     at(path, pending())
 }
 
@@ -94,9 +60,99 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
+        use ::grap::{call, vocabulary as g};
+        use gid::Value;
+        Value::record([(
+            g::CLOSURE,
+            Value::record([
+                (g::PARAMS, Value::list([])),
+                (
+                    g::ENVIRONMENT,
+                    Value::record([(crate::libraries::site::vocabulary::VALUE, payload)]),
+                ),
+                (
+                    g::BODY,
+                    call(
+                        vocabulary::SET.into(),
+                        [
+                            (
+                                vocabulary::PATH,
+                                call(
+                                    crate::libraries::list::vocabulary::CONCAT.into(),
+                                    [
+                                        (
+                                            crate::libraries::number::vocabulary::LEFT,
+                                            call(
+                                                crate::libraries::site::vocabulary::PATH.into(),
+                                                [],
+                                            ),
+                                        ),
+                                        (
+                                            crate::libraries::number::vocabulary::RIGHT,
+                                            crate::libraries::path::value(path),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                            (
+                                crate::libraries::site::vocabulary::VALUE,
+                                crate::libraries::site::vocabulary::VALUE.into(),
+                            ),
+                        ],
+                    ),
+                ),
+            ]),
+        )])
+    }
+
     use super::*;
     use gid::Value;
+
+    #[test]
+    fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
+        let document = gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        };
+        let empty = crate::libraries::Libraries::default();
+        let stack = crate::stack::load();
+        let site = vec![gid::Step::Key(gid::new_cell_id())];
+        let child = vec![gid::Step::Element(
+            gid::position::between(None, None).unwrap(),
+        )];
+        let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
+        for payload in [edge(), crate::libraries::absent::value()] {
+            for selected in [None, Some(destination.clone()), Some(site.clone())] {
+                let initial = || crate::site::PendingChanges {
+                    annotation: Some(Value::from(vec![42])),
+                    annotation_changed: true,
+                    selection: selected.clone().map(|path| (path, pending())),
+                    selection_changed: true,
+                };
+                let mut native = initial();
+                assert!(at(&child, payload.clone())(
+                    &crate::sources::Sources {
+                        doc: &document,
+                        libraries: &empty
+                    },
+                    &site,
+                    &mut native,
+                ));
+                let mut interpreted = initial();
+                assert!(crate::site::grap(grap_at(&child, payload.clone()), [])(
+                    &crate::sources::Sources {
+                        doc: &document,
+                        libraries: &stack.libraries
+                    },
+                    &site,
+                    &mut interpreted,
+                ));
+                assert_eq!(native, interpreted);
+            }
+        }
+    }
 
     #[test]
     fn the_vocabulary_alone_grants_no_selection_access() {
@@ -132,7 +188,9 @@ mod tests {
                 } else {
                     let path = context.field(call, vocabulary::PATH).unwrap();
                     let path = context.eval(path, environment)?;
-                    let value = context.field(call, vocabulary::VALUE).unwrap();
+                    let value = context
+                        .field(call, crate::libraries::site::vocabulary::VALUE)
+                        .unwrap();
                     let value = context.eval(value, environment)?;
                     Ok(context.effect(|| {
                         writes
@@ -148,7 +206,7 @@ mod tests {
             &interpret,
         );
         let result = ::grap::apply_scoped(
-            &pending_at(&[child.clone()]),
+            &grap_at(&[child.clone()], pending()),
             [],
             &crate::libraries::TestHost(|cell| {
                 functions

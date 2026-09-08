@@ -16,7 +16,7 @@ impl Editor {
         &mut self,
         value: Value,
         definition: Option<Value>,
-        on_commit: Option<Value>,
+        on_commit: Option<crate::site::Continuation>,
     ) -> bool {
         let Some(selection) = self.model.selection.as_ref() else {
             return false;
@@ -396,7 +396,7 @@ impl Editor {
             .model
             .collapse(&self.stack.libraries, root, path, closed);
         if changed {
-            self.gesture = None;
+            self.finish_gesture();
         }
         changed
     }

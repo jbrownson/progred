@@ -319,19 +319,24 @@ pub fn display(
     };
     let name =
         name::read(input.value?).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
-    let spelling = line_edit::layout_with_family(
-        spelling(encoded),
-        line_edit::native(edit),
-        "#",
-        "",
-        TextFamily::Monospace,
-    );
+    let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(centered_row(
         4.0,
         std::iter::once(swatch)
             .chain(name)
             .chain(std::iter::once(spelling)),
     ))
+}
+
+fn hex_editor(color: Encoded) -> crate::display::LineEdit {
+    line_edit::description(
+        spelling(color),
+        None::<String>,
+        line_edit::native(edit),
+        "#",
+        "",
+        TextFamily::Monospace,
+    )
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -511,8 +516,8 @@ mod tests {
                     if matches!(child.as_ref(), Recorded::Widget(_)))
         ));
         assert!(matches!(
-            crate::libraries::test_widgets::line(&children[1]),
-            Some(line)
+            hex_editor(encoded(&color).unwrap()),
+            line
                 if line.text == "b4e0fe"
                     && line.prefix == "#"
                     && line.suffix.is_empty()
@@ -586,8 +591,8 @@ mod tests {
             } if *field == name::vocabulary::NAME
         ));
         assert!(matches!(
-            crate::libraries::test_widgets::line(&children[2]),
-            Some(line) if line.text == "663399"
+            hex_editor(encoded(&color).unwrap()),
+            line if line.text == "663399"
         ));
     }
 

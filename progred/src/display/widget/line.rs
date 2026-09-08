@@ -33,18 +33,13 @@ pub fn layout(line: LineEdit) -> Layout<crate::Editor, crate::frame::Hovered> {
 
 pub fn view(
     context: &mut Context<'_, '_, crate::Editor, crate::frame::Hovered>,
-    mut line: LineEdit,
+    line: LineEdit,
 ) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
-    #[cfg(test)]
-    crate::libraries::test_widgets::observe_line(&line);
     let cx = context.inputs;
     let path = context.path;
     let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, path);
-    if let Some((_, spelling)) = cx.scrub_spelling.filter(|(site, _)| *site == path) {
-        line.text = spelling.to_owned();
-    }
     let active = cx.selection.filter(|selection| {
         writable
             && selection.path() == path

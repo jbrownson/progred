@@ -263,7 +263,6 @@ pub(crate) struct FrameDescription<'a> {
     toggles: crate::command::Toggles,
     scale: f64,
     viewport: Size,
-    scrub: Option<crate::gesture::ScrubSpelling<'a>>,
 }
 
 pub(crate) struct FrameResources<'a> {
@@ -431,10 +430,6 @@ impl Editor {
             availability,
             scale,
             viewport,
-            scrub: self
-                .gesture
-                .as_ref()
-                .and_then(|gesture| gesture.scrub_spelling()),
         };
         let resources = FrameResources {
             fonts: &mut self.font_cx,
@@ -580,7 +575,6 @@ fn project_workspace_view(
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     view: &workspace::View,
-    scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<Editor>> {
@@ -628,9 +622,6 @@ fn project_workspace_view(
                 .selection
                 .as_ref()
                 .filter(|selection| selection.root() == &view.root),
-            scrub_spelling: scrub
-                .filter(|scrub| scrub.root == &view.root)
-                .map(|scrub| (scrub.path, scrub.spelling)),
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
             raw,
@@ -694,7 +685,6 @@ fn project_workspace(
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
-    scrub: Option<&crate::gesture::ScrubSpelling<'_>>,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<Editor>> {
@@ -713,17 +703,8 @@ fn project_workspace(
             .view(&placed_view.root)
             .expect("workspace geometry only names live views");
         let rect = placed_view.rect;
-        let child = project_workspace_view(
-            model,
-            stack,
-            styles,
-            tcx,
-            sources,
-            view,
-            scrub,
-            rect.size(),
-            scale,
-        );
+        let child =
+            project_workspace_view(model, stack, styles, tcx, sources, view, rect.size(), scale);
         body = measured::overlay(body, child, move |placement, _, _| {
             let rect = rect + placement.rect.origin().to_vec2();
             Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
@@ -809,7 +790,6 @@ fn app_view(
         availability,
         scale,
         viewport,
-        scrub,
     } = description;
     let FrameResources {
         fonts: font_cx,
@@ -855,7 +835,6 @@ fn app_view(
         &styles,
         &mut tcx,
         sources,
-        scrub.as_ref(),
         content_viewport.size(),
         scale,
     );
@@ -1162,7 +1141,6 @@ mod frame_tests {
                         doc: &model.doc,
                         libraries: &stack.libraries,
                     },
-                    None,
                     size,
                     1.0,
                 ),
@@ -1360,7 +1338,6 @@ mod frame_tests {
                             libraries: &stack.libraries,
                         },
                         view,
-                        None,
                         size,
                         scale,
                     ),
@@ -1468,7 +1445,6 @@ mod frame_tests {
                     doc: &model.doc,
                     libraries: &stack.libraries,
                 },
-                None,
                 size,
                 1.0,
             ),

@@ -275,7 +275,6 @@ impl BenchContext {
                 root,
                 root_path,
                 selection,
-                scrub_spelling: None,
                 source_selection: selection,
                 annotations,
                 raw: false,

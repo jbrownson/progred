@@ -929,7 +929,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             root: doc.root.as_ref(),
             root_path: &[],
             selection: None,
-            scrub_spelling: None,
             source_selection: None,
             annotations: &Annotations::default(),
             raw: false,

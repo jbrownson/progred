@@ -1,46 +1,7 @@
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
-use crate::display::{LineEdit, widget};
+use crate::display::widget;
 use crate::{Editor, frame::Hovered};
-use std::cell::RefCell;
-
-thread_local! {
-    static LINES: RefCell<Option<Vec<LineEdit>>> = const { RefCell::new(None) };
-}
-
-pub fn observe_line(line: &LineEdit) {
-    LINES.with_borrow_mut(|lines| {
-        if let Some(lines) = lines {
-            lines.push(line.clone());
-        }
-    });
-}
-
-pub fn record_line(run: impl FnOnce()) -> Option<LineEdit> {
-    struct Restore(Option<Vec<LineEdit>>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            LINES.set(self.0.take());
-        }
-    }
-    let previous = Restore(LINES.replace(Some(Vec::new())));
-    run();
-    let line = LINES.take().and_then(|lines| lines.into_iter().next());
-    drop(previous);
-    line
-}
-
-pub fn line(layout: &impl Recordable<Editor, Hovered>) -> Option<LineEdit> {
-    let Recorded::Widget(widget) = layout.record() else {
-        return None;
-    };
-    with_context(&crate::display::test_support::NoProject, |context| {
-        record_line(|| {
-            widget(context);
-        })
-    })
-}
-
 pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri::DrawList) {
     let Recorded::Widget(widget) = layout.record() else {
         panic!("expected a native widget");

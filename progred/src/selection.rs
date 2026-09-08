@@ -216,6 +216,10 @@ impl Selection {
         self.editor.as_mut().map(|editor| &mut editor.line)
     }
 
+    pub(crate) fn clear_editor(&mut self) {
+        self.editor = None;
+    }
+
     pub(crate) fn initial_line(&self, text: &str) -> LineEditState {
         payload::editor_line(&self.payload, text)
     }

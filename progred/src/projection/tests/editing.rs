@@ -37,19 +37,40 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
 
 #[test]
 fn native_line_conversions_agree_with_their_grap_entry_points() {
-    use crate::libraries::{blob, color, f32, line_edit, u64};
+    use crate::libraries::{blob, color, f32, line_edit, number, u64};
 
     let libraries = core_libraries();
     let metadata = new_cell_id();
-    for (current, function) in [
-        (text::value("old"), text::vocabulary::UPDATE),
-        (Value::from(vec![0xab]), blob::vocabulary::UPDATE),
-        (f32::value(1.0), f32::vocabulary::UPDATE),
-        (f64::value(1.0), f64::vocabulary::UPDATE),
-        (u64::value(1), u64::vocabulary::UPDATE),
+    for (current, function, native) in [
+        (
+            text::value("old"),
+            text::vocabulary::UPDATE,
+            line_edit::native(text::edit),
+        ),
+        (
+            Value::from(vec![0xab]),
+            blob::vocabulary::UPDATE,
+            line_edit::native(blob::edit),
+        ),
+        (
+            f32::value(1.0),
+            f32::vocabulary::UPDATE,
+            line_edit::native(|s, c| number::edit(s, c, f32::value)),
+        ),
+        (
+            f64::value(1.0),
+            f64::vocabulary::UPDATE,
+            line_edit::native(|s, c| number::edit(s, c, f64::value)),
+        ),
+        (
+            u64::value(1),
+            u64::vocabulary::UPDATE,
+            line_edit::native(|s, c| number::edit(s, c, u64::value)),
+        ),
         (
             color::value(Color::new([0.2, 0.4, 0.6, 1.0])),
             color::vocabulary::UPDATE,
+            line_edit::native(color::edit),
         ),
     ] {
         let current = match current {
@@ -63,7 +84,6 @@ fn native_line_conversions_agree_with_their_grap_entry_points() {
             root: Some(current.clone()),
             cells: Cells::new(),
         };
-        let native = projected_line(&doc, &libraries, &[]).unwrap().update;
         let grap = line_edit::grap(grap::ffi(function));
         let sources = src(&doc, &libraries);
         for spelling in ["", "invalid", "1.5", "12", "-", "0", "ff", "123456"] {
@@ -551,16 +571,24 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
             f64::value(17.0),
         ),
     ] {
-        let mut doc = Rc::new(Document {
+        let doc = Rc::new(Document {
             root: Some(original),
             cells: Cells::new(),
         });
         let mut selected = make_projected_editing_selection(&doc, &libraries, vec![]);
         assert_eq!(selected.path(), &[]);
         assert_eq!(selected.edit().map(LineEditState::text), Some(spelling));
-        selected.edit_mut().unwrap().set_text("17");
-        assert!(write_through(&mut doc, &libraries, &mut selected));
-        assert_eq!(doc.root, Some(expected));
+        *selected.edit_mut().unwrap() =
+            LineEditState::from_parts(spelling, 0, spelling.len(), None, None);
+        let mut world = editing_world(&doc, &libraries);
+        world.model.selection = Some(selected);
+        assert!(
+            editing_frame(&mut world, false)
+                .handler
+                .unwrap()
+                .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit("17".into()),)
+        );
+        assert_eq!(world.model.doc.root, Some(expected));
     }
 }
 
@@ -576,7 +604,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
     assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
     selection.edit_mut().unwrap().cursor_to_start();
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
-    assert!(!write_through(&mut doc, &libraries, &mut selection));
+    assert!(!write_text(&mut doc, &libraries, &mut selection));
     let reified = Selection::from_payload(
         &crate::test_root(),
         &src(&doc, &libraries),
@@ -597,7 +625,7 @@ fn edits_write_through_to_the_field() {
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    write_through(&mut doc, &lib, &mut selection);
+    write_text(&mut doc, &lib, &mut selection);
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
         Some(&crate::test_values::text("new"))
@@ -607,7 +635,7 @@ fn edits_write_through_to_the_field() {
         Step::Follow(gid::Resolution::Document),
         key("missing"),
     ]);
-    assert!(!write_through(&mut doc, &lib, &mut plain));
+    assert!(!write_text(&mut doc, &lib, &mut plain));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
         Some(&crate::test_values::text("new"))
@@ -628,9 +656,19 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
     let path = vec![Step::Follow(gid::Resolution::Document)];
     let mut selected = make_projected_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selected.edit().unwrap().text(), gid::hex_string(&bytes));
-    assert!(!write_through(&mut doc, &libraries, &mut selected));
+    assert!(!write_with(
+        &mut doc,
+        &libraries,
+        &mut selected,
+        crate::libraries::blob::edit
+    ));
     selected.edit_mut().unwrap().set_text("DEad");
-    assert!(write_through(&mut doc, &libraries, &mut selected));
+    assert!(write_with(
+        &mut doc,
+        &libraries,
+        &mut selected,
+        crate::libraries::blob::edit
+    ));
     assert_eq!(doc.cells.value(cell), Some(&Value::from(vec![0xde, 0xad])));
     for (input, expected) in [
         ("DEadf", None),
@@ -641,7 +679,12 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         let before = doc.clone();
         selected.edit_mut().unwrap().set_text(input);
         assert!(
-            !write_through(&mut doc, &libraries, &mut selected),
+            !write_with(
+                &mut doc,
+                &libraries,
+                &mut selected,
+                crate::libraries::blob::edit
+            ),
             "one edit run opens one undo step"
         );
         assert_eq!(selected.edit().unwrap().text(), input);
@@ -667,14 +710,18 @@ fn compact_f64_values_edit_as_decimal_text() {
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("7.25");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
+        crate::libraries::number::edit(s, c, f64::value)
+    }));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path).and_then(f64::read),
         Some(7.25)
     );
 
     selection.edit_mut().unwrap().set_text("not a number");
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_with(&mut doc, &lib, &mut selection, |s, c| {
+        crate::libraries::number::edit(s, c, f64::value)
+    }));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path).and_then(f64::read),
         Some(7.25)
@@ -704,7 +751,9 @@ fn editing_an_f64_keeps_unrelated_fields() {
     let path = vec![Step::Follow(gid::Resolution::Document)];
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
+        crate::libraries::number::edit(s, c, f64::value)
+    }));
     let value = src(&doc, &lib).resolve_path(&path).unwrap();
     assert_eq!(f64::read(value), Some(8.0));
     assert_eq!(
@@ -735,7 +784,7 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
     // owning cell; the sibling keeps its position and value.
     let mut selection = make_editing_selection(&doc, &lib, element.clone());
     selection.edit_mut().unwrap().set_text("9");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve_path(&element),
         Some(&crate::test_values::text("9"))
@@ -954,15 +1003,15 @@ fn write_through_opens_one_step_per_editor_life() {
     // First write opens the step; the rest of the run is silent,
     // as are no-op rewrites.
     selection.edit_mut().unwrap().set_text("ab");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_text(&mut doc, &lib, &mut selection));
     selection.edit_mut().unwrap().set_text("abc");
-    assert!(!write_through(&mut doc, &lib, &mut selection));
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_text(&mut doc, &lib, &mut selection));
+    assert!(!write_text(&mut doc, &lib, &mut selection));
 
     // Breaking the run (a save) makes the next write a new step.
     break_edit_run(Some(&mut selection));
     selection.edit_mut().unwrap().set_text("abcd");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_text(&mut doc, &lib, &mut selection));
 
     // A re-minted editor is a new run by construction.
     let mut fresh = make_editing_selection(
@@ -971,7 +1020,7 @@ fn write_through_opens_one_step_per_editor_life() {
         vec![Step::Follow(gid::Resolution::Document), key("name")],
     );
     fresh.edit_mut().unwrap().set_text("x");
-    assert!(write_through(&mut doc, &lib, &mut fresh));
+    assert!(write_text(&mut doc, &lib, &mut fresh));
 }
 
 #[test]
@@ -1361,14 +1410,14 @@ fn a_simple_name_is_an_ordinary_editable_field() {
 
     let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_text(&mut doc, &lib, &mut selection));
 
     // Empty is an ordinary text value, not a hidden spelling of
     // field absence.
     selection.edit_mut().unwrap().set_text("");
-    write_through(&mut doc, &lib, &mut selection);
+    write_text(&mut doc, &lib, &mut selection);
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some(""));
     assert_eq!(
         doc.cells
@@ -1443,7 +1492,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
                     .text(),
                 "new name"
             );
-            assert!(!write_through(
+            assert!(!write_text(
                 &mut world.model.doc,
                 &libraries,
                 world.model.selection.as_mut().unwrap()
@@ -1515,7 +1564,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
         crate::selection::payload::edge()
     );
     assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(!write_through(
+    assert!(!write_text(
         &mut world.model.doc,
         &lib,
         world.model.selection.as_mut().unwrap()
@@ -1528,7 +1577,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
 
     // Keyboard navigation enters the same missing location.
     world.model.selection = Some(make_projected_selection(&doc, &lib, path.clone()));
-    assert!(!write_through(
+    assert!(!write_text(
         &mut world.model.doc,
         &lib,
         world.model.selection.as_mut().unwrap()
@@ -1543,7 +1592,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
             .unwrap()
             .dispatch_key(&mut world, &arrow(NamedKey::End))
     );
-    assert!(!write_through(
+    assert!(!write_text(
         &mut world.model.doc,
         &lib,
         world.model.selection.as_mut().unwrap()
@@ -1559,7 +1608,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let selected = world.model.selection.as_mut().unwrap();
     assert_eq!(selected.stage(&src(&world.model.doc, &lib)), Stage::Pending);
     assert_eq!(selected.edit().unwrap().text(), "\"tree\"");
-    assert!(!write_through(&mut world.model.doc, &lib, selected));
+    assert!(!write_text(&mut world.model.doc, &lib, selected));
     assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
 
     let prepared = crate::completion::prepare(
@@ -1619,7 +1668,7 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
     assert!(world.model.selection.as_ref().unwrap().edit().is_none());
     let selected = editing_frame(&mut world, false);
     assert!(selected.completion.is_none());
-    assert!(!write_through(
+    assert!(!write_text(
         &mut world.model.doc,
         &libraries,
         world.model.selection.as_mut().unwrap()

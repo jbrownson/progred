@@ -52,7 +52,9 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let mut selected = make_projected_editing_selection(&doc, &libraries, number.clone());
     assert_eq!(selected.edit().unwrap().text(), "25");
     selected.edit_mut().unwrap().set_text("30");
-    assert!(write_through(&mut doc, &libraries, &mut selected));
+    assert!(write_with(&mut doc, &libraries, &mut selected, |s, c| {
+        crate::libraries::number::edit(s, c, crate::libraries::f32::value)
+    }));
     assert_eq!(
         src(&doc, &libraries).resolve_path(&number),
         Some(&crate::libraries::f32::value(30.0))

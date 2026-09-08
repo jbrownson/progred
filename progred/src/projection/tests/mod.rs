@@ -1,7 +1,7 @@
 use super::completion::{completion_card, completion_placement};
 use super::*;
 use crate::annotations::Annotations;
-use crate::completion::{Commit, Entry, Offers};
+use crate::completion::{Entry, Offers};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;
@@ -62,28 +62,23 @@ fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::dis
     .unwrap_or_default()
 }
 
-fn completion_entries_with<C: 'static>(
+fn completion_entries_with(
     sources: &Sources,
     raw: bool,
-    commit: &Commit<C>,
+    kind: &crate::display::CompletionKind,
     query: &str,
     providers: Option<&crate::display::CompletionProvider>,
     contextual: Option<&crate::display::CompletionProvider>,
     everything: bool,
-) -> Vec<Entry<C>> {
-    use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
+) -> Vec<Entry<completion::CompletionResult>> {
+    use crate::display::{CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
     crate::completion::completion_entries_with(
         sources,
         raw,
-        commit,
         &CompletionRequest {
             query,
-            kind: if matches!(commit, Commit::Label(_)) {
-                CompletionKind::Field
-            } else {
-                CompletionKind::Value
-            },
+            kind: *kind,
             scope: if everything {
                 CompletionScope::Everything
             } else {
@@ -97,6 +92,9 @@ fn completion_entries_with<C: 'static>(
         contextual,
     )
     .0
+    .into_iter()
+    .map(|entry| completion::test_entry(entry, *kind))
+    .collect()
 }
 
 fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
@@ -153,7 +151,6 @@ fn editing_frame_at(
             root: world.model.doc.root.as_ref(),
             root_path: &[],
             selection: world.model.selection.as_ref(),
-            scrub_spelling: None,
             source_selection: world.model.selection.as_ref(),
             annotations: &annotations,
             raw,
@@ -207,91 +204,25 @@ fn make_projected_editing_selection(
 }
 
 fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    Selection::from_line(
-        &crate::test_root(),
-        &src(doc, libraries),
-        path.clone(),
-        projected_line(doc, libraries, &path).expect("value is not line editable"),
-    )
+    make_projected_editing_selection(doc, libraries, path)
 }
 
-fn projected_line(
-    doc: &Document,
+fn write_text(doc: &mut Rc<Document>, libraries: &Libraries, selected: &mut Selection) -> bool {
+    write_with(doc, libraries, selected, text::edit)
+}
+
+fn write_with(
+    doc: &mut Rc<Document>,
     libraries: &Libraries,
-    path: &[Step],
-) -> Option<crate::display::LineEdit> {
-    struct NoEval;
-    impl crate::display::Env for NoEval {
-        fn apply_scoped(
-            &self,
-            _: &gid::Value,
-            _: &[(gid::CellId, gid::Value)],
-            _scope: Option<&grap::ForeignOverlay<'_>>,
-        ) -> grap::Evaluation {
-            panic!("unexpected projection application")
-        }
-
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            panic!("line projection evaluated")
-        }
-    }
-
-    let value = src(doc, libraries).resolve_path(path)?;
-    let stack = crate::stack::load();
-    let layout = {
-        let target = |_| crate::display::ProjectionTarget {
-            select: Rc::new(|_: &mut crate::Editor| false),
-            select_with: Rc::new(|_: &mut crate::Editor, _| false),
-            hover: Hovered::Tree(Hover::Value(Rc::from(path))),
-        };
-        stack.projection.apply(&crate::display::ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
-            env: &NoEval,
-            value: Some(value),
-            scale_factor: 1.0,
-            writable: true,
-            selection: None,
-            pending: None,
-            state: None,
-            targets: crate::display::ProjectionTargets::new(&target),
-        })
-    }?;
-    let layout = match crate::display::recording::record(&layout) {
-        crate::display::recording::Recorded::Before { child, .. } => *child,
-        layout => layout,
-    };
-    match layout {
-        crate::display::recording::Recorded::Widget(widget) => placed_line_description(&widget),
-        crate::display::recording::Recorded::Row { children, .. } => {
-            children.into_iter().find_map(|child| match child {
-                crate::display::recording::Recorded::Widget(widget) => {
-                    placed_line_description(&widget)
-                }
-                _ => None,
-            })
-        }
-        _ => None,
-    }
-}
-
-fn placed_line_description(
-    widget: &crate::display::widget::Widget<crate::Editor, Hovered>,
-) -> Option<crate::display::LineEdit> {
-    crate::display::test_support::with_context(
-        &crate::display::test_support::NoProject,
-        |context| {
-            crate::libraries::test_widgets::record_line(|| {
-                widget(context);
-            })
-        },
+    selected: &mut Selection,
+    update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static,
+) -> bool {
+    line_control::commit(
+        doc,
+        libraries,
+        selected,
+        &crate::libraries::line_edit::native(update),
     )
-}
-
-// Direct conversion tests use a fresh projection's callback, just as a
-// newly minted handler does; the selection stores no conversion.
-fn write_through(doc: &mut Rc<Document>, libraries: &Libraries, selected: &mut Selection) -> bool {
-    projected_line(doc, libraries, selected.path())
-        .is_some_and(|line| line_control::commit(doc, libraries, selected, &line.update))
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {

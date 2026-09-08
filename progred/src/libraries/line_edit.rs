@@ -53,43 +53,32 @@ pub fn layout_with_family(
     suffix: impl Into<String>,
     family: TextFamily,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    description(text, None::<String>, update, prefix, suffix, family)
-}
-
-#[cfg(test)]
-pub fn layout_with_placeholder(
-    text: impl Into<String>,
-    placeholder: Option<impl Into<String>>,
-    update: LineUpdate,
-    prefix: impl Into<String>,
-    suffix: impl Into<String>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    description(
+    line_edit(description(
         text,
-        placeholder,
+        None::<String>,
         update,
         prefix,
         suffix,
-        TextFamily::SystemUi,
-    )
+        family,
+    ))
 }
 
-fn description(
+pub fn description(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
     update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
     family: TextFamily,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    line_edit(LineEdit {
+) -> LineEdit {
+    LineEdit {
         text: text.into(),
         placeholder: placeholder.map(Into::into),
         update,
         prefix: prefix.into(),
         suffix: suffix.into(),
         family,
-    })
+    }
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -111,10 +100,14 @@ mod tests {
     #[test]
     fn native_handler_captures_the_current_line_description() {
         let update = native(|spelling, _| Some(crate::libraries::text::value(spelling)));
-        let layout = layout("42", update.clone(), "(", ")");
-        let Some(line) = crate::libraries::test_widgets::line(&layout) else {
-            panic!("stock line-edit layout")
-        };
+        let line = description(
+            "42",
+            None::<String>,
+            update.clone(),
+            "(",
+            ")",
+            TextFamily::SystemUi,
+        );
         assert_eq!(line.text, "42");
         assert_eq!(line.placeholder, None);
         assert!(Rc::ptr_eq(&line.update, &update));
@@ -125,29 +118,27 @@ mod tests {
 
     #[test]
     fn layout_can_request_a_monospace_editor() {
-        let Some(line) = crate::libraries::test_widgets::line(&layout_with_family(
+        let line = description(
             "b4e0fe",
+            None::<String>,
             native(|_, _| None),
             "#",
             "",
             TextFamily::Monospace,
-        )) else {
-            panic!("stock line-edit layout")
-        };
+        );
         assert_eq!(line.family, TextFamily::Monospace);
     }
 
     #[test]
     fn layout_exposes_a_placeholder() {
-        let Some(line) = crate::libraries::test_widgets::line(&layout_with_placeholder(
+        let line = description(
             "",
             Some("λ"),
             native(|_, _| None),
             "",
             "",
-        )) else {
-            panic!("stock line-edit layout")
-        };
+            TextFamily::SystemUi,
+        );
         assert_eq!(line.placeholder.as_deref(), Some("λ"));
     }
 }

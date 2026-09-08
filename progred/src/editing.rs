@@ -1,6 +1,6 @@
 //! Document-facing widget operations. Handlers pass the live editor explicitly.
 
-use crate::{Editor, gesture, projection, selection, sources, sources::Sources, workspace::Root};
+use crate::{Editor, projection, selection, sources, sources::Sources, workspace::Root};
 use gid::{Path, Step, Value};
 use puri::{Point, edit::EditCtx};
 
@@ -49,16 +49,19 @@ pub(crate) fn insert(app: &mut Editor, root: &Root, path: &[Step]) {
 
 pub(crate) fn start_gesture(
     app: &mut Editor,
-    root: Root,
-    path: Path,
     continuation: Box<dyn crate::display::widget::gesture::Gesture<Editor>>,
     samples: &[Point],
 ) {
-    app.gesture = Some(gesture::Active::new(root, path, continuation));
+    app.finish_gesture();
+    app.gesture = Some(continuation);
     app.advance_gesture(samples);
 }
 
-pub(crate) fn commit_value(app: &mut Editor, value: Value, on_commit: Option<Value>) {
+pub(crate) fn commit_value(
+    app: &mut Editor,
+    value: Value,
+    on_commit: Option<crate::site::Continuation>,
+) {
     if app
         .model
         .selection
@@ -73,7 +76,7 @@ pub(crate) fn commit_label(
     app: &mut Editor,
     label: gid::CellId,
     definition: Option<Value>,
-    on_commit: Option<Value>,
+    on_commit: Option<crate::site::Continuation>,
 ) {
     if app
         .model

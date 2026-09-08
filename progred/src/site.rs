@@ -10,12 +10,57 @@ use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
 use std::cell::RefCell;
+use std::rc::Rc;
 
-pub(crate) struct PendingChanges {
+#[derive(Debug, PartialEq)]
+pub struct PendingChanges {
     pub annotation: Option<Value>,
     pub annotation_changed: bool,
     pub selection: Option<(Path, Value)>,
     pub selection_changed: bool,
+}
+
+pub type Continuation = Rc<dyn Fn(&Sources<'_>, &[gid::Step], &mut PendingChanges) -> bool>;
+
+impl PendingChanges {
+    pub fn select(&mut self, path: Path, payload: Value) {
+        if !absent::is_absent(&payload) {
+            self.selection = Some((path, payload));
+            self.selection_changed = true;
+        } else if self
+            .selection
+            .as_ref()
+            .is_some_and(|(selected, _)| selected == &path)
+        {
+            self.selection = None;
+            self.selection_changed = true;
+        }
+    }
+}
+
+pub fn grap(
+    function: Value,
+    arguments: impl IntoIterator<Item = (gid::CellId, Value)> + Clone,
+) -> impl Fn(&Sources<'_>, &[gid::Step], &mut PendingChanges) -> bool {
+    move |sources, path, staged| {
+        if let Some(next) = evaluate(
+            &function,
+            arguments.clone(),
+            path,
+            staged.annotation.clone(),
+            staged.selection.clone(),
+            sources,
+            grap::DEFAULT_FUEL,
+        ) {
+            staged.annotation = next.annotation;
+            staged.annotation_changed |= next.annotation_changed;
+            staged.selection = next.selection;
+            staged.selection_changed |= next.selection_changed;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 const EVENT_FUNCTIONS: [gid::CellId; 5] = [
@@ -48,17 +93,15 @@ pub fn apply_event(
         .view(&root)
         .and_then(|view| view.annotations.at(&path))
         .cloned();
-    let staged = evaluate(
-        &function,
-        [(layout::vocabulary::EVENT, event)],
-        &path,
+    let mut staged = PendingChanges {
         annotation,
-        current,
-        &app.sources(),
-        grap::DEFAULT_FUEL,
-    );
-    let handled = staged.is_some();
-    if let Some(staged) = staged {
+        annotation_changed: false,
+        selection: current,
+        selection_changed: false,
+    };
+    let handled =
+        grap(function, [(layout::vocabulary::EVENT, event)])(&app.sources(), &path, &mut staged);
+    if handled {
         let Some(view) = app.model.workspace.view_mut(&root) else {
             return false;
         };
@@ -181,19 +224,14 @@ fn event_foreign(
         };
         let value = context.eval(expression, environment)?;
         let mut staged = staged.borrow_mut();
-        if !absent::is_absent(&value) {
-            context.effect(|| {
-                staged.selection = Some((path, value.clone()));
-                staged.selection_changed = true;
-            });
-        } else if staged
-            .selection
-            .as_ref()
-            .is_some_and(|(selected, _)| selected == &path)
+        if !absent::is_absent(&value)
+            || staged
+                .selection
+                .as_ref()
+                .is_some_and(|(selected, _)| selected == &path)
         {
             context.effect(|| {
-                staged.selection = None;
-                staged.selection_changed = true;
+                staged.select(path, value.clone());
             });
         }
         return Ok(value);

@@ -3,13 +3,14 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::{
-    Face, Layout, ProjectionInput, ScrubEvent, ScrubUpdate, on_scrub, overlay_value, row, subscript,
-};
+use crate::display::{Face, Layout, ProjectionInput, overlay_value, row, subscript};
 use crate::libraries::{Library, line_edit, name};
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
 use std::rc::Rc;
+
+pub(crate) mod scrub;
+use scrub::{ScrubEvent, ScrubUpdate, on_scrub};
 
 pub const ID: CellId = CellId::from_u128(0xc46d010325d3a1ec0f2a84dd3a9570ae);
 

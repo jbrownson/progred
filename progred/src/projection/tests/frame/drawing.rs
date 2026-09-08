@@ -329,7 +329,6 @@ fn drawing_frame(
         annotations: &annotations,
         styles: &styles,
         selection: None,
-        scrub_spelling: None,
         secondary: None,
         selected_trace: None,
         source: Source::Stored,

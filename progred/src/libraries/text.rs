@@ -81,12 +81,17 @@ pub fn functions() -> ForeignFunctions {
 pub fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let content = read(input.value?)?;
-    Some(line_edit::layout(
-        content,
+    editor(input.value?).map(crate::display::line_edit)
+}
+
+pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
+    Some(line_edit::description(
+        read(value)?,
+        None::<String>,
         line_edit::native(edit),
         "\"",
         "\"",
+        crate::display::TextFamily::SystemUi,
     ))
 }
 
@@ -165,9 +170,11 @@ mod tests {
             targets: crate::display::ProjectionTargets::new(&target),
         })
         .expect("text projection");
-        let Some(line) = crate::libraries::test_widgets::line(&display) else {
-            panic!("text projects directly to a line editor")
-        };
+        assert!(matches!(
+            crate::display::recording::record(&display),
+            crate::display::recording::Recorded::Widget(_)
+        ));
+        let line = editor(&value("hi")).unwrap();
         assert_eq!(line.text, "hi");
         assert_eq!(line.prefix, "\"");
         assert_eq!(line.suffix, "\"");

@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::CompletionKind;
 use crate::libraries::{control, presentation};
 use gid::Resolution;
 
@@ -6,22 +7,47 @@ use gid::Resolution;
 pub(crate) struct CompletionResult {
     pub(crate) value: Option<Value>,
     pub(crate) label: Option<(CellId, Option<Value>)>,
-    pub(crate) on_commit: Option<Value>,
+    pub(crate) selected: Option<(Path, Value)>,
 }
 
-fn value_commit(result: &mut CompletionResult, value: Value, on_commit: Option<Value>) {
-    result.value = Some(value);
-    result.on_commit = on_commit;
-}
-
-fn label_commit(
-    result: &mut CompletionResult,
-    cell: CellId,
-    definition: Option<Value>,
-    on_commit: Option<Value>,
-) {
-    result.label = Some((cell, definition));
-    result.on_commit = on_commit;
+pub(super) fn test_entry(
+    entry: Entry<crate::Editor>,
+    kind: CompletionKind,
+) -> Entry<CompletionResult> {
+    Entry {
+        display: entry.display,
+        detail: entry.detail,
+        matches: entry.matches,
+        face: entry.face,
+        source: entry.source,
+        activate: Rc::new(move |result| {
+            let mut world = crate::test_editor(Document {
+                root: (kind == CompletionKind::Field).then(|| Value::record([])),
+                cells: Cells::new(),
+            });
+            let root = world.model.workspace.document_root().clone();
+            world.model.selection = Some(match kind {
+                CompletionKind::Value => crate::selection::pending_value(&root, vec![]),
+                CompletionKind::Field => pending_edge(&root, &world.sources(), vec![]).unwrap(),
+            });
+            (entry.activate)(&mut world);
+            result.selected = world
+                .model
+                .selection
+                .as_ref()
+                .map(|s| (s.path().to_vec(), s.payload()));
+            match kind {
+                CompletionKind::Value => result.value = world.model.doc.root.clone(),
+                CompletionKind::Field => {
+                    let cell = match world.model.selection.as_ref().unwrap().path().first() {
+                        Some(Step::Key(cell)) => *cell,
+                        _ => panic!("label activation must select its field"),
+                    };
+                    result.label = Some((cell, world.model.doc.cells.value(cell).cloned()));
+                }
+            }
+        }),
+    }
 }
 
 fn completion_entries(
@@ -34,9 +60,9 @@ fn completion_entries(
         sources,
         raw,
         &if labels {
-            Commit::Label(Rc::new(label_commit))
+            CompletionKind::Field
         } else {
-            Commit::Value(Rc::new(value_commit))
+            CompletionKind::Value
         },
         query,
         Some(&crate::stack::load().completions),
@@ -99,7 +125,6 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
             let (entries, _) = crate::completion::completion_entries_with(
                 &sources,
                 false,
-                &Commit::Value(Rc::new(value_commit)),
                 &CompletionRequest {
                     query,
                     kind: CompletionKind::Value,
@@ -117,9 +142,26 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 };
                 assert_eq!(entry.display, display);
                 assert_eq!(entry.detail.as_deref(), Some(detail));
-                let result = activated(entry);
+                let result = activated(&test_entry(entry.clone(), CompletionKind::Value));
                 assert_eq!(result.value.as_ref(), Some(&expected_value));
-                assert_eq!(result.on_commit, expected_continuation);
+                let mut effects = crate::site::PendingChanges {
+                    annotation: None,
+                    annotation_changed: false,
+                    selection: None,
+                    selection_changed: false,
+                };
+                assert!(expected_continuation.as_ref().unwrap()(
+                    &sources,
+                    &[],
+                    &mut effects
+                ));
+                let (path, payload) = result.selected.unwrap();
+                let (expected_path, expected_payload) = effects.selection.unwrap();
+                assert_eq!(path, expected_path);
+                assert_eq!(
+                    selection_payload::stage(&payload),
+                    selection_payload::stage(&expected_payload)
+                );
             } else {
                 assert!(entries.is_empty(), "stale name matched {query:?}");
             }
@@ -560,7 +602,7 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
     let entries = completion_entries_with(
         &src(&document, &libraries),
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "custom",
         Some(&provider),
         None,
@@ -644,7 +686,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             .find(|entry| inserted_value(&doc, &pending, entry).as_ref() == Some(&value))
             .unwrap();
         let mut world = activate_projected(&doc, &pending, entry);
-        let mut document = world.model.doc.clone();
+        let document = world.model.doc.clone();
         let selected = world.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), path);
         assert_eq!(selected.stage(&src(&document, &libraries)), Stage::Edge);
@@ -662,16 +704,19 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             .handler
             .unwrap()
             .dispatch_key(&mut world, &arrow(NamedKey::End));
-        let mut selected = world.model.selection.unwrap();
+        let selected = world.model.selection.as_ref().unwrap();
         let editor = selected.edit().expect("the selected line handles input");
         assert_eq!(editor.text(), spelling);
         assert_eq!(editor.selection_offsets(), (spelling.len(), spelling.len()));
-        selected.edit_mut().unwrap().set_text(edit);
-        assert!(write_through(&mut document, &libraries, &mut selected));
-        assert_eq!(
-            src(&document, &libraries).resolve_path(&path),
-            Some(&changed)
+        *world.model.selection.as_mut().unwrap().edit_mut().unwrap() =
+            LineEditState::from_parts(spelling, 0, spelling.len(), None, None);
+        assert!(
+            editing_frame(&mut world, false)
+                .handler
+                .unwrap()
+                .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit(edit.into()),)
         );
+        assert_eq!(world.sources().resolve_path(&path), Some(&changed));
     }
 }
 
@@ -685,7 +730,13 @@ fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     };
     let pending = crate::selection::pending_with_query(&root, vec![], "original query");
     let old_payload = pending.payload();
-    for continuation in [None, Some(grap::lambda([], Value::record([])))] {
+    for continuation in [
+        None,
+        Some(
+            Rc::new(crate::site::grap(grap::lambda([], Value::record([])), []))
+                as crate::site::Continuation,
+        ),
+    ] {
         let prepared = crate::completion::prepare(
             &src(&doc, &libraries),
             &pending,
@@ -765,12 +816,10 @@ fn label_offer_explicitly_opens_its_missing_value() {
 #[test]
 fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors() {
     let libraries = core_libraries();
-    let root = crate::test_root();
     let doc = Document {
         root: None,
         cells: Cells::new(),
     };
-    let pending = crate::selection::pending_with_query(&root, vec![], "2.5");
     let entries = completion_entries(&src(&doc, &libraries), true, false, "2.5");
     for value in [text::value("2.5"), f64::value(2.5)] {
         let offer = activated(
@@ -779,20 +828,7 @@ fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors()
                 .find(|entry| activated(entry).value.as_ref() == Some(&value))
                 .unwrap(),
         );
-        let prepared = crate::completion::prepare(
-            &src(&doc, &libraries),
-            &pending,
-            &Annotations::default(),
-            offer.value.unwrap(),
-            None,
-            offer.on_commit.as_ref(),
-        )
-        .unwrap();
-        assert!(prepared.effects.selection_changed);
-        assert_eq!(
-            prepared.effects.selection,
-            Some((vec![], selection_payload::edge()))
-        );
+        assert_eq!(offer.selected, Some((vec![], selection_payload::edge())));
     }
 }
 
@@ -821,7 +857,7 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     let entries = completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "custom",
         Some(&provider),
         Some(&narrow),
@@ -832,7 +868,7 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     let entries = completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "custom",
         Some(&provider),
         Some(&narrow),
@@ -843,7 +879,7 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     completion_entries_with(
         &sources,
         false,
-        &Commit::Label(Rc::new(label_commit)),
+        &CompletionKind::Field,
         "custom",
         Some(&provider),
         None,
@@ -852,7 +888,7 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
     completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "\"custom\"",
         Some(&provider),
         None,
@@ -872,7 +908,7 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
     let entries = completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "sdf",
         Some(&stack.completions),
         Some(&stack.completions),
@@ -889,13 +925,13 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
             .and_then(Value::as_cell)
             .is_some()
     );
-    assert!(activated(&entries[0]).on_commit.is_some());
+    assert!(!activated(&entries[0]).selected.unwrap().0.is_empty());
     assert_eq!(entries.len(), 1);
 
     let widened = completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "sdf",
         Some(&stack.completions),
         Some(&stack.completions),
@@ -1074,7 +1110,13 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
             [(
                 control::vocabulary::EXPRESSIONS,
                 Value::list([
-                    grap::call(offer.on_commit.unwrap(), []),
+                    grap::call(
+                        crate::libraries::selection::tests::grap_at(
+                            &[],
+                            crate::libraries::selection::edge(),
+                        ),
+                        [],
+                    ),
                     crate::libraries::absent::decline(),
                 ]),
             )],
@@ -1087,7 +1129,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
             &Annotations::default(),
             inserted,
             None,
-            Some(&declined),
+            Some(&(Rc::new(crate::site::grap(declined, [])) as crate::site::Continuation)),
         )
         .is_none()
     );
@@ -1127,7 +1169,6 @@ fn projected_completion_entries_with(
             root: doc.root.as_ref(),
             root_path: &[],
             selection: Some(selection),
-            scrub_spelling: None,
             source_selection: Some(selection),
             annotations: &annotations,
             raw: false,
@@ -1531,8 +1572,10 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         assert_eq!(request.kind, CompletionKind::Field);
         assert_eq!(request.value(), Some(&definition));
         Some(vec![
-            Completion::new("offered present", present.into()),
-            Completion::new("offered missing", missing.into()),
+            Completion::new("offered present", present.into())
+                .on_commit(crate::libraries::selection::pending_at(&[])),
+            Completion::new("offered missing", missing.into())
+                .on_commit(crate::libraries::selection::pending_at(&[])),
         ])
     });
     let value_at = |path: &[Step]| sources.resolve_path(path);
@@ -1544,18 +1587,19 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         value_at: &value_at,
         resolve: &|cell| sources.definition(cell),
     };
-    let commit = Commit::Label(Rc::new(label_commit));
     let (entries, everything) = crate::completion::completion_entries_with(
         &sources,
         false,
-        &commit,
         &request,
         None,
         Some(&provider),
     );
     assert!(!everything);
     assert_eq!(entries.len(), 1);
-    assert_eq!(activated(&entries[0]).label, Some((missing, None)));
+    assert_eq!(
+        activated(&test_entry(entries[0].clone(), CompletionKind::Field)).label,
+        Some((missing, None))
+    );
 
     let unspecified: CompletionProvider = Rc::new(|_| None);
     let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
@@ -1563,31 +1607,18 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         crate::completion::completion_entries_with(
             &sources,
             false,
-            &commit,
             &request,
             None,
             Some(&unspecified)
         )
         .1
     );
-    let (entries, everything) = crate::completion::completion_entries_with(
-        &sources,
-        false,
-        &commit,
-        &request,
-        None,
-        Some(&empty),
-    );
+    let (entries, everything) =
+        crate::completion::completion_entries_with(&sources, false, &request, None, Some(&empty));
     assert!(!everything);
     assert!(entries.is_empty());
-    let (entries, everything) = crate::completion::completion_entries_with(
-        &sources,
-        true,
-        &commit,
-        &request,
-        None,
-        Some(&empty),
-    );
+    let (entries, everything) =
+        crate::completion::completion_entries_with(&sources, true, &request, None, Some(&empty));
     assert!(everything);
     assert!(!entries.is_empty());
 }
@@ -1682,13 +1713,14 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     let provider: crate::display::CompletionProvider = Rc::new(move |_| {
         Some(vec![
             crate::display::Completion::new("text", text::value("not a label")),
-            crate::display::Completion::new("existing", Value::from(existing)),
+            crate::display::Completion::new("existing", Value::from(existing))
+                .on_commit(crate::libraries::selection::pending_at(&[])),
         ])
     });
     let labels = completion_entries_with(
         &sources,
         false,
-        &Commit::Label(Rc::new(label_commit)),
+        &CompletionKind::Field,
         "",
         None,
         Some(&provider),
@@ -1721,7 +1753,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     let entries = completion_entries_with(
         &sources,
         false,
-        &Commit::Value(Rc::new(value_commit)),
+        &CompletionKind::Value,
         "generated",
         None,
         Some(&provider),
@@ -1730,7 +1762,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     let labels = completion_entries_with(
         &sources,
         false,
-        &Commit::Label(Rc::new(label_commit)),
+        &CompletionKind::Field,
         "generated",
         None,
         Some(&provider),
@@ -1748,7 +1780,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         let entry = completion_entries_with(
             &sources,
             false,
-            &Commit::Value(Rc::new(value_commit)),
+            &CompletionKind::Value,
             "",
             Some(&stack.completions),
             Some(&stack.completions),

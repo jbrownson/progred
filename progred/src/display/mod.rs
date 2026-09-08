@@ -65,12 +65,8 @@ pub use measured::RowAlignment;
 pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
 pub use widget::gesture::{
-    PointEvent, PointHandler, PointUpdate, ScrubEvent, ScrubGesture, ScrubUpdate, StateDragEvent,
-    StateDragGesture, StateDragHandler,
+    PointEvent, PointHandler, PointUpdate, StateDragEvent, StateDragGesture, StateDragHandler,
 };
-
-#[cfg(test)]
-pub use widget::gesture::ScrubHandler;
 
 /// One value a projection suggests at an explicit completion control.
 /// The host owns filtering and presentation; the projection owns the
@@ -81,11 +77,11 @@ pub struct Completion {
     pub aliases: Vec<String>,
     pub detail: Option<CompletionText>,
     pub value: CompletionValue,
-    /// Grap callable run at the committed location. Its selection and
+    /// Continuation run at the committed location. Its selection and
     /// annotation effects are staged with the insertion.
     /// No continuation means no selection change; standard completion
     /// combinators supply their own selection transitions explicitly.
-    pub on_commit: Option<Value>,
+    pub on_commit: Option<crate::site::Continuation>,
 }
 
 /// Names are resolved from the current sources when the picker is built,
@@ -169,7 +165,7 @@ impl Completion {
         self
     }
 
-    pub fn on_commit(mut self, function: Value) -> Self {
+    pub fn on_commit(mut self, function: crate::site::Continuation) -> Self {
         self.on_commit = Some(function);
         self
     }
@@ -473,7 +469,7 @@ pub fn activatable<World: 'static, Hover: Clone + PartialEq + 'static>(
     on_hover(on_activate(child, target.clone(), handler), target)
 }
 
-pub use widget::gesture::{on_point, on_scrub, on_state_drag};
+pub use widget::gesture::{on_point, on_state_drag};
 
 pub fn row<World: 'static, Hover: 'static>(
     gap: f64,

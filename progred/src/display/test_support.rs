@@ -158,7 +158,6 @@ pub fn with_context<W: 'static, H: 'static, R>(
         annotations: &annotations,
         styles: &styles,
         selection: None,
-        scrub_spelling: None,
         secondary: None,
         selected_trace: None,
         source: crate::projection::Source::Stored,

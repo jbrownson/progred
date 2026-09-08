@@ -7,63 +7,54 @@ use crate::display::{
 use crate::filter;
 use crate::identity::short_id;
 use crate::libraries::{blob, name, text};
+use crate::site::Continuation;
 use crate::sources::Sources;
 use gid::{CellId, Resolution, Value, new_cell_id};
 use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-/// The insertion capability supplied by the active completion site.
-pub enum Commit<C> {
-    Value(Rc<dyn Fn(&mut C, Value, Option<Value>)>),
-    Label(Rc<dyn Fn(&mut C, CellId, Option<Value>, Option<Value>)>),
-}
-
-impl<C: 'static> Commit<C> {
-    fn value(
-        &self,
-        value: CompletionValue,
-        on_commit: Option<Value>,
-    ) -> Option<Rc<dyn Fn(&mut C)>> {
-        match self {
-            Self::Value(commit) => {
-                let commit = commit.clone();
-                Some(Rc::new(move |world| {
-                    commit(world, value.instantiate(), on_commit.clone())
-                }))
-            }
-            Self::Label(commit) => value.literal().and_then(Value::as_cell).map(|cell| {
-                let commit = commit.clone();
-                Rc::new(move |world: &mut C| commit(world, cell, None, on_commit.clone()))
-                    as Rc<dyn Fn(&mut C)>
-            }),
-        }
-    }
-
-    fn new_cell(&self) -> Rc<dyn Fn(&mut C)> {
-        match self {
-            Self::Value(commit) => {
-                let commit = commit.clone();
-                let select =
-                    crate::libraries::selection::at(&[], crate::libraries::selection::edge());
-                Rc::new(move |world| {
-                    commit(world, Value::from(new_cell_id()), Some(select.clone()))
-                })
-            }
-            Self::Label(commit) => {
-                let commit = commit.clone();
-                let select = crate::libraries::selection::pending_at(&[]);
-                Rc::new(move |world| commit(world, new_cell_id(), None, Some(select.clone())))
-            }
-        }
+fn activation(
+    kind: CompletionKind,
+    value: CompletionValue,
+    on_commit: Option<Continuation>,
+) -> Option<Rc<dyn Fn(&mut crate::Editor)>> {
+    match kind {
+        CompletionKind::Value => Some(Rc::new(move |world| {
+            crate::editing::commit_value(world, value.instantiate(), on_commit.clone())
+        })),
+        CompletionKind::Field => value.literal().and_then(Value::as_cell).map(|cell| {
+            Rc::new(move |world: &mut crate::Editor| {
+                crate::editing::commit_label(world, cell, None, on_commit.clone())
+            }) as Rc<dyn Fn(&mut crate::Editor)>
+        }),
     }
 }
 
-fn completion_entry<C: 'static>(
+fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
+    Rc::new(move |world| match kind {
+        CompletionKind::Value => crate::editing::commit_value(
+            world,
+            new_cell_id().into(),
+            Some(crate::libraries::selection::at(
+                &[],
+                crate::libraries::selection::edge(),
+            )),
+        ),
+        CompletionKind::Field => crate::editing::commit_label(
+            world,
+            new_cell_id(),
+            None,
+            Some(crate::libraries::selection::pending_at(&[])),
+        ),
+    })
+}
+
+fn completion_entry(
     sources: &Sources,
     offer: Completion,
-    commit: &Commit<C>,
-) -> Option<Entry<C>> {
+    kind: CompletionKind,
+) -> Option<Entry<crate::Editor>> {
     offered_entry(
         completion_text(sources, &offer.display),
         offer
@@ -72,52 +63,52 @@ fn completion_entry<C: 'static>(
             .map(|detail| completion_text(sources, detail)),
         offer.value,
         offer.on_commit,
-        commit,
+        kind,
     )
 }
 
-fn value_entry<C: 'static>(
+fn value_entry(
     display: String,
     detail: Option<String>,
     value: Value,
-    on_commit: Value,
-    commit: &Commit<C>,
-) -> Option<Entry<C>> {
+    on_commit: Continuation,
+    kind: CompletionKind,
+) -> Option<Entry<crate::Editor>> {
     offered_entry(
         display,
         detail,
         CompletionValue::Literal(value),
         Some(on_commit),
-        commit,
+        kind,
     )
 }
 
-fn offered_entry<C: 'static>(
+fn offered_entry(
     display: String,
     detail: Option<String>,
     value: CompletionValue,
-    on_commit: Option<Value>,
-    commit: &Commit<C>,
-) -> Option<Entry<C>> {
-    commit
-        .value(value.clone(), on_commit)
-        .map(|activate| Entry {
-            display,
-            detail,
-            matches: Vec::new(),
-            face: if value.literal().and_then(text::read).is_some() {
-                Face::String
-            } else if value.literal().and_then(Value::as_blob).is_some() {
-                Face::Id
-            } else {
-                Face::Label
-            },
-            source: value.literal().and_then(Value::as_cell),
-            activate,
-        })
+    on_commit: Option<Continuation>,
+    kind: CompletionKind,
+) -> Option<Entry<crate::Editor>> {
+    activation(kind, value.clone(), on_commit).map(|activate| Entry {
+        display,
+        detail,
+        matches: Vec::new(),
+        face: if value.literal().and_then(text::read).is_some() {
+            Face::String
+        } else if value.literal().and_then(Value::as_blob).is_some() {
+            Face::Id
+        } else {
+            Face::Label
+        },
+        source: value.literal().and_then(Value::as_cell),
+        activate,
+    })
 }
 
-pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'static str, Entry<C>)> {
+pub(crate) fn constructor_entries(
+    kind: CompletionKind,
+) -> Vec<(&'static str, Entry<crate::Editor>)> {
     std::iter::once((
         "(",
         Entry {
@@ -126,7 +117,7 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
             matches: Vec::new(),
             face: Face::Dim,
             source: None,
-            activate: commit.new_cell(),
+            activate: new_cell(kind),
         },
     ))
     .chain(
@@ -141,7 +132,7 @@ pub(crate) fn constructor_entries<C: 'static>(commit: &Commit<C>) -> Vec<(&'stat
                 None,
                 value,
                 crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
-                commit,
+                kind,
             )
             .map(|mut entry| {
                 entry.face = Face::Dim;
@@ -167,7 +158,7 @@ pub(crate) fn prepare(
     annotations: &crate::annotations::Annotations,
     value: Value,
     definition: Option<Value>,
-    on_commit: Option<&Value>,
+    on_commit: Option<&Continuation>,
 ) -> Option<Prepared> {
     use crate::selection::{self, Stage};
     let mut document = std::rc::Rc::new(sources.doc.clone());
@@ -195,26 +186,23 @@ pub(crate) fn prepare(
     };
     let annotation = annotations.at(&path).cloned();
     let selection = Some((selection.path().to_vec(), selection.payload()));
-    let effects = match on_commit {
-        Some(function) => crate::site::evaluate(
-            function,
-            [],
-            &path,
-            annotation,
-            selection,
+    let mut effects = crate::site::PendingChanges {
+        annotation,
+        annotation_changed: false,
+        selection,
+        selection_changed: false,
+    };
+    if let Some(function) = on_commit {
+        function(
             &Sources {
                 doc: &document,
                 libraries: sources.libraries,
             },
-            grap::DEFAULT_FUEL,
-        )?,
-        None => crate::site::PendingChanges {
-            annotation,
-            annotation_changed: false,
-            selection,
-            selection_changed: false,
-        },
-    };
+            &path,
+            &mut effects,
+        )
+        .then_some(())?;
+    }
     Some(Prepared {
         document,
         document_changed,
@@ -223,14 +211,14 @@ pub(crate) fn prepare(
     })
 }
 
-pub(crate) fn completion_entries_with<C: 'static>(
+pub(crate) fn completion_entries_with(
     sources: &Sources,
     raw: bool,
-    commit: &Commit<C>,
     request: &CompletionRequest<'_>,
     providers: Option<&CompletionProvider>,
     contextual: Option<&CompletionProvider>,
-) -> (Vec<Entry<C>>, bool) {
+) -> (Vec<Entry<crate::Editor>>, bool) {
+    let kind = request.kind;
     let narrow = CompletionRequest {
         scope: CompletionScope::Suggested,
         ..*request
@@ -245,10 +233,10 @@ pub(crate) fn completion_entries_with<C: 'static>(
     if request.scope == CompletionScope::Suggested
         && let Some(offers) = suggested
     {
-        return (contextual_entries(sources, offers, request, commit), false);
+        return (contextual_entries(sources, offers, request), false);
     }
     let query = request.query;
-    let labels = matches!(commit, Commit::Label(_));
+    let labels = kind == CompletionKind::Field;
     let trimmed = query.trim();
     let quoted = trimmed.starts_with('"');
     let universal = CompletionRequest {
@@ -258,18 +246,17 @@ pub(crate) fn completion_entries_with<C: 'static>(
     let value_entries = providers
         .filter(|_| !quoted)
         .and_then(|provider| provider(&universal))
-        .map(|offers| contextual_entries(sources, offers, request, commit))
+        .map(|offers| contextual_entries(sources, offers, request))
         .unwrap_or_default();
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = text::query_spelling(query);
     let atom_leads = quoted || blob.is_some();
     let text_entry = blob
         .is_some()
-        .then(|| completion_entry(sources, text::completion(query), commit))
+        .then(|| completion_entry(sources, text::completion(query), kind))
         .flatten();
-    let atom_entry = match commit {
-        Commit::Label(commit) => {
-            let commit = commit.clone();
+    let atom_entry = match kind {
+        CompletionKind::Field => {
             let spelling = spelling.to_string();
             Entry {
                 display: spelling.clone(),
@@ -278,7 +265,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 face: Face::Dim,
                 source: None,
                 activate: Rc::new(move |world| {
-                    commit(
+                    crate::editing::commit_label(
                         world,
                         new_cell_id(),
                         Some(name::record(&spelling, [])),
@@ -287,11 +274,11 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 }),
             }
         }
-        Commit::Value(_) => completion_entry(
+        CompletionKind::Value => completion_entry(
             sources,
             blob.map(blob::completion)
                 .unwrap_or_else(|| text::completion(spelling)),
-            commit,
+            kind,
         )
         .unwrap(),
     };
@@ -322,7 +309,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
                 source.map(|source| source_name(sources, source)),
                 Value::from(cell),
                 reference_selection.clone(),
-                commit,
+                kind,
             )
             .unwrap();
             if name.is_none() {
@@ -338,7 +325,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
         .map(|(entry, named, _)| (entry, named, None))
         .collect();
     references_pool.extend(
-        constructor_entries(commit)
+        constructor_entries(kind)
             .into_iter()
             .map(|(key, entry)| (entry, true, Some(key))),
     );
@@ -366,7 +353,7 @@ pub(crate) fn completion_entries_with<C: 'static>(
     })
     .collect();
     let mut entries = suggested
-        .map(|offers| contextual_entries(sources, offers, request, commit))
+        .map(|offers| contextual_entries(sources, offers, request))
         .unwrap_or_default();
     if atom_leads {
         entries.push(atom_entry);
@@ -384,12 +371,11 @@ pub(crate) fn completion_entries_with<C: 'static>(
     (entries, true)
 }
 
-fn contextual_entries<C: 'static>(
+fn contextual_entries(
     sources: &Sources,
     offers: Vec<Completion>,
     request: &CompletionRequest<'_>,
-    commit: &Commit<C>,
-) -> Vec<Entry<C>> {
+) -> Vec<Entry<crate::Editor>> {
     filter::rank_with_aliases(
         offers
             .into_iter()
@@ -423,7 +409,7 @@ fn contextual_entries<C: 'static>(
                 .map(|detail| completion_text(sources, detail)),
             completion.value,
             completion.on_commit,
-            commit,
+            request.kind,
         )
         .map(|entry| Entry {
             matches: ranked.matches,

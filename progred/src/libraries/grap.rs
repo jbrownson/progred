@@ -68,28 +68,24 @@ fn declaration_name(
     name::read(input.value?)?;
     Some(descend_local(
         Step::Key(name::vocabulary::NAME),
-        crate::display::partial(|input| {
-            Some(crate::libraries::line_edit::layout(
-                crate::libraries::text::read(input.value?)?,
-                crate::libraries::line_edit::native(crate::libraries::text::edit),
-                "",
-                "",
-            ))
-        }),
+        crate::display::partial(|input| name_editor(input.value?).map(crate::display::line_edit)),
         &input.default_projection,
     ))
+}
+
+fn name_editor(value: &Value) -> Option<crate::display::LineEdit> {
+    Some(crate::display::LineEdit {
+        prefix: String::new(),
+        suffix: String::new(),
+        ..crate::libraries::text::editor(value)?
+    })
 }
 
 fn lambda_name(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     Some(match input.value {
-        Some(value) => crate::libraries::line_edit::layout(
-            crate::libraries::text::read(value)?,
-            crate::libraries::line_edit::native(crate::libraries::text::edit),
-            "",
-            "",
-        ),
+        Some(value) => crate::display::line_edit(name_editor(value)?),
         None => {
             input.selection.is_none().then_some(())?;
             let target = input.targets.current();
@@ -648,11 +644,8 @@ mod tests {
                     .unwrap()
                     .get(&name::vocabulary::NAME)
                     .unwrap();
-                let Some(line) =
-                    crate::libraries::test_widgets::line(&projection(&input(&env, value)).unwrap())
-                else {
-                    panic!("a declaration name uses the stock editor");
-                };
+                assert!(projection(&input(&env, value)).is_some());
+                let line = name_editor(value).unwrap();
                 assert_eq!(line.text, spelling);
                 assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
                 assert_eq!(
@@ -743,15 +736,30 @@ mod tests {
             );
             let call = call_completion(function.into(), function, &resolve);
             assert_eq!(call.value.instantiate(), ::grap::call(function.into(), []));
+            let mut effects = crate::site::PendingChanges {
+                annotation: None,
+                annotation_changed: false,
+                selection: None,
+                selection_changed: false,
+            };
+            let document = gid::Document {
+                root: None,
+                cells: gid::Cells::new(),
+            };
+            let sources = crate::sources::Sources {
+                doc: &document,
+                libraries: &Default::default(),
+            };
+            assert!(call.on_commit.unwrap()(&sources, &[], &mut effects));
             assert_eq!(
-                call.on_commit,
-                expected
-                    .first()
-                    .map(|first| crate::libraries::selection::pending_at(&[Step::Key(*first)]))
-                    .or_else(|| Some(crate::libraries::selection::at(
-                        &[],
-                        crate::libraries::selection::edge()
-                    )))
+                effects.selection,
+                Some(match expected.first() {
+                    Some(first) => (
+                        vec![Step::Key(*first)],
+                        crate::libraries::selection::pending()
+                    ),
+                    None => (vec![], crate::libraries::selection::edge()),
+                })
             );
         }
     }
@@ -1240,11 +1248,8 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Some(line) = crate::libraries::test_widgets::line(
-            &projection(&relative_input(&env(), value)).unwrap(),
-        ) else {
-            panic!("lambda name uses the stock line editor");
-        };
+        assert!(projection(&relative_input(&env(), value)).is_some());
+        let line = name_editor(value).unwrap();
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
     }
 
@@ -1296,11 +1301,8 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        let Some(line) = crate::libraries::test_widgets::line(
-            &projection(&relative_input(&env(), value)).unwrap(),
-        ) else {
-            panic!("lambda name uses the stock line editor");
-        };
+        assert!(projection(&relative_input(&env(), value)).is_some());
+        let line = name_editor(value).unwrap();
         assert_eq!(line.text, "");
         assert_eq!(line.placeholder, None);
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));

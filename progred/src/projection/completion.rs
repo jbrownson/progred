@@ -4,7 +4,7 @@ use super::{
     Cx, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
-use crate::completion::{Commit, Entry, Offers, completion_entries_with, constructor_entries};
+use crate::completion::{Entry, Offers, completion_entries_with, constructor_entries};
 use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -148,11 +148,6 @@ fn query_content(
 ) -> Measured<Placed<crate::Editor>> {
     // The card and keyboard commit must answer from one list.
     let everything = cx.selection.is_some_and(Selection::completion_everything);
-    let commit = if labels {
-        Commit::Label(Rc::new(crate::editing::commit_label))
-    } else {
-        Commit::Value(Rc::new(crate::editing::commit_value))
-    };
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
     let resolve = |cell| cx.sources.definition(cell);
     let request = crate::display::CompletionRequest {
@@ -171,14 +166,8 @@ fn query_content(
         value_at: &value_at,
         resolve: &resolve,
     };
-    let (entries, everything) = completion_entries_with(
-        &cx.sources,
-        cx.raw,
-        &commit,
-        &request,
-        cx.completions,
-        completions,
-    );
+    let (entries, everything) =
+        completion_entries_with(&cx.sources, cx.raw, &request, cx.completions, completions);
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
@@ -245,7 +234,7 @@ fn query_content(
         },
     );
     let card = if query.text().is_empty() && !query.is_composing() {
-        let constructors = constructor_entries(&commit);
+        let constructors = constructor_entries(request.kind);
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())

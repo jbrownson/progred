@@ -103,7 +103,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
         let mut selected = make_projected_editing_selection(&doc, &libraries, name_path.clone());
         assert_eq!(selected.edit().unwrap().text(), "size");
         selected.edit_mut().unwrap().set_text("width");
-        assert!(write_through(&mut doc, &libraries, &mut selected));
+        assert!(write_text(&mut doc, &libraries, &mut selected));
         assert_eq!(
             src(&doc, &libraries).resolve_path(&name_path),
             Some(&text::value("width"))

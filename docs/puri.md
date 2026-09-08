@@ -213,6 +213,15 @@ Only the latest packet's predictions survive; predictions are never applied as
 observed input. Different contacts, buttons, modifiers, scales, or viewport sizes
 start a new batch. Release and cancellation flush pending motion first.
 
+An active projection gesture exposes `advance` and `finish`. The shell finishes
+it on release, cancellation, replacement, history restoration, or a successful
+save. Its implementation owns any finalization; the frame pipeline has no
+number-specific presentation channel. The number library's scrub widget keeps
+precision-aware spelling in the selected line editor during the gesture and
+clears that editor on finish, leaving other selection payload fields intact.
+Value-changing gestures use a concrete edit run holding the target and undo
+grouping flag, not a dictionary of editor callbacks.
+
 Handlers choose which samples matter, without rebuilding between samples.
 Number scrubbing integrates the full precision path; state-drag callbacks receive
 the latest logical displacement and the earlier displacements, letting Fidget

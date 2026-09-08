@@ -222,12 +222,14 @@ list. A field label permits only the cell constructor. Nonempty queries and
 IME composition keep ordinary text input; quoted punctuation leads with literal
 text. Shortcuts use the same insertion callbacks as the constructor offers.
 
-A library completion can provide an `on_commit` Grap callable, run at the
-committed location with the same site and selection capabilities as event
-handlers. Insertion and continuation effects are prepared together and installed
-unless the callable explicitly declines or evaluation halts. Ordinary absent
-results do not veto the completion. Selection changes are effectful calls, not a
-special return-value format. Insertion itself does not change selection: the
+A library completion can provide an `on_commit` continuation, run at the
+committed location against the staged selection and annotation state. Native
+offers use Rust functions directly. `site::grap` adapts a Grap callable to the
+same interface and uses the same capabilities as Grap event handlers. Insertion
+and continuation effects are prepared together and installed only if the
+continuation accepts; Grap explicitly declining or halting declines the whole
+operation. Ordinary absent results do not veto it. Selection changes are
+effectful calls, not a special return-value format. Insertion itself does not change selection: the
 continuation receives the existing selection, and only its explicit effects
 replace or clear it. A low-level offer with no continuation leaves that selection
 unchanged, including an active pending query. Stock offer combinators supply the
@@ -239,6 +241,10 @@ caret positions are not translated across parsing. These same offers work in
 Raw without an override, since that projection contains no atomic line control.
 Enter commits only through the placed completion control; the shell has no
 fallback which inserts query text after its offers decline.
+
+The native offer builder takes the completion request's field/value kind and
+produces ordinary `Editor` handlers. It does not carry a separate dictionary of
+insertion callbacks.
 
 Root `grap` and `fidget` offers create a fresh bare
 cell shared by their domain field and a left pane. Fidget's pane applies

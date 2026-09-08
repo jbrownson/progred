@@ -30,7 +30,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root: doc.root.as_ref(),
             root_path: &[],
             selection: None,
-            scrub_spelling: None,
             source_selection: None,
             annotations: &Annotations::default(),
             raw: false,
@@ -107,7 +106,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
             root: world.model.doc.root.as_ref(),
             root_path: &[],
             selection: world.model.selection.as_ref(),
-            scrub_spelling: None,
             source_selection: world.model.selection.as_ref(),
             annotations: &Annotations::default(),
             raw: false,
@@ -360,11 +358,11 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
     ] {
         let frame = drag_frame(
             gesture_place(
-                crate::display::on_scrub(
+                crate::libraries::number::scrub::on_scrub(
                     crate::display::row(0.0, []),
                     target(),
                     Rc::new(|| {
-                        Box::new(|_| crate::display::ScrubUpdate {
+                        Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                             value: f64_convention::value(13.0),
                             spelling: Some("13".into()),
                         })
@@ -415,11 +413,11 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         let raw_contacts = Rc::new(std::cell::Cell::new(0));
         let contacts = raw_contacts.clone();
         let scrub = gesture_place(
-            crate::display::on_scrub(
+            crate::libraries::number::scrub::on_scrub(
                 crate::display::row(0.0, []),
                 target(),
                 Rc::new(|| {
-                    Box::new(|_| crate::display::ScrubUpdate {
+                    Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                         value: f64_convention::value(13.0),
                         spelling: None,
                     })
@@ -483,7 +481,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
 #[test]
 fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
     for layout in [
-        crate::display::on_scrub(
+        crate::libraries::number::scrub::on_scrub(
             crate::display::row(0.0, []),
             target(),
             Rc::new(|| panic!("read-only scrub")),

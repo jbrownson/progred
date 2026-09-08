@@ -599,3 +599,20 @@ checks, not measurements of native GPU presentation.
 After the final gesture-adapter and test cleanup, the same 90-frame checks
 measured 3.59 ms for source and 23.30 ms for picture. The full workspace suite
 passed 629 tests; native and browser builds still check successfully.
+
+## Native continuations and widget-owned scrubbing — 2026-09-08
+
+Native completion offers now select through staged Rust continuations rather
+than constructing and evaluating Grap functions. Completion insertion and
+gesture edit runs no longer carry callback dictionaries. Precision-aware scrub
+spelling belongs to the number widget's selected line editor, not the frame
+pipeline. The test-only line-description observer was removed; tests use pure
+descriptions/conversions or actual editor handlers instead.
+
+The same feature-free release checks (five warm-up, 90 measured frames) measured
+3.57 ms median / 3.71 ms p95 for IoP source at 1400 × 900 @1, and 23.48 ms median /
+24.16 ms p95 for its picture at 500 × 500 @1. Compared with the preceding
+3.59 / 23.30 ms check, this is neutral at the precision of these separate runs,
+not evidence of a speedup. These remain headless checks, not GPU presentation
+measurements. All 632 workspace tests pass. Native checks are clean; the web
+check retains its existing `drawn_menu` and `Quit` warnings.

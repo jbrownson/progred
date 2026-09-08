@@ -116,7 +116,6 @@ pub(crate) struct Cx<'a> {
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
-    pub(crate) scrub_spelling: Option<(&'a [Step], &'a str)>,
     /// The selected cell-relative location whose other projections
     /// carry the secondary mark.
     pub(crate) secondary: Option<Secondary>,
@@ -534,7 +533,6 @@ pub struct ProjectDescription<'a> {
     pub root_path: &'a [Step],
     /// Selection belonging to this editable view.
     pub selection: Option<&'a Selection>,
-    pub scrub_spelling: Option<(&'a [Step], &'a str)>,
     /// Selection from any view, used only to link generated output
     /// back to its structural source.
     pub source_selection: Option<&'a Selection>,
@@ -568,7 +566,6 @@ fn prepare_project(
         root,
         root_path,
         selection,
-        scrub_spelling,
         source_selection,
         annotations,
         raw,
@@ -585,7 +582,6 @@ fn prepare_project(
         annotations,
         styles,
         selection,
-        scrub_spelling,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         // Other projections of the selected cell are secondary. The
@@ -767,7 +763,6 @@ fn prepare_transient_root(
         annotations: cx.annotations,
         styles: cx.styles,
         selection: None,
-        scrub_spelling: None,
         secondary: None,
         selected_trace: cx.selected_trace.clone(),
         source: Source::Transient { owner: path },

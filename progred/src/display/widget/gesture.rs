@@ -7,22 +7,6 @@ use puri::interact::is_primary_contact;
 use puri::{Point, Rect};
 use std::rc::Rc;
 
-/// Logical drag motion after the shared threshold recognizer accepts it.
-/// Number libraries map this motion to values without inspecting raw buttons.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScrubEvent {
-    pub movement_x: f64,
-    pub distance_y: f64,
-}
-
-pub struct ScrubUpdate {
-    pub value: Value,
-    pub spelling: Option<String>,
-}
-
-pub type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
-pub type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
-
 /// Displacement from the drag's origin, in logical display units.
 /// The caller supplies threshold policy and retains the active continuation.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,19 +43,7 @@ pub trait Gesture<World> {
     /// This does not control event propagation: an active gesture owns motion.
     fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool;
 
-    fn spelling(&self) -> Option<&str> {
-        None
-    }
-}
-
-pub type Write<World> = Box<dyn FnMut(&mut World, Value) -> bool>;
-
-/// A fresh edit run. The writer owns grouping; the payload setter only updates
-/// an existing selection at this site. Neither operation implicitly selects it.
-pub struct ValueEdit<World> {
-    pub select: ActionHandler<World>,
-    pub write: Write<World>,
-    pub selection: Rc<dyn Fn(&mut World, Value)>,
+    fn finish(&mut self, _world: &mut World) {}
 }
 
 pub fn targeted<World: 'static, Hover: 'static>(
@@ -95,50 +67,6 @@ pub fn targeted<World: 'static, Hover: 'static>(
                     && start(world, point)
             });
     })
-}
-
-pub fn on_scrub(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
-    target: crate::frame::Hovered,
-    handler: ScrubHandler,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    before(
-        child,
-        Rc::new(move |context| {
-            if !context.inputs.source.transient()
-                && crate::selection::writable_at(&context.inputs.sources, context.path)
-            {
-                let root = context.inputs.view.clone();
-                let path = context.path.to_vec();
-                let handler = handler.clone();
-                let scale = context.inputs.styles.scale;
-                let threshold = crate::gesture::DRAG_THRESHOLD;
-                targeted(
-                    target.clone(),
-                    true,
-                    crate::editing::picking,
-                    PartialEq::eq,
-                    move |world, point| {
-                        let edit = crate::gesture::value_edit(root.clone(), path.clone());
-                        if (edit.select)(world) {
-                            crate::editing::start_gesture(
-                                world,
-                                root.clone(),
-                                path.clone(),
-                                scrub(Drag::new(point, scale, threshold), handler(), edit.write),
-                                &[],
-                            );
-                            true
-                        } else {
-                            false
-                        }
-                    },
-                )
-            } else {
-                Box::new(|_, _| {})
-            }
-        }),
-    )
 }
 
 pub fn on_state_drag(
@@ -170,8 +98,6 @@ pub fn on_state_drag(
                     if on_press(world) {
                         crate::editing::start_gesture(
                             world,
-                            root.clone(),
-                            path.clone(),
                             state_drag(
                                 Drag::new(point, scale, threshold),
                                 handler(),
@@ -208,8 +134,6 @@ pub fn on_point(
                         if is_primary_contact(event) && placement.contains(at) {
                             crate::editing::start_gesture(
                                 world,
-                                root.clone(),
-                                path.clone(),
                                 point(
                                     placement.rect,
                                     handler.clone(),
@@ -228,45 +152,6 @@ pub fn on_point(
             }
         }),
     )
-}
-
-struct Scrub<World> {
-    drag: Drag,
-    update: crate::display::ScrubGesture,
-    write: Write<World>,
-    spelling: Option<String>,
-}
-
-pub fn scrub<World: 'static>(
-    drag: Drag,
-    update: crate::display::ScrubGesture,
-    write: Write<World>,
-) -> Box<dyn Gesture<World>> {
-    Box::new(Scrub {
-        drag,
-        update,
-        write,
-        spelling: None,
-    })
-}
-
-impl<World> Gesture<World> for Scrub<World> {
-    fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool {
-        samples.iter().fold(false, |changed, point| {
-            self.drag.advance(*point).is_some_and(|motion| {
-                let update = (self.update)(crate::display::ScrubEvent {
-                    movement_x: motion.movement.x,
-                    distance_y: motion.distance.y,
-                });
-                self.spelling = update.spelling;
-                (self.write)(world, update.value)
-            }) || changed
-        })
-    }
-
-    fn spelling(&self) -> Option<&str> {
-        self.spelling.as_deref()
-    }
 }
 
 struct StateDrag<World> {
@@ -304,30 +189,30 @@ impl<World> Gesture<World> for StateDrag<World> {
     }
 }
 
-struct PointControl<World> {
+struct PointControl {
     rect: Rect,
     update: PointHandler,
-    edit: ValueEdit<World>,
+    edit: crate::gesture::EditRun,
 }
 
-pub fn point<World: 'static>(
+pub(crate) fn point(
     rect: Rect,
     update: PointHandler,
-    edit: ValueEdit<World>,
-) -> Box<dyn Gesture<World>> {
+    edit: crate::gesture::EditRun,
+) -> Box<dyn Gesture<crate::Editor>> {
     Box::new(PointControl { rect, update, edit })
 }
 
-impl<World> Gesture<World> for PointControl<World> {
-    fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool {
+impl Gesture<crate::Editor> for PointControl {
+    fn advance(&mut self, world: &mut crate::Editor, samples: &[Point]) -> bool {
         samples.iter().fold(false, |changed, point| {
             let update = (self.update)(crate::display::PointEvent {
                 x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
                 y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
             });
-            let wrote = (self.edit.write)(world, update.value);
+            let wrote = self.edit.write(world, update.value);
             if let Some(payload) = update.selection {
-                (self.edit.selection)(world, payload);
+                self.edit.selection(world, payload);
             }
             wrote || changed
         })
