@@ -239,9 +239,11 @@ reports ascent/descent relative to the surrounding baseline. Ordinary rows
 then align it correctly without a new layout operation. The number projections
 use this for muted representation labels outside the editable digits.
 
-Puri's delimiter widget accepts a vertical span and text size and returns the
-existing `Drawing` description with its metrics. Its width is fixed by text size;
-only the vertical shape stretches. Progred's `bracket` combines two ordinary
+Puri's delimiter widget exposes its advance and minimum span for measurement,
+then draws its stretched outline directly into the canvas at paint time. It
+does not build an intermediate drawing-command list; clipped or skipped paint
+does not construct a path. Its width is fixed by text size; only the vertical
+shape stretches. Progred's `bracket` combines two ordinary
 fixed-width widgets and a child in a row, with `fill_height` on the sides.
 There is no `Surround` operation, maximum-width reservation, or child-dependent
 remeasurement. `selectable_bracket` explicitly composes `selectable_widget`

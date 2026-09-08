@@ -364,3 +364,50 @@ would require changing how arbitrary output transformations are represented;
 this pass deliberately leaves that alone. Alternative selection, hover
 precedence, clipping, navigation, and optional painting are unchanged. No cache,
 partial invalidation, or runtime instrumentation was added.
+
+## Direct delimiter painting — 2026-09-07
+
+Baseline: `637b5eb`. Delimiters still built a one-command `Drawing` during
+hover, then interpreted it during paint. Temporary diagnostic scopes counted
+830 delimiter constructions, about 0.38 ms and 3,452 allocations per IoP source
+frame. Only 304 of those delimiters reached painting: the ordinary leaf clip
+had already discarded the other paint continuations, but their outlines had
+been built anyway.
+
+Delimiter measurement still reports the same advance and minimum span. Its
+paint continuation now constructs the outline and calls the canvas directly,
+without a drawing-command vector or interpreter. The backend still receives
+the same Bezier path. Square brackets also extend that path from rectangle
+iterators rather than allocating two temporary paths. Geometry, brush,
+transforms, hover, and clipping policy are unchanged. Skipping paint skips
+outline construction naturally; there is no additional visibility test or cache.
+
+Feature-free release binaries were alternated in before/after/after/before/
+before/after order, with five warm-up and 300 measured frames per run, at
+1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 4.07 / 4.05 / 3.99 ms | 3.71 / 3.70 / 3.70 ms |
+| Hover + handlers, median | 1.05–1.07 ms | 0.658–0.662 ms |
+| Paint + handler disposal, median | 0.195–0.201 ms | 0.317–0.319 ms |
+| All allocations per frame | 90,589 | 87,941 |
+
+The whole-source-frame improvement is about 8–9%. Some time intentionally
+moves from hover into paint; the whole-frame numbers include both phases and
+disposal. The rectangle-iterator change alone is small: direct-paint medians
+3.71 / 3.75 ms versus 3.68 / 3.75 ms with the iterators. It removes another 208
+allocations per frame without changing the path elements.
+
+All eight canaries also ran in before/after/after/before order with 60 measured
+frames. IoP picture medians were 22.95 / 23.01 ms before and 22.64 / 22.46 ms
+after; this does not indicate a meaningful picture-rendering speedup. Fidget
+CPU-fallback timings fluctuated across runs, as before; those viewports do not
+exercise the changed delimiter painter. These are headless measurements, not
+on-screen frame rates. The temporary finer profiling scopes were removed.
+
+The 19 SVG outputs exercised by the headless projection tests were compared
+with the saved baseline. Fifteen are byte-identical; the sample and its pending
+variant differ only in glyph outlines for newly minted short cell IDs. All
+delimiter and other non-text geometry is identical. Workspace tests, native
+all-target checks, and the web target check pass.

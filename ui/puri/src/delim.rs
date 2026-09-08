@@ -9,7 +9,7 @@
 //! spans exactly x in [0, bow-for-height] and y in [top, bottom].
 
 mod widget;
-pub use widget::{Side, advance, minimum_span, stretched};
+pub use widget::{Side, advance, draw_stretched, minimum_span};
 
 use kurbo::{Affine, Arc, BezPath, Point, Rect, Shape, Vec2};
 use std::f64::consts::{FRAC_PI_2, PI};
@@ -159,8 +159,8 @@ fn paren(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
 fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
     let weight = belly * 0.8;
     let mut path = Rect::new(0.0, top, weight.min(bow), bottom).to_path(0.05);
-    path.extend(Rect::new(0.0, top, bow, top + weight).to_path(0.05));
-    path.extend(Rect::new(0.0, bottom - weight, bow, bottom).to_path(0.05));
+    path.extend(Rect::new(0.0, top, bow, top + weight).path_elements(0.05));
+    path.extend(Rect::new(0.0, bottom - weight, bow, bottom).path_elements(0.05));
     path
 }
 

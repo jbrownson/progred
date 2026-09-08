@@ -259,15 +259,13 @@ pub fn assert_delimiter<Hover: Default + 'static>(
         render(&mut canvas, Default::default());
     }
     let mut expected = DrawList::new();
-    puri::draw::draw(
-        puri::delim::stretched(
-            delim,
-            side,
-            14.0,
-            0.0,
-            0.0,
-            widget::style::editor(1.0).dim.brush,
-        ),
+    puri::delim::draw_stretched(
+        delim,
+        side,
+        14.0,
+        0.0,
+        0.0,
+        widget::style::editor(1.0).dim.brush,
         &mut expected,
         Affine::translate((
             if side == puri::delim::Side::Close {
@@ -277,7 +275,6 @@ pub fn assert_delimiter<Hover: Default + 'static>(
             },
             0.0,
         )),
-        Clone::clone,
     );
     let (
         [

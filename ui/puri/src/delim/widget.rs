@@ -1,5 +1,5 @@
 use super::{Delim, DelimStyle, close_with_width, open_with_width};
-use crate::{Affine, Command, Drawing, Shape};
+use crate::{Affine, Brush, Canvas, draw::CanvasSink};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -22,16 +22,18 @@ pub fn minimum_span(text_size: f64) -> (f64, f64) {
     (GLYPH_ASC_EM * text_size, GLYPH_DESC_EM * text_size)
 }
 
-/// A delimiter spanning the caller's ascent/descent, with its bearings
-/// included in the returned metrics. All inputs use the same units.
-pub fn stretched<Paint>(
+/// Paint a delimiter spanning the caller's ascent/descent. The transform's
+/// origin is the top-left of its box, including the side bearings.
+pub fn draw_stretched(
     delim: Delim,
     side: Side,
     text_size: f64,
     ascent: f64,
     descent: f64,
-    paint: Paint,
-) -> Drawing<Paint> {
+    brush: Brush,
+    canvas: &mut (impl CanvasSink + ?Sized),
+    transform: Affine,
+) {
     let style = DelimStyle::for_text_size(text_size);
     let ascent = ascent.max(GLYPH_ASC_EM * text_size);
     let descent = descent.max(GLYPH_DESC_EM * text_size);
@@ -48,22 +50,17 @@ pub fn stretched<Paint>(
         Side::Open => open_with_width(delim, &style, top, bottom, bow),
         Side::Close => close_with_width(delim, &style, top, bottom, bow),
     };
-    Drawing {
-        width: bow + 2.0 * bearing,
-        ascent,
-        descent,
-        commands: vec![Command::Fill {
-            shape: Shape::Path(path),
-            paint,
-            transform: Affine::translate((bearing, ascent)),
-        }],
-    }
+    canvas.fill(
+        path,
+        brush,
+        transform * Affine::translate((bearing, ascent)),
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Color, DrawCmd, DrawList, Rect};
+    use crate::{Color, DrawCmd, DrawList, Rect, Shape};
     use kurbo::Shape as _;
 
     #[test]
@@ -73,29 +70,27 @@ mod tests {
                 let mut expected_width = None;
                 for delim in [Delim::Paren, Delim::Bracket, Delim::Brace] {
                     for side in [Side::Open, Side::Close] {
-                        let drawing = stretched(
+                        let width = advance(delim, 14.0 * scale);
+                        let (min_ascent, min_descent) = minimum_span(14.0 * scale);
+                        let rect = Rect::new(
+                            20.0,
+                            100.0,
+                            20.0 + width,
+                            100.0
+                                + (ascent * scale).max(min_ascent)
+                                + (descent * scale).max(min_descent),
+                        );
+                        assert!((width - *expected_width.get_or_insert(width)).abs() < 1e-6);
+                        let mut recording = DrawList::new();
+                        draw_stretched(
                             delim,
                             side,
                             14.0 * scale,
                             ascent * scale,
                             descent * scale,
-                            Color::BLACK,
-                        );
-                        let rect = Rect::new(
-                            20.0,
-                            100.0,
-                            20.0 + drawing.width,
-                            100.0 + drawing.ascent + drawing.descent,
-                        );
-                        let width = *expected_width.get_or_insert(drawing.width);
-                        assert!((drawing.width - width).abs() < 1e-6);
-                        assert_eq!(drawing.width, advance(delim, 14.0 * scale));
-                        let mut recording = DrawList::new();
-                        crate::draw::draw(
-                            drawing,
+                            Color::BLACK.into(),
                             &mut recording,
                             Affine::translate((20.0, 100.0)),
-                            |color| (*color).into(),
                         );
                         let [
                             DrawCmd::Fill {

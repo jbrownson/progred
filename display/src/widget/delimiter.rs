@@ -22,24 +22,20 @@ pub fn side<World: 'static, Hover: 'static>(
                 descent,
             },
             move |output, placement| {
-                let drawing = delim::stretched(
-                    delim,
-                    side,
-                    size,
-                    ascent,
-                    placement.rect.height() - ascent,
-                    brush,
-                );
                 output.render(move |canvas, _| {
                     let inset = match side {
                         delim::Side::Open => 0.0,
                         delim::Side::Close => gap,
                     };
-                    puri::draw::draw(
-                        drawing,
+                    delim::draw_stretched(
+                        delim,
+                        side,
+                        size,
+                        ascent,
+                        placement.rect.height() - ascent,
+                        brush,
                         canvas,
                         Affine::translate((placement.rect.x0 + inset, placement.rect.y0)),
-                        Clone::clone,
                     )
                 });
             },
