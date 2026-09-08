@@ -41,22 +41,16 @@ impl<H> Default for HoverInput<'_, H> {
     }
 }
 
-/// Transient outputs of one widget's hover computation. The input is not
-/// retained by the resulting paint or event continuations.
+/// Transient access to caller-owned output during a widget's hover computation.
+/// The input is not retained by the resulting paint or event continuations.
 pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
-    pub(super) output: Fragment<C, H>,
+    pub(super) output: &'a mut Fragment<C, H>,
 }
 
 impl<'a, C: 'static, H: 'static> HoverContext<'a, C, H> {
-    pub fn new(input: HoverInput<'a, H>) -> Self {
-        Self {
-            input,
-            output: Fragment::empty(),
-        }
-    }
-    pub fn finish(self) -> Fragment<C, H> {
-        self.output
+    pub fn new(input: HoverInput<'a, H>, output: &'a mut Fragment<C, H>) -> Self {
+        Self { input, output }
     }
 }
 
@@ -144,14 +138,9 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         self.steps.push(Box::new(move |input, output| {
             let start = output.lengths();
             let above = output.take_controls();
-            let mut context = HoverContext {
-                input: *input,
-                output: std::mem::take(output),
-            };
-            step(&mut context);
-            context.output.reverse_since(start);
-            context.output.controls_below(above);
-            *output = context.output;
+            step(&mut HoverContext::new(*input, output));
+            output.reverse_since(start);
+            output.controls_below(above);
         }));
     }
 

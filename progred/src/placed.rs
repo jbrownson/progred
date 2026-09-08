@@ -612,11 +612,14 @@ mod tests {
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> =
-            HoverContext::new(HoverInput {
+        let mut frame = Ready::default();
+        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> = HoverContext::new(
+            HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
                 ..Default::default()
-            });
+            },
+            &mut frame,
+        );
         let mut p = Builder::new(&mut placed, placement);
         p.handler().on_pointer_down(|log, _| {
             log.push("raw below");
@@ -631,7 +634,7 @@ mod tests {
             log.push("raw above declined");
             false
         });
-        let mut placed = placed.finish();
+        let mut placed = frame;
         let mut pointer = DispatchContext::new(None, Some(target));
         let mut log = Vec::new();
         assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
@@ -914,11 +917,14 @@ mod tests {
     }
     #[test]
     fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
-        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> =
-            HoverContext::new(HoverInput {
+        let mut frame = Ready::default();
+        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> = HoverContext::new(
+            HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
                 ..Default::default()
-            });
+            },
+            &mut frame,
+        );
         let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         let mut p = Builder::new(&mut placed, full);
         p.handler().on_pointer_down(|log, _| {
@@ -934,7 +940,7 @@ mod tests {
             true
         });
         p.occlude(Placement::new(full.rect, Rect::new(10.0, 10.0, 20.0, 20.0)));
-        let mut placed = placed.finish();
+        let mut placed = frame;
         let handler = placed.handler.take().unwrap();
         let mut log = Vec::new();
         for button in [PointerButton::Primary, PointerButton::Secondary] {
@@ -1149,10 +1155,14 @@ mod tests {
         ));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         for covered in [false, true] {
-            let mut placed: HoverContext<'_, usize, Hovered> = HoverContext::new(HoverInput {
-                pointer: Some(Point::new(5.0, 5.0)),
-                ..Default::default()
-            });
+            let mut frame = Ready::default();
+            let mut placed: HoverContext<'_, usize, Hovered> = HoverContext::new(
+                HoverInput {
+                    pointer: Some(Point::new(5.0, 5.0)),
+                    ..Default::default()
+                },
+                &mut frame,
+            );
             let mut p = Builder::new(&mut placed, placement);
             p.handler()
                 .on_pointer_down(|_, _| panic!("covered raw handler"));
@@ -1170,7 +1180,7 @@ mod tests {
             if covered {
                 p.occlude(placement);
             }
-            let mut placed = placed.finish();
+            let mut placed = frame;
             let hovered = match placed.claim.take().map(|(_, claim)| claim) {
                 Some(Claim::Direct(target)) => target,
                 Some(Claim::Occludes) => Hovered::Blocked,

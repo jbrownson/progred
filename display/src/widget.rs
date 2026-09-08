@@ -342,7 +342,9 @@ mod tests {
 
     #[test]
     fn native_canvas_clip_streams_to_the_selected_interpreter() {
-        let mut output: HoverContext<'_, (), ()> = HoverContext::new(Default::default());
+        let mut frame = Fragment::default();
+        let mut output: HoverContext<'_, (), ()> =
+            HoverContext::new(Default::default(), &mut frame);
         let clip = Rect::new(0.0, 0.0, 20.0, 10.0);
         output.render(move |canvas, _| {
             canvas.with_clip(
@@ -365,7 +367,7 @@ mod tests {
                 }),
             )
         });
-        let mut output = output.finish();
+        let mut output = frame;
         assert_eq!(output.renders.len(), 1);
         let mut canvas = DrawList::new();
         for render in std::mem::take(&mut output.renders) {
@@ -384,7 +386,8 @@ mod tests {
     fn render_is_one_continuation_regardless_of_drawing_count() {
         let calls = Rc::new(std::cell::Cell::new(0));
         let during_render = calls.clone();
-        let mut output = crate::widget::HoverContext::<(), ()>::new(Default::default());
+        let mut frame = Fragment::default();
+        let mut output = crate::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
         output.render(move |canvas, _| {
             for _ in 0..100 {
                 during_render.set(during_render.get() + 1);
@@ -396,7 +399,7 @@ mod tests {
             }
         });
         assert_eq!(calls.get(), 0);
-        let mut output = output.finish();
+        let mut output = frame;
         assert_eq!(output.renders.len(), 1);
         let mut canvas = DrawList::new();
         for render in std::mem::take(&mut output.renders) {
@@ -451,9 +454,12 @@ mod tests {
             let Recorded::Before { before, .. } = record(&layout) else {
                 panic!("leading callback");
             };
-            let mut output = crate::widget::HoverContext::new(Default::default());
-            before(&mut context)(&mut output, placement);
-            assert!(output.finish().handler.is_some());
+            let mut output = Fragment::default();
+            before(&mut context)(
+                &mut HoverContext::new(Default::default(), &mut output),
+                placement,
+            );
+            assert!(output.handler.is_some());
         }
         for layout in [
             hover::on_hover(crate::text("claim"), ()),
@@ -463,7 +469,10 @@ mod tests {
             let Recorded::Before { before, .. } = record(&layout) else {
                 panic!("leading callback");
             };
-            before(&mut context)(&mut HoverContext::new(Default::default()), placement);
+            before(&mut context)(
+                &mut HoverContext::new(Default::default(), &mut Fragment::default()),
+                placement,
+            );
         }
         assert_eq!(
             place(empty::<(), ()>(context.text, context.styles), placement)

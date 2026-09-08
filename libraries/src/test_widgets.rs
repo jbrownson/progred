@@ -138,7 +138,8 @@ pub fn point_update(
         same_target: |_, _| false,
         primary_edit: |_| true,
     });
-    let mut fragment = widget::HoverContext::new(Default::default());
+    let mut output = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default(), &mut output);
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
@@ -154,13 +155,11 @@ pub fn point_update(
     };
     event.state.position.x = 50.0;
     event.state.position.y = 50.0;
-    assert!(
-        fragment
-            .finish()
-            .handler
-            .unwrap()
-            .dispatch_pointer_down_with(&mut (), &event, &mut Default::default())
-    );
+    assert!(output.handler.unwrap().dispatch_pointer_down_with(
+        &mut (),
+        &event,
+        &mut Default::default()
+    ));
     progred_display::PointUpdate {
         value: value.take().expect("initial contact writes"),
         selection: selection.take(),
@@ -184,12 +183,13 @@ pub fn picked(layout: &impl Recordable<(), ()>) -> Option<gid::Value> {
         context.same_target = |_, _| true;
         before(context)
     });
-    let mut fragment = widget::HoverContext::new(Default::default());
+    let mut output = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default(), &mut output);
     place(
         &mut fragment,
         Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
-    fragment.finish().handler?.dispatch_pointer_down_with(
+    output.handler?.dispatch_pointer_down_with(
         &mut (),
         &PointerButtonEvent {
             button: Some(PointerButton::Primary),
@@ -212,11 +212,12 @@ pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
         return None;
     };
     let place = with_context(Rc::new(|_, _, _| false), |context| before(context));
-    let mut fragment = widget::HoverContext::new(Default::default());
+    let mut output = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default(), &mut output);
     let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
     fragment.input.pointer = Some(placement.rect.center());
     place(&mut fragment, placement);
-    fragment.finish().claim.map(|(_, claim)| claim)
+    output.claim.map(|(_, claim)| claim)
 }
 
 pub fn event_handler(layout: &impl Recordable<(), ()>) -> Option<gid::Value> {
@@ -232,13 +233,13 @@ pub fn event_handler(layout: &impl Recordable<(), ()>) -> Option<gid::Value> {
     let place = with_interpreter(Rc::new(|_, _, _| false), interpret, |context| {
         before(context)
     });
-    let mut fragment = widget::HoverContext::new(Default::default());
+    let mut output = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default(), &mut output);
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
-    fragment
-        .finish()
+    output
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()

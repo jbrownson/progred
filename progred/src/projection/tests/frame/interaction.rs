@@ -596,8 +596,11 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
             }),
             None,
         );
-        let mut fragment =
-            progred_display::widget::HoverContext::<(), Hovered>::new(Default::default());
+        let mut frame = progred_display::widget::Fragment::default();
+        let mut fragment = progred_display::widget::HoverContext::<(), Hovered>::new(
+            Default::default(),
+            &mut frame,
+        );
         place(
             &mut fragment,
             Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -613,7 +616,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         };
         event.state.modifiers =
             ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
-        assert!(!fragment.finish().handler.is_some_and(|handler| {
+        assert!(!frame.handler.is_some_and(|handler| {
             handler.dispatch_pointer_down_with(
                 &mut (),
                 &event,

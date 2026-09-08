@@ -118,7 +118,9 @@ mod tests {
 
     #[test]
     fn raw_click_uses_the_live_world_and_both_placement_rectangles() {
-        let mut output = crate::widget::HoverContext::<usize, ()>::new(Default::default());
+        let mut frame = crate::widget::Fragment::default();
+        let mut output =
+            crate::widget::HoverContext::<usize, ()>::new(Default::default(), &mut frame);
         click(
             Rc::new(|world| {
                 *world += 1;
@@ -132,7 +134,7 @@ mod tests {
                 Rect::new(0.0, 0.0, 10.0, 20.0),
             ),
         );
-        let handler = output.finish().handler.unwrap();
+        let handler = frame.handler.unwrap();
         let mut world = 10;
         for (x, expected) in [
             (-1.0, false),
@@ -153,7 +155,9 @@ mod tests {
     fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
         for pick in [false, true] {
             for picking in [false, true] {
-                let mut output = crate::widget::HoverContext::<usize, u32>::new(Default::default());
+                let mut frame = crate::widget::Fragment::default();
+                let mut output =
+                    crate::widget::HoverContext::<usize, u32>::new(Default::default(), &mut frame);
                 target_action(
                     7,
                     Rc::new(|world| {
@@ -167,7 +171,7 @@ mod tests {
                     &mut output,
                     Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
                 );
-                let handler = output.finish().handler.unwrap();
+                let handler = frame.handler.unwrap();
                 let mut world = 0;
                 for (hovered, expected) in
                     [(None, false), (Some(8), false), (Some(7), pick == picking)]
@@ -191,7 +195,9 @@ mod tests {
                 assert_eq!(world, usize::from(pick == picking));
             }
         }
-        let mut clipped = crate::widget::HoverContext::<usize, u32>::new(Default::default());
+        let mut frame = crate::widget::Fragment::default();
+        let mut clipped =
+            crate::widget::HoverContext::<usize, u32>::new(Default::default(), &mut frame);
         target_action(
             7,
             Rc::new(|_| panic!("clipped action")),
@@ -205,7 +211,7 @@ mod tests {
                 Rect::new(30.0, 0.0, 40.0, 20.0),
             ),
         );
-        assert!(clipped.finish().handler.is_none());
+        assert!(frame.handler.is_none());
     }
 
     #[test]

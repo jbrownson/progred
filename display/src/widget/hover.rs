@@ -97,7 +97,7 @@ mod tests {
             Recorded::Before { before, .. } | Recorded::After { after: before, .. } => before,
             _ => panic!("native decorator"),
         };
-        let mut output = HoverContext::new(input);
+        let mut output = Fragment::default();
         before(&mut Context {
             project: &crate::test_support::NoProject,
             completion: &|_, _, _| panic!("unexpected completion control"),
@@ -120,8 +120,8 @@ mod tests {
             picking: |_| false,
             same_target: PartialEq::eq,
             primary_edit: |_| true,
-        })(&mut output, placement);
-        output.finish()
+        })(&mut HoverContext::new(input, &mut output), placement);
+        output
     }
 
     #[test]

@@ -315,3 +315,52 @@ For a repeatable CPU sample, start `sample` waiting for the headless test
 executable's process name, then run the source filter with
 `--config 'env.FRAME_PROFILE_ITERATIONS="2000"'`. Use that run for call stacks
 only and take clean wall-time measurements separately.
+
+## Hover-output borrowing and empty handlers — 2026-09-07
+
+Baseline: `318341c`, including shared list-position bytes. A temporary finer
+breakdown counted 7,305 hover callbacks and 1,124 mapped output scopes per IoP
+source frame. The latter isolate child output, restore its public ordering, and
+merge it back. A separate five-second CPU sample also found buffer reversal,
+control composition, memory movement, and allocation/freeing in this phase.
+The extra scopes substantially perturb timing, so their times are not used as
+speedup measurements. They were removed after the investigation.
+
+Two small changes preserve the continuation and ordering contracts:
+
+- `HoverContext` borrows the accumulating `Fragment`, instead of taking and
+  restoring the complete output for every callback. Its lifetime is confined to
+  the callback; paint and event continuations still own their captures.
+- `Handler` represents its empty identity explicitly. Combining a function with
+  an empty handler returns that function directly, without allocating another
+  composition closure. Ordinary declining handlers are not treated as empty.
+
+Feature-free release binaries were saved separately and alternated in
+before/after/after/before/before/after order, with five warm-up and 300 measured
+frames per run, at 1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 4.07 / 4.07 / 4.07 ms | 3.96 / 3.95 / 3.96 ms |
+| Hover + handlers, median | 1.14 ms | 1.03–1.04 ms |
+| Paint + handler disposal, median | 0.214–0.216 ms | 0.194–0.195 ms |
+| Hover-phase allocations per frame | 12,179 | 10,911 |
+| All allocations per frame | 91,857 | 90,589 |
+
+This is about a 3% whole-source-frame improvement, not a large architectural
+speedup. The handler-only experiment was much smaller: before medians
+4.06 / 4.09 / 4.03 ms versus 4.00 / 4.03 / 4.03 ms, mostly saving disposal work.
+The allocation reduction comes from removing 1,268 empty-handler composition
+closures; borrowing the output removes moves, not allocations.
+
+All eight canaries were also run in before/after/after/before order with 60
+measured frames each. IoP picture medians were 22.30 / 22.24 ms before and
+22.49 / 22.12 ms after; the Fidget CPU-fallback and layout-FFI canaries likewise
+showed no consistent regression. These workloads do little hover construction,
+so this change is not expected to materially accelerate their rendering.
+
+Mapped child output still has buffer/reversal costs. Avoiding all of those
+would require changing how arbitrary output transformations are represented;
+this pass deliberately leaves that alone. Alternative selection, hover
+precedence, clipping, navigation, and optional painting are unchanged. No cache,
+partial invalidation, or runtime instrumentation was added.

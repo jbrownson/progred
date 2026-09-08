@@ -127,11 +127,11 @@ impl<'a> EventOutcome<'a> {
 type Dispatch<C, P> = Box<dyn for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a>>;
 
 /// P is caller-owned frame data, supplied at dispatch rather than captured.
-pub struct Handler<C, P = ()>(Dispatch<C, P>);
+pub struct Handler<C, P = ()>(Option<Dispatch<C, P>>);
 
 impl<C, P> Default for Handler<C, P> {
     fn default() -> Self {
-        Self(Box::new(|_, event, _| EventOutcome::decline(event)))
+        Self(None)
     }
 }
 
@@ -143,11 +143,14 @@ impl<C, P> Handler<C, P> {
     pub fn from_function(
         dispatch: impl for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a> + 'static,
     ) -> Self {
-        Self(Box::new(dispatch))
+        Self(Some(Box::new(dispatch)))
     }
 
     pub fn dispatch<'a>(&self, ctx: &mut C, event: Event<'a>, input: &mut P) -> EventOutcome<'a> {
-        (self.0)(ctx, event, input)
+        match &self.0 {
+            Some(dispatch) => dispatch(ctx, event, input),
+            None => EventOutcome::decline(event),
+        }
     }
 
     pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
@@ -225,19 +228,23 @@ impl<C, P> Handler<C, P> {
 impl<C: 'static, P: 'static> Handler<C, P> {
     /// Later contributions run first, in the same order as painting.
     pub fn over(self, above: Self) -> Self {
-        Self::from_function(move |ctx, event, input| {
-            let outcome = above.dispatch(ctx, event, input);
-            match outcome.remaining {
-                Some(event) => {
-                    let next = self.dispatch(ctx, event, input);
-                    Outcome {
-                        handled: outcome.handled || next.handled,
-                        ..next
+        match (self.0, above.0) {
+            (base, None) => Self(base),
+            (None, above) => Self(above),
+            (Some(base), Some(above)) => Self::from_function(move |ctx, event, input| {
+                let outcome = above(ctx, event, input);
+                match outcome.remaining {
+                    Some(event) => {
+                        let next = base(ctx, event, input);
+                        Outcome {
+                            handled: outcome.handled || next.handled,
+                            ..next
+                        }
                     }
+                    None => outcome,
                 }
-                None => outcome,
-            }
-        })
+            }),
+        }
     }
 
     pub fn on(
@@ -388,6 +395,40 @@ mod tests {
             delta: ScrollDelta::LineDelta(0.0, y),
             state: PointerState::default(),
         }
+    }
+
+    #[test]
+    fn empty_composition_preserves_the_existing_function() {
+        let increment = 7;
+        let handler = Handler::from_function(move |count: &mut usize, event, input: &mut usize| {
+            *count += increment;
+            *input += 1;
+            EventOutcome::decline(event)
+        });
+        let function = std::ptr::from_ref(handler.0.as_deref().unwrap()).cast::<()>();
+        let handler = Handler::new().over(handler).over(Handler::new());
+        assert_eq!(
+            function,
+            std::ptr::from_ref(handler.0.as_deref().unwrap()).cast::<()>()
+        );
+        let event = KeyboardEvent::default();
+        let mut count = 0;
+        let mut input = 0;
+        let outcome = handler.dispatch(&mut count, Event::Key(&event), &mut input);
+        assert!(!outcome.handled());
+        assert!(matches!(outcome.remaining, Some(Event::Key(key)) if std::ptr::eq(key, &event)));
+        assert_eq!((count, input), (7, 1));
+        assert!(Handler::<()>::new().over(Handler::new()).0.is_none());
+    }
+
+    #[test]
+    fn an_empty_handler_preserves_borrowed_input() {
+        let event = scroll(4.0);
+        let outcome = Handler::<()>::new().dispatch_scroll(&mut (), &event);
+        assert!(!outcome.handled());
+        assert!(matches!(outcome.remaining,
+            Some(Event::Scroll(Cow::Borrowed(remaining))) if std::ptr::eq(remaining, &event)
+        ));
     }
 
     #[test]
