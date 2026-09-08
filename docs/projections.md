@@ -210,9 +210,10 @@ Completion uses an ordinary native widget factory with explicit kind/provider
 inputs. The app adapter constructs document-specific offers and pending
 state; the reusable card owns row ink, navigation, and scrolling. Drawing-program
 widgets directly use the app's evaluation/source attribution helpers. Both
-return the same measured `HoverPass` as other widgets, not control opcodes.
-The app's `Placed` aliases that continuation. Running it returns `Fragment`
-(`Ready` in the app), with paint and handlers as independent outputs.
+return the same measured widgets as other projections, not control opcodes.
+Their settled placements run against `HoverPass`; its `HoverOutput` holds the
+winner and after-hover continuations. Binding those with `ResolvedHover` produces
+paint and handlers independently, using Puri's generic phase composition.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
 Delimiter handles use ordinary [side widgets](../progred/src/display/widget/delimiter.rs).

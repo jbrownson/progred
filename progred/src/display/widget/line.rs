@@ -120,7 +120,7 @@ pub fn view(
         let presentation = context.inputs.styles.line_presentation(&line);
         let scale = context.inputs.styles.scale as f32;
         let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
-        crate::display::widget::before_hover(content, move |placement: Placement, output| {
+        crate::display::widget::before_place(content, move |placement: Placement, output| {
             output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
@@ -189,11 +189,11 @@ mod tests {
                 );
                 let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
                 let output =
-                    crate::display::widget::place(measured, placement).run(&Default::default());
+                    crate::display::widget::frame::place(measured, placement, &Default::default());
                 assert!(output.handler.is_none());
                 assert!(output.claim.is_none());
                 assert!(output.landmark_select.is_none());
-                assert_eq!(output.renders.len(), 1);
+                assert_eq!(output.after_hover.len(), 1);
             },
         );
     }

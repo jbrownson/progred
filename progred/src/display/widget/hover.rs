@@ -56,7 +56,11 @@ pub fn hover_highlight<World: 'static, Hover: Clone + PartialEq + 'static>(
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
                     output.render(move |canvas, hovered| {
-                        if hovered.is_some_and(|hovered| hovered == &target) {
+                        if hovered
+                            .hovered
+                            .as_ref()
+                            .is_some_and(|hovered| hovered == &target)
+                        {
                             canvas.fill_shape(
                                 style::highlight_outline(scale, placement.rect).into(),
                                 style::hover_wash().into(),
@@ -74,13 +78,13 @@ pub fn hover_highlight<World: 'static, Hover: Clone + PartialEq + 'static>(
 mod tests {
     use super::*;
     use crate::display::recording::{Recorded, record};
-    use crate::display::widget::Fragment;
+    use crate::display::widget::HoverOutput;
     use crate::display::widget::{HoverContext, HoverInput};
     use puri::handler::{PointerButtonEvent, PointerInfo, PointerState, PointerType};
     use puri::hover::Claim;
     use puri::{DrawList, Placement, Rect};
 
-    fn place(layout: Layout<(), u32>, placement: Placement) -> Fragment<(), u32> {
+    fn place(layout: Layout<(), u32>, placement: Placement) -> HoverOutput<(), u32> {
         place_at(layout, placement, HoverInput::default())
     }
 
@@ -88,12 +92,12 @@ mod tests {
         layout: Layout<(), u32>,
         placement: Placement,
         input: HoverInput<'_, u32>,
-    ) -> Fragment<(), u32> {
+    ) -> HoverOutput<(), u32> {
         let before = match record(&layout) {
             Recorded::Before { before, .. } | Recorded::After { after: before, .. } => before,
             _ => panic!("native decorator"),
         };
-        let mut output = Fragment::default();
+        let mut output = HoverOutput::default();
         crate::display::test_support::with_context(
             &crate::display::test_support::NoProject,
             |context| before(context),
@@ -104,7 +108,7 @@ mod tests {
     #[test]
     fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities() {
         let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
-        let output = place(
+        let mut output = place(
             crate::display::widget::border(crate::display::text("inside")),
             placement,
         );
@@ -112,9 +116,7 @@ mod tests {
         assert!(output.claim.is_none());
         assert!(output.landmark_select.is_none());
         let mut drawing = DrawList::new();
-        for render in output.renders {
-            render(&mut drawing, Default::default());
-        }
+        puri::frame::render(output.resolve(Default::default()), &mut drawing);
         assert!(
             matches!(&drawing.0[..], [puri::DrawCmd::Stroke { shape: puri::Shape::Rect(rect), style, .. }]
             if *rect == placement.rect.inset(-0.5) && style.width == 1.0)
@@ -125,7 +127,7 @@ mod tests {
                 crate::display::widget::border(crate::display::text("inside")),
                 clipped
             )
-            .renders
+            .after_hover
             .is_empty()
         );
     }
@@ -158,32 +160,29 @@ mod tests {
                     prior: Some(&7),
                     reach: 4.0,
                     debug_geometry: false,
-                    occluded: false,
                 }
             )
             .claim
             .map(|(_, claim)| claim),
             Some(Claim::Extended(7))
         );
-        assert!(claimed.renders.is_empty());
+        assert!(claimed.after_hover.is_empty());
         assert!(claimed.handler.is_none());
         for hovered in [None, Some(7), Some(8)] {
-            let highlighted = place(
+            let mut highlighted = place(
                 hover_highlight(crate::display::text("feedback"), 7),
                 placement,
             );
             assert!(highlighted.claim.is_none());
             assert!(highlighted.handler.is_none());
             let mut canvas = DrawList::new();
-            for render in highlighted.renders {
-                render(
-                    &mut canvas,
-                    crate::display::widget::Ink {
-                        hovered: hovered.as_ref(),
-                        ..Default::default()
-                    },
-                );
-            }
+            puri::frame::render(
+                highlighted.resolve(crate::display::widget::ResolvedHover {
+                    hovered,
+                    ..Default::default()
+                }),
+                &mut canvas,
+            );
             assert_eq!(canvas.0.len(), usize::from(hovered == Some(7)));
         }
     }
@@ -234,7 +233,7 @@ mod tests {
         ] {
             let output = place(layout, clipped);
             assert!(
-                output.claim.is_none() && output.handler.is_none() && output.renders.is_empty()
+                output.claim.is_none() && output.handler.is_none() && output.after_hover.is_empty()
             );
         }
     }

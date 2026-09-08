@@ -677,16 +677,16 @@ fn a_projection_defined_as_data_realizes() {
         &mut tcx,
     );
     assert!(measured.extent.width > 0.0);
-    let placed = measured::place(
+    let mut placed = crate::display::widget::frame::place(
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
-    )
-    .run(&Default::default());
+        &Default::default(),
+    );
     let mut pointer = crate::placed::DispatchContext::new(
         None,
         Some(crate::frame::Hovered::Tree(Hover::Value(Rc::from([])))),
     );
-    assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+    assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
         &mut crate::test_editor(doc.clone()),
         &PointerButtonEvent {
             button: Some(PointerButton::Primary),

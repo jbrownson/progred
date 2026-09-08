@@ -8,7 +8,7 @@ use crate::completion::{Entry, Offers, completion_entries_with, constructor_entr
 use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use crate::placed::{self, Placed, before, decorate, on_key};
+use crate::placed::{self, HoverPass, before, decorate, on_key};
 use crate::render::text;
 use crate::selection::{Selection, Stage};
 use crate::styles::Styles;
@@ -28,7 +28,7 @@ pub(crate) fn control(
     context: &mut crate::display::widget::Context<'_, '_, crate::Editor, Hovered>,
     kind: crate::display::CompletionKind,
     provider: Option<&crate::display::CompletionProvider>,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     match kind {
         crate::display::CompletionKind::Value => pending_view(
             context.inputs,
@@ -53,7 +53,7 @@ pub(super) fn pending_view(
     tcx: &mut TextCtx,
     path: Path,
     completions: Option<&crate::display::CompletionProvider>,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
         writable
@@ -72,8 +72,8 @@ pub(super) fn pending_view(
 fn pending_target(
     cx: &Cx,
     path: Path,
-    child: Measured<Placed<crate::Editor>>,
-) -> Measured<Placed<crate::Editor>> {
+    child: Measured<HoverPass<crate::Editor>>,
+) -> Measured<HoverPass<crate::Editor>> {
     let (path, transient): (SharedPath, bool) = match cx.source {
         Source::Transient { owner } if owner != path.as_slice() => return child,
         Source::Transient { owner } => (Rc::from(owner), true),
@@ -99,11 +99,11 @@ fn pending_target(
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);
         let highlight_path = path.clone();
-        p.ink(move |cv, ink| {
+        p.render(move |cv, hover| {
             if selected {
                 primary_highlight(scale, cv, outline);
             } else if matches!(
-                tree_hovered(ink),
+                tree_hovered(hover),
                 Some(Hover::Value(hovered)) if hovered == &highlight_path
             ) {
                 hover_highlight(cv, outline);
@@ -128,7 +128,7 @@ fn placeholder(
     engaged: Option<&LineEditState>,
     labels: bool,
     completions: Option<&crate::display::CompletionProvider>,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     match engaged {
         Some(query) => query_content(cx, tcx, path, query, labels, completions),
         None => placeholder_box(tcx, cx.styles),
@@ -145,7 +145,7 @@ fn query_content(
     query: &LineEditState,
     labels: bool,
     completions: Option<&crate::display::CompletionProvider>,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     // The card and keyboard commit must answer from one list.
     let everything = cx.selection.is_some_and(Selection::completion_everything);
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
@@ -290,7 +290,7 @@ pub(super) fn completion_card<C: 'static>(
     scroll: f64,
     everything: bool,
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
-) -> Measured<Placed<C>> {
+) -> Measured<HoverPass<C>> {
     let entries = entries
         .iter()
         .enumerate()
@@ -329,7 +329,7 @@ pub(super) fn label_query(
     path: &[gid::Step],
     query: &LineEditState,
     completions: Option<&crate::display::CompletionProvider>,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, path, Some(query), true, completions);
     let ringed = decorate(content, move |p, rect| {

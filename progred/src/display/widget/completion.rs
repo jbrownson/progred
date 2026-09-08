@@ -135,13 +135,13 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
             outcome
         },
     );
-    let viewport = measured::overlay(
+    let viewport = measured::overlay_into(
         leaf(viewport_extent, |_, _| {}),
         scrolled,
-        move |placement, _, _| Some(placement),
+        move |placement, _| Some(placement),
     );
     let card = pad(Insets::uniform(4.0 * scale), viewport);
-    let card = crate::display::widget::before_hover(
+    let card = crate::display::widget::before_place(
         card,
         move |_, output: &mut HoverContext<'_, C, H>| {
             output.handler().on_key(move |world, event| {
@@ -188,7 +188,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         border: Some((border(scale), Color::new([0.75, 0.77, 0.81, 1.0]).into())),
         radius: 6.0 * scale,
     };
-    crate::display::widget::before_hover(card, move |placement, output| {
+    crate::display::widget::before_place(card, move |placement, output| {
         if !placement.clipped_out() {
             output.render(move |canvas, _| panel.place(canvas, placement));
             output.claim(Probe::occludes(placement));

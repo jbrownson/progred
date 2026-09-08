@@ -1,12 +1,12 @@
-//! One staged pass: place the document, probe hover, mint dispatch.
-//! Ink stays latent in the returned frame; rendering it is the
+//! One staged pass: place and probe, resolve hover, mint dispatch.
+//! Paint stays latent in the returned frame; rendering it is the
 //! caller's choice, so a silent mint never draws.
 
 use crate::hover;
 use crate::menu;
 use crate::model::{Model, ViewFlags};
 use crate::navigate;
-use crate::placed::{self, Placed};
+use crate::placed::{self, HoverPass};
 use crate::projection;
 use crate::sources;
 use crate::stack;
@@ -46,10 +46,6 @@ pub(crate) struct Dispatch {
 pub(crate) struct Frame {
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render>,
-    /// The cell-relative location the resolved hover refers to, for
-    /// the render pass's secondary marks.
-    pub(crate) hovered_secondary: Option<hover::Secondary>,
-    pub(crate) hovered_trace: Option<hover::SourceTrace>,
 }
 
 /// What the resting pointer claims in the document or application
@@ -63,6 +59,33 @@ pub(crate) enum Hovered {
     /// distinct from air prevents the shell's empty-space fallback
     /// without inventing a clickable identity for the chrome.
     Blocked,
+}
+
+/// A fresh description of this frame's winner, shared by its continuations.
+/// Resolve source paths here once, not in each painted occurrence.
+fn resolved_hover(
+    sources: &sources::Sources<'_>,
+    completion: Option<&crate::completion::Offers<Editor>>,
+    hovered: Option<Hovered>,
+    link: bool,
+) -> placed::ResolvedHover {
+    let visible = source_hover_visible(hovered.as_ref(), link);
+    let hovered_secondary = match &hovered {
+        Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(sources, completion, hover),
+        _ => None,
+    };
+    let hovered_trace = match &hovered {
+        Some(Hovered::Tree(hover::Hover::Value(path))) if visible => {
+            Some(hover::SourceTrace::from_path(sources, path.clone()))
+        }
+        Some(Hovered::Tree(hover::Hover::Drawing(source))) if visible => Some(source.clone()),
+        _ => None,
+    };
+    placed::ResolvedHover {
+        hovered,
+        hovered_secondary,
+        hovered_trace,
+    }
 }
 
 /// The concrete native canvas frame ink renders into: the Vello scene,
@@ -405,7 +428,7 @@ impl Editor {
     }
 
     /// One staged pass over the UI: place, probe the pointer against
-    /// the settled geometry, resolve hover, mint dispatch. Ink comes
+    /// the settled geometry, resolve hover, mint dispatch. Paint comes
     /// back deferred; the caller renders it or drops it.
     pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
         let declarations = workspace::declarations(self.model.doc.root.as_ref());
@@ -437,45 +460,31 @@ impl Editor {
             text_cache: &mut self.text_cache,
         };
         let view = app_view(description, resources);
-        let hover_pass = measured::place(
-            view,
-            Placement::root(Rect::from_origin_size(Point::ZERO, viewport)),
-        );
         let hover_reach = HOVER_REACH * scale;
         let prior = self.hover.take();
-        let mut ready = hover_pass.run(&placed::HoverInput {
-            pointer: if self.pressed { None } else { self.pointer },
-            prior: prior.as_ref(),
-            reach: hover_reach,
-            debug_geometry,
-            occluded: false,
-        });
+        let mut ready = placed::place(
+            view,
+            Placement::root(Rect::from_origin_size(Point::ZERO, viewport)),
+            &placed::HoverInput {
+                pointer: if self.pressed { None } else { self.pointer },
+                prior: prior.as_ref(),
+                reach: hover_reach,
+                debug_geometry,
+            },
+        );
         let (hover, pointer_root) = derive_hover(ready.claim.take(), prior, self.pressed);
         self.hover = hover;
         let sources = sources::Sources {
             doc: &self.model.doc,
             libraries: &self.stack.libraries,
         };
-        let show_source_hover =
-            source_hover_visible(self.hover.as_ref(), crate::modifiers::link(&self.modifiers));
-        let hovered_secondary = match &self.hover {
-            Some(Hovered::Tree(_)) if !show_source_hover => None,
-            Some(Hovered::Tree(hover)) => {
-                hover::hover_secondary(&sources, ready.completion.as_ref(), hover)
-            }
-            Some(Hovered::Menu(_)) => None,
-            Some(Hovered::Divider(_)) => None,
-            Some(Hovered::Blocked) => None,
-            None => None,
-        };
-        let hovered_trace = match &self.hover {
-            Some(Hovered::Tree(_)) if !show_source_hover => None,
-            Some(Hovered::Tree(hover::Hover::Value(path))) => {
-                Some(hover::SourceTrace::from_path(&sources, path.clone()))
-            }
-            Some(Hovered::Tree(hover::Hover::Drawing(source))) => Some(source.clone()),
-            _ => None,
-        };
+        let hover = resolved_hover(
+            &sources,
+            ready.completion.as_ref(),
+            self.hover.clone(),
+            crate::modifiers::link(&self.modifiers),
+        );
+        let mut renders = ready.resolve(hover);
         let extended_rects = debug_geometry
             .then(|| {
                 self.hover
@@ -490,7 +499,7 @@ impl Editor {
                     .unwrap_or_default()
             })
             .unwrap_or_default();
-        let placed::Ready {
+        let placed::HoverOutput {
             claim: _,
             debug_regions: _,
             handler,
@@ -498,14 +507,14 @@ impl Editor {
             view_regions,
             landmark_select,
             completion: _,
-            mut renders,
+            after_hover: _,
         } = ready;
         debug_assert!(
             landmark_select.is_none(),
             "selection handler escaped its landmark"
         );
         if debug_geometry {
-            renders.push(Box::new(move |canvas, _| {
+            renders.push(Box::new(move |canvas| {
                 let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
                 for rect in extended_rects {
                     canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
@@ -521,8 +530,6 @@ impl Editor {
                 line: 14.0 * scale,
             },
             renders,
-            hovered_secondary,
-            hovered_trace,
         }
     }
 
@@ -540,19 +547,12 @@ impl Editor {
     }
 
     fn install_frame(&mut self, frame: Frame, scale: f64, viewport: Size) -> PendingPaint {
-        let Frame {
-            dispatch,
-            renders,
-            hovered_secondary,
-            hovered_trace,
-        } = frame;
+        let Frame { dispatch, renders } = frame;
         self.dispatch = Some(dispatch);
         PendingPaint {
             scale,
             viewport,
             renders,
-            hovered_secondary,
-            hovered_trace,
         }
     }
 
@@ -577,7 +577,7 @@ fn project_workspace_view(
     view: &workspace::View,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<Editor>> {
+) -> measured::Measured<HoverPass<Editor>> {
     let raw = view.projection == workspace::Projection::Raw;
     let viewport = match view.root.target() {
         workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
@@ -670,7 +670,7 @@ fn project_workspace_view(
         },
         |_, _| {},
     );
-    measured::overlay(frame, content, move |placement, _, _| {
+    measured::overlay_into(frame, content, move |placement, _| {
         Some(Placement::new(
             placement.rect,
             placement.clip_rect.intersect(placement.rect),
@@ -687,7 +687,7 @@ fn project_workspace(
     sources: sources::Sources<'_>,
     size: Size,
     scale: f64,
-) -> measured::Measured<Placed<Editor>> {
+) -> measured::Measured<HoverPass<Editor>> {
     let geometry = model.workspace.geometry(size, scale);
     let mut body = placed::leaf(
         measured::Extent {
@@ -705,7 +705,7 @@ fn project_workspace(
         let rect = placed_view.rect;
         let child =
             project_workspace_view(model, stack, styles, tcx, sources, view, rect.size(), scale);
-        body = measured::overlay(body, child, move |placement, _, _| {
+        body = measured::overlay_into(body, child, move |placement, _| {
             let rect = rect + placement.rect.origin().to_vec2();
             Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
         });
@@ -766,7 +766,7 @@ fn project_workspace(
                 });
             },
         );
-        body = measured::overlay(body, rule, move |placement, _, _| {
+        body = measured::overlay_into(body, rule, move |placement, _| {
             let rect = rect + placement.rect.origin().to_vec2();
             // The rule is inside the workspace, but its retained drag
             // needs the workspace origin after the pointer leaves the
@@ -780,7 +780,7 @@ fn project_workspace(
 fn app_view(
     description: FrameDescription<'_>,
     resources: FrameResources<'_>,
-) -> measured::Measured<Placed<Editor>> {
+) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
         drawn_menu,
         toggles,
@@ -853,9 +853,9 @@ fn app_view(
             Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
             Rect::new(0.0, 0.0, viewport_width, viewport.height),
         );
-        stage = measured::overlay(stage, bar, move |_, _, _| Some(bar_placement));
+        stage = measured::overlay_into(stage, bar, move |_, _| Some(bar_placement));
     }
-    stage = measured::overlay(stage, body, move |_, _, _| {
+    stage = measured::overlay_into(stage, body, move |_, _| {
         Some(Placement::new(content_viewport, content_viewport))
     });
 
@@ -897,7 +897,6 @@ fn app_view(
 mod frame_tests {
     use super::*;
     use gid::{CellId, Cells, Document, Step, Value};
-    use measured::Output;
 
     #[test]
     fn only_transitions_and_changed_frame_inputs_remint() {
@@ -1131,7 +1130,7 @@ mod frame_tests {
         };
         let size = Size::new(1200.0, 1000.0);
         let mut place = |model: &Model| {
-            measured::place(
+            crate::display::widget::frame::place(
                 project_workspace(
                     model,
                     &stack,
@@ -1145,8 +1144,8 @@ mod frame_tests {
                     1.0,
                 ),
                 Placement::root(Rect::from_origin_size(Point::ZERO, size)),
+                &Default::default(),
             )
-            .run(&Default::default())
         };
         let document = model.workspace.document_root();
         let sources: Vec<_> = [
@@ -1327,7 +1326,7 @@ mod frame_tests {
                 cache: &mut cache,
             };
             let mut place = |view, pointer| {
-                measured::place(
+                crate::display::widget::frame::place(
                     project_workspace_view(
                         &model,
                         &stack,
@@ -1342,11 +1341,11 @@ mod frame_tests {
                         scale,
                     ),
                     Placement::root(Rect::from_origin_size(Point::new(30.0, 40.0), size)),
+                    &placed::HoverInput {
+                        pointer,
+                        ..Default::default()
+                    },
                 )
-                .run(&placed::HoverInput {
-                    pointer,
-                    ..Default::default()
-                })
             };
             let placed = place(pane, Some(Point::new(30.5, 40.5)));
             assert_eq!(calls.borrow_mut().pop(), Some(size / scale));
@@ -1435,7 +1434,7 @@ mod frame_tests {
             cache: &mut cache,
         };
         let size = Size::new(801.0, 600.0);
-        let placed = measured::place(
+        let placed = crate::display::widget::frame::place(
             project_workspace(
                 &model,
                 &stack,
@@ -1449,8 +1448,8 @@ mod frame_tests {
                 1.0,
             ),
             Placement::root(Rect::from_origin_size(Point::ZERO, size)),
-        )
-        .run(&Default::default());
+            &Default::default(),
+        );
 
         assert_eq!(placed.view_regions.len(), 3);
         let upper_region = placed
@@ -1499,13 +1498,23 @@ mod frame_tests {
             (Some(target(0)), Some(40.0), true, false, Some(target(0))),
             (None, Some(25.0), false, true, Some(Hovered::Blocked)),
         ] {
-            let pass: Placed<Editor> = Placed::new(move |output| {
+            let mut pass: HoverPass<Editor> = HoverPass::new(&placed::HoverInput {
+                pointer: if pressed {
+                    None
+                } else {
+                    pointer.map(|x| Point::new(x, 5.0))
+                },
+                prior: prior.as_ref(),
+                reach: 8.0,
+                ..Default::default()
+            });
+            pass.visit(move |output| {
                 output.claim(placed::Probe::retaining(
                     Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
                     target(0),
                 ));
-            })
-            .over(Placed::new(move |output| {
+            });
+            pass.visit(move |output| {
                 output.claim(placed::Probe::retaining(
                     Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
                     target(1),
@@ -1516,18 +1525,8 @@ mod frame_tests {
                         viewport,
                     )));
                 }
-            }));
-            let ready = pass.run(&placed::HoverInput {
-                pointer: if pressed {
-                    None
-                } else {
-                    pointer.map(|x| Point::new(x, 5.0))
-                },
-                prior: prior.as_ref(),
-                reach: 8.0,
-                debug_geometry: false,
-                occluded: false,
             });
+            let ready = pass.finish();
             assert_eq!(derive_hover(ready.claim, prior, pressed).0, expected);
         }
     }
@@ -1541,19 +1540,19 @@ mod frame_tests {
             (11.0, true, Some(target.clone())),
         ] {
             let claimed = target.clone();
-            let pass: Placed<Editor> = Placed::new(move |output| {
+            let mut pass: HoverPass<Editor> = HoverPass::new(&placed::HoverInput {
+                pointer: Some(Point::new(x, 5.0)),
+                prior: Some(&target),
+                reach: 8.0,
+                ..Default::default()
+            });
+            pass.visit(move |output| {
                 output.claim(placed::Probe::exact(
                     Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
                     claimed,
                 ));
             });
-            let ready = pass.run(&placed::HoverInput {
-                pointer: Some(Point::new(x, 5.0)),
-                prior: Some(&target),
-                reach: 8.0,
-                debug_geometry: false,
-                occluded: false,
-            });
+            let ready = pass.finish();
             assert_eq!(
                 derive_hover(ready.claim, Some(target.clone()), pressed).0,
                 expected

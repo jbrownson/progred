@@ -46,7 +46,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    let placed = measured::place(node, Placement::root(rect)).run(&Default::default());
+    let mut placed =
+        crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
     let point = placed
         .descends
         .iter()
@@ -69,8 +70,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     let mut world = crate::test_editor(doc.clone());
     assert!(
         placed
-            .handler
-            .expect("line handler")
+            .resolve_for_dispatch()
             .dispatch_pointer_down(&mut world, &event)
     );
     assert_eq!(
@@ -116,7 +116,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
         },
         &mut frame_tcx,
     );
-    let active = measured::place(active, Placement::root(rect)).run(&Default::default());
+    let mut active =
+        crate::display::widget::frame::place(active, Placement::root(rect), &Default::default());
     let line = active
         .descends
         .iter()
@@ -127,7 +128,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     double.state.position.x = line.center().x;
     double.state.position.y = line.center().y;
     double.state.count = 2;
-    let handler = active.handler.expect("active line handler");
+    let handler = active.resolve_for_dispatch();
     assert!(handler.dispatch_pointer_down(&mut world, &double));
     let selection = world.model.selection.as_ref().unwrap().edit().unwrap();
     let (anchor, focus) = selection.selection_offsets();
@@ -198,27 +199,33 @@ fn gesture_place(
 fn drag_frame(
     place: crate::display::widget::HoverCallback<crate::Editor, Hovered>,
     covered: bool,
-) -> crate::placed::Ready<crate::Editor> {
+) -> crate::placed::HoverOutput<crate::Editor> {
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,
         descent: 20.0,
     };
     let node =
-        crate::display::widget::before_hover(leaf(extent, |_, _| {}), move |placement, output| {
+        crate::display::widget::before_place(leaf(extent, |_, _| {}), move |placement, output| {
             place(output, placement)
         });
     let placement = Placement::new(
         Rect::new(0.0, 0.0, 20.0, 20.0),
         Rect::new(0.0, 0.0, 10.0, 20.0),
     );
-    let placed = measured::place(placed::in_view(node, crate::test_root()), placement)
-        .run(&Default::default());
+    let placed = crate::display::widget::frame::place(
+        placed::in_view(node, crate::test_root()),
+        placement,
+        &Default::default(),
+    );
     if covered {
         measured::Output::over(
             placed,
-            measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement)
-                .run(&Default::default()),
+            crate::display::widget::frame::place(
+                leaf(extent, |p, placement| p.occlude(placement)),
+                placement,
+                &Default::default(),
+            ),
         )
     } else {
         placed
@@ -231,7 +238,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let log = Rc::new(std::cell::RefCell::new(Vec::new()));
         let select_log = log.clone();
         let start_log = log.clone();
-        let frame = drag_frame(
+        let mut frame = drag_frame(
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
@@ -256,7 +263,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             root: None,
             cells: Cells::new(),
         });
-        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+        let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(5.0, false),
             &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),
@@ -317,7 +324,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             false,
         ),
     ] {
-        let frame = drag_frame(
+        let mut frame = drag_frame(
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
@@ -336,7 +343,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
         let mut event = press(x, false);
         event.button = button;
         event.pointer.pointer_type = pointer_type;
-        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+        let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &event,
             &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
@@ -356,7 +363,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         (false, false, 5.0, false, true, false),
         (false, false, 5.0, true, false, false),
     ] {
-        let frame = drag_frame(
+        let mut frame = drag_frame(
             gesture_place(
                 crate::libraries::number::scrub::on_scrub(
                     crate::display::row(0.0, []),
@@ -379,7 +386,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         if pending {
             world.model.selection = Some(pending_value(&crate::test_root(), vec![]));
         }
-        let handled = frame.handler.unwrap().dispatch_pointer_down_with(
+        let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(x, pick),
             &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
@@ -396,7 +403,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
 
 #[test]
 fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
-    use crate::display::widget::{before_hover, interaction::target_action};
+    use crate::display::widget::{before_place, interaction::target_action};
 
     for (pending, raw) in [(false, false), (true, false), (false, true), (true, true)] {
         let field = new_cell_id();
@@ -437,8 +444,8 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             ascent: 0.0,
             descent: 20.0,
         };
-        let node = before_hover(
-            before_hover(
+        let node = before_place(
+            before_place(
                 leaf(extent, move |p, _| {
                     p.handler().on_pointer_down(move |_, _| {
                         if raw {
@@ -451,12 +458,12 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             ),
             move |placement, output| pick(output, placement),
         );
-        let frame = measured::place(
+        let mut frame = crate::display::widget::frame::place(
             placed::in_view(node, crate::test_root()),
             Placement::root(extent.rect_at(Point::ZERO)),
-        )
-        .run(&Default::default());
-        assert!(frame.handler.unwrap().dispatch_pointer_down_with(
+            &Default::default(),
+        );
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(5.0, true),
             &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),

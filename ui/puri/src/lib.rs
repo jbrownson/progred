@@ -9,6 +9,7 @@ pub mod delim;
 pub mod drag;
 pub mod draw;
 pub mod edit;
+pub mod frame;
 pub mod geometry;
 pub mod handler;
 pub mod hover;

@@ -98,6 +98,21 @@ ad-hoc cache or event-specific relevance checks.
 The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
+## Hover traversal order
+
+Revisit when the document/widget mix includes more expensive overlapping hover
+targets, especially canvases covered by opaque popups or other content. Current
+placement runs probes in painting order; foreground claims replace background
+claims, but cannot avoid the work of background probes already run.
+
+Compare this streaming pass with retaining probes and querying topmost-first,
+where a direct hit or occlusion can skip probes underneath. Measure skipped
+hit-test work against the extra allocations, retained captures, and traversal;
+include ordinary source documents as well as overlap-heavy cases. Preserve
+direct-over-extended claim priority, clipping, and nested-floater ordering, and
+check identical hover, paint, and dispatch results. This is a deferred experiment,
+not a decision to reverse traversal or add caching.
+
 ## Platform work
 
 ### Fidget constant fields on the GPU — upstream fix to adopt

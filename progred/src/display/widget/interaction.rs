@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn raw_click_uses_the_live_world_and_both_placement_rectangles() {
-        let mut frame = crate::display::widget::Fragment::default();
+        let mut frame = crate::display::widget::HoverOutput::default();
         let mut output =
             crate::display::widget::HoverContext::<usize, ()>::new(Default::default(), &mut frame);
         click(
@@ -154,7 +154,7 @@ mod tests {
     fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
         for pick in [false, true] {
             for picking in [false, true] {
-                let mut frame = crate::display::widget::Fragment::default();
+                let mut frame = crate::display::widget::HoverOutput::default();
                 let mut output = crate::display::widget::HoverContext::<usize, u32>::new(
                     Default::default(),
                     &mut frame,
@@ -196,7 +196,7 @@ mod tests {
                 assert_eq!(world, usize::from(pick == picking));
             }
         }
-        let mut frame = crate::display::widget::Fragment::default();
+        let mut frame = crate::display::widget::HoverOutput::default();
         let mut clipped =
             crate::display::widget::HoverContext::<usize, u32>::new(Default::default(), &mut frame);
         target_action(
@@ -238,11 +238,13 @@ mod tests {
                     });
                 },
             );
-            let measured = crate::display::widget::before_hover(child, move |placement, output| {
+            let measured = crate::display::widget::before_place(child, move |placement, output| {
                 place(output, placement)
             });
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-            let output = measured::place(measured, placement).run(&Default::default());
+            let mut output =
+                crate::display::widget::frame::place(measured, placement, &Default::default());
+            output.resolve(Default::default());
             let mut world = vec![];
             assert!(
                 output

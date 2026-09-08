@@ -40,17 +40,20 @@ pub fn landmark<World: 'static, H: 'static>(
     path: Rc<[Step]>,
     select: Select<World>,
 ) -> Measured<HoverPass<World, H>> {
-    measured::around(child, move |placement, inner| {
-        inner.place().map(move |mut output| {
-            let select = output.landmark_select.take().unwrap_or(select);
-            output.descends.push(Landmark {
-                root: None,
-                path,
-                rect: placement.rect,
-                select,
-            });
-            output
-        })
+    measured::around_into(child, move |placement, inner, pass| {
+        pass.scope(
+            |pass| inner.place_into(pass),
+            move |mut output| {
+                let select = output.landmark_select.take().unwrap_or(select);
+                output.descends.push(Landmark {
+                    root: None,
+                    path,
+                    rect: placement.rect,
+                    select,
+                });
+                output
+            },
+        );
     })
 }
 
@@ -58,7 +61,7 @@ pub fn landmark<World: 'static, H: 'static>(
 mod tests {
     use super::*;
     use crate::display::widget::{HoverContext, leaf};
-    use measured::{Extent, Output, place};
+    use measured::Extent;
     use puri::Placement;
 
     type World = Vec<(&'static str, Option<Direction>)>;
@@ -92,11 +95,11 @@ mod tests {
     fn only_the_nearest_landmark_consumes_a_controls_arrival_handler() {
         let child = landmark(control(Some(select("control"))), path(), select("child"));
         let child = landmark(child, path(), select("parent"));
-        let child = crate::display::widget::before_hover(child, |_, output: &mut Frame| {
+        let child = crate::display::widget::before_place(child, |_, output: &mut Frame| {
             output.on_arrival(Some(select("outside")));
         });
         let placement = Placement::root(Rect::new(15.0, 30.0, 25.0, 40.0));
-        let output = place(child, placement).run(&Default::default());
+        let output = crate::display::widget::frame::place(child, placement, &Default::default());
         let mut log = vec![];
         for landmark in output.descends {
             assert_eq!(landmark.rect, placement.rect);
@@ -118,8 +121,11 @@ mod tests {
         let first = landmark(control(Some(select("first"))), path(), select("unused"));
         let second = landmark(control(None), path(), select("second"));
         let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
-        let output =
-            place(measured::row(0.0, vec![first, second]), placement).run(&Default::default());
+        let output = crate::display::widget::frame::place(
+            measured::row(0.0, vec![first, second]),
+            placement,
+            &Default::default(),
+        );
         let mut log = vec![];
         for landmark in output.descends {
             (landmark.select)(&mut log, None);
@@ -131,9 +137,12 @@ mod tests {
     #[test]
     fn unplaced_subtrees_do_not_contribute_landmarks() {
         let child = landmark(control(Some(select("control"))), path(), select("unused"));
-        let child = measured::around(child, |_, _| HoverPass::empty());
-        let output =
-            place(child, Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0))).run(&Default::default());
+        let child = measured::around_into(child, |_, _, _| {});
+        let output = crate::display::widget::frame::place(
+            child,
+            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+            &Default::default(),
+        );
         assert!(output.descends.is_empty());
         assert!(output.landmark_select.is_none());
     }

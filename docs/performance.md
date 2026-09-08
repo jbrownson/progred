@@ -70,7 +70,7 @@ paint continuations into a headless `DrawList`. The report separates:
   cold shader compilation: the OS may already have compiled shaders on disk.
 - Warm median, p95, and maximum total time, including output disposal.
 - Preparation (projection, text metrics, and choice-graph construction), choice
-  resolution plus settled geometry, placement, hover/handler construction,
+  resolution plus settled geometry, placement/hover, after-hover binding,
   painting plus handler disposal, and final output disposal. These timers live
   only in the test harness. Library work occurs in its normal phase: Fidget
   renders during preparation, while the IoP canvas program runs during painting.
@@ -616,3 +616,74 @@ The same feature-free release checks (five warm-up, 90 measured frames) measured
 not evidence of a speedup. These remain headless checks, not GPU presentation
 measurements. All 632 workspace tests pass. Native checks are clean; the web
 check retains its existing `drawn_menu` and `Quit` warnings.
+
+## Streaming hover and explicit after-hover binding — 2026-09-08
+
+Settled placements now run ordinary hover probes in painting order. Only
+floating placements are queued. The retained hover-callback sequence and its
+paint/navigation reversal bookkeeping are gone. Puri's generic `AfterHover`
+collection binds the final hover before producing independent paint and
+handlers; paint callbacks retain that frame's input rather than reading live
+editor hover during presentation. No cross-frame memo or native render enum
+was added.
+
+Feature-free release checks used five warm-up and 90 measured frames:
+
+| Whole-frame median | Before | After, two runs |
+| --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 3.71 ms | 3.39 / 3.50 ms |
+| IoP picture, 500 × 500 @1 | 23.63 ms | 23.82 / 23.90 ms |
+
+This suggests a modest source improvement, with effectively neutral picture
+cost. These are headless checks, not GPU presentation measurements. Phase
+timings now label placement and hover together, followed by after-hover
+binding, so their individual columns are not directly comparable to old runs.
+On the final source run those phases took 0.716 and 0.149 ms respectively;
+the old placement plus hover/handler phases took 0.414 plus 0.700 ms.
+
+The full workspace suite passed 634 tests, followed by an additional passing
+nested-floater ordering regression. Browser checks retain only the existing
+`drawn_menu` and `Quit` warnings.
+
+## Hover attribution: shared versus derived at use — 2026-09-08
+
+The preceding source canary had no pointer, so it did not measure the benefit
+of sharing the hovered source's attribution. A temporary headless experiment
+exercised `Editor::build_frame` and its actual paint continuations at 1400 × 900
+@1, with real visible source hover targets in the IoP document. Source-only
+removed the pane declaration; the other case kept the source and picture panes.
+
+Four variants rotated order each iteration: both descriptors shared, secondary
+identity derived at each use, canvas source trace derived at each use, and both
+derived at use. At-use variants skipped the corresponding eager derivation.
+Temporary test-only accessors counted actual consumers and used an immutable
+document/library snapshot established outside timing. The same accessor/counting
+overhead applied to shared variants. Render commands were compared outside
+timing for every variant/target combination. The initial run used 90 samples;
+the expanded repeat used five warm-up and 120 measured samples per variant.
+All experimental hooks and the temporary test were removed afterward.
+
+| Source-only build + paint median | Shared | Secondary at each use |
+| --- | --- | --- |
+| Deep value hover (21 path steps) | 3.415 ms | 3.570 ms |
+| Shallow value hover (4 steps) | 3.407 ms | 3.441 ms |
+| No hover | 3.433 ms | 3.426 ms |
+
+These times include handler disposal, but not final draw-list disposal or GPU
+presentation. The deep-hover result repeated the initial 3.421 → 3.571 ms result.
+There were 439 secondary-identity consumers with a value hovered (440 with no
+hover). Isolated derivation took roughly 0.33 µs for the deep path and 0.05 µs for
+the shallow path: cheap individually, but repeated enough to add about 4.5% or
+1% respectively. No-hover differences were noise.
+
+With both panes, 301 secondary consumers and one canvas-trace consumer ran;
+total build + paint was about 26 ms, dominated by drawing evaluation. Moving
+trace derivation to its consumer had no stable measurable impact across runs.
+One trace derivation took about 0.18 µs for the deep path and 0.04 µs for the
+shallow path. Unlike secondary identity, trace derivation can allocate an owned
+cell-relative path slice, but it does not repeat per drawing command.
+
+Keep shared secondary attribution: it avoids hundreds of redundant graph walks
+without a cross-frame cache. Eager canvas-trace derivation has no demonstrated
+performance advantage in this workload; its placement is an API/design choice,
+not a measured optimization requirement.

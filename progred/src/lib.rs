@@ -184,8 +184,6 @@ pub(crate) struct PendingPaint {
     pub(crate) scale: f64,
     pub(crate) viewport: Size,
     pub(crate) renders: Vec<placed::Render>,
-    pub(crate) hovered_secondary: Option<hover::Secondary>,
-    pub(crate) hovered_trace: Option<hover::SourceTrace>,
 }
 
 struct PendingScroll {
@@ -353,7 +351,7 @@ pub(crate) struct Editor {
     /// A minted frame's event surface, retained until an event spends
     /// it. `pending_paint` carries the same successor frame's pixels.
     pub(crate) dispatch: Option<Dispatch>,
-    /// Ink from the successor frame already minted after an event.
+    /// Paint from the successor frame already minted after an event.
     /// The next redraw consumes it instead of minting that frame twice.
     pub(crate) pending_paint: Option<PendingPaint>,
     /// Consecutive scroll packets are one continuous displacement.
@@ -1987,24 +1985,13 @@ impl App {
 
         let viewport = Size::new(width as f64, height as f64);
         editor.scene.reset();
-        let PendingPaint {
-            renders,
-            hovered_secondary,
-            hovered_trace,
-            ..
-        } = editor.prepare_paint(scale, viewport);
+        let PendingPaint { renders, .. } = editor.prepare_paint(scale, viewport);
         editor.sync_cursor(&window);
-        let ink = placed::Ink {
-            hovered: editor.hover.as_ref(),
-            hovered_secondary: hovered_secondary.as_ref(),
-            hovered_trace: hovered_trace.as_ref(),
-            debug_geometry: editor.model.view.debug_geometry,
-        };
         let mut paint = Paint {
             scene: std::mem::replace(&mut editor.scene, Scene::new()),
         };
         for render in renders {
-            render(&mut paint, ink);
+            render(&mut paint);
         }
         editor.scene = paint.scene;
 
@@ -2102,19 +2089,8 @@ impl App {
         }
 
         let viewport = Size::new(width as f64, height as f64);
-        let PendingPaint {
-            renders,
-            hovered_secondary,
-            hovered_trace,
-            ..
-        } = editor.prepare_paint(scale, viewport);
+        let PendingPaint { renders, .. } = editor.prepare_paint(scale, viewport);
         editor.sync_cursor(&window);
-        let ink = placed::Ink {
-            hovered: editor.hover.as_ref(),
-            hovered_secondary: hovered_secondary.as_ref(),
-            hovered_trace: hovered_trace.as_ref(),
-            debug_geometry: editor.model.view.debug_geometry,
-        };
         let mut paint = Paint {
             canvas: puri_web::WebCanvas(context),
         };
@@ -2124,7 +2100,7 @@ impl App {
             Color::new([0.965, 0.965, 0.972, 1.0]),
         );
         for render in renders {
-            render(&mut paint, ink);
+            render(&mut paint);
         }
     }
 }

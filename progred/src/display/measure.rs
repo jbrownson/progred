@@ -56,7 +56,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         let before = before(self.context);
         let child = self.build.take(child.0);
         self.push(ChoiceLayout::map(child, 0.0, move |child| {
-            widget::before_hover(child, move |placement, output| before(output, placement))
+            widget::before_place(child, move |placement, output| before(output, placement))
         }))
     }
     fn after(&mut self, child: Node, after: widget::Decoration<W, H>) -> Node {
@@ -65,7 +65,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         let after = after(self.context);
         let child = self.build.take(child.0);
         self.push(ChoiceLayout::map(child, 0.0, move |child| {
-            widget::after_hover(child, move |placement, output| after(output, placement))
+            widget::after_place(child, move |placement, output| after(output, placement))
         }))
     }
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node {
@@ -137,9 +137,9 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
 mod tests {
     use super::*;
     use crate::display::test_support::{NoProject, with_context};
-    use crate::display::widget::{Fragment, HoverContext};
+    use crate::display::widget::HoverContext;
+    use measured::Extent;
     use measured::choices::resolve_choices;
-    use measured::{Extent, place};
     use puri::{DrawCmd, DrawList, Placement, Rect};
     use std::{cell::Cell, rc::Rc};
 
@@ -171,8 +171,11 @@ mod tests {
             assert_eq!(placements.get(), frame - 1);
             let measured = resolve_choices(build.finish(prepared), width, false);
             assert_eq!(measured.extent.width, expected_width);
-            place(measured, Placement::root(Rect::new(0.0, 0.0, width, 10.0)))
-                .run(&Default::default());
+            crate::display::widget::frame::place(
+                measured,
+                Placement::root(Rect::new(0.0, 0.0, width, 10.0)),
+                &Default::default(),
+            );
             assert_eq!(placements.get(), frame);
         }
     }
@@ -194,19 +197,16 @@ mod tests {
             let mut build = ChoiceBuild::default();
             let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
             let measured = resolve_choices(build.finish(prepared), 13.0, false);
-            let output = place(measured, Placement::root(rect)).run(&widget::HoverInput {
-                debug_geometry: debug,
-                ..Default::default()
-            });
-            let mut canvas = DrawList::new();
-            Fragment::<(), ()>::paint(
-                output.renders,
-                &mut canvas,
-                widget::Ink {
+            let mut output = crate::display::widget::frame::place(
+                measured,
+                Placement::root(rect),
+                &widget::HoverInput {
                     debug_geometry: debug,
                     ..Default::default()
                 },
             );
+            let mut canvas = DrawList::new();
+            puri::frame::render(output.resolve(Default::default()), &mut canvas);
             if debug {
                 assert!(
                     matches!(&canvas.0[..],[DrawCmd::Stroke {shape:puri::Shape::Rect(drawn),..}] if *drawn==rect)

@@ -2,13 +2,13 @@
 
 use super::HoverPass;
 
-use measured::{Extent, Measured, Output};
+use measured::{Extent, Measured};
 use puri::handler::{Event, EventOutcome, Handler, HasHandler, PointerScrollEvent, ScrollOutcome};
 use puri::{Placement, Point, Vec2};
 
-pub trait Layers: Output {
-    fn clipped(self, placement: Placement) -> Self;
-    fn float(&mut self, above: Self);
+pub trait Layers {
+    fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self));
+    fn float(&mut self, above: impl FnOnce(&mut Self) + 'static);
 }
 
 pub fn floating<O: Layers + 'static>(
@@ -17,12 +17,11 @@ pub fn floating<O: Layers + 'static>(
     place: impl FnOnce(Placement, Extent) -> Option<Placement> + 'static,
 ) -> Measured<O> {
     let extent = content.extent;
-    measured::around(base, move |placement, base| {
-        let mut output = base.place();
+    measured::around_into(base, move |placement, base, output| {
+        base.place_into(output);
         if let Some(placement) = place(placement, extent) {
-            output.float(measured::place(content, placement));
+            output.float(move |output| measured::place_into(content, placement, output));
         }
-        output
     })
 }
 
@@ -33,8 +32,8 @@ pub fn scrolled<World: 'static, H: 'static>(
     offset: Vec2,
     on_scroll: impl Fn(&mut World, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<HoverPass<World, H>> {
-    measured::around(child, move |placement, inner| {
-        let base = HoverPass::new(move |base| {
+    measured::around_into(child, move |placement, inner, output| {
+        output.visit(move |base| {
             if !placement.clipped_out() {
                 base.handler().on_scroll(move |state, event| {
                     if placement
@@ -52,7 +51,9 @@ pub fn scrolled<World: 'static, H: 'static>(
             measured::clipped_placement(placement, placement.rect),
             child_rect,
         );
-        base.over(inner.place_at(child_placement).clipped(placement))
+        output.clipped(placement, |output| {
+            inner.place_at_into(child_placement, output)
+        });
     })
 }
 
@@ -134,14 +135,15 @@ mod tests {
             Rect::new(10.0, 20.0, 50.0, 60.0),
             Rect::new(0.0, 0.0, 30.0, 100.0),
         );
-        let frame = measured::place(
+        let mut frame = crate::display::widget::frame::place(
             scrolled(child, Vec2::new(5.0, 15.0), |log, event| {
                 log.push("scroll");
                 ScrollOutcome::consume(event)
             }),
             viewport,
+            &Default::default(),
         );
-        let frame = frame.run(&Default::default());
+        let renders = frame.resolve(Default::default());
         assert_eq!(
             *seen.borrow(),
             Some(Placement::new(
@@ -174,9 +176,7 @@ mod tests {
         assert!(handler.dispatch_key(&mut log, &Default::default()));
         assert_eq!(log, ["down", "scroll", "up", "key"]);
         let mut drawing = DrawList::new();
-        for render in frame.renders {
-            render(&mut drawing, Default::default());
-        }
+        puri::frame::render(renders, &mut drawing);
         assert!(
             matches!(&drawing.0[..], [DrawCmd::Clip { shape: Shape::Rect(rect), children, .. }]
             if *rect == viewport.rect && matches!(&children[..], [DrawCmd::Fill { .. }]))
@@ -198,8 +198,11 @@ mod tests {
                 show.then_some(overlay)
             });
             assert_eq!(widget.extent, Extent::default());
-            let output = measured::place(widget, Placement::root(Rect::ZERO));
-            output.run(&Default::default());
+            crate::display::widget::frame::place(
+                widget,
+                Placement::root(Rect::ZERO),
+                &Default::default(),
+            );
         }
         assert_eq!(
             &*seen.borrow(),

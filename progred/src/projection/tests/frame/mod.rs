@@ -32,16 +32,21 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let child = crate::display::widget::leaf(extent, contribution("child"));
     let before = contribution("before");
     let after = contribution("after");
-    let decorated = crate::display::widget::after_hover(
-        crate::display::widget::before_hover(child, move |placement, output| {
+    let decorated = crate::display::widget::after_place(
+        crate::display::widget::before_place(child, move |placement, output| {
             before(output, placement)
         }),
         move |placement, output| after(output, placement),
     );
     assert_eq!(decorated.extent, extent);
-    let output = measured::place_top_left(decorated, Point::ZERO).run(&Default::default());
+    let mut output = {
+        let layout = decorated;
+        let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
+        crate::display::widget::frame::place(layout, placement, &Default::default())
+    };
+    let renders = output.resolve(Default::default());
     assert!(log.borrow().is_empty());
-    assert!(!output.handler.as_ref().unwrap().dispatch_key(
+    assert!(!output.resolve_for_dispatch().dispatch_key(
         &mut crate::test_editor(Document {
             root: None,
             cells: Cells::new()
@@ -50,7 +55,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     ));
     assert_eq!(&*log.borrow(), &["after", "child", "before"]);
     log.borrow_mut().clear();
-    settle(output);
+    puri::frame::render(renders, &mut DrawList::new());
     assert_eq!(&*log.borrow(), &["before", "child", "after"]);
 }
 
@@ -73,12 +78,18 @@ struct Bench {
 }
 
 /// Paint and unpack the output of the completed hover pass.
-fn settle(placed: crate::placed::Ready<World>) -> Bench {
+fn settle(placed: crate::placed::HoverOutput<World>) -> Bench {
     settle_with_sources(placed, None)
 }
 
-fn settle_with_sources(placed: crate::placed::Ready<World>, sources: Option<&Sources>) -> Bench {
-    let hit = placed.claim;
+fn settle_with_sources(
+    mut placed: crate::placed::HoverOutput<World>,
+    sources: Option<&Sources>,
+) -> Bench {
+    let binding = std::time::Instant::now();
+    #[cfg(feature = "layout-profile")]
+    let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
+    let hit = placed.claim.take();
     let hit = hit.map(|(_, claim)| claim);
     let hovered = match &hit {
         Some(Claim::Direct(hover)) => Some(hover.clone()),
@@ -88,25 +99,26 @@ fn settle_with_sources(placed: crate::placed::Ready<World>, sources: Option<&Sou
         Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
         _ => None,
     });
-    let crate::placed::Ready {
-        descends, renders, ..
-    } = placed;
+    let renders = placed.resolve(crate::placed::ResolvedHover {
+        hovered,
+        hovered_secondary,
+        hovered_trace: None,
+    });
+    let hover = binding.elapsed();
+    #[cfg(feature = "layout-profile")]
+    drop(profile);
+    let crate::placed::HoverOutput { descends, .. } = placed;
     let mut bench = Bench {
         list: DrawList::new(),
         descends,
         hit,
-        times: FrameTimes::default(),
+        times: FrameTimes {
+            hover,
+            ..Default::default()
+        },
         frame_elapsed: std::time::Duration::ZERO,
     };
-    let ink = crate::placed::Ink {
-        hovered: hovered.as_ref(),
-        hovered_secondary: hovered_secondary.as_ref(),
-        hovered_trace: None,
-        debug_geometry: false,
-    };
-    for render in renders {
-        render(&mut bench, ink);
-    }
+    puri::frame::render(renders, &mut bench);
     bench
 }
 
@@ -303,27 +315,21 @@ impl BenchContext {
         let rect = node.extent.rect_at(origin);
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Placement);
-        let placed = measured::place(
+        let placed = crate::display::widget::frame::place(
             node,
             match viewport {
                 Some(clip_rect) => Placement::new(rect, clip_rect),
                 None => Placement::root(rect),
             },
+            &crate::display::widget::HoverInput {
+                pointer,
+                reach: crate::frame::HOVER_REACH,
+                ..Default::default()
+            },
         );
         #[cfg(feature = "layout-profile")]
         drop(profile);
         let placement = phase.elapsed();
-        let phase = std::time::Instant::now();
-        #[cfg(feature = "layout-profile")]
-        let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
-        let placed = placed.run(&crate::display::widget::HoverInput {
-            pointer,
-            reach: crate::frame::HOVER_REACH,
-            ..Default::default()
-        });
-        #[cfg(feature = "layout-profile")]
-        drop(profile);
-        let hover = phase.elapsed();
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Paint);
@@ -334,8 +340,8 @@ impl BenchContext {
             prepare,
             choices,
             placement,
-            hover,
-            paint: phase.elapsed(),
+            hover: settled.times.hover,
+            paint: phase.elapsed().saturating_sub(settled.times.hover),
         };
         settled.frame_elapsed = start.elapsed();
         (settled, extent)

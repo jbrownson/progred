@@ -318,7 +318,7 @@ fn drawing_frame(
     doc: &Document,
     libraries: &Libraries,
     shape_function: CellId,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let cx = Cx {
@@ -384,15 +384,16 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
     for expected in 1..=2 {
         let selected = Rc::new(std::cell::RefCell::new(Vec::new()));
         let picked = selected.clone();
-        let placed = measured::place(
+        assert_eq!(calls.get(), expected - 1);
+        let mut placed = crate::display::widget::frame::place(
             drawing_frame(&doc, &libraries, shape_function),
             Placement::root(bounds),
+            &placed::HoverInput {
+                pointer: Some(Point::new(5.0, 5.0)),
+                ..Default::default()
+            },
         );
-        assert_eq!(calls.get(), expected - 1);
-        let placed = placed.run(&placed::HoverInput {
-            pointer: Some(Point::new(5.0, 5.0)),
-            ..Default::default()
-        });
+        placed.resolve(Default::default());
         for _ in 0..2 {
             assert!(matches!(
                 placed.claim.clone().map(|(_, claim)| claim),
@@ -431,7 +432,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             },
             state,
         };
-        assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
+        assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut crate::test_editor(doc.clone()),
             &event,
             &mut pointer,
@@ -440,11 +441,11 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         settle(placed);
         assert_eq!(calls.get(), expected);
     }
-    let clipped = measured::place(
+    let clipped = crate::display::widget::frame::place(
         drawing_frame(&doc, &libraries, shape_function),
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
-    )
-    .run(&Default::default());
+        &Default::default(),
+    );
     settle(clipped);
     assert_eq!(calls.get(), 2);
 }
@@ -491,11 +492,11 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         (after, vec![20.0]),
         (Libraries::default(), vec![]),
     ] {
-        let placed = measured::place(
+        let placed = crate::display::widget::frame::place(
             drawing_frame(&doc, &libraries, shape_function),
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
-        )
-        .run(&Default::default());
+            &Default::default(),
+        );
         let drawing = settle(placed);
         let widths: Vec<_> = drawing
             .list

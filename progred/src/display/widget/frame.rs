@@ -1,4 +1,4 @@
-//! Placement produces a hover computation; running it produces ink and dispatch.
+//! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
     container::{self, Layers},
     navigation::{Landmark, Select},
@@ -6,21 +6,21 @@ use super::{
     source::{Secondary, SourceTrace},
     view::Root,
 };
-use measured::Output;
+use measured::{Measured, Output};
 use puri::draw::{Canvas, CanvasSink};
+use puri::frame::AfterHover;
+pub use puri::frame::Render;
 use puri::handler::{Event, Handler, HasHandler};
 use puri::hover::Claim;
-use puri::{Affine, Placement, Point, Rect, Vec2};
-pub type Render<Hover> = Box<dyn for<'ink> FnOnce(&mut dyn CanvasSink, Ink<'ink, Hover>)>;
 pub use puri::hover::Probe;
+use puri::{Affine, Placement, Point, Rect, Vec2};
+use std::rc::Rc;
 
 pub struct HoverInput<'a, H> {
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
     pub reach: f64,
     pub debug_geometry: bool,
-    /// An upper direct claim or occluder has already won this pass.
-    pub occluded: bool,
 }
 
 impl<H> Copy for HoverInput<'_, H> {}
@@ -36,7 +36,6 @@ impl<H> Default for HoverInput<'_, H> {
             prior: None,
             reach: 0.0,
             debug_geometry: false,
-            occluded: false,
         }
     }
 }
@@ -45,25 +44,37 @@ impl<H> Default for HoverInput<'_, H> {
 /// The input is not retained by the resulting paint or event continuations.
 pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
-    pub(super) output: &'a mut Fragment<C, H>,
+    pub(super) output: &'a mut HoverOutput<C, H>,
+    root: Option<Root>,
 }
 
-impl<'a, C: 'static, H: 'static> HoverContext<'a, C, H> {
-    pub fn new(input: HoverInput<'a, H>, output: &'a mut Fragment<C, H>) -> Self {
-        Self { input, output }
+impl<'a, C, H> HoverContext<'a, C, H> {
+    pub fn new(input: HoverInput<'a, H>, output: &'a mut HoverOutput<C, H>) -> Self {
+        Self {
+            input,
+            output,
+            root: None,
+        }
     }
 }
 
 impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
-    pub fn render(&mut self, render: impl FnOnce(&mut dyn CanvasSink, Option<&H>) + 'static) {
-        self.output.render(render);
+    pub fn after_hover(
+        &mut self,
+        next: impl FnOnce(Rc<ResolvedHover<H>>, &mut Effects<C, H>) + 'static,
+    ) {
+        self.output.after_hover.push(next);
     }
 
-    pub fn ink(
+    pub fn render(
         &mut self,
-        render: impl for<'ink> FnOnce(&mut dyn CanvasSink, Ink<'ink, H>) + 'static,
+        render: impl FnOnce(&mut dyn CanvasSink, &ResolvedHover<H>) + 'static,
     ) {
-        self.output.renders.push(Box::new(render));
+        self.after_hover(move |hover, output| {
+            output
+                .renders
+                .push(Box::new(move |canvas| render(canvas, &hover)));
+        });
     }
 
     pub fn with_clip(
@@ -72,18 +83,23 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         transform: Affine,
         content: impl FnOnce(&mut Self),
     ) {
-        let start = self.output.renders.len();
+        let start = self.output.after_hover.len();
         content(self);
-        let renders = self.output.renders.split_off(start);
-        self.ink(move |canvas, ink| {
-            canvas.clip(shape, transform, |canvas| {
-                Fragment::<C, H>::paint(renders, canvas, ink)
-            })
+        let after = self.output.after_hover.split_off(start);
+        self.after_hover(move |hover, output| {
+            let start = output.renders.len();
+            after.bind(hover, output);
+            let renders = output.renders.split_off(start);
+            output.renders.push(Box::new(move |canvas| {
+                canvas.clip(shape, transform, |canvas| {
+                    puri::frame::render(renders, canvas)
+                })
+            }));
         });
     }
 
     pub fn on_arrival(&mut self, select: Option<Select<C>>) {
-        self.output.landmark_select = select;
+        self.output.landmark_select = select.or(self.output.landmark_select.take());
     }
 
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
@@ -100,9 +116,8 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
             self.output.claim.take(),
             self.input
                 .pointer
-                .filter(|_| !self.input.occluded)
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach))
-                .map(|claim| (None, claim)),
+                .map(|claim| (self.root.clone(), claim)),
         );
         if self.input.debug_geometry {
             if let Some(region) = probe.retention_region(self.input.reach) {
@@ -118,119 +133,119 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
     }
 }
 
-type HoverStep<C, H> = Box<dyn FnOnce(&HoverInput<'_, H>, &mut Fragment<C, H>)>;
-
-/// A composition of one-shot functions, opaque to measurement and placement.
-/// Flat composition avoids a call-stack frame per sibling.
+/// A running placement/hover pass. Ordinary leaves execute immediately;
+/// only floating placements are deferred.
 pub struct HoverPass<C, H> {
-    steps: Vec<HoverStep<C, H>>,
-    floaters: Vec<HoverPass<C, H>>,
+    pointer: Option<Point>,
+    prior: Option<H>,
+    reach: f64,
+    debug_geometry: bool,
+    root: Option<Root>,
+    output: HoverOutput<C, H>,
+    floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {
-    pub fn new(step: impl FnOnce(&mut HoverContext<'_, C, H>) + 'static) -> Self {
-        let mut pass = Self::empty();
-        pass.push(step);
-        pass
-    }
-
-    pub(crate) fn push(&mut self, step: impl FnOnce(&mut HoverContext<'_, C, H>) + 'static) {
-        self.steps.push(Box::new(move |input, output| {
-            let start = output.lengths();
-            let above = output.take_controls();
-            step(&mut HoverContext::new(*input, output));
-            output.reverse_since(start);
-            output.controls_below(above);
-        }));
-    }
-
-    pub fn run(self, input: &HoverInput<'_, H>) -> Fragment<C, H> {
-        let mut output = Fragment::empty();
-        let mut input = *input;
-        for step in self.raise_floaters().steps.into_iter().rev() {
-            step(&input, &mut output);
-            if matches!(output.claim, Some((_, Claim::Direct(_) | Claim::Occludes))) {
-                input.occluded = true;
-            }
-        }
-        output.reverse_since([0; 4]);
-        output
-    }
-
-    pub fn map(self, map: impl FnOnce(Fragment<C, H>) -> Fragment<C, H> + 'static) -> Self {
-        let Self { steps, floaters } = self;
+    pub fn new(input: &HoverInput<'_, H>) -> Self
+    where
+        H: Clone,
+    {
         Self {
-            steps: vec![Box::new(move |input, output| {
-                let mut below = map(Self {
-                    steps,
-                    floaters: Vec::new(),
-                }
-                .run(input));
-                below.reverse_since([0; 4]);
-                let above = output.take_controls();
-                *output = std::mem::take(output).over(below);
-                output.controls_below(above);
-            })],
-            floaters,
-        }
-    }
-
-    fn raise_floaters(mut self) -> Self {
-        for floater in std::mem::take(&mut self.floaters) {
-            self = self.over(floater.raise_floaters());
-        }
-        self
-    }
-
-    pub fn in_view(self, root: Root) -> Self {
-        let Self { steps, floaters } = self;
-        let children = floaters
-            .into_iter()
-            .map(|floater| floater.in_view(root.clone()))
-            .collect();
-        let mut scoped = Self {
-            steps,
+            pointer: input.pointer,
+            prior: input.prior.cloned(),
+            reach: input.reach,
+            debug_geometry: input.debug_geometry,
+            root: None,
+            output: HoverOutput::empty(),
             floaters: Vec::new(),
         }
-        .map(move |mut output| {
+    }
+
+    pub(crate) fn visit(&mut self, step: impl FnOnce(&mut HoverContext<'_, C, H>)) {
+        let mut context = HoverContext::new(
+            HoverInput {
+                pointer: self.pointer,
+                prior: self.prior.as_ref(),
+                reach: self.reach,
+                debug_geometry: self.debug_geometry,
+            },
+            &mut self.output,
+        );
+        context.root = self.root.clone();
+        step(&mut context);
+        if let Some(handler) = self.output.handler.take() {
+            self.output.after_hover.push(move |_, output| {
+                *output.handler() = std::mem::take(output.handler()).over(handler);
+            });
+        }
+    }
+
+    pub fn scope(
+        &mut self,
+        content: impl FnOnce(&mut Self),
+        map: impl FnOnce(HoverOutput<C, H>) -> HoverOutput<C, H>,
+    ) {
+        let base = std::mem::take(&mut self.output);
+        content(self);
+        let child = std::mem::replace(&mut self.output, base);
+        self.output = std::mem::take(&mut self.output).over(map(child));
+    }
+
+    pub fn in_view(&mut self, root: Root, content: impl FnOnce(&mut Self)) {
+        let parent = self.root.replace(root.clone());
+        self.scope(content, |mut output| {
             output.root_navigation(&root);
             output
         });
-        scoped.floaters = children;
-        scoped
+        self.root = parent;
     }
-}
 
-impl<C: 'static, H: 'static> Output for HoverPass<C, H> {
-    fn empty() -> Self {
-        Self {
-            steps: Vec::new(),
-            floaters: Vec::new(),
+    fn run_floaters(&mut self) {
+        for floater in std::mem::take(&mut self.floaters) {
+            floater(self);
+            self.run_floaters();
         }
     }
-    fn over(mut self, above: Self) -> Self {
-        append(&mut self.steps, above.steps);
-        append(&mut self.floaters, above.floaters);
-        self
+
+    pub fn finish(mut self) -> HoverOutput<C, H> {
+        self.run_floaters();
+        self.output
     }
 }
 impl<C: 'static, H: 'static> Layers for HoverPass<C, H> {
-    fn clipped(self, placement: Placement) -> Self {
-        self.map(move |output| output.clipped(placement))
+    fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self)) {
+        self.scope(content, |output| output.clipped(placement));
     }
-    fn float(&mut self, above: Self) {
-        self.floaters.push(above);
+    fn float(&mut self, above: impl FnOnce(&mut Self) + 'static) {
+        let root = self.root.clone();
+        self.floaters.push(Box::new(move |pass| match root {
+            Some(root) => pass.in_view(root, above),
+            None => above(pass),
+        }));
     }
+}
+
+pub fn place<C: 'static, H: Clone + 'static>(
+    layout: Measured<HoverPass<C, H>>,
+    placement: Placement,
+    input: &HoverInput<'_, H>,
+) -> HoverOutput<C, H> {
+    let mut pass = HoverPass::new(input);
+    measured::place_into(layout, placement, &mut pass);
+    pass.finish()
 }
 
 fn claim_over<H>(
     base: Option<(Option<Root>, Claim<H>)>,
     above: Option<(Option<Root>, Claim<H>)>,
 ) -> Option<(Option<Root>, Claim<H>)> {
-    match (&base, &above) {
-        (_, Some((_, Claim::Direct(_) | Claim::Occludes))) => above,
-        (Some(_), _) => base,
-        _ => above,
+    if above
+        .as_ref()
+        .is_some_and(|(_, claim)| claim.supersedes(base.as_ref().map(|(_, claim)| claim)))
+    {
+        above
+    } else {
+        base
     }
 }
 
@@ -287,21 +302,39 @@ pub struct ViewRegion {
     pub maximum: Vec2,
 }
 
-/// What ink may condition on: the frame's RESOLVED hover, decided
-/// from this same pass's geometry before any render runs.
-pub struct Ink<'a, Hover> {
-    pub hovered: Option<&'a Hover>,
+/// The winner and its source attribution, freshly derived for this frame.
+pub struct ResolvedHover<Hover> {
+    pub hovered: Option<Hover>,
     /// The cell-relative location the hover refers to; its other
     /// projections carry the faint secondary mark.
-    pub hovered_secondary: Option<&'a Secondary>,
+    pub hovered_secondary: Option<Secondary>,
     /// The actual structural source under the pointer, independent of
     /// value-equivalence highlighting.
-    pub hovered_trace: Option<&'a SourceTrace>,
-    /// Draw each leaf's honest placement rectangle after its own ink.
-    pub debug_geometry: bool,
+    pub hovered_trace: Option<SourceTrace>,
 }
 
-pub struct Fragment<C, Hover> {
+pub struct Effects<C, H> {
+    pub renders: Vec<Render>,
+    pub handler: Option<Handler<C, DispatchContext<C, H>>>,
+}
+
+impl<C: 'static, H: 'static> Default for Effects<C, H> {
+    fn default() -> Self {
+        Self {
+            renders: Vec::new(),
+            handler: None,
+        }
+    }
+}
+
+impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
+    type Input = DispatchContext<C, H>;
+    fn handler(&mut self) -> &mut Handler<C, Self::Input> {
+        self.handler.get_or_insert_with(Handler::new)
+    }
+}
+
+pub struct HoverOutput<C, Hover> {
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub debug_regions: Vec<(Hover, Rect)>,
     /// `None` until something registers: combining empty frames must
@@ -314,7 +347,7 @@ pub struct Fragment<C, Hover> {
     /// while assembling this frame, so it never leaks into an ancestor.
     pub landmark_select: Option<Select<C>>,
     pub completion: Option<Offers<C>>,
-    pub renders: Vec<Render<Hover>>,
+    pub after_hover: AfterHover<ResolvedHover<Hover>, Effects<C, Hover>>,
 }
 
 /// Preserve the destination's ordering while avoiding an allocation
@@ -331,7 +364,7 @@ fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
     }
 }
 
-impl<C: 'static, Hover: 'static> Output for Fragment<C, Hover> {
+impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     fn empty() -> Self {
         Self {
             claim: None,
@@ -341,7 +374,7 @@ impl<C: 'static, Hover: 'static> Output for Fragment<C, Hover> {
             view_regions: Vec::new(),
             landmark_select: None,
             completion: None,
-            renders: Vec::new(),
+            after_hover: AfterHover::default(),
         }
     }
 
@@ -357,51 +390,12 @@ impl<C: 'static, Hover: 'static> Output for Fragment<C, Hover> {
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.completion = above.completion.or(self.completion);
-        append(&mut self.renders, above.renders);
+        self.after_hover.append(above.after_hover);
         self
     }
 }
 
-impl<C: 'static, Hover: 'static> Fragment<C, Hover> {
-    // Hover runs front-to-back. Reverse each widget's appended segment, then
-    // the whole stream once, to retain back-to-front paint without per-leaf buffers.
-    fn lengths(&self) -> [usize; 4] {
-        [
-            self.renders.len(),
-            self.descends.len(),
-            self.view_regions.len(),
-            self.debug_regions.len(),
-        ]
-    }
-
-    fn reverse_since(&mut self, [renders, descends, views, debug]: [usize; 4]) {
-        self.renders[renders..].reverse();
-        self.descends[descends..].reverse();
-        self.view_regions[views..].reverse();
-        self.debug_regions[debug..].reverse();
-    }
-
-    fn take_controls(&mut self) -> Self {
-        Self {
-            claim: self.claim.take(),
-            handler: self.handler.take(),
-            landmark_select: self.landmark_select.take(),
-            completion: self.completion.take(),
-            ..Self::empty()
-        }
-    }
-
-    fn controls_below(&mut self, above: Self) {
-        self.claim = claim_over(self.claim.take(), above.claim);
-        self.handler = match (self.handler.take(), above.handler) {
-            (base, None) => base,
-            (None, above) => above,
-            (Some(base), Some(above)) => Some(base.over(above)),
-        };
-        self.landmark_select = above.landmark_select.or(self.landmark_select.take());
-        self.completion = above.completion.or(self.completion.take());
-    }
-
+impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
     pub fn root_navigation(&mut self, root: &Root) {
         if let Some((owner, _)) = &mut self.claim {
             *owner = Some(root.clone());
@@ -409,140 +403,153 @@ impl<C: 'static, Hover: 'static> Fragment<C, Hover> {
         for descend in &mut self.descends {
             descend.root = Some(root.clone());
         }
-        if let Some(handler) = &mut self.handler {
-            let root = root.clone();
-            let inner = std::mem::take(handler);
-            *handler = Handler::from_function(
-                move |ctx, event, pointer: &mut DispatchContext<C, Hover>| {
-                    if matches!(event, Event::PointerDown(_)) {
-                        let outside = pointer.outside_view;
-                        pointer.outside_view = pointer.root.as_ref() != Some(&root);
-                        let outcome = inner.dispatch(ctx, event, pointer);
-                        pointer.outside_view = outside;
-                        outcome
-                    } else {
-                        inner.dispatch(ctx, event, pointer)
-                    }
-                },
-            );
-        }
+        let after = std::mem::take(&mut self.after_hover);
+        let root = root.clone();
+        self.after_hover.push(move |hover, output| {
+            let mut child = Effects::default();
+            after.bind(hover, &mut child);
+            output.renders.append(&mut child.renders);
+            if let Some(handler) = &mut child.handler {
+                let root = root.clone();
+                let inner = std::mem::take(handler);
+                *handler = Handler::from_function(
+                    move |ctx, event, pointer: &mut DispatchContext<C, Hover>| {
+                        if matches!(event, Event::PointerDown(_)) {
+                            let outside = pointer.outside_view;
+                            pointer.outside_view = pointer.root.as_ref() != Some(&root);
+                            let outcome = inner.dispatch(ctx, event, pointer);
+                            pointer.outside_view = outside;
+                            outcome
+                        } else {
+                            inner.dispatch(ctx, event, pointer)
+                        }
+                    },
+                );
+            }
+            if let Some(handler) = child.handler {
+                *output.handler() = std::mem::take(output.handler()).over(handler);
+            }
+        });
     }
 
     pub fn handler_mut(&mut self) -> &mut Handler<C, DispatchContext<C, Hover>> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
-    /// Run the deferred ink into a canvas, with the resolved hover.
-    pub fn paint(renders: Vec<Render<Hover>>, canvas: &mut dyn CanvasSink, ink: Ink<'_, Hover>) {
-        for render in renders {
-            render(canvas, ink);
-        }
+    pub fn resolve(&mut self, hover: ResolvedHover<Hover>) -> Vec<Render> {
+        let mut effects = Effects {
+            renders: Vec::new(),
+            handler: self.handler.take(),
+        };
+        std::mem::take(&mut self.after_hover).bind(Rc::new(hover), &mut effects);
+        self.handler = effects.handler;
+        effects.renders
     }
 }
 
-impl<H> Copy for Ink<'_, H> {}
-impl<H> Clone for Ink<'_, H> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<H> Default for Ink<'_, H> {
+impl<H> Default for ResolvedHover<H> {
     fn default() -> Self {
         Self {
             hovered: None,
             hovered_secondary: None,
             hovered_trace: None,
-            debug_geometry: false,
         }
     }
 }
-impl<C: 'static, H: 'static> Default for Fragment<C, H> {
+impl<C: 'static, H: 'static> Default for HoverOutput<C, H> {
     fn default() -> Self {
         Self::empty()
     }
 }
-impl<C: 'static, H: 'static> HasHandler<C> for Fragment<C, H> {
+impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
     type Input = DispatchContext<C, H>;
     fn handler(&mut self) -> &mut Handler<C, Self::Input> {
         self.handler_mut()
     }
 }
-impl<C: 'static, H: 'static> Fragment<C, H> {
+impl<C: 'static, H: 'static> HoverOutput<C, H> {
     fn clipped(mut self, placement: Placement) -> Self {
-        let renders = std::mem::take(&mut self.renders);
-        self.renders.push(Box::new(move |canvas, ink| {
-            canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
-                for render in renders {
-                    render(canvas, ink);
-                }
-            })
-        }));
+        let after = std::mem::take(&mut self.after_hover);
+        self.after_hover.push(move |hover, output| {
+            let mut child = Effects::default();
+            after.bind(hover, &mut child);
+            output.renders.push(Box::new(move |canvas| {
+                canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
+                    puri::frame::render(child.renders, canvas)
+                })
+            }));
+            if let Some(handler) = child.handler {
+                *output.handler() = std::mem::take(output.handler())
+                    .over(container::gate_starts(handler, placement));
+            }
+        });
         self.handler = self
             .handler
             .map(|handler| container::gate_starts(handler, placement));
         self
     }
 }
-impl<C, H: 'static> Fragment<C, H> {
-    pub fn render(&mut self, render: impl FnOnce(&mut dyn CanvasSink, Option<&H>) + 'static) {
-        self.renders
-            .push(Box::new(move |canvas, ink| render(canvas, ink.hovered)));
-    }
-}
 
 #[cfg(test)]
 mod tests {
+    use super::super::leaf;
     use super::*;
     use std::{cell::RefCell, rc::Rc};
 
     #[test]
-    fn hover_runs_topmost_first_but_paint_stays_back_to_front() {
+    fn hover_runs_in_paint_order_and_handlers_run_front_to_back() {
         let calls = Rc::new(RefCell::new(Vec::new()));
-        let pointer = Point::new(5.0, 5.0);
         let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
         let widget = |id| {
             let calls = calls.clone();
-            HoverPass::new(move |output: &mut HoverContext<'_, Vec<u8>, u8>| {
-                calls.borrow_mut().push(id);
-                assert_eq!(output.input.pointer, Some(pointer));
-                assert_eq!(output.input.occluded, id == 1);
-                let query_log = calls.clone();
-                output.claim(Probe::dynamic(placement, move |_| {
-                    query_log.borrow_mut().push(id + 10);
-                    Some(id)
-                }));
-                let paint_log = calls.clone();
-                output.render(move |_, hovered| {
-                    assert_eq!(hovered, Some(&2));
-                    paint_log.borrow_mut().push(id + 20);
-                });
-                let paint_log = calls.clone();
-                output.render(move |_, _| paint_log.borrow_mut().push(id + 30));
-                output.handler().on_key(move |log, _| {
-                    log.push(id);
-                    false
-                });
-            })
+            leaf(
+                measured::Extent {
+                    width: 10.0,
+                    ascent: 10.0,
+                    descent: 0.0,
+                },
+                move |output: &mut HoverContext<'_, Vec<u8>, u8>, placement| {
+                    calls.borrow_mut().push(id);
+                    let log = calls.clone();
+                    output.claim(Probe::dynamic(placement, move |_| {
+                        log.borrow_mut().push(id + 10);
+                        Some(id)
+                    }));
+                    output.after_hover(move |hover, effects| {
+                        assert_eq!(hover.hovered, Some(2));
+                        calls.borrow_mut().push(id + 20);
+                        effects
+                            .renders
+                            .push(Box::new(move |_| calls.borrow_mut().push(id + 30)));
+                        effects.handler().on_key(move |log, _| {
+                            log.push(id);
+                            false
+                        });
+                    });
+                },
+            )
         };
-        let pass = widget(1).over(widget(2));
+        let layout = measured::layers(vec![widget(1), widget(2)]);
         assert!(calls.borrow().is_empty());
-        let ready = pass.run(&HoverInput {
-            pointer: Some(pointer),
-            ..Default::default()
-        });
-        assert_eq!(&*calls.borrow(), &[2, 12, 1]);
-        assert_eq!(ready.claim, Some((None, Claim::Direct(2))));
-        Fragment::<Vec<u8>, u8>::paint(
-            ready.renders,
-            &mut puri::DrawList::new(),
-            Ink {
-                hovered: Some(&2),
+        let mut output = place(
+            layout,
+            placement,
+            &HoverInput {
+                pointer: Some(placement.rect.center()),
                 ..Default::default()
             },
         );
-        assert_eq!(&*calls.borrow(), &[2, 12, 1, 21, 31, 22, 32]);
+        assert_eq!(&*calls.borrow(), &[1, 11, 2, 12]);
+        assert_eq!(output.claim, Some((None, Claim::Direct(2))));
+        let renders = output.resolve(ResolvedHover {
+            hovered: Some(2),
+            ..Default::default()
+        });
+        assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22]);
+        puri::frame::render(renders, &mut puri::DrawList::new());
+        assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22, 31, 32]);
         let mut log = Vec::new();
-        ready
+        output
             .handler
             .unwrap()
             .dispatch_key(&mut log, &Default::default());
@@ -551,15 +558,18 @@ mod tests {
 
     #[test]
     fn a_frame_can_discard_paint_and_still_dispatch() {
-        let pass = HoverPass::<usize, ()>::new(|output| {
+        let mut pass = HoverPass::<usize, ()>::new(&Default::default());
+        pass.visit(|output| {
             output.render(|_, _| panic!("paint is optional"));
-            output.handler().on_key(|count, _| {
-                *count += 1;
-                true
+            output.after_hover(|_, effects| {
+                effects.handler().on_key(|count, _| {
+                    *count += 1;
+                    true
+                });
             });
         });
-        let frame = pass.run(&Default::default());
-        drop(frame.renders);
+        let mut frame = pass.finish();
+        drop(frame.resolve(Default::default()));
         let mut count = 0;
         assert!(
             frame
@@ -571,21 +581,57 @@ mod tests {
     }
 
     #[test]
+    fn nested_floaters_follow_their_parent_before_later_siblings() {
+        fn mark(pass: &mut HoverPass<Vec<u8>, u8>, id: u8) {
+            pass.visit(move |output| {
+                output.claim(Probe::exact(
+                    Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                    id,
+                ));
+                output.handler().on_key(move |log, _| {
+                    log.push(id);
+                    false
+                });
+            });
+        }
+        let mut pass = HoverPass::new(&HoverInput {
+            pointer: Some(Point::new(5.0, 5.0)),
+            ..Default::default()
+        });
+        pass.float(|pass| {
+            mark(pass, 1);
+            pass.float(|pass| mark(pass, 2));
+        });
+        pass.float(|pass| mark(pass, 3));
+        mark(&mut pass, 0);
+        let mut output = pass.finish();
+        assert_eq!(output.claim, Some((None, Claim::Direct(3))));
+        output.resolve(ResolvedHover {
+            hovered: Some(3),
+            ..Default::default()
+        });
+        let mut log = Vec::new();
+        output
+            .handler
+            .unwrap()
+            .dispatch_key(&mut log, &Default::default());
+        assert_eq!(log, [3, 2, 1, 0]);
+    }
+
+    #[test]
     fn debug_retention_geometry_does_not_change_the_hover_answer() {
         let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
         for debug_geometry in [false, true] {
-            let pass = HoverPass::<(), u8>::new(move |output| {
-                output.claim(Probe::retaining(placement, 1));
-            })
-            .over(HoverPass::new(move |output| {
-                output.claim(Probe::retaining(placement, 2));
-            }));
-            let frame = pass.run(&HoverInput {
-                pointer: Some(Point::new(5.0, 5.0)),
+            let mut pass = HoverPass::<(), u8>::new(&HoverInput {
+                pointer: Some(placement.rect.center()),
                 debug_geometry,
                 reach: 4.0,
                 ..Default::default()
             });
+            for id in [1, 2] {
+                pass.visit(|output| output.claim(Probe::retaining(placement, id)));
+            }
+            let frame = pass.finish();
             assert_eq!(frame.claim, Some((None, Claim::Direct(2))));
             assert_eq!(
                 frame.debug_regions.len(),

@@ -10,14 +10,14 @@ pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri
         widget(context)
     });
     let extent = measured.extent;
-    let fragment = widget::place(
+    let mut fragment = crate::display::widget::frame::place(
         measured,
         puri::Placement::root(extent.rect_at(puri::Point::ZERO)),
-    )
-    .run(&Default::default());
+        &Default::default(),
+    );
     let mut canvas = puri::DrawList::new();
-    for render in fragment.renders {
-        render(&mut canvas, Default::default());
+    for render in fragment.resolve(Default::default()) {
+        render(&mut canvas);
     }
     (extent, canvas)
 }
@@ -41,7 +41,7 @@ pub fn point_update(
         &crate::test_root(),
         vec![],
     ));
-    let mut output = widget::Fragment::default();
+    let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
@@ -81,7 +81,7 @@ pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::C
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::Fragment::default();
+    let mut output = widget::HoverOutput::default();
     let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
     place(
         &mut widget::HoverContext::new(
@@ -106,10 +106,11 @@ pub fn assert_delimiter(
         widget(context)
     });
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let fragment = widget::place(measured, placement).run(&Default::default());
+    let mut fragment =
+        crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut canvas = DrawList::new();
-    for render in fragment.renders {
-        render(&mut canvas, Default::default());
+    for render in fragment.resolve(Default::default()) {
+        render(&mut canvas);
     }
     let mut expected = DrawList::new();
     puri::delim::draw_stretched(
@@ -163,7 +164,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::Fragment::default();
+    let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -200,7 +201,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::Fragment::default();
+    let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),

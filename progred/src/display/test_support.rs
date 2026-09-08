@@ -1,7 +1,27 @@
 //! A recording interpreter for projection calls. Production programs retain
 //! no parallel request encoding; tests obtain one by running the same function.
 
-use measured::Output;
+use puri::handler::Handler;
+
+pub trait ResolveForDispatch<C, H> {
+    fn resolve_for_dispatch(&mut self) -> &Handler<C, widget::frame::DispatchContext<C, H>>;
+}
+
+impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverOutput<C, H> {
+    fn resolve_for_dispatch(&mut self) -> &Handler<C, widget::frame::DispatchContext<C, H>> {
+        let hovered = self.claim.as_ref().and_then(|(_, claim)| match claim {
+            puri::hover::Claim::Direct(target) | puri::hover::Claim::Extended(target) => {
+                Some(target.clone())
+            }
+            puri::hover::Claim::Occludes => None,
+        });
+        drop(self.resolve(widget::frame::ResolvedHover {
+            hovered,
+            ..Default::default()
+        }));
+        self.handler.as_ref().expect("resolved frame handler")
+    }
+}
 
 pub use crate::display::recording::{Recordable, Recorded, record};
 use crate::display::{Partial, widget};
@@ -84,9 +104,7 @@ struct Recorder<W, H>(RefCell<ProjectionCall<W, H>>);
 impl<W: 'static, H: 'static> Recorder<W, H> {
     fn record(&self, call: ProjectionCall<W, H>) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.0.replace(call);
-        ChoiceLayout::fixed(measured::leaf(Extent::default(), |_| {
-            widget::HoverPass::empty()
-        }))
+        ChoiceLayout::fixed(measured::leaf_into(Extent::default(), |_, _| {}))
     }
 }
 

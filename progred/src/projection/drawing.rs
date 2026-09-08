@@ -5,7 +5,7 @@ use super::Cx;
 use crate::frame::Hovered;
 use crate::hover::{Hover, SourceTrace};
 use crate::libraries::{absent, layout as layout_data};
-use crate::placed::{Placed, leaf};
+use crate::placed::{HoverPass, leaf};
 use crate::sources::Sources;
 use gid::{CellId, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
@@ -381,7 +381,7 @@ pub(crate) fn program_leaf(
     descent: f64,
     fuel: usize,
     program: Value,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     let scale = cx.styles.scale;
     let extent = Extent {
         width: width * scale,
@@ -432,7 +432,7 @@ pub(crate) fn program_leaf(
                 }
             },
         );
-        builder.ink(move |canvas: &mut dyn puri::draw::CanvasSink, ink| {
+        builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
                 outer,
@@ -441,7 +441,7 @@ pub(crate) fn program_leaf(
                     if let Some(source) = &selected {
                         drawing.highlight(canvas, outer, source, &selected_highlight);
                     }
-                    if let Some(source) = ink.hovered_trace {
+                    if let Some(source) = hover.hovered_trace.as_ref() {
                         drawing.highlight(canvas, outer, source, &highlight);
                     }
                 },

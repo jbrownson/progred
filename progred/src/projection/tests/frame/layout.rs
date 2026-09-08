@@ -58,7 +58,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             cells: Cells::new(),
         };
         let mut world = editing_world(&doc, &core_libraries());
-        let output = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let mut output = editing_frame_with_projection(&mut world, false, Some(&projection));
         let content = placements
             .borrow()
             .iter()
@@ -90,7 +90,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                 .map(|(_, claim)| claim),
             Some(Claim::Direct(Hovered::Tree(Hover::Entry(1))))
         );
-        let handler = output.handler.unwrap();
+        let handler = output.resolve_for_dispatch();
         for (point, expected) in [
             (margin, if card { None } else { Some("2") }),
             (content.center(), Some("1")),
@@ -160,8 +160,8 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
         cells: Cells::new(),
     };
     for (available, expected_width, names) in [
-        (200.0, 100.0, ["wide", "before wide"]),
-        (60.0, 20.0, ["narrow", "before narrow"]),
+        (200.0, 100.0, ["before wide", "wide"]),
+        (60.0, 20.0, ["before narrow", "narrow"]),
     ] {
         log.borrow_mut().clear();
         let (_, extent) = context.place(
@@ -277,7 +277,7 @@ fn stretching_widgets_receive_only_the_chosen_row_span() {
         assert_eq!(placements.len(), 2);
         assert_eq!(placements[0].rect.height(), expected.height());
         assert_eq!(
-            placements[0].rect.x0 - placements[1].rect.x1,
+            placements[1].rect.x0 - placements[0].rect.x1,
             expected.width
         );
     }

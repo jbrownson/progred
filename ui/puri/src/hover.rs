@@ -13,6 +13,17 @@ pub enum Claim<H> {
     Occludes,
 }
 
+/// Compose in painting order: a foreground hit or occluder replaces the
+/// underlying answer; retention never displaces a direct hit.
+impl<H> Claim<H> {
+    pub fn supersedes(&self, below: Option<&Self>) -> bool {
+        match self {
+            Self::Direct(_) | Self::Occludes => true,
+            Self::Extended(_) => below.is_none(),
+        }
+    }
+}
+
 use crate::{Placement, Point, Rect};
 
 enum Target<H> {
@@ -123,6 +134,43 @@ impl<H: Clone + PartialEq> Probe<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn painter_order_claim_composition_is_associative() {
+        let choices = [
+            None,
+            Some(Claim::Direct(1)),
+            Some(Claim::Direct(2)),
+            Some(Claim::Extended(1)),
+            Some(Claim::Extended(2)),
+            Some(Claim::Occludes),
+        ];
+        let over = |base: Option<Claim<u8>>, above: Option<Claim<u8>>| {
+            if above
+                .as_ref()
+                .is_some_and(|claim| claim.supersedes(base.as_ref()))
+            {
+                above
+            } else {
+                base
+            }
+        };
+        for a in choices {
+            for b in choices {
+                for c in choices {
+                    assert_eq!(over(over(a, b), c), over(a, over(b, c)));
+                }
+            }
+        }
+        assert_eq!(
+            over(Some(Claim::Direct(1)), Some(Claim::Extended(2))),
+            Some(Claim::Direct(1))
+        );
+        assert_eq!(
+            over(Some(Claim::Occludes), Some(Claim::Direct(2))),
+            Some(Claim::Direct(2))
+        );
+    }
 
     #[test]
     fn claims_distinguish_establishing_retaining_and_occluding() {

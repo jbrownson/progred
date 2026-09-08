@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn acceptance_does_not_require_a_state_write() {
         for accepts in [false, true] {
-            let mut frame = crate::display::widget::Fragment::default();
+            let mut frame = crate::display::widget::HoverOutput::default();
             let mut output =
                 crate::display::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
             scroll(1.0, move |_, delta| {
@@ -125,7 +125,7 @@ mod tests {
                 ScrollDelta::PixelDelta((2.0, 2.0).into()),
             ),
         ] {
-            let mut frame = crate::display::widget::Fragment::default();
+            let mut frame = crate::display::widget::HoverOutput::default();
             let mut output =
                 crate::display::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
             scroll(2.0, move |_, input| {
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
-        let mut frame = crate::display::widget::Fragment::default();
+        let mut frame = crate::display::widget::HoverOutput::default();
         let mut output = crate::display::widget::HoverContext::<Vec<Vec2>, ()>::new(
             Default::default(),
             &mut frame,

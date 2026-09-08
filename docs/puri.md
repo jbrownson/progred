@@ -34,7 +34,7 @@ The package boundaries are:
 
 | Package | Responsibility |
 | --- | --- |
-| [puri](../ui/puri/src/lib.rs) | Canvas and text vocabulary, placement geometry, typed handlers, pure widget descriptions |
+| [puri](../ui/puri/src/lib.rs) | Canvas and text vocabulary, placement geometry, hover claims, optional after-hover composition, typed handlers, pure widget descriptions |
 | [puri-widgets](../ui/puri-widgets/src/lib.rs) | Reusable composed widgets, including completion rows |
 | [measured](../ui/measured/src/lib.rs) | Box composition and ordered alternatives with opaque placement outputs |
 | [uig](../ui/uig/src/lib.rs) | Shared geometry vocabulary (`Placement`), re-exported by Puri |
@@ -87,8 +87,11 @@ composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 
 Native widgets use `progred::display::widget::Widget`: a measurement function
-whose result places a `HoverPass`. Calling that continuation produces a
-`Fragment` of deferred ink, handlers, the hover claim, and navigation declarations.
+whose result feeds settled placements into a running `HoverPass`. Each leaf
+answers hover immediately and contributes a continuation for after hover settles.
+`finish` returns `HoverOutput`; binding its continuations produces paint and
+handlers independently. Puri supplies generic `AfterHover<H, O>` composition,
+without knowing a layout system or Progred's source identities.
 `LineEdit` uses this path, with no control-specific layout constructor. Native
 handlers receive the current settled hover as an
 explicit dispatch input; the host suppresses that target outside its owning view.
@@ -103,23 +106,21 @@ ordinary [editing helpers](../progred/src/editing.rs). There is no per-widget
 dictionary of editor callbacks. A read-only line installs no editing handlers.
 Puri's text editor remains independent of these document operations.
 Ordinary decorations do not resolve paths or inspect selection.
-A fragment is not a Canvas: it retains
+A hover output is not a Canvas: it retains
 whole-widget render continuations, then executes their draw calls directly after
 hover settles, rather than allocating a deferred closure per drawing operation.
 
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
 The [container combinators](../progred/src/display/widget/container.rs) share scrolling
-and out-of-flow placement over the shared `HoverPass` output. The editor's
-`Placed` aliases that continuation; `Ready` aliases its returned `Fragment`.
-`Layers` supplies clipping and floater attachment. Hover callbacks compose input
-handlers through `HasHandler`. The editor adds view ownership separately;
-running the hover pass raises floaters before querying targets. Clips do not
-capture floating subtrees.
+and out-of-flow placement over the running `HoverPass`. `Layers` supplies
+clipping and floater attachment. Hover callbacks compose input handlers through
+`HasHandler`. The editor adds view ownership separately. Ordinary probes run in
+painting order; floating placements run afterward, outside ancestor clips.
 
 The [navigation combinator](../progred/src/display/widget/navigation.rs) similarly
 contributes a projection-declared path, settled rectangle, and arrival handler.
-It maps a child's hover continuation and consumes the control's arrival override
+It scopes a child's placement output and consumes the control's arrival override
 only at the nearest landmark. The native output can carry complete landmarks;
 view attribution remains the editor's separate wrapper. Unplaced subtrees
 contribute neither geometry nor navigation.

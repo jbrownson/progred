@@ -58,7 +58,7 @@ fn native_annotation_handler_retains_the_projected_site() {
         },
     );
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let placed = measured::place(measured, placement).run(&Default::default());
+    let mut placed = crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut writes = crate::test_editor(doc.clone());
     let event = PointerScrollEvent {
         pointer: PointerInfo {
@@ -72,7 +72,9 @@ fn native_annotation_handler_retains_the_projected_site() {
         },
         delta: ScrollDelta::LineDelta(0.0, 1.0),
     };
-    let outcome = placed.handler.unwrap().dispatch_scroll(&mut writes, &event);
+    let outcome = placed
+        .resolve_for_dispatch()
+        .dispatch_scroll(&mut writes, &event);
     assert!(outcome.handled());
     assert!(outcome.remaining.is_none());
     assert_eq!(
@@ -146,12 +148,12 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         &mut tcx,
     );
     assert!(measured.extent.width > 0.0);
-    let placed = measured::place(
+    let mut placed = crate::display::widget::frame::place(
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
-    )
-    .run(&Default::default());
-    let handler = placed.handler.expect("event handler");
+        &Default::default(),
+    );
+    let handler = placed.resolve_for_dispatch();
     let mut state = PointerState::default();
     state.position.x = 1.0;
     state.position.y = 1.0;

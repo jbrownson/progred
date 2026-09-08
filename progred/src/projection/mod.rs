@@ -16,7 +16,7 @@ use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 #[cfg(test)]
 use crate::navigate::Descend;
-use crate::placed::{self, Placed, before, decorate};
+use crate::placed::{self, HoverPass, before, decorate};
 use crate::render;
 use crate::selection::{Selection, Stage, last_follow, writable_at};
 use crate::sources::Sources;
@@ -222,8 +222,8 @@ fn prepare(
     ancestors: &Ancestry,
     value: Option<&Value>,
     layout: crate::display::Layout<crate::Editor, Hovered>,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let project = ProjectionScope {
         cx,
         projection,
@@ -255,11 +255,11 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     fn descend(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<crate::Editor>>,
+        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         step: Step,
         current: Option<crate::display::Partial<crate::Editor, Hovered>>,
         default: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    ) -> ChoiceLayout<Placed<crate::Editor>> {
+    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         prepare_descend(
             self.cx,
             self.projection,
@@ -276,12 +276,12 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     fn at(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<crate::Editor>>,
+        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: Vec<Step>,
         value: Value,
         current: Option<crate::display::Partial<crate::Editor, Hovered>>,
         default: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    ) -> ChoiceLayout<Placed<crate::Editor>> {
+    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         prepare_at(
             self.cx,
             self.projection,
@@ -298,10 +298,10 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     fn transient(
         &self,
         text: &mut TextCtx,
-        build: &mut ChoiceBuild<Placed<crate::Editor>>,
+        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         value: Value,
         fuel: usize,
-    ) -> ChoiceLayout<Placed<crate::Editor>> {
+    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         prepare_transient_root(
             self.cx,
             self.projection,
@@ -324,8 +324,8 @@ fn prepare_at(
     nested: Value,
     current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let mut path = path.to_vec();
     let mut follow_ancestors = ancestors.clone();
     for step in &steps {
@@ -352,8 +352,8 @@ fn prepare_at(
 
 /// The resolved hover's tree identity, for ink that lights its own
 /// claim.
-fn tree_hovered<'a>(ink: placed::Ink<'a>) -> Option<&'a Hover> {
-    match ink.hovered {
+fn tree_hovered(hover: &placed::ResolvedHover) -> Option<&Hover> {
+    match hover.hovered.as_ref() {
         Some(Hovered::Tree(hover)) => Some(hover),
         _ => None,
     }
@@ -461,7 +461,7 @@ fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
     LineEditPresentation::new(style.size, style.brush.clone())
 }
 
-fn placeholder_box(tcx: &mut TextCtx, styles: &Styles) -> Measured<Placed<crate::Editor>> {
+fn placeholder_box(tcx: &mut TextCtx, styles: &Styles) -> Measured<HoverPass<crate::Editor>> {
     crate::display::widget::empty(tcx, styles)
 }
 
@@ -546,7 +546,7 @@ pub struct ProjectDescription<'a> {
 pub(crate) fn project(
     description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     let width = description.width;
     resolve_choices(
         prepare_project(description, tcx),
@@ -558,7 +558,7 @@ pub(crate) fn project(
 fn prepare_project(
     description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
-) -> ChoiceGraph<Placed<crate::Editor>> {
+) -> ChoiceGraph<HoverPass<crate::Editor>> {
     let ProjectDescription {
         view,
         completions,
@@ -585,7 +585,7 @@ fn prepare_project(
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         // Other projections of the selected cell are secondary. The
-        // HOVERED value's faint marks come from the render pass's Ink.
+        // HOVERED value's faint marks come from the render pass's ResolvedHover.
         secondary: secondary_of(&sources, selection),
         selected_trace: source_selection
             .map(|selection| SourceTrace::from_path(&sources, Rc::from(selection.path()))),
@@ -630,27 +630,27 @@ fn descend_landmark_with(
     path: SharedPath,
     secondary: Option<(Secondary, bool)>,
     select: crate::navigate::Select<crate::Editor>,
-    child: Measured<Placed<crate::Editor>>,
-) -> Measured<Placed<crate::Editor>> {
+    child: Measured<HoverPass<crate::Editor>>,
+) -> Measured<HoverPass<crate::Editor>> {
     let highlight_path = path.clone();
     let marked = decorate(child, move |p, rect| {
         let highlight_path = highlight_path.clone();
         let outline = highlight_outline(scale, rect);
-        p.ink(move |cv, ink| {
+        p.render(move |cv, hover| {
             if selected && !transient {
                 primary_highlight(scale, cv, outline);
             } else if matches!(&secondary, Some((_, true))) {
                 secondary_highlight(scale, cv, outline, true);
             } else if !transient
                 && matches!(
-                    tree_hovered(ink),
+                    tree_hovered(hover),
                     Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
                 )
             {
                 hover_highlight(cv, outline);
             } else if secondary
                 .as_ref()
-                .is_some_and(|(secondary, _)| ink.hovered_secondary == Some(secondary))
+                .is_some_and(|(secondary, _)| hover.hovered_secondary.as_ref() == Some(secondary))
             {
                 secondary_highlight(scale, cv, outline, false);
             }
@@ -667,7 +667,7 @@ fn descend_landmark_with(
     }
 }
 
-fn bind_delete(child: Measured<Placed<crate::Editor>>) -> Measured<Placed<crate::Editor>> {
+fn bind_delete(child: Measured<HoverPass<crate::Editor>>) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
         p.handler().on_key_with(move |ctx, event, input| {
             crate::modifiers::plain(&event.modifiers)
@@ -713,8 +713,8 @@ fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Colo
 fn ground_with(
     scale: f64,
     color: Color,
-    content: Measured<Placed<crate::Editor>>,
-) -> Measured<Placed<crate::Editor>> {
+    content: Measured<HoverPass<crate::Editor>>,
+) -> Measured<HoverPass<crate::Editor>> {
     decorate(content, move |p, rect| {
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
         p.fill(bg, color, Affine::IDENTITY);
@@ -751,8 +751,8 @@ fn prepare_transient_root(
     path: &[Step],
     result: Value,
     fuel: usize,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let ordinary_projection = projection.without_entry();
     let projection = &ordinary_projection;
     let result_cx = Cx {
@@ -795,8 +795,8 @@ fn prepare_descend(
     step: Step,
     current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
     if let Step::Follow(source) = &step
@@ -846,8 +846,8 @@ fn prepare_location(
     location: Location<'_>,
     current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     prepare_value(
         cx,
         projection,
@@ -871,8 +871,8 @@ fn prepare_value(
     path: &[Step],
     ancestors: &Ancestry,
     value: Option<&Value>,
-    build: &mut ChoiceBuild<Placed<crate::Editor>>,
-) -> ChoiceLayout<Placed<crate::Editor>> {
+    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let child_projection = default_projection
         .map(|partial| Projection {
             partial: partial.clone(),
@@ -1039,8 +1039,8 @@ fn pick_target_with(
     value: Value,
     root: crate::workspace::Root,
     destination: SharedPath,
-    child: Measured<Placed<crate::Editor>>,
-) -> Measured<Placed<crate::Editor>> {
+    child: Measured<HoverPass<crate::Editor>>,
+) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
         let path = path.clone();
         let value = value.clone();
@@ -1058,12 +1058,12 @@ fn pick_target_with(
 /// empty — its static text otherwise.
 fn atom_content(
     editing: Option<&LineEditState>,
-    fallback: Measured<Placed<crate::Editor>>,
+    fallback: Measured<HoverPass<crate::Editor>>,
     presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     styles: &Styles,
-) -> Measured<Placed<crate::Editor>> {
+) -> Measured<HoverPass<crate::Editor>> {
     match editing {
         Some(line) => render::text_edit(
             LineEditDescription {

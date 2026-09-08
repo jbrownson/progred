@@ -83,7 +83,9 @@ impl<Out: Output> PlaceInner<Out> {
     pub fn place_at(self, placement: Placement) -> Out {
         place(self.child, placement)
     }
+}
 
+impl<Out> PlaceInner<Out> {
     pub fn place_into(self, out: &mut Out) {
         place_into(self.child, self.placement, out)
     }
@@ -116,18 +118,15 @@ pub fn leaf_into<Out>(
     }
 }
 
-pub fn row<Out: Output + 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     row_aligned(gap, children, false)
 }
 
-pub fn centered_row<Out: Output + 'static>(
-    gap: f64,
-    children: Vec<Measured<Out>>,
-) -> Measured<Out> {
+pub fn centered_row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     row_aligned(gap, children, true)
 }
 
-fn row_aligned<Out: Output + 'static>(
+fn row_aligned<Out: 'static>(
     gap: f64,
     children: Vec<Measured<Out>>,
     centered: bool,
@@ -146,11 +145,7 @@ fn row_aligned<Out: Output + 'static>(
     })
 }
 
-pub fn col<Out: Output + 'static>(
-    baseline: usize,
-    gap: f64,
-    children: Vec<Measured<Out>>,
-) -> Measured<Out> {
+pub fn col<Out: 'static>(baseline: usize, gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     let extent = col_extent(baseline, gap, children.iter().map(|child| child.extent));
     leaf_into(extent, move |placement, out| {
         place_col(
@@ -163,7 +158,7 @@ pub fn col<Out: Output + 'static>(
     })
 }
 
-pub fn layers<Out: Output + 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn layers<Out: 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
     let extent = overlay_extent(children.iter().map(|child| child.extent));
     leaf_into(extent, move |placement, out| {
         place_layers(
@@ -176,7 +171,7 @@ pub fn layers<Out: Output + 'static>(children: Vec<Measured<Out>>) -> Measured<O
     })
 }
 
-pub fn pad<Out: Output + 'static>(insets: Insets, child: Measured<Out>) -> Measured<Out> {
+pub fn pad<Out: 'static>(insets: Insets, child: Measured<Out>) -> Measured<Out> {
     let extent = padded_extent(insets, child.extent);
     leaf_into(extent, move |placement, out| {
         let placement = padded_placement(placement, insets, child.extent);
@@ -184,12 +179,12 @@ pub fn pad<Out: Output + 'static>(insets: Insets, child: Measured<Out>) -> Measu
     })
 }
 
-pub fn min_width<Out: Output + 'static>(min: f64, child: Measured<Out>) -> Measured<Out> {
+pub fn min_width<Out: 'static>(min: f64, child: Measured<Out>) -> Measured<Out> {
     let deficit = (min - child.extent.width).max(0.0);
     pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
 }
 
-pub fn fill_height<Out: Output + 'static>(child: Measured<Out>) -> Measured<Out> {
+pub fn fill_height<Out: 'static>(child: Measured<Out>) -> Measured<Out> {
     around_into(child, |placement, inner, out| {
         inner.place_at_into(placement.fill_height(), out)
     })
@@ -211,6 +206,20 @@ pub fn around_into<Out: 'static>(
 ) -> Measured<Out> {
     leaf_into(child.extent, move |placement, out| {
         place(placement, PlaceInner { child, placement }, out)
+    })
+}
+
+pub fn overlay_into<Out: 'static>(
+    base: Measured<Out>,
+    layer: Measured<Out>,
+    position: impl FnOnce(Placement, Extent) -> Option<Placement> + 'static,
+) -> Measured<Out> {
+    let extent = layer.extent;
+    around_into(base, move |placement, base, output| {
+        base.place_into(output);
+        if let Some(placement) = position(placement, extent) {
+            place_into(layer, placement, output);
+        }
     })
 }
 
@@ -247,7 +256,7 @@ pub fn after<Out: Output + 'static>(
     })
 }
 
-pub fn before_into<Out: Output + 'static>(
+pub fn before_into<Out: 'static>(
     child: Measured<Out>,
     place_before: impl FnOnce(Placement, &mut Out) + 'static,
 ) -> Measured<Out> {
@@ -257,7 +266,7 @@ pub fn before_into<Out: Output + 'static>(
     })
 }
 
-pub fn after_into<Out: Output + 'static>(
+pub fn after_into<Out: 'static>(
     child: Measured<Out>,
     place_after: impl FnOnce(Placement, &mut Out) + 'static,
 ) -> Measured<Out> {
@@ -285,7 +294,7 @@ fn contribute<Out: Output>(out: &mut Out, above: Out) {
     *out = base.over(above);
 }
 
-pub(crate) fn place_into<Out>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
+pub fn place_into<Out>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
     (layout.place)(placement, out)
 }
 

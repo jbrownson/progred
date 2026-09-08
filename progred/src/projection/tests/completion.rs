@@ -695,14 +695,13 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             selected.payload(),
             make_projected_selection(&document, &libraries, path.clone()).payload()
         );
-        let frame = editing_frame(&mut world, false);
+        let mut frame = editing_frame(&mut world, false);
         assert!(
             world.model.selection.as_ref().unwrap().edit().is_none(),
             "projection is pure"
         );
         frame
-            .handler
-            .unwrap()
+            .resolve_for_dispatch()
             .dispatch_key(&mut world, &arrow(NamedKey::End));
         let selected = world.model.selection.as_ref().unwrap();
         let editor = selected.edit().expect("the selected line handles input");
@@ -712,8 +711,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             LineEditState::from_parts(spelling, 0, spelling.len(), None, None);
         assert!(
             editing_frame(&mut world, false)
-                .handler
-                .unwrap()
+                .resolve_for_dispatch()
                 .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit(edit.into()),)
         );
         assert_eq!(world.sources().resolve_path(&path), Some(&changed));
@@ -1180,11 +1178,11 @@ fn projected_completion_entries_with(
         &mut tcx,
     );
     let extent = measured.extent;
-    measured::place(
+    crate::display::widget::frame::place(
         measured,
         Placement::root(Rect::from_origin_size(Point::ZERO, extent.size())),
+        &Default::default(),
     )
-    .run(&Default::default())
     .completion
     .expect("the selected pending emits its offers")
     .entries

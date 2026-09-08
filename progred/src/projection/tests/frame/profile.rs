@@ -120,8 +120,8 @@ fn profile(name: &str, mut frame: impl FnMut(usize) -> Bench, check: impl Fn(&Be
         "choices + settled geometry",
         warm.iter().map(|t| t.phases.choices),
     );
-    distribution("placement", warm.iter().map(|t| t.phases.placement));
-    distribution("hover + handlers", warm.iter().map(|t| t.phases.hover));
+    distribution("placement + hover", warm.iter().map(|t| t.phases.placement));
+    distribution("after-hover binding", warm.iter().map(|t| t.phases.hover));
     distribution(
         "paint + handler disposal",
         warm.iter().map(|t| t.phases.paint),

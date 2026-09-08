@@ -232,7 +232,7 @@ mod view {
     use crate::Editor;
     use crate::command::{Availability, Command, Spec, Toggles, spec};
     use crate::frame::Hovered;
-    use crate::placed::{self, Placed};
+    use crate::placed::{self, HoverPass};
     use kurbo::{Affine, Insets, Rect, Stroke};
     use measured::{self, Extent, Measured};
     use peniko::{Brush, Color};
@@ -283,9 +283,9 @@ mod view {
 
     fn activatable<C: 'static>(
         hover: Hover,
-        content: Measured<Placed<C>>,
+        content: Measured<HoverPass<C>>,
         action: impl Fn(&mut C) -> bool + 'static,
-    ) -> Measured<Placed<C>> {
+    ) -> Measured<HoverPass<C>> {
         let action = Rc::new(action);
         placed::before(content, move |p, placement| {
             let target = Hovered::Menu(hover);
@@ -303,15 +303,15 @@ mod view {
         label: &'static str,
         active: bool,
         scale: f64,
-    ) -> Measured<Placed<Editor>> {
+    ) -> Measured<HoverPass<Editor>> {
         let content = measured::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
             crate::render::text(tcx, label, style),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
+            p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
                 let hovered =
-                    matches!(ink.hovered, Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
+                    matches!(hover.hovered.as_ref(), Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
                 if active || hovered {
                     cv.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
                 }
@@ -323,7 +323,7 @@ mod view {
         })
     }
 
-    fn separator<C: 'static>(scale: f64, width: f64) -> Measured<Placed<C>> {
+    fn separator<C: 'static>(scale: f64, width: f64) -> Measured<HoverPass<C>> {
         placed::leaf(
             Extent {
                 width,
@@ -356,7 +356,7 @@ mod view {
         cursored: bool,
         scale: f64,
         width: f64,
-    ) -> Measured<Placed<Editor>> {
+    ) -> Measured<HoverPass<Editor>> {
         let style = if enabled {
             &styles.text
         } else {
@@ -384,9 +384,9 @@ mod view {
             measured::row(gap, vec![label, shortcut]),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
+            p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
                 let hovered = matches!(
-                    ink.hovered,
+                    hover.hovered.as_ref(),
                     Some(Hovered::Menu(Hover::Item(c))) if *c == command
                 );
                 if enabled && (hovered || cursored) {
@@ -409,7 +409,7 @@ mod view {
         styles: &Styles,
         description: &Description,
         menu_entries: &[Entry],
-    ) -> Measured<Placed<Editor>> {
+    ) -> Measured<HoverPass<Editor>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let mut command_index = 0;
@@ -456,7 +456,7 @@ mod view {
         )
     }
 
-    pub fn view(tcx: &mut TextCtx, description: Description) -> View<Placed<Editor>> {
+    pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
         let styles = styles();
         let definition = definition();
         let mut x = 0.0;

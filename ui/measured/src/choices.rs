@@ -98,7 +98,7 @@ pub struct ChoiceGraph<Out> {
     choice_count: usize,
 }
 
-impl<Out: crate::Output + 'static> ChoiceBuild<Out> {
+impl<Out: 'static> ChoiceBuild<Out> {
     /// Temporary results of builder calls, consumed by their parent operation.
     pub fn push(&mut self, layout: ChoiceLayout<Out>) -> usize {
         let id = self.pending.len();
@@ -173,7 +173,7 @@ struct LayoutTrace {
     deepest_selected_fallback: usize,
 }
 
-impl<Out: crate::Output + 'static> ChoiceLayout<Out> {
+impl<Out: 'static> ChoiceLayout<Out> {
     pub fn fixed(measured: Measured<Out>) -> Self {
         Self {
             widths: Widths::fixed(measured.extent.width),
@@ -613,7 +613,7 @@ impl<Out: crate::Output + 'static> ChoiceLayout<Out> {
     }
 }
 
-pub fn resolve_choices<Out: crate::Output + 'static>(
+pub fn resolve_choices<Out: 'static>(
     graph: ChoiceGraph<Out>,
     available: f64,
     tracing: bool,

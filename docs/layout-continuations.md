@@ -1,6 +1,6 @@
 # Layout and widget continuations
 
-Current architecture, 2026-09-07.
+Current architecture, 2026-09-08.
 
 ## Boundary
 
@@ -37,26 +37,28 @@ and preserve its separate settled-geometry hover stage.
    that graph. Its root is exposed as `Measured<HoverPass<World, Hover>>`: an
    extent and a one-shot placement function, not another container tree.
 3. Placement calls only the chosen continuations with their full rectangle and
-   effective enclosing clip. They return an opaque hover continuation; no hover
-   query, painting, or event dispatch runs during placement.
-4. The app calls that continuation with the pointer and retention inputs.
-   It raises floaters and runs widgets topmost-first. Each widget answers hover
-   against its settled geometry and contributes paint continuations, handlers,
-   and navigation data. The resulting `Fragment` holds the winning claim, not a
-   retained list of probes. Lower widgets still produce their paint and handlers
-   after a direct claim wins; only their hover queries are occluded.
-5. The app resolves the claim and may run the paint continuations, supplying the
-   settled hover. They draw directly into the chosen canvas backend. Handlers
-   and navigation are separate outputs: dispatch never requires painting first.
+   effective enclosing clip. They run hover probes immediately, in painting
+   order, against the current pointer and retention inputs. No painting or event
+   dispatch runs here. Later direct hits and occluders supersede earlier claims;
+   an extended claim only retains a target when there is no stronger claim.
+4. Floating placements run after ordinary content. A floater's nested floaters
+   run before the next sibling floater. The resulting `HoverOutput` contains the
+   winning claim, navigation declarations, and `AfterHover` continuations, not
+   a retained list of ordinary hover callbacks or probes.
+5. The app constructs `ResolvedHover` and binds the continuations. This produces
+   rendering and handlers independently. Each render is now a canvas-only
+   callback capturing the resolved input from this frame. Presenting it cannot
+   read a newer hover or debug setting. Painting remains optional.
 
 The central sequence is:
 
 ```rust,ignore
 let view = app_view(description, resources);
-let hover = measured::place(view, placement);
-let ready = hover.run(&hover_input);
-// Resolve ready.claim, then paint ready.renders if requested.
-// Retain ready.handler and navigation for later input dispatch.
+let mut output = placed::place(view, placement, &hover_input);
+let resolved = /* app resolves output.claim and describes its source */;
+let renders = output.resolve(resolved);
+// Retain output.handler and navigation for later input dispatch.
+// Run puri::frame::render(renders, canvas), or discard renders.
 ```
 
 Navigation stops are declared by projection/widget functions; placement only
@@ -101,23 +103,33 @@ catalogue of control variants. Puri's plain text/drawing leaves are measured by
 [`widget::drawing`](../progred/src/display/widget/drawing.rs); they contain no document
 or interaction information.
 
-[`HoverPass`](../progred/src/display/widget/frame.rs) is the shared placement output;
-the app's `Placed` aliases it. It composes one-shot functions, using a flat
-sequence for siblings rather than a recursive call stack. `run` returns a
-`Fragment` (the app's `Ready`): the hover claim, rendering, one
-function-over-`Event` handler chain, navigation, view regions, and exact
-completion offers. `HoverContext` is a transient output builder inside a
-widget's hover callback. Its contribution methods do not expose neighboring
-widgets' buffers. The pointer input is not retained in paint or handlers;
-those receive the resolved target later.
+[`HoverPass`](../progred/src/display/widget/frame.rs) is the running consumer of
+settled placements. `HoverContext` is the transient interface used by a widget:
+answer probes, declare navigation, and supply `after_hover` continuations.
+`render` is a combinator over that boundary; native handlers that do not need
+the winner are lifted into it at the end of the widget's contribution. Handlers
+that need the winner can instead be constructed inside `after_hover`.
+`finish` runs floating placements and returns `HoverOutput`. Binding its
+continuations with `ResolvedHover` assembles `Effects`: canvas-only renders
+and one function-over-`Event` handler chain.
 
-Hover composition streams into shared output buffers. Hover visits front to
-back; the paint and landmark segments are reordered to preserve their ordinary
-back-to-front construction order. Scoped wrappers map a child's completed
-output, consuming navigation overrides without affecting siblings or ancestors.
-Floaters are lifted before hover and remain outside the enclosing clip/navigation
-scope. These editor-facing types belong to `progred::display`; Puri itself remains
-layout-neutral and knows no document paths.
+[`puri::frame::AfterHover<H, O>`](../ui/puri/src/frame.rs) owns the reusable
+phase-composition mechanism. Both the resolved input and output are generic;
+there is no dependency on Progred, its identities, or `measured`. It is optional
+plumbing for widgets, not a required Puri layout or widget protocol. Puri also
+owns probes and claim precedence. Progred owns source attribution, view identity,
+navigation, and popup policy.
+
+Hover and continuation collection run in painting order. There are no reversed
+paint/navigation segments. Scoped wrappers map a child's output, consuming
+navigation overrides without affecting siblings or ancestors. Floating placements
+escape enclosing clip/navigation scopes but retain their owning view.
+
+Progred's `resolved_hover` function derives secondary identity and source trace
+once for the winner. `ResolvedHover` explicitly shares those results within this
+frame, avoiding repeated source-path walks by each painted occurrence. It is
+freshly constructed, not retained as a cross-frame memo. Debug geometry is
+editor configuration captured while constructing the frame, not hover data.
 
 [`CanvasSink`](../ui/puri/src/draw.rs) is the object-safe primitive drawing
 interface implemented by Vello, Canvas2D, and the test recorder. `Canvas`

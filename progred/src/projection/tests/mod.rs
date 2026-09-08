@@ -2,6 +2,7 @@ use super::completion::{completion_card, completion_placement};
 use super::*;
 use crate::annotations::Annotations;
 use crate::completion::{Entry, Offers};
+use crate::display::test_support::ResolveForDispatch;
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;
@@ -113,7 +114,7 @@ fn editing_world(doc: &Document, libraries: &Libraries) -> EditingWorld {
     world
 }
 
-fn editing_frame(world: &mut EditingWorld, raw: bool) -> crate::placed::Ready<EditingWorld> {
+fn editing_frame(world: &mut EditingWorld, raw: bool) -> crate::placed::HoverOutput<EditingWorld> {
     editing_frame_with_projection(world, raw, None)
 }
 
@@ -121,7 +122,7 @@ fn editing_frame_with_projection(
     world: &mut EditingWorld,
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
-) -> crate::placed::Ready<EditingWorld> {
+) -> crate::placed::HoverOutput<EditingWorld> {
     editing_frame_at(world, raw, projection, None)
 }
 
@@ -130,7 +131,7 @@ fn editing_frame_at(
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
     pointer: Option<Point>,
-) -> crate::placed::Ready<EditingWorld> {
+) -> crate::placed::HoverOutput<EditingWorld> {
     let stack = crate::stack::load();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -162,14 +163,16 @@ fn editing_frame_at(
         &mut tcx,
     );
     let height = measured.extent.height().max(1.0);
-    measured::place(
+    let mut output = crate::display::widget::frame::place(
         measured,
         Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
-    )
-    .run(&placed::HoverInput {
-        pointer,
-        ..Default::default()
-    })
+        &placed::HoverInput {
+            pointer,
+            ..Default::default()
+        },
+    );
+    output.resolve(Default::default());
+    output
 }
 
 /// Select through the current projection, without an editing interaction.
@@ -197,8 +200,7 @@ fn make_projected_editing_selection(
     let mut world = editing_world(doc, libraries);
     world.model.selection = Some(make_projected_selection(doc, libraries, path));
     editing_frame(&mut world, false)
-        .handler
-        .unwrap()
+        .resolve_for_dispatch()
         .dispatch_key(&mut world, &arrow(NamedKey::End));
     world.model.selection.unwrap()
 }
