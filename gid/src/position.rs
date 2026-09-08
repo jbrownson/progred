@@ -9,16 +9,18 @@
 //! and insert and stripped from list storage at save. Libraries may
 //! encode their bytes in ordinary values to describe session paths.
 
-/// A canonical binary fraction. Ordering is the sequence.
+use std::sync::Arc;
+
+/// A canonical binary fraction. Ordering is the sequence; clones share its immutable bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Position(Vec<u8>);
+pub struct Position(Arc<[u8]>);
 
 impl Position {
     pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
         bytes
             .last()
             .is_some_and(|last| *last != 0)
-            .then_some(Self(bytes))
+            .then(|| Self(bytes.into()))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -37,8 +39,8 @@ pub fn between(low: Option<&Position>, high: Option<&Position>) -> Option<Positi
         return None;
     }
     Position::from_bytes(between_bytes(
-        low.map(|p| p.0.as_slice()).unwrap_or(&[]),
-        high.map(|p| p.0.as_slice()),
+        low.map(Position::as_bytes).unwrap_or(&[]),
+        high.map(Position::as_bytes),
     ))
 }
 
@@ -109,6 +111,29 @@ fn between_bytes(low: &[u8], high: Option<&[u8]>) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloned_positions_share_bytes_but_compare_by_content() {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+
+        let position = Position::from_bytes(vec![0, 42]).unwrap();
+        let cloned = position.clone();
+        let separate = Position::from_bytes(vec![0, 42]).unwrap();
+        assert!(Arc::ptr_eq(&position.0, &cloned.0));
+        assert!(!Arc::ptr_eq(&position.0, &separate.0));
+        assert_eq!(position, separate);
+        assert_eq!(position.cmp(&separate), std::cmp::Ordering::Equal);
+        let hash = |position: &Position| {
+            let mut state = DefaultHasher::new();
+            position.hash(&mut state);
+            state.finish()
+        };
+        assert_eq!(hash(&position), hash(&separate));
+        drop(position);
+        assert_eq!(cloned.as_bytes(), &[0, 42]);
+        assert!(Position::from_bytes(vec![]).is_none());
+        assert!(Position::from_bytes(vec![42, 0]).is_none());
+    }
 
     #[test]
     fn between_is_ordered_and_dense() {

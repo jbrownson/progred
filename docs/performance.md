@@ -161,6 +161,36 @@ and the general continuation/output assembly in placement and hover. Profile
 those call sites before changing representations; no such optimization is part
 of this pass.
 
+## Shared list-position bytes — 2026-09-07
+
+Tracing the allocation-heavy path handling found that every `Position` clone
+copied a `Vec<u8>`, including each list step in a copied path. Positions now
+share immutable bytes with `Arc<[u8]>`; equality, hashing, ordering, and the
+path encoding still use the bytes, not allocation identity. This adds no cache,
+interner, or invalidation. New positions convert their construction buffer to
+shared storage once; clones no longer allocate, and GID remains Send/Sync.
+
+Feature-free source runs used the same two saved release test executables,
+under the Cargo sandbox, in A/B, B/A, A/B order. Each run used five warm-up
+frames and 180 measured frames at 1400 × 900, scale 1:
+
+| Source frame, including disposal | Pair 1 | Pair 2 | Pair 3 |
+| --- | ---: | ---: | ---: |
+| Copied position bytes | 4.32 ms | 4.36 ms | 4.34 ms |
+| Shared position bytes | 4.07 ms | 4.07 ms | 4.10 ms |
+
+That is about 6% less frame time. Preparation fell from about 2.14 ms to
+1.96 ms; final output disposal fell from about 0.115 ms to 0.079 ms.
+The separately instrumented run counted 105,597 versus 91,857 allocation/
+reallocation requests per source frame: 13,740 fewer (13%). Most of that
+reduction was in recursion/adaptation (26,610 → 17,056).
+
+All eight canaries also passed in A/B and B/A order at 60 measured frames.
+The IoP picture remained about 22.3–22.6 ms; the Fidget CPU-fallback measurements
+varied slightly in both directions. This is a source construction/disposal
+improvement, not a claimed speedup of drawing or GPU rendering. No change to
+hover composition or projection callbacks was included in this experiment.
+
 ## Initial baseline — 2026-09-06
 
 Local ARM64 Mac, macOS 26.6.2, release build under Seatbelt. Five warm-up frames
