@@ -7,7 +7,7 @@ use puri::handler::HasHandler;
 use puri::{Affine, Point};
 use std::rc::Rc;
 
-pub fn on_hover<World: 'static, Hover: Clone + 'static>(
+pub fn on_hover<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
 ) -> Layout<World, Hover> {
@@ -17,14 +17,14 @@ pub fn on_hover<World: 'static, Hover: Clone + 'static>(
             let target = target.clone();
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
-                    output.probes.push(Probe::retaining(placement, target));
+                    output.claim(Probe::retaining(placement, target));
                 }
             })
         }),
     )
 }
 
-pub fn block_hover<World: 'static, Hover: 'static>(
+pub fn block_hover<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
     before(
@@ -32,7 +32,7 @@ pub fn block_hover<World: 'static, Hover: 'static>(
         Rc::new(|_| {
             Box::new(|output, placement| {
                 if !placement.clipped_out() {
-                    output.probes.push(Probe::occludes(placement));
+                    output.claim(Probe::occludes(placement));
                     output.handler().on_pointer_down(move |_, event| {
                         placement
                             .contains(Point::new(event.state.position.x, event.state.position.y))
@@ -74,21 +74,30 @@ pub fn hover_highlight<World: 'static, Hover: Clone + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recording::{Recorded, record};
     use crate::widget::{Context, Fragment};
-    use measured::Output;
+    use crate::widget::{HoverContext, HoverInput};
     use puri::handler::{PointerButtonEvent, PointerInfo, PointerState, PointerType};
     use puri::hover::Claim;
     use puri::{DrawList, Placement, Rect, TextCache, TextCtx};
 
     fn place(layout: Layout<(), u32>, placement: Placement) -> Fragment<(), u32> {
+        place_at(layout, placement, HoverInput::default())
+    }
+
+    fn place_at(
+        layout: Layout<(), u32>,
+        placement: Placement,
+        input: HoverInput<'_, u32>,
+    ) -> Fragment<(), u32> {
         let mut fonts = puri::text::FontContext::new();
         let mut layouts = puri::text::LayoutContext::new();
         let mut cache = TextCache::default();
-        let before = match layout {
-            Layout::Before { before, .. } | Layout::After { after: before, .. } => before,
+        let before = match record(&layout) {
+            Recorded::Before { before, .. } | Recorded::After { after: before, .. } => before,
             _ => panic!("native decorator"),
         };
-        let mut output = Fragment::empty();
+        let mut output = HoverContext::new(input);
         before(&mut Context {
             project: &crate::test_support::NoProject,
             completion: &|_, _, _| panic!("unexpected completion control"),
@@ -112,7 +121,7 @@ mod tests {
             same_target: PartialEq::eq,
             primary_edit: |_| true,
         })(&mut output, placement);
-        output
+        output.finish()
     }
 
     #[test]
@@ -120,7 +129,7 @@ mod tests {
         let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
         let output = place(crate::widget::border(crate::text("inside")), placement);
         assert!(output.handler.is_none());
-        assert!(output.probes.is_empty());
+        assert!(output.claim.is_none());
         assert!(output.landmark_select.is_none());
         let mut drawing = DrawList::new();
         for render in output.renders {
@@ -144,20 +153,40 @@ mod tests {
             Rect::new(0.0, 0.0, 20.0, 20.0),
             Rect::new(0.0, 0.0, 100.0, 100.0),
         );
-        let claimed = place(on_hover(crate::text("target"), 7), placement);
+        let claimed = place_at(
+            on_hover(crate::text("target"), 7),
+            placement,
+            HoverInput {
+                pointer: Some(Point::new(5.0, 5.0)),
+                reach: 4.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(
-            claimed.probes[0].answer(Point::new(5.0, 5.0), None, 4.0),
+            claimed.claim.map(|(_, claim)| claim),
             Some(Claim::Direct(7))
         );
         assert_eq!(
-            claimed.probes[0].answer(Point::new(22.0, 5.0), Some(&7), 4.0),
+            place_at(
+                on_hover(crate::text("target"), 7),
+                placement,
+                HoverInput {
+                    pointer: Some(Point::new(22.0, 5.0)),
+                    prior: Some(&7),
+                    reach: 4.0,
+                    debug_geometry: false,
+                    occluded: false,
+                }
+            )
+            .claim
+            .map(|(_, claim)| claim),
             Some(Claim::Extended(7))
         );
         assert!(claimed.renders.is_empty());
         assert!(claimed.handler.is_none());
         for hovered in [None, Some(7), Some(8)] {
             let highlighted = place(hover_highlight(crate::text("feedback"), 7), placement);
-            assert!(highlighted.probes.is_empty());
+            assert!(highlighted.claim.is_none());
             assert!(highlighted.handler.is_none());
             let mut canvas = DrawList::new();
             for render in highlighted.renders {
@@ -197,7 +226,17 @@ mod tests {
             assert_eq!(handler.dispatch_pointer_down(&mut (), &event), x == 5.0);
             assert!(!handler.dispatch_pointer_up(&mut (), &event));
             assert_eq!(
-                blocked.probes[0].answer(Point::new(x, 5.0), None, 4.0),
+                place_at(
+                    block_hover(crate::text("panel")),
+                    placement,
+                    HoverInput {
+                        pointer: Some(Point::new(x, 5.0)),
+                        reach: 4.0,
+                        ..Default::default()
+                    }
+                )
+                .claim
+                .map(|(_, claim)| claim),
                 (x == 5.0).then_some(Claim::Occludes)
             );
         }
@@ -209,7 +248,7 @@ mod tests {
         ] {
             let output = place(layout, clipped);
             assert!(
-                output.probes.is_empty() && output.handler.is_none() && output.renders.is_empty()
+                output.claim.is_none() && output.handler.is_none() && output.renders.is_empty()
             );
         }
     }

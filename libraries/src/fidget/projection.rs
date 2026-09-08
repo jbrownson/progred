@@ -43,7 +43,7 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     Some((marker, content))
 }
 
-fn operand<World: 'static, Hover: Clone + 'static>(
+fn operand<World: 'static, Hover: Clone + PartialEq + 'static>(
     marker: CellId,
     key: CellId,
     value: &Value,
@@ -66,7 +66,7 @@ fn operand<World: 'static, Hover: Clone + 'static>(
     }
 }
 
-fn infix<World: 'static, Hover: Clone + 'static>(
+fn infix<World: 'static, Hover: Clone + PartialEq + 'static>(
     marker: CellId,
     left: &Value,
     right: &Value,
@@ -81,7 +81,7 @@ fn infix<World: 'static, Hover: Clone + 'static>(
     ])
 }
 
-fn arguments<World: 'static, Hover: Clone + 'static>(
+fn arguments<World: 'static, Hover: Clone + PartialEq + 'static>(
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
     let children: Vec<_> = children.into_iter().map(shared).collect();
@@ -115,7 +115,7 @@ fn arguments<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-pub(super) fn field<World: 'static, Hover: Clone + 'static>(
+pub(super) fn field<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     // An active new field needs the structural record's insertion control.

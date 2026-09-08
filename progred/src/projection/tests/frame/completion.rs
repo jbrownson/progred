@@ -98,7 +98,7 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
             node,
             Placement::new(rect, Rect::new(0.0, 0.0, 640.0, 480.0)),
         )
-        .raise_floaters()
+        .run(&Default::default())
     };
     let press = |key: &str, modifiers| KeyboardEvent {
         key: Key::Character(key.into()),
@@ -246,7 +246,8 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
             |_, _, _, _| {},
         ),
         Point::ZERO,
-    );
+    )
+    .run(&Default::default());
     let mut attempts = 0;
     assert!(card.handler.unwrap().dispatch_key(
         &mut attempts,
@@ -286,7 +287,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                 completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
             let placement =
                 completion_placement(Placement::new(field, bounds), card.extent, scale).unwrap();
-            let mut painted = settle(measured::place(card, placement), None);
+            let mut painted = settle(measured::place(card, placement).run(&Default::default()));
             primary_highlight(
                 scale,
                 &mut painted,
@@ -357,7 +358,7 @@ fn completion_details_share_the_cards_right_edge() {
             completion_card::<()>(&mut tcx, &styles, &entries, 0, 0.0, true, |_, _, _, _| {});
         let origin = Point::new(37.0, 59.0);
         let right = origin.x + card.extent.width - (4.0 + 8.0) * scale;
-        let bench = settle(measured::place_top_left(card, origin), None);
+        let bench = settle(measured::place_top_left(card, origin).run(&Default::default()));
         let details = bench
             .list
             .0
@@ -414,8 +415,11 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             |_, _, _, _| {},
         );
         let extent = card.extent;
-        let placed = measured::place_top_left(card, Point::ZERO);
-        (settle(placed, Some(pointer)), extent)
+        let placed = measured::place_top_left(card, Point::ZERO).run(&placed::HoverInput {
+            pointer: Some(pointer),
+            ..Default::default()
+        });
+        (settle(placed), extent)
     };
     // The card's own padding claims-and-clears: an overlay's
     // pointer never falls through to what sits beneath it.
@@ -461,7 +465,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut frame = |(scroll, choice, everything)| {
+    let mut frame = |(scroll, choice, everything), pointer| {
         measured::place_top_left(
             completion_card::<(f64, usize, bool)>(
                 &mut tcx,
@@ -474,10 +478,16 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             ),
             Point::ZERO,
         )
+        .run(&placed::HoverInput {
+            pointer,
+            ..Default::default()
+        })
     };
     let mut state = (0.0, 0, false);
     assert_eq!(
-        frame(state).probe(Point::new(10.0, 10.0), None, 0.0),
+        frame(state, Some(Point::new(10.0, 10.0)))
+            .claim
+            .map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(0)))),
     );
     let pointer = PointerInfo {
@@ -494,22 +504,23 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         delta: ScrollDelta::LineDelta(0.0, -5.0),
     };
     assert!(
-        frame(state)
+        frame(state, None)
             .handler
             .unwrap()
             .dispatch_scroll(&mut state, &scroll)
             .handled()
     );
     assert_eq!(state, (200.0, 0, false));
-    let scrolled = frame(state);
     assert!((4..160).any(|y| matches!(
-        scrolled.probe(Point::new(10.0, y as f64), None, 0.0),
+        frame(state, Some(Point::new(10.0,y as f64))).claim.map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(index)))) if index > 0
     )));
-    assert!(
-        (0..200).all(|y| scrolled.probe(Point::new(10.0, y as f64), None, 0.0)
-            != Some(Claim::Direct(Hovered::Tree(Hover::Entry(0)))))
-    );
+    assert!((0..200).all(|y| {
+        frame(state, Some(Point::new(10.0, y as f64)))
+            .claim
+            .map(|(_, claim)| claim)
+            != Some(Claim::Direct(Hovered::Tree(Hover::Entry(0))))
+    }));
     let press = |key| KeyboardEvent {
         key: Key::Named(key),
         state: KeyState::Down,
@@ -517,7 +528,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     };
     for key in [NamedKey::ArrowDown, NamedKey::ArrowUp] {
         assert!(
-            frame(state)
+            frame(state, None)
                 .handler
                 .unwrap()
                 .dispatch_key(&mut state, &press(key))
@@ -525,59 +536,60 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     }
     assert_eq!(state, (0.0, 0, false));
     for _ in 0..12 {
-        frame(state)
+        frame(state, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     }
     let offset = state.0;
     assert!(offset > 0.0);
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
     assert_eq!(state, (offset, 11, false));
     for _ in 11..entries.len() {
-        frame(state)
+        frame(state, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     }
     assert_eq!(state.1, entries.len());
-    let bottom = frame(state);
     assert!((0..200).any(|y| {
-        bottom.probe(Point::new(10.0, y as f64), None, 0.0)
+        frame(state, Some(Point::new(10.0, y as f64)))
+            .claim
+            .map(|(_, claim)| claim)
             == Some(Claim::Direct(Hovered::Tree(Hover::MoreCompletions)))
     }));
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
     assert_eq!(state.1, entries.len() - 1);
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     let before_expansion = state;
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Enter));
     assert_eq!(state, (before_expansion.0, before_expansion.1, true));
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     assert_eq!(state.1, entries.len() - 1);
     let before_tab = state;
     state.2 = false;
-    frame(state)
+    frame(state, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Tab));
     assert_eq!(state, before_tab);
     assert!(
-        !frame(state)
+        !frame(state, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Tab))
@@ -609,7 +621,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         cache: &mut context.cache,
         scale: 1.0,
     };
-    let mut frame = |state: &State, clip: Option<Rect>| {
+    let mut frame = |state: &State, clip: Option<Rect>, pointer| {
         let card = completion_card::<State>(
             &mut tcx,
             &context.styles,
@@ -620,17 +632,25 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             |state, scroll, choice, everything| state.view = (scroll, choice, everything),
         );
         let rect = card.extent.rect_at(Point::ZERO);
-        measured::place(card, puri::Placement::new(rect, clip.unwrap_or(rect)))
+        measured::place(card, puri::Placement::new(rect, clip.unwrap_or(rect))).run(
+            &placed::HoverInput {
+                pointer,
+                ..Default::default()
+            },
+        )
     };
-    let row_point = |placed: &Placed<State>, hover: Hover| {
+    let mut row_point = |state: &State, hover: Hover| {
         (0..160)
             .map(|y| Point::new(10.0, y as f64))
             .find(|point| {
-                placed.probe(*point, None, 0.0) == Some(Claim::Direct(Hovered::Tree(hover.clone())))
+                frame(state, None, Some(*point))
+                    .claim
+                    .map(|(_, claim)| claim)
+                    == Some(Claim::Direct(Hovered::Tree(hover.clone())))
             })
             .unwrap()
     };
-    let highlight = |placed: Placed<State>, hovered, selected_point| {
+    let highlight = |placed: crate::placed::Ready<State>, hovered, selected_point| {
         let mut drawing = DrawList::new();
         let hovered = Hovered::Tree(hovered);
         for render in placed.renders {
@@ -690,39 +710,38 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         }
     };
     let mut state = State::default();
-    let placed = frame(&state, None);
-    let points = std::array::from_fn::<_, 3, _>(|index| row_point(&placed, Hover::Entry(index)));
-    let more = row_point(&placed, Hover::MoreCompletions);
-    highlight(placed, Hover::Entry(2), points[0]);
+    let points = std::array::from_fn::<_, 3, _>(|index| row_point(&state, Hover::Entry(index)));
+    let more = row_point(&state, Hover::MoreCompletions);
+    highlight(frame(&state, None, None), Hover::Entry(2), points[0]);
 
     assert!(
-        frame(&state, None)
+        frame(&state, None, None)
             .handler
             .unwrap()
             .dispatch_pointer_move(&mut state, &move_to(points[2], PointerType::Mouse))
     );
     assert_eq!(state.view.1, 2);
-    highlight(frame(&state, None), Hover::Entry(2), points[2]);
+    highlight(frame(&state, None, None), Hover::Entry(2), points[2]);
     assert!(
-        frame(&state, None)
+        frame(&state, None, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::ArrowUp))
     );
     assert_eq!(state.view.1, 1);
-    highlight(frame(&state, None), Hover::Entry(2), points[1]);
-    frame(&state, None)
+    highlight(frame(&state, None, None), Hover::Entry(2), points[1]);
+    frame(&state, None, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Enter));
     assert_eq!(state.committed, Some(1));
 
-    frame(&state, None)
+    frame(&state, None, None)
         .handler
         .unwrap()
         .dispatch_pointer_move(&mut state, &move_to(points[0], PointerType::Mouse));
     assert_eq!(state.view.1, 0);
-    frame(&state, None)
+    frame(&state, None, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Enter));
@@ -736,7 +755,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         move_to(Point::new(-10.0, -10.0), PointerType::Mouse),
     ] {
         assert!(
-            !frame(&state, None)
+            !frame(&state, None, None)
                 .handler
                 .unwrap()
                 .dispatch_pointer_move(&mut state, &event)
@@ -744,19 +763,19 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         assert_eq!(state.view.1, 0);
     }
     assert!(
-        !frame(&state, Some(Rect::new(0.0, 0.0, 200.0, points[1].y)))
+        !frame(&state, Some(Rect::new(0.0, 0.0, 200.0, points[1].y)), None)
             .handler
             .unwrap()
             .dispatch_pointer_move(&mut state, &move_to(points[2], PointerType::Mouse))
     );
     assert_eq!(state.view.1, 0);
 
-    frame(&state, None)
+    frame(&state, None, None)
         .handler
         .unwrap()
         .dispatch_pointer_move(&mut state, &move_to(more, PointerType::Mouse));
     assert_eq!(state.view.1, entries.len());
-    frame(&state, None)
+    frame(&state, None, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::Enter));
@@ -791,7 +810,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut frame = |state: &State, entries: &[Entry<State>]| {
+    let mut frame = |state: &State, entries: &[Entry<State>], pointer| {
         measured::place_top_left(
             completion_card::<State>(
                 &mut tcx,
@@ -804,6 +823,10 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             ),
             Point::ZERO,
         )
+        .run(&placed::HoverInput {
+            pointer,
+            ..Default::default()
+        })
     };
     let press = |key| KeyboardEvent {
         key: Key::Named(key),
@@ -812,14 +835,14 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     };
     let mut state = State::default();
     assert!(
-        frame(&state, &entries)
+        frame(&state, &entries, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::list([])));
     assert!(!state.view.2);
-    frame(&state, &entries)
+    frame(&state, &entries, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
@@ -827,7 +850,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     for key in [NamedKey::Enter, NamedKey::ArrowDown] {
         state.view.2 = false;
         assert!(
-            frame(&state, &entries)
+            frame(&state, &entries, None)
                 .handler
                 .unwrap()
                 .dispatch_key(&mut state, &press(key))
@@ -846,31 +869,36 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         },
     ];
     assert!(
-        frame(&state, &expanded)
+        frame(&state, &expanded, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::record([])));
     assert!(
-        frame(&state, &entries)
+        frame(&state, &entries, None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::list([])));
-    frame(&state, &entries)
+    frame(&state, &entries, None)
         .handler
         .unwrap()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     assert_eq!(state.view.1, 0);
 
     state.view = (0.0, 1, false);
-    let placed = frame(&state, &entries);
+    let placed = frame(&state, &entries, None);
     let target = Hovered::Tree(Hover::MoreCompletions);
     let point = (0..100)
         .map(|y| Point::new(10.0, y as f64))
-        .find(|point| placed.probe(*point, None, 0.0) == Some(Claim::Direct(target.clone())))
+        .find(|point| {
+            frame(&state, &entries, Some(*point))
+                .claim
+                .map(|(_, claim)| claim)
+                == Some(Claim::Direct(target.clone()))
+        })
         .expect("expansion row is visible");
     let mut pointer_state = ui_events::pointer::PointerState::default();
     pointer_state.position.x = point.x;
@@ -894,7 +922,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
 
     state.view = (0.0, 0, false);
     assert!(
-        frame(&state, &[])
+        frame(&state, &[], None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
@@ -902,7 +930,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     assert_eq!(state.view, (0.0, 0, true));
     assert!(state.committed.is_none());
     assert!(
-        !frame(&state, &[])
+        !frame(&state, &[], None)
             .handler
             .unwrap()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
@@ -985,7 +1013,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    let placed = measured::place(node, Placement::root(rect));
+    let placed = measured::place(node, Placement::root(rect)).run(&Default::default());
     let point = placed
         .descends
         .iter()
@@ -1014,9 +1042,12 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     let card_rect = card
         .extent
         .rect_at(Point::new(point.x - 8.0, point.y - 8.0));
-    let card = measured::place(card, Placement::root(card_rect));
+    let card = measured::place(card, Placement::root(card_rect)).run(&placed::HoverInput {
+        pointer: Some(point),
+        ..Default::default()
+    });
     let placed = measured::Output::over(placed, card);
-    let Some(Claim::Direct(target)) = placed.probe(point, None, 0.0) else {
+    let Some(Claim::Direct(target)) = placed.claim.clone().map(|(_, claim)| claim) else {
         panic!("direct hover")
     };
     assert_eq!(target, Hovered::Tree(Hover::Entry(0)));

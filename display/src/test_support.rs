@@ -1,7 +1,10 @@
 //! A recording interpreter for projection calls. Production programs retain
 //! no parallel request encoding; tests obtain one by running the same function.
 
-use crate::{Layout, Partial, widget};
+use measured::Output;
+
+pub use crate::recording::{Recordable, Recorded, record};
+use crate::{Partial, widget};
 use gid::{Step, Value};
 use measured::Extent;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
@@ -27,13 +30,29 @@ pub enum ProjectionCall<W, H> {
     Other,
 }
 
+pub fn delimited<W, H>(
+    layout: &Recorded<W, H>,
+) -> (
+    &widget::Widget<W, H>,
+    &Recorded<W, H>,
+    &widget::Widget<W, H>,
+) {
+    match layout {
+        Recorded::Row { gap, children, .. } if *gap == 0.0 => match children.as_slice() {
+            [Recorded::Widget(left), child, Recorded::Widget(right)] => (left, child, right),
+            _ => panic!("expected two ordinary delimiter widgets around a child"),
+        },
+        _ => panic!("expected a delimiter row"),
+    }
+}
+
 struct Recorder<W, H>(RefCell<ProjectionCall<W, H>>);
 
 impl<W: 'static, H: 'static> Recorder<W, H> {
-    fn record(&self, call: ProjectionCall<W, H>) -> ChoiceLayout<widget::Fragment<W, H>> {
+    fn record(&self, call: ProjectionCall<W, H>) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.0.replace(call);
         ChoiceLayout::fixed(measured::leaf(Extent::default(), |_| {
-            widget::Fragment::default()
+            widget::HoverPass::empty()
         }))
     }
 }
@@ -42,11 +61,11 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
     fn descend(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         step: Step,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::Descend {
             step,
             projection,
@@ -56,12 +75,12 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
     fn at(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         steps: Vec<Step>,
         value: Value,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::At {
             steps,
             value,
@@ -72,10 +91,10 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
     fn transient(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         value: Value,
         fuel: usize,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::Transient { value, fuel })
     }
 }
@@ -112,9 +131,9 @@ pub fn with_context<W: 'static, H: 'static, R>(
     })
 }
 
-pub fn inspect<W: 'static, H: 'static>(layout: &Layout<W, H>) -> ProjectionCall<W, H> {
+pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> ProjectionCall<W, H> {
     let recorder = Recorder(RefCell::new(ProjectionCall::Other));
-    if let Layout::Program(program) = layout {
+    if let Recorded::Program(program) = record(layout) {
         with_context(&recorder, |context| {
             program(context, &mut ChoiceBuild::default());
         });
@@ -128,31 +147,31 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
     fn descend(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Step,
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected descent")
     }
     fn at(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Vec<Step>,
         _: Value,
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected projection")
     }
     fn transient(
         &self,
         _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::Fragment<W, H>>,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Value,
         _: usize,
-    ) -> ChoiceLayout<widget::Fragment<W, H>> {
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected computed root")
     }
 }

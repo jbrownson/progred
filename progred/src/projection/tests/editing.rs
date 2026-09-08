@@ -1453,7 +1453,9 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let point = marker.rect.center();
     let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
     assert_eq!(
-        idle.probe(point, None, 0.0),
+        editing_frame_at(&mut world, false, None, Some(point))
+            .claim
+            .map(|(_, claim)| claim),
         Some(puri::hover::Claim::Direct(target.clone()))
     );
     let mut state = PointerState::default();

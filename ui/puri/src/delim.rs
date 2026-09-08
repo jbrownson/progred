@@ -9,7 +9,7 @@
 //! spans exactly x in [0, bow-for-height] and y in [top, bottom].
 
 mod widget;
-pub use widget::{Side, maximum_advance, stretched};
+pub use widget::{Side, advance, minimum_span, stretched};
 
 use kurbo::{Affine, Arc, BezPath, Point, Rect, Shape, Vec2};
 use std::f64::consts::{FRAC_PI_2, PI};

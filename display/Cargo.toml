@@ -5,9 +5,11 @@ edition = "2024"
 
 [features]
 test-support = []
+profile = []
 
 [dependencies]
 gid.workspace = true
+grap = { path = "../grap" }
 measured = { path = "../ui/measured" }
 puri.workspace = true
 puri-widgets.workspace = true

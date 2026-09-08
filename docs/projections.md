@@ -60,8 +60,9 @@ while presentation declarations can apply ordinary Grap callables.
 [`ProjectionInput`](../display/src/lib.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
 selection targets. Its `default_projection` is one composed partial function,
-passed explicitly through recursion. A partial returns `Layout<World, Hover>` with measured-composition
-instructions, Puri leaves, host-control requests, and callbacks.
+passed explicitly through recursion. A partial returns a `Layout<World, Hover>`
+program that calls the layout builder with box operations, Puri leaves, and
+opaque widget/preparation functions.
 
 `At`/`descend` extend provenance and accept independent optional replacements
 for the projection at their target and the default passed to descendants.
@@ -69,7 +70,8 @@ Omitting either inherits it; supplying one replaces it without implicit
 composition. The total structural fallback still handles a declined result.
 `descend_local`/`at_local` compose a custom partial before the default only at
 the target. `at_scoped` passes that composition both here and below, so callers
-can intentionally establish a scope. Both build ordinary `At`/`Descend` values.
+can intentionally establish a scope. Both build ordinary preparation functions,
+not path-bearing layout opcodes.
 
 Partials receive `Option<&Value>`: `None` means a missing location, not a GID
 absent or an empty string. `descend` offers the resolved value or its absence to
@@ -193,9 +195,10 @@ Puri leaves carry text or canvas drawing operations. They do not acquire
 selection paths, document editing rules, names, or completion providers.
 The stock [line widget](../display/src/widget/line.rs) is an ordinary native
 function. Text and number projections supply its spelling, affixes, and
-conversion callback; `Layout::Widget` carries the resulting measurement
-program without inspecting its props. Placement contributes native render
-continuations, handlers, hover claims, and a navigation transition through
+conversion callback; `Layout::widget` carries the resulting measurement
+program without inspecting its props. Placement returns a hover continuation;
+running it contributes native render continuations, handlers, the hover claim,
+and a navigation transition through
 the [widget output interface](../display/src/widget.rs). The editor supplies
 state and capabilities; its [line adapter](../progred/src/projection/line_control.rs)
 only applies editing operations, conversion, and undo grouping. The current
@@ -205,13 +208,15 @@ Completion uses an ordinary native widget factory with explicit kind/provider
 inputs. The scoped app adapter constructs document-specific offers and pending
 state; the reusable card owns row ink, navigation, and scrolling. Drawing-program
 widgets similarly request evaluation/source attribution from the app. Both
-return the same measured `Fragment` as other widgets, not control opcodes.
-The app's `Placed` is an alias for that shared output.
+return the same measured `HoverPass` as other widgets, not control opcodes.
+The app's `Placed` aliases that continuation. Running it returns `Fragment`
+(`Ready` in the app), with paint and handlers as independent outputs.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
 Delimiter handles use ordinary [side widgets](../display/src/widget/delimiter.rs).
-`Surround` lays out opaque sides around the chosen child's span; selection and
-picking are explicit `selectable_side` composition, not interpreter behavior.
+An ordinary row lays out fixed-width sides, which adopt its available height
+during placement; selection and picking are explicit `selectable_widget`
+composition inside the stretch, not interpreter behavior.
 The standard record/list/cell projections request `selectable_bracket`. The
 low-level `bracket` constructor, including its Grap layout encoding, contributes
 only ink and geometry. The same settled hover drives native handler activation,
@@ -264,6 +269,42 @@ Drawing programs use scoped foreign operations for fills, strokes, paths,
 transforms, and clips. A temporary path builder belongs to that synchronous
 evaluation. A visible program records once in the frame; hover and painting
 share the recording and its source origins. There is no cross-frame canvas memo.
+
+## Scoped layout programs
+
+The layout library's `layout program` function takes a raw `expression` and
+returns `{layout program: closure}`. This is an ordinary Grap closure with its
+lexical environment, not an opaque native value. The normal partial recognizes
+that record and runs the closure with a borrowed `ForeignOverlay` capturing a
+Rust layout output buffer. No evaluator types or syntax were added.
+
+Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
+`children` expression. They evaluate it once into a fresh child buffer, then
+emit the corresponding native layout. `do`, ordinary function calls, and loops
+can produce that sequence; a list of expressions remains inert unless a control
+function evaluates it. `pad`, `bracket`, and interaction wrappers take a raw
+`child` expression that must emit exactly one child. No buffer borrow is held
+while evaluating a body. Successful operations return the ordinary empty record;
+their useful output remains in Rust.
+
+Leaf/recursion capabilities include `text`, `slot`, `descend`, `at`, and
+`transient`. `canvas` accepts width/ascent/descent and a drawing-program value;
+it does not construct a list of draw commands. Its optional fuel argument
+configures the later drawing evaluation, as with the stored drawing convention.
+Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
+and text paint to the ink face. Other required inputs are validated. An invalid
+builder call, multiple root emissions, or evaluator halt discards all output;
+an invalid call cannot leave a partial layout even if `do` ignores its result.
+An intentionally empty layout can emit an empty row or column.
+
+The explicit boundary matters for composition: pane/viewport projection
+functions still return ordinary values. The existing `border` combinator wraps
+a layout-program record like any other result. Neither it nor other existing
+value-returning functions changes meaning inside a secretly installed scope.
+Stored GID layout descriptions remain supported. The new path avoids building
+and decoding those descriptions per node, but still allocates the chosen Rust
+layout representation and evaluates Grap code. It is not a cache or a guarantee
+of improved speed for arbitrary programs.
 
 ## Evaluation
 

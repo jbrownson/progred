@@ -20,14 +20,27 @@ pub struct Sources<'a> {
 }
 
 impl progred_display::Env for Sources<'_> {
-    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
-        let result = grap::apply(
-            function,
-            arguments.iter().cloned(),
-            self,
-            grap::DEFAULT_FUEL,
-        );
-        (result.result, result.remaining_fuel)
+    fn apply_scoped(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation {
+        match scope {
+            Some(scope) => grap::apply_scoped(
+                function,
+                arguments.iter().cloned(),
+                self,
+                scope,
+                grap::DEFAULT_FUEL,
+            ),
+            None => grap::apply(
+                function,
+                arguments.iter().cloned(),
+                self,
+                grap::DEFAULT_FUEL,
+            ),
+        }
     }
 
     fn evaluate(&self, expression: &Value) -> (Value, usize) {

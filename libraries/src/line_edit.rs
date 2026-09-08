@@ -35,7 +35,7 @@ pub mod vocabulary {
     pub const INPUT: CellId = CellId::from_u128(0xd58c17f3402b96ea6f0e4a2b91c738d5);
 }
 
-pub fn layout<World: 'static, Hover: Clone + 'static>(
+pub fn layout<World: 'static, Hover: Clone + PartialEq + 'static>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
@@ -44,7 +44,7 @@ pub fn layout<World: 'static, Hover: Clone + 'static>(
     layout_with_family(text, update, prefix, suffix, TextFamily::SystemUi)
 }
 
-pub fn layout_with_family<World: 'static, Hover: Clone + 'static>(
+pub fn layout_with_family<World: 'static, Hover: Clone + PartialEq + 'static>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
@@ -54,7 +54,7 @@ pub fn layout_with_family<World: 'static, Hover: Clone + 'static>(
     description(text, None::<String>, update, prefix, suffix, family)
 }
 
-pub fn layout_with_placeholder<World: 'static, Hover: Clone + 'static>(
+pub fn layout_with_placeholder<World: 'static, Hover: Clone + PartialEq + 'static>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
     update: LineUpdate,
@@ -71,7 +71,7 @@ pub fn layout_with_placeholder<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-fn description<World: 'static, Hover: Clone + 'static>(
+fn description<World: 'static, Hover: Clone + PartialEq + 'static>(
     text: impl Into<String>,
     placeholder: Option<impl Into<String>>,
     update: LineUpdate,

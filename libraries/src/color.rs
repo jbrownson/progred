@@ -139,7 +139,7 @@ fn without_picker(selection: Option<&Value>) -> Value {
     Value::Record(fields)
 }
 
-fn picker_leaf<World, Hover>(drawing: Drawing<Brush>) -> Layout<World, Hover> {
+fn picker_leaf<World: 'static, Hover: 'static>(drawing: Drawing<Brush>) -> Layout<World, Hover> {
     leaf(Leaf::Drawing(drawing.map_paint(Paint::Brush)))
 }
 
@@ -172,7 +172,7 @@ fn hsva(encoded: Encoded) -> Hsva {
     Hsva::from_rgba8(rgba)
 }
 
-fn picker<World: 'static, Hover: 'static>(
+fn picker<World: 'static, Hover: Clone + PartialEq + 'static>(
     original: &Value,
     encoded: Encoded,
     hue: f64,
@@ -241,7 +241,7 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     replace_color(current?, parse(spelling)?)
 }
 
-fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
+fn swatch<World: 'static, Hover: 'static>(color: Color) -> Layout<World, Hover> {
     let shape = Shape::RoundedRect(RoundedRect::from_rect(Rect::new(0.5, 0.5, 14.5, 14.5), 2.5));
     leaf(Leaf::Drawing(Drawing {
         width: 15.0,
@@ -263,7 +263,7 @@ fn swatch<World, Hover>(color: Color) -> Layout<World, Hover> {
     }))
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let encoded = encoded(input.value?)?;
@@ -311,7 +311,7 @@ pub fn display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));
@@ -330,6 +330,8 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::new_cell_id;
     use progred_display::test_support::{ProjectionCall, inspect};
     use progred_display::{Env, RowAlignment};
@@ -431,11 +433,11 @@ mod tests {
             targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("color projection");
-        let Layout::Row {
+        let Recorded::Row {
             alignment,
             children,
             ..
-        } = layout
+        } = layout.record()
         else {
             panic!("color projection is one row")
         };
@@ -443,9 +445,9 @@ mod tests {
         assert!(matches!(alignment, RowAlignment::Center));
         assert!(matches!(
             children[0],
-            Layout::Before { ref child, .. }
-                if matches!(child.as_ref(), Layout::Before { child, .. }
-                    if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_))))
+            Recorded::Before { ref child, .. }
+                if matches!(child.as_ref(), Recorded::Before { child, .. }
+                    if matches!(child.as_ref(), Recorded::Leaf(Leaf::Drawing(_))))
         ));
         assert!(matches!(
             crate::test_widgets::line(&children[1]),
@@ -478,14 +480,14 @@ mod tests {
             targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("read-only color projection");
-        let Layout::Row { children, .. } = layout else {
+        let Recorded::Row { children, .. } = layout.record() else {
             panic!("color projection is one row")
         };
 
         assert!(matches!(
             children[0],
-            Layout::Before { ref child, .. }
-                if matches!(child.as_ref(), Layout::Leaf(Leaf::Drawing(_)))
+            Recorded::Before { ref child, .. }
+                if matches!(child.as_ref(), Recorded::Leaf(Leaf::Drawing(_)))
         ));
     }
 
@@ -512,7 +514,7 @@ mod tests {
             targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("named color projection");
-        let Layout::Row { children, .. } = layout else {
+        let Recorded::Row { children, .. } = layout.record() else {
             panic!("named color projection is one row")
         };
 
@@ -556,13 +558,14 @@ mod tests {
             targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("selected color projection");
-        let Layout::Row { children, .. } = layout else {
+        let Recorded::Row { children, .. } = layout.record() else {
             panic!("color projection is one row")
         };
-        let Layout::Floating { .. } = &children[0] else {
+        let Recorded::Floating { .. } = &children[0] else {
             panic!("picker mode floats from the swatch")
         };
-        let Layout::Col { children, .. } = picker::<(), ()>(&color, encoded(&color).unwrap(), 0.1)
+        let Recorded::Col { children, .. } =
+            picker::<(), ()>(&color, encoded(&color).unwrap(), 0.1).record()
         else {
             panic!("picker controls are stacked")
         };
@@ -598,7 +601,7 @@ mod tests {
     struct NoEval;
 
     impl Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 

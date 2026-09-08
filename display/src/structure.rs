@@ -3,13 +3,13 @@
 
 use super::*;
 
-pub fn list<World: 'static, Hover: Clone + 'static>(
+pub fn list<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: Option<Partial<World, Hover>>,
 ) -> Partial<World, Hover> {
     partial(move |input| list_layout(input, child.clone()))
 }
 
-pub fn list_layout<World: 'static, Hover: Clone + 'static>(
+pub fn list_layout<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
     child: Option<Partial<World, Hover>>,
 ) -> Option<Layout<World, Hover>> {
@@ -60,13 +60,13 @@ pub fn list_layout<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-pub fn record<World: 'static, Hover: Clone + 'static>(
+pub fn record<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: impl Fn(CellId) -> Option<Partial<World, Hover>> + 'static,
 ) -> Partial<World, Hover> {
     partial(move |input| record_layout(input, &child))
 }
 
-pub fn record_layout<World: 'static, Hover: Clone + 'static>(
+pub fn record_layout<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
     child: impl Fn(CellId) -> Option<Partial<World, Hover>>,
 ) -> Option<Layout<World, Hover>> {

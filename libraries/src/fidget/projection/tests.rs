@@ -1,5 +1,6 @@
 use super::*;
 use crate::fidget::{binary, node, unary};
+use progred_display::recording::{Recordable, Recorded};
 use progred_display::test_support::{ProjectionCall, inspect};
 use progred_display::{Env, Pending, ProjectionTarget, ProjectionTargets};
 use std::rc::Rc;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 struct Names;
 
 impl Env for Names {
-    fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+fn apply_scoped(&self, _: &Value, _: &[(CellId, Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
         panic!("source projection must not evaluate")
     }
 
@@ -46,9 +47,9 @@ fn number(n: f32) -> Value {
     crate::f32::value(n)
 }
 
-fn unshared(layout: &Layout<(), Vec<Step>>) -> &Layout<(), Vec<Step>> {
+fn unshared(layout: &Recorded<(), Vec<Step>>) -> &Recorded<(), Vec<Step>> {
     match layout {
-        Layout::Shared { child, .. } => unshared(child),
+        Recorded::Shared { child, .. } => unshared(child),
         _ => layout,
     }
 }
@@ -56,10 +57,10 @@ fn unshared(layout: &Layout<(), Vec<Step>>) -> &Layout<(), Vec<Step>> {
 #[test]
 fn operands_keep_their_paths_and_operator_targets_the_expression() {
     let sum = binary(SUM, number(1.0), number(2.0));
-    let Layout::Alternatives(options) = field(&input(&sum)).unwrap() else {
+    let Recorded::Alternatives(options) = field(&input(&sum)).unwrap().record() else {
         panic!()
     };
-    let Layout::Row { children, .. } = &options[0] else {
+    let Recorded::Row { children, .. } = &options[0] else {
         panic!()
     };
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
@@ -87,8 +88,8 @@ fn grouping_preserves_the_expression_tree_without_reassociating() {
     ] {
         assert_eq!(
             matches!(
-                operand::<(), ()>(parent, key, child),
-                Layout::Surround { .. }
+                operand::<(), ()>(parent, key, child).record(),
+                Recorded::Row { .. }
             ),
             grouped
         );
@@ -143,13 +144,13 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
         if steps == [Step::Key(AXIS)])
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
-    let Layout::Alternatives(options) = field(&input(&named)).unwrap() else {
+    let Recorded::Alternatives(options) = field(&input(&named)).unwrap().record() else {
         panic!()
     };
-    let Layout::Row { children, .. } = &options[0] else {
+    let Recorded::Row { children, .. } = &options[0] else {
         panic!()
     };
-    let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+    let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
         panic!()
     };
     assert!(

@@ -1,4 +1,4 @@
-use super::{Delim, DelimStyle, MAX_GROWTH, close_with_width, open_with_width};
+use super::{Delim, DelimStyle, close_with_width, open_with_width};
 use crate::{Affine, Command, Drawing, Shape};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,9 +14,12 @@ const TOP_TRIM_EM: f64 = 0.929 - GLYPH_ASC_EM;
 const BOTTOM_TRIM_EM: f64 = 0.249 - GLYPH_DESC_EM;
 const SIDE_BEARING_EM: f64 = 0.05;
 
-/// Reserve this width when the final vertical span is not yet known.
-pub fn maximum_advance(delim: Delim, text_size: f64) -> f64 {
-    DelimStyle::for_text_size(text_size).bow(delim) * MAX_GROWTH + 2.0 * SIDE_BEARING_EM * text_size
+pub fn advance(delim: Delim, text_size: f64) -> f64 {
+    DelimStyle::for_text_size(text_size).bow(delim) + 2.0 * SIDE_BEARING_EM * text_size
+}
+
+pub fn minimum_span(text_size: f64) -> (f64, f64) {
+    (GLYPH_ASC_EM * text_size, GLYPH_DESC_EM * text_size)
 }
 
 /// A delimiter spanning the caller's ascent/descent, with its bearings
@@ -40,7 +43,7 @@ pub fn stretched<Paint>(
         ),
     };
     let bearing = SIDE_BEARING_EM * text_size;
-    let bow = style.bow_for(delim, ascent + descent);
+    let bow = style.bow(delim);
     let path = match side {
         Side::Open => open_with_width(delim, &style, top, bottom, bow),
         Side::Close => close_with_width(delim, &style, top, bottom, bow),
@@ -86,7 +89,7 @@ mod tests {
                         );
                         let width = *expected_width.get_or_insert(drawing.width);
                         assert!((drawing.width - width).abs() < 1e-6);
-                        assert!(drawing.width <= maximum_advance(delim, 14.0 * scale));
+                        assert_eq!(drawing.width, advance(delim, 14.0 * scale));
                         let mut recording = DrawList::new();
                         crate::draw::draw(
                             drawing,

@@ -88,7 +88,7 @@ pub fn projected_display<World: 'static, Hover: 'static>(
     })
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::RENDER, "render"),
@@ -109,6 +109,8 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::{CellId, Value};
     use progred_display::test_support::{ProjectionCall, inspect};
     use progred_display::{Env, ProjectionTargets};
@@ -120,7 +122,12 @@ mod tests {
     fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
         struct CheckArguments;
         impl Env for CheckArguments {
-            fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
+            fn apply_scoped(
+                &self,
+                function: &Value,
+                arguments: &[(CellId, Value)],
+                _scope: Option<&grap_runtime::ForeignOverlay<'_>>,
+            ) -> grap_runtime::Evaluation {
                 assert_eq!(function, &Value::from(LEFT_VALUE));
                 assert_eq!(
                     arguments,
@@ -130,7 +137,11 @@ mod tests {
                         (layout::vocabulary::HEIGHT, f64::value(160.25)),
                     ]
                 );
-                (layout::drawing(420.5, 0.0, 160.25, []), 17)
+                grap_runtime::Evaluation {
+                    result: layout::drawing(420.5, 0.0, 160.25, []),
+                    remaining_fuel: 17,
+                    completed: true,
+                }
             }
             fn evaluate(&self, _: &Value) -> (Value, usize) {
                 panic!("viewport sources are passed as data")
@@ -151,16 +162,26 @@ mod tests {
         assert!(matches!(
             projected(&declaration, &CheckArguments, |input| viewport_display(
                 input, 0.0, 160.25
-            )),
-            Some(Layout::Row { .. })
+            ))
+            .map(|layout| layout.record()),
+            Some(Recorded::Row { .. })
         ));
     }
 
     struct EvaluateTo(Value);
 
     impl Env for EvaluateTo {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
-            (self.0.clone(), 17)
+        fn apply_scoped(
+            &self,
+            _: &gid::Value,
+            _: &[(gid::CellId, gid::Value)],
+            _scope: Option<&grap_runtime::ForeignOverlay<'_>>,
+        ) -> grap_runtime::Evaluation {
+            grap_runtime::Evaluation {
+                result: self.0.clone(),
+                remaining_fuel: 17,
+                completed: true,
+            }
         }
 
         fn evaluate(&self, _: &Value) -> (Value, usize) {
@@ -195,7 +216,12 @@ mod tests {
     fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source() {
         struct NoEvaluation;
         impl Env for NoEvaluation {
-            fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+            fn apply_scoped(
+                &self,
+                _: &Value,
+                _: &[(CellId, Value)],
+                _scope: Option<&grap_runtime::ForeignOverlay<'_>>,
+            ) -> grap_runtime::Evaluation {
                 panic!("authoring a declaration must not apply its projection")
             }
             fn evaluate(&self, _: &Value) -> (Value, usize) {

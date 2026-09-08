@@ -55,12 +55,10 @@ pub trait Output {
 
 pub struct Measured<Out> {
     pub extent: Extent,
-    kind: Kind<Out>,
+    place: Box<dyn FnOnce(Placement, &mut Out)>,
 }
 
 /// A child held back for its wrapper: place it, move it, or drop it.
-/// It may be collected as an isolated output or placed directly into
-/// the frame's existing accumulator.
 pub struct PlaceInner<Out> {
     child: Measured<Out>,
     placement: Placement,
@@ -71,7 +69,10 @@ pub fn child_placement(parent: Placement, rect: Rect) -> Placement {
 }
 
 pub fn clipped_placement(placement: Placement, bounds: Rect) -> Placement {
-    Placement::new(placement.rect, placement.clip_rect.intersect(bounds))
+    Placement {
+        clip_rect: placement.clip_rect.intersect(bounds),
+        ..placement
+    }
 }
 
 impl<Out: Output> PlaceInner<Out> {
@@ -96,33 +97,6 @@ impl<Out: Output> PlaceInner<Out> {
     }
 }
 
-type PlaceInto<Out> = Box<dyn FnOnce(Placement, &mut Out)>;
-type PlaceAround<Out> = Box<dyn FnOnce(Placement, PlaceInner<Out>, &mut Out)>;
-
-enum Kind<Out> {
-    Leaf(PlaceInto<Out>),
-    Row {
-        children: Vec<Measured<Out>>,
-        gap: f64,
-        centered: bool,
-    },
-    Col {
-        children: Vec<Measured<Out>>,
-        gap: f64,
-    },
-    Overlay {
-        children: Vec<Measured<Out>>,
-    },
-    Pad {
-        child: Box<Measured<Out>>,
-        insets: Insets,
-    },
-    Around {
-        child: Box<Measured<Out>>,
-        place: PlaceAround<Out>,
-    },
-}
-
 pub fn leaf<Out: Output>(
     extent: Extent,
     place: impl FnOnce(Placement) -> Out + 'static,
@@ -132,185 +106,114 @@ pub fn leaf<Out: Output>(
     })
 }
 
-/// A leaf interpreted directly into the placement accumulator. This is
-/// the production path for outputs whose algebra is naturally mutable;
-/// [`leaf`] remains useful for small initial encodings in tests.
 pub fn leaf_into<Out>(
     extent: Extent,
     place: impl FnOnce(Placement, &mut Out) + 'static,
 ) -> Measured<Out> {
     Measured {
         extent,
-        kind: Kind::Leaf(Box::new(place)),
+        place: Box::new(place),
     }
 }
 
-/// Children on one baseline: ascent and descent are the maxima.
-pub fn row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn row<Out: Output + 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     row_aligned(gap, children, false)
 }
 
-/// Children centered vertically in the tallest child's line box. The
-/// tallest child supplies the resulting baseline, so the row remains
-/// typographic when composed into a larger layout.
-pub fn centered_row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn centered_row<Out: Output + 'static>(
+    gap: f64,
+    children: Vec<Measured<Out>>,
+) -> Measured<Out> {
     row_aligned(gap, children, true)
 }
 
-fn row_aligned<Out>(gap: f64, children: Vec<Measured<Out>>, centered: bool) -> Measured<Out> {
-    let width = children.iter().map(|c| c.extent.width).sum::<f64>()
-        + gap * children.len().saturating_sub(1) as f64;
-    let (ascent, descent) = if centered {
-        children
-            .iter()
-            .reduce(|tallest, child| {
-                if child.extent.height() > tallest.extent.height() {
-                    child
-                } else {
-                    tallest
-                }
-            })
-            .map(|child| (child.extent.ascent, child.extent.descent))
-            .unwrap_or_default()
-    } else {
-        (
-            children
-                .iter()
-                .map(|c| c.extent.ascent)
-                .fold(0.0_f64, f64::max),
-            children
-                .iter()
-                .map(|c| c.extent.descent)
-                .fold(0.0_f64, f64::max),
-        )
-    };
-    Measured {
-        extent: Extent {
-            width,
-            ascent,
-            descent,
-        },
-        kind: Kind::Row {
-            children,
+fn row_aligned<Out: Output + 'static>(
+    gap: f64,
+    children: Vec<Measured<Out>>,
+    centered: bool,
+) -> Measured<Out> {
+    let extent = row_extent(gap, centered, children.iter().map(|child| child.extent));
+    leaf_into(extent, move |placement, out| {
+        place_row(
+            extent,
+            placement,
             gap,
             centered,
-        },
-    }
+            children,
+            |child| child.extent,
+            |child, placement| place_into(child, placement, out),
+        );
+    })
 }
 
-/// Children stacked; the column's baseline is child `baseline`'s.
-pub fn col<Out>(baseline: usize, gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
-    let extent = if children.is_empty() {
-        Extent::default()
-    } else {
-        assert!(baseline < children.len());
-        let width = children
-            .iter()
-            .map(|c| c.extent.width)
-            .fold(0.0_f64, f64::max);
-        let total = children.iter().map(|c| c.extent.height()).sum::<f64>()
-            + gap * (children.len() - 1) as f64;
-        let ascent = children[..baseline]
-            .iter()
-            .map(|c| c.extent.height())
-            .sum::<f64>()
-            + gap * baseline as f64
-            + children[baseline].extent.ascent;
-        Extent {
-            width,
-            ascent,
-            descent: total - ascent,
-        }
-    };
-    Measured {
-        extent,
-        kind: Kind::Col { children, gap },
-    }
+pub fn col<Out: Output + 'static>(
+    baseline: usize,
+    gap: f64,
+    children: Vec<Measured<Out>>,
+) -> Measured<Out> {
+    let extent = col_extent(baseline, gap, children.iter().map(|child| child.extent));
+    leaf_into(extent, move |placement, out| {
+        place_col(
+            placement,
+            gap,
+            children,
+            |child| child.extent,
+            |child, placement| place_into(child, placement, out),
+        );
+    })
 }
 
-/// Place children on the same origin and baseline in back-to-front
-/// order. The overlay is large enough for every child.
-pub fn layers<Out>(children: Vec<Measured<Out>>) -> Measured<Out> {
-    let extent = Extent {
-        width: children
-            .iter()
-            .map(|child| child.extent.width)
-            .fold(0.0_f64, f64::max),
-        ascent: children
-            .iter()
-            .map(|child| child.extent.ascent)
-            .fold(0.0_f64, f64::max),
-        descent: children
-            .iter()
-            .map(|child| child.extent.descent)
-            .fold(0.0_f64, f64::max),
-    };
-    Measured {
-        extent,
-        kind: Kind::Overlay { children },
-    }
+pub fn layers<Out: Output + 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
+    let extent = overlay_extent(children.iter().map(|child| child.extent));
+    leaf_into(extent, move |placement, out| {
+        place_layers(
+            extent,
+            placement,
+            children,
+            |child| child.extent,
+            |child, placement| place_into(child, placement, out),
+        );
+    })
 }
 
-pub fn pad<Out>(insets: Insets, child: Measured<Out>) -> Measured<Out> {
-    let e = child.extent;
-    Measured {
-        extent: Extent {
-            width: e.width + insets.x0 + insets.x1,
-            ascent: e.ascent + insets.y0,
-            descent: e.descent + insets.y1,
-        },
-        kind: Kind::Pad {
-            child: Box::new(child),
-            insets,
-        },
-    }
+pub fn pad<Out: Output + 'static>(insets: Insets, child: Measured<Out>) -> Measured<Out> {
+    let extent = padded_extent(insets, child.extent);
+    leaf_into(extent, move |placement, out| {
+        let placement = padded_placement(placement, insets, child.extent);
+        place_into(child, placement, out)
+    })
 }
 
-/// Holds `child` to at least `min` wide by padding on the right: a
-/// frame's minimum, not the child's — the child keeps its own extent
-/// and placement.
-pub fn min_width<Out>(min: f64, child: Measured<Out>) -> Measured<Out> {
+pub fn min_width<Out: Output + 'static>(min: f64, child: Measured<Out>) -> Measured<Out> {
     let deficit = (min - child.extent.width).max(0.0);
     pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
 }
 
-/// Transparently wraps this layout's placement. The wrapper receives
-/// the settled placement and the held-back child, and returns the
-/// combined output — placing the child exactly once, or not at all.
-pub fn around<Out>(
+pub fn fill_height<Out: Output + 'static>(child: Measured<Out>) -> Measured<Out> {
+    around_into(child, |placement, inner, out| {
+        inner.place_at_into(placement.fill_height(), out)
+    })
+}
+
+/// A wrapper controls when and where its child continuation runs.
+pub fn around<Out: Output + 'static>(
     child: Measured<Out>,
     place: impl FnOnce(Placement, PlaceInner<Out>) -> Out + 'static,
-) -> Measured<Out>
-where
-    Out: Output,
-{
+) -> Measured<Out> {
     around_into(child, move |placement, inner, out| {
         contribute(out, place(placement, inner))
     })
 }
 
-/// Transparently wrap direct placement. The callback may save and
-/// restore a small piece of accumulator state around `inner.place_into`,
-/// but the child's ordinary contributions flow straight to the frame.
-pub fn around_into<Out>(
+pub fn around_into<Out: 'static>(
     child: Measured<Out>,
     place: impl FnOnce(Placement, PlaceInner<Out>, &mut Out) + 'static,
 ) -> Measured<Out> {
-    Measured {
-        extent: child.extent,
-        kind: Kind::Around {
-            child: Box::new(child),
-            place: Box::new(place),
-        },
-    }
+    leaf_into(child.extent, move |placement, out| {
+        place(placement, PlaceInner { child, placement }, out)
+    })
 }
 
-/// Pin `layer` over `base` at a position of the caller's choosing.
-/// The layer is overhang: the node keeps the base's extent, so layout
-/// never pays for what floats. `position` sees the base's settled
-/// placement, the layer's extent, and the base's placed output — the
-/// hook for overlays anchored to something the base discovered while
-/// placing — and may decline, placing nothing.
 pub fn overlay<Out: Output + 'static>(
     base: Measured<Out>,
     layer: Measured<Out>,
@@ -326,8 +229,7 @@ pub fn overlay<Out: Output + 'static>(
     })
 }
 
-/// Contribute under this layout, before its content and descendants.
-pub fn before<Out: Output>(
+pub fn before<Out: Output + 'static>(
     child: Measured<Out>,
     place_before: impl FnOnce(Placement) -> Out + 'static,
 ) -> Measured<Out> {
@@ -336,8 +238,7 @@ pub fn before<Out: Output>(
     })
 }
 
-/// Contribute over this layout, on top of its content and descendants.
-pub fn after<Out: Output>(
+pub fn after<Out: Output + 'static>(
     child: Measured<Out>,
     place_after: impl FnOnce(Placement) -> Out + 'static,
 ) -> Measured<Out> {
@@ -346,9 +247,7 @@ pub fn after<Out: Output>(
     })
 }
 
-/// Contribute directly before placing `child`, without constructing a
-/// temporary subtree output.
-pub fn before_into<Out: Output>(
+pub fn before_into<Out: Output + 'static>(
     child: Measured<Out>,
     place_before: impl FnOnce(Placement, &mut Out) + 'static,
 ) -> Measured<Out> {
@@ -358,9 +257,7 @@ pub fn before_into<Out: Output>(
     })
 }
 
-/// Contribute directly after placing `child`, without constructing a
-/// temporary subtree output.
-pub fn after_into<Out: Output>(
+pub fn after_into<Out: Output + 'static>(
     child: Measured<Out>,
     place_after: impl FnOnce(Placement, &mut Out) + 'static,
 ) -> Measured<Out> {
@@ -370,9 +267,7 @@ pub fn after_into<Out: Output>(
     })
 }
 
-/// The historical leading decoration operation, retained as the
-/// rectangle-only spelling of [`before`].
-pub fn decorate<Out: Output>(
+pub fn decorate<Out: Output + 'static>(
     child: Measured<Out>,
     draw: impl FnOnce(Rect) -> Out + 'static,
 ) -> Measured<Out> {
@@ -390,81 +285,158 @@ fn contribute<Out: Output>(out: &mut Out, above: Out) {
     *out = base.over(above);
 }
 
-fn place_into<Out: Output>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
-    let extent = layout.extent;
-    let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
-    match layout.kind {
-        Kind::Leaf(f) => f(placement, out),
-        Kind::Row {
-            children,
-            gap,
-            centered,
-        } => {
-            let mut x = at.x;
-            let top = at.y - extent.ascent;
-            for child in children {
-                let advance = child.extent.width + gap;
-                let y = if centered {
-                    top + (extent.height() - child.extent.height()) / 2.0
-                } else {
-                    at.y - child.extent.ascent
-                };
-                let rect = Rect::new(x, y, x + child.extent.width, y + child.extent.height());
-                place_into(child, child_placement(placement, rect), out);
-                x += advance;
-            }
-        }
-        Kind::Col { children, gap } => {
-            let mut y = at.y - extent.ascent;
-            for child in children {
-                let advance = child.extent.height() + gap;
-                let child_baseline = y + child.extent.ascent;
-                let rect = Rect::new(
-                    at.x,
-                    child_baseline - child.extent.ascent,
-                    at.x + child.extent.width,
-                    child_baseline + child.extent.descent,
-                );
-                place_into(child, child_placement(placement, rect), out);
-                y += advance;
-            }
-        }
-        Kind::Overlay { children } => {
-            for child in children {
-                let rect = Rect::new(
-                    at.x,
-                    at.y - child.extent.ascent,
-                    at.x + child.extent.width,
-                    at.y + child.extent.descent,
-                );
-                place_into(child, child_placement(placement, rect), out);
-            }
-        }
-        Kind::Pad { child, insets } => {
-            let child_at = Point::new(at.x + insets.x0, at.y);
-            let rect = Rect::new(
-                child_at.x,
-                child_at.y - child.extent.ascent,
-                child_at.x + child.extent.width,
-                child_at.y + child.extent.descent,
-            );
-            place_into(*child, child_placement(placement, rect), out)
-        }
-        Kind::Around { child, place } => place(
-            placement,
-            PlaceInner {
-                child: *child,
-                placement,
-            },
-            out,
-        ),
-    }
+pub(crate) fn place_into<Out>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
+    (layout.place)(placement, out)
 }
 
-/// `at` is the top-left corner of the layout.
 pub fn place_top_left<Out: Output>(layout: Measured<Out>, at: Point) -> Out {
     let placement = Placement::root(layout.extent.rect_at(at));
     place(layout, placement)
+}
+
+pub(crate) fn row_extent(
+    gap: f64,
+    centered: bool,
+    children: impl Iterator<Item = Extent>,
+) -> Extent {
+    let (mut extent, mut count) = (Extent::default(), 0usize);
+    for child in children {
+        extent.width += child.width;
+        if centered {
+            if count == 0 || child.height() > extent.height() {
+                extent.ascent = child.ascent;
+                extent.descent = child.descent;
+            }
+        } else {
+            extent.ascent = extent.ascent.max(child.ascent);
+            extent.descent = extent.descent.max(child.descent);
+        }
+        count += 1;
+    }
+    extent.width += gap * count.saturating_sub(1) as f64;
+    extent
+}
+
+pub(crate) fn col_extent(
+    baseline: usize,
+    gap: f64,
+    children: impl ExactSizeIterator<Item = Extent>,
+) -> Extent {
+    assert!(children.len() == 0 || baseline < children.len());
+    let mut extent = Extent::default();
+    let mut height = 0.0;
+    for (index, child) in children.enumerate() {
+        if index > 0 {
+            height += gap;
+        }
+        extent.width = extent.width.max(child.width);
+        if index == baseline {
+            extent.ascent = height + child.ascent;
+        }
+        height += child.height();
+    }
+    extent.descent = height - extent.ascent;
+    extent
+}
+
+pub(crate) fn overlay_extent(children: impl Iterator<Item = Extent>) -> Extent {
+    children.fold(Extent::default(), |extent, child| Extent {
+        width: extent.width.max(child.width),
+        ascent: extent.ascent.max(child.ascent),
+        descent: extent.descent.max(child.descent),
+    })
+}
+
+pub(crate) fn padded_extent(insets: Insets, child: Extent) -> Extent {
+    Extent {
+        width: child.width + insets.x0 + insets.x1,
+        ascent: child.ascent + insets.y0,
+        descent: child.descent + insets.y1,
+    }
+}
+
+pub(crate) fn place_row<T>(
+    extent: Extent,
+    placement: Placement,
+    gap: f64,
+    centered: bool,
+    children: Vec<T>,
+    extent_of: impl Fn(&T) -> Extent,
+    mut place: impl FnMut(T, Placement),
+) {
+    let mut x = placement.rect.x0;
+    for child in children {
+        let size = extent_of(&child);
+        let y = placement.rect.y0
+            + if centered {
+                (extent.height() - size.height()) / 2.0
+            } else {
+                extent.ascent - size.ascent
+            };
+        let rect = size.rect_at(Point::new(x, y));
+        place(
+            child,
+            child_placement(placement, rect).with_available_rect(Rect::new(
+                rect.x0,
+                placement.rect.y0,
+                rect.x1,
+                placement.rect.y1,
+            )),
+        );
+        x += size.width + gap;
+    }
+}
+
+pub(crate) fn place_col<T>(
+    placement: Placement,
+    gap: f64,
+    children: Vec<T>,
+    extent_of: impl Fn(&T) -> Extent,
+    mut place: impl FnMut(T, Placement),
+) {
+    let mut y = placement.rect.y0;
+    for child in children {
+        let size = extent_of(&child);
+        let rect = size.rect_at(Point::new(placement.rect.x0, y));
+        place(
+            child,
+            child_placement(placement, rect).with_available_rect(Rect::new(
+                placement.rect.x0,
+                rect.y0,
+                placement.rect.x1,
+                rect.y1,
+            )),
+        );
+        y += size.height() + gap;
+    }
+}
+
+pub(crate) fn place_layers<T>(
+    extent: Extent,
+    placement: Placement,
+    children: Vec<T>,
+    extent_of: impl Fn(&T) -> Extent,
+    mut place: impl FnMut(T, Placement),
+) {
+    for child in children {
+        let size = extent_of(&child);
+        let rect = size.rect_at(Point::new(
+            placement.rect.x0,
+            placement.rect.y0 + extent.ascent - size.ascent,
+        ));
+        place(
+            child,
+            child_placement(placement, rect).with_available_rect(placement.rect),
+        );
+    }
+}
+
+pub(crate) fn padded_placement(placement: Placement, insets: Insets, child: Extent) -> Placement {
+    let rect = child.rect_at(Point::new(
+        placement.rect.x0 + insets.x0,
+        placement.rect.y0 + insets.y0,
+    ));
+    child_placement(placement, rect).with_available_rect(placement.available_rect.inset(-insets))
 }
 
 #[cfg(test)]
@@ -529,6 +501,57 @@ mod tests {
                 Rect::new(14.0, 88.0, 34.0, 104.0),
             ]
         );
+    }
+
+    #[test]
+    fn row_offers_its_height_without_stretching_children_implicitly() {
+        let layout = row(
+            2.0,
+            vec![
+                probe(ext(5.0, 3.0, 2.0)),
+                fill_height(probe(ext(5.0, 3.0, 2.0))),
+                probe(ext(20.0, 30.0, 10.0)),
+            ],
+        );
+        let placement = Placement::new(
+            layout.extent.rect_at(Point::new(10.0, 20.0)),
+            Rect::new(0.0, 35.0, 100.0, 50.0),
+        );
+        let output = place(layout, placement);
+        assert_eq!(output[0].rect, Rect::new(10.0, 47.0, 15.0, 52.0));
+        assert_eq!(output[0].available_rect, Rect::new(10.0, 20.0, 15.0, 60.0));
+        assert_eq!(output[1].rect, Rect::new(17.0, 20.0, 22.0, 60.0));
+        assert_eq!(output[1].clip_rect, placement.clip_rect);
+    }
+
+    #[test]
+    fn nested_rows_offer_their_own_span_not_an_ancestors() {
+        let nested = row(0.0, vec![fill_height(probe(ext(5.0, 3.0, 2.0)))]);
+        let layout = row(0.0, vec![nested, probe(ext(20.0, 30.0, 10.0))]);
+        let placement = Placement::root(layout.extent.rect_at(Point::ZERO));
+        let output = place(layout, placement);
+        assert_eq!(output[0].rect.height(), 5.0);
+        assert_eq!(output[0].available_rect.height(), 5.0);
+    }
+
+    #[test]
+    fn columns_and_padding_offer_space_without_changing_the_clip() {
+        let layout = col(
+            0,
+            2.0,
+            vec![
+                pad(Insets::new(1.0, 2.0, 3.0, 4.0), probe(ext(5.0, 3.0, 2.0))),
+                probe(ext(40.0, 8.0, 2.0)),
+            ],
+        );
+        let placement = Placement::new(
+            layout.extent.rect_at(Point::ZERO),
+            Rect::new(0.0, 0.0, 10.0, 100.0),
+        );
+        let output = place(layout, placement);
+        assert_eq!(output[0].rect, Rect::new(1.0, 2.0, 6.0, 7.0));
+        assert_eq!(output[0].available_rect, Rect::new(1.0, 2.0, 37.0, 7.0));
+        assert_eq!(output[0].clip_rect, placement.clip_rect);
     }
 
     #[test]

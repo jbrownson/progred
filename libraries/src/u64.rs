@@ -68,7 +68,7 @@ impl number::Scrubbable for u64 {
     }
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     number::layout(input, read(input.value?)?, vocabulary::U64, value)
@@ -161,7 +161,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::U64, "u64"),

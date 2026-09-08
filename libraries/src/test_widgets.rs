@@ -1,5 +1,6 @@
-//! Inspect the description captured by a real placed text handler, not a layout opcode.
-use progred_display::{Layout, LineEdit, widget};
+use progred_display::recording::{Recordable, Recorded};
+// Inspect the description captured by a real placed text handler, not a layout opcode.
+use progred_display::{LineEdit, widget};
 use puri::text::{FontContext, LayoutContext, TextCache, TextCtx};
 use std::{cell::RefCell, rc::Rc};
 
@@ -57,8 +58,8 @@ fn with_interpreter<Hover: Default, R>(
     })
 }
 
-pub fn line<Hover: Default + 'static>(layout: &Layout<(), Hover>) -> Option<LineEdit> {
-    let Layout::Widget(widget) = layout else {
+pub fn line<Hover: Default + 'static>(layout: &impl Recordable<(), Hover>) -> Option<LineEdit> {
+    let Recorded::Widget(widget) = layout.record() else {
         return None;
     };
     let captured = Rc::new(RefCell::new(None));
@@ -71,20 +72,21 @@ pub fn line<Hover: Default + 'static>(layout: &Layout<(), Hover>) -> Option<Line
         |context| widget(context),
     );
     let placement = puri::Placement::root(measured.extent.rect_at(puri::Point::ZERO));
-    let placed = widget::place(measured, placement);
+    let mut placed = widget::place(measured, placement).run(&Default::default());
     placed
-        .handler?
+        .handler
+        .take()?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()
 }
 
 pub fn point_update(
-    layout: &Layout<(), ()>,
+    layout: &impl Recordable<(), ()>,
     point: progred_display::PointEvent,
 ) -> progred_display::PointUpdate {
     use progred_display::widget::gesture::{BeginEdit, ValueEdit};
     use puri::handler::{PointerButton, PointerButtonEvent, PointerInfo, PointerType};
-    let Layout::Before { before, .. } = layout else {
+    let Recorded::Before { before, .. } = layout.record() else {
         panic!("expected a point-control wrapper");
     };
     let value = Rc::new(RefCell::new(None));
@@ -136,7 +138,7 @@ pub fn point_update(
         same_target: |_, _| false,
         primary_edit: |_| true,
     });
-    let mut fragment = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default());
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
@@ -152,21 +154,23 @@ pub fn point_update(
     };
     event.state.position.x = 50.0;
     event.state.position.y = 50.0;
-    assert!(fragment.handler.unwrap().dispatch_pointer_down_with(
-        &mut (),
-        &event,
-        &mut Default::default()
-    ));
+    assert!(
+        fragment
+            .finish()
+            .handler
+            .unwrap()
+            .dispatch_pointer_down_with(&mut (), &event, &mut Default::default())
+    );
     progred_display::PointUpdate {
         value: value.take().expect("initial contact writes"),
         selection: selection.take(),
     }
 }
 
-pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
+pub fn picked(layout: &impl Recordable<(), ()>) -> Option<gid::Value> {
     use puri::handler::{PointerButton, PointerButtonEvent, PointerInfo, PointerType};
     use puri::{Placement, Rect};
-    let Layout::Before { before, .. } = layout else {
+    let Recorded::Before { before, .. } = layout.record() else {
         return None;
     };
     let picked = Rc::new(RefCell::new(None));
@@ -180,12 +184,12 @@ pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
         context.same_target = |_, _| true;
         before(context)
     });
-    let mut fragment = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default());
     place(
         &mut fragment,
         Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
-    fragment.handler?.dispatch_pointer_down_with(
+    fragment.finish().handler?.dispatch_pointer_down_with(
         &mut (),
         &PointerButtonEvent {
             button: Some(PointerButton::Primary),
@@ -202,24 +206,21 @@ pub fn picked(layout: &Layout<(), ()>) -> Option<gid::Value> {
 }
 
 pub fn claim<Hover: Default + Clone + PartialEq + 'static>(
-    layout: &Layout<(), Hover>,
+    layout: &impl Recordable<(), Hover>,
 ) -> Option<puri::hover::Claim<Hover>> {
-    let Layout::Before { before, .. } = layout else {
+    let Recorded::Before { before, .. } = layout.record() else {
         return None;
     };
     let place = with_context(Rc::new(|_, _, _| false), |context| before(context));
-    let mut fragment = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default());
     let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
+    fragment.input.pointer = Some(placement.rect.center());
     place(&mut fragment, placement);
-    fragment
-        .probes
-        .iter()
-        .rev()
-        .find_map(|probe| probe.answer(placement.rect.center(), None, 0.0))
+    fragment.finish().claim.map(|(_, claim)| claim)
 }
 
-pub fn event_handler(layout: &Layout<(), ()>) -> Option<gid::Value> {
-    let Layout::Before { before, .. } = layout else {
+pub fn event_handler(layout: &impl Recordable<(), ()>) -> Option<gid::Value> {
+    let Recorded::Before { before, .. } = layout.record() else {
         return None;
     };
     let captured = Rc::new(RefCell::new(None));
@@ -231,27 +232,27 @@ pub fn event_handler(layout: &Layout<(), ()>) -> Option<gid::Value> {
     let place = with_interpreter(Rc::new(|_, _, _| false), interpret, |context| {
         before(context)
     });
-    let mut fragment = widget::Fragment::default();
+    let mut fragment = widget::HoverContext::new(Default::default());
     place(
         &mut fragment,
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
     fragment
+        .finish()
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()
 }
 
 pub fn assert_delimiter<Hover: Default + 'static>(
-    widget: &widget::Side<(), Hover>,
+    widget: &widget::Widget<(), Hover>,
     delim: puri::delim::Delim,
     side: puri::delim::Side,
 ) {
     use puri::{Affine, DrawCmd, DrawList, Placement, Point};
-    let prepared = with_context(Rc::new(|_, _, _| false), |context| widget(context));
-    let measured = (prepared.measure)(Default::default());
+    let measured = with_context(Rc::new(|_, _, _| false), |context| widget(context));
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let fragment = widget::place(measured, placement);
+    let fragment = widget::place(measured, placement).run(&Default::default());
     let mut canvas = DrawList::new();
     for render in fragment.renders {
         render(&mut canvas, Default::default());

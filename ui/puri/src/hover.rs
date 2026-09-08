@@ -92,6 +92,15 @@ impl<H: PartialEq> Probe<H> {
 }
 
 impl<H: Clone + PartialEq> Probe<H> {
+    pub fn retention_region(&self, reach: f64) -> Option<(H, Rect)> {
+        match &self.target {
+            Target::Retains(target) => self
+                .extended_rect(target, reach)
+                .map(|rect| (target.clone(), rect)),
+            _ => None,
+        }
+    }
+
     pub fn answer(&self, point: Point, prior: Option<&H>, reach: f64) -> Option<Claim<H>> {
         if self.placement.contains(point) {
             match &self.target {

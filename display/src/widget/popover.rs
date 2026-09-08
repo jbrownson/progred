@@ -7,7 +7,7 @@ use puri::{Color, Placement, Point, Rect, Size, Stroke};
 use puri_widgets::panel::Panel;
 use std::rc::Rc;
 
-pub fn popover<World: 'static, Hover: 'static>(
+pub fn popover<World: 'static, Hover: Clone + PartialEq + 'static>(
     trigger: Layout<World, Hover>,
     content: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
@@ -16,15 +16,11 @@ pub fn popover<World: 'static, Hover: 'static>(
     })
 }
 
-fn card<World: 'static, Hover: 'static>(content: Layout<World, Hover>) -> Layout<World, Hover> {
+fn card<World: 'static, Hover: Clone + PartialEq + 'static>(
+    content: Layout<World, Hover>,
+) -> Layout<World, Hover> {
     block_hover(before(
-        Layout::Pad {
-            left: 10.0,
-            top: 10.0,
-            right: 10.0,
-            bottom: 10.0,
-            child: Box::new(content),
-        },
+        crate::padding((10.0, 10.0, 10.0, 10.0).into(), content),
         Rc::new(|context| {
             let panel = Panel {
                 fill: Some(Color::new([0.985, 0.985, 0.99, 1.0]).into()),

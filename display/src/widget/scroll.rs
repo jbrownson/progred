@@ -1,4 +1,4 @@
-use super::Place;
+use super::HoverCallback;
 use puri::handler::{HasHandler, ScrollOutcome};
 use puri::{Point, Size, Vec2};
 
@@ -43,7 +43,7 @@ pub fn units(scale: f64, viewport: Size) -> puri::scroll::Units {
 pub fn scroll<World: 'static, Hover: 'static>(
     scale: f64,
     handler: impl Fn(&mut World, Vec2) -> ScrollOutcome<Vec2> + 'static,
-) -> Place<World, Hover> {
+) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
         let units = units(scale, placement.rect.size());
         output.handler().on_scroll(move |world, event| {
@@ -59,8 +59,6 @@ pub fn scroll<World: 'static, Hover: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::widget::Fragment;
-    use measured::Output;
     use puri::handler::{
         Event, PointerInfo, PointerScrollEvent, PointerState, PointerType, ScrollDelta,
     };
@@ -81,7 +79,7 @@ mod tests {
     #[test]
     fn acceptance_does_not_require_a_state_write() {
         for accepts in [false, true] {
-            let mut output = Fragment::<(), ()>::empty();
+            let mut output = crate::widget::HoverContext::<(), ()>::new(Default::default());
             scroll(1.0, move |_, delta| {
                 if accepts {
                     ScrollOutcome::with_remainder(Vec2::ZERO)
@@ -93,7 +91,11 @@ mod tests {
                 Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
             );
             let event = event(ScrollDelta::LineDelta(0.0, 1.0));
-            let outcome = output.handler.unwrap().dispatch_scroll(&mut (), &event);
+            let outcome = output
+                .finish()
+                .handler
+                .unwrap()
+                .dispatch_scroll(&mut (), &event);
             assert_eq!(outcome.handled(), accepts);
             match outcome.remaining {
                 None => assert!(accepts),
@@ -125,7 +127,7 @@ mod tests {
                 ScrollDelta::PixelDelta((2.0, 2.0).into()),
             ),
         ] {
-            let mut output = Fragment::<(), ()>::empty();
+            let mut output = crate::widget::HoverContext::<(), ()>::new(Default::default());
             scroll(2.0, move |_, input| {
                 assert_eq!(input, expected);
                 ScrollOutcome::with_remainder(Vec2::new(input.x, input.y / 2.0))
@@ -134,7 +136,11 @@ mod tests {
                 Placement::root(Rect::new(0.0, 0.0, 20.0, 30.0)),
             );
             let event = event(delta);
-            let outcome = output.handler.unwrap().dispatch_scroll(&mut (), &event);
+            let outcome = output
+                .finish()
+                .handler
+                .unwrap()
+                .dispatch_scroll(&mut (), &event);
             assert!(outcome.handled());
             let Some(Event::Scroll(result)) = outcome.remaining else {
                 panic!("expected unconsumed scroll");
@@ -145,7 +151,7 @@ mod tests {
 
     #[test]
     fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
-        let mut output = Fragment::<Vec<Vec2>, ()>::empty();
+        let mut output = crate::widget::HoverContext::<Vec<Vec2>, ()>::new(Default::default());
         let outer = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         scroll(2.0, |log: &mut Vec<Vec2>, delta| {
             log.push(delta);
@@ -161,7 +167,7 @@ mod tests {
                 Rect::new(0.0, 0.0, 10.0, 20.0),
             ),
         );
-        let handler = output.handler.unwrap();
+        let handler = output.finish().handler.unwrap();
         for (x, expected) in [
             (5.0, vec![Vec2::new(80.0, 160.0), Vec2::new(80.0, 80.0)]),
             (15.0, vec![Vec2::new(80.0, 160.0)]),

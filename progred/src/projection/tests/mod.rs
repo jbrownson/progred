@@ -145,7 +145,7 @@ impl EditingWorld {
     }
 }
 
-fn editing_frame(world: &mut EditingWorld, raw: bool) -> Placed<EditingWorld> {
+fn editing_frame(world: &mut EditingWorld, raw: bool) -> crate::placed::Ready<EditingWorld> {
     editing_frame_with_projection(world, raw, None)
 }
 
@@ -153,7 +153,16 @@ fn editing_frame_with_projection(
     world: &mut EditingWorld,
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
-) -> Placed<EditingWorld> {
+) -> crate::placed::Ready<EditingWorld> {
+    editing_frame_at(world, raw, projection, None)
+}
+
+fn editing_frame_at(
+    world: &mut EditingWorld,
+    raw: bool,
+    projection: Option<&Projection<EditingWorld>>,
+    pointer: Option<Point>,
+) -> crate::placed::Ready<EditingWorld> {
     let stack = crate::stack::load::<EditingWorld>();
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
@@ -249,6 +258,10 @@ fn editing_frame_with_projection(
         measured,
         Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
     )
+    .run(&placed::HoverInput {
+        pointer,
+        ..Default::default()
+    })
 }
 
 /// Select through the current projection, without an editing interaction.
@@ -295,7 +308,12 @@ fn projected_line(
 ) -> Option<progred_display::LineEdit> {
     struct NoEval;
     impl progred_display::Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+        fn apply_scoped(
+            &self,
+            _: &gid::Value,
+            _: &[(gid::CellId, gid::Value)],
+            _scope: Option<&grap::ForeignOverlay<'_>>,
+        ) -> grap::Evaluation {
             panic!("unexpected projection application")
         }
 
@@ -324,15 +342,17 @@ fn projected_line(
             targets: progred_display::ProjectionTargets::new(&target),
         })
     }?;
-    let layout = match layout {
-        progred_display::Layout::Before { child, .. } => *child,
+    let layout = match progred_display::recording::record(&layout) {
+        progred_display::recording::Recorded::Before { child, .. } => *child,
         layout => layout,
     };
     match layout {
-        progred_display::Layout::Widget(widget) => placed_line_description(&widget),
-        progred_display::Layout::Row { children, .. } => {
+        progred_display::recording::Recorded::Widget(widget) => placed_line_description(&widget),
+        progred_display::recording::Recorded::Row { children, .. } => {
             children.into_iter().find_map(|child| match child {
-                progred_display::Layout::Widget(widget) => placed_line_description(&widget),
+                progred_display::recording::Recorded::Widget(widget) => {
+                    placed_line_description(&widget)
+                }
                 _ => None,
             })
         }
@@ -390,6 +410,7 @@ fn placed_line_description(
     });
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
     measured::place(measured, placement)
+        .run(&Default::default())
         .handler?
         .dispatch_key(&mut (), &puri::handler::KeyboardEvent::default());
     captured.take()

@@ -1,9 +1,6 @@
-//! Progred's placement output: the frame with its pixels still
-//! latent. Placement folds every leaf's contribution into one
-//! [`Placed`] — hover probes, the composed handler, keyboard
-//! geometry, completion offers, floating subtrees, and deferred ink
-//! — combined in placement order, so the later contribution is on
-//! top: painted last, asked first.
+//! Progred adapters for the placement → hover → paint/dispatch chain.
+//! The shared hover continuation keeps paint optional and resolves targets
+//! before either painting or dispatch sees the frame.
 
 use crate::completion::Offers;
 use crate::frame::Hovered;
@@ -24,23 +21,24 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use uig::Placement;
 
-pub type Placed<C> = progred_display::widget::Fragment<C, Hovered>;
+pub type Placed<C> = progred_display::widget::HoverPass<C, Hovered>;
+pub type Ready<C> = progred_display::widget::Fragment<C, Hovered>;
+pub use progred_display::widget::{HoverContext, HoverInput};
 pub type DispatchContext<C> = progred_display::widget::frame::DispatchContext<C, Hovered>;
 pub type Ink<'a> = progred_display::widget::frame::Ink<'a, Hovered>;
 pub type Render = progred_display::widget::frame::Render<Hovered>;
 pub type Probe = progred_display::widget::frame::Probe<Hovered>;
 pub use progred_display::widget::frame::ViewRegion;
 
-/// The leaf-construction context: today's placement-pass interface,
-/// accumulating a [`Placed`] instead of drawing and registering
-/// against live machinery. Ink defers; everything else settles here.
-pub(crate) struct Builder<'a, C: 'static> {
-    placed: &'a mut Placed<C>,
+/// App-facing construction inside the hover continuation. Claims are
+/// answered now; ink and handlers are returned for later execution.
+pub(crate) struct Builder<'a, 'input, C: 'static> {
+    placed: &'a mut HoverContext<'input, C, Hovered>,
     visible: bool,
 }
 
-impl<'builder, C: 'static> Builder<'builder, C> {
-    fn new(placed: &'builder mut Placed<C>, placement: Placement) -> Self {
+impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
+    fn new(placed: &'builder mut HoverContext<'input, C, Hovered>, placement: Placement) -> Self {
         Self {
             placed,
             visible: !placement.clipped_out(),
@@ -50,7 +48,7 @@ impl<'builder, C: 'static> Builder<'builder, C> {
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: Hovered) {
         if !placement.clipped_out() {
-            self.placed.probes.push(Probe::retaining(placement, target));
+            self.placed.claim(Probe::retaining(placement, target));
         }
     }
 
@@ -59,7 +57,7 @@ impl<'builder, C: 'static> Builder<'builder, C> {
     /// its hit geometry exactly.
     pub fn claim_exact(&mut self, placement: Placement, target: Hovered) {
         if !placement.clipped_out() {
-            self.placed.probes.push(Probe::exact(placement, target));
+            self.placed.claim(Probe::exact(placement, target));
         }
     }
 
@@ -69,16 +67,14 @@ impl<'builder, C: 'static> Builder<'builder, C> {
         target_at: impl Fn(Point) -> Option<Hovered> + 'static,
     ) {
         if !placement.clipped_out() {
-            self.placed
-                .probes
-                .push(Probe::dynamic(placement, target_at));
+            self.placed.claim(Probe::dynamic(placement, target_at));
         }
     }
 
     /// Contribute an unnamed region that blocks targets below it.
     pub fn occlude(&mut self, placement: Placement) {
         if !placement.clipped_out() {
-            self.placed.probes.push(Probe::occludes(placement));
+            self.placed.claim(Probe::occludes(placement));
             self.handler().on_pointer_down(move |_, event| {
                 placement.contains(Point::new(event.state.position.x, event.state.position.y))
             });
@@ -154,41 +150,35 @@ impl<'builder, C: 'static> Builder<'builder, C> {
         render: impl for<'ink> FnOnce(&mut dyn puri::draw::CanvasSink, Ink<'ink>) + 'static,
     ) {
         if self.visible {
-            self.placed.renders.push(Box::new(render));
+            self.placed.ink(render);
         }
     }
 }
 
-impl<C: 'static> puri::draw::CanvasSink for Builder<'_, C> {
+impl<C: 'static> puri::draw::CanvasSink for Builder<'_, '_, C> {
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if self.visible {
-            self.placed
-                .renders
-                .push(Box::new(move |cv, _| cv.image(image, transform)));
+            self.placed.render(move |cv, _| cv.image(image, transform));
         }
     }
 
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         if self.visible {
             self.placed
-                .renders
-                .push(Box::new(move |cv, _| cv.fill(shape, brush, transform)));
+                .render(move |cv, _| cv.fill(shape, brush, transform));
         }
     }
 
     fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         if self.visible {
-            self.placed.renders.push(Box::new(move |cv, _| {
-                cv.stroke(shape, style, brush, transform)
-            }));
+            self.placed
+                .render(move |cv, _| cv.stroke(shape, style, brush, transform));
         }
     }
 
     fn draw_glyphs(&mut self, run: GlyphRun) {
         if self.visible {
-            self.placed
-                .renders
-                .push(Box::new(move |cv, _| cv.glyph_run(run)));
+            self.placed.render(move |cv, _| cv.glyph_run(run));
         }
     }
 
@@ -199,50 +189,50 @@ impl<C: 'static> puri::draw::CanvasSink for Builder<'_, C> {
         content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
         if self.visible {
-            let render_start = self.placed.renders.len();
-            content(self);
-            let renders = self.placed.renders.split_off(render_start);
-            self.placed
-                .renders
-                .push(Box::new(move |cv: &mut dyn puri::draw::CanvasSink, ink| {
-                    cv.clip(shape, transform, |cv| Placed::<C>::paint(renders, cv, ink))
-                }));
+            self.placed.with_clip(shape, transform, |output| {
+                content(&mut Builder {
+                    placed: output,
+                    visible: true,
+                });
+            });
         }
     }
 }
 
-impl<C: 'static> HasHandler<C> for Builder<'_, C> {
+impl<C: 'static> HasHandler<C> for Builder<'_, '_, C> {
     type Input = DispatchContext<C>;
 
     fn handler(&mut self) -> &mut Handler<C, DispatchContext<C>> {
-        self.placed.handler_mut()
+        self.placed.handler()
     }
 }
 
-impl<C: 'static> Builder<'_, C> {
+impl<C: 'static> Builder<'_, '_, C> {
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
-        &mut self.placed.completion
+        self.placed.completion()
     }
 }
 
 fn built_into<C: 'static>(
-    f: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
-) -> impl FnOnce(Placement, &mut Placed<C>) + 'static {
+    f: impl FnOnce(&mut Builder<'_, '_, C>, Placement) + 'static,
+) -> impl FnOnce(Placement, &mut HoverContext<'_, C, Hovered>) + 'static {
     move |placement, placed| f(&mut Builder::new(placed, placement), placement)
 }
 
 pub fn leaf<C: 'static>(
     extent: Extent,
-    place: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
+    place: impl FnOnce(&mut Builder<'_, '_, C>, Placement) + 'static,
 ) -> Measured<Placed<C>> {
-    progred_display::widget::debug_geometry(measured::leaf_into(extent, built_into(place)))
+    progred_display::widget::leaf(extent, move |output, placement| {
+        built_into(place)(placement, output)
+    })
 }
 
 pub fn before<C: 'static>(
     child: Measured<Placed<C>>,
-    place_before: impl FnOnce(&mut Builder<'_, C>, Placement) + 'static,
+    place_before: impl FnOnce(&mut Builder<'_, '_, C>, Placement) + 'static,
 ) -> Measured<Placed<C>> {
-    measured::before_into(child, built_into(place_before))
+    progred_display::widget::before_hover(child, built_into(place_before))
 }
 
 /// Add `content` as an out-of-flow subtree without contributing its
@@ -252,7 +242,7 @@ pub use progred_display::widget::container::floating;
 
 pub fn decorate<C: 'static>(
     child: Measured<Placed<C>>,
-    draw: impl FnOnce(&mut Builder<'_, C>, Rect) + 'static,
+    draw: impl FnOnce(&mut Builder<'_, '_, C>, Rect) + 'static,
 ) -> Measured<Placed<C>> {
     before(child, move |p, placement| draw(p, placement.rect))
 }
@@ -285,7 +275,7 @@ pub fn scrolled_at<C: 'static>(
     let scrolled = container::scrolled(child, offset, on_scroll);
     before(scrolled, move |output, placement| {
         if let Some((root, scale)) = owner {
-            output.placed.view_regions.push(ViewRegion {
+            output.placed.view_region(ViewRegion {
                 root,
                 rect: placement.rect,
                 maximum: Vec2::new(
@@ -305,13 +295,17 @@ pub fn viewport<C: 'static>(child: Measured<Placed<C>>, root: Root) -> Measured<
             measured::clipped_placement(placement, placement.rect),
             child_rect,
         );
-        let mut placed = inner.place_at(child_placement).clipped(placement);
-        placed.view_regions.push(ViewRegion {
-            root,
-            rect: placement.rect,
-            maximum: Vec2::ZERO,
-        });
-        placed
+        inner
+            .place_at(child_placement)
+            .clipped(placement)
+            .map(move |mut placed| {
+                placed.view_regions.push(ViewRegion {
+                    root,
+                    rect: placement.rect,
+                    maximum: Vec2::ZERO,
+                });
+                placed
+            })
     })
 }
 
@@ -320,9 +314,7 @@ pub fn viewport<C: 'static>(child: Measured<Placed<C>>, root: Root) -> Measured<
 /// the projection language remains unaware of panes.
 pub fn in_view<C: 'static>(child: Measured<Placed<C>>, root: Root) -> Measured<Placed<C>> {
     measured::around(child, move |placement, inner| {
-        let mut placed = inner.place_at(placement);
-        placed.root_navigation(&root);
-        placed
+        inner.place_at(placement).in_view(root)
     })
 }
 
@@ -425,11 +417,11 @@ mod tests {
         let value = gid::Value::record([]);
         let side = widget::delimiter::side(puri::Delim::Bracket, side);
         let side = if interactive {
-            widget::selectable_side(side)
+            widget::selectable_widget(side)
         } else {
             side
         };
-        let prepared = side(&mut widget::Context {
+        let native = widget::fill_height(side)(&mut widget::Context {
             project: &progred_display::test_support::NoProject,
             completion: &|_, _, _| panic!("unexpected completion control"),
             drawing: &|_, _, _| panic!("unexpected drawing control"),
@@ -468,11 +460,12 @@ mod tests {
             same_target: PartialEq::eq,
             primary_edit: |_| false,
         });
-        let native = (prepared.measure)(span);
-        assert!(native.extent.width <= prepared.maximum_width);
-        measured::leaf(native.extent, move |placement| {
-            measured::place(native, placement)
-        })
+        let extent = Extent {
+            width: native.extent.width,
+            ascent: span.ascent.max(native.extent.ascent),
+            descent: span.descent.max(native.extent.descent),
+        };
+        measured::leaf(extent, move |placement| measured::place(native, placement))
     }
 
     #[test]
@@ -492,12 +485,15 @@ mod tests {
                     let interactive = native_delimiter(true, scale, span, side);
                     assert_eq!(inert.extent, interactive.extent);
                     let placement = Placement::root(inert.extent.rect_at(Point::new(20.0, 30.0)));
-                    let inert = measured::place(inert, placement);
-                    let interactive = measured::place(interactive, placement);
-                    assert!(inert.probes.is_empty() && inert.handler.is_none());
-                    assert_eq!(interactive.probes.len(), 1);
+                    let inert = measured::place(inert, placement).run(&Default::default());
+                    let interactive = measured::place(interactive, placement).run(&HoverInput {
+                        pointer: Some(placement.rect.center()),
+                        ..Default::default()
+                    });
+                    assert!(inert.claim.is_none() && inert.handler.is_none());
+                    assert!(interactive.claim.is_some());
                     assert_eq!(
-                        interactive.probe(placement.rect.center(), None, 0.0),
+                        interactive.claim.clone().map(|(_, claim)| claim),
                         Some(Claim::Direct(Hovered::Tree(crate::hover::Hover::Value(
                             std::rc::Rc::from([])
                         ))))
@@ -505,7 +501,7 @@ mod tests {
                     assert!(interactive.handler.is_some());
                     let outlines = [inert, interactive].map(|placed| {
                         let mut canvas = TestCanvas(DrawList::new());
-                        Placed::<Vec<&str>>::paint(placed.renders, &mut canvas, no_ink());
+                        Ready::<Vec<&str>>::paint(placed.renders, &mut canvas, no_ink());
                         let [
                             DrawCmd::Fill {
                                 shape: Shape::Path(path),
@@ -538,11 +534,17 @@ mod tests {
         );
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
-        let placed = measured::place(measured, Placement::new(rect, bounds));
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let point = Point::new(rect.x1 + 1.0, rect.center().y);
+        let placed = measured::place(measured, Placement::new(rect, bounds)).run(&HoverInput {
+            pointer: Some(point),
+            prior: Some(&target),
+            reach: 3.0,
+            debug_geometry: false,
+            occluded: false,
+        });
         assert!(matches!(
-            placed.probe(point, Some(&target), 3.0),
+            placed.claim.clone().map(|(_, claim)| claim),
             Some(Claim::Extended(_))
         ));
         for (root, hovered, picking, expected) in [
@@ -581,9 +583,10 @@ mod tests {
     fn clipped_native_delimiters_add_no_ink_hover_or_actions() {
         let measured = native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Close);
         let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
-        let placed = measured::place(measured, Placement::new(rect, Rect::ZERO));
+        let placed =
+            measured::place(measured, Placement::new(rect, Rect::ZERO)).run(&Default::default());
         assert!(placed.renders.is_empty());
-        assert!(placed.probes.is_empty());
+        assert!(placed.claim.is_none());
         assert!(placed.handler.is_none());
     }
 
@@ -609,7 +612,11 @@ mod tests {
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-        let mut placed: Placed<Vec<&'static str>> = Placed::empty();
+        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> =
+            HoverContext::new(HoverInput {
+                pointer: Some(Point::new(5.0, 5.0)),
+                ..Default::default()
+            });
         let mut p = Builder::new(&mut placed, placement);
         p.handler().on_pointer_down(|log, _| {
             log.push("raw below");
@@ -624,9 +631,10 @@ mod tests {
             log.push("raw above declined");
             false
         });
+        let mut placed = placed.finish();
         let mut pointer = DispatchContext::new(None, Some(target));
         let mut log = Vec::new();
-        assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+        assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
             &mut log,
             &down_at(5.0, 5.0),
             &mut pointer
@@ -641,19 +649,20 @@ mod tests {
             ascent: 5.0,
             descent: 5.0,
         };
-        let lower = leaf(extent, |p: &mut Builder<'_, Vec<&'static str>>, _| {
+        let lower = leaf(extent, |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
             p.handler().on_pointer_down(|log, _| {
                 log.push("lower");
                 true
             });
         });
-        let upper = leaf(extent, |p: &mut Builder<'_, Vec<&'static str>>, _| {
+        let upper = leaf(extent, |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
             p.handler().on_pointer_down(|log, _| {
                 log.push("upper");
                 false
             });
         });
-        let placed = measured::place_top_left(measured::layers(vec![lower, upper]), Point::ZERO);
+        let placed = measured::place_top_left(measured::layers(vec![lower, upper]), Point::ZERO)
+            .run(&Default::default());
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
 
@@ -669,7 +678,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 10.0,
             },
-            |p: &mut Builder<'_, ()>, placement| {
+            |p: &mut Builder<'_, '_, ()>, placement| {
                 p.fill(placement.rect, Color::BLACK, Affine::IDENTITY);
             },
         );
@@ -679,7 +688,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 20.0,
             },
-            |p: &mut Builder<'_, ()>, placement| {
+            |p: &mut Builder<'_, '_, ()>, placement| {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
@@ -696,11 +705,11 @@ mod tests {
                 Rect::new(5.0, 5.0, 15.0, 15.0),
                 Rect::new(0.0, 0.0, 100.0, 100.0),
             ),
-        );
-        assert_eq!(placed.floaters.len(), 1);
+        )
+        .run(&Default::default());
 
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<()>::paint(placed.raise_floaters().renders, &mut canvas, no_ink());
+        Ready::<()>::paint(placed.renders, &mut canvas, no_ink());
         assert!(matches!(
             &canvas.0.0[..],
             [
@@ -725,14 +734,17 @@ mod tests {
                 ascent: 4.0,
                 descent: 6.0,
             },
-            |p: &mut Builder<'_, ()>, placement| {
+            |p: &mut Builder<'_, '_, ()>, placement| {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
         let rect = Rect::new(3.0, 5.0, 15.0, 15.0);
-        let placed = measured::place(child, Placement::root(rect));
+        let placed = measured::place(child, Placement::root(rect)).run(&HoverInput {
+            debug_geometry: true,
+            ..Default::default()
+        });
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<()>::paint(
+        Ready::<()>::paint(
             placed.renders,
             &mut canvas,
             Ink {
@@ -767,7 +779,7 @@ mod tests {
                 ascent: 5.0,
                 descent: 5.0,
             },
-            move |p: &mut Builder<'_, ()>, placement| {
+            move |p: &mut Builder<'_, '_, ()>, placement| {
                 p.claim(placement, target.clone());
                 p.activate(target.clone(), |_| true);
                 p.pick(target, |_| true);
@@ -781,9 +793,10 @@ mod tests {
                 Rect::new(20.0, 20.0, 30.0, 30.0),
                 Rect::new(0.0, 0.0, 10.0, 10.0),
             ),
-        );
+        )
+        .run(&Default::default());
 
-        assert!(placed.probes.is_empty());
+        assert!(placed.claim.is_none());
         assert!(placed.renders.is_empty());
         assert!(placed.handler.is_some());
     }
@@ -796,7 +809,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 300.0,
             },
-            |p: &mut Builder<'_, ()>, placement| {
+            |p: &mut Builder<'_, '_, ()>, placement| {
                 assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
                 p.fill(
                     Rect::new(
@@ -818,9 +831,10 @@ mod tests {
                 Rect::new(10.0, 20.0, 90.0, 70.0),
                 Rect::new(0.0, 0.0, 100.0, 100.0),
             ),
-        );
+        )
+        .run(&Default::default());
         let mut canvas = TestCanvas(DrawList::new());
-        Placed::<()>::paint(placed.renders, &mut canvas, no_ink());
+        Ready::<()>::paint(placed.renders, &mut canvas, no_ink());
         let [
             DrawCmd::Clip {
                 shape: Shape::Rect(clip),
@@ -852,7 +866,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 30.0,
             },
-            |p: &mut Builder<'_, Vec<&'static str>>, _| {
+            |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
                 p.handler().on_pointer_down(|log, _| {
                     log.push("down");
                     true
@@ -878,7 +892,8 @@ mod tests {
                 },
             ),
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-        );
+        )
+        .run(&Default::default());
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
         assert!(!handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
@@ -899,7 +914,11 @@ mod tests {
     }
     #[test]
     fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
-        let mut placed: Placed<Vec<&'static str>> = Placed::empty();
+        let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> =
+            HoverContext::new(HoverInput {
+                pointer: Some(Point::new(5.0, 5.0)),
+                ..Default::default()
+            });
         let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         let mut p = Builder::new(&mut placed, full);
         p.handler().on_pointer_down(|log, _| {
@@ -915,7 +934,8 @@ mod tests {
             true
         });
         p.occlude(Placement::new(full.rect, Rect::new(10.0, 10.0, 20.0, 20.0)));
-        let handler = placed.handler.unwrap();
+        let mut placed = placed.finish();
+        let handler = placed.handler.take().unwrap();
         let mut log = Vec::new();
         for button in [PointerButton::Primary, PointerButton::Secondary] {
             let mut event = down_at(15.0, 15.0);
@@ -943,7 +963,7 @@ mod tests {
             let target = target.clone();
             leaf(
                 extent,
-                move |p: &mut Builder<'_, Vec<&'static str>>, placement| {
+                move |p: &mut Builder<'_, '_, Vec<&'static str>>, placement| {
                     p.claim(placement, target.clone());
                     p.activate(target.clone(), move |log| {
                         log.push(label);
@@ -960,7 +980,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let owner_view = in_view(
             floating(
-                leaf(extent, |_: &mut Builder<'_, Vec<&'static str>>, _| {}),
+                leaf(extent, |_: &mut Builder<'_, '_, Vec<&'static str>>, _| {}),
                 row("popup"),
                 move |_, _| Some(Placement::new(popup_rect, bounds)),
             ),
@@ -974,9 +994,12 @@ mod tests {
             in_view(row("covered pane"), covered),
             Placement::new(popup_rect, bounds),
         );
-        let placed = owner_view.over(covered_view).raise_floaters();
+        let placed = owner_view.over(covered_view).run(&HoverInput {
+            pointer: Some(popup_rect.center()),
+            ..Default::default()
+        });
         let point = popup_rect.center();
-        let (root, Claim::Direct(hit)) = placed.probe_scoped(point, None, 0.0).unwrap() else {
+        let (root, Claim::Direct(hit)) = placed.claim.clone().unwrap() else {
             panic!("popup hover")
         };
         assert!(root.as_ref() == Some(&owner));
@@ -1012,13 +1035,11 @@ mod tests {
                 ascent: 0.0,
                 descent: 20.0,
             },
-            move |output: &mut widget::Fragment<usize, _>, placement| {
-                output
-                    .probes
-                    .push(progred_display::widget::frame::Probe::retaining(
-                        placement,
-                        target.clone(),
-                    ));
+            move |output: &mut widget::HoverContext<'_, usize, _>, placement| {
+                output.claim(progred_display::widget::frame::Probe::retaining(
+                    placement,
+                    target.clone(),
+                ));
                 output
                     .handler()
                     .on_pointer_down_with(move |count, _, hovered| {
@@ -1056,8 +1077,10 @@ mod tests {
             ),
             Placement::root(bounds),
         );
-        let output = native.over(covered).raise_floaters();
-        assert!(output.floaters.is_empty());
+        let output = native.over(covered).run(&HoverInput {
+            pointer: Some(rect.center()),
+            ..Default::default()
+        });
         let [landmark] = output.descends.as_slice() else {
             panic!("native popup must contribute exactly one landmark");
         };
@@ -1073,7 +1096,7 @@ mod tests {
             Some(crate::navigate::Direction::Left)
         ));
         assert_eq!(count, 10);
-        let (root, claim) = output.probe_scoped(rect.center(), None, 0.0).unwrap();
+        let (root, claim) = output.claim.clone().unwrap();
         assert_eq!(root, Some(owner.clone()));
         assert_eq!(claim, Claim::Direct(expected.clone()));
         let handler = output.handler.unwrap();
@@ -1096,7 +1119,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 30.0,
             },
-            move |p: &mut Builder<'_, usize>, placement| {
+            move |p: &mut Builder<'_, '_, usize>, placement| {
                 p.claim(placement, claimed.clone());
                 p.activate(claimed, |count| {
                     *count += 1;
@@ -1109,7 +1132,8 @@ mod tests {
                 ScrollOutcome::pass(event)
             }),
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-        );
+        )
+        .run(&Default::default());
         let mut pointer = DispatchContext::new(None, Some(target));
         let handler = placed.handler.unwrap();
         let mut count = 0;
@@ -1125,7 +1149,10 @@ mod tests {
         ));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         for covered in [false, true] {
-            let mut placed: Placed<usize> = Placed::empty();
+            let mut placed: HoverContext<'_, usize, Hovered> = HoverContext::new(HoverInput {
+                pointer: Some(Point::new(5.0, 5.0)),
+                ..Default::default()
+            });
             let mut p = Builder::new(&mut placed, placement);
             p.handler()
                 .on_pointer_down(|_, _| panic!("covered raw handler"));
@@ -1143,7 +1170,8 @@ mod tests {
             if covered {
                 p.occlude(placement);
             }
-            let hovered = match placed.probe(Point::new(5.0, 5.0), None, 0.0) {
+            let mut placed = placed.finish();
+            let hovered = match placed.claim.take().map(|(_, claim)| claim) {
                 Some(Claim::Direct(target)) => target,
                 Some(Claim::Occludes) => Hovered::Blocked,
                 _ => panic!("hit"),
@@ -1153,7 +1181,7 @@ mod tests {
             event.state.modifiers =
                 ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
             let mut count = 0;
-            assert!(placed.handler.unwrap().dispatch_pointer_down_with(
+            assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
                 &mut count,
                 &event,
                 &mut pointer

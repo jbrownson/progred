@@ -2444,6 +2444,7 @@ name = "progred-display"
 version = "0.1.0"
 dependencies = [
  "gid",
+ "grap",
  "measured",
  "peniko",
  "puri",

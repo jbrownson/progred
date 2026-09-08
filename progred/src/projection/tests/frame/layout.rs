@@ -11,7 +11,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
         let projection = Projection::new([progred_display::partial(move |_| {
             let rectangle = |id, width, height| {
                 let placements = placed_boxes.clone();
-                Layout::Widget(Rc::new(move |_| {
+                Layout::widget(Rc::new(move |_| {
                     let placements = placements.clone();
                     widget::leaf(
                         Extent {
@@ -19,14 +19,13 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                             ascent: 0.0,
                             descent: height,
                         },
-                        move |output: &mut widget::Fragment<EditingWorld, Hovered>, placement| {
+                        move |output: &mut widget::HoverContext<'_, EditingWorld, Hovered>,
+                              placement| {
                             placements.borrow_mut().push((id, placement.rect));
-                            output
-                                .probes
-                                .push(progred_display::widget::frame::Probe::exact(
-                                    placement,
-                                    Hovered::Tree(Hover::Entry(id)),
-                                ));
+                            output.claim(progred_display::widget::frame::Probe::exact(
+                                placement,
+                                Hovered::Tree(Hover::Entry(id)),
+                            ));
                             output.handler().on_pointer_down(move |world, event| {
                                 placement.contains(Point::new(
                                     event.state.position.x,
@@ -59,8 +58,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             cells: Cells::new(),
         };
         let mut world = EditingWorld::new(&doc, &core_libraries());
-        let output =
-            editing_frame_with_projection(&mut world, false, Some(&projection)).raise_floaters();
+        let output = editing_frame_with_projection(&mut world, false, Some(&projection));
         let content = placements
             .borrow()
             .iter()
@@ -77,7 +75,9 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
         );
         let margin = Point::new(35.0, 25.0);
         assert_eq!(
-            output.probe(margin, None, 0.0),
+            editing_frame_at(&mut world, false, Some(&projection), Some(margin))
+                .claim
+                .map(|(_, claim)| claim),
             Some(if card {
                 Claim::Occludes
             } else {
@@ -85,7 +85,9 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             })
         );
         assert_eq!(
-            output.probe(content.center(), None, 0.0),
+            editing_frame_at(&mut world, false, Some(&projection), Some(content.center()))
+                .claim
+                .map(|(_, claim)| claim),
             Some(Claim::Direct(Hovered::Tree(Hover::Entry(1))))
         );
         let handler = output.handler.unwrap();
@@ -127,7 +129,7 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
             let child_log = projection_log.clone();
             let before_log = projection_log.clone();
             widget::before(
-                progred_display::Layout::Widget(Rc::new(move |_| {
+                progred_display::Layout::widget(Rc::new(move |_| {
                     let log = child_log.clone();
                     widget::leaf(
                         Extent {
@@ -158,8 +160,8 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
         cells: Cells::new(),
     };
     for (available, expected_width, names) in [
-        (200.0, 100.0, ["before wide", "wide"]),
-        (60.0, 20.0, ["before narrow", "narrow"]),
+        (200.0, 100.0, ["wide", "before wide"]),
+        (60.0, 20.0, ["narrow", "before narrow"]),
     ] {
         log.borrow_mut().clear();
         let (_, extent) = context.place(
@@ -187,8 +189,8 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
 }
 
 #[test]
-fn surrounding_widgets_receive_only_the_chosen_child_span() {
-    use progred_display::widget::{self, MeasuredSide};
+fn stretching_widgets_receive_only_the_chosen_row_span() {
+    use progred_display::widget;
     use std::cell::RefCell;
     let measured_spans = Rc::new(RefCell::new(Vec::new()));
     let placed_spans = Rc::new(RefCell::new(Vec::new()));
@@ -199,21 +201,19 @@ fn surrounding_widgets_receive_only_the_chosen_child_span() {
         input.value?;
         let measured_log = measured_log.clone();
         let placed_log = placed_log.clone();
-        let side: widget::Side<(), Hovered> = Rc::new(move |_| {
-            let measured_log = measured_log.clone();
+        let side: widget::Widget<(), Hovered> = Rc::new(move |_| {
             let placed_log = placed_log.clone();
-            MeasuredSide {
-                maximum_width: 5.0,
-                measure: Box::new(move |span| {
-                    measured_log.borrow_mut().push(span);
-                    widget::leaf(Extent { width: 5.0, ..span }, move |_, placement| {
-                        placed_log.borrow_mut().push(placement);
-                    })
-                }),
-            }
+            let extent = Extent {
+                width: 5.0,
+                ..Extent::default()
+            };
+            measured_log.borrow_mut().push(extent);
+            measured::fill_height(widget::leaf(extent, move |_, placement| {
+                placed_log.borrow_mut().push(placement);
+            }))
         });
         let box_at = |width, ascent| {
-            progred_display::Layout::Widget(Rc::new(move |_| {
+            progred_display::Layout::widget(Rc::new(move |_| {
                 widget::leaf(
                     Extent {
                         width,
@@ -224,10 +224,13 @@ fn surrounding_widgets_receive_only_the_chosen_child_span() {
                 )
             }))
         };
-        Some(progred_display::surround(
-            side.clone(),
-            progred_display::alternatives([box_at(100.0, 10.0), box_at(20.0, 40.0)]),
-            side,
+        Some(progred_display::row(
+            0.0,
+            [
+                progred_display::Layout::widget(side.clone()),
+                progred_display::alternatives([box_at(100.0, 10.0), box_at(20.0, 40.0)]),
+                progred_display::Layout::widget(side),
+            ],
         ))
     })]);
     let doc = Document {
@@ -256,7 +259,13 @@ fn surrounding_widgets_receive_only_the_chosen_child_span() {
         placed_spans.borrow_mut().clear();
         let (_, extent) =
             context.place(&doc, None, &Annotations::default(), width, None, None, None);
-        assert_eq!(&*measured_spans.borrow(), &[expected, expected]);
+        assert_eq!(
+            &*measured_spans.borrow(),
+            &[Extent {
+                width: 5.0,
+                ..Extent::default()
+            }; 2]
+        );
         assert_eq!(
             extent,
             Extent {
@@ -268,7 +277,7 @@ fn surrounding_widgets_receive_only_the_chosen_child_span() {
         assert_eq!(placements.len(), 2);
         assert_eq!(placements[0].rect.height(), expected.height());
         assert_eq!(
-            placements[1].rect.x0 - placements[0].rect.x1,
+            placements[0].rect.x0 - placements[1].rect.x1,
             expected.width
         );
     }

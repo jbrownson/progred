@@ -95,7 +95,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    let placed = measured::place(node, Placement::root(rect));
+    let placed = measured::place(node, Placement::root(rect)).run(&Default::default());
     let point = placed
         .descends
         .iter()
@@ -220,7 +220,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             set_completion_view: Rc::new(|_, _, _, _| {}),
         },
     );
-    let active = measured::place(active, Placement::root(rect));
+    let active = measured::place(active, Placement::root(rect)).run(&Default::default());
     let line = active
         .descends
         .iter()
@@ -292,12 +292,15 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             ),
         );
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-        let mut placed = measured::place(node, placement);
+        let mut placed = measured::place(node, placement).run(&Default::default());
         if covered {
             let cover = leaf::<Vec<&str>>(extent, |p, placement| {
                 p.occlude(placement);
             });
-            placed = measured::Output::over(placed, measured::place(cover, placement));
+            placed = measured::Output::over(
+                placed,
+                measured::place(cover, placement).run(&Default::default()),
+            );
         }
         let mut state = PointerState::default();
         state.position.x = 5.0;
@@ -366,7 +369,8 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             Rect::new(0.0, 0.0, 20.0, 20.0),
             Rect::new(0.0, 0.0, 10.0, 20.0),
         ),
-    );
+    )
+    .run(&Default::default());
     for (x, button, pointer_type, owns_view, expected) in [
         (
             5.0,
@@ -521,11 +525,13 @@ fn scrub_start_respects_dispatch_order_pending_picks_and_visible_view_geometry()
             Rect::new(0.0, 0.0, 20.0, 20.0),
             Rect::new(0.0, 0.0, 10.0, 20.0),
         );
-        let mut placed = measured::place(placed::in_view(node, root.clone()), placement);
+        let mut placed = measured::place(placed::in_view(node, root.clone()), placement)
+            .run(&Default::default());
         if covered {
             placed = measured::Output::over(
                 placed,
-                measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement),
+                measured::place(leaf(extent, |p, placement| p.occlude(placement)), placement)
+                    .run(&Default::default()),
             );
         }
         let mut state = PointerState::default();
@@ -591,7 +597,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
             None,
         );
         let mut fragment =
-            <progred_display::widget::Fragment<(), Hovered> as measured::Output>::empty();
+            progred_display::widget::HoverContext::<(), Hovered>::new(Default::default());
         place(
             &mut fragment,
             Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -607,7 +613,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         };
         event.state.modifiers =
             ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
-        assert!(!fragment.handler.is_some_and(|handler| {
+        assert!(!fragment.finish().handler.is_some_and(|handler| {
             handler.dispatch_pointer_down_with(
                 &mut (),
                 &event,
@@ -621,8 +627,10 @@ fn gesture_place<World: 'static>(
     layout: progred_display::Layout<World, Hovered>,
     start: progred_display::widget::gesture::Start<World>,
     edit: Option<progred_display::widget::gesture::BeginEdit<World>>,
-) -> progred_display::widget::Place<World, Hovered> {
-    let progred_display::Layout::Before { before, .. } = layout else {
+) -> progred_display::widget::HoverCallback<World, Hovered> {
+    let progred_display::recording::Recorded::Before { before, .. } =
+        progred_display::recording::record(&layout)
+    else {
         panic!("expected an ordinary widget wrapper");
     };
     let mut fonts = parley::FontContext::new();
@@ -655,7 +663,7 @@ fn gesture_place<World: 'static>(
 
 fn with_placement<C: 'static>(
     child: Measured<Placed<C>>,
-    place: progred_display::widget::Place<C, Hovered>,
+    place: progred_display::widget::HoverCallback<C, Hovered>,
 ) -> Measured<Placed<C>> {
-    measured::before_into(child, move |placement, output| place(output, placement))
+    progred_display::widget::before_hover(child, move |placement, output| place(output, placement))
 }

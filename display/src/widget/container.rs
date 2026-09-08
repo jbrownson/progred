@@ -1,5 +1,7 @@
 //! Containers compose placement outputs without knowing which widgets produced them.
 
+use super::HoverPass;
+
 use measured::{Extent, Measured, Output};
 use puri::handler::{Event, EventOutcome, Handler, HasHandler, PointerScrollEvent, ScrollOutcome};
 use puri::{Placement, Point, Vec2};
@@ -26,22 +28,25 @@ pub fn floating<O: Layers + 'static>(
 
 /// The caller owns the offset. Only gesture starts and scroll are bounded;
 /// motion, release, and keyboard events remain available to active controls.
-pub fn scrolled<World: 'static, O: Layers + HasHandler<World> + 'static>(
-    child: Measured<O>,
+pub fn scrolled<World: 'static, H: 'static>(
+    child: Measured<HoverPass<World, H>>,
     offset: Vec2,
     on_scroll: impl Fn(&mut World, &PointerScrollEvent) -> ScrollOutcome + 'static,
-) -> Measured<O> {
+) -> Measured<HoverPass<World, H>> {
     measured::around(child, move |placement, inner| {
-        let mut base = O::empty();
-        if !placement.clipped_out() {
-            base.handler().on_scroll(move |state, event| {
-                if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
-                    on_scroll(state, event)
-                } else {
-                    ScrollOutcome::pass(event)
-                }
-            });
-        }
+        let base = HoverPass::new(move |base| {
+            if !placement.clipped_out() {
+                base.handler().on_scroll(move |state, event| {
+                    if placement
+                        .contains(Point::new(event.state.position.x, event.state.position.y))
+                    {
+                        on_scroll(state, event)
+                    } else {
+                        ScrollOutcome::pass(event)
+                    }
+                });
+            }
+        });
         let child_rect = inner.extent().rect_at(placement.rect.origin() - offset);
         let child_placement = measured::child_placement(
             measured::clipped_placement(placement, placement.rect),
@@ -72,13 +77,13 @@ pub fn gate_starts<World: 'static, Input: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::widget::{Fragment, leaf};
+    use crate::widget::{HoverContext, leaf};
     use puri::draw::{DrawCmd, DrawList, Shape};
     use puri::handler::{PointerButtonEvent, PointerInfo, PointerState, PointerType, ScrollDelta};
     use puri::{Affine, Color, Rect};
     use std::{cell::RefCell, rc::Rc};
 
-    type Frame = Fragment<Vec<&'static str>, u8>;
+    type Frame<'a> = HoverContext<'a, Vec<&'static str>, u8>;
 
     fn extent() -> Extent {
         Extent {
@@ -136,6 +141,7 @@ mod tests {
             }),
             viewport,
         );
+        let frame = frame.run(&Default::default());
         assert_eq!(
             *seen.borrow(),
             Some(Placement::new(
@@ -193,7 +199,7 @@ mod tests {
             });
             assert_eq!(widget.extent, Extent::default());
             let output = measured::place(widget, Placement::root(Rect::ZERO));
-            assert_eq!(output.floaters.len(), usize::from(show));
+            output.run(&Default::default());
         }
         assert_eq!(
             &*seen.borrow(),

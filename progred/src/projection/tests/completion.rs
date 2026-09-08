@@ -1227,6 +1227,7 @@ fn projected_completion_entries_with(
         measured,
         Placement::root(Rect::from_origin_size(Point::ZERO, extent.size())),
     )
+    .run(&Default::default())
     .completion
     .expect("the selected pending emits its offers")
     .entries

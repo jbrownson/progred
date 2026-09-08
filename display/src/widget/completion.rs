@@ -1,7 +1,9 @@
 //! Completion interaction is a native widget; callers supply offers and own state.
 
+use crate::widget::{HoverContext, HoverPass};
+
 use super::frame::Probe;
-use super::{Fragment, container, extent, leaf, scroll, style::Styles};
+use super::{container, extent, leaf, scroll, style::Styles};
 use measured::{Extent, Measured, col, pad};
 use peniko::kurbo::Insets;
 use puri::handler::{HasHandler, Key, Modifiers, NamedKey, PointerType};
@@ -39,7 +41,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     state: State,
     set_view: impl Fn(&mut C, State) + 'static,
     command: fn(&Modifiers) -> bool,
-) -> Measured<Fragment<C, H>> {
+) -> Measured<HoverPass<C, H>> {
     let State {
         choice,
         scroll,
@@ -139,7 +141,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         move |placement, _, _| Some(placement),
     );
     let card = pad(Insets::uniform(4.0 * scale), viewport);
-    let card = measured::before_into(card, move |_, output: &mut Fragment<C, H>| {
+    let card = crate::widget::before_hover(card, move |_, output: &mut HoverContext<'_, C, H>| {
         output.handler().on_key(move |world, event| {
             if event.state.is_down() {
                 match event.key {
@@ -182,10 +184,10 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         border: Some((border(scale), Color::new([0.75, 0.77, 0.81, 1.0]).into())),
         radius: 6.0 * scale,
     };
-    measured::before_into(card, move |placement, output| {
+    crate::widget::before_hover(card, move |placement, output| {
         if !placement.clipped_out() {
             output.render(move |canvas, _| panel.place(canvas, placement));
-            output.probes.push(Probe::occludes(placement));
+            output.claim(Probe::occludes(placement));
             output.handler().on_pointer_down(move |_, event| {
                 placement.contains(Point::new(event.state.position.x, event.state.position.y))
             });
@@ -228,12 +230,10 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
     chosen: bool,
     choose: impl Fn(&mut C) + 'static,
     activate: impl Fn(&mut C) + 'static,
-) -> Measured<Fragment<C, H>> {
+) -> Measured<HoverPass<C, H>> {
     leaf(extent(row.metrics()), move |output, placement| {
         if !placement.clipped_out() {
-            output
-                .probes
-                .push(Probe::retaining(placement, hover.clone()));
+            output.claim(Probe::retaining(placement, hover.clone()));
             output.handler().on_pointer_move(move |world, event| {
                 if event.pointer.pointer_type == PointerType::Mouse
                     && event.current.buttons.is_empty()

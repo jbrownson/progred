@@ -4,6 +4,10 @@ use super::*;
 use crate::command::Example;
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "layout-profile")]
+mod forms;
+mod layout_ffi;
+
 struct ProfileView {
     /// Logical points; the projection and clip receive physical pixels.
     size: kurbo::Size,
@@ -54,7 +58,8 @@ impl ProfileView {
 #[derive(Clone, Copy)]
 struct Timing {
     total: Duration,
-    project: Duration,
+    phases: FrameTimes,
+    disposal: Duration,
 }
 
 fn iterations() -> usize {
@@ -93,12 +98,14 @@ fn profile(name: &str, mut frame: impl FnMut(usize) -> Bench, check: impl Fn(&Be
             let build = start.elapsed();
             // Validation is outside the timer; disposal is inside it.
             check(&bench);
-            let project = bench.project_elapsed;
+            let phases = bench.times;
             let cleanup = Instant::now();
             drop(bench);
+            let disposal = cleanup.elapsed();
             Timing {
-                total: build + cleanup.elapsed(),
-                project,
+                total: build + disposal,
+                phases,
+                disposal,
             }
         })
         .collect();
@@ -108,8 +115,18 @@ fn profile(name: &str, mut frame: impl FnMut(usize) -> Bench, check: impl Fn(&Be
     );
     let warm = &timings[warmup..];
     distribution("frame + disposal", warm.iter().map(|t| t.total));
-    distribution("project + measure", warm.iter().map(|t| t.project));
-    distribution("remaining work", warm.iter().map(|t| t.total - t.project));
+    distribution("prepare", warm.iter().map(|t| t.phases.prepare));
+    distribution(
+        "choices + settled geometry",
+        warm.iter().map(|t| t.phases.choices),
+    );
+    distribution("placement", warm.iter().map(|t| t.phases.placement));
+    distribution("hover + handlers", warm.iter().map(|t| t.phases.hover));
+    distribution(
+        "paint + handler disposal",
+        warm.iter().map(|t| t.phases.paint),
+    );
+    distribution("output disposal", warm.iter().map(|t| t.disposal));
 }
 
 fn fixture(source: &str) -> Document {

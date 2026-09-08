@@ -76,7 +76,7 @@ impl number::Scrubbable for f64 {
     }
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let number = read(input.value?)?;
@@ -107,7 +107,7 @@ fn expression_precedence(value: &Value) -> Option<Precedence> {
     fields.get(&FUNCTION)?.as_cell().and_then(precedence)
 }
 
-fn operand<World: 'static, Hover: Clone + 'static>(
+fn operand<World: 'static, Hover: Clone + PartialEq + 'static>(
     field: CellId,
     value: &Value,
     parent: Precedence,
@@ -126,7 +126,7 @@ fn operand<World: 'static, Hover: Clone + 'static>(
     }
 }
 
-pub fn binary_display<World: 'static, Hover: Clone + 'static>(
+pub fn binary_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     input.pending.is_none().then_some(())?;
@@ -310,7 +310,7 @@ pub fn completions(query: &str) -> Vec<progred_display::Completion> {
     number::completions(query, vocabulary::F64, value)
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::F64, "f64"),
@@ -364,13 +364,15 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::new_cell_id;
     use progred_display::test_support::{ProjectionCall, inspect};
 
     struct TestEnv;
 
     impl progred_display::Env for TestEnv {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 
@@ -505,7 +507,7 @@ mod tests {
         let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
         let sum = call(vocabulary::SUM, value(1.0), product);
         let layout = binary_display(&projection_input(&sum)).unwrap();
-        let Layout::Row { children, .. } = layout else {
+        let Recorded::Row { children, .. } = layout.record() else {
             panic!("binary notation is a row");
         };
         assert!(matches!(&inspect(&(&children[0])),
@@ -534,10 +536,10 @@ mod tests {
             value(3.0),
         );
         let layout = binary_display(&projection_input(&product)).unwrap();
-        let Layout::Row { children, .. } = layout else {
+        let Recorded::Row { children, .. } = layout.record() else {
             panic!("binary notation is a row");
         };
-        assert!(matches!(&children[0], Layout::Surround { .. }));
+        progred_display::test_support::delimited(&children[0]);
     }
 
     #[test]

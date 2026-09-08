@@ -502,7 +502,7 @@ fn matches_pattern(
 
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
-pub fn match_display<World: 'static, Hover: Clone + 'static>(
+pub fn match_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -542,7 +542,7 @@ pub fn match_display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn pattern_at<World: 'static, Hover: Clone + 'static>(
+fn pattern_at<World: 'static, Hover: Clone + PartialEq + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     default: &progred_display::Partial<World, Hover>,
@@ -555,7 +555,7 @@ fn pattern_at<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-fn pattern_binder<World: 'static, Hover: Clone + 'static>(
+fn pattern_binder<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     input.pending.is_none().then_some(())?;
@@ -587,7 +587,7 @@ fn pattern_binder<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn case_display<World: 'static, Hover: Clone + 'static>(
+fn case_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     (input.value?.as_record()?.len() == 2 && input.pending.is_none()).then_some(())?;
@@ -635,7 +635,7 @@ enum BindingForm {
 /// `let` and `where` are the same sequential binding call with two
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
-pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
+pub fn bindings_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -707,7 +707,7 @@ pub fn bindings_display<World: 'static, Hover: Clone + 'static>(
     }
 }
 
-fn binding_display<World: 'static, Hover: Clone + 'static>(
+fn binding_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -746,7 +746,7 @@ fn binding_display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn quote_marker<World: 'static, Hover: Clone + 'static>(
+fn quote_marker<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
@@ -758,7 +758,7 @@ fn quote_marker<World: 'static, Hover: Clone + 'static>(
 /// Quote reads as a small structural marker followed by its template,
 /// rather than as a generic call with a redundant `expression` label.
 /// Decorated calls fall through so this compact form never hides data.
-pub fn quote_display<World: 'static, Hover: Clone + 'static>(
+pub fn quote_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -786,7 +786,7 @@ pub fn quote_display<World: 'static, Hover: Clone + 'static>(
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
-pub fn do_display<World: 'static, Hover: Clone + 'static>(
+pub fn do_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -815,7 +815,7 @@ pub fn do_display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::MATCH, "match"),
@@ -860,6 +860,8 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::new_cell_id;
     use progred_display::Env;
     use progred_display::test_support::{ProjectionCall, inspect};
@@ -868,7 +870,7 @@ mod tests {
     struct NoEval;
 
     impl Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 
@@ -1029,8 +1031,9 @@ mod tests {
     #[test]
     fn do_projects_its_expression_list_without_hiding_extra_data() {
         let expression = do_call([blob("first"), blob("second")]);
-        let Layout::Row { children, .. } =
-            do_display(&relative_projection_input(&expression)).expect("coherent do projection")
+        let Recorded::Row { children, .. } = do_display(&relative_projection_input(&expression))
+            .expect("coherent do projection")
+            .record()
         else {
             panic!("do is its marker followed by a list")
         };
@@ -1056,7 +1059,7 @@ mod tests {
         let expression = blob("body");
         let quoted = quote_call(expression.clone());
         let layout = quote_display(&projection_input(&quoted)).unwrap();
-        let Layout::Row { children, .. } = &layout else {
+        let Recorded::Row { children, .. } = &layout.record() else {
             panic!("quote is an inline prefix");
         };
         let [marker, body] = children.as_slice() else {
@@ -1079,13 +1082,13 @@ mod tests {
         assert_eq!(value, &expression);
 
         let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
-        let Layout::Before { child, .. } = marker else {
+        let Recorded::Before { child, .. } = marker.record() else {
             panic!("the marker claims hover");
         };
-        let Layout::Before { child, .. } = *child else {
+        let Recorded::Before { child, .. } = *child else {
             panic!("the marker remains selectable");
         };
-        let Layout::Leaf(puri::Leaf::Text {
+        let Recorded::Leaf(puri::Leaf::Text {
             text, paint: face, ..
         }) = *child
         else {
@@ -1486,10 +1489,10 @@ mod tests {
         let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
         let let_layout = bindings_display(&relative_projection_input(&let_call)).unwrap();
-        let Layout::Alternatives(let_options) = let_layout else {
+        let Recorded::Alternatives(let_options) = let_layout.record() else {
             panic!("let has responsive forms");
         };
-        let Layout::Row {
+        let Recorded::Row {
             children: let_children,
             ..
         } = &let_options[0]
@@ -1497,7 +1500,7 @@ mod tests {
             panic!("flat let first");
         };
         assert_eq!(let_children.len(), 4);
-        let Layout::Shared { child, .. } = &let_children[2] else {
+        let Recorded::Shared { child, .. } = &let_children[2] else {
             panic!("let shares its in marker");
         };
         assert_eq!(
@@ -1507,7 +1510,7 @@ mod tests {
             )]))
         );
 
-        let Layout::Shared {
+        let Recorded::Shared {
             child: bindings, ..
         } = &let_children[1]
         else {
@@ -1524,13 +1527,13 @@ mod tests {
         assert_eq!(steps, &[Step::Key(vocabulary::BINDINGS)]);
 
         let where_layout = bindings_display(&relative_projection_input(&where_call)).unwrap();
-        let Layout::Alternatives(where_options) = where_layout else {
+        let Recorded::Alternatives(where_options) = where_layout.record() else {
             panic!("where has responsive forms");
         };
-        let Layout::Row { children, .. } = &where_options[0] else {
+        let Recorded::Row { children, .. } = &where_options[0] else {
             panic!("flat where first");
         };
-        let Layout::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = &children[0] else {
             panic!("where starts with its body");
         };
         assert!(matches!(&inspect(&(child.as_ref())),
@@ -1544,16 +1547,16 @@ mod tests {
         let binder = new_cell_id();
         let binding = bind_clause(binder, blob("value"));
         let layout = binding_display(&relative_projection_input(&binding)).unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("a binding has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("a flat binding first");
         };
-        let Layout::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = &children[0] else {
             panic!("a binding shares its pattern and equals");
         };
-        let Layout::Row {
+        let Recorded::Row {
             alignment: progred_display::RowAlignment::Center,
             children,
             ..
@@ -1581,14 +1584,14 @@ mod tests {
             ],
         );
         let layout = match_display(&projection_input(&expression)).unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("match has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("flat match first");
         };
         let mut arms = &children[1];
-        while let Layout::Shared { child, .. } = arms {
+        while let Recorded::Shared { child, .. } = arms {
             arms = child.as_ref();
         }
         let ProjectionCall::At {
@@ -1608,19 +1611,19 @@ mod tests {
             .and_then(|cases| cases.values().next())
             .expect("the standard list contains its cases");
         let case = case_display(&relative_projection_input(case)).unwrap();
-        let Layout::Alternatives(options) = case else {
+        let Recorded::Alternatives(options) = case.record() else {
             panic!("a case has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("a flat case is a row");
         };
-        let Layout::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = &children[0] else {
             panic!("a case shares its head");
         };
-        let Layout::Row { children, .. } = child.as_ref() else {
+        let Recorded::Row { children, .. } = child.as_ref() else {
             panic!("a case head contains its pattern and arrow");
         };
-        let Layout::Before { child, .. } = &children[1] else {
+        let Recorded::Before { child, .. } = &children[1] else {
             panic!("the arrow claims the case hover");
         };
         assert_eq!(
@@ -1629,7 +1632,7 @@ mod tests {
                 grap::vocabulary::EXPRESSION
             )]))
         );
-        assert!(matches!(child.as_ref(), Layout::Before { .. }));
+        assert!(matches!(child.as_ref(), Recorded::Before { .. }));
     }
 
     #[test]

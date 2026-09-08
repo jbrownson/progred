@@ -911,7 +911,7 @@ fn volume_drawing(
     ))
 }
 
-fn display<World: 'static, Hover: Clone + 'static>(
+fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<World, Hover>> {
@@ -960,7 +960,7 @@ fn display<World: 'static, Hover: Clone + 'static>(
     }
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),
@@ -1085,6 +1085,8 @@ fn root_completion() -> progred_display::Completion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use progred_display::ProjectionTargets;
     use std::rc::Rc;
 
@@ -1248,7 +1250,7 @@ mod tests {
         )
         .expect("preview projection");
 
-        let Layout::Leaf(Leaf::Drawing(drawing)) = layout else {
+        let Recorded::Leaf(Leaf::Drawing(drawing)) = layout.record() else {
             panic!("preview is one drawing leaf");
         };
         let [Command::Image { image, transform }] = drawing.commands.as_slice() else {
@@ -1499,7 +1501,7 @@ mod tests {
     struct NoEval;
 
     impl progred_display::Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 

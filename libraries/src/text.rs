@@ -78,7 +78,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value?)?;
@@ -90,7 +90,7 @@ pub fn display<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
@@ -176,7 +176,7 @@ mod tests {
     struct NoEval;
 
     impl progred_display::Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 

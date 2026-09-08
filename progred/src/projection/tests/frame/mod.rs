@@ -13,7 +13,8 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let contribution = |name: &'static str| {
         let log = log.clone();
         Box::new(
-            move |output: &mut progred_display::widget::Fragment<(), Hovered>, _: Placement| {
+            move |output: &mut progred_display::widget::HoverContext<'_, (), Hovered>,
+                  _: Placement| {
                 let during_paint = log.clone();
                 output.render(move |_, _| during_paint.borrow_mut().push(name));
                 output.handler().on_key(move |_, _| {
@@ -21,7 +22,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
                     false
                 });
             },
-        ) as progred_display::widget::Place<(), Hovered>
+        ) as progred_display::widget::HoverCallback<(), Hovered>
     };
     let extent = Extent {
         width: 40.0,
@@ -31,12 +32,14 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let child = progred_display::widget::leaf(extent, contribution("child"));
     let before = contribution("before");
     let after = contribution("after");
-    let decorated = measured::after_into(
-        measured::before_into(child, move |placement, output| before(output, placement)),
+    let decorated = progred_display::widget::after_hover(
+        progred_display::widget::before_hover(child, move |placement, output| {
+            before(output, placement)
+        }),
         move |placement, output| after(output, placement),
     );
     assert_eq!(decorated.extent, extent);
-    let output = measured::place_top_left(decorated, Point::ZERO);
+    let output = measured::place_top_left(decorated, Point::ZERO).run(&Default::default());
     assert!(log.borrow().is_empty());
     assert!(
         !output
@@ -47,8 +50,17 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     );
     assert_eq!(&*log.borrow(), &["after", "child", "before"]);
     log.borrow_mut().clear();
-    settle(output, None);
+    settle(output);
     assert_eq!(&*log.borrow(), &["before", "child", "after"]);
+}
+
+#[derive(Clone, Copy, Default)]
+struct FrameTimes {
+    prepare: std::time::Duration,
+    choices: std::time::Duration,
+    placement: std::time::Duration,
+    hover: std::time::Duration,
+    paint: std::time::Duration,
 }
 
 struct Bench {
@@ -56,21 +68,18 @@ struct Bench {
     descends: Vec<Descend<World>>,
     /// What the probe answered for the pass's pointer input.
     hit: Option<Claim<Hovered>>,
-    project_elapsed: std::time::Duration,
+    times: FrameTimes,
     frame_elapsed: std::time::Duration,
 }
 
-/// Probe with the pointer, then render and unpack the placed frame.
-fn settle(placed: Placed<World>, pointer: Option<Point>) -> Bench {
-    settle_with_sources(placed, pointer, None)
+/// Paint and unpack the output of the completed hover pass.
+fn settle(placed: crate::placed::Ready<World>) -> Bench {
+    settle_with_sources(placed, None)
 }
 
-fn settle_with_sources(
-    placed: Placed<World>,
-    pointer: Option<Point>,
-    sources: Option<&Sources>,
-) -> Bench {
-    let hit = pointer.and_then(|point| placed.probe(point, None, crate::frame::HOVER_REACH));
+fn settle_with_sources(placed: crate::placed::Ready<World>, sources: Option<&Sources>) -> Bench {
+    let hit = placed.claim;
+    let hit = hit.map(|(_, claim)| claim);
     let hovered = match &hit {
         Some(Claim::Direct(hover)) => Some(hover.clone()),
         _ => None,
@@ -79,14 +88,14 @@ fn settle_with_sources(
         Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
         _ => None,
     });
-    let Placed {
+    let crate::placed::Ready {
         descends, renders, ..
     } = placed;
     let mut bench = Bench {
         list: DrawList::new(),
         descends,
         hit,
-        project_elapsed: std::time::Duration::ZERO,
+        times: FrameTimes::default(),
         frame_elapsed: std::time::Duration::ZERO,
     };
     let ink = crate::placed::Ink {
@@ -217,7 +226,8 @@ impl BenchContext {
         });
         eprintln!(
             "frame at {width:.0}px: {:.1?} (project {:.1?})",
-            bench.frame_elapsed, bench.project_elapsed,
+            bench.frame_elapsed,
+            bench.times.prepare + bench.times.choices,
         );
         (bench, extent)
     }
@@ -269,15 +279,13 @@ impl BenchContext {
             commit_label: Rc::new(|_, _, _, _| {}),
             set_completion_view: Rc::new(|_, _, _, _| {}),
         };
-        // Timed as the frame perf canary: projection is reported
-        // separately, while the total also includes placement, hover,
-        // and render-continuation settlement. Fallback-heavy narrow
-        // widths are where accidental exponentials have surfaced twice.
-        // Numbers only, no assert (user call).
+        // Test-only phase timings; normal frames contain no timers.
         let start = std::time::Instant::now();
         let root_path = root;
         let root = sources.resolve_path(root_path);
-        let node = project::<World>(
+        #[cfg(feature = "layout-profile")]
+        let profile = progred_display::profile::enter(progred_display::profile::Kind::Projection);
+        let graph = prepare_project::<World>(
             ProjectDescription {
                 sources,
                 root,
@@ -294,9 +302,25 @@ impl BenchContext {
             &mut tcx,
             hooks,
         );
-        let project_elapsed = start.elapsed();
+        #[cfg(feature = "layout-profile")]
+        drop(profile);
+        let prepare = start.elapsed();
+        let phase = std::time::Instant::now();
+        #[cfg(feature = "layout-profile")]
+        let profile = progred_display::profile::enter(progred_display::profile::Kind::Choices);
+        let node = resolve_choices(
+            graph,
+            width,
+            std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
+        );
+        #[cfg(feature = "layout-profile")]
+        drop(profile);
+        let choices = phase.elapsed();
+        let phase = std::time::Instant::now();
         let extent = node.extent;
         let rect = node.extent.rect_at(origin);
+        #[cfg(feature = "layout-profile")]
+        let profile = progred_display::profile::enter(progred_display::profile::Kind::Placement);
         let placed = measured::place(
             node,
             match viewport {
@@ -304,8 +328,33 @@ impl BenchContext {
                 None => Placement::root(rect),
             },
         );
-        let mut settled = settle_with_sources(placed, pointer, Some(&sources));
-        settled.project_elapsed = project_elapsed;
+        #[cfg(feature = "layout-profile")]
+        drop(profile);
+        let placement = phase.elapsed();
+        let phase = std::time::Instant::now();
+        #[cfg(feature = "layout-profile")]
+        let profile = progred_display::profile::enter(progred_display::profile::Kind::Hover);
+        let placed = placed.run(&progred_display::widget::HoverInput {
+            pointer,
+            reach: crate::frame::HOVER_REACH,
+            ..Default::default()
+        });
+        #[cfg(feature = "layout-profile")]
+        drop(profile);
+        let hover = phase.elapsed();
+        let phase = std::time::Instant::now();
+        #[cfg(feature = "layout-profile")]
+        let profile = progred_display::profile::enter(progred_display::profile::Kind::Paint);
+        let mut settled = settle_with_sources(placed, Some(&sources));
+        #[cfg(feature = "layout-profile")]
+        drop(profile);
+        settled.times = FrameTimes {
+            prepare,
+            choices,
+            placement,
+            hover,
+            paint: phase.elapsed(),
+        };
         settled.frame_elapsed = start.elapsed();
         (settled, extent)
     }

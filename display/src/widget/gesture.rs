@@ -1,4 +1,4 @@
-use super::{Annotate, Place, before};
+use super::{Annotate, HoverCallback, before};
 use crate::{ActionHandler, Layout};
 use gid::Value;
 use puri::drag::Drag;
@@ -82,7 +82,7 @@ pub fn targeted<World: 'static, Hover: 'static>(
     picking: fn(&PointerButtonEvent) -> bool,
     same_target: fn(&Hover, &Hover) -> bool,
     start: impl Fn(&mut World, Point) -> bool + 'static,
-) -> Place<World, Hover> {
+) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
         output
             .handler()

@@ -398,9 +398,13 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             Placement::root(bounds),
         );
         assert_eq!(calls.get(), expected - 1);
+        let placed = placed.run(&placed::HoverInput {
+            pointer: Some(Point::new(5.0, 5.0)),
+            ..Default::default()
+        });
         for _ in 0..2 {
             assert!(matches!(
-                placed.probe(Point::new(5.0, 5.0), None, 0.0),
+                placed.claim.clone().map(|(_, claim)| claim),
                 Some(Claim::Direct(_))
             ));
         }
@@ -409,7 +413,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let source = SourceTrace::Stored(Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]));
         let target = Hovered::Tree(Hover::Drawing(source.clone()));
         assert_eq!(
-            placed.probe(Point::new(5.0, 5.0), None, 0.0),
+            placed.claim.clone().map(|(_, claim)| claim),
             Some(Claim::Direct(target.clone()))
         );
         let mut pointer = placed::DispatchContext::new(None, Some(target));
@@ -439,14 +443,15 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             &mut pointer,
         ));
         assert_eq!(*selected.borrow(), [source]);
-        settle(placed, Some(Point::new(5.0, 5.0)));
+        settle(placed);
         assert_eq!(calls.get(), expected);
     }
     let clipped = measured::place(
         drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
-    );
-    settle(clipped, Some(Point::new(5.0, 5.0)));
+    )
+    .run(&Default::default());
+    settle(clipped);
     assert_eq!(calls.get(), 2);
 }
 
@@ -495,8 +500,9 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         let placed = measured::place(
             drawing_frame(&doc, &libraries, shape_function, Rc::new(|_, _, _| {})),
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
-        );
-        let drawing = settle(placed, None);
+        )
+        .run(&Default::default());
+        let drawing = settle(placed);
         let widths: Vec<_> = drawing
             .list
             .0

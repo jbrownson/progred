@@ -1,5 +1,6 @@
-//! The layout language and Puri leaf language as GID values, so a Grap
-//! projection can return them. Each node is a
+//! Grap-facing layout: scoped emitting programs, and stored descriptions.
+//! A `layout program` returns an ordinary closure run by [`scope`] with
+//! Rust-owned output. In the stored description form, each node is a
 //! record under a single marker key, strings ride the text convention
 //! and numbers the f64 convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
@@ -14,9 +15,9 @@ use gid::{CellId, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
-    alternatives, block_hover, border, bracket, descend, leaf, on_activate, on_hover,
-    overlay as layout_overlay, pickable, slot,
+    ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, alternatives,
+    block_hover, border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay,
+    pickable, slot,
 };
 use puri::{
     Affine, BezPath, Brush, Circle, ColorStop, Command, Drawing, Gradient, Leaf, Line, Point, Rect,
@@ -27,6 +28,7 @@ const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4
 
 mod events;
 pub use events::on_event;
+pub mod scope;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -46,6 +48,9 @@ pub mod vocabulary {
     // Leaves.
     pub const TEXT: CellId = CellId::from_u128(0x08e64d1f3a92c5b7b7f0d38a165e29c4);
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
+    pub const CANVAS: CellId = CellId::from_u128(0xb33eff2d53a88f77c431b7c728a49f0f);
+    pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0x120660d976130c8ba722d26b1a28c975);
+    pub const INVALID_PROGRAM: CellId = CellId::from_u128(0xd0f97606bf2fe368cb9645e4bad8b977);
 
     // Generic display and event nodes.
     pub const DRAWING: CellId = CellId::from_u128(0x6889fa235b002be4c8b106d5f31dafbf);
@@ -509,7 +514,7 @@ pub fn bordered(child: Value) -> Value {
 /// Decode a layout value into the display language, attaching the
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
-pub fn decode<World: 'static, Hover: Clone + 'static>(
+pub fn decode<World: 'static, Hover: Clone + PartialEq + 'static>(
     value: &Value,
     select: &ActionHandler<World>,
     hover: &Hover,
@@ -524,41 +529,45 @@ pub fn decode<World: 'static, Hover: Clone + 'static>(
     })
 }
 
-fn decode_with<World: 'static, Hover: Clone + 'static>(
+fn decode_with<World: 'static, Hover: Clone + PartialEq + 'static>(
     value: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = value.as_record()?;
     if let Some(content) = fields.get(&vocabulary::ROW) {
         let content = content.as_record()?;
-        return Some(Layout::Row {
-            alignment: RowAlignment::Baseline,
-            gap: read_number(content.get(&vocabulary::GAP)?)?,
-            children: children(content.get(&vocabulary::CHILDREN)?, target)?,
-        });
+        return Some(progred_display::row(
+            read_number(content.get(&vocabulary::GAP)?)?,
+            children(content.get(&vocabulary::CHILDREN)?, target)?,
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::COL) {
         let content = content.as_record()?;
         let baseline = read_number(content.get(&vocabulary::BASELINE)?)?;
         (baseline >= 0.0 && baseline.fract() == 0.0).then_some(())?;
-        return Some(Layout::Col {
-            baseline: baseline as usize,
-            gap: read_number(content.get(&vocabulary::GAP)?)?,
-            children: children(content.get(&vocabulary::CHILDREN)?, target)?,
-        });
+        let children = children(content.get(&vocabulary::CHILDREN)?, target)?;
+        (children.is_empty() || baseline < children.len() as f64).then_some(())?;
+        return Some(progred_display::col(
+            baseline as usize,
+            read_number(content.get(&vocabulary::GAP)?)?,
+            children,
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::OVERLAY) {
         return Some(layout_overlay(children(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::PAD) {
         let content = content.as_record()?;
-        return Some(Layout::Pad {
-            left: read_number(content.get(&vocabulary::LEFT)?)?,
-            top: read_number(content.get(&vocabulary::TOP)?)?,
-            right: read_number(content.get(&vocabulary::RIGHT)?)?,
-            bottom: read_number(content.get(&vocabulary::BOTTOM)?)?,
-            child: Box::new(decode_with(content.get(&vocabulary::CHILD)?, target)?),
-        });
+        return Some(progred_display::padding(
+            (
+                read_number(content.get(&vocabulary::LEFT)?)?,
+                read_number(content.get(&vocabulary::TOP)?)?,
+                read_number(content.get(&vocabulary::RIGHT)?)?,
+                read_number(content.get(&vocabulary::BOTTOM)?)?,
+            )
+                .into(),
+            decode_with(content.get(&vocabulary::CHILD)?, target)?,
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::BORDER) {
         return Some(border(decode_with(content, target)?));
@@ -680,7 +689,7 @@ fn decode_with<World: 'static, Hover: Clone + 'static>(
     None
 }
 
-fn children<World: 'static, Hover: Clone + 'static>(
+fn children<World: 'static, Hover: Clone + PartialEq + 'static>(
     list: &Value,
     target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Vec<Layout<World, Hover>>> {
@@ -903,13 +912,13 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    decode_with(input.value?, &|| input.targets.current())
+    scope::display(input).or_else(|| decode_with(input.value?, &|| input.targets.current()))
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),
@@ -926,6 +935,9 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
         (vocabulary::DRAWING, "drawing"),
         (vocabulary::PROGRAM, "program"),
         (vocabulary::SLOT, "slot"),
+        (vocabulary::CANVAS, "canvas"),
+        (vocabulary::LAYOUT_PROGRAM, "layout program"),
+        (vocabulary::INVALID_PROGRAM, "invalid layout program"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),
         (vocabulary::HOVERABLE, "hoverable"),
@@ -1033,6 +1045,10 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
             cells,
             ForeignFunctions::default()
                 .register(
+                    vocabulary::LAYOUT_PROGRAM,
+                    ForeignFunction::runtime(scope::program),
+                )
+                .register(
                     vocabulary::DRAWING,
                     ForeignFunction::new(drawing_projection),
                 )
@@ -1052,12 +1068,14 @@ pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use progred_display::test_support::{ProjectionCall, inspect};
     use std::rc::Rc;
 
-    fn decoded(value: &Value) -> Option<Layout<(), ()>> {
+    fn decoded(value: &Value) -> Option<Recorded<(), ()>> {
         let select: ActionHandler<()> = Rc::new(|_| false);
-        decode(value, &select, &())
+        decode(value, &select, &()).map(|layout| layout.record())
     }
 
     #[test]
@@ -1134,7 +1152,7 @@ mod tests {
             &library.functions(),
             50,
         );
-        let Some(Layout::After { child, .. }) = decoded(&evaluation.result) else {
+        let Some(Recorded::After { child, .. }) = decoded(&evaluation.result) else {
             panic!(
                 "the composed projection returns a border: {:?}",
                 evaluation.result
@@ -1147,14 +1165,23 @@ mod tests {
     }
 
     #[test]
+    fn invalid_column_baselines_decline_before_measurement() {
+        let child = || text_leaf("one", vocabulary::NAME_FACE);
+        assert!(decoded(&col(0, 0.0, [child()])).is_some());
+        assert!(decoded(&col(1, 0.0, [child()])).is_none());
+        assert!(decoded(&col(usize::MAX, 0.0, [child()])).is_none());
+        assert!(decoded(&col(0, 0.0, [])).is_some());
+    }
+
+    #[test]
     fn border_wraps_any_decoded_layout() {
         let value = bordered(text_leaf("inside", vocabulary::NAME_FACE));
-        let Some(Layout::After { child, .. }) = decoded(&value) else {
+        let Some(Recorded::After { child, .. }) = decoded(&value) else {
             panic!("border decodes");
         };
         assert!(matches!(
             child.as_ref(),
-            Layout::Leaf(Leaf::Text { text, .. }) if text == "inside"
+            Recorded::Leaf(Leaf::Text { text, .. }) if text == "inside"
         ));
     }
 
@@ -1180,20 +1207,20 @@ mod tests {
                 ),
             ),
         ]);
-        let Some(Layout::Alternatives(forms)) = decoded(&value) else {
+        let Some(Recorded::Alternatives(forms)) = decoded(&value) else {
             panic!("alternatives decode");
         };
         assert_eq!(forms.len(), 2);
-        let Layout::Before { child, .. } = &forms[0] else {
+        let Recorded::Before { child, .. } = &forms[0] else {
             panic!("selectable attaches the provided select");
         };
-        let Layout::Row { gap, children, .. } = child.as_ref() else {
+        let Recorded::Row { gap, children, .. } = child.as_ref() else {
             panic!("row inside");
         };
         assert_eq!(*gap, 4.0);
         assert!(matches!(
             &children[0],
-            Layout::Leaf(Leaf::Text {
+            Recorded::Leaf(Leaf::Text {
                 text,
                 paint: Paint::Face(Face::Name),
                 ..
@@ -1202,12 +1229,10 @@ mod tests {
         assert!(matches!(&inspect(&(&children[1])),
             ProjectionCall::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
         ));
-        let Layout::Surround { left, child, right } = &forms[1] else {
-            panic!("bracket decodes to side widgets around its child");
-        };
+        let (left, child, right) = progred_display::test_support::delimited(&forms[1]);
         crate::test_widgets::assert_delimiter(left, Delim::Brace, progred_display::Side::Open);
         crate::test_widgets::assert_delimiter(right, Delim::Brace, progred_display::Side::Close);
-        let Layout::Col { children, .. } = child.as_ref() else {
+        let Recorded::Col { children, .. } = child else {
             panic!("col inside");
         };
         assert!(matches!(
@@ -1284,7 +1309,7 @@ mod tests {
                 ),
             ],
         );
-        let Some(Layout::Leaf(Leaf::Drawing(drawing))) = decoded(&display) else {
+        let Some(Recorded::Leaf(Leaf::Drawing(drawing))) = decoded(&display) else {
             panic!("Puri drawing leaf");
         };
         assert_eq!(

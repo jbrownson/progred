@@ -2,12 +2,10 @@
 //! Layout measures and places these without interpreting a widget description.
 
 use crate::{ActionHandler, Layout, LineEdit};
-pub use frame::{Fragment, Ink, Probe};
+pub use frame::{Fragment, HoverContext, HoverInput, HoverPass, Ink, Probe};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
-#[cfg(test)]
-use measured::Output;
 pub use measured::place;
 use puri::Placement;
 use puri::edit::{EditOperation, LineEditState};
@@ -39,23 +37,25 @@ pub type Pick<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
 /// Interpret a Grap handler with caller-supplied capabilities at this site.
 pub type EventInterpreter<World> = Rc<dyn Fn(&mut World, &Value, Value) -> bool>;
 pub type Annotate<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
-pub type Place<World, Hover> = Box<dyn FnOnce(&mut Fragment<World, Hover>, Placement)>;
-pub type Decoration<World, Hover> =
-    Rc<dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> Place<World, Hover>>;
+pub type HoverCallback<World, Hover> =
+    Box<dyn FnOnce(&mut HoverContext<'_, World, Hover>, Placement)>;
+pub type Decoration<World, Hover> = Rc<
+    dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> HoverCallback<World, Hover>,
+>;
 
 pub type Program<World, Hover> = Rc<
     dyn for<'a, 'fonts> Fn(
         &mut Context<'a, 'fonts, World, Hover>,
-        &mut measured::choices::ChoiceBuild<Fragment<World, Hover>>,
-    ) -> measured::choices::ChoiceLayout<Fragment<World, Hover>>,
+        &mut measured::choices::ChoiceBuild<HoverPass<World, Hover>>,
+    ) -> measured::choices::ChoiceLayout<HoverPass<World, Hover>>,
 >;
 pub type CompletionControl<'a, World, Hover> = &'a dyn Fn(
     &mut TextCtx,
     crate::CompletionKind,
     Option<&crate::CompletionProvider>,
-) -> Measured<Fragment<World, Hover>>;
+) -> Measured<HoverPass<World, Hover>>;
 pub type DrawingControl<'a, World, Hover> =
-    &'a dyn Fn(Extent, usize, Value) -> Measured<Fragment<World, Hover>>;
+    &'a dyn Fn(Extent, usize, Value) -> Measured<HoverPass<World, Hover>>;
 
 pub struct Context<'a, 'fonts, World, Hover> {
     pub project: &'a dyn project::Project<World, Hover>,
@@ -92,28 +92,28 @@ pub struct Site<'a, World, Hover> {
 pub type Widget<World, Hover> = Rc<
     dyn for<'a, 'fonts> Fn(
         &mut Context<'a, 'fonts, World, Hover>,
-    ) -> Measured<Fragment<World, Hover>>,
+    ) -> Measured<HoverPass<World, Hover>>,
 >;
 
-/// Contribute outputs before the child places, without inspecting its widget type.
-pub fn before<World, Hover>(
+/// Contribute a layer beneath the child, without inspecting its widget type.
+pub fn before<World: 'static, Hover: 'static>(
     child: Layout<World, Hover>,
     before: Decoration<World, Hover>,
 ) -> Layout<World, Hover> {
-    Layout::Before {
-        child: Box::new(child),
-        before,
-    }
+    Layout::new(move |builder| {
+        let child = child.run(builder);
+        builder.before(child, before.clone())
+    })
 }
 
-pub fn after<World, Hover>(
+pub fn after<World: 'static, Hover: 'static>(
     child: Layout<World, Hover>,
     after: Decoration<World, Hover>,
 ) -> Layout<World, Hover> {
-    Layout::After {
-        child: Box::new(child),
-        after,
-    }
+    Layout::new(move |builder| {
+        let child = child.run(builder);
+        builder.after(child, after.clone())
+    })
 }
 
 pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> Layout<World, Hover> {
@@ -138,20 +138,9 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     )
 }
 
-/// A side box whose final measurement depends on the enclosed box's span.
-/// Prepare borrowed inputs now; measure against the chosen child later.
-pub type Side<World, Hover> = Rc<
-    dyn for<'a, 'fonts> Fn(&mut Context<'a, 'fonts, World, Hover>) -> MeasuredSide<World, Hover>,
->;
-
-pub struct MeasuredSide<World, Hover> {
-    pub maximum_width: f64,
-    pub measure: Box<dyn FnOnce(Extent) -> Measured<Fragment<World, Hover>>>,
-}
-
-pub fn selectable<World: 'static, Hover: Clone + 'static>(
+pub fn selectable<World: 'static, Hover: Clone + PartialEq + 'static>(
     context: &Context<'_, '_, World, Hover>,
-) -> impl FnOnce(Measured<Fragment<World, Hover>>) -> Measured<Fragment<World, Hover>> + 'static {
+) -> impl FnOnce(Measured<HoverPass<World, Hover>>) -> Measured<HoverPass<World, Hover>> + 'static {
     let site = (context.site)();
     let target = site.target;
     let select = site.select;
@@ -160,13 +149,11 @@ pub fn selectable<World: 'static, Hover: Clone + 'static>(
     let picking = context.picking;
     let same_target = context.same_target;
     move |child| {
-        measured::before_into(
+        crate::widget::before_hover(
             child,
-            move |placement, output: &mut Fragment<World, Hover>| {
+            move |placement, output: &mut HoverContext<'_, World, Hover>| {
                 if !placement.clipped_out() {
-                    output
-                        .probes
-                        .push(Probe::retaining(placement, target.clone()));
+                    output.claim(Probe::retaining(placement, target.clone()));
                     output
                         .handler()
                         .on_pointer_down_with(move |world, event, hovered| {
@@ -188,17 +175,19 @@ pub fn selectable<World: 'static, Hover: Clone + 'static>(
     }
 }
 
-pub fn selectable_side<World: 'static, Hover: Clone + 'static>(
-    side: Side<World, Hover>,
-) -> Side<World, Hover> {
+pub fn selectable_widget<World: 'static, Hover: Clone + PartialEq + 'static>(
+    widget: Widget<World, Hover>,
+) -> Widget<World, Hover> {
     Rc::new(move |context| {
-        let side = side(context);
         let decorate = selectable(context);
-        MeasuredSide {
-            maximum_width: side.maximum_width,
-            measure: Box::new(move |span| decorate((side.measure)(span))),
-        }
+        decorate(widget(context))
     })
+}
+
+pub fn fill_height<World: 'static, Hover: 'static>(
+    widget: Widget<World, Hover>,
+) -> Widget<World, Hover> {
+    Rc::new(move |context| measured::fill_height(widget(context)))
 }
 
 pub fn extent(metrics: TextMetrics) -> Extent {
@@ -212,7 +201,7 @@ pub fn extent(metrics: TextMetrics) -> Extent {
 pub fn empty<World: 'static, Hover: 'static>(
     text: &mut TextCtx,
     styles: &style::Styles,
-) -> Measured<Fragment<World, Hover>> {
+) -> Measured<HoverPass<World, Hover>> {
     let frame = puri_widgets::text_frame::empty(text, &styles.label, styles.dim.brush.clone());
     leaf(extent(frame.metrics()), move |output, placement| {
         output.render(move |canvas, _| frame.place(canvas, placement));
@@ -221,85 +210,110 @@ pub fn empty<World: 'static, Hover: 'static>(
 
 pub fn leaf<World: 'static, Hover: 'static>(
     extent: Extent,
-    place: impl FnOnce(&mut Fragment<World, Hover>, Placement) + 'static,
-) -> Measured<Fragment<World, Hover>> {
+    hover: impl FnOnce(&mut HoverContext<'_, World, Hover>, Placement) + 'static,
+) -> Measured<HoverPass<World, Hover>> {
     measured::leaf_into(
         extent,
-        move |placement, output: &mut Fragment<World, Hover>| {
-            let start = output.renders.len();
-            place(output, placement);
-            if placement.clipped_out() {
-                output.renders.truncate(start);
-            }
+        move |placement, pass: &mut HoverPass<World, Hover>| {
+            pass.push(move |output| {
+                let start = output.output.renders.len();
+                hover(output, placement);
+                debug_geometry(placement, output);
+                if placement.clipped_out() {
+                    output.output.renders.truncate(start);
+                }
+            });
         },
     )
 }
 
-pub fn debug_geometry<W: 'static, H: 'static>(
-    child: Measured<Fragment<W, H>>,
-) -> Measured<Fragment<W, H>> {
-    measured::after_into(child, move |placement, output: &mut Fragment<W, H>| {
-        if !placement.clipped_out() {
-            output.renders.push(Box::new(move |canvas, ink| {
-                if ink.debug_geometry {
-                    canvas.stroke_shape(
-                        placement.rect.into(),
-                        puri::Stroke::new(0.75),
-                        puri::Color::new([0.0, 0.65, 1.0, 0.36]).into(),
-                        puri::Affine::IDENTITY,
-                    );
-                }
-            }));
-        }
+fn debug_geometry<W: 'static, H: 'static>(
+    placement: Placement,
+    output: &mut HoverContext<'_, W, H>,
+) {
+    if output.input.debug_geometry && !placement.clipped_out() {
+        output.ink(move |canvas, ink| {
+            if ink.debug_geometry {
+                canvas.stroke_shape(
+                    placement.rect.into(),
+                    puri::Stroke::new(0.75),
+                    puri::Color::new([0.0, 0.65, 1.0, 0.36]).into(),
+                    puri::Affine::IDENTITY,
+                );
+            }
+        });
+    }
+}
+
+pub fn before_hover<W: 'static, H: 'static>(
+    child: Measured<HoverPass<W, H>>,
+    before: impl FnOnce(Placement, &mut HoverContext<'_, W, H>) + 'static,
+) -> Measured<HoverPass<W, H>> {
+    measured::before_into(child, move |placement, pass| {
+        pass.push(move |output| before(placement, output));
+    })
+}
+
+pub fn after_hover<W: 'static, H: 'static>(
+    child: Measured<HoverPass<W, H>>,
+    after: impl FnOnce(Placement, &mut HoverContext<'_, W, H>) + 'static,
+) -> Measured<HoverPass<W, H>> {
+    measured::after_into(child, move |placement, pass| {
+        pass.push(move |output| after(placement, output));
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recording::{Recorded, record};
     use puri::draw::Shape;
     use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
 
     #[test]
     fn placement_hover_render_and_dispatch_are_distinct_stages() {
         let calls = Rc::new(std::cell::RefCell::new(Vec::new()));
-        let during_place = calls.clone();
+        let during_hover = calls.clone();
         let measured = leaf(
             Extent {
                 width: 20.0,
                 ascent: 8.0,
                 descent: 2.0,
             },
-            move |output: &mut Fragment<Vec<&str>, usize>, placement| {
-                during_place.borrow_mut().push("place");
-                output.probes.push(Probe::retaining(placement, 7));
-                let during_render = during_place.clone();
-                output.renders.push(Box::new(move |canvas, hover| {
+            move |output: &mut HoverContext<'_, Vec<&str>, usize>, placement| {
+                during_hover.borrow_mut().push("hover");
+                output.claim(Probe::retaining(placement, 7));
+                let during_render = during_hover.clone();
+                output.ink(move |canvas, hover| {
                     during_render.borrow_mut().push("render");
                     assert_eq!(hover.hovered, Some(&7));
                     canvas.fill_shape(placement.rect.into(), Color::BLACK.into(), Affine::IDENTITY);
-                }));
+                });
                 output.handler().on_key(|state, _| {
                     state.push("key");
                     true
                 });
-                output.landmark_select = Some(Rc::new(|state, _| {
+                output.on_arrival(Some(Rc::new(|state, _| {
                     state.push("select");
                     true
-                }));
+                })));
             },
         );
         assert!(calls.borrow().is_empty());
         let placement = Placement::root(Rect::new(10.0, 20.0, 30.0, 30.0));
-        let output = place(measured, placement);
-        assert_eq!(&*calls.borrow(), &["place"]);
-        assert_eq!(output.probes.len(), 1);
+        let pass = place(measured, placement);
+        assert!(calls.borrow().is_empty());
+        let mut output = pass.run(&HoverInput {
+            pointer: Some(placement.rect.center()),
+            ..Default::default()
+        });
+        assert_eq!(&*calls.borrow(), &["hover"]);
         assert_eq!(
-            output.probes[0].answer(placement.rect.center(), None, 0.0),
+            output.claim.map(|(_, claim)| claim),
             Some(puri::hover::Claim::Direct(7))
         );
         let mut canvas = DrawList::new();
-        for render in output.renders {
+        for render in std::mem::take(&mut output.renders) {
             render(
                 &mut canvas,
                 Ink {
@@ -308,7 +322,7 @@ mod tests {
                 },
             );
         }
-        assert_eq!(&*calls.borrow(), &["place", "render"]);
+        assert_eq!(&*calls.borrow(), &["hover", "render"]);
         assert!(
             matches!(&canvas.0[..], [DrawCmd::Fill { shape: Shape::Rect(rect), .. }] if *rect == placement.rect)
         );
@@ -328,7 +342,7 @@ mod tests {
 
     #[test]
     fn native_canvas_clip_streams_to_the_selected_interpreter() {
-        let mut output: Fragment<(), ()> = Fragment::empty();
+        let mut output: HoverContext<'_, (), ()> = HoverContext::new(Default::default());
         let clip = Rect::new(0.0, 0.0, 20.0, 10.0);
         output.render(move |canvas, _| {
             canvas.with_clip(
@@ -351,9 +365,10 @@ mod tests {
                 }),
             )
         });
+        let mut output = output.finish();
         assert_eq!(output.renders.len(), 1);
         let mut canvas = DrawList::new();
-        for render in output.renders {
+        for render in std::mem::take(&mut output.renders) {
             render(&mut canvas, Default::default());
         }
         let [DrawCmd::Clip { children, .. }] = &canvas.0[..] else {
@@ -369,7 +384,7 @@ mod tests {
     fn render_is_one_continuation_regardless_of_drawing_count() {
         let calls = Rc::new(std::cell::Cell::new(0));
         let during_render = calls.clone();
-        let mut output = Fragment::<(), ()>::empty();
+        let mut output = crate::widget::HoverContext::<(), ()>::new(Default::default());
         output.render(move |canvas, _| {
             for _ in 0..100 {
                 during_render.set(during_render.get() + 1);
@@ -381,9 +396,10 @@ mod tests {
             }
         });
         assert_eq!(calls.get(), 0);
+        let mut output = output.finish();
         assert_eq!(output.renders.len(), 1);
         let mut canvas = DrawList::new();
-        for render in output.renders {
+        for render in std::mem::take(&mut output.renders) {
             render(&mut canvas, Default::default());
         }
         assert_eq!(calls.get(), 100);
@@ -418,38 +434,40 @@ mod tests {
             same_target: PartialEq::eq,
             primary_edit: |_| true,
         };
-        let side = delimiter::side(crate::Delim::Bracket, crate::Side::Open)(&mut context);
-        let measured = (side.measure)(Extent {
-            width: 20.0,
-            ascent: 10.0,
-            descent: 2.0,
-        });
+        let measured = delimiter::side(crate::Delim::Bracket, crate::Side::Open)(&mut context);
         let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-        assert_eq!(place(measured, placement).renders.len(), 1);
+        assert_eq!(
+            place(measured, placement)
+                .run(&Default::default())
+                .renders
+                .len(),
+            1
+        );
         for layout in [
             interaction::on_click(crate::text("click"), Rc::new(|_| true)),
             interaction::on_activate(crate::text("activate"), (), Rc::new(|_| true)),
             interaction::pickable(crate::text("pick"), (), Value::record([])),
         ] {
-            let Layout::Before { before, .. } = layout else {
+            let Recorded::Before { before, .. } = record(&layout) else {
                 panic!("leading callback");
             };
-            let mut output = Fragment::empty();
+            let mut output = crate::widget::HoverContext::new(Default::default());
             before(&mut context)(&mut output, placement);
-            assert!(output.handler.is_some());
+            assert!(output.finish().handler.is_some());
         }
         for layout in [
             hover::on_hover(crate::text("claim"), ()),
             hover::block_hover(crate::text("occluder")),
             hover::hover_highlight(crate::text("highlight"), ()),
         ] {
-            let Layout::Before { before, .. } = layout else {
+            let Recorded::Before { before, .. } = record(&layout) else {
                 panic!("leading callback");
             };
-            before(&mut context)(&mut Fragment::empty(), placement);
+            before(&mut context)(&mut HoverContext::new(Default::default()), placement);
         }
         assert_eq!(
             place(empty::<(), ()>(context.text, context.styles), placement)
+                .run(&Default::default())
                 .renders
                 .len(),
             1
@@ -466,8 +484,8 @@ mod tests {
                     ascent: 10.0,
                     descent: 0.0,
                 },
-                move |output: &mut Fragment<(), usize>, placement| {
-                    output.probes.push(Probe::retaining(placement, target))
+                move |output: &mut HoverContext<'_, (), usize>, placement| {
+                    output.claim(Probe::retaining(placement, target))
                 },
             ))
         };
@@ -475,10 +493,12 @@ mod tests {
         let layout = choices.alternatives(vec![widget(100.0, 1), widget(20.0, 2)]);
         let measured = resolve_choices(choices.finish(layout), 50.0, false);
         let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-        let output = place(measured, placement);
-        assert_eq!(output.probes.len(), 1);
+        let output = place(measured, placement).run(&HoverInput {
+            pointer: Some(placement.rect.center()),
+            ..Default::default()
+        });
         assert_eq!(
-            output.probes[0].answer(placement.rect.center(), None, 0.0),
+            output.claim.map(|(_, claim)| claim),
             Some(puri::hover::Claim::Direct(2))
         );
     }

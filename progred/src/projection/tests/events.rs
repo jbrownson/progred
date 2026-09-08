@@ -78,7 +78,7 @@ fn native_annotation_handler_retains_the_projected_site() {
         },
     );
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let placed = measured::place(measured, placement);
+    let placed = measured::place(measured, placement).run(&Default::default());
     let mut writes = vec![];
     let event = PointerScrollEvent {
         pointer: PointerInfo {
@@ -179,7 +179,8 @@ fn a_data_event_realizes_the_apply_hook() {
     let placed = measured::place(
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
-    );
+    )
+    .run(&Default::default());
     let handler = placed.handler.expect("event handler");
     let mut state = PointerState::default();
     state.position.x = 1.0;

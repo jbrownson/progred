@@ -1,4 +1,5 @@
-use super::{Fragment, Place, before};
+use super::{HoverCallback, before};
+use crate::widget::HoverContext;
 use crate::{ActionHandler, Layout};
 use gid::Value;
 use puri::handler::{HasHandler, PointerButtonEvent};
@@ -8,7 +9,7 @@ use std::rc::Rc;
 pub fn click<World: 'static, Hover: 'static>(
     handler: ActionHandler<World>,
     primary: fn(&PointerButtonEvent) -> bool,
-) -> Place<World, Hover> {
+) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
         output.handler().on_pointer_down(move |world, event| {
             primary(event)
@@ -24,9 +25,9 @@ pub fn target_action<World: 'static, Hover: 'static>(
     pick: bool,
     picking: fn(&PointerButtonEvent) -> bool,
     same_target: fn(&Hover, &Hover) -> bool,
-) -> Place<World, Hover> {
+) -> HoverCallback<World, Hover> {
     Box::new(
-        move |output: &mut Fragment<World, Hover>, placement: Placement| {
+        move |output: &mut HoverContext<'_, World, Hover>, placement: Placement| {
             if !placement.clipped_out() {
                 output
                     .handler()
@@ -96,7 +97,7 @@ pub fn pickable<World: 'static, Hover: Clone + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use measured::{Extent, Output};
+    use measured::Extent;
     use puri::Rect;
     use puri::handler::{PointerButton, PointerInfo, PointerState, PointerType};
 
@@ -117,7 +118,7 @@ mod tests {
 
     #[test]
     fn raw_click_uses_the_live_world_and_both_placement_rectangles() {
-        let mut output = Fragment::<usize, ()>::empty();
+        let mut output = crate::widget::HoverContext::<usize, ()>::new(Default::default());
         click(
             Rc::new(|world| {
                 *world += 1;
@@ -131,7 +132,7 @@ mod tests {
                 Rect::new(0.0, 0.0, 10.0, 20.0),
             ),
         );
-        let handler = output.handler.unwrap();
+        let handler = output.finish().handler.unwrap();
         let mut world = 10;
         for (x, expected) in [
             (-1.0, false),
@@ -152,7 +153,7 @@ mod tests {
     fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
         for pick in [false, true] {
             for picking in [false, true] {
-                let mut output = Fragment::<usize, u32>::empty();
+                let mut output = crate::widget::HoverContext::<usize, u32>::new(Default::default());
                 target_action(
                     7,
                     Rc::new(|world| {
@@ -166,7 +167,7 @@ mod tests {
                     &mut output,
                     Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
                 );
-                let handler = output.handler.unwrap();
+                let handler = output.finish().handler.unwrap();
                 let mut world = 0;
                 for (hovered, expected) in
                     [(None, false), (Some(8), false), (Some(7), pick == picking)]
@@ -190,7 +191,7 @@ mod tests {
                 assert_eq!(world, usize::from(pick == picking));
             }
         }
-        let mut clipped = Fragment::<usize, u32>::empty();
+        let mut clipped = crate::widget::HoverContext::<usize, u32>::new(Default::default());
         target_action(
             7,
             Rc::new(|_| panic!("clipped action")),
@@ -204,7 +205,7 @@ mod tests {
                 Rect::new(30.0, 0.0, 40.0, 20.0),
             ),
         );
-        assert!(clipped.handler.is_none());
+        assert!(clipped.finish().handler.is_none());
     }
 
     #[test]
@@ -230,10 +231,11 @@ mod tests {
                     });
                 },
             );
-            let measured =
-                measured::before_into(child, move |placement, output| place(output, placement));
+            let measured = crate::widget::before_hover(child, move |placement, output| {
+                place(output, placement)
+            });
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-            let output = measured::place(measured, placement);
+            let output = measured::place(measured, placement).run(&Default::default());
             let mut world = vec![];
             assert!(
                 output

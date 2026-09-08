@@ -237,17 +237,15 @@ pub(crate) use progred_display::widget::scroll::offset as scroll_offset;
 /// direct claim under the pointer answers outright, an extension may
 /// retain only the prior target, and an occluder blocks both. A
 /// pressed gesture keeps the hover it began with.
-pub(crate) fn derive_hover<C: 'static>(
-    placed: &Placed<C>,
+pub(crate) fn derive_hover(
+    claim: Option<(Option<crate::workspace::Root>, Claim<Hovered>)>,
     prior: Option<Hovered>,
-    pointer: Option<Point>,
     pressed: bool,
-    reach: f64,
 ) -> (Option<Hovered>, Option<crate::workspace::Root>) {
     if pressed {
         return (prior, None);
     }
-    match pointer.and_then(|point| placed.probe_scoped(point, prior.as_ref(), reach)) {
+    match claim {
         Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
         Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
         None => (None, None),
@@ -274,12 +272,6 @@ pub(crate) struct FrameResources<'a> {
     fonts: &'a mut FontContext,
     layouts: &'a mut LayoutContext<Brush>,
     text_cache: &'a mut puri::text::TextCache,
-}
-
-/// The frame as one measured value, plus the scroll maxima its
-/// measurement settled.
-struct AppView {
-    view: measured::Measured<Placed<Editor>>,
 }
 
 impl Editor {
@@ -451,20 +443,21 @@ impl Editor {
             layouts: &mut self.layout_cx,
             text_cache: &mut self.text_cache,
         };
-        let AppView { view } = app_view(description, resources);
-        let placed = measured::place(
+        let view = app_view(description, resources);
+        let hover_pass = measured::place(
             view,
             Placement::root(Rect::from_origin_size(Point::ZERO, viewport)),
-        )
-        .raise_floaters();
-        let hover_reach = HOVER_REACH * scale;
-        let (hover, pointer_root) = derive_hover(
-            &placed,
-            self.hover.take(),
-            self.pointer,
-            self.pressed,
-            hover_reach,
         );
+        let hover_reach = HOVER_REACH * scale;
+        let prior = self.hover.take();
+        let mut ready = hover_pass.run(&placed::HoverInput {
+            pointer: if self.pressed { None } else { self.pointer },
+            prior: prior.as_ref(),
+            reach: hover_reach,
+            debug_geometry,
+            occluded: false,
+        });
+        let (hover, pointer_root) = derive_hover(ready.claim.take(), prior, self.pressed);
         self.hover = hover;
         let sources = sources::Sources {
             doc: &self.model.doc,
@@ -475,7 +468,7 @@ impl Editor {
         let hovered_secondary = match &self.hover {
             Some(Hovered::Tree(_)) if !show_source_hover => None,
             Some(Hovered::Tree(hover)) => {
-                hover::hover_secondary(&sources, placed.completion.as_ref(), hover)
+                hover::hover_secondary(&sources, ready.completion.as_ref(), hover)
             }
             Some(Hovered::Menu(_)) => None,
             Some(Hovered::Divider(_)) => None,
@@ -494,20 +487,26 @@ impl Editor {
             .then(|| {
                 self.hover
                     .as_ref()
-                    .map(|hover| placed.extended_rects(hover, hover_reach))
+                    .map(|hover| {
+                        ready
+                            .debug_regions
+                            .iter()
+                            .filter_map(|(target, rect)| (target == hover).then_some(*rect))
+                            .collect::<Vec<_>>()
+                    })
                     .unwrap_or_default()
             })
             .unwrap_or_default();
-        let Placed {
-            probes: _,
+        let placed::Ready {
+            claim: _,
+            debug_regions: _,
             handler,
             descends,
             view_regions,
             landmark_select,
             completion: _,
-            floaters: _,
             mut renders,
-        } = placed;
+        } = ready;
         debug_assert!(
             landmark_select.is_none(),
             "selection handler escaped its landmark"
@@ -938,7 +937,10 @@ fn project_workspace(
     body
 }
 
-fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) -> AppView {
+fn app_view(
+    description: FrameDescription<'_>,
+    resources: FrameResources<'_>,
+) -> measured::Measured<Placed<Editor>> {
     let FrameDescription {
         drawn_menu,
         toggles,
@@ -1054,7 +1056,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             ))
         });
     }
-    AppView { view: stage }
+    stage
 }
 
 /// Dispatch-time access to the selection's editor. Retained-frame
@@ -1396,6 +1398,7 @@ mod frame_tests {
                 ),
                 Placement::root(Rect::from_origin_size(Point::ZERO, size)),
             )
+            .run(&Default::default())
         };
         let document = model.workspace.document_root();
         let sources: Vec<_> = [
@@ -1575,7 +1578,7 @@ mod frame_tests {
                 scale: scale as f32,
                 cache: &mut cache,
             };
-            let mut place = |view| {
+            let mut place = |view, pointer| {
                 measured::place(
                     project_workspace_view(
                         &model,
@@ -1593,8 +1596,12 @@ mod frame_tests {
                     ),
                     Placement::root(Rect::from_origin_size(Point::new(30.0, 40.0), size)),
                 )
+                .run(&placed::HoverInput {
+                    pointer,
+                    ..Default::default()
+                })
             };
-            let placed = place(pane);
+            let placed = place(pane, Some(Point::new(30.5, 40.5)));
             assert_eq!(calls.borrow_mut().pop(), Some(size / scale));
             let rect = Rect::from_origin_size(Point::new(30.0, 40.0), size);
             assert_eq!(placed.view_regions[0].rect, rect);
@@ -1606,10 +1613,10 @@ mod frame_tests {
                     .any(|node| node.path.as_ref() == path && node.rect == rect)
             );
             assert!(matches!(
-                placed.probe(Point::new(30.5, 40.5), None, 0.0),
+                placed.claim.map(|(_, claim)| claim),
                 Some(Claim::Direct(_))
             ));
-            assert!(placed.probe(Point::new(29.5, 40.5), None, 0.0).is_none());
+            assert!(place(pane, Some(Point::new(29.5, 40.5))).claim.is_none());
             assert_eq!(
                 model.workspace.left.panes[0].view.scroll,
                 Vec2::new(75.0, 150.0)
@@ -1621,7 +1628,8 @@ mod frame_tests {
                 annotations: Default::default(),
                 scroll: Vec2::ZERO,
             };
-            let placed = place(&raw);
+            calls.borrow_mut().clear();
+            let placed = place(&raw, None);
             assert!(calls.borrow().is_empty(), "Raw never invokes the viewport");
             let field_path: Vec<_> = path
                 .iter()
@@ -1634,7 +1642,7 @@ mod frame_tests {
                     .iter()
                     .any(|node| node.path.as_ref() == field_path)
             );
-            place(&model.workspace.document);
+            place(&model.workspace.document, None);
             assert!(
                 calls.borrow().is_empty(),
                 "the document leaves declarations editable"
@@ -1695,7 +1703,8 @@ mod frame_tests {
                 1.0,
             ),
             Placement::root(Rect::from_origin_size(Point::ZERO, size)),
-        );
+        )
+        .run(&Default::default());
 
         assert_eq!(placed.view_regions.len(), 3);
         let upper_region = placed
@@ -1733,139 +1742,76 @@ mod frame_tests {
     fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
-        let mut placed: Placed<Editor> = Placed::empty();
-        placed.probes.push(placed::Probe::retaining(
-            Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
-            target(0),
-        ));
-        placed.probes.push(placed::Probe::retaining(
-            Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
-            target(1),
-        ));
-        // A direct answer establishes hover.
-        assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,).0,
-            Some(target(0))
-        );
-        // In the gap, only the prior target's extension may retain.
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target(0)),
-                Some(Point::new(12.0, 5.0)),
-                false,
-                8.0,
-            )
-            .0,
-            Some(target(0))
-        );
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target(1)),
-                Some(Point::new(12.0, 5.0)),
-                false,
-                8.0,
-            )
-            .0,
-            Some(target(1))
-        );
-        // Even when the prior target's extension is encountered
-        // first in z-order, a later direct answer overrides it.
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target(1)),
-                Some(Point::new(8.0, 5.0)),
-                false,
-                8.0,
-            )
-            .0,
-            Some(target(0))
-        );
-        // The neighboring real target overrides the prior target's
-        // overlapping extension.
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target(0)),
-                Some(Point::new(16.0, 5.0)),
-                false,
-                8.0,
-            )
-            .0,
-            Some(target(1))
-        );
-        assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(12.0, 5.0)), false, 8.0,).0,
-            None
-        );
-        assert_eq!(
-            derive_hover(&placed, Some(target(0)), None, false, 8.0).0,
-            None
-        );
-        // A pressed gesture keeps the hover it began with.
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target(0)),
-                Some(Point::new(40.0, 40.0)),
-                true,
-                8.0,
-            )
-            .0,
-            Some(target(0))
-        );
-        // An occluder answers "blocked" outright and blocks the
-        // fallback — an overlay's pointer never lights what sits
-        // beneath it or triggers the empty-space action.
-        placed.probes.push(placed::Probe::occludes(Placement::new(
-            Rect::new(0.0, 0.0, 40.0, 40.0),
-            viewport,
-        )));
-        assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(25.0, 5.0)), false, 8.0,).0,
-            Some(Hovered::Blocked)
-        );
+        for (prior, pointer, pressed, covered, expected) in [
+            (None, Some(5.0), false, false, Some(target(0))),
+            (Some(target(0)), Some(12.0), false, false, Some(target(0))),
+            (Some(target(1)), Some(12.0), false, false, Some(target(1))),
+            (Some(target(1)), Some(8.0), false, false, Some(target(0))),
+            (Some(target(0)), Some(16.0), false, false, Some(target(1))),
+            (None, Some(12.0), false, false, None),
+            (Some(target(0)), None, false, false, None),
+            (Some(target(0)), Some(40.0), true, false, Some(target(0))),
+            (None, Some(25.0), false, true, Some(Hovered::Blocked)),
+        ] {
+            let pass: Placed<Editor> = Placed::new(move |output| {
+                output.claim(placed::Probe::retaining(
+                    Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
+                    target(0),
+                ));
+            })
+            .over(Placed::new(move |output| {
+                output.claim(placed::Probe::retaining(
+                    Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
+                    target(1),
+                ));
+                if covered {
+                    output.claim(placed::Probe::occludes(Placement::new(
+                        Rect::new(0.0, 0.0, 40.0, 40.0),
+                        viewport,
+                    )));
+                }
+            }));
+            let ready = pass.run(&placed::HoverInput {
+                pointer: if pressed {
+                    None
+                } else {
+                    pointer.map(|x| Point::new(x, 5.0))
+                },
+                prior: prior.as_ref(),
+                reach: 8.0,
+                debug_geometry: false,
+                occluded: false,
+            });
+            assert_eq!(derive_hover(ready.claim, prior, pressed).0, expected);
+        }
     }
 
     #[test]
     fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
         let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
-        let mut placed: Placed<Editor> = Placed::empty();
-        placed.probes.push(placed::Probe::exact(
-            Placement::new(
-                Rect::new(0.0, 0.0, 10.0, 10.0),
-                Rect::new(-100.0, -100.0, 100.0, 100.0),
-            ),
-            target.clone(),
-        ));
-
-        assert_eq!(
-            derive_hover(&placed, None, Some(Point::new(5.0, 5.0)), false, 8.0,).0,
-            Some(target.clone())
-        );
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target.clone()),
-                Some(Point::new(11.0, 5.0)),
-                false,
-                8.0,
-            )
-            .0,
-            None
-        );
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target.clone()),
-                Some(Point::new(11.0, 5.0)),
-                true,
-                8.0,
-            )
-            .0,
-            Some(target)
-        );
+        for (x, pressed, expected) in [
+            (5.0, false, Some(target.clone())),
+            (11.0, false, None),
+            (11.0, true, Some(target.clone())),
+        ] {
+            let claimed = target.clone();
+            let pass: Placed<Editor> = Placed::new(move |output| {
+                output.claim(placed::Probe::exact(
+                    Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                    claimed,
+                ));
+            });
+            let ready = pass.run(&placed::HoverInput {
+                pointer: Some(Point::new(x, 5.0)),
+                prior: Some(&target),
+                reach: 8.0,
+                debug_geometry: false,
+                occluded: false,
+            });
+            assert_eq!(
+                derive_hover(ready.claim, Some(target.clone()), pressed).0,
+                expected
+            );
+        }
     }
 }

@@ -9,7 +9,12 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
+pub mod builder;
 mod measure;
+#[cfg(feature = "profile")]
+pub mod profile;
+#[cfg(any(test, feature = "test-support"))]
+pub mod recording;
 pub mod structure;
 pub mod widget;
 
@@ -264,152 +269,53 @@ impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
     }
 }
 
-/// Box descriptions with opaque preparation and placement programs.
-/// No document paths, selection policy, or host-control opcodes.
-pub enum Layout<World, Hover> {
-    Leaf(Leaf<Paint>),
-    /// Prepare a subtree, possibly contributing ordered alternatives.
-    Program(widget::Program<World, Hover>),
-    /// An ordinary native measurement program, producing opaque placement output.
-    Widget(widget::Widget<World, Hover>),
-    /// Add ordinary placement outputs before a child, without changing its geometry.
-    Before {
-        child: Box<Layout<World, Hover>>,
-        before: widget::Decoration<World, Hover>,
-    },
-    /// Add ordinary placement outputs after a child, without changing its geometry.
-    After {
-        child: Box<Layout<World, Hover>>,
-        after: widget::Decoration<World, Hover>,
-    },
-    Row {
-        alignment: RowAlignment,
-        gap: f64,
-        children: Vec<Layout<World, Hover>>,
-    },
-    Col {
-        baseline: usize,
-        gap: f64,
-        children: Vec<Layout<World, Hover>>,
-    },
-    /// Children share a top-left and baseline, in back-to-front
-    /// order. Its extent is the component-wise maximum.
-    Overlay {
-        children: Vec<Layout<World, Hover>>,
-    },
-    /// Only `base` contributes to surrounding layout. An explicit geometry
-    /// function places or omits the floating content; it supplies its own ink
-    /// and interaction, just like any other box.
-    Floating {
-        base: Box<Layout<World, Hover>>,
-        content: Box<Layout<World, Hover>>,
-        position: FloatingPosition,
-    },
-    Pad {
-        left: f64,
-        top: f64,
-        right: f64,
-        bottom: f64,
-        child: Box<Layout<World, Hover>>,
-    },
-    /// Measure `child`, then measure and place two side widgets against
-    /// its chosen span. The sides own their ink and interactions.
-    Surround {
-        left: widget::Side<World, Hover>,
-        child: Box<Layout<World, Hover>>,
-        right: widget::Side<World, Hover>,
-    },
-    /// One projected child used by mutually exclusive layout forms.
-    /// The editor measures the shared child once and the selected
-    /// form consumes it once. This is local layout sharing, not value
-    /// identity and not a cross-frame cache.
-    Shared {
-        id: usize,
-        child: Rc<Layout<World, Hover>>,
-    },
-    /// Ordered forms of the same content. Non-final forms use their
-    /// natural preferred widths; the first that fits wins. Otherwise
-    /// the final accommodating form receives the real allocation.
-    /// When nothing fits, the narrowest form wins; earlier forms win
-    /// ties.
-    Alternatives(Vec<Layout<World, Hover>>),
-}
+/// A reusable layout program. Running it calls a builder directly; the
+/// production builder retains only the graph needed for alternative selection.
+pub struct Layout<World, Hover>(
+    Rc<dyn Fn(&mut dyn builder::Builder<World, Hover>) -> builder::Node>,
+);
 
 impl<World, Hover> Clone for Layout<World, Hover> {
     fn clone(&self) -> Self {
-        match self {
-            Self::Leaf(display) => Self::Leaf(display.clone()),
-            Self::Program(program) => Self::Program(program.clone()),
-            Self::Widget(widget) => Self::Widget(widget.clone()),
-            Self::Before { child, before } => Self::Before {
-                child: child.clone(),
-                before: before.clone(),
-            },
-            Self::After { child, after } => Self::After {
-                child: child.clone(),
-                after: after.clone(),
-            },
-            Self::Row {
-                alignment,
-                gap,
-                children,
-            } => Self::Row {
-                alignment: *alignment,
-                gap: *gap,
-                children: children.clone(),
-            },
-            Self::Col {
-                baseline,
-                gap,
-                children,
-            } => Self::Col {
-                baseline: *baseline,
-                gap: *gap,
-                children: children.clone(),
-            },
-            Self::Overlay { children } => Self::Overlay {
-                children: children.clone(),
-            },
-            Self::Floating {
-                base,
-                content,
-                position,
-            } => Self::Floating {
-                base: base.clone(),
-                content: content.clone(),
-                position: position.clone(),
-            },
-            Self::Pad {
-                left,
-                top,
-                right,
-                bottom,
-                child,
-            } => Self::Pad {
-                left: *left,
-                top: *top,
-                right: *right,
-                bottom: *bottom,
-                child: child.clone(),
-            },
-            Self::Surround { left, child, right } => Self::Surround {
-                left: left.clone(),
-                child: child.clone(),
-                right: right.clone(),
-            },
-            Self::Shared { id, child } => Self::Shared {
-                id: *id,
-                child: child.clone(),
-            },
-            Self::Alternatives(options) => Self::Alternatives(options.clone()),
-        }
+        Self(self.0.clone())
+    }
+}
+
+impl<World: 'static, Hover: 'static> Layout<World, Hover> {
+    pub fn new(
+        run: impl Fn(&mut dyn builder::Builder<World, Hover>) -> builder::Node + 'static,
+    ) -> Self {
+        Self(Rc::new(run))
+    }
+
+    pub fn run(&self, builder: &mut dyn builder::Builder<World, Hover>) -> builder::Node {
+        (self.0)(builder)
+    }
+
+    pub fn widget(widget: widget::Widget<World, Hover>) -> Self {
+        Self::new(move |builder| builder.widget(widget.clone()))
+    }
+
+    pub fn program(program: widget::Program<World, Hover>) -> Self {
+        Self::new(move |builder| builder.program(program.clone()))
     }
 }
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
     /// Apply a callable to values without evaluating those arguments as expressions.
-    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize);
+    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
+        let evaluation = self.apply_scoped(function, arguments, None);
+        (evaluation.result, evaluation.remaining_fuel)
+    }
+
+    /// Borrow capabilities for this application only. Their output remains host-owned.
+    fn apply_scoped(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation;
 
     /// Remaining fuel is the evaluator budget left after this call,
     /// so a grap-shaped result can continue the same allowance.
@@ -495,23 +401,26 @@ pub fn compose_partials<World: 'static, Hover: 'static>(
     }
 }
 
-pub fn text<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
+pub fn text<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Name)
 }
 
-pub fn dim<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
+pub fn dim<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Dim)
 }
 
-pub fn label<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
+pub fn label<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Label)
 }
 
-pub fn id<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
+pub fn id<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Id)
 }
 
-pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World, Hover> {
+pub fn faced<World: 'static, Hover: 'static>(
+    text: impl Into<String>,
+    face: Face,
+) -> Layout<World, Hover> {
     leaf(Leaf::Text {
         text: text.into(),
         paint: Paint::Face(face),
@@ -519,7 +428,10 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
     })
 }
 
-pub fn subscript<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World, Hover> {
+pub fn subscript<World: 'static, Hover: 'static>(
+    text: impl Into<String>,
+    face: Face,
+) -> Layout<World, Hover> {
     leaf(Leaf::Text {
         text: text.into(),
         paint: Paint::Face(face),
@@ -531,25 +443,27 @@ pub fn completion<World: 'static, Hover: 'static>(
     kind: CompletionKind,
     provider: Option<CompletionProvider>,
 ) -> Layout<World, Hover> {
-    Layout::Widget(Rc::new(move |context| {
+    Layout::widget(Rc::new(move |context| {
+        #[cfg(feature = "profile")]
+        let _profile = crate::profile::enter(crate::profile::Kind::Completion);
         (context.completion)(context.text, kind, provider.as_ref())
     }))
 }
 
 pub fn slot<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
-    Layout::Widget(Rc::new(|context| {
+    Layout::widget(Rc::new(|context| {
         widget::empty(context.text, context.styles)
     }))
 }
 
-pub fn leaf<World, Hover>(leaf: Leaf<Paint>) -> Layout<World, Hover> {
-    Layout::Leaf(leaf)
+pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, Hover> {
+    Layout::new(move |builder| builder.leaf(&leaf))
 }
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, on_click, pickable};
 
-pub fn activatable<World: 'static, Hover: Clone + 'static>(
+pub fn activatable<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
     handler: ActionHandler<World>,
@@ -559,89 +473,90 @@ pub fn activatable<World: 'static, Hover: Clone + 'static>(
 
 pub use widget::gesture::{on_point, on_scrub, on_state_drag};
 
-pub fn row<World, Hover>(
+pub fn row<World: 'static, Hover: 'static>(
     gap: f64,
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Row {
-        alignment: RowAlignment::Baseline,
-        gap,
-        children: children.into_iter().collect(),
-    }
+    aligned_row(RowAlignment::Baseline, gap, children)
 }
 
-pub fn centered_row<World, Hover>(
+pub fn centered_row<World: 'static, Hover: 'static>(
     gap: f64,
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Row {
-        alignment: RowAlignment::Center,
-        gap,
-        children: children.into_iter().collect(),
-    }
+    aligned_row(RowAlignment::Center, gap, children)
 }
 
-pub fn col<World, Hover>(
+pub fn aligned_row<World: 'static, Hover: 'static>(
+    alignment: RowAlignment,
+    gap: f64,
+    children: impl IntoIterator<Item = Layout<World, Hover>>,
+) -> Layout<World, Hover> {
+    let children: Vec<_> = children.into_iter().collect();
+    Layout::new(move |builder| {
+        let children = children.iter().map(|child| child.run(builder)).collect();
+        builder.row(alignment, gap, children)
+    })
+}
+
+pub fn col<World: 'static, Hover: 'static>(
     baseline: usize,
     gap: f64,
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Col {
-        baseline,
-        gap,
-        children: children.into_iter().collect(),
-    }
+    let children: Vec<_> = children.into_iter().collect();
+    Layout::new(move |builder| {
+        let children = children.iter().map(|child| child.run(builder)).collect();
+        builder.col(baseline, gap, children)
+    })
 }
 
-pub fn overlay<World, Hover>(
+pub fn overlay<World: 'static, Hover: 'static>(
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Overlay {
-        children: children.into_iter().collect(),
-    }
+    let children: Vec<_> = children.into_iter().collect();
+    Layout::new(move |builder| {
+        let children = children.iter().map(|child| child.run(builder)).collect();
+        builder.overlay(children)
+    })
 }
 
-/// Geometry inputs are the current display scale, base placement, and content extent.
 pub type FloatingPosition =
     Rc<dyn Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement>>;
 
-pub fn floating<World, Hover>(
+pub fn floating<World: 'static, Hover: 'static>(
     base: Layout<World, Hover>,
     content: Layout<World, Hover>,
     position: impl Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement> + 'static,
 ) -> Layout<World, Hover> {
-    Layout::Floating {
-        base: Box::new(base),
-        content: Box::new(content),
-        position: Rc::new(position),
-    }
+    let position: FloatingPosition = Rc::new(position);
+    Layout::new(move |builder| {
+        let base = base.run(builder);
+        let content = content.run(builder);
+        builder.floating(base, content, position.clone())
+    })
 }
 
 pub use widget::popover::popover;
 
-pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World, Hover> {
-    Layout::Pad {
-        left,
-        top: 0.0,
-        right: 0.0,
-        bottom: 0.0,
-        child: Box::new(child),
-    }
+pub fn padding<World: 'static, Hover: 'static>(
+    insets: peniko::kurbo::Insets,
+    child: Layout<World, Hover>,
+) -> Layout<World, Hover> {
+    Layout::new(move |builder| {
+        let child = child.run(builder);
+        builder.pad(insets, child)
+    })
+}
+
+pub fn pad<World: 'static, Hover: 'static>(
+    left: f64,
+    child: Layout<World, Hover>,
+) -> Layout<World, Hover> {
+    padding((left, 0.0, 0.0, 0.0).into(), child)
 }
 
 pub use widget::border;
-
-pub fn surround<World, Hover>(
-    left: widget::Side<World, Hover>,
-    child: Layout<World, Hover>,
-    right: widget::Side<World, Hover>,
-) -> Layout<World, Hover> {
-    Layout::Surround {
-        left,
-        child: Box::new(child),
-        right,
-    }
-}
 
 /// Project record-shaped fields in a caller-supplied order. The
 /// caller owns each field's meaning — label behavior, child
@@ -652,7 +567,7 @@ pub struct RecordField<World, Hover> {
     pub value: Layout<World, Hover>,
 }
 
-pub fn record<'a, World: 'static, Hover: Clone + 'static>(
+pub fn record<'a, World: 'static, Hover: Clone + PartialEq + 'static>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
     field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
@@ -663,7 +578,7 @@ pub fn record<'a, World: 'static, Hover: Clone + 'static>(
 /// The record layout with explicit trailing fields, such as the one
 /// pending field currently being authored. They participate in both
 /// responsive forms but not in sorting the stored fields.
-pub fn record_with<'a, World: 'static, Hover: Clone + 'static>(
+pub fn record_with<'a, World: 'static, Hover: Clone + PartialEq + 'static>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
     mut field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
@@ -686,7 +601,7 @@ pub fn record_with<'a, World: 'static, Hover: Clone + 'static>(
 
 /// Shared record geometry. Heads already include punctuation and its
 /// interaction target; trailing rows can be incomplete field editors.
-pub fn record_heads<World: 'static, Hover: Clone + 'static>(
+pub fn record_heads<World: 'static, Hover: Clone + PartialEq + 'static>(
     fields: impl IntoIterator<Item = RecordField<World, Hover>>,
     trailing: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
@@ -725,7 +640,7 @@ pub fn record_heads<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-pub fn hug<World, Hover: Clone>(
+pub fn hug<World: 'static, Hover: Clone + 'static>(
     head: Layout<World, Hover>,
     child: Layout<World, Hover>,
     gap: f64,
@@ -743,11 +658,9 @@ pub fn hug<World, Hover: Clone>(
 /// This describes an explicit edge in the layout DAG, not a cache:
 /// the child is projected and measured once per frame. A selected
 /// concrete form must contain at most one use.
-pub fn shared<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover> {
-    Layout::Shared {
-        id: NEXT_SHARED_LAYOUT.fetch_add(1, AtomicOrdering::Relaxed),
-        child: Rc::new(child),
-    }
+pub fn shared<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> Layout<World, Hover> {
+    let id = NEXT_SHARED_LAYOUT.fetch_add(1, AtomicOrdering::Relaxed);
+    Layout::new(move |builder| builder.shared(id, &child))
 }
 
 pub fn nest<World: 'static, Hover: 'static>(step: Step, value: &Value) -> Layout<World, Hover> {
@@ -759,7 +672,7 @@ pub fn descend<World: 'static, Hover: 'static>(
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Program(Rc::new(move |context, build| {
+    Layout::program(Rc::new(move |context, build| {
         context.project.descend(
             context.text,
             build,
@@ -785,7 +698,7 @@ pub fn at_with_projection<World: 'static, Hover: 'static>(
 ) -> Layout<World, Hover> {
     let steps = steps.into();
     let value = value.clone();
-    Layout::Program(Rc::new(move |context, build| {
+    Layout::program(Rc::new(move |context, build| {
         context.project.at(
             context.text,
             build,
@@ -844,17 +757,21 @@ pub fn transient<World: 'static, Hover: 'static>(
     fuel: usize,
 ) -> Layout<World, Hover> {
     let value = value.clone();
-    Layout::Program(Rc::new(move |context, build| {
+    Layout::program(Rc::new(move |context, build| {
         context
             .project
             .transient(context.text, build, value.clone(), fuel)
     }))
 }
 
-pub fn alternatives<World, Hover>(
+pub fn alternatives<World: 'static, Hover: 'static>(
     options: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Alternatives(options.into_iter().collect())
+    let options: Vec<_> = options.into_iter().collect();
+    Layout::new(move |builder| {
+        let options = options.iter().map(|option| option.run(builder)).collect();
+        builder.alternatives(options)
+    })
 }
 
 /// If both values are records, `patch` fields win on shared keys.
@@ -875,10 +792,11 @@ pub fn overlay_value(current: &Value, patch: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recording::{Recorded, record};
     use crate::test_support::{ProjectionCall, inspect};
 
-    fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
-        while let Layout::Shared { child, .. } = layout {
+    fn unshared<World, Hover>(mut layout: &Recorded<World, Hover>) -> &Recorded<World, Hover> {
+        while let Recorded::Shared { child, .. } = layout {
             layout = child.as_ref();
         }
         layout
@@ -891,7 +809,12 @@ mod tests {
     fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
         struct NoEval;
         impl Env for NoEval {
-            fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+            fn apply_scoped(
+                &self,
+                _: &Value,
+                _: &[(CellId, Value)],
+                _scope: Option<&grap::ForeignOverlay<'_>>,
+            ) -> grap::Evaluation {
                 panic!("unexpected application")
             }
 
@@ -970,7 +893,7 @@ mod tests {
         const SECOND: CellId = CellId::from_u128(2);
         let first = Value::from(vec![1]);
         let second = Value::from(vec![2]);
-        let layout: Layout<(), ()> = record(
+        let layout: Layout<(), ()> = crate::record(
             [(FIRST, &first), (SECOND, &second)],
             |left, right| right.cmp(left),
             |key, value| RecordField {
@@ -978,16 +901,15 @@ mod tests {
                 value: at([Step::Key(key)], value),
             },
         );
-        let Layout::Surround { child, .. } = layout else {
-            panic!("a record is delimited");
-        };
-        let Layout::Alternatives(forms) = child.as_ref() else {
+        let layout = record(&layout);
+        let (_, child, _) = crate::test_support::delimited(&layout);
+        let Recorded::Alternatives(forms) = child else {
             panic!("a record has responsive forms");
         };
-        let Layout::Row { children, .. } = &forms[0] else {
+        let Recorded::Row { children, .. } = &forms[0] else {
             panic!("the first form is flat");
         };
-        let Layout::Row {
+        let Recorded::Row {
             children: first, ..
         } = &children[0]
         else {
@@ -996,7 +918,7 @@ mod tests {
         assert!(matches!(&inspect(&(unshared(&first[2]))),
             ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
-        let Layout::Row {
+        let Recorded::Row {
             children: second, ..
         } = &children[2]
         else {
@@ -1005,13 +927,13 @@ mod tests {
         assert!(matches!(&inspect(&(unshared(&second[2]))),
             ProjectionCall::At { steps, .. } if *steps == [Step::Key(FIRST)]
         ));
-        let Layout::Col { children, .. } = &forms[1] else {
+        let Recorded::Col { children, .. } = &forms[1] else {
             panic!("the second form is a column");
         };
-        let Layout::Alternatives(first) = &children[0] else {
+        let Recorded::Alternatives(first) = &children[0] else {
             panic!("a column field may break after its label");
         };
-        let Layout::Row {
+        let Recorded::Row {
             children: inline, ..
         } = &first[0]
         else {
@@ -1020,13 +942,13 @@ mod tests {
         assert!(matches!(&inspect(&(unshared(&inline[1]))),
             ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
-        let Layout::Col {
+        let Recorded::Col {
             children: broken, ..
         } = &first[1]
         else {
             panic!("a field may put its value below its label");
         };
-        let Layout::Pad { child, .. } = &broken[1] else {
+        let Recorded::Pad { child, .. } = &broken[1] else {
             panic!("a broken value is indented");
         };
         assert!(matches!(&inspect(&(unshared(child))),
@@ -1040,7 +962,7 @@ pub fn drawing_program<W: 'static, H: 'static>(
     fuel: usize,
     program: Value,
 ) -> Layout<W, H> {
-    Layout::Widget(Rc::new(move |context| {
+    Layout::widget(Rc::new(move |context| {
         (context.drawing)(extent, fuel, program.clone())
     }))
 }

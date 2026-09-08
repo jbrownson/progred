@@ -32,7 +32,7 @@ fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
 
 /// A cell as a reference, not as an invitation to inspect its value.
 /// Contextual projections use this for expression and callable references.
-pub(crate) fn shallow_cell<World: 'static, Hover: Clone + 'static>(
+pub(crate) fn shallow_cell<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value?.as_cell()?;
@@ -45,7 +45,7 @@ pub(crate) fn shallow_cell<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn declaration_cell<World: 'static, Hover: Clone + 'static>(
+fn declaration_cell<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value?.as_cell()?;
@@ -60,7 +60,7 @@ fn declaration_cell<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn declaration_name<World: 'static, Hover: Clone + 'static>(
+fn declaration_name<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     input.pending.is_none().then_some(())?;
@@ -80,7 +80,7 @@ fn declaration_name<World: 'static, Hover: Clone + 'static>(
     ))
 }
 
-fn lambda_name<World: 'static, Hover: Clone + 'static>(
+fn lambda_name<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     Some(match input.value {
@@ -98,7 +98,7 @@ fn lambda_name<World: 'static, Hover: Clone + 'static>(
     })
 }
 
-pub fn shallow_at<World: 'static, Hover: Clone + 'static>(
+pub fn shallow_at<World: 'static, Hover: Clone + PartialEq + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     default: &progred_display::Partial<World, Hover>,
@@ -113,7 +113,7 @@ pub fn shallow_at<World: 'static, Hover: Clone + 'static>(
 
 /// A direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
-pub(crate) fn expression_at<World: 'static, Hover: Clone + 'static>(
+pub(crate) fn expression_at<World: 'static, Hover: Clone + PartialEq + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     default: &progred_display::Partial<World, Hover>,
@@ -123,7 +123,7 @@ pub(crate) fn expression_at<World: 'static, Hover: Clone + 'static>(
 
 /// Declaration cells keep their parentheses, with a name-only definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_at<World: 'static, Hover: Clone + 'static>(
+pub(crate) fn declaration_at<World: 'static, Hover: Clone + PartialEq + 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
     default: &progred_display::Partial<World, Hover>,
@@ -136,7 +136,7 @@ pub(crate) fn declaration_at<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-pub(crate) fn shallow_descend<World: 'static, Hover: Clone + 'static>(
+pub(crate) fn shallow_descend<World: 'static, Hover: Clone + PartialEq + 'static>(
     step: Step,
     default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
@@ -147,7 +147,7 @@ pub(crate) fn shallow_descend<World: 'static, Hover: Clone + 'static>(
     )
 }
 
-pub(crate) fn expression_descend<World: 'static, Hover: Clone + 'static>(
+pub(crate) fn expression_descend<World: 'static, Hover: Clone + PartialEq + 'static>(
     step: Step,
     default: &progred_display::Partial<World, Hover>,
 ) -> Layout<World, Hover> {
@@ -241,7 +241,7 @@ fn standard_field_order(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a cell; arguments retain Grap's contextual
 /// projection.
-pub fn call_display<World: 'static, Hover: Clone + 'static>(
+pub fn call_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -305,7 +305,7 @@ pub fn call_display<World: 'static, Hover: Clone + 'static>(
 
 /// A stored lambda exposes its parameter declarations deeply and
 /// projects its body as an expression.
-pub fn lambda_display<World: 'static, Hover: Clone + 'static>(
+pub fn lambda_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value?.as_record()?;
@@ -349,7 +349,7 @@ pub fn lambda_display<World: 'static, Hover: Clone + 'static>(
 
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
-pub fn ffi_display<World: 'static, Hover: Clone + 'static>(
+pub fn ffi_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let ffi = input.value?.as_record()?.get(&FFI)?;
@@ -357,7 +357,7 @@ pub fn ffi_display<World: 'static, Hover: Clone + 'static>(
     Some(shallow_at([Step::Key(FFI)], ffi, &input.default_projection))
 }
 
-pub fn evaluate_display<World: 'static, Hover: Clone + 'static>(
+pub fn evaluate_display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value?.as_record()?.get(&EVALUATE)?;
@@ -410,7 +410,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, value) in [
         (grap_runtime::vocabulary::FUNCTION, "function"),
@@ -505,6 +505,8 @@ fn completions(request: &progred_display::CompletionRequest<'_>) -> Option<Vec<C
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::new_cell_id;
     use progred_display::Env;
     use progred_display::test_support::{ProjectionCall, inspect};
@@ -514,7 +516,7 @@ mod tests {
     }
 
     impl Env for TestEnv {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 
@@ -580,15 +582,15 @@ mod tests {
         }
     }
 
-    fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
-        evaluate_display(&input(env, value))
+    fn projected(env: &dyn Env, value: &Value) -> Option<Recorded<(), ()>> {
+        evaluate_display(&input(env, value)).map(|layout| layout.record())
     }
 
     #[test]
     fn declaration_cells_follow_their_source_and_edit_the_name_field() {
         struct DefinitionEnv(Value, gid::Resolution);
         impl Env for DefinitionEnv {
-            fn apply(&self, _: &Value, _: &[(CellId, Value)]) -> (Value, usize) {
+fn apply_scoped(&self, _: &Value, _: &[(CellId, Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
                 panic!("declarations do not evaluate");
             }
 
@@ -612,10 +614,8 @@ mod tests {
             for spelling in ["size", ""] {
                 let env = DefinitionEnv(name::record(spelling, []), source);
                 let cell = Value::from(new_cell_id());
-                let Layout::Surround { child, .. } = declaration_cell(&input(&env, &cell)).unwrap()
-                else {
-                    panic!("a declaration keeps its cell delimiters");
-                };
+                let declaration = declaration_cell(&input(&env, &cell)).unwrap().record();
+                let (_, child, _) = progred_display::test_support::delimited(&declaration);
                 let ProjectionCall::Descend {
                     step,
                     projection: Some(projection),
@@ -816,11 +816,10 @@ mod tests {
     fn parameter_offers_defer_name_lookup_to_the_picker() {
         struct CountingEnv(std::cell::Cell<usize>);
         impl Env for CountingEnv {
-            fn apply(
+fn apply_scoped(
                 &self,
                 _: &gid::Value,
-                _: &[(gid::CellId, gid::Value)],
-            ) -> (gid::Value, usize) {
+                _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
                 panic!("unexpected projection application")
             }
 
@@ -856,45 +855,43 @@ mod tests {
         assert_eq!(env.0.get(), 0);
     }
 
-    fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
-        while let Layout::Shared { child, .. } = layout {
+    fn unshared<World, Hover>(mut layout: &Recorded<World, Hover>) -> &Recorded<World, Hover> {
+        while let Recorded::Shared { child, .. } = layout {
             layout = child.as_ref();
         }
         layout
     }
 
-    fn arms(layout: &Layout<(), ()>) -> (&Layout<(), ()>, &Layout<(), ()>) {
-        let Layout::Alternatives(options) = layout else {
+    fn arms(layout: &Recorded<(), ()>) -> (&Recorded<(), ()>, &Recorded<(), ()>) {
+        let Recorded::Alternatives(options) = layout else {
             panic!("expected alternatives");
         };
-        let Some(Layout::Row { children, .. }) = options.first() else {
+        let Some(Recorded::Row { children, .. }) = options.first() else {
             panic!("expected a row first");
         };
         assert_eq!(children.len(), 3);
         (unshared(&children[0]), unshared(&children[2]))
     }
 
-    fn argument_order(layout: &Layout<(), ()>) -> Vec<CellId> {
-        let Layout::Alternatives(call_options) = layout else {
+    fn argument_order(layout: &impl Recordable<(), ()>) -> Vec<CellId> {
+        let Recorded::Alternatives(call_options) = layout.record() else {
             panic!("call has responsive forms");
         };
-        let Layout::Row { children, .. } = &call_options[0] else {
+        let Recorded::Row { children, .. } = &call_options[0] else {
             panic!("flat call first");
         };
-        let Layout::Surround { child, .. } = unshared(&children[1]) else {
-            panic!("arguments are record-delimited");
-        };
-        let Layout::Alternatives(argument_options) = child.as_ref() else {
+        let (_, child, _) = progred_display::test_support::delimited(unshared(&children[1]));
+        let Recorded::Alternatives(argument_options) = child else {
             panic!("arguments have responsive forms");
         };
-        let Layout::Row { children, .. } = &argument_options[0] else {
+        let Recorded::Row { children, .. } = &argument_options[0] else {
             panic!("flat arguments first");
         };
         children
             .iter()
             .step_by(2)
             .map(|argument| {
-                let Layout::Row { children, .. } = argument else {
+                let Recorded::Row { children, .. } = argument else {
                     panic!("argument has a label and value");
                 };
                 let ProjectionCall::At { steps, .. } = &inspect(&(unshared(&children[2]))) else {
@@ -932,7 +929,7 @@ mod tests {
                     [(new_cell_id(), Value::from(vec![2]))]
                 ),
             ),
-            Some(Layout::Alternatives(_))
+            Some(Recorded::Alternatives(_))
         ));
     }
 
@@ -968,10 +965,10 @@ mod tests {
             &grap_runtime::call(Value::from(function), [(argument, Value::from(vec![1]))]),
         ))
         .unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("call has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("flat call first");
         };
         assert!(matches!(&inspect(&(unshared(&children[0]))),
@@ -991,15 +988,13 @@ mod tests {
         let argument = new_cell_id();
         let call = grap_runtime::call(Value::from(function), [(argument, Value::from(vec![1]))]);
         let layout = call_display(&relative_input(&env(), &call)).unwrap();
-        let Layout::Alternatives(call_options) = layout else {
+        let Recorded::Alternatives(call_options) = layout.record() else {
             panic!("call has responsive forms");
         };
-        let Layout::Row { children, .. } = &call_options[0] else {
+        let Recorded::Row { children, .. } = &call_options[0] else {
             panic!("flat call first");
         };
-        let Layout::Surround { left, child, right } = unshared(&children[1]) else {
-            panic!("arguments are record-delimited");
-        };
+        let (left, child, right) = progred_display::test_support::delimited(unshared(&children[1]));
         crate::test_widgets::assert_delimiter(
             left,
             progred_display::Delim::Brace,
@@ -1010,26 +1005,26 @@ mod tests {
             progred_display::Delim::Brace,
             progred_display::Side::Close,
         );
-        let Layout::Alternatives(argument_options) = child.as_ref() else {
+        let Recorded::Alternatives(argument_options) = child else {
             panic!("arguments have responsive forms");
         };
-        let Layout::Row { children, .. } = &argument_options[0] else {
+        let Recorded::Row { children, .. } = &argument_options[0] else {
             panic!("flat arguments first");
         };
-        let Layout::Row { children, .. } = &children[0] else {
+        let Recorded::Row { children, .. } = &children[0] else {
             panic!("argument has a label and value");
         };
-        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+        let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("field head contains its label and colon");
         };
-        let Layout::Before { child, .. } = &head[0] else {
+        let Recorded::Before { child, .. } = &head[0] else {
             panic!("the label targets its argument");
         };
         assert_eq!(
             crate::test_widgets::claim(&head[0]),
             Some(puri::hover::Claim::Direct(vec![Step::Key(argument)]))
         );
-        assert!(matches!(child.as_ref(), Layout::Before { .. }));
+        assert!(matches!(child.as_ref(), Recorded::Before { .. }));
     }
 
     #[test]
@@ -1046,11 +1041,10 @@ mod tests {
         }
 
         impl Env for DefinitionEnv {
-            fn apply(
+fn apply_scoped(
                 &self,
                 _: &gid::Value,
-                _: &[(gid::CellId, gid::Value)],
-            ) -> (gid::Value, usize) {
+                _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
                 panic!("unexpected projection application")
             }
 
@@ -1123,13 +1117,13 @@ mod tests {
         let parameter = new_cell_id();
         let definition = grap_runtime::lambda([parameter], Value::from(parameter));
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("flat lambda first");
         };
-        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+        let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
         assert!(matches!(&inspect(&(&head[0])),
@@ -1146,14 +1140,14 @@ mod tests {
                 ..
             } if *steps == [Step::Key(PARAMS)]
         ));
-        let Layout::Before { child, .. } = &head[2] else {
+        let Recorded::Before { child, .. } = &head[2] else {
             panic!("lambda arrow targets its body");
         };
         assert_eq!(
             crate::test_widgets::claim(&head[2]),
             Some(puri::hover::Claim::Direct(vec![Step::Key(BODY)]))
         );
-        assert!(matches!(child.as_ref(), Layout::Before { .. }));
+        assert!(matches!(child.as_ref(), Recorded::Before { .. }));
         assert!(matches!(
             &inspect(&(unshared(&children[1]))),
             ProjectionCall::Descend {
@@ -1195,13 +1189,13 @@ mod tests {
             [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("flat lambda first");
         };
-        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+        let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
         let ProjectionCall::Descend {
@@ -1253,13 +1247,13 @@ mod tests {
             [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
-        let Layout::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };
-        let Layout::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = &options[0] else {
             panic!("flat lambda first");
         };
-        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+        let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
             panic!("lambda has a syntax head");
         };
         let ProjectionCall::Descend {

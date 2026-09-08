@@ -1,6 +1,8 @@
 //! A document-aware line widget, composed from Puri text and input functions.
 
-use super::{Context, Direction, Fragment, Select, extent, leaf};
+use crate::widget::HoverPass;
+
+use super::{Context, Direction, Select, extent, leaf};
 use crate::{Env, Layout, TextFamily};
 use gid::Value;
 use measured::Measured;
@@ -23,14 +25,20 @@ pub struct LineEdit {
 
 pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
 
-pub fn layout<World: 'static, Hover: Clone + 'static>(line: LineEdit) -> Layout<World, Hover> {
-    Layout::Widget(Rc::new(move |context| view(context, line.clone())))
+pub fn layout<World: 'static, Hover: Clone + PartialEq + 'static>(
+    line: LineEdit,
+) -> Layout<World, Hover> {
+    #[cfg(feature = "profile")]
+    let _profile = crate::profile::enter(crate::profile::Kind::LineEdit);
+    Layout::widget(Rc::new(move |context| view(context, line.clone())))
 }
 
-pub fn view<World: 'static, Hover: Clone + 'static>(
+pub fn view<World: 'static, Hover: Clone + PartialEq + 'static>(
     context: &mut Context<'_, '_, World, Hover>,
     mut line: LineEdit,
-) -> Measured<Fragment<World, Hover>> {
+) -> Measured<HoverPass<World, Hover>> {
+    #[cfg(feature = "profile")]
+    let _profile = crate::profile::enter(crate::profile::Kind::LineEdit);
     let site = (context.site)();
     if let Some(spelling) = site.spelling {
         line.text = spelling.to_owned();
@@ -110,12 +118,10 @@ pub fn view<World: 'static, Hover: Clone + 'static>(
         let edit = site.edit;
         let target = site.target;
         let primary_edit = context.primary_edit;
-        measured::before_into(content, move |placement: Placement, output| {
-            output.landmark_select = Some(navigation);
+        crate::widget::before_hover(content, move |placement: Placement, output| {
+            output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
-                output
-                    .probes
-                    .push(super::frame::Probe::retaining(placement, target));
+                output.claim(super::frame::Probe::retaining(placement, target));
             }
             output.handler().on_pointer_down(move |world, event| {
                 primary_edit(event)

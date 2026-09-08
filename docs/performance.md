@@ -25,6 +25,32 @@ environment variables:
 
 ## Inputs and measurements
 
+Two additional opt-in checks cover layout construction:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  grap_layout_ffi_profile_loop -- --ignored --nocapture --test-threads=1
+./tools/sandbox-cargo test --release -p progred --lib --features layout-profile \
+  iop_source_form_profile -- --ignored --nocapture --test-threads=1
+```
+
+The first alternates the two variants each pair: 100 two-text rows built by Grap
+as GID layout descriptions versus scoped layout-emitting FFIs. Both use the
+same explicit fuel budget, library stack, fonts, text cache, geometry, and draw
+endpoint. A normal regression test compares their complete paint commands and
+extents, with and without the existing border combinator. No timing assertion
+is a correctness test.
+
+The `layout-profile` feature adds diagnostic scopes and a test-only counting
+allocator. Ordinary builds have neither the scopes nor that allocator. The
+report partitions **exclusive** elapsed time and allocation/reallocation
+requests by the currently executing scope. Bytes are requested allocation sizes,
+not retained or peak memory. These timings include instrumentation overhead;
+use the feature-free canaries for baseline frame times. Constructors and
+measurement are tagged by construct, but later placement, hover, and painting
+are phase totals, not attributed back to each originating widget. In particular,
+`Program` means native projection recursion/adaptation, **not Grap execution**.
+
 `BenchFrame` takes a document, source-qualified root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
 `BenchContext` retains the library stack, fonts, layout context, and text shaping
@@ -40,9 +66,11 @@ paint continuations into a headless `DrawList`. The report separates:
 - First-frame time, including any lazy initialization. This is **not** necessarily
   cold shader compilation: the OS may already have compiled shaders on disk.
 - Warm median, p95, and maximum total time, including output disposal.
-- Projection/measurement time and the remaining frame work. Library work occurs
-  in whichever phase normally invokes it: Fidget renders during projection,
-  while the IoP canvas program runs during placement.
+- Preparation (projection, text metrics, and choice-graph construction), choice
+  resolution plus settled geometry, placement, hover/handler construction,
+  painting plus handler disposal, and final output disposal. These timers live
+  only in the test harness. Library work occurs in its normal phase: Fidget
+  renders during preparation, while the IoP canvas program runs during painting.
 
 Fixture parsing and app-lifetime resource construction are outside the timer.
 Per-frame input construction is included; output validation is excluded. There
@@ -87,6 +115,51 @@ paints; keep the interactive orbit/scroll check as a separate test of smoothness
 
 Older dated reports used different timing scopes and document margins; start a
 new baseline rather than directly comparing their averages to these medians.
+
+## Scoped layout FFIs and construct profile — 2026-09-07
+
+Two interleaved, feature-free runs of 180 measured frames (five warm-up pairs)
+on the same local ARM64 Mac:
+
+| 100 two-text rows | Run 1 median | Run 2 median |
+| --- | ---: | ---: |
+| Grap builds GID layout, then decode | 0.366 ms | 0.372 ms |
+| Grap emits native layout through scoped FFIs | 0.321 ms | 0.333 ms |
+
+That is 10–12% less complete-frame time on this synthetic workload. Preparation
+alone improved about 4–7%; disposal and later phases also contribute to the
+difference. The timing includes creation/reification and application of the one
+ordinary layout-program closure, so it does not hide that boundary's cost.
+It is not a 10–12% improvement to the editor: existing source projections are
+already native Rust, and these examples have not been rewritten to use the new
+FFIs. This test establishes the cost of the optional Grap construction path.
+
+The ordinary canaries remained comparable to the preceding pass: IoP source
+4.35 ms median (4.53 ms p95), picture 22.61 ms (23.73 ms p95). The five Fidget
+canaries also passed: original 8.84 ms, torus 6.69 ms, tanglecube 43.13 ms,
+gyroid 28.53 ms, cube 14.01 ms median. These retain the headless sandbox's
+automatic backend and exclude Vello/presentation, as described above.
+
+The separately instrumented IoP source run had about 105,600 allocation/reallocation
+requests per frame. Its largest exclusive buckets were:
+
+| Scope | Instrumented time/frame | Time share | Allocation requests/frame |
+| --- | ---: | ---: | ---: |
+| Native recursion/adaptation (`Program`) | 1.107 ms | 22.6% | 26,610 |
+| Projection construction | 0.710 ms | 14.5% | 30,626 |
+| Hover and handler assembly | 1.181 ms | 24.1% | 12,179 |
+| Placement | 0.415 ms | 8.5% | 11,692 |
+| Shared-node preparation overhead | 0.309 ms | 6.3% | 2,078 |
+| Choice resolution and geometry | 0.299 ms | 6.1% | 5,833 |
+| LineEdit construction/preparation | 0.114 ms | 2.3% | 3,304 |
+
+Other scopes account for the remainder. LineEdit's later placement/hover work is
+included in those phase totals, not in its 2.3%. This does not justify a special
+lowered LineEdit constructor by itself. The stronger next leads are the numerous
+short-lived path/target/layout allocations during projection and adaptation,
+and the general continuation/output assembly in placement and hover. Profile
+those call sites before changing representations; no such optimization is part
+of this pass.
 
 ## Initial baseline — 2026-09-06
 
@@ -141,3 +214,74 @@ source canary measured 3.65 ms median and 3.80 ms p95 (60 frames). The preceding
 run before default picker selection and name suggestions was 3.62 ms median;
 this shows no material regression, not a claimed speedup. This source-only
 canary has no active selection and does not measure picker interaction latency.
+
+## Layout builder and placement consolidation — 2026-09-07
+
+The native layout frontend is now a reusable program over `Builder`, with a
+production choice-graph builder and a test recorder. The chosen graph places
+directly; `Measured` no longer contains another container enum. Alternative
+selection policy and per-frame sharing are unchanged. This completes the
+native representation consolidation, not a direct Grap-to-native-layout FFI
+bridge: stored Grap layout forms still decode from GID.
+
+Local ARM64 Mac, same restricted release harness as above. Immediately before
+this pass, 60-frame canaries measured IoP source at 4.57 ms and picture at
+23.72 ms median. An early post-change run measured 4.86 / 24.18 ms; after the
+final borrowed-leaf cleanup, an isolated 60-frame source repeat was 4.35 ms.
+The final seven-workload run used 180 measured frames:
+
+| Workload | Median | p95 | Maximum |
+| --- | ---: | ---: | ---: |
+| IoP source | 4.36 ms | 4.52 ms | 4.76 ms |
+| IoP picture | 22.38 ms | 22.86 ms | 23.77 ms |
+| Fidget orbit | 8.65 ms | 9.82 ms | 10.33 ms |
+| Torus orbit | 6.76 ms | 7.53 ms | 8.91 ms |
+| Tanglecube orbit | 42.95 ms | 51.16 ms | 95.88 ms |
+| Gyroid sphere orbit | 28.33 ms | 35.78 ms | 41.28 ms |
+| Fidget cube orbit | 13.84 ms | 16.20 ms | 16.89 ms |
+
+These small before/after differences are not a controlled speedup claim. There
+was no interleaved checkout A/B, and the short runs vary enough to change the
+sign of the difference. The earlier continuation and bracket changes also
+changed costs and line breaks. This pass does not establish that the entire
+refactor is faster than the original implementation. Fidget numbers remain
+sandbox CPU-fallback canaries, not measurements of interactive Metal rendering.
+
+IoP source phase medians from that final run:
+
+| Phase | Median |
+| --- | ---: |
+| Preparation | 2.14 ms |
+| Choices and settled geometry | 0.29 ms |
+| Placement | 0.40 ms |
+| Hover and handler construction | 1.18 ms |
+| Paint and handler disposal | 0.23 ms |
+| Output disposal | 0.12 ms |
+
+The picture spends 22.28 ms in paint/handler disposal; all preceding phases
+together take about 0.01 ms. Each Fidget viewport spends essentially its entire
+time in preparation, which includes the actual Fidget render. Neither points
+to alternative search as the picture bottleneck.
+
+A separate five-second, 1 ms stack sample of a 2,000-frame source run found
+about 35% of the benchmark thread's samples ending inside the system allocator
+(allocation, freeing, and resizing). This is a conservative count of reported
+allocator leaf symbols, not a separately additive phase. Copying/clearing memory
+also features prominently. Application self-time includes temporary builder
+result consumption, definition lookup, settled geometry, and hover output
+ordering (`Fragment::reverse_since` and `controls_below`). Optimized symbols and
+inlining limit finer attribution. The sample run overlapped a compile briefly
+and is not used for timing comparisons.
+
+The actionable distinction is construction/disposal versus layout search:
+preparation and hover/handler construction dominate the source frame, while
+choice resolution is about 7%. Reusable layout closures, captured paths,
+handlers, and hover scoping still allocate. Fewer representations do not by
+themselves remove those costs. Investigate those allocations before changing
+the search policy or adding caches. No runtime profiling or new cross-frame
+state was introduced.
+
+For a repeatable CPU sample, start `sample` waiting for the headless test
+executable's process name, then run the source filter with
+`--config 'env.FRAME_PROFILE_ITERATIONS="2000"'`. Use that run for call stacks
+only and take clean wall-time measurements separately.

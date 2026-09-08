@@ -3,6 +3,9 @@ name = "progred"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+layout-profile = ["progred-display/profile"]
+
 [dependencies]
 grap = { path = "../grap" }
 progred-libraries = { path = "../libraries" }

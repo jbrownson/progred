@@ -69,7 +69,7 @@ impl number::Scrubbable for f32 {
     }
 }
 
-pub fn display<World: 'static, Hover: Clone + 'static>(
+pub fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     number::layout(input, read(input.value?)?, vocabulary::F32, value)
@@ -146,7 +146,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library<World: 'static, Hover: Clone + 'static>() -> Library<World, Hover> {
+pub fn library<World: 'static, Hover: Clone + PartialEq + 'static>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::F32, "f32"),

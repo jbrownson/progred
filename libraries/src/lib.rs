@@ -348,6 +348,8 @@ impl grap_runtime::Host for Libraries {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_display::recording::{Recordable, Recorded};
+
     use gid::{CellId, Value};
     use grap_runtime::{Environment, Expression, ForeignFunction, Halt};
     use progred_display::{Env, Layout, ProjectionInput, text as text_layout};
@@ -386,7 +388,7 @@ mod tests {
     struct NoEval;
 
     impl Env for NoEval {
-        fn apply(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)]) -> (gid::Value, usize) {
+fn apply_scoped(&self, _: &gid::Value, _: &[(gid::CellId, gid::Value)], _scope: Option<&grap_runtime::ForeignOverlay<'_>>) -> grap_runtime::Evaluation {
             panic!("unexpected projection application")
         }
 
@@ -470,8 +472,8 @@ mod tests {
                         state: None,
                         targets: progred_display::ProjectionTargets::new(&target),
                     })
-                    .and_then(|layout| match layout {
-                        Layout::Leaf(Leaf::Text { text, .. }) => Some(text),
+                    .and_then(|layout| match layout.record() {
+                        Recorded::Leaf(Leaf::Text { text, .. }) => Some(text),
                         _ => None,
                     })
                     .unwrap()

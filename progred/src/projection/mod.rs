@@ -24,7 +24,7 @@ use gid::{CellId, Path, Step, Value};
 use kurbo::{Affine, Point, RoundedRect, Stroke};
 use location::Location;
 use measured::Measured;
-use measured::choices::{ChoiceBuild, ChoiceLayout, resolve_choices};
+use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
 use peniko::Color;
 use progred_display::widget::style::{face_style, highlight_outline};
 use puri::draw::Canvas;
@@ -147,15 +147,29 @@ struct ProjectEnv<'a, 's> {
 }
 
 impl progred_display::Env for ProjectEnv<'_, '_> {
-    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
+    fn apply_scoped(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation {
         let fuel = if self.cx.source.transient() {
             self.cx.fuel.get()
         } else {
             grap::DEFAULT_FUEL
         };
-        let evaluation = grap::apply(function, arguments.iter().cloned(), &self.cx.sources, fuel);
+        let evaluation = match scope {
+            Some(scope) => grap::apply_scoped(
+                function,
+                arguments.iter().cloned(),
+                &self.cx.sources,
+                scope,
+                fuel,
+            ),
+            None => grap::apply(function, arguments.iter().cloned(), &self.cx.sources, fuel),
+        };
         self.cx.fuel.set(evaluation.remaining_fuel);
-        (evaluation.result, evaluation.remaining_fuel)
+        evaluation
     }
 
     fn evaluate(&self, expression: &Value) -> (Value, usize) {
@@ -588,13 +602,13 @@ fn placeholder_box<C: 'static>(tcx: &mut TextCtx, styles: &Styles) -> Measured<P
 /// The pointer over this settled rect names `key`, with the visible
 /// ink as its footprint. Placement order is precedence: descendants
 /// and overlays contribute later and answer first.
-fn hover_claim<C: 'static>(p: &mut placed::Builder<'_, C>, placement: Placement, key: Hover) {
+fn hover_claim<C: 'static>(p: &mut placed::Builder<'_, '_, C>, placement: Placement, key: Hover) {
     p.claim(placement, Hovered::Tree(key));
 }
 
 /// An occluder: takes the pointer and names nothing, so targets
 /// beneath an overlay never light.
-fn hover_block<C: 'static>(p: &mut placed::Builder<'_, C>, placement: Placement) {
+fn hover_block<C: 'static>(p: &mut placed::Builder<'_, '_, C>, placement: Placement) {
     p.occlude(placement);
 }
 
@@ -667,6 +681,19 @@ pub(crate) fn project<C: 'static>(
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
 ) -> Measured<Placed<C>> {
+    let width = description.width;
+    resolve_choices(
+        prepare_project(description, tcx, hooks),
+        width,
+        std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
+    )
+}
+
+fn prepare_project<C: 'static>(
+    description: ProjectDescription<'_, C>,
+    tcx: &mut TextCtx,
+    hooks: Hooks<C>,
+) -> ChoiceGraph<Placed<C>> {
     let ProjectDescription {
         sources,
         root,
@@ -677,7 +704,7 @@ pub(crate) fn project<C: 'static>(
         annotations,
         raw,
         styles,
-        width,
+        width: _,
         projection,
     } = description;
     let projection = projection.cloned().unwrap_or_default();
@@ -719,11 +746,7 @@ pub(crate) fn project<C: 'static>(
         &hooks,
         &mut build,
     );
-    resolve_choices(
-        build.finish(layout),
-        width,
-        std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
-    )
+    build.finish(layout)
 }
 
 /// Marks `child` as the projection of `path` WITHOUT claiming any
@@ -1110,6 +1133,8 @@ fn value_layout<C: 'static>(
     value: Option<&Value>,
     hooks: &Hooks<C>,
 ) -> Option<progred_display::Layout<C, Hovered>> {
+    #[cfg(all(test, feature = "layout-profile"))]
+    let _profile = progred_display::profile::enter(progred_display::profile::Kind::Projection);
     // Ancestry has already accumulated the cells crossed by Follow
     // edges. A repeated cell is the graph cycle; re-resolving this
     // path and all its prefixes here made every frame walk from the

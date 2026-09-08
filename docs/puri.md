@@ -47,8 +47,13 @@ vocabulary. Progred and its projection libraries supply those choices.
 
 ## Measurement and placement
 
-Puri owns `Placement { rect, clip_rect }`, not a layout algebra. `rect` is the
-full widget rectangle. `clip_rect` is the effective enclosing axis-aligned clip,
+Puri owns `Placement { rect, available_rect, clip_rect }`, not a layout algebra.
+`rect` is the widget's rectangle. `available_rect` is an optional expansion
+offered by its container: rows offer their vertical span, columns their width,
+and overlays both. Ordinary widgets ignore it. A `fill_height` combinator adopts
+the available vertical span before invoking the child's placement continuation.
+This does not change intrinsic measurement or trigger another choice search.
+`clip_rect` is the effective enclosing axis-aligned clip,
 not already intersected with the widget. Ordinary children inherit the clip;
 clipping containers intersect their bounds into it. Hover and gesture starts
 must lie inside both rectangles. Motion and release for an active gesture can
@@ -69,20 +74,23 @@ form.
 
 The choice engine has no GID, editor, or Puri dependency. `ChoiceBuild` owns
 per-frame sharing and choice bookkeeping; `resolve_choices` returns a
-`Measured<Out>`. Its leaves own opaque placement continuations, and wrappers
-compose those continuations without interpreting their output. Out-of-flow
+`Measured<Out>`: an extent and placement callback. The selected choice graph
+places directly, without building a second measured container tree. Plain
+measured combinators compose callbacks using the same geometry helpers, not a
+`Kind` enum. Wrappers do not interpret their output. Out-of-flow
 content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
-The display layout's `Floating` construct supplies only two boxes and a
+The display builder's `floating` operation supplies only two boxes and a
 positioning function. The ordinary [popover widget](../display/src/widget/popover.rs)
 composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 
 Native widgets use `progred_display::widget::Widget`: a measurement function
-whose result places a `Fragment` of deferred ink, handlers, hover claims,
-navigation declarations, and floating subtrees. `LineEdit` uses this path, with no control-specific
-layout constructor. Native handlers receive the current settled hover as an
+whose result places a `HoverPass`. Calling that continuation produces a
+`Fragment` of deferred ink, handlers, the hover claim, and navigation declarations.
+`LineEdit` uses this path, with no control-specific layout constructor. Native
+handlers receive the current settled hover as an
 explicit dispatch input; the host suppresses that target outside its owning view.
 `CanvasSink` is the object-safe primitive drawing interface implemented by
 Vello, Canvas2D, and recorders; `Canvas` adds generic convenience methods.
@@ -97,25 +105,28 @@ hover settles, rather than allocating a deferred closure per drawing operation.
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
 The [container combinators](../display/src/widget/container.rs) share scrolling
-and out-of-flow placement over the shared `Fragment` output. The editor's
-`Placed` is an alias for that same type, with no translation layer. `Layers` supplies clipping and floater attachment, while `HasHandler`
-supplies input composition. The editor adds view ownership separately and raises
-floaters once at the frame boundary. Clips do not capture floating subtrees.
+and out-of-flow placement over the shared `HoverPass` output. The editor's
+`Placed` aliases that continuation; `Ready` aliases its returned `Fragment`.
+`Layers` supplies clipping and floater attachment. Hover callbacks compose input
+handlers through `HasHandler`. The editor adds view ownership separately;
+running the hover pass raises floaters before querying targets. Clips do not
+capture floating subtrees.
 
 The [navigation combinator](../display/src/widget/navigation.rs) similarly
 contributes a projection-declared path, settled rectangle, and arrival handler.
-It consumes a control's arrival override only at the nearest landmark and
-restores the enclosing scope. The native output can carry complete landmarks;
+It maps a child's hover continuation and consumes the control's arrival override
+only at the nearest landmark. The native output can carry complete landmarks;
 view attribution remains the editor's separate wrapper. Unplaced subtrees
 contribute neither geometry nor navigation.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,
-then return an opaque placement callback; layout knows neither the control nor
-its event policy. Click, activation, and picking are ordinary functions built
+then return a hover callback to run over settled placement; layout knows neither
+the control nor its event policy. Click, activation, and picking are ordinary functions built
 on this combinator. Hover claims, occlusion, and optional hover feedback are
-ordinary decorators too. Generic Puri probes own settled hit geometry and
-retention; the editor adds the owning view. Insert and collapse handles request
+ordinary decorators too. Generic Puri probes test settled hit geometry and
+retention immediately inside that callback; the frame retains the winning claim,
+not the probes. The editor adds the owning view. Insert and collapse handles request
 feedback explicitly, not through a target-type switch in the interpreter.
 Interaction wrappers use `before`, keeping child handlers in front of enclosing
 handlers. `after` reverses that order when requested; borders use it to paint
@@ -127,7 +138,10 @@ It encodes events and installs one native handler; the editor supplies the
 site-scoped interpreter when requested. Ordinary native widgets do not touch
 this interpreter. Layout has no Grap-event constructor or interpretation arm.
 
-The [box interpreter](../display/src/measure.rs) belongs to `progred-display`.
+The [layout builder interface](../display/src/builder.rs) belongs to
+`progred-display`. `Layout` is a reusable program over that interface; its
+production interpreter prepares the choice graph, while a test-only recorder
+retains structure for inspection. There is no production layout enum.
 Projection recursion uses ordinary preparation functions with an explicit
 source scope, not path-bearing Layout variants. Native widgets and the editor
 share one placement output; there is no editor-side Layout interpreter.
@@ -161,21 +175,24 @@ its owning view, and navigation data explicitly. Event acceptance controls
 propagation; it does not tell the shell to infer a domain action or gesture.
 The accepting handler performs the action and installs any continuation.
 
-A hover probe returns a target, occlusion, or no claim. Probes are asked over
-settled geometry in paint order from front to back. Occlusion also consumes
+A hover callback returns its claim plus independent paint and event outputs.
+Callbacks run over settled geometry from front to back; a direct claim or
+occluder prevents lower hit queries without suppressing their other outputs.
+Paint retains back-to-front order. Occlusion also consumes
 pointer starts, while active motion/release can still reach their handlers.
 A floating card carries its owning view even when it covers another pane.
 
 Hover is derived for each pass. The frame is built without a resolved hover
-input; deferred paint receives the answer after placement. `LazyPointer` is
+input; deferred paint receives the answer after the hover continuation runs. `LazyPointer` is
 an input-side dead-zone filter for small gaps. Pressed interactions retain the
 anchor they need as explicit caller-owned gesture state.
 
 ## Frame lifecycle
 
 The [application shell](../progred/src/lib.rs) adapts Winit events, owns the
-model and pending frame, and supplies platform capabilities. A frame contains
-settled placement, hover probes, handlers, navigation, and deferred paint.
+model and pending frame, and supplies platform capabilities. Placement produces
+an opaque hover continuation. Running it gives a settled claim, handlers,
+navigation, and deferred paint; paint is not required to produce the handlers.
 [`frame`](../progred/src/frame.rs) builds it; [`placed`](../progred/src/placed.rs)
 composes its outputs.
 
@@ -223,16 +240,14 @@ then align it correctly without a new layout operation. The number projections
 use this for muted representation labels outside the editable digits.
 
 Puri's delimiter widget accepts a vertical span and text size and returns the
-existing `Drawing` description with its metrics. It owns minimum glyph height,
-baseline trimming, side bearings, and width growth. Progred reserves its maximum
-advance while choosing layouts. `Surround` receives opaque side widgets with
-width bounds, measures them against the chosen child's extent, and places the
-three boxes on one baseline. It knows neither delimiters nor editor actions.
-The ordinary `widget::delimiter` functions supply the ink and gap padding.
-`bracket` is inert; `selectable_bracket` explicitly composes `selectable_side`,
-which uses the same `selectable` measured-widget decorator available to other
-controls. Structural cell/list/record and expression projections opt into that
-behavior; Grap's low-level bracket layout is inert unless explicitly wrapped.
+existing `Drawing` description with its metrics. Its width is fixed by text size;
+only the vertical shape stretches. Progred's `bracket` combines two ordinary
+fixed-width widgets and a child in a row, with `fill_height` on the sides.
+There is no `Surround` operation, maximum-width reservation, or child-dependent
+remeasurement. `selectable_bracket` explicitly composes `selectable_widget`
+inside the stretching wrapper, so its handlers use the expanded rectangle too.
+Structural cell/list/record and expression projections opt into that behavior;
+Grap's low-level bracket layout is inert unless explicitly wrapped.
 
 `puri-widgets::panel` supplies the common fill/border painter for popup cards
 and projection borders. Colors, stroke, radius, placement, paint order, and
