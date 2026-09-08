@@ -44,16 +44,26 @@ fn iop_source_form_profile() {
         root: None,
     }
     .prepare(&doc);
-    let frame =
-        |context: &mut BenchContext| context.frame(view.frame(&doc, &Annotations::default())).0;
+    profile_forms("IoP source", || {
+        context.frame(view.frame(&doc, &Annotations::default())).0
+    });
+}
+
+#[test]
+#[ignore]
+fn color_picker_form_profile() {
+    profile_forms("RGBA picker", color_picker_frame());
+}
+
+fn profile_forms(name: &str, mut frame: impl FnMut() -> Bench) {
     for _ in 0..5 {
-        drop(frame(&mut context));
+        drop(frame());
     }
     let count = iterations();
     let mut totals = [Cost::default(); KINDS.len()];
     for _ in 0..count {
         costs::begin();
-        let result = frame(&mut context);
+        let result = frame();
         {
             let _profile = costs::enter(Kind::Disposal);
             drop(result);
@@ -68,7 +78,7 @@ fn iop_source_form_profile() {
     let time: f64 = totals.iter().map(|cost| cost.time.as_secs_f64()).sum();
     let allocations: usize = totals.iter().map(|cost| cost.allocations).sum();
     eprintln!(
-        "IoP source exclusive scopes; {count} warm frames (instrumented time, requested allocation bytes)"
+        "{name} exclusive scopes; {count} warm frames (instrumented time, requested allocation bytes)"
     );
     for (kind, cost) in KINDS.iter().zip(totals) {
         eprintln!(

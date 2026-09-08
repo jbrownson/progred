@@ -1,6 +1,5 @@
-use puri::{
-    Affine, Brush, Circle, Color, ColorStop, Command, Drawing, Gradient, Line, Rect, Shape, Stroke,
-};
+use puri::draw::CanvasSink;
+use puri::{Affine, Canvas, Circle, Color, ColorStop, Gradient, Line, Rect, Stroke};
 
 pub const WIDTH: f64 = 192.0;
 pub const PLANE_HEIGHT: f64 = 128.0;
@@ -93,87 +92,61 @@ impl Hsva {
     }
 }
 
-fn drawing(height: f64, commands: Vec<Command<Brush>>) -> Drawing<Brush> {
-    Drawing {
-        width: WIDTH,
-        ascent: height,
-        descent: 0.0,
-        commands,
-    }
-}
-
-fn marker(center: (f64, f64), radius: f64) -> Vec<Command<Brush>> {
-    let shape = Shape::Circle(Circle::new(center, radius));
-    [(2.5, Color::BLACK), (1.25, Color::WHITE)]
-        .map(|(width, color)| Command::Stroke {
-            shape: shape.clone(),
-            style: Stroke::new(width),
-            paint: Brush::from(color),
-            transform: Affine::IDENTITY,
-        })
-        .into()
-}
-
-pub fn plane(color: Hsva) -> Drawing<Brush> {
-    let rect = Shape::Rect(Rect::new(0.0, 0.0, WIDTH, PLANE_HEIGHT));
-    let mut commands = vec![
-        Command::Fill {
-            shape: rect.clone(),
-            paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
-                .with_stops(
-                    [
-                        ColorStop {
-                            offset: 0.0,
-                            color: Color::WHITE.into(),
-                        },
-                        ColorStop {
-                            offset: 1.0,
-                            color: color.opaque_hue().into(),
-                        },
-                    ]
-                    .as_slice(),
-                )
-                .into(),
-            transform: Affine::IDENTITY,
-        },
-        Command::Fill {
-            shape: rect,
-            paint: Gradient::new_linear((0.0, 0.0), (0.0, PLANE_HEIGHT))
-                .with_stops(
-                    [
-                        ColorStop {
-                            offset: 0.0,
-                            color: Color::TRANSPARENT.into(),
-                        },
-                        ColorStop {
-                            offset: 1.0,
-                            color: Color::BLACK.into(),
-                        },
-                    ]
-                    .as_slice(),
-                )
-                .into(),
-            transform: Affine::IDENTITY,
-        },
-    ];
-    commands.extend(marker(
+pub fn plane(color: Hsva, canvas: &mut dyn CanvasSink, transform: Affine) {
+    let rect = Rect::new(0.0, 0.0, WIDTH, PLANE_HEIGHT);
+    canvas.fill(
+        rect,
+        Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0)).with_stops(
+            [
+                ColorStop {
+                    offset: 0.0,
+                    color: Color::WHITE.into(),
+                },
+                ColorStop {
+                    offset: 1.0,
+                    color: color.opaque_hue().into(),
+                },
+            ]
+            .as_slice(),
+        ),
+        transform,
+    );
+    canvas.fill(
+        rect,
+        Gradient::new_linear((0.0, 0.0), (0.0, PLANE_HEIGHT)).with_stops(
+            [
+                ColorStop {
+                    offset: 0.0,
+                    color: Color::TRANSPARENT.into(),
+                },
+                ColorStop {
+                    offset: 1.0,
+                    color: Color::BLACK.into(),
+                },
+            ]
+            .as_slice(),
+        ),
+        transform,
+    );
+    let marker = Circle::new(
         (
             5.0 + color.saturation * (WIDTH - 10.0),
             5.0 + (1.0 - color.value) * (PLANE_HEIGHT - 10.0),
         ),
         5.0,
-    ));
-    drawing(PLANE_HEIGHT, commands)
+    );
+    for (width, brush) in [(2.5, Color::BLACK), (1.25, Color::WHITE)] {
+        canvas.stroke(marker, Stroke::new(width), brush, transform);
+    }
 }
 
-pub fn hue(color: Hsva) -> Drawing<Brush> {
+pub fn hue(color: Hsva, canvas: &mut dyn CanvasSink, transform: Affine) {
     let colors: [u32; 7] = [
         0xff0000ff, 0xffff00ff, 0x00ff00ff, 0x00ffffff, 0x0000ffff, 0xff00ffff, 0xff0000ff,
     ];
-    let stops = colors
-        .into_iter()
-        .enumerate()
-        .map(|(index, rgba)| ColorStop {
+    let stops = std::array::from_fn::<_, 7, _>(|index| {
+        let rgba = colors[index];
+        ColorStop {
             offset: index as f32 / 6.0,
             color: Color::from_rgba8(
                 (rgba >> 24) as u8,
@@ -182,83 +155,173 @@ pub fn hue(color: Hsva) -> Drawing<Brush> {
                 rgba as u8,
             )
             .into(),
-        })
-        .collect::<Vec<_>>();
-    let mut commands = vec![Command::Fill {
-        shape: Shape::Rect(Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT)),
-        paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
-            .with_stops(stops.as_slice())
-            .into(),
-        transform: Affine::IDENTITY,
-    }];
-    let x = 1.5 + color.hue * (WIDTH - 3.0);
-    for (width, brush) in [
-        (3.0, Brush::from(Color::BLACK)),
-        (1.5, Brush::from(Color::WHITE)),
-    ] {
-        commands.push(Command::Stroke {
-            shape: Shape::Line(Line::new((x, 0.0), (x, RAIL_HEIGHT))),
-            style: Stroke::new(width),
-            paint: brush,
-            transform: Affine::IDENTITY,
-        });
-    }
-    drawing(RAIL_HEIGHT, commands)
+        }
+    });
+    canvas.fill(
+        Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT),
+        Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0)).with_stops(stops.as_slice()),
+        transform,
+    );
+    rail_marker(color.hue, canvas, transform);
 }
 
-pub fn alpha(color: Hsva) -> Drawing<Brush> {
+pub fn alpha(color: Hsva, canvas: &mut dyn CanvasSink, transform: Affine) {
     let tile = RAIL_HEIGHT / 2.0;
-    let mut commands = (0..2)
+    for (row, column) in (0..2)
         .flat_map(|row| (0..(WIDTH / tile).ceil() as usize).map(move |column| (row, column)))
         .filter(|(row, column)| (row + column) % 2 == 0)
-        .map(|(row, column)| Command::Fill {
-            shape: Shape::Rect(Rect::new(
+    {
+        canvas.fill(
+            Rect::new(
                 column as f64 * tile,
                 row as f64 * tile,
                 ((column as f64 + 1.0) * tile).min(WIDTH),
                 (row as f64 + 1.0) * tile,
-            )),
-            paint: Brush::from(Color::from_rgba8(0xc8, 0xc8, 0xc8, 0xff)),
-            transform: Affine::IDENTITY,
-        })
-        .collect::<Vec<_>>();
-    commands.push(Command::Fill {
-        shape: Shape::Rect(Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT)),
-        paint: Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0))
-            .with_stops(
-                [
-                    ColorStop {
-                        offset: 0.0,
-                        color: Color::TRANSPARENT.into(),
-                    },
-                    ColorStop {
-                        offset: 1.0,
-                        color: color.opaque_color().into(),
-                    },
-                ]
-                .as_slice(),
-            )
-            .into(),
-        transform: Affine::IDENTITY,
-    });
-    let x = 1.5 + color.alpha * (WIDTH - 3.0);
-    for (width, brush) in [
-        (3.0, Brush::from(Color::BLACK)),
-        (1.5, Brush::from(Color::WHITE)),
-    ] {
-        commands.push(Command::Stroke {
-            shape: Shape::Line(Line::new((x, 0.0), (x, RAIL_HEIGHT))),
-            style: Stroke::new(width),
-            paint: brush,
-            transform: Affine::IDENTITY,
-        });
+            ),
+            Color::from_rgba8(0xc8, 0xc8, 0xc8, 0xff),
+            transform,
+        );
     }
-    drawing(RAIL_HEIGHT, commands)
+    canvas.fill(
+        Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT),
+        Gradient::new_linear((0.0, 0.0), (WIDTH, 0.0)).with_stops(
+            [
+                ColorStop {
+                    offset: 0.0,
+                    color: Color::TRANSPARENT.into(),
+                },
+                ColorStop {
+                    offset: 1.0,
+                    color: color.opaque_color().into(),
+                },
+            ]
+            .as_slice(),
+        ),
+        transform,
+    );
+    rail_marker(color.alpha, canvas, transform);
+}
+
+fn rail_marker(position: f64, canvas: &mut dyn CanvasSink, transform: Affine) {
+    let x = 1.5 + position * (WIDTH - 3.0);
+    for (width, brush) in [(3.0, Color::BLACK), (1.5, Color::WHITE)] {
+        canvas.stroke(
+            Line::new((x, 0.0), (x, RAIL_HEIGHT)),
+            Stroke::new(width),
+            brush,
+            transform,
+        );
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn picker_draws_gradients_and_markers_in_local_coordinates() {
+        use puri::{Brush, DrawCmd, DrawList, Shape};
+        for position in [0.0, 0.37, 1.0] {
+            let color = Hsva {
+                hue: position,
+                saturation: position,
+                value: position,
+                alpha: position,
+            };
+            for scale in [1.0, 1.5, 2.0] {
+                let transform = Affine::translate((31.0, 47.0)) * Affine::scale(scale);
+                let mut canvas = DrawList::new();
+                plane(color, &mut canvas, transform);
+                assert!(matches!(
+                    canvas.0.as_slice(),
+                    [
+                        DrawCmd::Fill {
+                            brush: Brush::Gradient(_),
+                            ..
+                        },
+                        DrawCmd::Fill {
+                            brush: Brush::Gradient(_),
+                            ..
+                        },
+                        DrawCmd::Stroke { .. },
+                        DrawCmd::Stroke { .. }
+                    ]
+                ));
+                for command in &canvas.0 {
+                    match command {
+                        DrawCmd::Fill {
+                            shape: Shape::Rect(rect),
+                            transform: actual,
+                            ..
+                        } => {
+                            assert_eq!(*rect, Rect::new(0.0, 0.0, WIDTH, PLANE_HEIGHT));
+                            assert_eq!(*actual, transform);
+                        }
+                        DrawCmd::Stroke {
+                            shape: Shape::Circle(marker),
+                            transform: actual,
+                            ..
+                        } => {
+                            assert_eq!(
+                                *marker,
+                                Circle::new(
+                                    (
+                                        5.0 + position * (WIDTH - 10.0),
+                                        5.0 + (1.0 - position) * (PLANE_HEIGHT - 10.0)
+                                    ),
+                                    5.0
+                                )
+                            );
+                            assert_eq!(*actual, transform);
+                        }
+                        _ => panic!("plane fills followed by its marker"),
+                    }
+                }
+                for draw in [hue, alpha] {
+                    let mut canvas = DrawList::new();
+                    draw(color, &mut canvas, transform);
+                    let (fills, markers) = canvas.0.split_at(canvas.0.len() - 2);
+                    assert!(matches!(
+                        fills.last(),
+                        Some(DrawCmd::Fill {
+                            brush: Brush::Gradient(_),
+                            ..
+                        })
+                    ));
+                    for command in fills {
+                        let DrawCmd::Fill {
+                            shape: Shape::Rect(rect),
+                            transform: actual,
+                            ..
+                        } = command
+                        else {
+                            panic!("rail fills");
+                        };
+                        assert!(
+                            rect.x0 >= 0.0
+                                && rect.y0 >= 0.0
+                                && rect.x1 <= WIDTH
+                                && rect.y1 <= RAIL_HEIGHT
+                        );
+                        assert_eq!(*actual, transform);
+                    }
+                    for command in markers {
+                        let DrawCmd::Stroke {
+                            shape: Shape::Line(line),
+                            transform: actual,
+                            ..
+                        } = command
+                        else {
+                            panic!("rail markers");
+                        };
+                        let x = 1.5 + position * (WIDTH - 3.0);
+                        assert_eq!(*line, Line::new((x, 0.0), (x, RAIL_HEIGHT)));
+                        assert_eq!(*actual, transform);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn primary_colors_round_trip() {

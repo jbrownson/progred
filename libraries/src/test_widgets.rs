@@ -80,6 +80,25 @@ pub fn line<Hover: Default + 'static>(layout: &impl Recordable<(), Hover>) -> Op
     captured.take()
 }
 
+pub fn paint<Hover: Default + 'static>(
+    layout: &impl Recordable<(), Hover>,
+) -> (widget::Extent, puri::DrawList) {
+    let Recorded::Widget(widget) = layout.record() else {
+        panic!("expected a native widget");
+    };
+    let measured = with_context(Rc::new(|_, _, _| panic!("unexpected editing")), |context| {
+        widget(context)
+    });
+    let extent = measured.extent;
+    let placement = puri::Placement::root(extent.rect_at(puri::Point::ZERO));
+    let fragment = widget::place(measured, placement).run(&Default::default());
+    let mut canvas = puri::DrawList::new();
+    for render in fragment.renders {
+        render(&mut canvas, Default::default());
+    }
+    (extent, canvas)
+}
+
 pub fn point_update(
     layout: &impl Recordable<(), ()>,
     point: progred_display::PointEvent,

@@ -23,8 +23,8 @@ mod projection;
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
-use progred_display::{Layout, Paint, ProjectionInput, leaf, on_hover, on_state_drag};
-use puri::{Affine, Command, Drawing, ImageAlphaType, ImageData, ImageFormat, Leaf, Size, Vec2};
+use progred_display::{Layout, ProjectionInput, on_hover, on_state_drag, widget};
+use puri::{Affine, ImageAlphaType, ImageData, ImageFormat, Size, Vec2};
 use std::{cell::RefCell, rc::Rc};
 
 const DEFAULT_PREVIEW_SIZE: f64 = 256.0;
@@ -453,7 +453,10 @@ fn slice_preview(value: &Value) -> Option<SlicePreview> {
     (preview.min_x < preview.max_x && preview.min_y < preview.max_y).then_some(preview)
 }
 
-fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Paint>> {
+fn slice_display<World: 'static, Hover: 'static>(
+    preview: SlicePreview,
+    scale_factor: f64,
+) -> Option<Layout<World, Hover>> {
     let raster_size = raster_size(preview.size, scale_factor)?;
     let minimum = raster_size.width().min(raster_size.height()) as f32;
     let half_width = (preview.max_x - preview.min_x) / 2.0;
@@ -477,7 +480,7 @@ fn slice_drawing(preview: SlicePreview, scale_factor: f64) -> Option<Drawing<Pai
             }
         })
         .collect::<Vec<u8>>();
-    Some(image_drawing(preview.size, raster_size, rgba))
+    Some(image_layout(preview.size, raster_size, rgba))
 }
 
 fn preview_size(fields: &gid::Record) -> Option<Size> {
@@ -502,25 +505,38 @@ fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
     ))
 }
 
-fn image_drawing(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Drawing<Paint> {
-    Drawing {
-        width: size.width,
-        ascent: size.height / 2.0,
-        descent: size.height / 2.0,
-        commands: vec![Command::Image {
-            image: ImageData {
-                data: rgba.into(),
-                format: ImageFormat::Rgba8,
-                alpha_type: ImageAlphaType::Alpha,
-                width: raster_size.width(),
-                height: raster_size.height(),
+fn image_layout<World: 'static, Hover: 'static>(
+    size: Size,
+    raster_size: PixelRenderSize,
+    rgba: Vec<u8>,
+) -> Layout<World, Hover> {
+    let image = ImageData {
+        data: rgba.into(),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: raster_size.width(),
+        height: raster_size.height(),
+    };
+    let image_transform = Affine::scale_non_uniform(
+        size.width / f64::from(raster_size.width()),
+        size.height / f64::from(raster_size.height()),
+    );
+    Layout::widget(Rc::new(move |context| {
+        let scale = context.styles.scale;
+        let image = image.clone();
+        widget::paint(
+            widget::Extent {
+                width: size.width * scale,
+                ascent: size.height / 2.0 * scale,
+                descent: size.height / 2.0 * scale,
             },
-            transform: Affine::scale_non_uniform(
-                size.width / f64::from(raster_size.width()),
-                size.height / f64::from(raster_size.height()),
-            ),
-        }],
-    }
+            move |canvas, placement| {
+                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                    * Affine::scale(scale);
+                canvas.draw_image(image, transform * image_transform);
+            },
+        )
+    }))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -896,15 +912,15 @@ impl GpuBuffers {
     }
 }
 
-fn volume_drawing(
+fn volume_display<World: 'static, Hover: 'static>(
     value: &Value,
     camera: Camera,
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
-) -> Option<Drawing<Paint>> {
+) -> Option<Layout<World, Hover>> {
     let preview = volume_preview(value)?;
     let raster_size = raster_size(preview.size, scale_factor)?;
-    Some(image_drawing(
+    Some(image_layout(
         preview.size,
         raster_size,
         renderer.render(&preview, camera, raster_size)?,
@@ -921,12 +937,12 @@ fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
         .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
     {
         let camera = camera(input.state);
-        let drawing = leaf(Leaf::Drawing(volume_drawing(
+        let drawing = volume_display(
             input.value?,
             camera,
             input.scale_factor,
             &mut renderer.borrow_mut(),
-        )?));
+        )?;
         let target = input.targets.current();
         let hover = target.hover;
         let state = input.state.cloned();
@@ -953,10 +969,7 @@ fn display<World: 'static, Hover: Clone + PartialEq + 'static>(
             }),
         ))
     } else {
-        Some(leaf(Leaf::Drawing(slice_drawing(
-            slice_preview(input.value?)?,
-            input.scale_factor,
-        )?)))
+        slice_display(slice_preview(input.value?)?, input.scale_factor)
     }
 }
 
@@ -1085,7 +1098,6 @@ fn root_completion() -> progred_display::Completion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_display::recording::{Recordable, Recorded};
 
     use progred_display::ProjectionTargets;
     use std::rc::Rc;
@@ -1250,13 +1262,11 @@ mod tests {
         )
         .expect("preview projection");
 
-        let Recorded::Leaf(Leaf::Drawing(drawing)) = layout.record() else {
-            panic!("preview is one drawing leaf");
-        };
-        let [Command::Image { image, transform }] = drawing.commands.as_slice() else {
+        let (extent, drawing) = crate::test_widgets::paint(&layout);
+        let [puri::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
             panic!("preview drawing is one raster image");
         };
-        assert_eq!((drawing.ascent, drawing.descent), (128.0, 128.0));
+        assert_eq!((extent.ascent, extent.descent), (128.0, 128.0));
         assert_eq!((image.width, image.height), (512, 512));
         assert_eq!(*transform, Affine::scale(0.5));
         let alphas = image.data.as_ref().iter().skip(3).step_by(4);
@@ -1316,10 +1326,11 @@ mod tests {
                     rgba.len(),
                     raster.width() as usize * raster.height() as usize * 4
                 );
-                let drawing = image_drawing(size, raster, rgba);
-                assert_eq!(drawing.width, size.width);
-                assert_eq!(drawing.ascent + drawing.descent, size.height);
-                let [Command::Image { image, transform }] = drawing.commands.as_slice() else {
+                let (extent, drawing) =
+                    crate::test_widgets::paint(&image_layout::<(), ()>(size, raster, rgba));
+                assert_eq!(extent.width, size.width);
+                assert_eq!(extent.ascent + extent.descent, size.height);
+                let [puri::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
                     panic!("one image")
                 };
                 assert_eq!(

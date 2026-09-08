@@ -11,8 +11,9 @@ Run the current canaries serially in an optimized build:
   profile_loop -- --ignored --nocapture --test-threads=1
 ```
 
-Use `fidget_orbit_profile_loop`, `iop_tree_profile_loop`, or
-`iop_tree_source_profile_loop` as the filter to isolate a workload. The default
+Use `fidget_orbit_profile_loop`, `iop_tree_profile_loop`,
+`iop_tree_source_profile_loop`, or `color_picker_profile_loop` as the filter to
+isolate a workload. The default
 is five warm-up frames followed by 60 measured frames. Override the measured
 count through Cargo configuration, since the build sandbox clears shell
 environment variables:
@@ -50,6 +51,8 @@ use the feature-free canaries for baseline frame times. Constructors and
 measurement are tagged by construct, but later placement, hover, and painting
 are phase totals, not attributed back to each originating widget. In particular,
 `Program` means native projection recursion/adaptation, **not Grap execution**.
+The same instrumented harness also accepts `color_picker_form_profile` to
+measure an open RGBA picker; `_form_profile` runs both workloads.
 
 `BenchFrame` takes a document, source-qualified root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
@@ -84,6 +87,7 @@ before/after runs when evaluating small changes.
 | --- | --- | --- | --- |
 | IoP picture | 500 × 500 | 1 | Rebuild the declared viewport |
 | IoP source | 1400 × 900 | 1 | Project the document's top clipped viewport |
+| RGBA picker | 600 × 400 | 2 | Project a selected color with its picker open |
 | Fidget orbit | 400 × 600 | 2 | Advance yaw by 2° per frame; pitch 60°, zoom 1 |
 | Torus orbit | 400 × 600 | 2 | Same camera sequence |
 | Tanglecube orbit | 400 × 600 | 2 | Same camera sequence |
@@ -411,3 +415,48 @@ with the saved baseline. Fifteen are byte-identical; the sample and its pending
 variant differ only in glyph outlines for newly minted short cell IDs. All
 delimiter and other non-text geometry is identical. Workspace tests, native
 all-target checks, and the web target check pass.
+
+## Direct color controls and image leaves — 2026-09-07
+
+Baseline: `21692b7`. Native color controls built command vectors, mapped their
+brushes into semantic paints, then interpreted them. The alpha checkerboard
+and markers also built temporary vectors. They now call `CanvasSink` directly,
+through one deferred painter per control. A small `widget::paint` combinator
+composes the existing measured leaf and render continuation; swatches,
+delimiters, and Fidget image leaves use it too. Fidget still renders in
+projection, at the same resolution and with the same camera inputs; only its
+one-image drawing wrapper is gone. Explicitly stored drawing descriptions
+retain their interpreter.
+
+The new open-RGBA-picker canary exercises these controls independently of the
+large documents. Feature-free release binaries were alternated in
+before/after/after/before/before/after order, with five warm-up and 3,000 measured
+frames each, at 600 × 400 logical pixels and scale 2. The isolated color change
+gave:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 15.58 / 15.62 / 15.58 µs | 12.46 / 11.67 / 11.46 µs |
+| Preparation, median | 9.04–9.17 µs | 5.42–5.88 µs |
+| Paint + handler disposal, median | 2.79 µs | 2.46–2.67 µs |
+| All allocations per picker frame | 254 | 241 |
+
+This is roughly 20–25% of this very small frame: only 3–4 µs saved. It is not a
+claim of a noticeable whole-editor improvement. IoP source remains at 87,941
+allocations per frame. All nine feature-free canaries also passed in an
+interleaved before/after/after/before run with 60 measured frames each; source,
+picture, and Fidget CPU-fallback results showed no consistent timing change.
+The image-wrapper cleanup is not expected to materially accelerate Fidget.
+A further six-run source check with 300 measured frames gave before medians
+3.67 / 3.81 / 4.03 ms and after medians 4.11 / 4.13 / 3.71 ms. The changing
+costs across unchanged phases make this noisy, not evidence of a source
+speedup; small effects remain unresolved.
+
+A temporary recording comparison confirmed identical geometry, brushes,
+gradients, transforms, and command order for all three picker controls, three
+colors, and two display scales. The temporary test was removed; permanent
+tests check marker and fill geometry at several positions and scales, swatch
+metrics and its inset border, raster-image transforms, and paint deferral and
+clipping. Workspace tests and native all-target checks pass. The web check
+passes with its existing unused `drawn_menu` and `Quit` warnings. No cache,
+partial invalidation, event-policy change, or runtime profiling was added.

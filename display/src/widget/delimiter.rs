@@ -1,4 +1,4 @@
-use super::{Widget, fill_height, leaf, selectable_widget};
+use super::{Widget, fill_height, paint, selectable_widget};
 use crate::{Delim, Layout};
 use measured::Extent;
 use puri::{Affine, delim};
@@ -15,29 +15,27 @@ pub fn side<World: 'static, Hover: 'static>(
         let gap = 2.0 * context.styles.scale;
         let brush = context.styles.dim.brush.clone();
         let (ascent, descent) = delim::minimum_span(size);
-        leaf(
+        paint(
             Extent {
                 width: delim::advance(delim, size) + gap,
                 ascent,
                 descent,
             },
-            move |output, placement| {
-                output.render(move |canvas, _| {
-                    let inset = match side {
-                        delim::Side::Open => 0.0,
-                        delim::Side::Close => gap,
-                    };
-                    delim::draw_stretched(
-                        delim,
-                        side,
-                        size,
-                        ascent,
-                        placement.rect.height() - ascent,
-                        brush,
-                        canvas,
-                        Affine::translate((placement.rect.x0 + inset, placement.rect.y0)),
-                    )
-                });
+            move |canvas, placement| {
+                let inset = match side {
+                    delim::Side::Open => 0.0,
+                    delim::Side::Close => gap,
+                };
+                delim::draw_stretched(
+                    delim,
+                    side,
+                    size,
+                    ascent,
+                    placement.rect.height() - ascent,
+                    brush,
+                    canvas,
+                    Affine::translate((placement.rect.x0 + inset, placement.rect.y0)),
+                )
             },
         )
     })

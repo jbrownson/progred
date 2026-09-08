@@ -6,10 +6,11 @@ use gid::{Cells, Step, Value};
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{
-    Face, Layout, Paint, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col,
-    descend, leaf, on_activate, on_hover, on_point, popover,
+    Layout, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col, descend,
+    on_activate, on_hover, on_point, popover, widget,
 };
-use puri::{Affine, Brush, Color, Command, Drawing, Leaf, Rect, RoundedRect, Shape, Stroke};
+use puri::draw::CanvasSink;
+use puri::{Affine, Canvas, Color, Rect, RoundedRect, Stroke};
 use puri_widgets::color_picker::{self, Hsva};
 use std::rc::Rc;
 
@@ -139,8 +140,29 @@ fn without_picker(selection: Option<&Value>) -> Value {
     Value::Record(fields)
 }
 
-fn picker_leaf<World: 'static, Hover: 'static>(drawing: Drawing<Brush>) -> Layout<World, Hover> {
-    leaf(Leaf::Drawing(drawing.map_paint(Paint::Brush)))
+fn picker_leaf<World: 'static, Hover: 'static>(
+    height: f64,
+    color: Hsva,
+    draw: fn(Hsva, &mut dyn CanvasSink, Affine),
+) -> Layout<World, Hover> {
+    Layout::widget(Rc::new(move |context| {
+        let scale = context.styles.scale;
+        widget::paint(
+            widget::Extent {
+                width: color_picker::WIDTH * scale,
+                ascent: height * scale,
+                descent: 0.0,
+            },
+            move |canvas, placement| {
+                draw(
+                    color,
+                    canvas,
+                    Affine::translate((placement.rect.x0, placement.rect.y0))
+                        * Affine::scale(scale),
+                );
+            },
+        )
+    }))
 }
 
 fn picker_update(
@@ -182,7 +204,7 @@ fn picker<World: 'static, Hover: Clone + PartialEq + 'static>(
         ..hsva(encoded)
     };
     let plane = on_point(
-        picker_leaf(color_picker::plane(color)),
+        picker_leaf(color_picker::PLANE_HEIGHT, color, color_picker::plane),
         picker_update(
             original.clone(),
             color,
@@ -191,7 +213,7 @@ fn picker<World: 'static, Hover: Clone + PartialEq + 'static>(
         ),
     );
     let hue = on_point(
-        picker_leaf(color_picker::hue(color)),
+        picker_leaf(color_picker::RAIL_HEIGHT, color, color_picker::hue),
         picker_update(
             original.clone(),
             color,
@@ -206,7 +228,7 @@ fn picker<World: 'static, Hover: Clone + PartialEq + 'static>(
             .into_iter()
             .chain(matches!(encoded, Encoded::Rgba(_)).then(|| {
                 on_point(
-                    picker_leaf(color_picker::alpha(color)),
+                    picker_leaf(color_picker::RAIL_HEIGHT, color, color_picker::alpha),
                     picker_update(
                         original.clone(),
                         color,
@@ -242,24 +264,23 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
 }
 
 fn swatch<World: 'static, Hover: 'static>(color: Color) -> Layout<World, Hover> {
-    let shape = Shape::RoundedRect(RoundedRect::from_rect(Rect::new(0.5, 0.5, 14.5, 14.5), 2.5));
-    leaf(Leaf::Drawing(Drawing {
-        width: 15.0,
-        ascent: 11.0,
-        descent: 4.0,
-        commands: vec![
-            Command::Fill {
-                shape: shape.clone(),
-                paint: Paint::Brush(Brush::from(color)),
-                transform: Affine::IDENTITY,
+    Layout::widget(Rc::new(move |context| {
+        let scale = context.styles.scale;
+        let border = context.styles.dim.brush.clone();
+        widget::paint(
+            widget::Extent {
+                width: 15.0 * scale,
+                ascent: 11.0 * scale,
+                descent: 4.0 * scale,
             },
-            Command::Stroke {
-                shape,
-                style: Stroke::new(1.0),
-                paint: Paint::Face(Face::Dim),
-                transform: Affine::IDENTITY,
+            move |canvas, placement| {
+                let shape = RoundedRect::from_rect(Rect::new(0.5, 0.5, 14.5, 14.5), 2.5);
+                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                    * Affine::scale(scale);
+                canvas.fill(shape, color, transform);
+                canvas.stroke(shape, Stroke::new(1.0), border, transform);
             },
-        ],
+        )
     }))
 }
 
@@ -335,6 +356,42 @@ mod tests {
     use gid::new_cell_id;
     use progred_display::test_support::{ProjectionCall, inspect};
     use progred_display::{Env, RowAlignment};
+
+    #[test]
+    fn swatch_keeps_its_metrics_fill_and_inset_border() {
+        let color = Color::from_rgba8(0xb4, 0xe0, 0xfe, 0x99);
+        let (extent, drawing) = crate::test_widgets::paint(&swatch::<(), ()>(color));
+        assert_eq!(
+            extent,
+            widget::Extent {
+                width: 15.0,
+                ascent: 11.0,
+                descent: 4.0
+            }
+        );
+        let [
+            puri::DrawCmd::Fill {
+                shape: puri::Shape::RoundedRect(fill),
+                brush,
+                ..
+            },
+            puri::DrawCmd::Stroke {
+                shape: puri::Shape::RoundedRect(border),
+                style,
+                ..
+            },
+        ] = drawing.0.as_slice()
+        else {
+            panic!("fill followed by border");
+        };
+        assert_eq!(fill, border);
+        assert_eq!(
+            *fill,
+            RoundedRect::from_rect(Rect::new(0.5, 0.5, 14.5, 14.5), 2.5)
+        );
+        assert_eq!(*brush, color.into());
+        assert_eq!(style.width, 1.0);
+    }
 
     #[test]
     fn rgb_and_rgba_are_open_library_data() {
@@ -447,7 +504,7 @@ mod tests {
             children[0],
             Recorded::Before { ref child, .. }
                 if matches!(child.as_ref(), Recorded::Before { child, .. }
-                    if matches!(child.as_ref(), Recorded::Leaf(Leaf::Drawing(_))))
+                    if matches!(child.as_ref(), Recorded::Widget(_)))
         ));
         assert!(matches!(
             crate::test_widgets::line(&children[1]),
@@ -487,7 +544,7 @@ mod tests {
         assert!(matches!(
             children[0],
             Recorded::Before { ref child, .. }
-                if matches!(child.as_ref(), Recorded::Leaf(Leaf::Drawing(_)))
+                if matches!(child.as_ref(), Recorded::Widget(_))
         ));
     }
 

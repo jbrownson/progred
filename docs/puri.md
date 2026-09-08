@@ -256,6 +256,17 @@ and projection borders. Colors, stroke, radius, placement, paint order, and
 whether the surface blocks input are supplied by the host. Panel drawing owns
 no child layout, popup policy, or document state.
 
+Color controls likewise paint directly through `CanvasSink`: their gradients,
+checkerboard, swatch, and markers are not intermediate command lists. Progred
+supplies the fixed metrics, scale, and point handlers. The paint-only
+`widget::paint` combinator attaches one deferred painter to an extent, without
+hover or document access; delimiters and Fidget image leaves use it too. Fidget
+still renders during projection, then its leaf submits that image at paint time.
+This changes neither Fidget's evaluation timing nor its camera behavior.
+
+The `Drawing` description remains for explicitly stored drawing data decoded
+by the layout library. Its interpreter is not used by these native widgets.
+
 `puri-widgets::text_frame` measures empty frames using the caller's font and
 supplies the outline geometry used around text. The ordinary `widget::empty`
 function and `slot` combinator use it, as do pending values and their selection

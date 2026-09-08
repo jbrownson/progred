@@ -184,6 +184,69 @@ fn iop_tree_source_profile_loop() {
     );
 }
 
+fn color_picker_fixture() -> (Document, Value) {
+    use progred_libraries::{color, f64};
+    (
+        Document {
+            root: Some(color::value(puri::Color::from_rgba8(
+                0xb4, 0xe0, 0xfe, 0x99,
+            ))),
+            cells: gid::Cells::new(),
+        },
+        Value::record([(
+            color::vocabulary::PICKER,
+            Value::record([(color::vocabulary::HUE, f64::value(0.57))]),
+        )]),
+    )
+}
+
+fn color_picker_frame() -> impl FnMut() -> Bench {
+    let (doc, payload) = color_picker_fixture();
+    let (view, mut context) = ProfileView {
+        size: kurbo::Size::new(600.0, 400.0),
+        scale: 2.0,
+        root: None,
+    }
+    .prepare(&doc);
+    let selection = Selection::from_payload(
+        &crate::workspace::Root::document(),
+        &Sources {
+            doc: &doc,
+            libraries: &context.stack.libraries,
+        },
+        Vec::new(),
+        payload,
+    );
+    move || {
+        let annotations = Annotations::default();
+        let mut frame = view.frame(&doc, &annotations);
+        frame.selection = Some(&selection);
+        context.frame(frame).0
+    }
+}
+
+#[test]
+#[ignore]
+fn color_picker_profile_loop() {
+    let mut frame = color_picker_frame();
+    profile(
+        "RGBA picker, 600x400 @2",
+        |_| frame(),
+        |bench| {
+            assert!(
+                bench.list.0.iter().any(|command| matches!(
+                    command,
+                    DrawCmd::Fill {
+                        brush: Brush::Gradient(_),
+                        ..
+                    }
+                )),
+                "the open picker must paint its gradients"
+            );
+        },
+    );
+}
+
 fn fidget_example() -> Document {
     fixture(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

@@ -227,6 +227,16 @@ pub fn leaf<World: 'static, Hover: 'static>(
     )
 }
 
+/// A paint-only leaf; geometry is settled before drawing, and hover needs no ink.
+pub fn paint<World: 'static, Hover: 'static>(
+    extent: Extent,
+    paint: impl FnOnce(&mut dyn puri::draw::CanvasSink, Placement) + 'static,
+) -> Measured<HoverPass<World, Hover>> {
+    leaf(extent, move |output, placement| {
+        output.render(move |canvas, _| paint(canvas, placement));
+    })
+}
+
 fn debug_geometry<W: 'static, H: 'static>(
     placement: Placement,
     output: &mut HoverContext<'_, W, H>,
@@ -269,6 +279,45 @@ mod tests {
     use crate::recording::{Recorded, record};
     use puri::draw::Shape;
     use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
+
+    #[test]
+    fn paint_only_leaves_defer_ink_and_skip_clipped_or_discarded_paint() {
+        let extent = Extent {
+            width: 20.0,
+            ascent: 8.0,
+            descent: 2.0,
+        };
+        let rect = Rect::new(30.0, 40.0, 50.0, 50.0);
+        for (clip, render) in [(rect, false), (rect, true), (Rect::ZERO, true)] {
+            let calls = Rc::new(std::cell::Cell::new(0));
+            let drawing = calls.clone();
+            let leaf = paint::<(), ()>(extent, move |canvas, placement| {
+                drawing.set(drawing.get() + 1);
+                canvas.fill_shape(placement.rect.into(), Color::BLACK.into(), Affine::IDENTITY);
+            });
+            assert_eq!(leaf.extent, extent);
+            let mut placement = Placement::root(rect);
+            placement.clip_rect = clip;
+            let fragment = place(leaf, placement).run(&Default::default());
+            assert_eq!(calls.get(), 0);
+            assert!(fragment.claim.is_none());
+            assert!(fragment.handler.is_none());
+            let mut canvas = DrawList::new();
+            if render {
+                for draw in fragment.renders {
+                    draw(&mut canvas, Default::default());
+                }
+            }
+            let painted = render && clip == rect;
+            assert_eq!(calls.get(), usize::from(painted));
+            assert_eq!(canvas.0.len(), usize::from(painted));
+            if painted {
+                assert!(
+                    matches!(&canvas.0[0], DrawCmd::Fill { shape: Shape::Rect(drawn), .. } if *drawn == rect)
+                );
+            }
+        }
+    }
 
     #[test]
     fn placement_hover_render_and_dispatch_are_distinct_stages() {
