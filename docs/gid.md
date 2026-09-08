@@ -20,6 +20,12 @@ Names, UTF-8 text, numbers, Grap, and CAD concepts are open
 conventions or libraries embedded in GID values. They are not primitive
 GID forms.
 
+The Rust implementation shares record, list, and blob storage across clones.
+Blobs wrap `Arc<Vec<u8>>`: construction takes ownership of the existing byte
+buffer without copying it, and `make_mut` copies shared bytes only when edited.
+There is no size cutoff, interning, or storage identity in value equality,
+hashing, or serialization. See [the storage measurements](performance.md).
+
 The native binary representation is not designed yet. It should follow
 the model directly and eventually support the needs of a projectional
 system: direct manipulation, cross-document references, indexing, and

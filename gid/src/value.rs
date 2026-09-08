@@ -5,6 +5,7 @@
 //! per value, owned by the constructors. See `docs/model.md`, Data
 //! Layer v3.
 
+use crate::blob::Blob;
 use crate::cell_id::CellId;
 use crate::position::Position;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -247,7 +248,7 @@ impl<'a> IntoIterator for &'a List {
 #[derive(Debug, Clone)]
 pub enum Value {
     Cell(CellId),
-    Blob(Vec<u8>),
+    Blob(Blob),
     List(List),
     Record(Record),
 }
@@ -350,7 +351,7 @@ impl From<CellId> for Value {
 }
 impl From<Vec<u8>> for Value {
     fn from(bytes: Vec<u8>) -> Self {
-        Value::Blob(bytes)
+        Value::Blob(bytes.into())
     }
 }
 

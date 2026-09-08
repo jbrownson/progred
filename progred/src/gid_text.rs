@@ -492,7 +492,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
         None => match value {
             Value::Blob(bytes) => {
                 out.push_str("0x");
-                for byte in bytes {
+                for byte in bytes.iter() {
                     let _ = write!(out, "{byte:02x}");
                 }
             }
