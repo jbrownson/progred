@@ -124,6 +124,10 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
                 self.output.debug_regions.push(region);
             }
         }
+        self.output
+            .hover_geometry
+            .probes
+            .push((self.root.clone(), probe));
     }
 }
 impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
@@ -249,6 +253,37 @@ fn claim_over<H>(
     }
 }
 
+/// The installed frame's hit tests, in painting order, with their owning views.
+pub struct HoverGeometry<H> {
+    probes: Vec<(Option<Root>, Probe<H>)>,
+}
+
+impl<H> Default for HoverGeometry<H> {
+    fn default() -> Self {
+        Self { probes: Vec::new() }
+    }
+}
+
+impl<H: Clone + PartialEq> HoverGeometry<H> {
+    pub fn probe(
+        &self,
+        pointer: Option<Point>,
+        prior: Option<&H>,
+        reach_px: f64,
+    ) -> Option<(Option<Root>, Claim<H>)> {
+        pointer.and_then(|point| {
+            self.probes.iter().fold(None, |below, (root, probe)| {
+                claim_over(
+                    below,
+                    probe
+                        .answer(point, prior, reach_px)
+                        .map(|claim| (root.clone(), claim)),
+                )
+            })
+        })
+    }
+}
+
 /// The settled target is an explicit dispatch input, never an input to
 /// description or placement. Accepted handlers perform their own actions.
 pub struct DispatchContext<C, Hover> {
@@ -326,6 +361,7 @@ pub struct FrameOutput<C, H> {
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
     pub descends: Vec<Landmark<C>>,
     pub view_regions: Vec<ViewRegion>,
+    pub hover_geometry: HoverGeometry<H>,
 }
 
 impl<C: 'static, H: 'static> Default for Effects<C, H> {
@@ -346,6 +382,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
 
 pub struct HoverOutput<C, Hover> {
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
+    pub hover_geometry: HoverGeometry<Hover>,
     pub debug_regions: Vec<(Hover, Rect)>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
@@ -378,6 +415,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     fn empty() -> Self {
         Self {
             claim: None,
+            hover_geometry: HoverGeometry::default(),
             debug_regions: Vec::new(),
             handler: None,
             descends: Vec::new(),
@@ -390,6 +428,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
 
     fn over(mut self, above: Self) -> Self {
         self.claim = claim_over(self.claim, above.claim);
+        append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
         append(&mut self.debug_regions, above.debug_regions);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
@@ -408,6 +447,9 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
 impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
     pub fn root_navigation(&mut self, root: &Root) {
         if let Some((owner, _)) = &mut self.claim {
+            *owner = Some(root.clone());
+        }
+        for (owner, _) in &mut self.hover_geometry.probes {
             *owner = Some(root.clone());
         }
         for descend in &mut self.descends {
@@ -462,6 +504,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             handler: effects.handler,
             descends: self.descends,
             view_regions: self.view_regions,
+            hover_geometry: self.hover_geometry,
         }
     }
 }
@@ -657,5 +700,93 @@ mod tests {
                 if debug_geometry { 2 } else { 0 }
             );
         }
+    }
+
+    #[test]
+    fn retained_probes_preserve_order_clipping_retention_shapes_and_view_ownership() {
+        let root = Root::document();
+        let front = Root::document();
+        let layout = |pass: &mut HoverPass<(), u8>| {
+            pass.in_view(root.clone(), |pass| {
+                pass.visit(|output| {
+                    output.claim(Probe::retaining(
+                        Placement::new(
+                            Rect::new(0.0, 0.0, 10.0, 10.0),
+                            Rect::new(0.0, 0.0, 50.0, 20.0),
+                        ),
+                        1,
+                    ));
+                    output.claim(Probe::dynamic(
+                        Placement::new(
+                            Rect::new(20.0, 0.0, 40.0, 20.0),
+                            Rect::new(20.0, 0.0, 35.0, 20.0),
+                        ),
+                        |point| (point.distance(Point::new(30.0, 10.0)) < 8.0).then_some(2),
+                    ));
+                });
+            });
+            let front = front.clone();
+            pass.float(move |pass| {
+                pass.in_view(front, |pass| {
+                    pass.visit(|output| {
+                        output.claim(Probe::occludes(Placement::root(Rect::new(
+                            0.0, 0.0, 5.0, 5.0,
+                        ))));
+                        output.claim(Probe::exact(
+                            Placement::root(Rect::new(1.0, 1.0, 3.0, 3.0)),
+                            3,
+                        ));
+                    });
+                });
+            });
+        };
+        let mut pass = HoverPass::new(&Default::default());
+        layout(&mut pass);
+        let retained = pass.finish().bind(Default::default()).hover_geometry;
+        for (point, prior, expected) in [
+            (
+                Point::new(2.0, 2.0),
+                None,
+                Some((Some(front.clone()), Claim::Direct(3))),
+            ),
+            (
+                Point::new(4.0, 4.0),
+                Some(1),
+                Some((Some(front.clone()), Claim::Occludes)),
+            ),
+            (
+                Point::new(8.0, 8.0),
+                None,
+                Some((Some(root.clone()), Claim::Direct(1))),
+            ),
+            (
+                Point::new(12.0, 8.0),
+                Some(1),
+                Some((Some(root.clone()), Claim::Extended(1))),
+            ),
+            (Point::new(12.0, 8.0), None, None),
+            (
+                Point::new(30.0, 10.0),
+                None,
+                Some((Some(root.clone()), Claim::Direct(2))),
+            ),
+            (Point::new(21.0, 1.0), None, None),
+            (Point::new(36.0, 10.0), None, None),
+        ] {
+            let input = HoverInput {
+                pointer: Some(point),
+                prior: prior.as_ref(),
+                reach_px: 4.0,
+                ..Default::default()
+            };
+            let mut pass = HoverPass::new(&input);
+            layout(&mut pass);
+            assert_eq!(pass.finish().claim, expected);
+            assert_eq!(
+                retained.probe(input.pointer, input.prior, input.reach_px),
+                expected
+            );
+        }
+        assert_eq!(retained.probe(None, None, 0.0), None);
     }
 }

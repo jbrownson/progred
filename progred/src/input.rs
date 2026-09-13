@@ -1,5 +1,5 @@
 use crate::frame::{Dispatch, frame_disposition};
-use crate::{Editor, EditorRunner, PendingPointer, PendingScroll, navigate, placed, selection};
+use crate::{Editor, EditorRunner, PendingPointer, PendingScroll, navigate, selection};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
 use ui_events::ScrollDelta;
@@ -23,19 +23,19 @@ pub(super) fn window_pointer(position: Point, size: Size) -> Option<Point> {
         .then_some(position)
 }
 
-fn keyboard(editor: &mut Editor, dispatch: &Dispatch, event: &KeyboardEvent) -> bool {
-    let mut input = placed::DispatchContext::new(None, None);
-    input.descends = dispatch.descends.clone();
+fn keyboard(editor: &mut Editor, dispatch: &Dispatch, event: &KeyboardEvent, scale: f64) -> bool {
+    let mut input = dispatch.context(None);
+    let geometry = dispatch.geometry(scale);
     // Structure pasted into a pending must bypass its text query. Other keys
     // reach text editing before falling through to structural operations.
-    editor.menu_key(event)
+    editor.menu_key(event, geometry)
         || editor.pending_paste_key(event)
         || dispatch
             .handler
             .dispatch_key_with(editor, event, &mut input)
-        || editor.clipboard_key(&dispatch.descends, event)
-        || editor.delete_key(&dispatch.descends, event)
-        || editor.insert_key(&dispatch.descends, event)
+        || editor.clipboard_key(geometry, event)
+        || editor.delete_key(geometry, event)
+        || editor.insert_key(geometry, event)
         || editor.collapse_key(event)
         || match navigate::step_selection(
             &dispatch.descends,
@@ -51,11 +51,7 @@ fn keyboard(editor: &mut Editor, dispatch: &Dispatch, event: &KeyboardEvent) -> 
             dispatch.line,
             event,
         ) {
-            Some(target) => {
-                let select = target.select.clone();
-                select(editor, navigate::direction(event));
-                true
-            }
+            Some(target) => geometry.arrive(editor, target, navigate::direction(event)),
             None => false,
         }
 }
@@ -126,7 +122,7 @@ impl EditorRunner {
         viewport: Size,
     ) -> bool {
         self.update_frame(scale, viewport, |editor, dispatch, _| {
-            frame_disposition(keyboard(editor, dispatch, event), false)
+            frame_disposition(keyboard(editor, dispatch, event, scale), false)
         })
     }
 
@@ -248,6 +244,8 @@ impl EditorRunner {
         );
         self.editor.pointer = window_pointer(self.editor.cursor, pending.viewport);
         self.editor.modifiers = pending.event.current.modifiers;
+        self.probe_pointer(pending.scale);
+        let hover_handled = self.dispatch_hover_changed();
         self.update_frame(pending.scale, pending.viewport, |editor, dispatch, _| {
             let event = &pending.event;
             let samples: Vec<_> = puri::interact::pointer_samples(event)
@@ -275,7 +273,7 @@ impl EditorRunner {
                             },
                         )
                         .handled());
-            frame_disposition(handled, false)
+            frame_disposition(handled || hover_handled, false)
         })
     }
 
@@ -527,6 +525,14 @@ mod tests {
         assert!(log.borrow().is_empty());
         assert!(runner.frame.pending_paint.is_none());
         assert!(runner.frame.dispatch.descends.is_empty());
+        assert!(
+            runner
+                .frame
+                .dispatch
+                .hover_geometry
+                .probe(Some(Point::new(20.0, 20.0)), None, 0.0)
+                .is_none()
+        );
         assert_eq!(runner.editor.model.doc.root, Some(f64::value(10.0)));
         runner.refresh_frame(1.0, VIEWPORT);
         assert!(runner.keyboard_event(&key(), 1.0, VIEWPORT));
@@ -613,6 +619,68 @@ mod tests {
                 ("bind", 1.0)
             ]
         );
+    }
+
+    #[test]
+    fn paint_flushes_motion_without_requesting_another_paint_but_release_does_request_one() {
+        use winit::dpi::PhysicalPosition;
+        use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
+
+        let device_id = DeviceId::dummy();
+        for (event, request_redraw) in [
+            (WindowEvent::RedrawRequested, false),
+            (
+                WindowEvent::MouseInput {
+                    device_id,
+                    state: ElementState::Released,
+                    button: MouseButton::Left,
+                },
+                true,
+            ),
+        ] {
+            let log = Log::default();
+            let mut runner = instrumented_runner(&log);
+            runner.refresh_frame(1.0, VIEWPORT);
+            puri::frame::render(
+                runner.prepare_paint(1.0, VIEWPORT).renders,
+                &mut puri::draw::DrawList::default(),
+            );
+            assert!(!runner.frame_presented());
+            log.take();
+
+            let motion = WindowEvent::CursorMoved {
+                device_id,
+                position: PhysicalPosition::new(25.0, 20.0),
+            };
+            let Some(crate::WindowEventTranslation::Pointer(pointer)) =
+                crate::translate_window_event(&mut runner.editor.reducer, 1.0, &motion)
+            else {
+                panic!("expected pointer motion");
+            };
+            runner.pointer_event(&pointer, 1.0, VIEWPORT);
+            assert!(!runner.flush_before_window_event(&motion));
+            assert!(runner.pending_pointer.is_some());
+            assert!(log.borrow().is_empty());
+
+            assert_eq!(runner.flush_before_window_event(&event), request_redraw);
+            assert!(runner.pending_pointer.is_none());
+            assert_eq!(
+                log.take(),
+                [
+                    ("move", 0.0),
+                    ("project", 0.0),
+                    ("hover", 0.0),
+                    ("bind", 0.0)
+                ]
+            );
+            puri::frame::render(
+                runner.prepare_paint(1.0, VIEWPORT).renders,
+                &mut puri::draw::DrawList::default(),
+            );
+            assert_eq!(log.take(), [("paint", 0.0)]);
+            assert!(!runner.frame_presented());
+            assert!(!runner.flush_before_window_event(&event));
+        }
     }
 
     #[test]

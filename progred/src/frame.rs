@@ -37,6 +37,7 @@ pub(crate) struct Dispatch {
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
+    pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
@@ -68,6 +69,14 @@ impl FrameState {
 }
 
 impl Dispatch {
+    pub(crate) fn geometry(&self, scale: f64) -> navigate::Geometry<'_> {
+        navigate::Geometry {
+            descends: &self.descends,
+            view_regions: &self.view_regions,
+            scale,
+        }
+    }
+
     pub(crate) fn context(&self, hover: Option<Hovered>) -> placed::DispatchContext<Editor> {
         placed::DispatchContext {
             descends: self.descends.clone(),
@@ -204,56 +213,6 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
     }
 }
 
-/// Returns the vertical scroll needed to reveal `target`. A visible
-/// top edge is already a useful orientation anchor, even when the
-/// target extends below the viewport, so it is left undisturbed.
-fn reveal_vertical_scroll(
-    current: f64,
-    maximum: f64,
-    target: Rect,
-    viewport: Rect,
-    pad: f64,
-    scale: f64,
-) -> f64 {
-    reveal_axis(
-        current,
-        maximum,
-        target.y0,
-        target.y1,
-        viewport.y0,
-        viewport.y1,
-        pad,
-        scale,
-    )
-}
-
-fn reveal_axis(
-    current: f64,
-    maximum: f64,
-    start: f64,
-    end: f64,
-    viewport_start: f64,
-    viewport_end: f64,
-    pad: f64,
-    scale: f64,
-) -> f64 {
-    let current = current.clamp(0.0, maximum);
-    if (viewport_start..=viewport_end).contains(&start) {
-        return current;
-    }
-    let mut scroll = current;
-    if end > viewport_end {
-        scroll += (end + pad - viewport_end) / scale;
-    }
-    // Checked against the adjusted position, so a target taller than
-    // the viewport lands with its top visible.
-    let adjusted_start = start - (scroll - current) * scale;
-    if adjusted_start < viewport_start {
-        scroll += (adjusted_start - pad - viewport_start) / scale;
-    }
-    scroll.clamp(0.0, maximum)
-}
-
 pub(crate) use crate::display::widget::scroll::offset as scroll_offset;
 
 /// Interpret the winning claim as an editor target and its owning view.
@@ -364,6 +323,7 @@ fn compute_hover(
         handler,
         descends,
         view_regions,
+        hover_geometry,
     } = output.bind(resolved);
     Frame {
         hover,
@@ -372,6 +332,7 @@ fn compute_hover(
             pointer_root,
             descends: descends.into(),
             view_regions: view_regions.into(),
+            hover_geometry,
             line: 14.0 * description.scale,
         },
         renders,
@@ -409,60 +370,6 @@ impl Editor {
             view.scroll = next;
         }
         outcome
-    }
-
-    fn selection_target(&self) -> Option<(Root, gid::Path, crate::selection::Stage)> {
-        self.model.selection.as_ref().map(|s| {
-            (
-                s.root().clone(),
-                s.path().to_vec(),
-                s.stage(&self.sources()),
-            )
-        })
-    }
-
-    /// One-shot reveal using installed geometry. A missing path is a no-op.
-    fn reveal_path(&mut self, dispatch: &Dispatch, root: &Root, path: &[gid::Step], scale: f64) {
-        if let Some(target) = dispatch
-            .descends
-            .iter()
-            .find(|descend| descend.root.as_ref() == Some(root) && descend.path.as_ref() == path)
-        {
-            self.reveal_rect(&dispatch.view_regions, root, target.rect, scale);
-        }
-    }
-
-    pub(crate) fn reveal_rect(
-        &mut self,
-        view_regions: &[placed::ViewRegion],
-        view: &workspace::Root,
-        rect: Rect,
-        scale: f64,
-    ) -> bool {
-        let pad = 12.0 * scale;
-        let Some(region) = view_regions.iter().find(|region| &region.root == view) else {
-            return false;
-        };
-        let Some(before) = self.model.workspace.view(view).map(|view| view.scroll) else {
-            return false;
-        };
-        let next = Vec2::new(
-            reveal_axis(
-                before.x,
-                region.maximum.x,
-                rect.x0,
-                rect.x1,
-                region.rect.x0,
-                region.rect.x1,
-                pad,
-                scale,
-            ),
-            reveal_vertical_scroll(before.y, region.maximum.y, rect, region.rect, pad, scale),
-        );
-        if let Some(view) = self.model.workspace.view_mut(view) {
-            view.scroll = next;
-        }
-        next != before
     }
 
     fn sync_views(&mut self) {
@@ -507,13 +414,26 @@ impl Editor {
 }
 
 impl EditorRunner {
+    pub(crate) fn probe_pointer(&mut self, scale: f64) {
+        let (hover, pointer_root) = if self.editor.pressed {
+            (self.frame.hover.clone(), None)
+        } else {
+            hover_target(self.frame.dispatch.hover_geometry.probe(
+                self.editor.pointer,
+                self.frame.hover.as_ref(),
+                HOVER_REACH_POINTS * scale,
+            ))
+        };
+        self.frame.hover = hover;
+        self.frame.dispatch.pointer_root = pointer_root;
+    }
+
     pub(crate) fn update_frame(
         &mut self,
         scale: f64,
         viewport: Size,
         handle_event: impl FnOnce(&mut Editor, &Dispatch, Option<&Hovered>) -> FrameDisposition,
     ) -> bool {
-        let selection_before = self.editor.selection_target();
         match handle_event(
             &mut self.editor,
             &self.frame.dispatch,
@@ -521,13 +441,6 @@ impl EditorRunner {
         ) {
             FrameDisposition::Retain => false,
             FrameDisposition::Remint => {
-                let selection_after = self.editor.selection_target();
-                if selection_after != selection_before
-                    && let Some((root, path, _)) = selection_after
-                {
-                    self.editor
-                        .reveal_path(&self.frame.dispatch, &root, &path, scale);
-                }
                 self.refresh_frame(scale, viewport);
                 true
             }
@@ -548,21 +461,27 @@ impl EditorRunner {
     }
 
     fn notify_hover_changed(&mut self, scale: f64, viewport: Size) {
+        if self.dispatch_hover_changed() {
+            self.rebuild_frame(scale, viewport);
+        }
+    }
+
+    pub(crate) fn dispatch_hover_changed(&mut self) -> bool {
         if !self.frame.hover_awaits_paint
             && self.frame.notified_hover != self.frame.hover_location()
         {
             self.frame.notified_hover = self.frame.hover_location();
             let mut input = self.frame.dispatch.context(self.frame.hover.clone());
-            if self
+            let handled = self
                 .frame
                 .dispatch
                 .handler
                 .dispatch(&mut self.editor, Event::HoverChanged, &mut input)
-                .handled()
-            {
-                self.rebuild_frame(scale, viewport);
-                self.frame.hover_awaits_paint = true;
-            }
+                .handled();
+            self.frame.hover_awaits_paint = handled;
+            handled
+        } else {
+            false
         }
     }
 
@@ -1014,6 +933,81 @@ mod frame_tests {
         runner.frame_presented()
     }
 
+    fn move_hover_pointer(runner: &mut EditorRunner, point: Point) {
+        use ui_events::pointer::{PointerEvent, PointerInfo, PointerState, PointerUpdate};
+        assert!(runner.pointer_event(
+            &PointerEvent::Move(PointerUpdate {
+                pointer: PointerInfo {
+                    pointer_id: None,
+                    persistent_device_id: None,
+                    pointer_type: ui_events::pointer::PointerType::Mouse,
+                },
+                current: PointerState {
+                    position: (point.x, point.y).into(),
+                    ..Default::default()
+                },
+                coalesced: Vec::new(),
+                predicted: Vec::new(),
+            }),
+            1.0,
+            HOVER_VIEWPORT,
+        ));
+        assert!(runner.flush_pending_continuous());
+    }
+
+    #[test]
+    fn pointer_hover_reacts_against_installed_geometry_before_one_successor_build() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, false);
+        runner.editor.pointer = None;
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        assert!(!paint_hover_frame(&mut runner));
+        log.take();
+
+        move_hover_pointer(&mut runner, Point::new(25.0, 25.0));
+        assert_eq!(log.take(), [("hover", 0.0), ("project", 0.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 0.0)]);
+
+        move_hover_pointer(&mut runner, Point::new(26.0, 25.0));
+        assert_eq!(log.take(), [("project", 0.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 0.0)]);
+
+        move_hover_pointer(&mut runner, Point::new(450.0, 300.0));
+        assert_eq!(log.take(), [("leave", 0.0), ("project", 0.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+    }
+
+    #[test]
+    fn pointer_hover_reactions_that_change_geometry_wait_for_paint_before_reacting_again() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, true);
+        runner.editor.pointer = None;
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        assert!(!paint_hover_frame(&mut runner));
+        log.take();
+
+        move_hover_pointer(&mut runner, Point::new(25.0, 25.0));
+        assert_eq!(log.take(), [("hover", 0.0), ("project", 1.0)]);
+        assert_eq!(
+            runner.frame.hover,
+            Some(Hovered::Tree(hover::Hover::Toggle(Rc::from([]))))
+        );
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 1.0)]);
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(
+            log.take(),
+            [
+                ("project", 1.0),
+                ("hover", 1.0),
+                ("project", 2.0),
+                ("paint", 2.0)
+            ]
+        );
+    }
+
     #[test]
     fn hover_reactions_continue_across_painted_frames_without_recursion_or_a_limit() {
         let log = HoverLog::default();
@@ -1203,9 +1197,9 @@ mod frame_tests {
             .find(|target| target.path.as_ref() == path)
             .unwrap();
         assert!(target.rect.y0 > viewport.height);
-        let select = target.select.clone();
-        assert!(runner.update_frame(1.0, viewport, |editor, _, _| {
-            frame_disposition(select(editor, None), false)
+        let target = target.clone();
+        assert!(runner.update_frame(1.0, viewport, |editor, dispatch, _| {
+            frame_disposition(dispatch.geometry(1.0).arrive(editor, &target, None), false)
         }));
         assert_eq!(projected.replace(0), per_frame);
         assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
@@ -1273,7 +1267,7 @@ mod frame_tests {
     }
 
     #[test]
-    fn selection_mode_changes_reveal_even_when_the_path_is_unchanged() {
+    fn selection_changes_do_not_implicitly_request_reveal() {
         let projected = Rc::new(std::cell::Cell::new(0));
         let mut runner = scrolling_runner(&projected);
         let viewport = Size::new(500.0, 400.0);
@@ -1287,10 +1281,15 @@ mod frame_tests {
             .unwrap()
             .path
             .to_vec();
-        runner.editor.model.selection = Some(crate::selection::Selection::edge(
-            runner.editor.model.workspace.document_root(),
-            path.clone(),
-        ));
+        runner.update_frame(1.0, viewport, |editor, _, _| {
+            crate::editing::select(
+                editor,
+                &editor.model.workspace.document_root().clone(),
+                &path,
+            );
+            FrameDisposition::Remint
+        });
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 
         runner.update_frame(1.0, viewport, |editor, _, _| {
             editor.model.selection = Some(crate::selection::pending_value(
@@ -1299,7 +1298,96 @@ mod frame_tests {
             ));
             FrameDisposition::Remint
         });
-        assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    }
+
+    fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.rect.y0 > viewport.height)
+            .unwrap();
+        let path = target.path.to_vec();
+        crate::editing::select(&mut runner.editor, target.root.as_ref().unwrap(), &path);
+        path
+    }
+
+    #[test]
+    fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
+        use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+        for key in [NamedKey::ArrowDown, NamedKey::Delete, NamedKey::Backspace] {
+            let projected = Rc::new(std::cell::Cell::new(0));
+            let mut runner = scrolling_runner(&projected);
+            let viewport = Size::new(500.0, 400.0);
+            runner.refresh_frame(1.0, viewport);
+            let path = select_offscreen(&mut runner, viewport);
+            if key == NamedKey::Backspace {
+                runner.editor.model.selection = Some(crate::selection::pending_value(
+                    runner.editor.model.workspace.document_root(),
+                    path.clone(),
+                ));
+            }
+            // Include the selected widget's installed delete handler, not only
+            // the shell's structural fallback.
+            runner.refresh_frame(1.0, viewport);
+            assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+            projected.set(0);
+            assert!(runner.keyboard_event(
+                &KeyboardEvent {
+                    key: Key::Named(key),
+                    state: KeyState::Down,
+                    ..Default::default()
+                },
+                1.0,
+                viewport
+            ));
+            assert_ne!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+            assert_eq!(
+                projected.get(),
+                if key == NamedKey::Delete { 39 } else { 40 }
+            );
+        }
+    }
+
+    #[test]
+    fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
+        use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
+        for drawn in [false, true] {
+            let mut runner = scrolling_runner(&Default::default());
+            runner.editor.drawn_menu = drawn;
+            let viewport = Size::new(500.0, 400.0);
+            runner.refresh_frame(1.0, viewport);
+            let path = select_offscreen(&mut runner, viewport);
+            runner
+                .editor
+                .model
+                .history
+                .record(runner.editor.model.snapshot());
+            // History restores the same selection. It still explicitly reveals;
+            // selection equality is not involved in the command's policy.
+            if drawn {
+                assert!(runner.keyboard_event(
+                    &KeyboardEvent {
+                        key: Key::Character("z".into()),
+                        modifiers: Modifiers::CONTROL,
+                        state: KeyState::Down,
+                        ..Default::default()
+                    },
+                    1.0,
+                    viewport
+                ));
+            } else {
+                runner.update_frame(1.0, viewport, |editor, dispatch, _| {
+                    editor.run_doc_command(crate::DocCommand::Undo, dispatch.geometry(1.0));
+                    FrameDisposition::Remint
+                });
+            }
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+        }
     }
 
     #[test]
@@ -1329,12 +1417,13 @@ mod frame_tests {
                 .iter()
                 .any(|stop| stop.path.as_ref() == path)
         );
-        runner.update_frame(1.0, viewport, |editor, _, _| {
+        runner.update_frame(1.0, viewport, |editor, dispatch, _| {
             Rc::make_mut(&mut editor.model.doc).root = Some(content);
             editor.model.selection = Some(crate::selection::Selection::edge(
                 editor.model.workspace.document_root(),
                 path.clone(),
             ));
+            dispatch.geometry(1.0).reveal_selection(editor);
             FrameDisposition::Remint
         });
         assert_eq!(projected.replace(0), 41);
@@ -1374,39 +1463,6 @@ mod frame_tests {
         assert!(source_hover_visible(Some(&code), false));
         assert!(!source_hover_visible(Some(&drawing), false));
         assert!(source_hover_visible(Some(&drawing), true));
-    }
-
-    #[test]
-    fn an_oversized_target_with_a_visible_top_does_not_scroll() {
-        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = Rect::new(20.0, 80.0, 380.0, 500.0);
-
-        assert_eq!(
-            reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
-            120.0
-        );
-    }
-
-    #[test]
-    fn a_target_starting_below_the_viewport_is_still_revealed() {
-        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = Rect::new(20.0, 220.0, 380.0, 260.0);
-
-        assert_eq!(
-            reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
-            192.0
-        );
-    }
-
-    #[test]
-    fn reveal_clamps_an_offset_left_stale_by_a_resize() {
-        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = Rect::new(20.0, 80.0, 380.0, 120.0);
-
-        assert_eq!(
-            reveal_vertical_scroll(300.0, 100.0, target, viewport, 12.0, 1.0),
-            100.0
-        );
     }
 
     #[test]
@@ -2109,6 +2165,28 @@ mod frame_tests {
             );
             assert_eq!(
                 frame.dispatch.pointer_root,
+                (!pressed).then(|| root.clone())
+            );
+            let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
+                root: None,
+                cells: gid::Cells::new(),
+            }));
+            runner.editor.pointer = Some(Point::new(6.0, 5.0));
+            runner.editor.pressed = pressed;
+            drop(runner.install_frame(frame, 1.0, Size::new(100.0, 100.0)));
+            calls.set(0);
+            runner.probe_pointer(1.0);
+            assert_eq!(calls.get(), usize::from(!pressed));
+            assert_eq!(
+                runner.frame.hover,
+                Some(if pressed {
+                    prior.clone()
+                } else {
+                    Hovered::Blocked
+                })
+            );
+            assert_eq!(
+                runner.frame.dispatch.pointer_root,
                 (!pressed).then(|| root.clone())
             );
         }

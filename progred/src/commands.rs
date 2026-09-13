@@ -62,7 +62,7 @@ impl Editor {
     /// the previous, else the parent.
     pub(crate) fn delete_key(
         &mut self,
-        descends: &[navigate::Descend<Editor>],
+        geometry: navigate::Geometry<'_>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -71,12 +71,12 @@ impl Editor {
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
             )
-            && self.delete_selected_edge(descends)
+            && self.delete_selected_edge(geometry)
     }
 
     /// Deletes the selected edge and lands the selection on a
     /// survivor — Backspace/Delete's action, and cut's second half.
-    pub(crate) fn delete_selected_edge(&mut self, descends: &[navigate::Descend<Editor>]) -> bool {
+    pub(crate) fn delete_selected_edge(&mut self, geometry: navigate::Geometry<'_>) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -94,8 +94,10 @@ impl Editor {
                         self.model.history.record(before);
                         self.refresh_title();
                     }
-                    let next = navigate::selection_after_delete(descends, Some(&root), &path);
+                    let next =
+                        navigate::selection_after_delete(geometry.descends, Some(&root), &path);
                     self.model.selection = Some(selection::Selection::edge(&root, next));
+                    geometry.reveal_selection(self);
                     true
                 }
             }
@@ -137,7 +139,7 @@ impl Editor {
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn clipboard_key(
         &mut self,
-        descends: &[navigate::Descend<Editor>],
+        geometry: navigate::Geometry<'_>,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || !modifiers::command(&event.modifiers) {
@@ -148,7 +150,7 @@ impl Editor {
         };
         match c.to_lowercase().as_str() {
             "c" => self.copy_selection(),
-            "x" => self.copy_selection() && self.delete_selected_edge(descends),
+            "x" => self.copy_selection() && self.delete_selected_edge(geometry),
             "v" => self.paste_clipboard(),
             _ => false,
         }
@@ -295,7 +297,7 @@ impl Editor {
     /// anchor instead, keeping the keyboard flow.
     pub(crate) fn insert_key(
         &mut self,
-        descends: &[navigate::Descend<Editor>],
+        geometry: navigate::Geometry<'_>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -323,6 +325,9 @@ impl Editor {
                         };
                         let began = started.is_some();
                         self.model.selection = started.or(selection);
+                        if began {
+                            geometry.reveal_selection(self);
+                        }
                         began
                     }
                 },
@@ -334,7 +339,7 @@ impl Editor {
                         {
                             let root = current.root().clone();
                             let back = navigate::selection_after_delete(
-                                descends,
+                                geometry.descends,
                                 Some(&root),
                                 current.path(),
                             );
@@ -344,6 +349,7 @@ impl Editor {
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
                             .then(|| selection::Selection::edge(&root, back));
+                            geometry.reveal_selection(self);
                             true
                         }
                         Some(current)
@@ -352,6 +358,7 @@ impl Editor {
                             let root = current.root().clone();
                             self.model.selection =
                                 Some(selection::Selection::edge(&root, current.path().to_vec()));
+                            geometry.reveal_selection(self);
                             true
                         }
                         _ => false,

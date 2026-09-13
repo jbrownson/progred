@@ -687,3 +687,31 @@ Keep shared secondary attribution: it avoids hundreds of redundant graph walks
 without a cross-frame cache. Eager canvas-trace derivation has no demonstrated
 performance advantage in this workload; its placement is an API/design choice,
 not a measured optimization requirement.
+
+## Pointer hover over retained frame geometry — 2026-09-13
+
+A temporary headless comparison used the complete IoP document at 1400 × 900
+@1, alternating between two drawing-source targets with source linking enabled.
+Both variants rebuilt all content. The old ordering built to discover hover,
+dispatched its reaction, then rebuilt; the new ordering queried the installed
+frame's probes, dispatched the reaction, then built once. Variant order alternated
+each iteration, with five warm-ups and 60 measured transitions per variant.
+
+| Motion through completed headless painting | Median | p95 |
+| --- | ---: | ---: |
+| Fresh build before hover reaction | 55.94 ms | 60.28 ms |
+| Retained probes before hover reaction | 28.73 ms | 30.91 ms |
+| Retained hit-test alone (1,000 queries) | 6.75 µs | 7.00 µs |
+
+The variants produced identical hover targets, source scroll offsets, and draw
+commands after normalizing only per-context font allocation identities. These
+times include building and headless painting, not native GPU/display latency.
+The temporary comparison was removed; permanent tests cover single-build pointer
+reactions, paint-gated follow-ups, probe ordering/clipping/view ownership, and
+drawing probes reusing the installed recording without reevaluating Grap.
+
+Separate 90-frame canaries measured source at 3.38 ms before and 3.50 ms after,
+and picture at 24.04 ms before and 23.60 ms after. Retaining source probes has a
+small construction/storage cost; these separate runs do not establish its exact
+size or a picture speedup. No successor frame reuses the previous drawing's
+evaluation: retained geometry belongs only to the installed frame's input handling.

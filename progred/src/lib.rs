@@ -384,6 +384,14 @@ impl EditorRunner {
         }
     }
 
+    /// Flush before discrete input. A paint request already presents the
+    /// resulting frame, so only other events need a future redraw requested.
+    fn flush_before_window_event(&mut self, event: &WindowEvent) -> bool {
+        !continuous_input(event)
+            && self.flush_pending_continuous()
+            && !matches!(event, WindowEvent::RedrawRequested)
+    }
+
     fn sync_cursor(&mut self, window: &Window) {
         let next = cursor_icon(self.frame.hover.as_ref());
         if next != self.cursor_icon {
@@ -873,7 +881,7 @@ impl App {
         let scale = window.scale_factor();
         // Preserve motion samples without minting intermediate frames.
         // Discrete input (including release/cancel) first settles the batch.
-        if !continuous_input(&event) && runner.flush_pending_continuous() {
+        if runner.flush_before_window_event(&event) {
             window.request_redraw();
         }
 
@@ -1244,10 +1252,10 @@ impl Editor {
         }
     }
 
-    pub(crate) fn choose_menu(&mut self, command: Command) {
+    pub(crate) fn choose_menu(&mut self, command: Command, geometry: navigate::Geometry<'_>) {
         self.menu.close();
         match command {
-            Command::Doc(command) => self.run_doc_command(command),
+            Command::Doc(command) => self.run_doc_command(command, geometry),
             Command::App(_) => {
                 if let Some(proxy) = &self.proxy {
                     let _ = proxy.send_event(UserEvent::Command(command));
@@ -1258,14 +1266,18 @@ impl Editor {
 
     /// A document command against this editor, including the redraw
     /// its view changes require.
-    pub(crate) fn run_doc_command(&mut self, command: DocCommand) {
+    pub(crate) fn run_doc_command(
+        &mut self,
+        command: DocCommand,
+        geometry: navigate::Geometry<'_>,
+    ) {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::Save => self.menu_save(false),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::SaveAs => self.menu_save(true),
-            DocCommand::Undo => self.step_history(true),
-            DocCommand::Redo => self.step_history(false),
+            DocCommand::Undo => self.step_history(true, geometry),
+            DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPaneLeft => {
                 self.open_selected_in_pane(workspace::Side::Left);
             }
@@ -1303,7 +1315,11 @@ impl Editor {
         // in `run_command`.
     }
 
-    pub(crate) fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
+    pub(crate) fn menu_key(
+        &mut self,
+        event: &KeyboardEvent,
+        geometry: navigate::Geometry<'_>,
+    ) -> bool {
         // The native menu owns its own shortcuts; only the drawn
         // menu routes keys here.
         if !self.drawn_menu {
@@ -1319,7 +1335,7 @@ impl Editor {
             let availability = self.menu_availability();
             return match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
                 menu::Navigation::Activate(command) => {
-                    self.choose_menu(command);
+                    self.choose_menu(command, geometry);
                     true
                 }
                 menu::Navigation::Handled => true,
@@ -1329,16 +1345,17 @@ impl Editor {
         menu::shortcut(event)
             .filter(|command| self.menu_availability().enabled(*command))
             .is_some_and(|command| {
-                self.choose_menu(command);
+                self.choose_menu(command, geometry);
                 true
             })
     }
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
-    pub(crate) fn step_history(&mut self, back: bool) {
+    pub(crate) fn step_history(&mut self, back: bool, geometry: navigate::Geometry<'_>) {
         self.finish_gesture();
         if self.model.step_history(back) {
+            geometry.reveal_selection(self);
             self.refresh_title();
         }
     }
@@ -1477,14 +1494,19 @@ impl App {
                         runner.update_frame(
                             window.scale_factor(),
                             Size::new(size.width as f64, size.height as f64),
-                            |editor, _, _| {
-                                editor.run_doc_command(command);
+                            |editor, dispatch, _| {
+                                editor.run_doc_command(
+                                    command,
+                                    dispatch.geometry(window.scale_factor()),
+                                );
                                 frame::FrameDisposition::Remint
                             },
                         );
                         window.request_redraw();
                     } else {
-                        runner.editor.run_doc_command(command);
+                        runner
+                            .editor
+                            .run_doc_command(command, runner.frame.dispatch.geometry(1.0));
                     }
                 }
             }

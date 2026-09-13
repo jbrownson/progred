@@ -394,10 +394,12 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             },
         );
         for _ in 0..2 {
-            assert!(matches!(
-                placed.claim.clone().map(|(_, claim)| claim),
-                Some(Claim::Direct(_))
-            ));
+            assert_eq!(
+                placed
+                    .hover_geometry
+                    .probe(Some(Point::new(5.0, 5.0)), None, 0.0),
+                placed.claim,
+            );
         }
         assert_eq!(calls.get(), expected);
         assert!(selected.borrow().is_empty());
@@ -439,6 +441,15 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         ));
         assert_eq!(selected.borrow().len(), 1);
         puri::frame::render(frame.renders, &mut DrawList::new());
+        for (point, hits) in [
+            (Point::new(5.0, 5.0), true),
+            (Point::new(30.0, 30.0), false),
+        ] {
+            assert_eq!(
+                frame.hover_geometry.probe(Some(point), None, 0.0).is_some(),
+                hits,
+            );
+        }
         assert_eq!(calls.get(), expected);
     }
     let clipped = crate::display::widget::frame::place(
@@ -515,7 +526,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
 }
 
 #[test]
-fn drawing_source_reveal_is_an_ordinary_hover_and_modifier_handler() {
+fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     use puri::handler::Event;
     use ui_events::keyboard::Modifiers;
 
@@ -538,16 +549,23 @@ fn drawing_source_reveal_is_an_ordinary_hover_and_modifier_handler() {
     let handler = output.handler.unwrap();
     let path: Rc<[Step]> = Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]);
     let mut input = placed::DispatchContext::new(
-        Some(drawing_view),
+        Some(drawing_view.clone()),
         Some(Hovered::Tree(Hover::Drawing(SourceTrace::Stored(
             path.clone(),
         )))),
     );
     input.descends = Rc::from([crate::navigate::Descend {
         root: Some(source_view.clone()),
-        path,
+        path: path.clone(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),
-        select: Rc::new(|_, _| false),
+        select: Rc::new({
+            let root = source_view.clone();
+            let path = path.clone();
+            move |editor, _| {
+                crate::editing::select(editor, &root, &path);
+                true
+            }
+        }),
     }]);
     input.view_regions = Rc::from([placed::ViewRegion {
         root: source_view.clone(),
@@ -596,5 +614,29 @@ fn drawing_source_reveal_is_an_ordinary_hover_and_modifier_handler() {
     assert_eq!(
         editor.model.workspace.view(&source_view).unwrap().scroll.y,
         0.0
+    );
+
+    input.root = Some(drawing_view);
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: ui_events::pointer::PointerInfo {
+            pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: ui_events::pointer::PointerType::Mouse,
+        },
+        state: ui_events::pointer::PointerState {
+            position: (5.0, 5.0).into(),
+            modifiers,
+            ..Default::default()
+        },
+    };
+    editor.pressed = true;
+    assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
+    let selected = editor.model.selection.as_ref().unwrap();
+    assert_eq!(selected.root(), &source_view);
+    assert_eq!(selected.path(), path.as_ref());
+    assert_eq!(
+        editor.model.workspace.view(&source_view).unwrap().scroll.y,
+        442.0
     );
 }

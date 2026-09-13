@@ -423,12 +423,11 @@ pub(crate) fn program_leaf(
         });
         builder.pick_dynamic(
             placement,
-            move |world: &mut crate::Editor, target, descends| {
+            move |world: &mut crate::Editor, target, input| {
                 if let Hovered::Tree(Hover::Drawing(source)) = target {
-                    let select = source_descend(&world.sources(), descends, source)
-                        .map(|descend| descend.select.clone());
-                    if let Some(select) = select {
-                        select(world, None);
+                    if let Some(target) = source_descend(&world.sources(), &input.descends, source)
+                    {
+                        input.geometry(scale).arrive(world, target, None);
                     }
                     // The painted hit owns the pick even without a visible source occurrence.
                     true
@@ -449,7 +448,7 @@ pub(crate) fn program_leaf(
                                 descend.root.clone().map(|root| (root, descend.rect))
                             });
                         if let Some((root, rect)) = target {
-                            world.reveal_rect(&input.view_regions, &root, rect, scale);
+                            input.geometry(scale).reveal_rect(world, &root, rect);
                         }
                         true
                     }

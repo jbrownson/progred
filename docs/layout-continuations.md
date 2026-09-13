@@ -1,6 +1,6 @@
 # Layout and widget continuations
 
-Current architecture, 2026-09-08.
+Current architecture, 2026-09-13.
 
 ## Boundary
 
@@ -71,8 +71,9 @@ The successor is built by `refresh_frame` in
    an extended claim only retains a target when there is no stronger claim.
 4. Floating placements run after ordinary content. A floater's nested floaters
    run before the next sibling floater. The resulting `HoverOutput` contains the
-   winning claim, navigation declarations, and `AfterHover` continuations, not
-   a retained list of ordinary hover callbacks or probes.
+   winning claim, the probes that produced it, navigation declarations, and
+   `AfterHover` continuations. Widget placement callbacks are still one-shot;
+   only their settled hit tests are retained.
 5. The app constructs `ResolvedHover` and binds the continuations. This produces
    rendering and handlers independently. Each render is now a canvas-only
    callback capturing the resolved input from this frame. Presenting it cannot
@@ -99,17 +100,31 @@ hover, handlers, or painting.
 during a press, attributing the winner, and binding the continuations. It returns
 a completed `Frame`; it never updates the runner's stored hover.
 
-Selection reveal is part of handling input, not frame construction. `update_frame`
-compares the selection's view/path/stage before and after the action. When it
-changes, the installed frame's navigation rectangle determines a one-shot scroll
-adjustment before building the successor. Native menu commands use that same
-boundary. Nothing remembers which selection was revealed: plain refreshes and
-manual scrolling do not request another reveal. A path missing from the installed
-frame leaves the offset unchanged, with no deferred retry. Substantially reflowed
-destinations are deliberately best-effort. There is no reveal flag, persistent
-target mode, corrective build, or new layout/hover boundary for selection reveal.
+Selection and scrolling are separate operations. Navigation arrival explicitly
+selects and reveals; deletion, pending insertion/cancellation, and Undo/Redo
+explicitly reveal their resulting selection. Native and drawn menus use the same
+commands. `navigate::Geometry` borrows the installed frame's landmarks, view
+regions, and scale; a reveal immediately adjusts the appropriate view's offset.
+Ordinary pointer selection, completion, and low-level selection/payload setters
+do not implicitly scroll. Widgets that navigate elsewhere can compose selection
+with `reveal_path` or `reveal_selection`, as canvas picking does through `arrive`.
+`update_frame` neither compares selections nor processes reveal requests.
+A missing path leaves the offset unchanged, with no deferred retry.
+Substantially reflowed destinations are deliberately best-effort. There is no
+reveal flag, remembered target, corrective build, or new layout/hover boundary.
 
-After installing a different hover target or owning view, the runner dispatches
+The installed dispatch also owns `HoverGeometry`: those same probes in painting
+order, including their clips, retention policy, exact shape tests, and owning
+views. A motion batch probes this geometry at its latest position and dispatches
+any `HoverChanged` before its ordinary motion handler and successor build. This
+lets a hover reaction, such as revealing drawing source, contribute to that one
+successor instead of first building a frame just to discover the hover. Probing
+does not rerun projection or layout. Drawing probes keep the installed frame's
+recorded shapes alive after painting; they do not evaluate the next frame's
+drawing early or reuse the recording to build that next frame.
+
+The successor still computes hover over fresh geometry. After installing a
+different hover target or owning view, the runner dispatches
 `Event::HoverChanged` through that frame's ordinary handler chain. The dispatch
 context supplies the settled target and navigation/view geometry. An accepted
 notification builds one successor, regardless of whether the handler wrote any
@@ -196,7 +211,7 @@ that need the winner can instead be constructed inside `after_hover`.
 `finish` runs floating placements and returns `HoverOutput`. Its consuming
 `bind` operation uses `ResolvedHover` to assemble `Effects`, then returns a
 distinct `FrameOutput`: canvas-only renders, one function-over-`Event` handler
-chain, and settled navigation/view geometry. A hover output cannot be bound
+chain, and settled navigation/view/hover geometry. A hover output cannot be bound
 twice or masquerade as a completed frame.
 
 [`puri::frame::AfterHover<H, O>`](../ui/puri/src/frame.rs) owns the reusable

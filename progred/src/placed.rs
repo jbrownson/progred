@@ -5,7 +5,6 @@
 use crate::completion::Offers;
 use crate::display::widget::container::{self, Layers};
 use crate::frame::Hovered;
-use crate::navigate::Descend;
 use crate::workspace::Root;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use measured::{Extent, Measured};
@@ -28,6 +27,16 @@ pub type ResolvedHover = crate::display::widget::frame::ResolvedHover<Hovered>;
 pub use puri::frame::Render;
 pub type Probe = crate::display::widget::frame::Probe<Hovered>;
 pub use crate::display::widget::frame::ViewRegion;
+
+impl DispatchContext<crate::Editor> {
+    pub(crate) fn geometry(&self, scale: f64) -> crate::navigate::Geometry<'_> {
+        crate::navigate::Geometry {
+            descends: &self.descends,
+            view_regions: &self.view_regions,
+            scale,
+        }
+    }
+}
 
 /// App-facing construction inside the hover continuation. Claims are
 /// answered now; ink and handlers are returned for later execution.
@@ -124,7 +133,7 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
     pub fn pick_dynamic(
         &mut self,
         placement: Placement,
-        action: impl Fn(&mut C, &Hovered, &[Descend<C>]) -> bool + 'static,
+        action: impl Fn(&mut C, &Hovered, &DispatchContext<C>) -> bool + 'static,
     ) {
         if self.visible {
             self.handler()
@@ -137,7 +146,7 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
                         && pointer
                             .hovered
                             .as_ref()
-                            .is_some_and(|target| action(ctx, target, &pointer.descends))
+                            .is_some_and(|target| action(ctx, target, pointer))
                 });
         }
     }

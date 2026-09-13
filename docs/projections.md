@@ -272,6 +272,8 @@ Drawing programs use scoped foreign operations for fills, strokes, paths,
 transforms, and clips. A temporary path builder belongs to that synchronous
 evaluation. A visible program records once in the frame; hover and painting
 share the recording and its source origins. There is no cross-frame canvas memo.
+The installed frame's hover probes retain that recording for subsequent pointer
+hit tests; every successor frame still makes its own recording.
 
 ## Scoped layout programs
 

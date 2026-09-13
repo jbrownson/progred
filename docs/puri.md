@@ -131,8 +131,9 @@ then return a hover callback to run over settled placement; layout knows neither
 the control nor its event policy. Click, activation, and picking are ordinary functions built
 on this combinator. Hover claims, occlusion, and optional hover feedback are
 ordinary decorators too. Generic Puri probes test settled hit geometry and
-retention immediately inside that callback; the frame retains the winning claim,
-not the probes. The editor adds the owning view. Insert and collapse handles request
+retention immediately inside that callback; the frame retains both the winning
+claim and those probes for targeting later pointer input. The editor adds the
+owning view. Insert and collapse handles request
 feedback explicitly, not through a target-type switch in the interpreter.
 Interaction wrappers use `before`, keeping child handlers in front of enclosing
 handlers. `after` reverses that order when requested; borders use it to paint
@@ -205,7 +206,10 @@ dispatch until the successor is built.
 
 `HoverChanged` and `ModifiersChanged` use the ordinary Puri event chain, with
 the settled hover supplied in the caller's dispatch context. Progred emits a
-hover notification when the target or its owning view changes. An accepted
+hover notification when the target or its owning view changes. Pointer motion
+first probes the installed frame's geometry, allowing the notification to run
+before building a successor. The successor still computes its own hover from
+fresh geometry. An accepted
 notification builds one successor; any further hover reaction waits for an
 actual paint/submission before continuing. Oscillating reactions yield across
 painted frames rather than recursively dispatching, panicking, or reaching an
@@ -256,7 +260,9 @@ same pointer-cancellation handlers and clears the adapter's pressed state.
 The approved cross-frame computation memo is caller-threaded text shaping.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and
-the layout DAG do not retain computation across frames. General dependency
+the layout DAG do not reuse computation to construct later frames. The installed
+frame retains its hit tests, including recorded drawing shapes, alongside its
+handlers for subsequent input targeting. Replacement drops both. General dependency
 tracking is deferred; see [deferred work](deferred.md).
 
 ## Drawing and testing

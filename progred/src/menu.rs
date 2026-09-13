@@ -237,8 +237,8 @@ mod view {
     use measured::{self, Extent, Measured};
     use peniko::{Brush, Color};
     use puri::draw::Canvas;
+    use puri::handler::HasHandler;
     use puri::text::{TextCtx, TextStyle};
-    use std::rc::Rc;
 
     const BAR_HEIGHT: f64 = 30.0;
     const MENU_WIDTH: f64 = 230.0;
@@ -284,15 +284,18 @@ mod view {
     fn activatable<C: 'static>(
         hover: Hover,
         content: Measured<HoverPass<C>>,
-        action: impl Fn(&mut C) -> bool + 'static,
+        action: impl Fn(&mut C, &placed::DispatchContext<C>) -> bool + 'static,
     ) -> Measured<HoverPass<C>> {
-        let action = Rc::new(action);
         placed::before(content, move |p, placement| {
             let target = Hovered::Menu(hover);
             p.claim(placement, target.clone());
-            let activate = action.clone();
-            p.activate(target.clone(), move |world| activate(world));
-            p.pick(target, move |world| action(world));
+            p.handler()
+                .on_pointer_down_with(move |world, event, input| {
+                    !placement.clipped_out()
+                        && puri::interact::is_primary_contact(event)
+                        && input.matches(&target)
+                        && action(world, input)
+                });
         })
     }
 
@@ -317,7 +320,7 @@ mod view {
                 }
             });
         });
-        activatable(Hover::Heading(index), content, move |app| {
+        activatable(Hover::Heading(index), content, move |app, _| {
             app.menu.toggle(index);
             true
         })
@@ -395,8 +398,8 @@ mod view {
             });
         });
         if enabled {
-            activatable(Hover::Item(command), content, move |app| {
-                app.choose_menu(command);
+            activatable(Hover::Item(command), content, move |app, input| {
+                app.choose_menu(command, input.geometry(scale));
                 true
             })
         } else {

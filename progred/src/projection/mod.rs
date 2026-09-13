@@ -652,13 +652,16 @@ fn descend_landmark_with(
     }
     let marked = crate::display::widget::navigation::landmark(marked, path, select);
     if selected {
-        bind_delete(marked)
+        bind_delete(marked, scale)
     } else {
         marked
     }
 }
 
-fn bind_delete(child: Measured<HoverPass<crate::Editor>>) -> Measured<HoverPass<crate::Editor>> {
+fn bind_delete(
+    child: Measured<HoverPass<crate::Editor>>,
+    scale: f64,
+) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
         p.handler().on_key_with(move |ctx, event, input| {
             crate::modifiers::plain(&event.modifiers)
@@ -667,7 +670,7 @@ fn bind_delete(child: Measured<HoverPass<crate::Editor>>) -> Measured<HoverPass<
                     Key::Named(NamedKey::Backspace | NamedKey::Delete)
                 )
                 && event.state.is_down()
-                && ctx.delete_selected_edge(&input.descends)
+                && ctx.delete_selected_edge(input.geometry(scale))
         })
     })
 }

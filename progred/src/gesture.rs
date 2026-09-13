@@ -269,7 +269,7 @@ mod tests {
         );
         assert!(world.gesture.is_none());
         world.gesture = Some(Box::new(Finish(log.clone())));
-        world.step_history(true);
+        world.step_history(true, Default::default());
         assert!(world.gesture.is_none());
         assert_eq!(
             *log.borrow(),
