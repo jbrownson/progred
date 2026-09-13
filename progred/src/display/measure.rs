@@ -197,7 +197,7 @@ mod tests {
             let mut build = ChoiceBuild::default();
             let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
             let measured = resolve_choices(build.finish(prepared), 13.0, false);
-            let mut output = crate::display::widget::frame::place(
+            let output = crate::display::widget::frame::place(
                 measured,
                 Placement::root(rect),
                 &widget::HoverInput {
@@ -206,7 +206,7 @@ mod tests {
                 },
             );
             let mut canvas = DrawList::new();
-            puri::frame::render(output.resolve(Default::default()), &mut canvas);
+            puri::frame::render(output.bind(Default::default()).renders, &mut canvas);
             if debug {
                 assert!(
                     matches!(&canvas.0[..],[DrawCmd::Stroke {shape:puri::Shape::Rect(drawn),..}] if *drawn==rect)

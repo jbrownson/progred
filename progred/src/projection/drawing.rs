@@ -12,6 +12,7 @@ use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
 use puri::draw::{Canvas, DrawList};
+use puri::handler::{Event, EventOutcome, HasHandler};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
 
@@ -424,7 +425,11 @@ pub(crate) fn program_leaf(
             placement,
             move |world: &mut crate::Editor, target, descends| {
                 if let Hovered::Tree(Hover::Drawing(source)) = target {
-                    world.select_drawing_source(descends, source);
+                    let select = source_descend(&world.sources(), descends, source)
+                        .map(|descend| descend.select.clone());
+                    if let Some(select) = select {
+                        select(world, None);
+                    }
                     // The painted hit owns the pick even without a visible source occurrence.
                     true
                 } else {
@@ -432,6 +437,26 @@ pub(crate) fn program_leaf(
                 }
             },
         );
+        builder.handler().on(move |world, event, input| {
+            let handled = matches!(event, Event::HoverChanged | Event::ModifiersChanged(_))
+                && !world.pressed
+                && crate::modifiers::link(&world.modifiers)
+                && world.pointer.is_some_and(|point| placement.contains(point))
+                && match input.hovered() {
+                    Some(Hovered::Tree(Hover::Drawing(source))) => {
+                        let target = source_descend(&world.sources(), &input.descends, source)
+                            .and_then(|descend| {
+                                descend.root.clone().map(|root| (root, descend.rect))
+                            });
+                        if let Some((root, rect)) = target {
+                            world.reveal_rect(&input.view_regions, &root, rect, scale);
+                        }
+                        true
+                    }
+                    _ => false,
+                };
+            EventOutcome::from_handled(event, handled)
+        });
         builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
@@ -447,6 +472,16 @@ pub(crate) fn program_leaf(
                 },
             );
         });
+    })
+}
+
+pub(crate) fn source_descend<'a, World>(
+    sources: &Sources<'_>,
+    descends: &'a [crate::navigate::Descend<World>],
+    source: &SourceTrace,
+) -> Option<&'a crate::navigate::Descend<World>> {
+    descends.iter().find(|descend| {
+        descend.root.is_some() && SourceTrace::from_path(sources, descend.path.clone()) == *source
     })
 }
 

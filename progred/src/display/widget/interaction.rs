@@ -242,9 +242,9 @@ mod tests {
                 place(output, placement)
             });
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-            let mut output =
+            let output =
                 crate::display::widget::frame::place(measured, placement, &Default::default());
-            output.resolve(Default::default());
+            let output = output.bind(Default::default());
             let mut world = vec![];
             assert!(
                 output

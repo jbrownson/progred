@@ -60,6 +60,13 @@ pub fn on_event(
                             Event::Scroll(event) => scroll_value(placement, scale, event, command),
                             Event::Key(event) => key_value(event, command),
                             Event::Ime(event) => ime_value(event),
+                            Event::HoverChanged => {
+                                event_value(layout_data::vocabulary::HOVER_CHANGED, [])
+                            }
+                            Event::ModifiersChanged(modifiers) => event_value(
+                                layout_data::vocabulary::MODIFIERS_CHANGED,
+                                [modifier_field(modifiers, command)],
+                            ),
                         };
                         crate::site::apply_event(
                             world,
@@ -98,6 +105,22 @@ fn marker() -> Value {
     Value::record([])
 }
 
+fn modifier_field(modifiers: &Modifiers, command: fn(&Modifiers) -> bool) -> (CellId, Value) {
+    (
+        layout_data::vocabulary::MODIFIERS,
+        Value::list(
+            [
+                modifiers
+                    .shift()
+                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
+                command(modifiers).then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
+            ]
+            .into_iter()
+            .flatten(),
+        ),
+    )
+}
+
 fn pointer_fields(
     placement: Placement,
     scale: f64,
@@ -119,20 +142,7 @@ fn pointer_fields(
         ),
         (layout_data::vocabulary::SCALE, f64_convention::value(scale)),
     ];
-    fields.push((
-        layout_data::vocabulary::MODIFIERS,
-        Value::list(
-            [
-                state
-                    .modifiers
-                    .shift()
-                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&state.modifiers).then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
-            ]
-            .into_iter()
-            .flatten(),
-        ),
-    ));
+    fields.push(modifier_field(&state.modifiers, command));
     fields
 }
 
@@ -300,20 +310,7 @@ fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {
     if event.repeat {
         fields.push((layout_data::vocabulary::REPEAT, marker()));
     }
-    fields.push((
-        layout_data::vocabulary::MODIFIERS,
-        Value::list(
-            [
-                event
-                    .modifiers
-                    .shift()
-                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(&event.modifiers).then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
-            ]
-            .into_iter()
-            .flatten(),
-        ),
-    ));
+    fields.push(modifier_field(&event.modifiers, command));
     event_value(layout_data::vocabulary::KEY, fields)
 }
 

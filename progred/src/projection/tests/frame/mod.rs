@@ -39,14 +39,14 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
         move |placement, output| after(output, placement),
     );
     assert_eq!(decorated.extent, extent);
-    let mut output = {
+    let output = {
         let layout = decorated;
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(layout, placement, &Default::default())
     };
-    let renders = output.resolve(Default::default());
+    let output = output.bind(Default::default());
     assert!(log.borrow().is_empty());
-    assert!(!output.resolve_for_dispatch().dispatch_key(
+    assert!(!output.handler.unwrap().dispatch_key(
         &mut crate::test_editor(Document {
             root: None,
             cells: Cells::new()
@@ -55,7 +55,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     ));
     assert_eq!(&*log.borrow(), &["after", "child", "before"]);
     log.borrow_mut().clear();
-    puri::frame::render(renders, &mut DrawList::new());
+    puri::frame::render(output.renders, &mut DrawList::new());
     assert_eq!(&*log.borrow(), &["before", "child", "after"]);
 }
 
@@ -99,7 +99,7 @@ fn settle_with_sources(
         Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
         _ => None,
     });
-    let renders = placed.resolve(crate::placed::ResolvedHover {
+    let frame = placed.bind(crate::placed::ResolvedHover {
         hovered,
         hovered_secondary,
         hovered_trace: None,
@@ -107,10 +107,9 @@ fn settle_with_sources(
     let hover = binding.elapsed();
     #[cfg(feature = "layout-profile")]
     drop(profile);
-    let crate::placed::HoverOutput { descends, .. } = placed;
     let mut bench = Bench {
         list: DrawList::new(),
-        descends,
+        descends: frame.descends,
         hit,
         times: FrameTimes {
             hover,
@@ -118,7 +117,7 @@ fn settle_with_sources(
         },
         frame_elapsed: std::time::Duration::ZERO,
     };
-    puri::frame::render(renders, &mut bench);
+    puri::frame::render(frame.renders, &mut bench);
     bench
 }
 
@@ -323,7 +322,7 @@ impl BenchContext {
             },
             &crate::display::widget::HoverInput {
                 pointer,
-                reach: crate::frame::HOVER_REACH,
+                reach_px: crate::frame::HOVER_REACH_POINTS * styles.scale,
                 ..Default::default()
             },
         );

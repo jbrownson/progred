@@ -58,7 +58,7 @@ fn native_annotation_handler_retains_the_projected_site() {
         },
     );
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let mut placed = crate::display::widget::frame::place(measured, placement, &Default::default());
+    let placed = crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut writes = crate::test_editor(doc.clone());
     let event = PointerScrollEvent {
         pointer: PointerInfo {
@@ -148,7 +148,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         &mut tcx,
     );
     assert!(measured.extent.width > 0.0);
-    let mut placed = crate::display::widget::frame::place(
+    let placed = crate::display::widget::frame::place(
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
         &Default::default(),

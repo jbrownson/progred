@@ -3,8 +3,8 @@
 use super::frame::Probe;
 use super::{before, style};
 use crate::display::Layout;
+use puri::Point;
 use puri::handler::HasHandler;
-use puri::{Affine, Point};
 use std::rc::Rc;
 
 pub fn on_hover<World: 'static, Hover: Clone + PartialEq + 'static>(
@@ -61,10 +61,10 @@ pub fn hover_highlight<World: 'static, Hover: Clone + PartialEq + 'static>(
                             .as_ref()
                             .is_some_and(|hovered| hovered == &target)
                         {
-                            canvas.fill_shape(
-                                style::highlight_outline(scale, placement.rect).into(),
-                                style::hover_wash().into(),
-                                Affine::IDENTITY,
+                            style::hover_highlight(
+                                scale,
+                                canvas,
+                                style::highlight_outline(scale, placement.rect),
                             );
                         }
                     });
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities() {
         let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
-        let mut output = place(
+        let output = place(
             crate::display::widget::border(crate::display::text("inside")),
             placement,
         );
@@ -116,7 +116,7 @@ mod tests {
         assert!(output.claim.is_none());
         assert!(output.landmark_select.is_none());
         let mut drawing = DrawList::new();
-        puri::frame::render(output.resolve(Default::default()), &mut drawing);
+        puri::frame::render(output.bind(Default::default()).renders, &mut drawing);
         assert!(
             matches!(&drawing.0[..], [puri::DrawCmd::Stroke { shape: puri::Shape::Rect(rect), style, .. }]
             if *rect == placement.rect.inset(-0.5) && style.width == 1.0)
@@ -143,7 +143,7 @@ mod tests {
             placement,
             HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
-                reach: 4.0,
+                reach_px: 4.0,
                 ..Default::default()
             },
         );
@@ -158,7 +158,7 @@ mod tests {
                 HoverInput {
                     pointer: Some(Point::new(22.0, 5.0)),
                     prior: Some(&7),
-                    reach: 4.0,
+                    reach_px: 4.0,
                     debug_geometry: false,
                 }
             )
@@ -169,7 +169,7 @@ mod tests {
         assert!(claimed.after_hover.is_empty());
         assert!(claimed.handler.is_none());
         for hovered in [None, Some(7), Some(8)] {
-            let mut highlighted = place(
+            let highlighted = place(
                 hover_highlight(crate::display::text("feedback"), 7),
                 placement,
             );
@@ -177,13 +177,15 @@ mod tests {
             assert!(highlighted.handler.is_none());
             let mut canvas = DrawList::new();
             puri::frame::render(
-                highlighted.resolve(crate::display::widget::ResolvedHover {
-                    hovered,
-                    ..Default::default()
-                }),
+                highlighted
+                    .bind(crate::display::widget::ResolvedHover {
+                        hovered,
+                        ..Default::default()
+                    })
+                    .renders,
                 &mut canvas,
             );
-            assert_eq!(canvas.0.len(), usize::from(hovered == Some(7)));
+            assert_eq!(canvas.0.len(), 2 * usize::from(hovered == Some(7)));
         }
     }
 
@@ -216,7 +218,7 @@ mod tests {
                     placement,
                     HoverInput {
                         pointer: Some(Point::new(x, 5.0)),
-                        reach: 4.0,
+                        reach_px: 4.0,
                         ..Default::default()
                     }
                 )

@@ -163,16 +163,14 @@ fn editing_frame_at(
         &mut tcx,
     );
     let height = measured.extent.height().max(1.0);
-    let mut output = crate::display::widget::frame::place(
+    crate::display::widget::frame::place(
         measured,
         Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
         &placed::HoverInput {
             pointer,
             ..Default::default()
         },
-    );
-    output.resolve(Default::default());
-    output
+    )
 }
 
 /// Select through the current projection, without an editing interaction.

@@ -3,10 +3,10 @@
 
 use crate::display::Layout;
 #[cfg(test)]
-pub use frame::ResolvedHover;
-#[cfg(test)]
 pub use frame::place;
-pub use frame::{HoverContext, HoverInput, HoverOutput, HoverPass, Probe};
+pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
+#[cfg(test)]
+pub use frame::{HoverOutput, ResolvedHover};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
@@ -266,14 +266,14 @@ mod tests {
             assert_eq!(leaf.extent, extent);
             let mut placement = Placement::root(rect);
             placement.clip_rect = clip;
-            let mut fragment =
+            let fragment =
                 crate::display::widget::frame::place(leaf, placement, &Default::default());
             assert_eq!(calls.get(), 0);
             assert!(fragment.claim.is_none());
             assert!(fragment.handler.is_none());
             let mut canvas = DrawList::new();
             if render {
-                puri::frame::render(fragment.resolve(Default::default()), &mut canvas);
+                puri::frame::render(fragment.bind(Default::default()).renders, &mut canvas);
             }
             let painted = render && clip == rect;
             assert_eq!(calls.get(), usize::from(painted));
@@ -331,13 +331,12 @@ mod tests {
             Some(puri::hover::Claim::Direct(7))
         );
         let mut canvas = DrawList::new();
-        puri::frame::render(
-            output.resolve(ResolvedHover {
-                hovered: Some(7),
-                ..Default::default()
-            }),
-            &mut canvas,
-        );
+        let select = output.landmark_select.take().unwrap();
+        let output = output.bind(ResolvedHover {
+            hovered: Some(7),
+            ..Default::default()
+        });
+        puri::frame::render(output.renders, &mut canvas);
         assert_eq!(&*calls.borrow(), &["hover", "render"]);
         assert!(
             matches!(&canvas.0[..], [DrawCmd::Fill { shape: Shape::Rect(rect), .. }] if *rect == placement.rect)
@@ -349,10 +348,7 @@ mod tests {
                 .unwrap()
                 .dispatch_key(&mut state, &puri::handler::KeyboardEvent::default())
         );
-        assert!(output.landmark_select.unwrap()(
-            &mut state,
-            Some(Direction::Left)
-        ));
+        assert!(select(&mut state, Some(Direction::Left)));
         assert_eq!(state, ["key", "select"]);
     }
 
@@ -383,10 +379,10 @@ mod tests {
                 }),
             )
         });
-        let mut output = frame;
+        let output = frame;
         assert_eq!(output.after_hover.len(), 1);
         let mut canvas = DrawList::new();
-        puri::frame::render(output.resolve(Default::default()), &mut canvas);
+        puri::frame::render(output.bind(Default::default()).renders, &mut canvas);
         let [DrawCmd::Clip { children, .. }] = &canvas.0[..] else {
             panic!("outer clip");
         };
@@ -414,10 +410,10 @@ mod tests {
             }
         });
         assert_eq!(calls.get(), 0);
-        let mut output = frame;
+        let output = frame;
         assert_eq!(output.after_hover.len(), 1);
         let mut canvas = DrawList::new();
-        puri::frame::render(output.resolve(Default::default()), &mut canvas);
+        puri::frame::render(output.bind(Default::default()).renders, &mut canvas);
         assert_eq!(calls.get(), 100);
         assert_eq!(canvas.0.len(), 100);
     }

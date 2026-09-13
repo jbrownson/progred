@@ -259,7 +259,7 @@ mod tests {
         let mut world = model(f64::value(1.0));
         let log = Rc::new(std::cell::RefCell::new(Vec::new()));
         world.gesture = Some(Box::new(Finish(log.clone())));
-        world.adopt_model(
+        world.replace_document(
             gid::Document {
                 root: Some(f64::value(2.0)),
                 cells: gid::Cells::new(),

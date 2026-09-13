@@ -4,22 +4,23 @@
 use puri::handler::Handler;
 
 pub trait ResolveForDispatch<C, H> {
-    fn resolve_for_dispatch(&mut self) -> &Handler<C, widget::frame::DispatchContext<C, H>>;
+    fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>>;
 }
 
 impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverOutput<C, H> {
-    fn resolve_for_dispatch(&mut self) -> &Handler<C, widget::frame::DispatchContext<C, H>> {
+    fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>> {
         let hovered = self.claim.as_ref().and_then(|(_, claim)| match claim {
             puri::hover::Claim::Direct(target) | puri::hover::Claim::Extended(target) => {
                 Some(target.clone())
             }
             puri::hover::Claim::Occludes => None,
         });
-        drop(self.resolve(widget::frame::ResolvedHover {
+        self.bind(widget::frame::ResolvedHover {
             hovered,
             ..Default::default()
-        }));
-        self.handler.as_ref().expect("resolved frame handler")
+        })
+        .handler
+        .expect("resolved frame handler")
     }
 }
 

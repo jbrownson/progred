@@ -19,7 +19,7 @@ use std::rc::Rc;
 pub struct HoverInput<'a, H> {
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
-    pub reach: f64,
+    pub reach_px: f64,
     pub debug_geometry: bool,
 }
 
@@ -34,7 +34,7 @@ impl<H> Default for HoverInput<'_, H> {
         Self {
             pointer: None,
             prior: None,
-            reach: 0.0,
+            reach_px: 0.0,
             debug_geometry: false,
         }
     }
@@ -116,11 +116,11 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
             self.output.claim.take(),
             self.input
                 .pointer
-                .and_then(|point| probe.answer(point, self.input.prior, self.input.reach))
+                .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
                 .map(|claim| (self.root.clone(), claim)),
         );
         if self.input.debug_geometry {
-            if let Some(region) = probe.retention_region(self.input.reach) {
+            if let Some(region) = probe.retention_region(self.input.reach_px) {
                 self.output.debug_regions.push(region);
             }
         }
@@ -138,7 +138,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
 pub struct HoverPass<C, H> {
     pointer: Option<Point>,
     prior: Option<H>,
-    reach: f64,
+    reach_px: f64,
     debug_geometry: bool,
     root: Option<Root>,
     output: HoverOutput<C, H>,
@@ -153,7 +153,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         Self {
             pointer: input.pointer,
             prior: input.prior.cloned(),
-            reach: input.reach,
+            reach_px: input.reach_px,
             debug_geometry: input.debug_geometry,
             root: None,
             output: HoverOutput::empty(),
@@ -166,7 +166,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             HoverInput {
                 pointer: self.pointer,
                 prior: self.prior.as_ref(),
-                reach: self.reach,
+                reach_px: self.reach_px,
                 debug_geometry: self.debug_geometry,
             },
             &mut self.output,
@@ -253,6 +253,7 @@ fn claim_over<H>(
 /// description or placement. Accepted handlers perform their own actions.
 pub struct DispatchContext<C, Hover> {
     pub descends: std::rc::Rc<[Landmark<C>]>,
+    pub view_regions: std::rc::Rc<[ViewRegion]>,
     pub root: Option<Root>,
     pub hovered: Option<Hover>,
     pub outside_view: bool,
@@ -262,6 +263,7 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
     fn default() -> Self {
         Self {
             descends: Default::default(),
+            view_regions: Default::default(),
             root: None,
             hovered: None,
             outside_view: false,
@@ -316,6 +318,14 @@ pub struct ResolvedHover<Hover> {
 pub struct Effects<C, H> {
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
+}
+
+/// Completed widget output: no hover work remains, and painting is optional.
+pub struct FrameOutput<C, H> {
+    pub renders: Vec<Render>,
+    pub handler: Option<Handler<C, DispatchContext<C, H>>>,
+    pub descends: Vec<Landmark<C>>,
+    pub view_regions: Vec<ViewRegion>,
 }
 
 impl<C: 'static, H: 'static> Default for Effects<C, H> {
@@ -414,7 +424,12 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
                 let inner = std::mem::take(handler);
                 *handler = Handler::from_function(
                     move |ctx, event, pointer: &mut DispatchContext<C, Hover>| {
-                        if matches!(event, Event::PointerDown(_)) {
+                        if matches!(
+                            event,
+                            Event::PointerDown(_)
+                                | Event::HoverChanged
+                                | Event::ModifiersChanged(_)
+                        ) {
                             let outside = pointer.outside_view;
                             pointer.outside_view = pointer.root.as_ref() != Some(&root);
                             let outcome = inner.dispatch(ctx, event, pointer);
@@ -436,14 +451,18 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
-    pub fn resolve(&mut self, hover: ResolvedHover<Hover>) -> Vec<Render> {
+    pub fn bind(self, hover: ResolvedHover<Hover>) -> FrameOutput<C, Hover> {
         let mut effects = Effects {
             renders: Vec::new(),
-            handler: self.handler.take(),
+            handler: self.handler,
         };
-        std::mem::take(&mut self.after_hover).bind(Rc::new(hover), &mut effects);
-        self.handler = effects.handler;
-        effects.renders
+        self.after_hover.bind(Rc::new(hover), &mut effects);
+        FrameOutput {
+            renders: effects.renders,
+            handler: effects.handler,
+            descends: self.descends,
+            view_regions: self.view_regions,
+        }
     }
 }
 
@@ -531,7 +550,7 @@ mod tests {
         };
         let layout = measured::layers(vec![widget(1), widget(2)]);
         assert!(calls.borrow().is_empty());
-        let mut output = place(
+        let output = place(
             layout,
             placement,
             &HoverInput {
@@ -541,12 +560,12 @@ mod tests {
         );
         assert_eq!(&*calls.borrow(), &[1, 11, 2, 12]);
         assert_eq!(output.claim, Some((None, Claim::Direct(2))));
-        let renders = output.resolve(ResolvedHover {
+        let output = output.bind(ResolvedHover {
             hovered: Some(2),
             ..Default::default()
         });
         assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22]);
-        puri::frame::render(renders, &mut puri::DrawList::new());
+        puri::frame::render(output.renders, &mut puri::DrawList::new());
         assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22, 31, 32]);
         let mut log = Vec::new();
         output
@@ -568,8 +587,8 @@ mod tests {
                 });
             });
         });
-        let mut frame = pass.finish();
-        drop(frame.resolve(Default::default()));
+        let frame = pass.finish().bind(Default::default());
+        drop(frame.renders);
         let mut count = 0;
         assert!(
             frame
@@ -604,9 +623,9 @@ mod tests {
         });
         pass.float(|pass| mark(pass, 3));
         mark(&mut pass, 0);
-        let mut output = pass.finish();
+        let output = pass.finish();
         assert_eq!(output.claim, Some((None, Claim::Direct(3))));
-        output.resolve(ResolvedHover {
+        let output = output.bind(ResolvedHover {
             hovered: Some(3),
             ..Default::default()
         });
@@ -625,7 +644,7 @@ mod tests {
             let mut pass = HoverPass::<(), u8>::new(&HoverInput {
                 pointer: Some(placement.rect.center()),
                 debug_geometry,
-                reach: 4.0,
+                reach_px: 4.0,
                 ..Default::default()
             });
             for id in [1, 2] {

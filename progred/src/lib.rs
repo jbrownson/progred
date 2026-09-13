@@ -1,6 +1,5 @@
-//! Window shell: winit + Vello plumbing around pure frame drawing.
-//! `app_view` renders to any puri `Canvas`; here its deferred ink
-//! streams into vello.
+//! Window shell: translate platform input, schedule updates, and present
+//! the editor frame through Vello or Canvas2D.
 
 mod annotations;
 mod command;
@@ -19,6 +18,7 @@ mod grap_examples;
 mod history;
 mod hover;
 mod identity;
+mod input;
 mod libraries;
 #[cfg(target_os = "macos")]
 mod macos_surface;
@@ -48,7 +48,7 @@ mod text_store;
 mod workspace;
 
 use crate::command::{AppCommand, Command, DocCommand};
-use crate::frame::{Dispatch, FrameDisposition, Hovered, Paint, frame_disposition};
+use crate::frame::{FrameState, Hovered, Paint};
 use crate::model::Model;
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
@@ -80,7 +80,6 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 use winit::application::ApplicationHandler;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::dpi::LogicalSize;
-use winit::dpi::PhysicalPosition;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 #[cfg(target_arch = "wasm32")]
@@ -283,7 +282,7 @@ pub(crate) struct App {
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
     pub(crate) drawn_menu: bool,
-    pub(crate) editors: Vec<Editor>,
+    pub(crate) editors: Vec<EditorRunner>,
     /// The window whose editor application-level commands target.
     pub(crate) focused: Option<WindowId>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -330,30 +329,28 @@ pub(crate) struct Editor {
     pub(crate) menu: menu::State,
     /// Last pointer position, for anchoring pinch zoom.
     pub(crate) cursor: Point,
-    cursor_icon: CursorIcon,
     /// The pointer position while it is inside the window. It is an
     /// input to placement's internal hover resolution.
     pub(crate) pointer: Option<Point>,
-    /// Derived from pointer input and settled geometry. Kept outside
-    /// the model for air hysteresis, pressed-gesture freezing, and the
-    /// event-to-redraw handoff.
-    pub(crate) hover: Option<Hovered>,
     /// Current platform modifier state, an ordinary frame input.
     pub(crate) modifiers: Modifiers,
     /// A button is down: gestures keep the hover they began with, so
     /// hover resolution stands down until release.
     pub(crate) pressed: bool,
-    /// The selection identity last scrolled into view — path AND
-    /// variant, since Enter keeps the path while opening a pending —
-    /// so reveal fires once per change and never fights manual
-    /// scrolling.
-    pub(crate) revealed: Option<(workspace::Root, gid::Path, selection::Stage)>,
-    /// A minted frame's event surface, retained until an event spends
-    /// it. `pending_paint` carries the same successor frame's pixels.
-    pub(crate) dispatch: Option<Dispatch>,
-    /// Paint from the successor frame already minted after an event.
-    /// The next redraw consumes it instead of minting that frame twice.
-    pub(crate) pending_paint: Option<PendingPaint>,
+    /// The continuation installed by the accepting projection handler.
+    gesture: Option<gesture::Active<Editor>>,
+    pub(crate) reducer: WindowEventReducer,
+    /// Routes the discard sheet's answer back into the loop.
+    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
+    pub(crate) pending_discard: Option<AfterDiscard>,
+}
+
+/// Per-window execution state. Widgets receive only `editor`, never this runner.
+pub(crate) struct EditorRunner {
+    pub(crate) editor: Editor,
+    pub(crate) frame: FrameState,
+    cursor_icon: CursorIcon,
     /// Consecutive scroll packets are one continuous displacement.
     /// Hold them until paint or another event establishes an ordering
     /// boundary, then dispatch their sum through the retained frame.
@@ -374,13 +371,55 @@ pub(crate) struct Editor {
     /// Handlers receive earlier samples in `PointerUpdate::coalesced`
     /// and the latest in `current`, including during a drag.
     pending_pointer: Option<PendingPointer>,
-    /// The continuation installed by the accepting projection handler.
-    gesture: Option<gesture::Active<Editor>>,
-    pub(crate) reducer: WindowEventReducer,
-    /// Routes the discard sheet's answer back into the loop.
-    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
-    pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
-    pub(crate) pending_discard: Option<AfterDiscard>,
+}
+
+impl EditorRunner {
+    fn new(editor: Editor) -> Self {
+        Self {
+            editor,
+            frame: FrameState::default(),
+            cursor_icon: CursorIcon::Default,
+            pending_scroll: None,
+            pending_pointer: None,
+        }
+    }
+
+    fn sync_cursor(&mut self, window: &Window) {
+        let next = cursor_icon(self.frame.hover.as_ref());
+        if next != self.cursor_icon {
+            window.set_cursor(next);
+            self.cursor_icon = next;
+        }
+    }
+
+    pub(crate) fn adopt_model(
+        &mut self,
+        doc: gid::Document,
+        path: Option<PathBuf>,
+        text_binders: gid_text::Binders,
+    ) {
+        let Self {
+            editor,
+            frame,
+            pending_scroll,
+            pending_pointer,
+            cursor_icon: _,
+        } = self;
+        *frame = FrameState::default();
+        *pending_scroll = None;
+        *pending_pointer = None;
+        editor.replace_document(doc, path, text_binders);
+        if let RenderState::Active { window, .. } = &editor.state {
+            let window = window.clone();
+            let size = window.inner_size();
+            self.refresh_frame(
+                window.scale_factor(),
+                Size::new(size.width as f64, size.height as f64),
+            );
+            self.sync_cursor(&window);
+            window.request_redraw();
+        }
+    }
 }
 
 /// One canonical spelling per document, so every identity — frame
@@ -435,16 +474,9 @@ fn new_editor(
         text_binders,
         menu: menu::State::default(),
         cursor: Point::ZERO,
-        cursor_icon: CursorIcon::Default,
         pointer: None,
-        hover: None,
         modifiers: Modifiers::empty(),
         pressed: false,
-        revealed: None,
-        dispatch: None,
-        pending_paint: None,
-        pending_scroll: None,
-        pending_pointer: None,
         gesture: None,
         reducer: WindowEventReducer::default(),
         proxy,
@@ -492,19 +524,6 @@ fn font_context() -> FontContext {
     }
 }
 
-/// The position carried by any pointer translation, for cursor
-/// tracking.
-fn pointer_position(event: &PointerEvent) -> Option<Point> {
-    match event {
-        PointerEvent::Down(e) | PointerEvent::Up(e) => {
-            Some(Point::new(e.state.position.x, e.state.position.y))
-        }
-        PointerEvent::Move(u) => Some(Point::new(u.current.position.x, u.current.position.y)),
-        PointerEvent::Scroll(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
-        _ => None,
-    }
-}
-
 fn translate_window_event(
     reducer: &mut WindowEventReducer,
     scale: f64,
@@ -526,12 +545,6 @@ fn translate_window_event(
     }
 }
 
-fn window_pointer(position: Point, size: Size) -> Option<Point> {
-    Rect::from_origin_size(Point::ZERO, size)
-        .contains(position)
-        .then_some(position)
-}
-
 fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
     match hover {
         Some(Hovered::Divider(workspace::Divider::Columns(_))) => CursorIcon::ColResize,
@@ -547,9 +560,9 @@ pub(crate) fn text_dialog() -> rfd::FileDialog {
 
 impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
-        for editor in &mut self.editors {
-            if editor.flush_pending_continuous()
-                && let RenderState::Active { window, .. } = &editor.state
+        for runner in &mut self.editors {
+            if runner.flush_pending_continuous()
+                && let RenderState::Active { window, .. } = &runner.editor.state
             {
                 window.request_redraw();
             }
@@ -579,7 +592,7 @@ impl ApplicationHandler<UserEvent> for App {
                 let Some(index) = self.editor_index(window) else {
                     return;
                 };
-                let pending = self.editors[index].pending_discard.take();
+                let pending = self.editors[index].editor.pending_discard.take();
                 if accepted && let Some(then) = pending {
                     self.proceed(event_loop, index, then);
                 }
@@ -597,15 +610,18 @@ impl ApplicationHandler<UserEvent> for App {
             self.resume_editor(event_loop, index);
         }
         if self.focused.is_none() {
-            self.focused = self.editors.first().and_then(Editor::window_id);
+            self.focused = self
+                .editors
+                .first()
+                .and_then(|runner| runner.editor.window_id());
         }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
-        for editor in &mut self.editors {
-            editor.flush_pending_continuous();
-            if let RenderState::Active { window, .. } = &editor.state {
-                editor.state = RenderState::Suspended(Some(window.clone()));
+        for runner in &mut self.editors {
+            runner.flush_pending_continuous();
+            if let RenderState::Active { window, .. } = &runner.editor.state {
+                runner.editor.state = RenderState::Suspended(Some(window.clone()));
             }
         }
     }
@@ -633,7 +649,7 @@ impl App {
     fn editor_index(&self, id: WindowId) -> Option<usize> {
         self.editors
             .iter()
-            .position(|editor| editor.window_id() == Some(id))
+            .position(|runner| runner.editor.window_id() == Some(id))
     }
 
     /// The editor application-level commands act on: the focused
@@ -654,7 +670,7 @@ impl App {
         path: Option<PathBuf>,
         binders: gid_text::Binders,
     ) {
-        self.editors.push(new_editor(
+        self.editors.push(EditorRunner::new(new_editor(
             self.drawn_menu,
             self.stack.clone(),
             self.fonts.clone(),
@@ -662,7 +678,7 @@ impl App {
             path,
             binders,
             Some(self.proxy.clone()),
-        ));
+        )));
         self.resume_editor(event_loop, self.editors.len() - 1);
     }
 
@@ -672,7 +688,7 @@ impl App {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn close_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
         let closed = self.editors.remove(index);
-        if closed.window_id().is_some() && closed.window_id() == self.focused {
+        if closed.editor.window_id().is_some() && closed.editor.window_id() == self.focused {
             self.focused = None;
         }
         drop(closed);
@@ -691,7 +707,7 @@ impl App {
         if self
             .editors
             .iter()
-            .all(|editor| editor.pending_discard.is_none())
+            .all(|runner| runner.editor.pending_discard.is_none())
         {
             self.quit = QuitState::Draining { awaiting: None };
             self.advance_quit(event_loop);
@@ -709,8 +725,8 @@ impl App {
                 return;
             }
             let index = self.focused_index().unwrap_or(0);
-            if self.editors[index].model.dirty() {
-                if let RenderState::Active { window, .. } = &self.editors[index].state {
+            if self.editors[index].editor.model.dirty() {
+                if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
                     window.focus_window();
                     self.quit = QuitState::Draining {
                         awaiting: Some(window.id()),
@@ -741,13 +757,13 @@ impl App {
         } = &mut *self;
         #[cfg(target_arch = "wasm32")]
         let App { editors, .. } = &mut *self;
-        let editor = &mut editors[index];
-        let RenderState::Suspended(cached_window) = &mut editor.state else {
+        let runner = &mut editors[index];
+        let RenderState::Suspended(cached_window) = &mut runner.editor.state else {
             return;
         };
 
         let window = cached_window.take().unwrap_or_else(|| {
-            let attributes = Window::default_attributes().with_title(editor.title());
+            let attributes = Window::default_attributes().with_title(runner.editor.title());
             #[cfg(not(target_arch = "wasm32"))]
             let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
             // The app id must match linux/progred.desktop for compositors
@@ -771,10 +787,10 @@ impl App {
             {
                 macos_window::place_and_autosave_frame(
                     &window,
-                    editor.doc_path.as_deref(),
+                    runner.editor.doc_path.as_deref(),
                     cascade,
                 );
-                macos_window::set_represented(&window, editor.doc_path.as_deref());
+                macos_window::set_represented(&window, runner.editor.doc_path.as_deref());
             }
             Arc::new(window)
         });
@@ -807,7 +823,7 @@ impl App {
                 .expect("Couldn't create renderer")
             });
 
-            editor.state = RenderState::Active {
+            runner.editor.state = RenderState::Active {
                 surface: Box::new(surface),
                 valid_surface: true,
                 window,
@@ -823,14 +839,21 @@ impl App {
                 .expect("Canvas2D context")
                 .dyn_into::<CanvasRenderingContext2d>()
                 .expect("CanvasRenderingContext2D");
-            editor.state = RenderState::Active {
+            runner.editor.state = RenderState::Active {
                 canvas,
                 context,
                 window,
             };
         }
 
-        if let RenderState::Active { window, .. } = &editor.state {
+        if let RenderState::Active { window, .. } = &runner.editor.state {
+            let window = window.clone();
+            let size = window.inner_size();
+            runner.refresh_frame(
+                window.scale_factor(),
+                Size::new(size.width as f64, size.height as f64),
+            );
+            runner.sync_cursor(&window);
             window.request_redraw();
         }
     }
@@ -842,25 +865,24 @@ impl App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let editor = &mut self.editors[index];
-        let window = match &editor.state {
+        let runner = &mut self.editors[index];
+        let window = match &runner.editor.state {
             RenderState::Active { window, .. } if window.id() == window_id => window.clone(),
             _ => return,
         };
         let scale = window.scale_factor();
         // Preserve motion samples without minting intermediate frames.
         // Discrete input (including release/cancel) first settles the batch.
-        if !continuous_input(&event) && editor.flush_pending_continuous() {
+        if !continuous_input(&event) && runner.flush_pending_continuous() {
             window.request_redraw();
         }
 
         if let WindowEvent::ModifiersChanged(state) = &event {
-            editor.modifiers = ui_events_winit::keyboard::from_winit_modifier_state(state.state());
             let size = window.inner_size();
-            editor.retain_dispatch(
+            runner.modifiers_changed(
+                ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
                 scale,
                 Size::new(size.width as f64, size.height as f64),
-                false,
             );
             window.request_redraw();
         }
@@ -881,172 +903,21 @@ impl App {
                 }),
                 _ => None,
             };
-            let translation = translate_window_event(&mut editor.reducer, scale, &event);
-            let previous_cursor = editor.cursor;
-            if let Some(WindowEventTranslation::Pointer(pointer)) = &translation
-                && let Some(position) = pointer_position(pointer)
-            {
-                editor.cursor = position;
-            }
-            // Touch has no preceding hover motion. Mint once at the
-            // contact point before dispatch so the ordinary activate
-            // fallback sees exactly the target a mouse click would.
-            if let Some(WindowEventTranslation::Pointer(PointerEvent::Down(button))) = &translation
-                && button.pointer.pointer_type == PointerType::Touch
-            {
-                let size = window.inner_size();
-                editor.pointer = Some(Point::new(button.state.position.x, button.state.position.y));
-                editor.retain_dispatch(
-                    scale,
-                    Size::new(size.width as f64, size.height as f64),
-                    false,
-                );
-            }
-            // Continuous input waits for an ordering boundary below.
-            // Discrete events dispatch into the retained frame's
-            // single-shot handler and immediately mints its successor
-            // when handled or when a frame input changes.
-            if let Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update))) =
-                &translation
-            {
-                let size = window.inner_size();
-                let next = PendingScroll {
-                    event: update.clone(),
-                    scale,
-                    viewport: Size::new(size.width as f64, size.height as f64),
-                };
-                if let Some(pending) = editor.queue_scroll(next) {
-                    editor.dispatch_scroll_batch(pending);
+            let translation = translate_window_event(&mut runner.editor.reducer, scale, &event);
+            let size = window.inner_size();
+            let viewport = Size::new(size.width as f64, size.height as f64);
+            let redraw = match (ime, translation) {
+                (Some(ime), _) => runner.ime_event(&ime, scale, viewport),
+                (None, Some(WindowEventTranslation::Keyboard(event))) => {
+                    runner.keyboard_event(&event, scale, viewport)
                 }
+                (None, Some(WindowEventTranslation::Pointer(event))) => {
+                    runner.pointer_event(&event, scale, viewport)
+                }
+                _ => false,
+            };
+            if redraw {
                 window.request_redraw();
-            } else if let Some(WindowEventTranslation::Pointer(PointerEvent::Move(update))) =
-                &translation
-            {
-                let size = window.inner_size();
-                let position = Point::new(update.current.position.x, update.current.position.y);
-                let next = PendingPointer {
-                    event: update.clone(),
-                    start: previous_cursor,
-                    scale,
-                    viewport: Size::new(size.width as f64, size.height as f64),
-                };
-                if let Some(pending) = editor.queue_pointer(next) {
-                    editor.dispatch_pointer_batch(&pending);
-                }
-                editor.cursor = position;
-                editor.pointer =
-                    window_pointer(position, Size::new(size.width as f64, size.height as f64));
-                editor.modifiers = update.current.modifiers;
-                window.request_redraw();
-            } else if (ime.is_some() || translation.is_some())
-                && let Some(dispatch) = editor.dispatch.take()
-            {
-                let size = window.inner_size();
-                let viewport = size.height as f64;
-                let mut frame_input_changed = false;
-                let handled = match (ime, translation) {
-                    (Some(ime), _) => dispatch.handler.dispatch_ime(editor, &ime),
-                    // An open Linux menu owns the keyboard; otherwise
-                    // its shared shortcuts are application commands.
-                    // Remaining keys reach the editor first, except
-                    // Cmd+V of STRUCTURE while a pending is open — the
-                    // query must never eat Value JSON — then fall
-                    // through to the structural commands.
-                    (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
-                        let mut input = placed::DispatchContext::new(None, None);
-                        input.descends = dispatch.descends.clone();
-                        editor.menu_key(&key_event)
-                            || editor.pending_paste_key(&key_event)
-                            || dispatch
-                                .handler
-                                .dispatch_key_with(editor, &key_event, &mut input)
-                            || editor.clipboard_key(&dispatch.descends, &key_event)
-                            || editor.delete_key(&dispatch.descends, &key_event)
-                            || editor.insert_key(&dispatch.descends, &key_event)
-                            || editor.collapse_key(&key_event)
-                            || match navigate::step_selection(
-                                &dispatch.descends,
-                                Some(
-                                    editor
-                                        .model
-                                        .selection
-                                        .as_ref()
-                                        .map(selection::Selection::root)
-                                        .unwrap_or_else(|| editor.model.workspace.document_root()),
-                                ),
-                                editor.model.selection.as_ref(),
-                                dispatch.line,
-                                &key_event,
-                            ) {
-                                Some(target) => {
-                                    let select = target.select.clone();
-                                    select(editor, navigate::direction(&key_event));
-                                    true
-                                }
-                                None => false,
-                            }
-                    }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
-                        let position = Point::new(button.state.position.x, button.state.position.y);
-                        editor.pointer =
-                            window_pointer(position, Size::new(size.width as f64, viewport));
-                        editor.pressed = true;
-                        editor.finish_gesture();
-                        frame_input_changed = true;
-                        let mut pointer = placed::DispatchContext::new(
-                            dispatch.pointer_root.clone(),
-                            editor.hover.clone(),
-                        );
-                        pointer.descends = dispatch.descends.clone();
-                        let handled = dispatch.handler.dispatch_pointer_down_with(
-                            editor,
-                            &button,
-                            &mut pointer,
-                        );
-                        handled
-                            || (puri::interact::is_primary_contact(&button)
-                                && pointer.hovered.is_none()
-                                && editor.model.selection.take().is_some())
-                    }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
-                        let position = Point::new(button.state.position.x, button.state.position.y);
-                        editor.pointer =
-                            window_pointer(position, Size::new(size.width as f64, viewport));
-                        editor.pressed = false;
-                        frame_input_changed = true;
-                        editor.finish_gesture()
-                            || dispatch.handler.dispatch_pointer_up(editor, &button)
-                    }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
-                        editor.pointer = None;
-                        frame_input_changed = true;
-                        false
-                    }
-                    (
-                        None,
-                        Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(pointer))),
-                    ) => {
-                        editor.pointer = None;
-                        editor.pressed = false;
-                        frame_input_changed = true;
-                        let handled = dispatch.handler.dispatch_pointer_cancel(editor, &pointer);
-                        let resize_cancelled = editor.model.workspace.cancel_resize();
-                        let gesture_cancelled = editor.finish_gesture();
-                        handled || resize_cancelled || gesture_cancelled
-                    }
-                    _ => false,
-                };
-                match frame_disposition(handled, frame_input_changed) {
-                    FrameDisposition::Retain => editor.dispatch = Some(dispatch),
-                    FrameDisposition::Remint { reveal_selection } => {
-                        editor.retain_dispatch(
-                            scale,
-                            Size::new(size.width as f64, viewport),
-                            reveal_selection,
-                        );
-                        window.request_redraw();
-                    }
-                }
             }
         }
 
@@ -1065,7 +936,7 @@ impl App {
                     surface,
                     valid_surface,
                     ..
-                } = &mut self.editors[index].state
+                } = &mut self.editors[index].editor.state
                 {
                     if valid {
                         self.context
@@ -1089,19 +960,9 @@ impl App {
             // say where the pointer now sits). The honest state is
             // unknown until the next move.
             WindowEvent::Moved(_) => {
-                let editor = &mut self.editors[index];
-                let changed = editor.pointer.take().is_some() || editor.hover.is_some();
-                let window = match &editor.state {
-                    RenderState::Active { window, .. } => Some(window.clone()),
-                    _ => None,
-                };
-                if changed && let Some(window) = window {
-                    let size = window.inner_size();
-                    editor.retain_dispatch(
-                        window.scale_factor(),
-                        Size::new(size.width as f64, size.height as f64),
-                        false,
-                    );
+                let runner = &mut self.editors[index];
+                let size = window.inner_size();
+                if runner.window_moved(scale, Size::new(size.width as f64, size.height as f64)) {
                     window.request_redraw();
                 }
             }
@@ -1174,7 +1035,7 @@ pub fn run() {
         quit: QuitState::Idle,
         #[cfg(target_os = "macos")]
         cascade: macos_window::initial_cascade(),
-        editors: vec![new_editor(
+        editors: vec![EditorRunner::new(new_editor(
             drawn_menu,
             stack,
             fonts,
@@ -1182,7 +1043,7 @@ pub fn run() {
             doc_path,
             binders,
             Some(proxy),
-        )],
+        ))],
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1211,44 +1072,6 @@ impl Editor {
         }
     }
 
-    fn queue_scroll(&mut self, next: PendingScroll) -> Option<PendingScroll> {
-        match self.pending_scroll.take() {
-            None => {
-                self.pending_scroll = Some(next);
-                None
-            }
-            Some(mut pending) => match pending.merge(next) {
-                Ok(()) => {
-                    self.pending_scroll = Some(pending);
-                    None
-                }
-                Err(next) => {
-                    self.pending_scroll = Some(next);
-                    Some(pending)
-                }
-            },
-        }
-    }
-
-    fn queue_pointer(&mut self, next: PendingPointer) -> Option<PendingPointer> {
-        match self.pending_pointer.take() {
-            None => {
-                self.pending_pointer = Some(next);
-                None
-            }
-            Some(mut pending) => match pending.merge(next) {
-                Ok(()) => {
-                    self.pending_pointer = Some(pending);
-                    None
-                }
-                Err(next) => {
-                    self.pending_pointer = Some(next);
-                    Some(pending)
-                }
-            },
-        }
-    }
-
     fn advance_gesture(&mut self, samples: &[Point]) -> bool {
         if let Some(mut gesture) = self.gesture.take() {
             let changed = gesture.advance(self, samples);
@@ -1269,96 +1092,6 @@ impl Editor {
         } else {
             false
         }
-    }
-
-    fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
-        let initialized = self.dispatch.is_none();
-        if initialized {
-            self.retain_dispatch(pending.scale, pending.viewport, false);
-        }
-        match self.dispatch.take() {
-            Some(dispatch) => {
-                let outcome = dispatch.handler.dispatch_scroll(self, &pending.event);
-                if outcome.handled() {
-                    self.retain_dispatch(pending.scale, pending.viewport, true);
-                    true
-                } else {
-                    self.dispatch = Some(dispatch);
-                    initialized
-                }
-            }
-            None => false,
-        }
-    }
-
-    fn flush_pending_scroll(&mut self) -> bool {
-        match self.pending_scroll.take() {
-            Some(pending) => self.dispatch_scroll_batch(pending),
-            None => false,
-        }
-    }
-
-    fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
-        self.cursor = Point::new(
-            pending.event.current.position.x,
-            pending.event.current.position.y,
-        );
-        self.pointer = window_pointer(self.cursor, pending.viewport);
-        self.modifiers = pending.event.current.modifiers;
-        if self.dispatch.is_none() {
-            self.retain_dispatch(pending.scale, pending.viewport, false);
-        }
-        let Some(dispatch) = self.dispatch.take() else {
-            return false;
-        };
-        let event = &pending.event;
-        let samples: Vec<_> = puri::interact::pointer_samples(event)
-            .map(|sample| Point::new(sample.position.x, sample.position.y))
-            .collect();
-        let moved =
-            self.advance_gesture(&samples) || dispatch.handler.dispatch_pointer_move(self, event);
-        // Unclaimed touch motion scrolls through the same nested handlers.
-        let handled = moved
-            || (event.pointer.pointer_type == PointerType::Touch
-                && dispatch
-                    .handler
-                    .dispatch_scroll(
-                        self,
-                        &PointerScrollEvent {
-                            pointer: event.pointer,
-                            delta: ScrollDelta::PixelDelta(PhysicalPosition::new(
-                                event.current.position.x - pending.start.x,
-                                event.current.position.y - pending.start.y,
-                            )),
-                            state: event.current.clone(),
-                        },
-                    )
-                    .handled());
-        if handled {
-            self.retain_dispatch(pending.scale, pending.viewport, true);
-            true
-        } else {
-            self.dispatch = Some(dispatch);
-            false
-        }
-    }
-
-    /// Settle continuous inputs into the frame state. Scroll runs
-    /// before the latest pointer sample: scrolling moves content, then
-    /// pointer motion observes its final position. If neither handler
-    /// spends the frame, pointer movement still requires one remint so
-    /// hover sees the new frame input.
-    fn flush_pending_continuous(&mut self) -> bool {
-        let pointer = self.pending_pointer.take();
-        let mut reminted = self.flush_pending_scroll();
-        if let Some(pointer) = pointer {
-            reminted |= self.dispatch_pointer_batch(&pointer);
-            if !reminted {
-                self.retain_dispatch(pointer.scale, pointer.viewport, false);
-                reminted = true;
-            }
-        }
-        reminted
     }
 
     /// The current document read over the app's library.
@@ -1400,14 +1133,6 @@ impl Editor {
                 window.set_document_edited(self.model.dirty());
                 macos_window::set_represented(&window, self.doc_path.as_deref());
             }
-        }
-    }
-
-    fn sync_cursor(&mut self, window: &Window) {
-        let next = cursor_icon(self.hover.as_ref());
-        if next != self.cursor_icon {
-            window.set_cursor(next);
-            self.cursor_icon = next;
         }
     }
 
@@ -1652,8 +1377,8 @@ impl Editor {
 
     /// Replace document-owned state, retaining the window and its platform
     /// resources. In particular, the input reducer still knows the physical
-    /// pointer position and held modifiers; old gestures and handlers do not survive.
-    pub(crate) fn adopt_model(
+    /// pointer position and held modifiers; old gestures do not survive.
+    fn replace_document(
         &mut self,
         doc: gid::Document,
         path: Option<PathBuf>,
@@ -1676,16 +1401,9 @@ impl Editor {
             text_binders: binders,
             menu,
             cursor: _,
-            cursor_icon: _,
             pointer: _,
-            hover,
             modifiers: _,
             pressed,
-            revealed,
-            dispatch,
-            pending_paint,
-            pending_scroll,
-            pending_pointer,
             gesture: _,
             reducer: _,
             proxy: _,
@@ -1693,14 +1411,8 @@ impl Editor {
         } = self;
         #[cfg(target_os = "macos")]
         let changed_path = *doc_path != path;
-        *dispatch = None;
-        *pending_paint = None;
-        *pending_scroll = None;
-        *pending_pointer = None;
         *pending_discard = None;
         *pressed = false;
-        *hover = None;
-        *revealed = None;
         *menu = menu::State::default();
         *binders = text_binders;
         *doc_path = path;
@@ -1714,17 +1426,6 @@ impl Editor {
                 Some(path) => macos_window::rename_document_frame(&window, path),
                 None => macos_window::clear_document_frame(&window),
             }
-        }
-        if let RenderState::Active { window, .. } = &self.state {
-            let window = window.clone();
-            let size = window.inner_size();
-            self.retain_dispatch(
-                window.scale_factor(),
-                Size::new(size.width as f64, size.height as f64),
-                false,
-            );
-            self.sync_cursor(&window);
-            window.request_redraw();
         }
     }
 
@@ -1753,7 +1454,7 @@ impl App {
     pub(crate) fn sync_menus(&self, index: usize) {
         #[cfg(target_os = "macos")]
         {
-            let editor = &self.editors[index];
+            let editor = &self.editors[index].editor;
             self.native_menu
                 .sync(Some((editor.menu_availability(), editor.menu_toggles())));
         }
@@ -1770,19 +1471,20 @@ impl App {
             Command::App(command) => self.run_app_command(event_loop, command),
             Command::Doc(command) => {
                 if let Some(index) = self.focused_index() {
-                    let editor = &mut self.editors[index];
-                    editor.run_doc_command(command);
-                    // The native path's frame scheduling, mirroring
-                    // the drawn dispatch's handled-event remint.
-                    if let RenderState::Active { window, .. } = &editor.state {
-                        let window = window.clone();
+                    let runner = &mut self.editors[index];
+                    if let Some(window) = runner.editor.window() {
                         let size = window.inner_size();
-                        editor.retain_dispatch(
+                        runner.update_frame(
                             window.scale_factor(),
                             Size::new(size.width as f64, size.height as f64),
-                            true,
+                            |editor, _, _| {
+                                editor.run_doc_command(command);
+                                frame::FrameDisposition::Remint
+                            },
                         );
                         window.request_redraw();
+                    } else {
+                        runner.editor.run_doc_command(command);
                     }
                 }
             }
@@ -1880,10 +1582,10 @@ impl App {
         index: usize,
         then: AfterDiscard,
     ) {
-        if self.editors[index].pending_discard.is_some() {
+        if self.editors[index].editor.pending_discard.is_some() {
             return;
         }
-        if !self.editors[index].model.dirty() {
+        if !self.editors[index].editor.model.dirty() {
             self.proceed(event_loop, index, then);
             return;
         }
@@ -1899,7 +1601,7 @@ impl App {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
-            let editor = &mut self.editors[index];
+            let editor = &mut self.editors[index].editor;
             let RenderState::Active { window, .. } = &editor.state else {
                 return;
             };
@@ -1969,12 +1671,12 @@ impl App {
             renderers,
             ..
         } = &mut *self;
-        let editor = &mut editors[index];
+        let runner = &mut editors[index];
         let RenderState::Active {
             surface,
             valid_surface: true,
             window,
-        } = &editor.state
+        } = &runner.editor.state
         else {
             return;
         };
@@ -1984,18 +1686,16 @@ impl App {
         let height = surface.config.height;
 
         let viewport = Size::new(width as f64, height as f64);
-        editor.scene.reset();
-        let PendingPaint { renders, .. } = editor.prepare_paint(scale, viewport);
-        editor.sync_cursor(&window);
+        runner.editor.scene.reset();
+        let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
+        runner.sync_cursor(&window);
         let mut paint = Paint {
-            scene: std::mem::replace(&mut editor.scene, Scene::new()),
+            scene: std::mem::replace(&mut runner.editor.scene, Scene::new()),
         };
-        for render in renders {
-            render(&mut paint);
-        }
-        editor.scene = paint.scene;
+        puri::frame::render(renders, &mut paint);
+        runner.editor.scene = paint.scene;
 
-        let RenderState::Active { surface, .. } = &mut editor.state else {
+        let RenderState::Active { surface, .. } = &mut runner.editor.state else {
             return;
         };
         let device_handle = &context.devices[surface.dev_id];
@@ -2006,7 +1706,7 @@ impl App {
             .render_to_texture(
                 &device_handle.device,
                 &device_handle.queue,
-                &editor.scene,
+                &runner.editor.scene,
                 &surface.target_view,
                 &vello::RenderParams {
                     base_color: Color::new([0.965, 0.965, 0.972, 1.0]),
@@ -2052,6 +1752,9 @@ impl App {
         surface_texture.present();
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
+        if runner.frame_presented() {
+            window.request_redraw();
+        }
     }
 
     /// The browser runs the same deferred frame ink directly into
@@ -2062,12 +1765,12 @@ impl App {
         if self.focused_index() == Some(index) {
             self.sync_menus(index);
         }
-        let editor = &mut self.editors[index];
+        let runner = &mut self.editors[index];
         let RenderState::Active {
             canvas,
             context,
             window,
-        } = &editor.state
+        } = &runner.editor.state
         else {
             return;
         };
@@ -2089,8 +1792,8 @@ impl App {
         }
 
         let viewport = Size::new(width as f64, height as f64);
-        let PendingPaint { renders, .. } = editor.prepare_paint(scale, viewport);
-        editor.sync_cursor(&window);
+        let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
+        runner.sync_cursor(&window);
         let mut paint = Paint {
             canvas: puri_web::WebCanvas(context),
         };
@@ -2099,8 +1802,9 @@ impl App {
             height.into(),
             Color::new([0.965, 0.965, 0.972, 1.0]),
         );
-        for render in renders {
-            render(&mut paint);
+        puri::frame::render(renders, &mut paint);
+        if runner.frame_presented() {
+            window.request_redraw();
         }
     }
 }
@@ -2108,6 +1812,7 @@ impl App {
 #[cfg(test)]
 mod shell_tests {
     use super::*;
+    use crate::input::{pointer_position, window_pointer};
     use ui_events::pointer::{PointerId, PointerInfo, PointerState, PointerType};
     use winit::dpi::PhysicalPosition;
     use winit::event::{DeviceId, ElementState, MouseButton};

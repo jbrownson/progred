@@ -11,7 +11,7 @@ mod tests;
 pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
-use crate::display::widget::style::{face_style, highlight_outline};
+use crate::display::widget::style::{face_style, highlight_outline, hover_highlight};
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 #[cfg(test)]
@@ -478,15 +478,6 @@ fn hover_block(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placem
     p.occlude(placement);
 }
 
-/// The pointer's preview of a click's meaning, washed faint.
-fn hover_highlight<P: Canvas + ?Sized>(p: &mut P, outline: RoundedRect) {
-    p.fill(
-        outline,
-        crate::display::widget::style::hover_wash(),
-        Affine::IDENTITY,
-    );
-}
-
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
@@ -647,7 +638,7 @@ fn descend_landmark_with(
                     Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
                 )
             {
-                hover_highlight(cv, outline);
+                hover_highlight(scale, cv, outline);
             } else if secondary
                 .as_ref()
                 .is_some_and(|(secondary, _)| hover.hovered_secondary.as_ref() == Some(secondary))
@@ -727,18 +718,19 @@ fn secondary_highlight<P: Canvas + ?Sized>(
     outline: RoundedRect,
     strong: bool,
 ) {
-    let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
     p.fill(
         outline,
-        Color::new([0.0, 0.48, 1.0, fill]),
+        Color::new([0.0, 0.48, 1.0, if strong { 0.10 } else { 0.05 }]),
         Affine::IDENTITY,
     );
-    p.stroke(
-        outline,
-        Stroke::new(1.5 * scale),
-        Color::new([0.0, 0.48, 1.0, line]),
-        Affine::IDENTITY,
-    );
+    if strong {
+        p.stroke(
+            outline,
+            Stroke::new(1.5 * scale),
+            Color::new([0.0, 0.48, 1.0, 0.55]),
+            Affine::IDENTITY,
+        );
+    }
 }
 
 /// Starts the ordinary projection at a value with no document source.

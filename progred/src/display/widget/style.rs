@@ -1,10 +1,11 @@
-//! Named faces the walk picks from. The editor fills them in.
+//! Editor faces and highlight styling.
 
 use peniko::{Brush, Color};
+use puri::draw::Canvas;
 use puri::edit::{EditStyle, LineEditPresentation};
 use puri::text::GenericFamily;
 use puri::text::TextStyle;
-use puri::{Rect, RoundedRect};
+use puri::{Affine, Rect, RoundedRect, Stroke};
 
 pub fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
@@ -12,6 +13,16 @@ pub fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
 
 pub fn hover_wash() -> Color {
     Color::new([0.0, 0.48, 1.0, 0.08])
+}
+
+pub fn hover_highlight<P: Canvas + ?Sized>(scale: f64, canvas: &mut P, outline: RoundedRect) {
+    canvas.fill(outline, hover_wash(), Affine::IDENTITY);
+    canvas.stroke(
+        outline,
+        Stroke::new(1.5 * scale),
+        Color::new([0.0, 0.48, 1.0, 0.55]),
+        Affine::IDENTITY,
+    );
 }
 
 pub struct Styles {

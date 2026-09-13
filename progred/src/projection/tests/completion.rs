@@ -695,7 +695,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             selected.payload(),
             make_projected_selection(&document, &libraries, path.clone()).payload()
         );
-        let mut frame = editing_frame(&mut world, false);
+        let frame = editing_frame(&mut world, false);
         assert!(
             world.model.selection.as_ref().unwrap().edit().is_none(),
             "projection is pure"

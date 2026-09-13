@@ -129,7 +129,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     );
     world.model.selection = Some(make_selection(vec![]));
     for (marker, typed, expected) in [(first, "b", "ab"), (second, "c", "abc")] {
-        let mut frame = editing_frame_with_projection(&mut world, false, Some(&projection(marker)));
+        let frame = editing_frame_with_projection(&mut world, false, Some(&projection(marker)));
         assert!(frame.resolve_for_dispatch().dispatch_key(
             &mut world,
             &KeyboardEvent {
@@ -186,7 +186,7 @@ fn caret_motion_does_not_run_a_line_conversion() {
     );
     world.model.selection = Some(make_selection(vec![]));
     let original = world.model.doc.clone();
-    let mut frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert!(
         frame
             .resolve_for_dispatch()
@@ -194,7 +194,7 @@ fn caret_motion_does_not_run_a_line_conversion() {
     );
     assert_eq!(calls.get(), 0);
     assert!(Rc::ptr_eq(&world.model.doc, &original));
-    let mut frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert!(
         frame
             .resolve_for_dispatch()
@@ -321,7 +321,7 @@ fn a_plain_selection_accepts_first_input_using_the_line_default() {
         };
         let mut world = editing_world(&doc, &libraries);
         world.model.selection = Some(make_selection(vec![]));
-        let mut frame = editing_frame(&mut world, false);
+        let frame = editing_frame(&mut world, false);
         assert!(world.model.selection.as_ref().unwrap().edit().is_none());
         assert!(frame.resolve_for_dispatch().dispatch_key(
             &mut world,
@@ -359,7 +359,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
         let mut world = editing_world(&doc, &libraries);
         world.model.selection = Some(make_selection(vec![]));
         world.text_clipboard.text = Some(" world".into());
-        let mut frame = editing_frame(&mut world, false);
+        let frame = editing_frame(&mut world, false);
         let handler = frame.resolve_for_dispatch();
         assert!(if ime {
             handler.dispatch_ime(
@@ -411,7 +411,7 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
             (selection_payload::vocabulary::FOCUS, f64::value(1.0)),
         ]),
     ));
-    let mut frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world, false);
     assert!(world.model.selection.as_ref().unwrap().edit().is_none());
     assert!(frame.resolve_for_dispatch().dispatch_key(
         &mut world,
@@ -1466,7 +1466,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
                 payload.clone(),
             ));
             let original = world.model.doc.clone();
-            let mut frame = editing_frame(&mut world, false);
+            let frame = editing_frame(&mut world, false);
             assert!(frame.completion.is_some());
             let selected = world.model.selection.as_ref().unwrap();
             assert!(selected.edit().is_none());
@@ -1514,7 +1514,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
         Step::Key(name::vocabulary::NAME),
     ];
     let mut world = editing_world(&doc, &lib);
-    let mut idle = editing_frame(&mut world, false);
+    let idle = editing_frame(&mut world, false);
     let original = world.model.doc.clone();
     let marker = idle
         .descends
@@ -1580,20 +1580,17 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
         world.model.selection.as_mut().unwrap()
     ));
     assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
-    let mut frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world, false);
     assert!(frame.completion.is_some());
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &arrow(NamedKey::End))
-    );
+    let handler = frame.resolve_for_dispatch();
+    assert!(handler.dispatch_key(&mut world, &arrow(NamedKey::End)));
     assert!(!write_text(
         &mut world.model.doc,
         &lib,
         world.model.selection.as_mut().unwrap()
     ));
     assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
-    assert!(frame.resolve_for_dispatch().dispatch_key(
+    assert!(handler.dispatch_key(
         &mut world,
         &KeyboardEvent {
             key: Key::Character("\"tree\"".into()),

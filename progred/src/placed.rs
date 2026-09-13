@@ -20,8 +20,8 @@ use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use uig::Placement;
 
 pub type HoverPass<C> = crate::display::widget::HoverPass<C, Hovered>;
+#[cfg(test)]
 pub type HoverOutput<C> = crate::display::widget::HoverOutput<C, Hovered>;
-pub use crate::display::widget::frame::place;
 pub use crate::display::widget::{HoverContext, HoverInput};
 pub type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
 pub type ResolvedHover = crate::display::widget::frame::ResolvedHover<Hovered>;
@@ -471,10 +471,12 @@ mod tests {
                             std::rc::Rc::from([])
                         ))))
                     );
-                    let outlines = [inert, interactive].map(|mut placed| {
+                    let outlines = [inert, interactive].map(|placed| {
+                        let claimed = placed.claim.is_some();
+                        let placed = placed.bind(no_ink());
                         let mut canvas = TestCanvas(DrawList::new());
-                        puri::frame::render(placed.resolve(no_ink()), &mut canvas);
-                        assert_eq!(placed.handler.is_some(), placed.claim.is_some());
+                        puri::frame::render(placed.renders, &mut canvas);
+                        assert_eq!(placed.handler.is_some(), claimed);
                         let [
                             DrawCmd::Fill {
                                 shape: Shape::Path(path),
@@ -509,13 +511,13 @@ mod tests {
         let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
         let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
         let point = Point::new(rect.x1 + 1.0, rect.center().y);
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             measured,
             Placement::new(rect, bounds),
             &HoverInput {
                 pointer: Some(point),
                 prior: Some(&target),
-                reach: 3.0,
+                reach_px: 3.0,
                 debug_geometry: false,
             },
         );
@@ -523,7 +525,7 @@ mod tests {
             placed.claim.clone().map(|(_, claim)| claim),
             Some(Claim::Extended(_))
         ));
-        placed.resolve(Default::default());
+        let placed = placed.bind(Default::default());
         for (root, hovered, picking, expected) in [
             (
                 Some(owner.clone()),
@@ -573,13 +575,14 @@ mod tests {
     fn clipped_native_delimiters_add_no_ink_hover_or_actions() {
         let measured = native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Close);
         let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             measured,
             Placement::new(rect, Rect::ZERO),
             &Default::default(),
         );
-        assert!(placed.resolve(Default::default()).is_empty());
         assert!(placed.claim.is_none());
+        let placed = placed.bind(Default::default());
+        assert!(placed.renders.is_empty());
         assert!(placed.handler.is_none());
     }
 
@@ -657,12 +660,12 @@ mod tests {
                 false
             });
         });
-        let mut placed = {
+        let placed = {
             let layout = measured::layers(vec![lower, upper]);
             let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
             crate::display::widget::frame::place(layout, placement, &Default::default())
         };
-        placed.resolve(Default::default());
+        let placed = placed.bind(Default::default());
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
 
@@ -699,7 +702,7 @@ mod tests {
         assert_eq!(popup.extent.width, 10.0);
         assert_eq!(popup.extent.height(), 10.0);
 
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             popup,
             Placement::new(
                 Rect::new(5.0, 5.0, 15.0, 15.0),
@@ -709,7 +712,7 @@ mod tests {
         );
 
         let mut canvas = TestCanvas(DrawList::new());
-        puri::frame::render(placed.resolve(no_ink()), &mut canvas);
+        puri::frame::render(placed.bind(no_ink()).renders, &mut canvas);
         assert!(matches!(
             &canvas.0.0[..],
             [
@@ -739,7 +742,7 @@ mod tests {
             },
         );
         let rect = Rect::new(3.0, 5.0, 15.0, 15.0);
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             child,
             Placement::root(rect),
             &HoverInput {
@@ -748,7 +751,7 @@ mod tests {
             },
         );
         let mut canvas = TestCanvas(DrawList::new());
-        puri::frame::render(placed.resolve(Default::default()), &mut canvas);
+        puri::frame::render(placed.bind(Default::default()).renders, &mut canvas);
 
         assert!(matches!(
             &canvas.0.0[..],
@@ -782,7 +785,7 @@ mod tests {
                 p.handler().on_pointer_move(|_, _| true);
             },
         );
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             child,
             Placement::new(
                 Rect::new(20.0, 20.0, 30.0, 30.0),
@@ -792,7 +795,8 @@ mod tests {
         );
 
         assert!(placed.claim.is_none());
-        assert!(placed.resolve(Default::default()).is_empty());
+        let placed = placed.bind(Default::default());
+        assert!(placed.renders.is_empty());
         assert!(placed.handler.is_some());
     }
 
@@ -818,7 +822,7 @@ mod tests {
                 );
             },
         );
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             scrolled_at(probe, Vec2::new(5.0, 40.0), None, |_, event| {
                 ScrollOutcome::pass(event)
             }),
@@ -829,7 +833,7 @@ mod tests {
             &Default::default(),
         );
         let mut canvas = TestCanvas(DrawList::new());
-        puri::frame::render(placed.resolve(no_ink()), &mut canvas);
+        puri::frame::render(placed.bind(no_ink()).renders, &mut canvas);
         let [
             DrawCmd::Clip {
                 shape: Shape::Rect(clip),
@@ -876,7 +880,7 @@ mod tests {
                 });
             },
         );
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             scrolled_at(
                 child,
                 Vec2::ZERO,
@@ -889,7 +893,7 @@ mod tests {
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
             &Default::default(),
         );
-        placed.resolve(Default::default());
+        let placed = placed.bind(Default::default());
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
         assert!(!handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
@@ -933,9 +937,9 @@ mod tests {
             true
         });
         p.occlude(Placement::new(full.rect, Rect::new(10.0, 10.0, 20.0, 20.0)));
-        let mut placed = frame;
-        placed.resolve(Default::default());
-        let handler = placed.handler.take().unwrap();
+        let placed = frame;
+        let placed = placed.bind(Default::default());
+        let handler = placed.handler.unwrap();
         let mut log = Vec::new();
         for button in [PointerButton::Primary, PointerButton::Secondary] {
             let mut event = down_at(15.0, 15.0);
@@ -1000,12 +1004,12 @@ mod tests {
             Placement::new(popup_rect, bounds),
             &mut pass,
         );
-        let mut placed = pass.finish();
-        placed.resolve(Default::default());
+        let placed = pass.finish();
         let point = popup_rect.center();
         let (root, Claim::Direct(hit)) = placed.claim.clone().unwrap() else {
             panic!("popup hover")
         };
+        let placed = placed.bind(Default::default());
         assert!(root.as_ref() == Some(&owner));
         for modifiers in [
             ui_events::keyboard::Modifiers::empty(),
@@ -1089,8 +1093,9 @@ mod tests {
             Placement::root(bounds),
             &mut pass,
         );
-        let mut output = pass.finish();
-        output.resolve(Default::default());
+        let output = pass.finish();
+        let (root, claim) = output.claim.clone().unwrap();
+        let output = output.bind(Default::default());
         let [landmark] = output.descends.as_slice() else {
             panic!("native popup must contribute exactly one landmark");
         };
@@ -1106,7 +1111,6 @@ mod tests {
             Some(crate::navigate::Direction::Left)
         ));
         assert_eq!(count, 10);
-        let (root, claim) = output.claim.clone().unwrap();
         assert_eq!(root, Some(owner.clone()));
         assert_eq!(claim, Claim::Direct(expected.clone()));
         let handler = output.handler.unwrap();
@@ -1137,7 +1141,7 @@ mod tests {
                 });
             },
         );
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             scrolled_at(child, Vec2::ZERO, None, |_, event| {
                 ScrollOutcome::pass(event)
             }),
@@ -1145,7 +1149,7 @@ mod tests {
             &Default::default(),
         );
         let mut pointer = DispatchContext::new(None, Some(target));
-        placed.resolve(Default::default());
+        let placed = placed.bind(Default::default());
         let handler = placed.handler.unwrap();
         let mut count = 0;
         assert!(!handler.dispatch_pointer_down_with(&mut count, &down_at(20.0, 5.0), &mut pointer));

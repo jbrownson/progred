@@ -104,6 +104,10 @@ pub enum Event<'a> {
     Scroll(Cow<'a, PointerScrollEvent>),
     Key(&'a KeyboardEvent),
     Ime(&'a ImeEvent),
+    ModifiersChanged(&'a Modifiers),
+    /// The caller settled a different hover target. Its dispatch input
+    /// supplies the current target; Puri owns neither identity nor scheduling.
+    HoverChanged,
 }
 
 impl<'a> EventOutcome<'a> {
@@ -546,6 +550,40 @@ mod tests {
         assert!(handler.dispatch_pointer_down(&mut log, &down_at(1.0, 1.0)));
         assert!(handler.dispatch_key(&mut log, &KeyboardEvent::default()));
         assert_eq!(log, vec!["pointer", "key"]);
+    }
+
+    #[test]
+    fn hover_and_modifier_notifications_use_the_ordinary_handler_chain() {
+        let mut handler: Handler<Vec<&'static str>, usize> = Handler::new();
+        handler.on(|log, event, input| {
+            assert_eq!(*input, 7);
+            match event {
+                Event::HoverChanged => log.push("hover"),
+                Event::ModifiersChanged(modifiers) => {
+                    assert!(modifiers.shift());
+                    log.push("modifiers");
+                }
+                _ => return EventOutcome::decline(event),
+            }
+            EventOutcome::accept()
+        });
+        handler.on_key(|_, _| panic!("not a key event"));
+        handler.on(|log, event, _| {
+            log.push("above");
+            EventOutcome::decline(event)
+        });
+        let mut log = Vec::new();
+        assert!(
+            handler
+                .dispatch(&mut log, Event::HoverChanged, &mut 7)
+                .handled()
+        );
+        assert!(
+            handler
+                .dispatch(&mut log, Event::ModifiersChanged(&Modifiers::SHIFT), &mut 7)
+                .handled()
+        );
+        assert_eq!(log, ["above", "hover", "above", "modifiers"]);
     }
 
     #[test]

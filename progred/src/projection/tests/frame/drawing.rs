@@ -385,7 +385,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let selected = Rc::new(std::cell::RefCell::new(Vec::new()));
         let picked = selected.clone();
         assert_eq!(calls.get(), expected - 1);
-        let mut placed = crate::display::widget::frame::place(
+        let placed = crate::display::widget::frame::place(
             drawing_frame(&doc, &libraries, shape_function),
             Placement::root(bounds),
             &placed::HoverInput {
@@ -393,7 +393,6 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                 ..Default::default()
             },
         );
-        placed.resolve(Default::default());
         for _ in 0..2 {
             assert!(matches!(
                 placed.claim.clone().map(|(_, claim)| claim),
@@ -432,13 +431,14 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             },
             state,
         };
-        assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
+        let frame = placed.bind(Default::default());
+        assert!(frame.handler.unwrap().dispatch_pointer_down_with(
             &mut crate::test_editor(doc.clone()),
             &event,
             &mut pointer,
         ));
         assert_eq!(selected.borrow().len(), 1);
-        settle(placed);
+        puri::frame::render(frame.renders, &mut DrawList::new());
         assert_eq!(calls.get(), expected);
     }
     let clipped = crate::display::widget::frame::place(
@@ -512,4 +512,89 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
             .collect();
         assert_eq!(widths, expected);
     }
+}
+
+#[test]
+fn drawing_source_reveal_is_an_ordinary_hover_and_modifier_handler() {
+    use puri::handler::Event;
+    use ui_events::keyboard::Modifiers;
+
+    let mut editor = crate::test_editor(Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let source_view = editor.model.workspace.document_root().clone();
+    let drawing_view = crate::workspace::Root::document();
+    let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
+    let output = crate::display::widget::frame::place(
+        placed::in_view(
+            drawing_frame(&editor.model.doc, &editor.stack.libraries, new_cell_id()),
+            drawing_view.clone(),
+        ),
+        Placement::root(bounds),
+        &Default::default(),
+    )
+    .bind(Default::default());
+    let handler = output.handler.unwrap();
+    let path: Rc<[Step]> = Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]);
+    let mut input = placed::DispatchContext::new(
+        Some(drawing_view),
+        Some(Hovered::Tree(Hover::Drawing(SourceTrace::Stored(
+            path.clone(),
+        )))),
+    );
+    input.descends = Rc::from([crate::navigate::Descend {
+        root: Some(source_view.clone()),
+        path,
+        rect: Rect::new(0.0, 500.0, 20.0, 530.0),
+        select: Rc::new(|_, _| false),
+    }]);
+    input.view_regions = Rc::from([placed::ViewRegion {
+        root: source_view.clone(),
+        rect: Rect::new(0.0, 0.0, 200.0, 100.0),
+        maximum: kurbo::Vec2::new(0.0, 1_000.0),
+    }]);
+    editor.pointer = Some(Point::new(5.0, 5.0));
+    assert!(
+        !handler
+            .dispatch(&mut editor, Event::HoverChanged, &mut input)
+            .handled()
+    );
+    assert_eq!(
+        editor.model.workspace.view(&source_view).unwrap().scroll.y,
+        0.0
+    );
+
+    let modifiers = Modifiers::META | Modifiers::CONTROL;
+    editor.modifiers = modifiers;
+    for event in [Event::HoverChanged, Event::ModifiersChanged(&modifiers)] {
+        editor
+            .model
+            .workspace
+            .view_mut(&source_view)
+            .unwrap()
+            .scroll = kurbo::Vec2::ZERO;
+        assert!(handler.dispatch(&mut editor, event, &mut input).handled());
+        assert_eq!(
+            editor.model.workspace.view(&source_view).unwrap().scroll.y,
+            442.0
+        );
+        assert!(editor.model.selection.is_none());
+    }
+    editor
+        .model
+        .workspace
+        .view_mut(&source_view)
+        .unwrap()
+        .scroll = kurbo::Vec2::ZERO;
+    input.root = Some(source_view.clone());
+    assert!(
+        !handler
+            .dispatch(&mut editor, Event::HoverChanged, &mut input)
+            .handled()
+    );
+    assert_eq!(
+        editor.model.workspace.view(&source_view).unwrap().scroll.y,
+        0.0
+    );
 }

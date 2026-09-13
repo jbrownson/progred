@@ -27,7 +27,35 @@ Its Roclay bridge inserts widgets as leaves and wraps them with `around`.
 We retain Progred's baseline box algebra and ordered alternatives, not Clay,
 and preserve its separate settled-geometry hover stage.
 
-## Frame construction
+## Event and frame cycle
+
+[`input.rs`](../progred/src/input.rs) interprets the existing keyboard, pointer,
+and IME events. Its `update_frame` calls run the installed frame's handler before
+building its successor. The shell translates platform input and schedules painting;
+it no longer contains the text/structural keyboard chain or pointer selection rules.
+`update_frame` takes an ordinary event-interpreting function, not another event
+encoding or an action queue. Dispatch is always present: its default is an empty
+handler and navigation data. Window setup builds the initial frame once the window
+size is known. Document replacement clears old dispatch to that no-op and builds
+the successor immediately when a window is active. Event handling has no frame
+initialization branch. Unhandled events with unchanged frame inputs retain the
+installed frame.
+
+Each window owns an `EditorRunner`: mutable `Editor` state beside `FrameState`
+(dispatch, settled hover, and optional pending painting). The runner also owns
+queued continuous input. Widget handlers still receive only `&mut Editor`;
+the saved handler is never part of the state passed back to itself. `update_frame`
+borrows the editor mutably and the previous dispatch/hover immutably, then installs
+the successor after dispatch returns. There is no temporary no-op substitution,
+handler clone, or restore step. The no-op is only the initial/reset frame.
+
+Document replacement has the same separation: the editor finalizes gestures and
+replaces document-owned state; the runner clears old frame outputs and queued
+input, then prepares the successor. No replacement flag or snapshot comparison
+is needed to discover that the frame was invalidated.
+
+The successor is built by `refresh_frame` in
+[`frame.rs`](../progred/src/frame.rs):
 
 1. Partials produce `Layout<World, Hover>` programs, above the total structural
    fallback. Each program calls the layout builder interface; it is not an enum
@@ -50,21 +78,77 @@ and preserve its separate settled-geometry hover stage.
    callback capturing the resolved input from this frame. Presenting it cannot
    read a newer hover or debug setting. Painting remains optional.
 
-The central sequence is:
+The overall sequence is:
 
 ```rust,ignore
-let view = app_view(description, resources);
-let mut output = placed::place(view, placement, &hover_input);
-let resolved = /* app resolves output.claim and describes its source */;
-let renders = output.resolve(resolved);
-// Retain output.handler and navigation for later input dispatch.
-// Run puri::frame::render(renders, canvas), or discard renders.
+// Input: run the previous handler, then project, place, and resolve hover.
+runner.update_frame(scale, viewport, handle_event);
+
+// The platform's later paint request consumes the latest completed frame.
+puri::frame::render(runner.prepare_paint(scale, viewport).renders, canvas);
+// After successful submission, schedule another redraw if hover has a follow-up.
+let redraw = runner.frame_presented();
 ```
 
 Navigation stops are declared by projection/widget functions; placement only
 supplies their rectangles. A control's arrival override is consumed by its
 nearest navigation landmark. Discarded alternatives contribute no navigation,
 hover, handlers, or painting.
+
+`compute_hover` owns the whole hover stage: probing, preserving the prior target
+during a press, attributing the winner, and binding the continuations. It returns
+a completed `Frame`; it never updates the runner's stored hover.
+
+Selection reveal is part of handling input, not frame construction. `update_frame`
+compares the selection's view/path/stage before and after the action. When it
+changes, the installed frame's navigation rectangle determines a one-shot scroll
+adjustment before building the successor. Native menu commands use that same
+boundary. Nothing remembers which selection was revealed: plain refreshes and
+manual scrolling do not request another reveal. A path missing from the installed
+frame leaves the offset unchanged, with no deferred retry. Substantially reflowed
+destinations are deliberately best-effort. There is no reveal flag, persistent
+target mode, corrective build, or new layout/hover boundary for selection reveal.
+
+After installing a different hover target or owning view, the runner dispatches
+`Event::HoverChanged` through that frame's ordinary handler chain. The dispatch
+context supplies the settled target and navigation/view geometry. An accepted
+notification builds one successor, regardless of whether the handler wrote any
+state. There is no recursive dispatch or attempt to infer which inputs a widget
+depends on.
+
+Further hover reactions wait until that successor has been painted and submitted.
+`frame_presented` releases the boundary and requests another redraw when the
+current hover still differs from the last notification. Preparing or discarding
+paint, and failed native presentation attempts, do not release it. A handler
+which keeps changing hover therefore advances across painted frames, yielding to
+the event loop between them, without a cycle panic or iteration cutoff. An
+accepted no-op stops because the successor has the same hover.
+
+Notifications describe the current settled hover, not a history of discarded
+frames. As with other staged frames, intervening input may replace an unpainted
+successor; notification then uses the latest target and its current handler,
+never a saved callback into the replaced document. Document replacement resets
+notification state along with the rest of the frame.
+
+The drawing widget handles hover changes by explicitly revealing the winning
+source in the navigation geometry. Its ordinary `ModifiersChanged` handler
+does the same when Cmd is pressed over a stationary pointer. Both require the
+link modifier, the owning view, and a pointer inside the drawing's clipped
+placement. The frame runner contains no canvas-specific reveal operation.
+
+Two ordering boundaries remain explicit. Touch establishes a hover target before
+its first press because it has no preceding pointer motion. Continuous input is
+batched: scroll runs and settles geometry before the paired motion handler runs.
+That scroll frame already includes the latest pointer position, so unhandled
+paired motion needs no second frame. Motion on its own still rebuilds hover.
+Handled motion produces a successor as usual. The batching does not reuse a
+frame after its inputs change; it avoids projecting the same settled inputs twice.
+
+Painting is separate because input and redraw requests have different schedules.
+Several input transitions may replace unpainted frames, but their handlers still
+run in order. `prepare_paint` consumes the staged painting, or builds a frame when
+the viewport changed or no staged frame remains. Render callbacks run only there;
+updating a frame never calls the canvas.
 
 ## Ownership and types
 
@@ -109,9 +193,11 @@ answer probes, declare navigation, and supply `after_hover` continuations.
 `render` is a combinator over that boundary; native handlers that do not need
 the winner are lifted into it at the end of the widget's contribution. Handlers
 that need the winner can instead be constructed inside `after_hover`.
-`finish` runs floating placements and returns `HoverOutput`. Binding its
-continuations with `ResolvedHover` assembles `Effects`: canvas-only renders
-and one function-over-`Event` handler chain.
+`finish` runs floating placements and returns `HoverOutput`. Its consuming
+`bind` operation uses `ResolvedHover` to assemble `Effects`, then returns a
+distinct `FrameOutput`: canvas-only renders, one function-over-`Event` handler
+chain, and settled navigation/view geometry. A hover output cannot be bound
+twice or masquerade as a completed frame.
 
 [`puri::frame::AfterHover<H, O>`](../ui/puri/src/frame.rs) owns the reusable
 phase-composition mechanism. Both the resolved input and output are generic;
@@ -125,7 +211,7 @@ paint/navigation segments. Scoped wrappers map a child's output, consuming
 navigation overrides without affecting siblings or ancestors. Floating placements
 escape enclosing clip/navigation scopes but retain their owning view.
 
-Progred's `resolved_hover` function derives secondary identity and source trace
+Progred's `attribute_hover` function derives secondary identity and source trace
 once for the winner. `ResolvedHover` explicitly shares those results within this
 frame, avoiding repeated source-path walks by each painted occurrence. It is
 freshly constructed, not retained as a cross-frame memo. Debug geometry is

@@ -58,7 +58,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             cells: Cells::new(),
         };
         let mut world = editing_world(&doc, &core_libraries());
-        let mut output = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let output = editing_frame_with_projection(&mut world, false, Some(&projection));
         let content = placements
             .borrow()
             .iter()
@@ -546,7 +546,8 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         );
         assert_eq!(fills(&hovered, 0.08), vec![outlines[0]]);
         assert_eq!(fills(&hovered, 0.05), vec![outlines[1]]);
-        assert_eq!(strokes(&hovered, 0.25), vec![outlines[1]]);
+        assert_eq!(strokes(&hovered, 0.55), vec![outlines[0]]);
+        assert!(strokes(&hovered, 0.25).is_empty());
         for pointer in [None, Some(rects[0].center()), Some(rects[1].center())] {
             let (selected, _) = context.place(
                 &doc,

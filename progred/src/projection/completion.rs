@@ -106,7 +106,7 @@ fn pending_target(
                 tree_hovered(hover),
                 Some(Hover::Value(hovered)) if hovered == &highlight_path
             ) {
-                hover_highlight(cv, outline);
+                hover_highlight(scale, cv, outline);
             }
         });
         if !transient {

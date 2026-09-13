@@ -182,9 +182,9 @@ propagation; it does not tell the shell to infer a domain action or gesture.
 The accepting handler performs the action and installs any continuation.
 
 A hover callback returns its claim plus independent paint and event outputs.
-Callbacks run over settled geometry from front to back; a direct claim or
-occluder prevents lower hit queries without suppressing their other outputs.
-Paint retains back-to-front order. Occlusion also consumes
+Callbacks run over settled geometry in painting order; a later direct claim or
+occluder supersedes an earlier claim, while retention cannot displace a direct
+claim. Occlusion also consumes
 pointer starts, while active motion/release can still reach their handlers.
 A floating card carries its owning view even when it covers another pane.
 
@@ -195,12 +195,30 @@ anchor they need as explicit caller-owned gesture state.
 
 ## Frame lifecycle
 
-The [application shell](../progred/src/lib.rs) adapts Winit events, owns the
-model and pending frame, and supplies platform capabilities. Placement produces
-an opaque hover continuation. Running it gives a settled claim, handlers,
-navigation, and deferred paint; paint is not required to produce the handlers.
-[`frame`](../progred/src/frame.rs) builds it; [`placed`](../progred/src/placed.rs)
-composes its outputs.
+The [application shell](../progred/src/lib.rs) adapts Winit events and supplies
+platform capabilities. Each window owns an `EditorRunner`: the mutable `Editor`
+beside its saved `FrameState` (dispatch, settled hover, and pending painting).
+Widget handlers receive only `&mut Editor`, not their own saved dispatch. The
+runner borrows those separate fields directly and owns the input batches and
+frame replacement. Window setup builds the initial frame; reset uses a no-op
+dispatch until the successor is built.
+
+`HoverChanged` and `ModifiersChanged` use the ordinary Puri event chain, with
+the settled hover supplied in the caller's dispatch context. Progred emits a
+hover notification when the target or its owning view changes. An accepted
+notification builds one successor; any further hover reaction waits for an
+actual paint/submission before continuing. Oscillating reactions yield across
+painted frames rather than recursively dispatching, panicking, or reaching an
+iteration cutoff. The runner remembers the last notified identity and the paint
+boundary, not a queue of handlers from discarded frames. Intervening input can
+replace an unpainted successor, and the notification uses the current frame.
+See [the scheduling contract](layout-continuations.md#event-and-frame-cycle).
+
+Placement runs hover contributions over settled geometry, then the resolved
+hover binds independent handlers and deferred painting. Paint is not required
+to produce the handlers. [`frame`](../progred/src/frame.rs) builds and installs
+the frame; [`input`](../progred/src/input.rs) interprets input into its successor.
+See [layout continuations](layout-continuations.md) for the phase boundaries.
 
 A changed frame input remints a whole frame. The event-to-redraw pending frame
 stages the already-built successor for presentation; it avoids building it

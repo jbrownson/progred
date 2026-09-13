@@ -27,7 +27,7 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
                     .as_mut()
                     .unwrap()
                     .set_completion_view(0.0, 0, everything);
-                let mut frame = editing_frame(&mut world, false);
+                let frame = editing_frame(&mut world, false);
                 if !everything {
                     assert!(
                         frame
@@ -178,7 +178,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut card = {
+    let card = {
         let layout = completion_card::<usize>(
             &mut tcx,
             &crate::styles::editor(1.0),
@@ -191,7 +191,6 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(layout, placement, &Default::default())
     };
-    card.resolve(Default::default());
     let mut attempts = 0;
     assert!(card.resolve_for_dispatch().dispatch_key(
         &mut attempts,
@@ -617,14 +616,16 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             })
             .unwrap()
     };
-    let highlight = |mut placed: crate::placed::HoverOutput<State>, hovered, selected_point| {
+    let highlight = |placed: crate::placed::HoverOutput<State>, hovered, selected_point| {
         let mut drawing = DrawList::new();
         let hovered = Hovered::Tree(hovered);
         puri::frame::render(
-            placed.resolve(crate::placed::ResolvedHover {
-                hovered: Some(hovered),
-                ..Default::default()
-            }),
+            placed
+                .bind(crate::placed::ResolvedHover {
+                    hovered: Some(hovered),
+                    ..Default::default()
+                })
+                .renders,
             &mut drawing,
         );
         fn highlights(commands: &[DrawCmd]) -> Vec<Rect> {
@@ -839,7 +840,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     assert_eq!(state.view.1, 0);
 
     state.view = (0.0, 1, false);
-    let mut placed = frame(&state, &entries, None);
+    let placed = frame(&state, &entries, None);
     let target = Hovered::Tree(Hover::MoreCompletions);
     let point = (0..100)
         .map(|y| Point::new(10.0, y as f64))
@@ -968,7 +969,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             ..Default::default()
         },
     );
-    let mut placed = measured::Output::over(placed, card);
+    let placed = measured::Output::over(placed, card);
     let Some(Claim::Direct(target)) = placed.claim.clone().map(|(_, claim)| claim) else {
         panic!("direct hover")
     };

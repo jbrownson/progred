@@ -135,7 +135,7 @@ mod tests {
             Rect::new(10.0, 20.0, 50.0, 60.0),
             Rect::new(0.0, 0.0, 30.0, 100.0),
         );
-        let mut frame = crate::display::widget::frame::place(
+        let frame = crate::display::widget::frame::place(
             scrolled(child, Vec2::new(5.0, 15.0), |log, event| {
                 log.push("scroll");
                 ScrollOutcome::consume(event)
@@ -143,7 +143,7 @@ mod tests {
             viewport,
             &Default::default(),
         );
-        let renders = frame.resolve(Default::default());
+        let frame = frame.bind(Default::default());
         assert_eq!(
             *seen.borrow(),
             Some(Placement::new(
@@ -176,7 +176,7 @@ mod tests {
         assert!(handler.dispatch_key(&mut log, &Default::default()));
         assert_eq!(log, ["down", "scroll", "up", "key"]);
         let mut drawing = DrawList::new();
-        puri::frame::render(renders, &mut drawing);
+        puri::frame::render(frame.renders, &mut drawing);
         assert!(
             matches!(&drawing.0[..], [DrawCmd::Clip { shape: Shape::Rect(rect), children, .. }]
             if *rect == viewport.rect && matches!(&children[..], [DrawCmd::Fill { .. }]))

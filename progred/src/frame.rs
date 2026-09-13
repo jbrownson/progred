@@ -1,23 +1,23 @@
-//! One staged pass: place and probe, resolve hover, mint dispatch.
+//! Project → compute hover → bind paint and dispatch.
 //! Paint stays latent in the returned frame; rendering it is the
 //! caller's choice, so a silent mint never draws.
 
 use crate::hover;
 use crate::menu;
-use crate::model::{Model, ViewFlags};
+use crate::model::Model;
 use crate::navigate;
 use crate::placed::{self, HoverPass};
 use crate::projection;
 use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
-use crate::{Editor, PendingPaint, content_viewport};
+use crate::{Editor, EditorRunner, PendingPaint, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::geometry::Placement;
-use puri::handler::{Handler, HasHandler, ScrollOutcome};
+use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
@@ -29,23 +29,52 @@ use std::rc::Rc;
 #[cfg(not(target_arch = "wasm32"))]
 use vello::Scene;
 
-pub(crate) const HOVER_REACH: f64 = 8.0;
+pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 
+#[derive(Default)]
 pub(crate) struct Dispatch {
     pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
-    pub(crate) view_regions: Vec<placed::ViewRegion>,
+    pub(crate) view_regions: Rc<[placed::ViewRegion]>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
 }
 
-/// One minted frame: the dispatch the shell retains, and the ink the
-/// pass deferred — run it into a [`Paint`] or drop it silently.
+/// A completed frame. Installing it retains hover and dispatch together;
+/// its paint continuations can be run separately or discarded.
 pub(crate) struct Frame {
+    pub(crate) hover: Option<Hovered>,
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render>,
+}
+
+#[derive(Default)]
+pub(crate) struct FrameState {
+    pub(crate) hover: Option<Hovered>,
+    pub(crate) dispatch: Dispatch,
+    pub(crate) pending_paint: Option<PendingPaint>,
+    notified_hover: Option<(Option<Root>, Hovered)>,
+    hover_awaits_paint: bool,
+}
+
+impl FrameState {
+    fn hover_location(&self) -> Option<(Option<Root>, Hovered)> {
+        self.hover
+            .clone()
+            .map(|hover| (self.dispatch.pointer_root.clone(), hover))
+    }
+}
+
+impl Dispatch {
+    pub(crate) fn context(&self, hover: Option<Hovered>) -> placed::DispatchContext<Editor> {
+        placed::DispatchContext {
+            descends: self.descends.clone(),
+            view_regions: self.view_regions.clone(),
+            ..placed::DispatchContext::new(self.pointer_root.clone(), hover)
+        }
+    }
 }
 
 /// What the resting pointer claims in the document or application
@@ -63,7 +92,7 @@ pub(crate) enum Hovered {
 
 /// A fresh description of this frame's winner, shared by its continuations.
 /// Resolve source paths here once, not in each painted occurrence.
-fn resolved_hover(
+fn attribute_hover(
     sources: &sources::Sources<'_>,
     completion: Option<&crate::completion::Offers<Editor>>,
     hovered: Option<Hovered>,
@@ -164,18 +193,12 @@ impl puri::draw::CanvasSink for Paint {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FrameDisposition {
     Retain,
-    Remint { reveal_selection: bool },
+    Remint,
 }
 
 pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> FrameDisposition {
-    if handled {
-        FrameDisposition::Remint {
-            reveal_selection: true,
-        }
-    } else if frame_input_changed {
-        FrameDisposition::Remint {
-            reveal_selection: false,
-        }
+    if handled || frame_input_changed {
+        FrameDisposition::Remint
     } else {
         FrameDisposition::Retain
     }
@@ -231,41 +254,12 @@ fn reveal_axis(
     scroll.clamp(0.0, maximum)
 }
 
-fn drawing_source_descend<'a, World>(
-    sources: &sources::Sources<'_>,
-    descends: &'a [navigate::Descend<World>],
-    source: &hover::SourceTrace,
-) -> Option<&'a navigate::Descend<World>> {
-    descends.iter().find_map(|descend| {
-        (descend.root.is_some()
-            && hover::SourceTrace::from_path(sources, descend.path.clone()) == *source)
-            .then_some(descend)
-    })
-}
-
-fn drawing_source_target<World>(
-    sources: &sources::Sources<'_>,
-    descends: &[navigate::Descend<World>],
-    source: &hover::SourceTrace,
-) -> Option<(workspace::Root, Rect)> {
-    drawing_source_descend(sources, descends, source)
-        .and_then(|descend| descend.root.clone().map(|root| (root, descend.rect)))
-}
-
 pub(crate) use crate::display::widget::scroll::offset as scroll_offset;
 
-/// The frame's hover, derived from this pass's settled geometry: a
-/// direct claim under the pointer answers outright, an extension may
-/// retain only the prior target, and an occluder blocks both. A
-/// pressed gesture keeps the hover it began with.
-pub(crate) fn derive_hover(
+/// Interpret the winning claim as an editor target and its owning view.
+fn hover_target(
     claim: Option<(Option<crate::workspace::Root>, Claim<Hovered>)>,
-    prior: Option<Hovered>,
-    pressed: bool,
 ) -> (Option<Hovered>, Option<crate::workspace::Root>) {
-    if pressed {
-        return (prior, None);
-    }
     match claim {
         Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
         Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
@@ -292,6 +286,96 @@ pub(crate) struct FrameResources<'a> {
     fonts: &'a mut FontContext,
     layouts: &'a mut LayoutContext<Brush>,
     text_cache: &'a mut puri::text::TextCache,
+}
+
+struct PointerInput<'a> {
+    position: Option<Point>,
+    previous: Option<&'a Hovered>,
+    pressed: bool,
+    link_sources: bool,
+}
+
+fn prepare_frame(
+    description: FrameDescription<'_>,
+    resources: FrameResources<'_>,
+    pointer: PointerInput<'_>,
+) -> Frame {
+    compute_hover(
+        project_frame(&description, resources),
+        &description,
+        pointer,
+    )
+}
+
+fn compute_hover(
+    layout: measured::Measured<HoverPass<Editor>>,
+    description: &FrameDescription<'_>,
+    pointer: PointerInput<'_>,
+) -> Frame {
+    let mut output = crate::display::widget::frame::place(
+        layout,
+        Placement::root(Rect::from_origin_size(Point::ZERO, description.viewport)),
+        &placed::HoverInput {
+            pointer: if pointer.pressed {
+                None
+            } else {
+                pointer.position
+            },
+            prior: pointer.previous,
+            reach_px: HOVER_REACH_POINTS * description.scale,
+            debug_geometry: description.model.view.debug_geometry,
+        },
+    );
+    let (hover, pointer_root) = if pointer.pressed {
+        (pointer.previous.cloned(), None)
+    } else {
+        hover_target(output.claim.take())
+    };
+    let resolved = attribute_hover(
+        &sources::Sources {
+            doc: &description.model.doc,
+            libraries: &description.stack.libraries,
+        },
+        output.completion.as_ref(),
+        hover.clone(),
+        pointer.link_sources,
+    );
+    if description.model.view.debug_geometry {
+        let extended_rects: Vec<_> = output
+            .debug_regions
+            .iter()
+            .filter_map(|(target, rect)| (Some(target) == hover.as_ref()).then_some(*rect))
+            .collect();
+        output.after_hover.push(move |_, effects| {
+            effects.renders.push(Box::new(move |canvas| {
+                let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
+                for rect in extended_rects {
+                    canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
+                }
+            }));
+        });
+    }
+    debug_assert!(
+        output.landmark_select.is_none(),
+        "selection handler escaped its landmark"
+    );
+    let crate::display::widget::frame::FrameOutput {
+        renders,
+        handler,
+        descends,
+        view_regions,
+    } = output.bind(resolved);
+    Frame {
+        hover,
+        dispatch: Dispatch {
+            handler: handler.unwrap_or_else(Handler::new),
+            pointer_root,
+            descends: descends.into(),
+            view_regions: view_regions.into(),
+            line: 14.0 * description.scale,
+        },
+        renders,
+    }
 }
 
 impl Editor {
@@ -327,78 +411,36 @@ impl Editor {
         outcome
     }
 
-    pub(crate) fn select_drawing_source(
-        &mut self,
-        descends: &[navigate::Descend<Editor>],
-        source: &hover::SourceTrace,
-    ) {
-        let select = drawing_source_descend(&self.sources(), descends, source)
-            .map(|descend| descend.select.clone());
-        if let Some(select) = select {
-            select(self, None);
-        }
-    }
-
-    /// Scroll-to-reveal, computed from the freshly retained dispatch
-    /// pass BEFORE anything draws, so the reveal lands in the next
-    /// presented frame with no corrective flash. Fires once per
-    /// selection-identity change (path AND variant — Enter keeps the
-    /// path while opening a pending), so it never fights manual
-    /// scrolling. A pending's ordinary descend is its authoring row,
-    /// not the out-of-flow completion card.
-    pub(crate) fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
-        let reveal = self.model.selection.as_ref().map(|s| {
+    fn selection_target(&self) -> Option<(Root, gid::Path, crate::selection::Stage)> {
+        self.model.selection.as_ref().map(|s| {
             (
                 s.root().clone(),
                 s.path().to_vec(),
                 s.stage(&self.sources()),
             )
-        });
-        if reveal == self.revealed {
-            false
-        } else {
-            self.revealed = reveal.clone();
-            let target = reveal.as_ref().and_then(|(root, path, _)| {
-                dispatch
-                    .descends
-                    .iter()
-                    .find(|descend| {
-                        descend.root.as_ref() == Some(root) && descend.path.as_ref() == path
-                    })
-                    .map(|descend| descend.rect)
-                    .map(|rect| (root.clone(), rect))
-            });
-            target.is_some_and(|(view, rect)| self.reveal_rect(dispatch, &view, rect, scale))
+        })
+    }
+
+    /// One-shot reveal using installed geometry. A missing path is a no-op.
+    fn reveal_path(&mut self, dispatch: &Dispatch, root: &Root, path: &[gid::Step], scale: f64) {
+        if let Some(target) = dispatch
+            .descends
+            .iter()
+            .find(|descend| descend.root.as_ref() == Some(root) && descend.path.as_ref() == path)
+        {
+            self.reveal_rect(&dispatch.view_regions, root, target.rect, scale);
         }
     }
 
-    fn reveal_drawing_source(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
-        if !crate::modifiers::link(&self.modifiers) {
-            return false;
-        }
-        let Some(Hovered::Tree(hover::Hover::Drawing(source))) = &self.hover else {
-            return false;
-        };
-        let target = {
-            let sources = self.sources();
-            drawing_source_target(&sources, &dispatch.descends, source)
-        };
-        target.is_some_and(|(view, rect)| self.reveal_rect(dispatch, &view, rect, scale))
-    }
-
-    fn reveal_rect(
+    pub(crate) fn reveal_rect(
         &mut self,
-        dispatch: &Dispatch,
+        view_regions: &[placed::ViewRegion],
         view: &workspace::Root,
         rect: Rect,
         scale: f64,
     ) -> bool {
         let pad = 12.0 * scale;
-        let Some(region) = dispatch
-            .view_regions
-            .iter()
-            .find(|region| &region.root == view)
-        else {
+        let Some(region) = view_regions.iter().find(|region| &region.root == view) else {
             return false;
         };
         let Some(before) = self.model.workspace.view(view).map(|view| view.scroll) else {
@@ -423,14 +465,7 @@ impl Editor {
         next != before
     }
 
-    pub(crate) fn view_flags(&self) -> ViewFlags {
-        self.model.view
-    }
-
-    /// One staged pass over the UI: place, probe the pointer against
-    /// the settled geometry, resolve hover, mint dispatch. Paint comes
-    /// back deferred; the caller renders it or drops it.
-    pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
+    fn sync_views(&mut self) {
         let declarations = workspace::declarations(self.model.doc.root.as_ref());
         self.model.workspace.sync_declared(&declarations);
         if self
@@ -441,114 +476,111 @@ impl Editor {
         {
             self.model.selection = None;
         }
-        let view = self.view_flags();
-        let debug_geometry = view.debug_geometry;
-        let availability = self.menu_availability();
-        let description = FrameDescription {
-            drawn_menu: self.drawn_menu,
-            toggles: self.menu_toggles(),
-            model: &self.model,
-            stack: &self.stack,
-            menu: self.menu,
-            availability,
-            scale,
-            viewport,
-        };
-        let resources = FrameResources {
-            fonts: &mut self.font_cx,
-            layouts: &mut self.layout_cx,
-            text_cache: &mut self.text_cache,
-        };
-        let view = app_view(description, resources);
-        let hover_reach = HOVER_REACH * scale;
-        let prior = self.hover.take();
-        let mut ready = placed::place(
-            view,
-            Placement::root(Rect::from_origin_size(Point::ZERO, viewport)),
-            &placed::HoverInput {
-                pointer: if self.pressed { None } else { self.pointer },
-                prior: prior.as_ref(),
-                reach: hover_reach,
-                debug_geometry,
+    }
+
+    fn build_frame(&mut self, scale: f64, viewport: Size, previous: Option<Hovered>) -> Frame {
+        self.sync_views();
+        prepare_frame(
+            FrameDescription {
+                drawn_menu: self.drawn_menu,
+                toggles: self.menu_toggles(),
+                availability: self.menu_availability(),
+                model: &self.model,
+                stack: &self.stack,
+                menu: self.menu,
+                scale,
+                viewport,
             },
-        );
-        let (hover, pointer_root) = derive_hover(ready.claim.take(), prior, self.pressed);
-        self.hover = hover;
-        let sources = sources::Sources {
-            doc: &self.model.doc,
-            libraries: &self.stack.libraries,
-        };
-        let hover = resolved_hover(
-            &sources,
-            ready.completion.as_ref(),
-            self.hover.clone(),
-            crate::modifiers::link(&self.modifiers),
-        );
-        let mut renders = ready.resolve(hover);
-        let extended_rects = debug_geometry
-            .then(|| {
-                self.hover
-                    .as_ref()
-                    .map(|hover| {
-                        ready
-                            .debug_regions
-                            .iter()
-                            .filter_map(|(target, rect)| (target == hover).then_some(*rect))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
-        let placed::HoverOutput {
-            claim: _,
-            debug_regions: _,
-            handler,
-            descends,
-            view_regions,
-            landmark_select,
-            completion: _,
-            after_hover: _,
-        } = ready;
-        debug_assert!(
-            landmark_select.is_none(),
-            "selection handler escaped its landmark"
-        );
-        if debug_geometry {
-            renders.push(Box::new(move |canvas| {
-                let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
-                for rect in extended_rects {
-                    canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
+            FrameResources {
+                fonts: &mut self.font_cx,
+                layouts: &mut self.layout_cx,
+                text_cache: &mut self.text_cache,
+            },
+            PointerInput {
+                position: self.pointer,
+                previous: previous.as_ref(),
+                pressed: self.pressed,
+                link_sources: crate::modifiers::link(&self.modifiers),
+            },
+        )
+    }
+}
+
+impl EditorRunner {
+    pub(crate) fn update_frame(
+        &mut self,
+        scale: f64,
+        viewport: Size,
+        handle_event: impl FnOnce(&mut Editor, &Dispatch, Option<&Hovered>) -> FrameDisposition,
+    ) -> bool {
+        let selection_before = self.editor.selection_target();
+        match handle_event(
+            &mut self.editor,
+            &self.frame.dispatch,
+            self.frame.hover.as_ref(),
+        ) {
+            FrameDisposition::Retain => false,
+            FrameDisposition::Remint => {
+                let selection_after = self.editor.selection_target();
+                if selection_after != selection_before
+                    && let Some((root, path, _)) = selection_after
+                {
+                    self.editor
+                        .reveal_path(&self.frame.dispatch, &root, &path, scale);
                 }
-            }));
-        }
-        Frame {
-            dispatch: Dispatch {
-                handler: handler.unwrap_or_else(Handler::new),
-                pointer_root,
-                descends: descends.into(),
-                view_regions,
-                line: 14.0 * scale,
-            },
-            renders,
+                self.refresh_frame(scale, viewport);
+                true
+            }
         }
     }
 
-    /// Mint dispatch data from the final state of a transition. A
-    /// silent pass supplies reveal geometry and resolves hover;
-    /// scrolling to reveal changes geometry and earns one rebuild.
-    pub(crate) fn retain_dispatch(&mut self, scale: f64, viewport: Size, reveal_selection: bool) {
-        let mut frame = self.build_frame(scale, viewport);
-        let revealed_selection = reveal_selection && self.reveal_selection(&frame.dispatch, scale);
-        let revealed_source = self.reveal_drawing_source(&frame.dispatch, scale);
-        if revealed_selection || revealed_source {
-            frame = self.build_frame(scale, viewport);
+    /// Build the successor's projection, hover, handlers, and deferred paint.
+    pub(crate) fn refresh_frame(&mut self, scale: f64, viewport: Size) {
+        self.rebuild_frame(scale, viewport);
+        self.notify_hover_changed(scale, viewport);
+    }
+
+    fn rebuild_frame(&mut self, scale: f64, viewport: Size) {
+        let frame = self
+            .editor
+            .build_frame(scale, viewport, self.frame.hover.clone());
+        self.frame.pending_paint = Some(self.install_frame(frame, scale, viewport));
+    }
+
+    fn notify_hover_changed(&mut self, scale: f64, viewport: Size) {
+        if !self.frame.hover_awaits_paint
+            && self.frame.notified_hover != self.frame.hover_location()
+        {
+            self.frame.notified_hover = self.frame.hover_location();
+            let mut input = self.frame.dispatch.context(self.frame.hover.clone());
+            if self
+                .frame
+                .dispatch
+                .handler
+                .dispatch(&mut self.editor, Event::HoverChanged, &mut input)
+                .handled()
+            {
+                self.rebuild_frame(scale, viewport);
+                self.frame.hover_awaits_paint = true;
+            }
         }
-        self.pending_paint = Some(self.install_frame(frame, scale, viewport));
+    }
+
+    /// Only a submitted frame releases the next hover reaction. Unpainted
+    /// successors may be replaced by input, just like other pending frames.
+    pub(crate) fn frame_presented(&mut self) -> bool {
+        self.frame.hover_awaits_paint = false;
+        self.frame.notified_hover != self.frame.hover_location()
     }
 
     fn install_frame(&mut self, frame: Frame, scale: f64, viewport: Size) -> PendingPaint {
-        let Frame { dispatch, renders } = frame;
-        self.dispatch = Some(dispatch);
+        let Frame {
+            hover,
+            dispatch,
+            renders,
+        } = frame;
+        self.frame.hover = hover;
+        self.frame.dispatch = dispatch;
         PendingPaint {
             scale,
             viewport,
@@ -557,13 +589,19 @@ impl Editor {
     }
 
     pub(crate) fn prepare_paint(&mut self, scale: f64, viewport: Size) -> PendingPaint {
-        self.pending_paint
+        if self
+            .frame
+            .pending_paint
+            .as_ref()
+            .is_none_or(|pending| pending.scale != scale || pending.viewport != viewport)
+        {
+            self.rebuild_frame(scale, viewport);
+        }
+        self.notify_hover_changed(scale, viewport);
+        self.frame
+            .pending_paint
             .take()
-            .filter(|pending| pending.scale == scale && pending.viewport == viewport)
-            .unwrap_or_else(|| {
-                let frame = self.build_frame(scale, viewport);
-                self.install_frame(frame, scale, viewport)
-            })
+            .expect("prepared frame has paint")
     }
 }
 
@@ -777,8 +815,8 @@ fn project_workspace(
     body
 }
 
-fn app_view(
-    description: FrameDescription<'_>,
+fn project_frame(
+    description: &FrameDescription<'_>,
     resources: FrameResources<'_>,
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
@@ -790,7 +828,7 @@ fn app_view(
         availability,
         scale,
         viewport,
-    } = description;
+    } = *description;
     let FrameResources {
         fonts: font_cx,
         layouts: layout_cx,
@@ -898,27 +936,432 @@ mod frame_tests {
     use super::*;
     use gid::{CellId, Cells, Document, Step, Value};
 
+    type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
+    const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
+
+    fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
+        use crate::display::{Layout, partial, widget};
+        use crate::libraries::f64;
+        use puri::handler::EventOutcome;
+
+        let mut editor = crate::test_editor(Document {
+            root: Some(f64::value(0.0)),
+            cells: Cells::new(),
+        });
+        editor.pointer = Some(Point::new(25.0, 25.0));
+        editor.stack.projection = projection::Projection::new([partial({
+            let log = log.clone();
+            move |input| {
+                let value = f64::read(input.value?)?;
+                log.borrow_mut().push(("project", value));
+                let log = log.clone();
+                Some(Layout::widget(Rc::new(move |_| {
+                    let log = log.clone();
+                    widget::leaf(
+                        measured::Extent {
+                            width: 100.0,
+                            ascent: 40.0,
+                            descent: 0.0,
+                        },
+                        move |output, placement| {
+                            let target = Hovered::Tree(if value as u64 % 2 == 0 {
+                                hover::Hover::Value(Rc::from([]))
+                            } else {
+                                hover::Hover::Toggle(Rc::from([]))
+                            });
+                            output.claim(placed::Probe::exact(placement, target));
+                            output.after_hover(move |_, effects| {
+                                effects.handler().on({
+                                    let log = log.clone();
+                                    move |editor: &mut Editor, event, input| {
+                                        if matches!(event, Event::HoverChanged) {
+                                            log.borrow_mut().push((
+                                                if input.hovered().is_some() {
+                                                    "hover"
+                                                } else {
+                                                    "leave"
+                                                },
+                                                value,
+                                            ));
+                                            if input.hovered().is_some() {
+                                                if change_target {
+                                                    Rc::make_mut(&mut editor.model.doc).root =
+                                                        Some(f64::value(value + 1.0));
+                                                }
+                                                return EventOutcome::accept();
+                                            }
+                                        }
+                                        EventOutcome::decline(event)
+                                    }
+                                });
+                                effects.renders.push(Box::new(move |_| {
+                                    log.borrow_mut().push(("paint", value))
+                                }));
+                            });
+                        },
+                    )
+                })))
+            }
+        })]);
+        EditorRunner::new(editor)
+    }
+
+    fn paint_hover_frame(runner: &mut EditorRunner) -> bool {
+        puri::frame::render(
+            runner.prepare_paint(1.0, HOVER_VIEWPORT).renders,
+            &mut puri::draw::DrawList::default(),
+        );
+        runner.frame_presented()
+    }
+
+    #[test]
+    fn hover_reactions_continue_across_painted_frames_without_recursion_or_a_limit() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, true);
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        assert_eq!(
+            log.take(),
+            [("project", 0.0), ("hover", 0.0), ("project", 1.0)]
+        );
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 1.0)]);
+        for value in 1..20 {
+            assert!(paint_hover_frame(&mut runner));
+            let value = value as f64;
+            assert_eq!(
+                log.take(),
+                [
+                    ("project", value),
+                    ("hover", value),
+                    ("project", value + 1.0),
+                    ("paint", value + 1.0),
+                ]
+            );
+        }
+        // An ordinary input can interrupt the oscillation between paintings.
+        runner.update_frame(1.0, HOVER_VIEWPORT, |editor, _, _| {
+            editor.pointer = None;
+            FrameDisposition::Remint
+        });
+        assert_eq!(log.take(), [("project", 20.0), ("leave", 20.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 20.0)]);
+    }
+
+    #[test]
+    fn accepting_hover_without_changing_it_only_builds_one_successor() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, false);
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        assert_eq!(
+            log.take(),
+            [("project", 0.0), ("hover", 0.0), ("project", 0.0)]
+        );
+        assert!(!paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 0.0)]);
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        assert_eq!(log.take(), [("project", 0.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+    }
+
+    #[test]
+    fn preparing_or_replacing_unpainted_frames_does_not_release_hover_feedback() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, true);
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        log.borrow_mut().clear();
+        drop(runner.prepare_paint(1.0, HOVER_VIEWPORT));
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        drop(runner.prepare_paint(1.0, HOVER_VIEWPORT));
+        assert_eq!(log.take(), [("project", 1.0)]);
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("project", 1.0), ("paint", 1.0)]);
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(
+            log.take(),
+            [
+                ("project", 1.0),
+                ("hover", 1.0),
+                ("project", 2.0),
+                ("paint", 2.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn new_input_supersedes_an_unpainted_target_without_replaying_stale_handlers() {
+        let log = HoverLog::default();
+        let mut runner = hover_runner(&log, true);
+        runner.refresh_frame(1.0, HOVER_VIEWPORT);
+        log.borrow_mut().clear();
+        runner.update_frame(1.0, HOVER_VIEWPORT, |editor, _, _| {
+            editor.pointer = None;
+            FrameDisposition::Remint
+        });
+        assert_eq!(log.take(), [("project", 1.0)]);
+        assert!(paint_hover_frame(&mut runner));
+        assert_eq!(log.take(), [("paint", 1.0)]);
+        assert!(!paint_hover_frame(&mut runner));
+        assert_eq!(
+            log.take(),
+            [("project", 1.0), ("leave", 1.0), ("paint", 1.0)]
+        );
+    }
+
+    #[test]
+    fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() {
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        }));
+        let roots = Rc::new(std::cell::RefCell::new(Vec::new()));
+        runner.frame.dispatch.handler.on({
+            let roots = roots.clone();
+            move |_, event, input| {
+                if matches!(event, Event::HoverChanged) {
+                    roots.borrow_mut().push(input.root.clone());
+                }
+                puri::handler::EventOutcome::decline(event)
+            }
+        });
+        runner.frame.hover = Some(Hovered::Blocked);
+        let first = Root::document();
+        let second = Root::document();
+        runner.frame.dispatch.pointer_root = Some(first.clone());
+        runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
+        runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
+        runner.frame.dispatch.pointer_root = Some(second.clone());
+        runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
+        assert_eq!(roots.take(), [Some(first), Some(second)]);
+        runner.frame.hover_awaits_paint = true;
+        runner.adopt_model(
+            Document {
+                root: None,
+                cells: Cells::new(),
+            },
+            None,
+            Default::default(),
+        );
+        assert!(runner.frame.notified_hover.is_none());
+        assert!(!runner.frame.hover_awaits_paint);
+        assert!(!runner.frame_presented());
+    }
+
+    fn scrolling_runner(projected: &Rc<std::cell::Cell<usize>>) -> EditorRunner {
+        let mut editor = crate::test_editor(Document {
+            root: Some(Value::list(
+                (0..40).map(|n| crate::libraries::f64::value(n as f64)),
+            )),
+            cells: Cells::new(),
+        });
+        let projected = projected.clone();
+        editor.stack.projection =
+            projection::Projection::new([crate::display::partial(move |input| {
+                crate::libraries::f64::read(input.value?)?;
+                projected.set(projected.get() + 1);
+                Some(crate::display::Layout::widget(Rc::new(|_| {
+                    crate::display::widget::leaf(
+                        measured::Extent {
+                            width: 100.0,
+                            ascent: 25.0,
+                            descent: 5.0,
+                        },
+                        |_, _| {},
+                    )
+                })))
+            })]);
+        EditorRunner::new(editor)
+    }
+
+    #[test]
+    fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
+        let projected = Rc::new(std::cell::Cell::new(0));
+        let mut runner = scrolling_runner(&projected);
+        let viewport = Size::new(500.0, 400.0);
+        runner.refresh_frame(1.0, viewport);
+        let per_frame = projected.replace(0);
+        let path = vec![Step::Element(
+            runner
+                .editor
+                .model
+                .doc
+                .root
+                .as_ref()
+                .unwrap()
+                .as_list()
+                .unwrap()
+                .keys()
+                .last()
+                .unwrap()
+                .clone(),
+        )];
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!(target.rect.y0 > viewport.height);
+        let select = target.select.clone();
+        assert!(runner.update_frame(1.0, viewport, |editor, _, _| {
+            frame_disposition(select(editor, None), false)
+        }));
+        assert_eq!(projected.replace(0), per_frame);
+        assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!((0.0..viewport.height).contains(&target.rect.y0));
+
+        // Scrolling away from an unchanged selection must not reveal it again.
+        runner.update_frame(1.0, viewport, |editor, dispatch, _| {
+            frame_disposition(
+                dispatch
+                    .handler
+                    .dispatch_scroll(
+                        editor,
+                        &ui_events::pointer::PointerScrollEvent {
+                            pointer: ui_events::pointer::PointerInfo {
+                                pointer_id: None,
+                                persistent_device_id: None,
+                                pointer_type: ui_events::pointer::PointerType::Mouse,
+                            },
+                            state: ui_events::pointer::PointerState {
+                                position: (200.0, 200.0).into(),
+                                ..Default::default()
+                            },
+                            delta: ui_events::ScrollDelta::PixelDelta((0.0, 2_000.0).into()),
+                        },
+                    )
+                    .handled(),
+                false,
+            )
+        });
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        assert_eq!(projected.get(), per_frame);
+    }
+
+    #[test]
+    fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
+        let projected = Rc::new(std::cell::Cell::new(0));
+        let mut runner = scrolling_runner(&projected);
+        let viewport = Size::new(500.0, 400.0);
+        runner.refresh_frame(1.0, viewport);
+        let path = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.rect.y0 > viewport.height)
+            .unwrap()
+            .path
+            .to_vec();
+        runner.editor.model.selection = Some(crate::selection::Selection::edge(
+            runner.editor.model.workspace.document_root(),
+            path,
+        ));
+
+        runner.refresh_frame(1.0, viewport);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        runner.update_frame(1.0, viewport, |_, _, _| FrameDisposition::Remint);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    }
+
+    #[test]
+    fn selection_mode_changes_reveal_even_when_the_path_is_unchanged() {
+        let projected = Rc::new(std::cell::Cell::new(0));
+        let mut runner = scrolling_runner(&projected);
+        let viewport = Size::new(500.0, 400.0);
+        runner.refresh_frame(1.0, viewport);
+        let path = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.rect.y0 > viewport.height)
+            .unwrap()
+            .path
+            .to_vec();
+        runner.editor.model.selection = Some(crate::selection::Selection::edge(
+            runner.editor.model.workspace.document_root(),
+            path.clone(),
+        ));
+
+        runner.update_frame(1.0, viewport, |editor, _, _| {
+            editor.model.selection = Some(crate::selection::pending_value(
+                editor.model.workspace.document_root(),
+                path,
+            ));
+            FrameDisposition::Remint
+        });
+        assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+    }
+
+    #[test]
+    fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
+        let projected = Rc::new(std::cell::Cell::new(0));
+        let mut runner = scrolling_runner(&projected);
+        let viewport = Size::new(500.0, 400.0);
+        runner.refresh_frame(1.0, viewport);
+        projected.set(0);
+        let content = runner
+            .editor
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap();
+        let position = gid::position::between(content.keys().last(), None).unwrap();
+        let path = vec![Step::Element(position.clone())];
+        let content = Value::List(content.update(position, crate::libraries::f64::value(40.0)));
+        assert!(
+            !runner
+                .frame
+                .dispatch
+                .descends
+                .iter()
+                .any(|stop| stop.path.as_ref() == path)
+        );
+        runner.update_frame(1.0, viewport, |editor, _, _| {
+            Rc::make_mut(&mut editor.model.doc).root = Some(content);
+            editor.model.selection = Some(crate::selection::Selection::edge(
+                editor.model.workspace.document_root(),
+                path.clone(),
+            ));
+            FrameDisposition::Remint
+        });
+        assert_eq!(projected.replace(0), 41);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!(target.rect.y0 > viewport.height);
+
+        runner.refresh_frame(1.0, viewport);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        assert_eq!(projected.replace(0), 41);
+        runner.update_frame(1.0, viewport, |_, _, _| FrameDisposition::Remint);
+        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        assert_eq!(projected.get(), 41);
+    }
+
     #[test]
     fn only_transitions_and_changed_frame_inputs_remint() {
         assert_eq!(frame_disposition(false, false), FrameDisposition::Retain);
-        assert_eq!(
-            frame_disposition(false, true),
-            FrameDisposition::Remint {
-                reveal_selection: false,
-            }
-        );
-        assert_eq!(
-            frame_disposition(true, false),
-            FrameDisposition::Remint {
-                reveal_selection: true,
-            }
-        );
-        assert_eq!(
-            frame_disposition(true, true),
-            FrameDisposition::Remint {
-                reveal_selection: true,
-            }
-        );
+        assert_eq!(frame_disposition(false, true), FrameDisposition::Remint);
+        assert_eq!(frame_disposition(true, false), FrameDisposition::Remint);
+        assert_eq!(frame_disposition(true, true), FrameDisposition::Remint);
     }
 
     #[test]
@@ -1019,14 +1462,11 @@ mod frame_tests {
                 source,
                 path: Rc::from([Step::Key(call)]),
             };
-            assert_eq!(
-                drawing_source_target(&sources, &descends, &trace),
-                Some((root.clone(), rect))
-            );
+            let descend = projection::drawing::source_descend(&sources, &descends, &trace).unwrap();
+            assert_eq!(descend.root, Some(root.clone()));
+            assert_eq!(descend.rect, rect);
             let mut selected = None;
-            assert!((drawing_source_descend(&sources, &descends, &trace)
-                .unwrap()
-                .select)(&mut selected, None));
+            assert!((descend.select)(&mut selected, None));
             assert_eq!(selected, Some(source));
         }
     }
@@ -1485,6 +1925,10 @@ mod frame_tests {
 
     #[test]
     fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
+        let editor = crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        });
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
         for (prior, pointer, pressed, covered, expected) in [
@@ -1498,41 +1942,45 @@ mod frame_tests {
             (Some(target(0)), Some(40.0), true, false, Some(target(0))),
             (None, Some(25.0), false, true, Some(Hovered::Blocked)),
         ] {
-            let mut pass: HoverPass<Editor> = HoverPass::new(&placed::HoverInput {
-                pointer: if pressed {
-                    None
-                } else {
-                    pointer.map(|x| Point::new(x, 5.0))
+            let layout = crate::display::widget::leaf(
+                measured::Extent::default(),
+                move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                    output.claim(placed::Probe::retaining(
+                        Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
+                        target(0),
+                    ));
+                    output.claim(placed::Probe::retaining(
+                        Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
+                        target(1),
+                    ));
+                    if covered {
+                        output.claim(placed::Probe::occludes(Placement::new(
+                            Rect::new(0.0, 0.0, 40.0, 40.0),
+                            viewport,
+                        )));
+                    }
                 },
-                prior: prior.as_ref(),
-                reach: 8.0,
-                ..Default::default()
-            });
-            pass.visit(move |output| {
-                output.claim(placed::Probe::retaining(
-                    Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
-                    target(0),
-                ));
-            });
-            pass.visit(move |output| {
-                output.claim(placed::Probe::retaining(
-                    Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
-                    target(1),
-                ));
-                if covered {
-                    output.claim(placed::Probe::occludes(Placement::new(
-                        Rect::new(0.0, 0.0, 40.0, 40.0),
-                        viewport,
-                    )));
-                }
-            });
-            let ready = pass.finish();
-            assert_eq!(derive_hover(ready.claim, prior, pressed).0, expected);
+            );
+            assert_eq!(
+                hover_frame(
+                    &editor,
+                    layout,
+                    pointer.map(|x| Point::new(x, 5.0)),
+                    prior.as_ref(),
+                    pressed
+                )
+                .hover,
+                expected
+            );
         }
     }
 
     #[test]
     fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
+        let editor = crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        });
         let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
         for (x, pressed, expected) in [
             (5.0, false, Some(target.clone())),
@@ -1540,22 +1988,128 @@ mod frame_tests {
             (11.0, true, Some(target.clone())),
         ] {
             let claimed = target.clone();
-            let mut pass: HoverPass<Editor> = HoverPass::new(&placed::HoverInput {
-                pointer: Some(Point::new(x, 5.0)),
-                prior: Some(&target),
-                reach: 8.0,
-                ..Default::default()
-            });
-            pass.visit(move |output| {
-                output.claim(placed::Probe::exact(
-                    Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-                    claimed,
-                ));
-            });
-            let ready = pass.finish();
+            let layout = crate::display::widget::leaf(
+                measured::Extent::default(),
+                move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                    output.claim(placed::Probe::exact(
+                        Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                        claimed,
+                    ));
+                },
+            );
             assert_eq!(
-                derive_hover(ready.claim, Some(target.clone()), pressed).0,
+                hover_frame(
+                    &editor,
+                    layout,
+                    Some(Point::new(x, 5.0)),
+                    Some(&target),
+                    pressed
+                )
+                .hover,
                 expected
+            );
+        }
+    }
+
+    fn hover_frame(
+        editor: &Editor,
+        layout: measured::Measured<HoverPass<Editor>>,
+        position: Option<Point>,
+        previous: Option<&Hovered>,
+        pressed: bool,
+    ) -> Frame {
+        compute_hover(
+            layout,
+            &FrameDescription {
+                drawn_menu: false,
+                model: &editor.model,
+                stack: &editor.stack,
+                menu: menu::State::default(),
+                availability: editor.menu_availability(),
+                toggles: editor.menu_toggles(),
+                scale: 1.0,
+                viewport: Size::new(100.0, 100.0),
+            },
+            PointerInput {
+                position,
+                previous,
+                pressed,
+                link_sources: false,
+            },
+        )
+    }
+
+    #[test]
+    fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
+        let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        }));
+        let prior = Hovered::Tree(hover::Hover::Entry(7));
+        runner.frame.hover = Some(prior.clone());
+        runner.frame.dispatch.line = 42.0;
+        let frame =
+            runner
+                .editor
+                .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover.clone());
+        assert_eq!(runner.frame.hover, Some(prior));
+        assert_eq!(runner.frame.dispatch.line, 42.0);
+        assert!(runner.frame.dispatch.descends.is_empty());
+        assert_eq!(frame.hover, None);
+        let line = frame.dispatch.line;
+        let descends = frame.dispatch.descends.clone();
+        let paint = runner.install_frame(frame, 1.0, Size::new(300.0, 200.0));
+        assert_eq!(runner.frame.hover, None);
+        assert_eq!(runner.frame.dispatch.line, line);
+        assert!(Rc::ptr_eq(&runner.frame.dispatch.descends, &descends));
+        drop(paint);
+    }
+
+    #[test]
+    fn pressed_hover_skips_probes_and_unpressed_hover_keeps_the_owning_view() {
+        let editor = crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        });
+        let root = editor.model.workspace.document_root().clone();
+        let prior = Hovered::Tree(hover::Hover::Entry(7));
+        for pressed in [true, false] {
+            let calls = Rc::new(std::cell::Cell::new(0));
+            let counted = calls.clone();
+            let layout = placed::in_view(
+                crate::display::widget::leaf(
+                    measured::Extent::default(),
+                    move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                        output.claim(placed::Probe::dynamic(
+                            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                            move |_| {
+                                counted.set(counted.get() + 1);
+                                Some(Hovered::Blocked)
+                            },
+                        ));
+                    },
+                ),
+                root.clone(),
+            );
+            let frame = hover_frame(
+                &editor,
+                layout,
+                Some(Point::new(5.0, 5.0)),
+                Some(&prior),
+                pressed,
+            );
+            assert_eq!(calls.get(), usize::from(!pressed));
+            assert_eq!(
+                frame.hover,
+                Some(if pressed {
+                    prior.clone()
+                } else {
+                    Hovered::Blocked
+                })
+            );
+            assert_eq!(
+                frame.dispatch.pointer_root,
+                (!pressed).then(|| root.clone())
             );
         }
     }

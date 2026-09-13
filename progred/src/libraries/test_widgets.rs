@@ -10,13 +10,13 @@ pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri
         widget(context)
     });
     let extent = measured.extent;
-    let mut fragment = crate::display::widget::frame::place(
+    let fragment = crate::display::widget::frame::place(
         measured,
         puri::Placement::root(extent.rect_at(puri::Point::ZERO)),
         &Default::default(),
     );
     let mut canvas = puri::DrawList::new();
-    for render in fragment.resolve(Default::default()) {
+    for render in fragment.bind(Default::default()).renders {
         render(&mut canvas);
     }
     (extent, canvas)
@@ -106,10 +106,9 @@ pub fn assert_delimiter(
         widget(context)
     });
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let mut fragment =
-        crate::display::widget::frame::place(measured, placement, &Default::default());
+    let fragment = crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut canvas = DrawList::new();
-    for render in fragment.resolve(Default::default()) {
+    for render in fragment.bind(Default::default()).renders {
         render(&mut canvas);
     }
     let mut expected = DrawList::new();

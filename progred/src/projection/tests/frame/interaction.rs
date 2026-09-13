@@ -46,7 +46,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    let mut placed =
+    let placed =
         crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
     let point = placed
         .descends
@@ -116,7 +116,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         },
         &mut frame_tcx,
     );
-    let mut active =
+    let active =
         crate::display::widget::frame::place(active, Placement::root(rect), &Default::default());
     let line = active
         .descends
@@ -238,7 +238,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let log = Rc::new(std::cell::RefCell::new(Vec::new()));
         let select_log = log.clone();
         let start_log = log.clone();
-        let mut frame = drag_frame(
+        let frame = drag_frame(
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
@@ -324,7 +324,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             false,
         ),
     ] {
-        let mut frame = drag_frame(
+        let frame = drag_frame(
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
@@ -363,7 +363,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         (false, false, 5.0, false, true, false),
         (false, false, 5.0, true, false, false),
     ] {
-        let mut frame = drag_frame(
+        let frame = drag_frame(
             gesture_place(
                 crate::libraries::number::scrub::on_scrub(
                     crate::display::row(0.0, []),
@@ -458,7 +458,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             ),
             move |placement, output| pick(output, placement),
         );
-        let mut frame = crate::display::widget::frame::place(
+        let frame = crate::display::widget::frame::place(
             placed::in_view(node, crate::test_root()),
             Placement::root(extent.rect_at(Point::ZERO)),
             &Default::default(),

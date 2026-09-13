@@ -82,6 +82,8 @@ pub mod vocabulary {
     pub const SCROLL: CellId = CellId::from_u128(0x7b0de6ea9b052da4b40e5f97438d537c);
     pub const KEY: CellId = CellId::from_u128(0xbabfda8d94c4a003ae22faf4a4a2fd01);
     pub const IME: CellId = CellId::from_u128(0x33b7ee93c08863b54d3106802a28d110);
+    pub const HOVER_CHANGED: CellId = CellId::from_u128(0xc0776db8cfd8e86b29d854f629717d17);
+    pub const MODIFIERS_CHANGED: CellId = CellId::from_u128(0x5310f0fe0e1d13eddb21c96b61dfb9ac);
 
     // Fields.
     pub const GAP: CellId = CellId::from_u128(0xa4917e2c60d3f8b5310b6d8f2c74ae95);
@@ -924,6 +926,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::EVENT, "event"),
         (vocabulary::EVENT_KIND, "event kind"),
         (vocabulary::POINTER_DOWN, "pointer down"),
+        (vocabulary::HOVER_CHANGED, "hover changed"),
+        (vocabulary::MODIFIERS_CHANGED, "modifiers changed"),
         (vocabulary::POINTER_MOVE, "pointer move"),
         (vocabulary::POINTER_UP, "pointer up"),
         (vocabulary::POINTER_CANCEL, "pointer cancel"),
