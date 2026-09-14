@@ -115,7 +115,7 @@ not a decision to reverse traversal or add caching.
 
 ## Platform work
 
-### Fidget constant fields on the GPU — upstream fix to adopt
+### Fidget constant fields on the GPU — verify adopted upstream fix
 
 Fidget 0.5.0's GPU `RenderShape` allocates its variable buffer from the compiled
 variable count. A constant field therefore creates a zero-byte buffer and tries
@@ -134,15 +134,15 @@ no separate matching bug report. The older [PR #318](https://github.com/mkeeter/
 fixes a different constant-evaluation problem. Do not file a duplicate report
 for the allocation/binding defect already fixed in #461.
 
-Progred remains pinned to 0.5.0. By explicit choice, there is no constant-field
-workaround: the temporary CPU-routing special case was removed rather than
-retained after its upstream fix. Rendering a zero-variable field on the GPU
-can therefore still fail, including expressions compiled down to constants.
-The ordinary CPU backend remains available when no GPU is available and on
-the web; its tests do not verify GPU behavior.
+The 2026-09-13 dependency update adopts this fix through the reviewed upstream
+revision `0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6`. There is no constant-field
+workaround. The ordinary CPU backend remains available when no GPU is available
+and on the web; its tests do not verify GPU behavior.
 
-At the next reviewed dependency update, verify the upstream fix is included
-and test zero, positive, negative, and computed constant fields on the real GPU.
+Still test zero, positive, negative, and computed constant fields on the real
+GPU. The ignored `gpu_colors_constants_and_workspace_reuse` test exercises
+these and multi-object colors without allowing CPU fallback, but its attempted
+run inside Seatbelt found no Metal adapter. Normal CPU tests pass.
 If validation still fails, prepare a minimal standalone Fidget reproducer and
 capture the exact validation error, dependency versions, OS, and adapter/backend
 for an upstream report. The original Progred crash did not preserve the GPU

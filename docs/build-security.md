@@ -87,6 +87,31 @@ RustSec advisory database. The first run installs the pinned `cargo-audit`
 version into the sandbox Cargo home; both that installation and every scan run
 inside the same filesystem and network boundary.
 
+### Reviewed Fidget development revision
+
+On 2026-09-13, Fidget was pinned to upstream commit
+[`0c89e87`](https://github.com/mkeeter/fidget/commit/0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6)
+(2026-09-12) for its per-object GPU color support, not a local rendering patch.
+The upstream changelog calls the next release **0.5.1 (unpublished)**; replace
+the Git pin with a reviewed published release when available.
+
+Review covered the 42-commit delta from 0.5.0, commit provenance, changed
+manifests/build scripts, and current advisory/news checks. This is a reviewed
+exception to the age preference for the Git revision; registry resolution kept
+the seven-day minimum and existing unrelated versions. Git uses upstream's real
+`workspace-hack` development dependency unifier, unlike its empty published
+shim, so it brings extra dependencies/features into the lockfile. There is no
+local patch to suppress that helper. Cargo's built-in Git transport hit a TLS
+error here; `./tools/sandbox-cargo resolve --config net.git-fetch-with-cli=true`
+used the system Git transport within the same sandbox.
+
+The RustSec scan had no vulnerability errors, but retained warnings for the
+existing `im`, `sized-chunks`, `bitmaps`, and `ttf-parser` versions, including
+unsoundness advisories for the first two. This review does not establish that
+the dependency graph is safe; sandboxed builds remain required.
+
+### Sandbox boundaries
+
 `sandbox-fetch` downloads the locked dependency graph into a Cargo home under
 `target/sandbox`. It has network access but remains filesystem-isolated;
 fetching does not compile crates or execute their build scripts. The remaining

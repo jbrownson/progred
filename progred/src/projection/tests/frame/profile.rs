@@ -344,6 +344,7 @@ fn fidget_cube_profile_loop() {
 fn complex_fidget_examples_render_visible_surfaces() {
     let side = 64;
     for example in [
+        Example::Fidget,
         Example::Torus,
         Example::Tanglecube,
         Example::Gyroid,
@@ -369,6 +370,13 @@ fn complex_fidget_examples_render_visible_surfaces() {
             covered > side as usize && covered < (side * side / 2) as usize,
             "{example:?}: {covered} covered pixels"
         );
+        let pixels = || image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0);
+        if example == Example::Fidget {
+            assert!(pixels().any(|p| p[2] > p[0]), "blue shell");
+            assert!(pixels().any(|p| p[0] > p[2]), "gold sphere");
+        } else if example == Example::Cube {
+            assert!(pixels().all(|p| p[2] > p[0]), "cyan cube");
+        }
     }
 }
 

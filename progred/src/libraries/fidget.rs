@@ -2,11 +2,16 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
-use crate::libraries::{Library, absent, control, f32, name, presentation};
+use crate::libraries::{Library, absent, color, control, f32, name, presentation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
-use fidget_engine::wgpu::{Gpu, effects, voxel};
+use fidget_engine::wgpu::{
+    Gpu, RenderShape,
+    color::{ShapeColor, ShapeColorBuffers},
+    voxel,
+    voxel::effects,
+};
 use fidget_engine::{
     context::Tree,
     raster::{
@@ -60,6 +65,8 @@ pub mod vocabulary {
     pub const PREVIEW: CellId = CellId::from_u128(0x69662683bafef0d10c88d46245cb638f);
     pub const PREVIEW_3D: CellId = CellId::from_u128(0x9a8142ecc3124e873dd2ad955d28fb85);
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
+    pub const SCENE: CellId = CellId::from_u128(0xd6757ca4cb992116fe31ede39530709d);
+    pub const COLOR: CellId = CellId::from_u128(0xd6b4c91765541de967c02878c42d15ea);
     pub const RADIUS: CellId = CellId::from_u128(0x64302843e07250efdb485267245c762e);
     pub const DELTA_X: CellId = CellId::from_u128(0x671936a24eb2d9d6e47ac5915a3e38c4);
     pub const DELTA_Y: CellId = CellId::from_u128(0x3dd683179b807ca200980eeffb90011f);
@@ -76,6 +83,8 @@ pub mod vocabulary {
     pub const PITCH: CellId = CellId::from_u128(0x9872a30927160707b693ffe1e6019fd9);
     pub const ZOOM: CellId = CellId::from_u128(0x745f4518cc847a4e7457e3426d010754);
     pub const INVALID_FIELD: CellId = CellId::from_u128(0xc26cfccc2a9fc752bf73c4359f2e9ade);
+    pub const INVALID_SCENE: CellId = CellId::from_u128(0x8e43712a94cf767dc9c2bf848d8bbf15);
+    pub const INVALID_COLOR: CellId = CellId::from_u128(0x91720fe73042065ac464952efa8dddd3);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
     pub const INVALID_SIZE: CellId = CellId::from_u128(0x220fe6002d6a973da9c2ea1ff7fec98e);
 }
@@ -119,8 +128,13 @@ fn preview_value(
     else {
         return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
-    if tree(&field).is_none() {
-        return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
+    let validation = if marker == vocabulary::PREVIEW_3D {
+        scene_objects(&field).map(|_| ())
+    } else {
+        tree(&field).map(|_| ()).ok_or(vocabulary::INVALID_FIELD)
+    };
+    if let Err(reason) = validation {
+        return Ok(absent::with_reason(reason));
     }
     let dimensions = [
         crate::libraries::layout::vocabulary::WIDTH,
@@ -374,7 +388,7 @@ fn parameters(marker: CellId) -> Option<&'static [CellId]> {
 
 fn tree(value: &Value) -> Option<Tree> {
     if let Some(number) = f32::read(value) {
-        return number.is_finite().then(|| Tree::constant(number.into()));
+        return number.is_finite().then(|| Tree::constant(number));
     }
     let fields = value.as_record()?;
     let marker = one_marker(fields)?;
@@ -466,10 +480,10 @@ fn slice_display(
             + (preview.min_x + preview.max_x) / 2.0,
         Tree::y() * (half_height * minimum / raster_size.height() as f32)
             + (preview.min_y + preview.max_y) / 2.0,
-        Tree::constant(preview.z.into()),
+        Tree::constant(preview.z),
     );
     let config = PixelRenderConfig::from_size(raster_size);
-    let image = config.run(VmShape::from(tree).try_into().ok()?)?;
+    let image = config.run(VmShape::from(tree).try_into().ok()?);
     let rgba = image
         .iter()
         .flat_map(|pixel| {
@@ -639,8 +653,55 @@ fn zoom_handler(
     }
 }
 
-struct VolumePreview {
+struct SceneObject {
     tree: Tree,
+    color: [u8; 3],
+}
+
+fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
+    let Some(scene) = value
+        .as_record()
+        .and_then(|fields| fields.get(&vocabulary::SCENE))
+    else {
+        return Ok(vec![SceneObject {
+            tree: tree(value).ok_or(vocabulary::INVALID_FIELD)?,
+            color: [255; 3],
+        }]);
+    };
+    let objects = scene.as_list().ok_or(vocabulary::INVALID_SCENE)?;
+    // Fidget's merged voxel stores the object index in a u16.
+    if objects.len() > usize::from(u16::MAX) + 1 {
+        return Err(vocabulary::INVALID_SCENE);
+    }
+    objects
+        .iter()
+        .map(|(_, object)| {
+            let fields = object.as_record().ok_or(vocabulary::INVALID_SCENE)?;
+            let field = fields
+                .get(&vocabulary::FIELD)
+                .ok_or(vocabulary::INVALID_SCENE)?;
+            let color = fields
+                .get(&vocabulary::COLOR)
+                .map(|value| {
+                    let rgba = color::read(value)
+                        .ok_or(vocabulary::INVALID_COLOR)?
+                        .to_rgba8();
+                    (rgba.a == 255)
+                        .then_some([rgba.r, rgba.g, rgba.b])
+                        .ok_or(vocabulary::INVALID_COLOR)
+                })
+                .transpose()?
+                .unwrap_or([255; 3]);
+            Ok(SceneObject {
+                tree: tree(field).ok_or(vocabulary::INVALID_FIELD)?,
+                color,
+            })
+        })
+        .collect()
+}
+
+struct VolumePreview {
+    objects: Vec<SceneObject>,
     size: Size,
     min: Vector3<f32>,
     max: Vector3<f32>,
@@ -652,7 +713,7 @@ fn volume_preview(value: &Value) -> Option<VolumePreview> {
         .get(&vocabulary::PREVIEW_3D)?
         .as_record()?;
     let preview = VolumePreview {
-        tree: tree(fields.get(&vocabulary::FIELD)?)?,
+        objects: scene_objects(fields.get(&vocabulary::FIELD)?).ok()?,
         size: preview_size(fields)?,
         min: Vector3::new(
             f32::read(fields.get(&vocabulary::MIN_X)?)?,
@@ -708,28 +769,41 @@ fn volume_view(
     }
 }
 
-fn cpu_volume(shape: VmShape, view: &VolumeView) -> Option<Vec<u8>> {
+fn cpu_volume(objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
     let config = VoxelRenderConfig {
         world_to_model: view.world_to_model,
         ..VoxelRenderConfig::from_size(view.size)
     };
-    let image = config.run(shape.try_into().ok()?)?;
+    let mut image = vec![
+        (GeometryPixel::default(), [255; 3]);
+        view.size.width() as usize * view.size.height() as usize
+    ];
+    for object in objects {
+        let shape = VmShape::from(object.tree.clone());
+        let geometry = config.run(shape.try_into().ok()?);
+        for (output, pixel) in image.iter_mut().zip(geometry.iter()) {
+            if pixel.depth > output.0.depth {
+                *output = (*pixel, object.color);
+            }
+        }
+    }
     let light = Vector3::new(0.35, -0.45, 1.0).normalize();
     Some(
         image
             .iter()
-            .flat_map(|pixel| shade_geometry(*pixel, light))
+            .flat_map(|(pixel, color)| shade_geometry(*pixel, *color, light))
             .collect(),
     )
 }
 
-fn shade_geometry(pixel: GeometryPixel, light: Vector3<f32>) -> [u8; 4] {
+fn shade_geometry(pixel: GeometryPixel, color: [u8; 3], light: Vector3<f32>) -> [u8; 4] {
     if pixel.depth == 0 {
         [0, 0, 0, 0]
     } else {
         let normal = Vector3::from(pixel.normal).normalize();
-        let intensity = ((0.22 + 0.78 * normal.dot(&light).max(0.0)) * 255.0) as u8;
-        [intensity, intensity, intensity, 255]
+        let intensity = 0.22 + 0.78 * normal.dot(&light).max(0.0);
+        let [r, g, b] = color.map(|channel| (f32::from(channel) * intensity) as u8);
+        [r, g, b, 255]
     }
 }
 
@@ -754,13 +828,20 @@ impl PreviewRenderer {
         camera: Camera,
         raster_size: PixelRenderSize,
     ) -> Option<Vec<u8>> {
-        let shape = VmShape::from(preview.tree.clone());
         let view = volume_view(preview, camera, raster_size);
+        if preview.objects.is_empty() {
+            return Some(vec![
+                0;
+                raster_size.width() as usize
+                    * raster_size.height() as usize
+                    * 4
+            ]);
+        }
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(&shape, &view) {
+        if let Some(image) = self.gpu.render(&preview.objects, &view) {
             return Some(image);
         }
-        cpu_volume(shape, &view)
+        cpu_volume(&preview.objects, &view)
     }
 }
 
@@ -775,7 +856,7 @@ enum GpuState {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl GpuState {
-    fn render(&mut self, shape: &VmShape, view: &VolumeView) -> Option<Vec<u8>> {
+    fn render(&mut self, objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
         if matches!(self, Self::Uninitialized) {
             let gpu = pollster::block_on(Gpu::init());
             *self = match gpu {
@@ -784,7 +865,7 @@ impl GpuState {
             };
         }
         match self {
-            Self::Available(renderer) => renderer.render(shape, view),
+            Self::Available(renderer) => renderer.render(objects, view),
             Self::Uninitialized | Self::Unavailable => None,
         }
     }
@@ -795,121 +876,89 @@ struct GpuRenderer {
     gpu: Gpu,
     voxel: voxel::Context,
     effects: effects::Context,
-    buffers: Option<GpuBuffers>,
+    voxel_workspace: voxel::Workspace,
+    merge: effects::MergeWorkspace,
+    color_workspace: effects::ColorWorkspace,
+    ssao: effects::SsaoWorkspace,
+    shade: effects::ShadeWorkspace,
+    read: fidget_engine::wgpu::buf::ReadBuffer<effects::ShadedImageTag>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl GpuRenderer {
     fn new(gpu: Gpu) -> Self {
+        let voxel = voxel::Context::new(&gpu);
+        let effects = effects::Context::new(&gpu);
+        let shade = effects.shade_workspace();
         Self {
-            voxel: voxel::Context::new(&gpu),
-            effects: effects::Context::new(&gpu),
+            voxel_workspace: voxel.workspace(),
+            merge: effects.merge_workspace(),
+            color_workspace: effects.color_workspace(),
+            ssao: effects.ssao_workspace(),
+            read: gpu.read_buffer_for(shade.output()),
+            shade,
+            voxel,
+            effects,
             gpu,
-            buffers: None,
         }
     }
 
-    fn render(&mut self, shape: &VmShape, view: &VolumeView) -> Option<Vec<u8>> {
-        let shape = self.voxel.shape(shape).ok()?;
+    fn render(&mut self, objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
         let Self {
             gpu,
             voxel,
             effects,
-            buffers,
-        } = self;
-        match buffers {
-            Some(buffers) if buffers.size == view.size => {}
-            Some(buffers)
-                if buffers.size.width() == view.size.width()
-                    && buffers.size.height() == view.size.height() =>
-            {
-                buffers.set_depth(voxel, effects, view.size)?;
-            }
-            _ => *buffers = Some(GpuBuffers::new(gpu, voxel, effects, view.size)?),
-        }
-        let GpuBuffers {
-            voxel: voxel_buffers,
+            voxel_workspace,
             merge,
+            color_workspace,
             ssao,
             shade,
             read,
-            ..
-        } = buffers.as_mut()?;
-        voxel
-            .submit(
-                &shape,
-                voxel_buffers,
-                None,
-                &voxel::RenderConfig {
-                    world_to_model: view.world_to_model,
-                },
-            )
-            .ok()?;
+        } = self;
+        merge.reset();
+        for object in objects {
+            let shape = RenderShape::new(&VmShape::from(object.tree.clone())).ok()?;
+            voxel
+                .submit(
+                    &shape,
+                    voxel_workspace,
+                    &VoxelRenderConfig {
+                        image_size: view.size,
+                        world_to_model: view.world_to_model,
+                    },
+                )
+                .ok()?;
+            effects
+                .submit_merge(
+                    voxel_workspace.output(),
+                    effects::MergeSettings::default(),
+                    merge,
+                )
+                .ok()?;
+        }
+        let colors = objects
+            .iter()
+            .map(|object| {
+                let [r, g, b] = object
+                    .color
+                    .map(|channel| VmShape::from(Tree::constant(f32::from(channel) / 255.0)));
+                ShapeColor::Rgb { r, g, b }
+            })
+            .collect::<Vec<_>>();
+        let colors = ShapeColorBuffers::new(&colors).ok()?;
         effects
-            .submit_merge(&[voxel_buffers.image_storage_buffer()], true, merge)
+            .submit_color(merge, &view.world_to_model, &colors, color_workspace, shade)
             .ok()?;
         effects.submit_ssao(merge, ssao).ok()?;
-        effects
-            .submit_shade(merge, Some(ssao), shade, Some(read))
-            .ok()?;
+        effects.submit_shade(merge, Some(ssao), shade).ok()?;
+        gpu.copy(shade.output(), read);
         Some(
             gpu.map(read)
-                .image()
-                .take()
-                .0
+                .to_vec()
                 .into_iter()
                 .flat_map(u32::to_le_bytes)
                 .collect(),
         )
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-struct GpuBuffers {
-    size: VoxelRenderSize,
-    voxel: voxel::Buffers,
-    merge: effects::MergeBuffers,
-    ssao: effects::SsaoBuffers,
-    shade: effects::ShadeBuffers,
-    read: fidget_engine::wgpu::buf::ImageReadBuffer<effects::ShadedImageTag>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl GpuBuffers {
-    fn new(
-        gpu: &Gpu,
-        voxel: &voxel::Context,
-        effects: &effects::Context,
-        size: VoxelRenderSize,
-    ) -> Option<Self> {
-        let voxel = voxel.buffers(size).ok()?;
-        let merge = effects.merge_buffers(size).ok()?;
-        let ssao = effects.ssao_buffers(size).ok()?;
-        let shade = effects
-            .shade_buffers(PixelRenderSize::new(size.width(), size.height()))
-            .ok()?;
-        let read = gpu.read_buffer_for(shade.output());
-        Some(Self {
-            size,
-            voxel,
-            merge,
-            ssao,
-            shade,
-            read,
-        })
-    }
-
-    fn set_depth(
-        &mut self,
-        voxel: &voxel::Context,
-        effects: &effects::Context,
-        size: VoxelRenderSize,
-    ) -> Option<()> {
-        let merge = effects.merge_buffers(size).ok()?;
-        voxel.set_buffers_image_size(&mut self.voxel, size).ok()?;
-        self.size = size;
-        self.merge = merge;
-        Some(())
     }
 }
 
@@ -1002,6 +1051,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::PREVIEW, "preview"),
         (vocabulary::PREVIEW_3D, "preview 3d"),
         (vocabulary::FIELD, "field"),
+        (vocabulary::SCENE, "scene"),
+        (vocabulary::COLOR, "color"),
         (vocabulary::RADIUS, "radius"),
         (vocabulary::DELTA_X, "x"),
         (vocabulary::DELTA_Y, "y"),
@@ -1022,6 +1073,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     }
     for (cell, spelling) in [
         (vocabulary::INVALID_FIELD, "invalid field"),
+        (vocabulary::INVALID_SCENE, "invalid scene"),
+        (vocabulary::INVALID_COLOR, "invalid opaque color"),
         (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
         (vocabulary::INVALID_SIZE, "invalid preview size"),
     ] {
@@ -1127,6 +1180,230 @@ mod tests {
         let mut evaluator = VmShape::new_float_slice_eval();
         let tape = shape.ez_float_slice_tape();
         evaluator.eval(&tape, &[x], &[y], &[z]).unwrap()[0]
+    }
+
+    fn colored(field: Value, rgb: [u8; 3]) -> Value {
+        Value::record([
+            (vocabulary::FIELD, field),
+            (
+                vocabulary::COLOR,
+                node(color::vocabulary::RGB, rgb.to_vec().into()),
+            ),
+        ])
+    }
+
+    #[test]
+    fn scene_colors_are_data_and_preview_preserves_metadata() {
+        let field = f32::value(-1.0);
+        let scene = name::record(
+            "parts",
+            [(
+                vocabulary::SCENE,
+                Value::list([
+                    name::record(
+                        "red part",
+                        colored(field.clone(), [255, 0, 0])
+                            .as_record()
+                            .unwrap()
+                            .iter()
+                            .map(|(key, value)| (*key, value.clone())),
+                    ),
+                    Value::record([(vocabulary::FIELD, field)]),
+                ]),
+            )],
+        );
+        let preview = evaluate(&call(
+            vocabulary::PREVIEW_3D,
+            [(presentation::vocabulary::VALUE, scene.clone())],
+        ));
+        assert_eq!(
+            preview
+                .as_record()
+                .unwrap()
+                .get(&vocabulary::PREVIEW_3D)
+                .unwrap()
+                .as_record()
+                .unwrap()
+                .get(&vocabulary::FIELD),
+            Some(&scene)
+        );
+        let objects = scene_objects(&scene).unwrap();
+        assert_eq!(objects[0].color, [255, 0, 0]);
+        assert_eq!(objects[1].color, [255; 3]);
+        assert_eq!(scene_objects(&f32::value(0.0)).unwrap()[0].color, [255; 3]);
+        assert!(tree(&scene).is_none(), "a scene is not an arithmetic field");
+    }
+
+    #[test]
+    fn malformed_scenes_and_translucent_colors_fail_explicitly() {
+        for (objects, reason) in [
+            (Value::record([]), vocabulary::INVALID_SCENE),
+            (Value::list([Value::record([])]), vocabulary::INVALID_SCENE),
+            (
+                Value::list([colored(Value::record([]), [1, 2, 3])]),
+                vocabulary::INVALID_FIELD,
+            ),
+            (
+                Value::list([Value::record([
+                    (vocabulary::FIELD, f32::value(0.0)),
+                    (
+                        vocabulary::COLOR,
+                        node(color::vocabulary::RGBA, vec![255, 0, 0, 128].into()),
+                    ),
+                ])]),
+                vocabulary::INVALID_COLOR,
+            ),
+            (
+                Value::list([Value::record([
+                    (vocabulary::FIELD, f32::value(0.0)),
+                    (
+                        vocabulary::COLOR,
+                        node(color::vocabulary::RGB, vec![255].into()),
+                    ),
+                ])]),
+                vocabulary::INVALID_COLOR,
+            ),
+        ] {
+            let result = evaluate(&call(
+                vocabulary::PREVIEW_3D,
+                [(
+                    presentation::vocabulary::VALUE,
+                    node(vocabulary::SCENE, objects),
+                )],
+            ));
+            assert_eq!(result, absent::with_reason(reason));
+        }
+        let opaque = node(
+            vocabulary::SCENE,
+            Value::list([Value::record([
+                (vocabulary::FIELD, f32::value(0.0)),
+                (
+                    vocabulary::COLOR,
+                    node(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
+                ),
+            ])]),
+        );
+        assert_eq!(scene_objects(&opaque).unwrap()[0].color, [1, 2, 3]);
+    }
+
+    fn overlapping_objects() -> Vec<SceneObject> {
+        let sphere = |x, z| {
+            ((Tree::x() - x).square() + Tree::y().square() + (Tree::z() - z).square()).sqrt() - 0.65
+        };
+        vec![
+            SceneObject {
+                tree: sphere(-0.3, -0.1),
+                color: [255, 0, 0],
+            },
+            SceneObject {
+                tree: sphere(0.3, 0.15),
+                color: [0, 0, 255],
+            },
+        ]
+    }
+
+    fn test_volume_view() -> VolumeView {
+        VolumeView {
+            size: VoxelRenderSize::new(64, 64, 64),
+            world_to_model: Matrix4::identity(),
+        }
+    }
+
+    fn assert_two_colors(rgba: &[u8]) {
+        assert!(
+            rgba.chunks_exact(4)
+                .filter(|p| p[0] > 0 && p[1] == 0 && p[2] == 0 && p[3] == 255)
+                .count()
+                > 64
+        );
+        assert!(
+            rgba.chunks_exact(4)
+                .filter(|p| p[0] == 0 && p[1] == 0 && p[2] > 0 && p[3] == 255)
+                .count()
+                > 64
+        );
+        let middle = &rgba[(32 * 64 + 32) * 4..][..4];
+        assert!(
+            middle[0] == 0 && middle[2] > 0,
+            "the nearer blue surface owns the overlap: {middle:?}"
+        );
+    }
+
+    #[test]
+    fn cpu_scene_merges_depth_before_shading_colors() {
+        let view = test_volume_view();
+        let mut objects = overlapping_objects();
+        assert_two_colors(&cpu_volume(&objects, &view).unwrap());
+        objects.reverse();
+        assert_two_colors(&cpu_volume(&objects, &view).unwrap());
+        objects[1].tree = objects[0].tree.clone();
+        let rgba = cpu_volume(&objects, &view).unwrap();
+        assert!(
+            rgba.chunks_exact(4)
+                .filter(|p| p[3] != 0)
+                .all(|p| p[0] == 0 && p[2] > 0),
+            "equal depths keep the first object, like Fidget's GPU merge"
+        );
+    }
+
+    #[test]
+    fn empty_scene_is_transparent() {
+        let value = evaluate(&call(
+            vocabulary::PREVIEW_3D,
+            [(
+                presentation::vocabulary::VALUE,
+                node(vocabulary::SCENE, Value::list([])),
+            )],
+        ));
+        let preview = volume_preview(&value).unwrap();
+        let rgba = PreviewRenderer::default()
+            .render(&preview, Camera::default(), PixelRenderSize::from(64))
+            .unwrap();
+        assert_eq!(rgba, vec![0; 64 * 64 * 4]);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    #[ignore = "requires a GPU; does not use the CPU fallback"]
+    fn gpu_colors_constants_and_workspace_reuse() {
+        let gpu = pollster::block_on(Gpu::init()).expect("GPU required for this test");
+        let mut renderer = GpuRenderer::new(gpu);
+        let mut objects = overlapping_objects();
+        for (width, height) in [(64, 64), (80, 48), (64, 64)] {
+            let mut view = test_volume_view();
+            view.size = VoxelRenderSize::new(width, height, 64);
+            let rgba = renderer.render(&objects, &view).expect("GPU color render");
+            assert_eq!(rgba.len(), width as usize * height as usize * 4);
+            if width == 64 {
+                assert_two_colors(&rgba);
+            }
+            objects.reverse();
+        }
+        for (tree, inside) in [
+            (Tree::constant(0.0), false),
+            (Tree::constant(1.0), false),
+            (Tree::constant(-1.0), true),
+            (Tree::constant(1.0) + Tree::constant(-1.0), false),
+        ] {
+            let rgba = renderer
+                .render(
+                    &[SceneObject {
+                        tree,
+                        color: [255, 0, 0],
+                    }],
+                    &test_volume_view(),
+                )
+                .expect("constant fields must use valid GPU buffers");
+            assert!(
+                rgba.chunks_exact(4)
+                    .all(|p| p[3] == if inside { 255 } else { 0 })
+            );
+        }
+        assert_two_colors(
+            &renderer
+                .render(&overlapping_objects(), &test_volume_view())
+                .unwrap(),
+        );
     }
 
     #[test]
@@ -1293,8 +1570,8 @@ mod tests {
 
         assert_eq!(preview.min, Vector3::new(-80.0, -80.0, -80.0));
         assert_eq!(preview.max, Vector3::new(80.0, 80.0, 80.0));
-        assert!(sample(preview.tree.clone(), 0.0, 0.0, 0.0) < 0.0);
-        assert!(sample(preview.tree, 80.0, 0.0, 0.0) > 0.0);
+        assert!(sample(preview.objects[0].tree.clone(), 0.0, 0.0, 0.0) < 0.0);
+        assert!(sample(preview.objects[0].tree.clone(), 80.0, 0.0, 0.0) > 0.0);
     }
 
     #[test]
@@ -1326,7 +1603,7 @@ mod tests {
                 let x = screen.fixed_view::<3, 1>(0, 0).norm();
                 let y = screen.fixed_view::<3, 1>(0, 1).norm();
                 assert!((x - y).abs() < 0.00001, "square pixels must stay square");
-                let rgba = cpu_volume(VmShape::from(preview.tree.clone()), &view).unwrap();
+                let rgba = cpu_volume(&preview.objects, &view).unwrap();
                 assert_eq!(
                     rgba.len(),
                     raster.width() as usize * raster.height() as usize * 4
@@ -1384,7 +1661,7 @@ mod tests {
             ));
             let preview = volume_preview(&value).unwrap();
             let view = volume_view(&preview, Camera::default(), PixelRenderSize::from(64));
-            let rgba = cpu_volume(VmShape::from(preview.tree), &view).unwrap();
+            let rgba = cpu_volume(&preview.objects, &view).unwrap();
             assert_eq!(rgba.len(), 64 * 64 * 4);
             assert!(
                 rgba.chunks_exact(4)
@@ -1445,7 +1722,7 @@ mod tests {
     #[test]
     fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
         let preview = VolumePreview {
-            tree: Tree::from(0.0),
+            objects: vec![],
             size: Size::new(256.0, 256.0),
             min: Vector3::repeat(-1.0),
             max: Vector3::repeat(1.0),

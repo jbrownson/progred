@@ -8,7 +8,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 1 | `sample.gid` | Basic data and projections |
 | 2 | `grap-demo.gid` | Grap evaluation |
 | 3 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
-| 4 | `fidget.gid` | Small constructive-geometry example |
+| 4 | `fidget.gid` | Blue cutaway sphere and a separate gold sphere in one colored scene |
 | 5 | `fidget-torus.gid` | Smooth torus: a small arithmetic field |
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
@@ -49,11 +49,17 @@ Fidget arithmetic. Its `where` bindings expose the Rhino defaults: size `1`,
 chamfer `0.1`, and control-point depth `0.5`. The resulting face-center depression
 is `0.125`, not `0.5`. Edit or scrub those constants in the source.
 
-The left viewport calls the function and passes its result to `preview 3d`.
+The left viewport calls the function and wraps its result in a cyan scene object
+for `preview 3d`. The cube function itself still returns an ordinary field.
 Its explicit bounds are −0.6…0.6, in the same model units; no geometry scaling
 or cube-specific Rust primitive is involved. Orbit and zoom work normally.
 See [the geometry derivation](../docs/fidget-cube.md) for correspondence to the
 Rhino surfaces, parameter limitations, and what is not yet a CAM model.
+
+Colors are editable RGB values in the documents. The small Fidget example uses
+Grap quote/unquote to combine two fields in `{scene: [{field, color}, ...]}`;
+they retain separate colors while sharing depth testing and lighting. This
+first color interface is opaque only, not a transparency or texture system.
 
 See [frame performance checks](../docs/performance.md) for repeatable orbit
 measurements using the actual example documents.

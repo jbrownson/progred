@@ -8,6 +8,7 @@
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "color": d6b4c91765541de967c02878c42d15ea,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
     "cube": 650c98379ab879a6b902b0bc94305103,
@@ -19,6 +20,7 @@
     "f32_subtract": 5cd7408dab067d8b92c7a1bd9cda7b05,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
+    "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
     "half_size": f6e416437259d6867c11eced7923bf1c,
@@ -40,13 +42,17 @@
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
+    "scene": d6757ca4cb992116fe31ede39530709d,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
     "square": 6164efe43a126d79bcd252a17a9453c1,
     "subtract": 90e22494757f01a2ddf9bea409c186ae,
     "sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
     "u": c55bbadf3e61435c3aeab495079d1b19,
+    "unquote": da48703c290e3b35d7353c38110bc953,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
@@ -348,7 +354,21 @@
               },
               function: preview_3d,
               projection_value: {
-                function: projection_value,
+                function: quote,
+                expression: {
+                  scene: [
+                    {
+                      field: {
+                        unquote: {
+                          function: projection_value,
+                        },
+                      },
+                      color: {
+                        rgb: 0x60b6d0,
+                      },
+                    },
+                  ],
+                },
               },
               max_x: {
                 f32: 0x9a99193f,

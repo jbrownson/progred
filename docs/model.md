@@ -331,6 +331,17 @@ resolution follows the display scale; rectangular 3D views preserve square
 pixels rather than stretching the geometry. Ordinary preview calls without size
 arguments retain the 256-point default.
 
+`preview 3d` accepts either one Fidget field (white) or a scene value:
+`{scene: [{field: sdf, color: rgb}, ...]}`. A scene groups separately colored
+objects; it is not a CSG operator. Geometry is depth-merged before lighting,
+and equal depths keep the earlier object. Colors use the existing color
+library's RGB/RGBA values; omitted colors are white and alpha must be opaque.
+An empty scene is transparent. Fidget's 16-bit object index limits one scene to
+65,536 objects. Scene data is inert like other records: Grap code constructs
+it with ordinary quote/unquote, not implicit evaluation inside the scene.
+The native renderer uses Fidget's GPU color pass; the CPU/web renderer shades
+the winning geometry with the same object's color. Their lighting differs.
+
 The IoP example uses an inline Grap viewport function to construct a drawing
 program with the assigned width and height. Those dimensions also reach `tree
 scene`; its drawing units and editable tree parameters are not rescaled.
