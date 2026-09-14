@@ -872,8 +872,8 @@ pub mod payload {
         payload
             .as_record()
             .and_then(|fields| fields.get(&vocabulary::COMPLETION_EVERYTHING))
-            .and_then(Value::as_cell)
-            == Some(logic::vocabulary::TRUE)
+            .and_then(logic::read)
+            == Some(true)
     }
 
     pub fn with_completion_query(payload: &Value, query: &str) -> Value {

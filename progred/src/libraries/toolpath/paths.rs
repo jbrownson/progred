@@ -38,6 +38,7 @@ impl<S: Sink + ?Sized> Sink for &mut S {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     StartAt(Point3),
@@ -50,11 +51,13 @@ pub enum InvalidPath {
     MissingStart,
 }
 
+#[cfg(test)]
 #[derive(Default)]
 pub struct Recording {
     pub commands: Vec<Command>,
 }
 
+#[cfg(test)]
 impl Recording {
     pub fn replay<S: Sink + ?Sized>(&self, sink: &mut S) -> Result<(), S::Error> {
         for command in &self.commands {
@@ -67,6 +70,7 @@ impl Recording {
     }
 }
 
+#[cfg(test)]
 impl Sink for Recording {
     type Error = InvalidPath;
 

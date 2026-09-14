@@ -47,6 +47,7 @@ pub mod vocabulary {
     pub const START_NOT_F64: CellId = CellId::from_u128(0x809d7bba33afaf8a673846f0c44cd2e6);
     pub const END_NOT_F64: CellId = CellId::from_u128(0x17081dd43c4af46c54408cd125eaf3e2);
     pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
+    pub const INVALID_INPUT: CellId = CellId::from_u128(0xa344d4784dae693385d91140b3c030a2);
 }
 
 // The convention itself lives in the evaluator, which privileges it
@@ -175,7 +176,13 @@ pub fn functions() -> ForeignFunctions {
                 let input = context.eval(input, environment)?;
                 Ok(crate::libraries::text::read(&input)
                     .and_then(|text| number::edit(text, Some(&current), value))
-                    .unwrap_or_else(crate::libraries::absent::value))
+                    .unwrap_or_else(|| {
+                        ::grap::absent::with_detail(
+                            vocabulary::INVALID_INPUT,
+                            line_edit::vocabulary::INPUT,
+                            input.clone(),
+                        )
+                    }))
             }),
         )
         .register(
@@ -391,6 +398,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::START_NOT_F64, "start is not f64"),
         (vocabulary::END_NOT_F64, "end is not f64"),
         (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
+        (vocabulary::INVALID_INPUT, "invalid f64 input"),
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }

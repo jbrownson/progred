@@ -13,12 +13,12 @@ Calling generators in sequence composes their output. `MapPoints` adapts another
 sink, so translation, reflection, surface mapping, and further adapters compose
 without recording intermediate paths.
 
-`Recording` is an optional initial representation: a native vector of start/line
-commands, with replay into any sink. Counting or direct rendering consumers can
-skip it. There is no GID command list and no opaque Rust program passed through
-Grap. A preview records locally while preparing each frame, projects the points
-to one vector path, and paints that path through the ordinary canvas interface.
-Nothing is memoized across frames.
+Tests use `Recording` as an optional initial representation: a native vector of
+start/line commands, with replay into any sink. The preview instead consumes
+emitted points directly into one projected vector path and its bounds, then fits
+and paints that path through the ordinary canvas interface. There is no
+intermediate command recording, GID command list, or opaque Rust program passed
+through Grap. Nothing is memoized across frames.
 
 Grap uses ordinary calls to scoped `start at`, `line to`, and
 `map points` functions. `do` supplies sequencing; lambdas supply reusable
@@ -32,10 +32,12 @@ compute coordinates, not emit more paths.
 
 The scoped output owns its mapping chain and sink. No mutable state is held by
 the library between evaluations. Each emitted sample consumes evaluator fuel,
-including samples generated inside Rust. Invalid commands mark the scoped
-result failed even if a surrounding `do` ignores their returned absent. A
-consumer needing atomic results must stage its sink and discard it on failure;
-the preview does. Native generators propagate their sink's errors immediately.
+including samples generated inside Rust. Invalid commands return ordinary absents;
+`do` stops at the first one. An enclosing `match` can recover and continue emitting,
+with earlier output retained. No failure latch can override that recovery.
+A consumer needing atomic results must stage its sink and discard it on a failed
+final result; the preview does. Native generators propagate their sink's errors
+immediately.
 
 ## First example
 
@@ -50,7 +52,10 @@ The row loop and point loop use the ordinary `iterate` function, emitting
 policy is document code, not a toolpath FFI. General `min`, `max`, `ceil`,
 `hypot`, and `is finite` operations belong to the f64 library. The example
 rejects nonfinite or fractional row counts and nonpositive/nonfinite spacing;
-an excessive sampling request is bounded by evaluator fuel.
+these checks are a flat sequence of ordinary `require` guards. Loops explicitly
+return the list library's `iteration finished` absent at their endpoint rather
+than relying on a failed match. An excessive sampling request is bounded by
+evaluator fuel.
 
 The example maps two crossing sweeps to the top quadratic patch used by the
 Rhino cube (size 1, chamfer 0.1, center-control-point displacement 0.5):

@@ -1,5 +1,6 @@
 {
   "binders": {
+    "absent": d9c0a7145a38859a245640d3469cbcd4,
     "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
@@ -12,6 +13,7 @@
     "blossoms": 8e6f78c4ab9b8bef8a26643b2a6203b2,
     "blossoms_per_branch": 02a022e127aba280fa54bfc9876ab42e,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "branch_item": 36b771a86bf3f81e62ddd3b7bfeb2485,
     "branch_items": 6de2b6ac6cdfb49f75c7a323152eb700,
     "branch_length": d219d7e20342e9423e3bc5f319d8f4fe,
@@ -42,7 +44,9 @@
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "false": 8fcc0a2e5f26c72efd9e917a28919801,
     "fill": 1624dc973ec7790203eb8fd22c9d6d05,
+    "finished": b19fe726e3c2eab7a5d81cda12cf44b7,
     "floor": d007814c5f6a6c38b025605b399473d4,
     "flowering_tree": 4818a5401ad0728e42e374df991bad2e,
     "fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
@@ -199,7 +203,9 @@
                 function: match,
                 cases: [
                   {
-                    pattern: true,
+                    pattern: {
+                      bool: true,
+                    },
                     expression: {
                       function: let,
                       expression: {
@@ -385,7 +391,9 @@
                             function: match,
                             cases: [
                               {
-                                pattern: true,
+                                pattern: {
+                                  bool: true,
+                                },
                                 expression: {
                                   function: quote,
                                   expression: {
@@ -432,6 +440,14 @@
                           },
                         },
                       ],
+                    },
+                  },
+                  {
+                    pattern: {
+                      bool: false,
+                    },
+                    expression: {
+                      absent: finished,
                     },
                   },
                 ],
@@ -591,310 +607,211 @@
                   state,
                 ],
                 body: {
-                  function: let,
-                  expression: {
-                    function: quote,
-                    expression: {
-                      state: {
-                        frontier: {
-                          unquote: new_frontier,
-                        },
-                      },
-                      item: {
-                        unquote: branch_item,
-                      },
-                    },
-                  },
-                  bindings: [
+                  value: state,
+                  function: match,
+                  cases: [
                     {
-                      value: state,
                       pattern: {
-                        frontier: {
-                          bind: frontier,
-                        },
+                        frontier: [],
+                      },
+                      expression: {
+                        absent: finished,
                       },
                     },
                     {
-                      value: {
-                        index: {
-                          f64: 0x0000000000000000,
-                        },
-                        list: frontier,
-                        function: list_at,
+                      pattern: {
+                        bind: value,
                       },
-                      pattern: [
-                        {
-                          bind: depth,
-                        },
-                        {
-                          bind: angle,
-                        },
-                        {
-                          bind: x,
-                        },
-                        {
-                          bind: y,
-                        },
-                        {
-                          bind: branch_width,
-                        },
-                      ],
-                    },
-                    {
-                      value: {
-                        list: frontier,
-                        function: list_tail,
-                      },
-                      bind: rest,
-                    },
-                    {
-                      value: {
-                        maximum: {
-                          f64: 0xcdccccccccccf43f,
-                        },
-                        minimum: {
-                          f64: 0x666666666666e63f,
-                        },
-                        function: random_between,
-                      },
-                      bind: random_scale,
-                    },
-                    {
-                      value: {
-                        right: random_scale,
-                        function: multiply,
-                        left: {
-                          value: depth,
-                          end: {
-                            f64: 0x0000000000002840,
-                          },
-                          start: {
-                            f64: 0x000000000000f03f,
-                          },
-                          start_value: branch_length,
-                          function: tween,
-                          end_value: {
-                            f64: 0x0000000000000840,
-                          },
-                        },
-                      },
-                      bind: scaled_length,
-                    },
-                    {
-                      value: {
-                        value: {
-                          right: {
-                            f64: 0x0000000000000000,
-                          },
-                          function: equal,
-                          left: depth,
-                        },
-                        function: match,
-                        cases: [
-                          {
-                            pattern: true,
-                            expression: trunk_length,
-                          },
-                          {
-                            pattern: {
-                              bind: value,
+                      expression: {
+                        function: let,
+                        expression: {
+                          function: quote,
+                          expression: {
+                            state: {
+                              frontier: {
+                                unquote: new_frontier,
+                              },
                             },
-                            expression: scaled_length,
+                            item: {
+                              unquote: branch_item,
+                            },
                           },
-                        ],
-                      },
-                      bind: length,
-                    },
-                    {
-                      value: {
-                        right: {
-                          f64: 0x0000000000000040,
                         },
-                        function: divide,
-                        left: branch_width,
-                      },
-                      bind: half_width,
-                    },
-                    {
-                      value: {
-                        right: half_width,
-                        function: subtract,
-                        left: length,
-                      },
-                      bind: tip_distance,
-                    },
-                    {
-                      value: {
-                        right: {
-                          right: {
-                            operand: angle,
-                            function: cos,
-                          },
-                          function: multiply,
-                          left: tip_distance,
-                        },
-                        function: sum,
-                        left: x,
-                      },
-                      bind: tip_x,
-                    },
-                    {
-                      value: {
-                        right: {
-                          right: {
-                            operand: angle,
-                            function: sin,
-                          },
-                          function: multiply,
-                          left: tip_distance,
-                        },
-                        function: sum,
-                        left: y,
-                      },
-                      bind: tip_y,
-                    },
-                    {
-                      value: {
-                        right: {
-                          f64: 0x000000000000f03f,
-                        },
-                        function: sum,
-                        left: depth,
-                      },
-                      bind: child_depth,
-                    },
-                    {
-                      value: {
-                        right: {
-                          f64: 0x666666666666e63f,
-                        },
-                        function: multiply,
-                        left: branch_width,
-                      },
-                      bind: child_width,
-                    },
-                    {
-                      value: {
-                        value: {
-                          right: {
-                            f64: 0x0000000000001840,
-                          },
-                          function: less,
-                          left: depth,
-                        },
-                        function: match,
-                        cases: [
+                        bindings: [
                           {
-                            pattern: true,
-                            expression: {
-                              function: let,
-                              expression: new_frontier,
-                              bindings: [
+                            value: state,
+                            pattern: {
+                              frontier: {
+                                bind: frontier,
+                              },
+                            },
+                          },
+                          {
+                            value: {
+                              index: {
+                                f64: 0x0000000000000000,
+                              },
+                              list: frontier,
+                              function: list_at,
+                            },
+                            pattern: [
+                              {
+                                bind: depth,
+                              },
+                              {
+                                bind: angle,
+                              },
+                              {
+                                bind: x,
+                              },
+                              {
+                                bind: y,
+                              },
+                              {
+                                bind: branch_width,
+                              },
+                            ],
+                          },
+                          {
+                            value: {
+                              list: frontier,
+                              function: list_tail,
+                            },
+                            bind: rest,
+                          },
+                          {
+                            value: {
+                              maximum: {
+                                f64: 0xcdccccccccccf43f,
+                              },
+                              minimum: {
+                                f64: 0x666666666666e63f,
+                              },
+                              function: random_between,
+                            },
+                            bind: random_scale,
+                          },
+                          {
+                            value: {
+                              right: random_scale,
+                              function: multiply,
+                              left: {
+                                value: depth,
+                                end: {
+                                  f64: 0x0000000000002840,
+                                },
+                                start: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                start_value: branch_length,
+                                function: tween,
+                                end_value: {
+                                  f64: 0x0000000000000840,
+                                },
+                              },
+                            },
+                            bind: scaled_length,
+                          },
+                          {
+                            value: {
+                              value: {
+                                right: {
+                                  f64: 0x0000000000000000,
+                                },
+                                function: equal,
+                                left: depth,
+                              },
+                              function: match,
+                              cases: [
                                 {
-                                  value: {
-                                    maximum: {
-                                      f64: 0x9a9999999999a9bf,
-                                    },
-                                    minimum: {
-                                      f64: 0x333333333333c3bf,
-                                    },
-                                    function: random_between,
+                                  pattern: {
+                                    bool: true,
                                   },
-                                  bind: turn_left,
+                                  expression: trunk_length,
                                 },
                                 {
-                                  value: {
-                                    maximum: {
-                                      f64: 0x9a9999999999a93f,
-                                    },
-                                    minimum: {
-                                      f64: 0x333333333333c33f,
-                                    },
-                                    function: random_between,
+                                  pattern: {
+                                    bind: value,
                                   },
-                                  bind: turn_right,
-                                },
-                                {
-                                  value: {
-                                    right: {
-                                      right: pi,
-                                      function: multiply,
-                                      left: turn_left,
-                                    },
-                                    function: sum,
-                                    left: angle,
-                                  },
-                                  bind: left_angle,
-                                },
-                                {
-                                  value: {
-                                    right: {
-                                      right: pi,
-                                      function: multiply,
-                                      left: turn_right,
-                                    },
-                                    function: sum,
-                                    left: angle,
-                                  },
-                                  bind: right_angle,
-                                },
-                                {
-                                  value: {
-                                    right: rest,
-                                    function: concat,
-                                    left: {
-                                      function: quote,
-                                      expression: [
-                                        [
-                                          {
-                                            unquote: child_depth,
-                                          },
-                                          {
-                                            unquote: left_angle,
-                                          },
-                                          {
-                                            unquote: tip_x,
-                                          },
-                                          {
-                                            unquote: tip_y,
-                                          },
-                                          {
-                                            unquote: child_width,
-                                          },
-                                        ],
-                                        [
-                                          {
-                                            unquote: child_depth,
-                                          },
-                                          {
-                                            unquote: right_angle,
-                                          },
-                                          {
-                                            unquote: tip_x,
-                                          },
-                                          {
-                                            unquote: tip_y,
-                                          },
-                                          {
-                                            unquote: child_width,
-                                          },
-                                        ],
-                                      ],
-                                    },
-                                  },
-                                  bind: new_frontier,
+                                  expression: scaled_length,
                                 },
                               ],
                             },
+                            bind: length,
                           },
                           {
-                            pattern: {
-                              bind: value,
+                            value: {
+                              right: {
+                                f64: 0x0000000000000040,
+                              },
+                              function: divide,
+                              left: branch_width,
                             },
-                            expression: {
+                            bind: half_width,
+                          },
+                          {
+                            value: {
+                              right: half_width,
+                              function: subtract,
+                              left: length,
+                            },
+                            bind: tip_distance,
+                          },
+                          {
+                            value: {
+                              right: {
+                                right: {
+                                  operand: angle,
+                                  function: cos,
+                                },
+                                function: multiply,
+                                left: tip_distance,
+                              },
+                              function: sum,
+                              left: x,
+                            },
+                            bind: tip_x,
+                          },
+                          {
+                            value: {
+                              right: {
+                                right: {
+                                  operand: angle,
+                                  function: sin,
+                                },
+                                function: multiply,
+                                left: tip_distance,
+                              },
+                              function: sum,
+                              left: y,
+                            },
+                            bind: tip_y,
+                          },
+                          {
+                            value: {
+                              right: {
+                                f64: 0x000000000000f03f,
+                              },
+                              function: sum,
+                              left: depth,
+                            },
+                            bind: child_depth,
+                          },
+                          {
+                            value: {
+                              right: {
+                                f64: 0x666666666666e63f,
+                              },
+                              function: multiply,
+                              left: branch_width,
+                            },
+                            bind: child_width,
+                          },
+                          {
+                            value: {
                               value: {
                                 right: {
-                                  f64: 0x0000000000002840,
+                                  f64: 0x0000000000001840,
                                 },
                                 function: less,
                                 left: depth,
@@ -902,7 +819,9 @@
                               function: match,
                               cases: [
                                 {
-                                  pattern: true,
+                                  pattern: {
+                                    bool: true,
+                                  },
                                   expression: {
                                     function: let,
                                     expression: new_frontier,
@@ -913,11 +832,23 @@
                                             f64: 0x9a9999999999a9bf,
                                           },
                                           minimum: {
-                                            f64: 0x000000000000d03f,
+                                            f64: 0x333333333333c3bf,
                                           },
                                           function: random_between,
                                         },
                                         bind: turn_left,
+                                      },
+                                      {
+                                        value: {
+                                          maximum: {
+                                            f64: 0x9a9999999999a93f,
+                                          },
+                                          minimum: {
+                                            f64: 0x333333333333c33f,
+                                          },
+                                          function: random_between,
+                                        },
+                                        bind: turn_right,
                                       },
                                       {
                                         value: {
@@ -933,28 +864,59 @@
                                       },
                                       {
                                         value: {
-                                          list: rest,
-                                          item: {
+                                          right: {
+                                            right: pi,
+                                            function: multiply,
+                                            left: turn_right,
+                                          },
+                                          function: sum,
+                                          left: angle,
+                                        },
+                                        bind: right_angle,
+                                      },
+                                      {
+                                        value: {
+                                          right: rest,
+                                          function: concat,
+                                          left: {
                                             function: quote,
                                             expression: [
-                                              {
-                                                unquote: child_depth,
-                                              },
-                                              {
-                                                unquote: left_angle,
-                                              },
-                                              {
-                                                unquote: tip_x,
-                                              },
-                                              {
-                                                unquote: tip_y,
-                                              },
-                                              {
-                                                unquote: child_width,
-                                              },
+                                              [
+                                                {
+                                                  unquote: child_depth,
+                                                },
+                                                {
+                                                  unquote: left_angle,
+                                                },
+                                                {
+                                                  unquote: tip_x,
+                                                },
+                                                {
+                                                  unquote: tip_y,
+                                                },
+                                                {
+                                                  unquote: child_width,
+                                                },
+                                              ],
+                                              [
+                                                {
+                                                  unquote: child_depth,
+                                                },
+                                                {
+                                                  unquote: right_angle,
+                                                },
+                                                {
+                                                  unquote: tip_x,
+                                                },
+                                                {
+                                                  unquote: tip_y,
+                                                },
+                                                {
+                                                  unquote: child_width,
+                                                },
+                                              ],
                                             ],
                                           },
-                                          function: prepend,
                                         },
                                         bind: new_frontier,
                                       },
@@ -965,99 +927,180 @@
                                   pattern: {
                                     bind: value,
                                   },
-                                  expression: rest,
+                                  expression: {
+                                    value: {
+                                      right: {
+                                        f64: 0x0000000000002840,
+                                      },
+                                      function: less,
+                                      left: depth,
+                                    },
+                                    function: match,
+                                    cases: [
+                                      {
+                                        pattern: {
+                                          bool: true,
+                                        },
+                                        expression: {
+                                          function: let,
+                                          expression: new_frontier,
+                                          bindings: [
+                                            {
+                                              value: {
+                                                maximum: {
+                                                  f64: 0x9a9999999999a9bf,
+                                                },
+                                                minimum: {
+                                                  f64: 0x000000000000d03f,
+                                                },
+                                                function: random_between,
+                                              },
+                                              bind: turn_left,
+                                            },
+                                            {
+                                              value: {
+                                                right: {
+                                                  right: pi,
+                                                  function: multiply,
+                                                  left: turn_left,
+                                                },
+                                                function: sum,
+                                                left: angle,
+                                              },
+                                              bind: left_angle,
+                                            },
+                                            {
+                                              value: {
+                                                list: rest,
+                                                item: {
+                                                  function: quote,
+                                                  expression: [
+                                                    {
+                                                      unquote: child_depth,
+                                                    },
+                                                    {
+                                                      unquote: left_angle,
+                                                    },
+                                                    {
+                                                      unquote: tip_x,
+                                                    },
+                                                    {
+                                                      unquote: tip_y,
+                                                    },
+                                                    {
+                                                      unquote: child_width,
+                                                    },
+                                                  ],
+                                                },
+                                                function: prepend,
+                                              },
+                                              bind: new_frontier,
+                                            },
+                                          ],
+                                        },
+                                      },
+                                      {
+                                        pattern: {
+                                          bind: value,
+                                        },
+                                        expression: rest,
+                                      },
+                                    ],
+                                  },
                                 },
                               ],
                             },
+                            bind: new_frontier,
                           },
-                        ],
-                      },
-                      bind: new_frontier,
-                    },
-                    {
-                      value: {
-                        value: {
-                          right: depth,
-                          function: less,
-                          left: {
-                            f64: 0x0000000000001040,
-                          },
-                        },
-                        function: match,
-                        cases: [
                           {
-                            pattern: true,
-                            expression: {
-                              function: quote,
-                              expression: [
-                                [
-                                  {
-                                    unquote: x,
+                            value: {
+                              value: {
+                                right: depth,
+                                function: less,
+                                left: {
+                                  f64: 0x0000000000001040,
+                                },
+                              },
+                              function: match,
+                              cases: [
+                                {
+                                  pattern: {
+                                    bool: true,
                                   },
-                                  {
-                                    unquote: y,
+                                  expression: {
+                                    function: quote,
+                                    expression: [
+                                      [
+                                        {
+                                          unquote: x,
+                                        },
+                                        {
+                                          unquote: y,
+                                        },
+                                        {
+                                          unquote: tip_x,
+                                        },
+                                        {
+                                          unquote: tip_y,
+                                        },
+                                      ],
+                                    ],
                                   },
-                                  {
-                                    unquote: tip_x,
+                                },
+                                {
+                                  pattern: {
+                                    bind: value,
                                   },
-                                  {
-                                    unquote: tip_y,
-                                  },
-                                ],
+                                  expression: [],
+                                },
                               ],
                             },
+                            bind: branch_points,
                           },
                           {
-                            pattern: {
-                              bind: value,
-                            },
-                            expression: [],
-                          },
-                        ],
-                      },
-                      bind: branch_points,
-                    },
-                    {
-                      value: {
-                        expressions: [
-                          {
-                            transform: [
-                              {
-                                translate: {
-                                  x: x,
-                                  y: y,
-                                },
-                              },
-                              {
-                                rotate: angle,
-                              },
-                            ],
-                            function: fill,
-                            paint: {
-                              rgb: 0x000000,
-                            },
-                            shape: {
-                              rect: {
-                                x: {
-                                  f64: 0x0000000000000000,
-                                },
-                                y: {
-                                  right: half_width,
-                                  function: subtract,
-                                  left: {
-                                    f64: 0x0000000000000000,
+                            value: {
+                              expressions: [
+                                {
+                                  transform: [
+                                    {
+                                      translate: {
+                                        x: x,
+                                        y: y,
+                                      },
+                                    },
+                                    {
+                                      rotate: angle,
+                                    },
+                                  ],
+                                  function: fill,
+                                  paint: {
+                                    rgb: 0x000000,
+                                  },
+                                  shape: {
+                                    rect: {
+                                      x: {
+                                        f64: 0x0000000000000000,
+                                      },
+                                      y: {
+                                        right: half_width,
+                                        function: subtract,
+                                        left: {
+                                          f64: 0x0000000000000000,
+                                        },
+                                      },
+                                      height: branch_width,
+                                      width: length,
+                                    },
                                   },
                                 },
-                                height: branch_width,
-                                width: length,
-                              },
+                                branch_points,
+                              ],
+                              function: do,
                             },
+                            bind: branch_item,
                           },
-                          branch_points,
                         ],
-                        function: do,
                       },
-                      bind: branch_item,
                     },
                   ],
                 },
@@ -1191,7 +1234,9 @@
                     function: match,
                     cases: [
                       {
-                        pattern: true,
+                        pattern: {
+                          bool: true,
+                        },
                         expression: {
                           function: let,
                           expression: {
@@ -1257,6 +1302,14 @@
                               bind: next_y,
                             },
                           ],
+                        },
+                      },
+                      {
+                        pattern: {
+                          bool: false,
+                        },
+                        expression: {
+                          absent: finished,
                         },
                       },
                     ],

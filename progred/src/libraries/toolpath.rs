@@ -109,7 +109,6 @@ fn result(value: Result<Value, Error>) -> Result<Value, Halt> {
 struct Output<'a> {
     sink: RefCell<&'a mut dyn Sink<Error = InvalidPath>>,
     mappers: RefCell<Rc<Vec<Value>>>,
-    failure: RefCell<Option<Value>>,
 }
 
 struct Emission<'a, 'b, 'c> {
@@ -196,28 +195,11 @@ pub fn run(
     let output = Output {
         sink: RefCell::new(sink),
         mappers: RefCell::new(Rc::new(Vec::new())),
-        failure: RefCell::new(None),
     };
     let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
-        if let Some(error) = output.failure.borrow().as_ref() {
-            return Ok(error.clone());
-        }
-        match operation(function, context, call, environment, &output) {
-            Ok(value) => Ok(value),
-            Err(Error::Halt(halt)) => Err(halt),
-            Err(Error::Invalid(error)) => Ok(context.effect(|| {
-                output.failure.replace(Some(error.clone()));
-                error
-            })),
-        }
+        result(operation(function, context, call, environment, &output))
     };
-    let mut evaluation = evaluate(&ForeignOverlay::new(EMITTERS, &emit));
-    if evaluation.completed {
-        if let Some(error) = output.failure.into_inner() {
-            evaluation.result = error;
-        }
-    }
-    evaluation
+    evaluate(&ForeignOverlay::new(EMITTERS, &emit))
 }
 
 fn functions() -> ForeignFunctions {

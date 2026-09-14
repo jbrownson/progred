@@ -15,6 +15,7 @@ pub mod vocabulary {
     /// SET stores this (evaluated).
     pub const VALUE: CellId = CellId::from_u128(0x544d3b52ea73cd263c435ecddfe5e8bf);
     pub const PATH: CellId = CellId::from_u128(0x803e2b0d0c621eb9688569d0879c3b23);
+    pub const NO_STATE: CellId = CellId::from_u128(0xee0b3857bf9f615333e0b0f5feebd92e);
 
     pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
     pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
@@ -31,6 +32,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::FOLD, "fold"),
         (vocabulary::FOLDED, "folded"),
         (vocabulary::EXPANDED, "expanded"),
+        (vocabulary::NO_STATE, "no site state"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }

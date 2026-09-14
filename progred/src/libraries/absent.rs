@@ -16,11 +16,6 @@ pub mod vocabulary {
     pub const CAUSES: CellId = ::grap::absent::CAUSES;
     pub const NO_ALTERNATIVE: CellId = ::grap::absent::NO_ALTERNATIVE;
     pub const DECLINED: CellId = ::grap::absent::DECLINED;
-    pub const UNSPECIFIED: CellId = CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
-}
-
-pub fn value() -> Value {
-    with_reason(vocabulary::UNSPECIFIED)
 }
 
 pub fn with_reason(reason: CellId) -> Value {
@@ -59,7 +54,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         vocabulary::NO_ALTERNATIVE,
         named_reason("no applicable alternative"),
     );
-    cells.set_value(vocabulary::UNSPECIFIED, named_reason("unspecified absence"));
     cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
     Library::named(
         ID,
@@ -88,7 +82,6 @@ mod tests {
 
         assert!(is_absent(&absent));
         assert_eq!(super::reason(&absent), Some(reason));
-        assert_eq!(super::reason(&value()), Some(vocabulary::UNSPECIFIED));
         assert!(!is_absent(&named_reason("specific absence")));
         assert!(!is_absent(&Value::record([(
             vocabulary::ABSENT,

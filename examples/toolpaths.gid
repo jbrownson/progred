@@ -1,6 +1,9 @@
 {
   "binders": {
-    "done": 5ae245f7b88104268c93fdb6eb9e2bd2,
+    "done": b19fe726e3c2eab7a5d81cda12cf44b7,
+    "bool": b2d13b64336a9e808133d0c7d5e4981e,
+    "require": cadca87ed76939f9c1ba3bb94495ad06,
+    "condition": 91c786935eb5794b005582b8e7941bc2,
     "min": 6daed3f67cff3da30767201e5a895f1a,
     "max": 9dfc13c9c7e059da42ea74ef63897ce6,
     "ceil": e1ddb3a620b61117d3873c163f603488,
@@ -14,7 +17,6 @@
     "v1": d9722fd96f763e6016557b9e5cd485e7,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "t": 97de1a6f95080533856024449272a3d1,
-    "invalid_sampling": 5afa933039fbbd8e7ca2311883ec6079,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
     "less": ed44dbf5b4cdf5c952e1ef00f219b655,
@@ -75,7 +77,6 @@
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49
   },
   "cells": {
-    done: { name: "done" },
     rows: { name: "rows" },
     spacing: { name: "spacing" },
     intercept: { name: "intercept" },
@@ -85,7 +86,6 @@
     v1: { name: "v end" },
     segments: { name: "segments" },
     t: { name: "fraction" },
-    invalid_sampling: { name: "invalid sampling" },
     sample_pass: {
       name: "sample pass",
       params: [intercept, spacing],
@@ -147,9 +147,9 @@
                   function: match,
                   subject: { function: less, left: segments, right: state },
                   cases: [
-                    { pattern: true, expression: { absent: done } },
+                    { pattern: { bool: true }, expression: { absent: done } },
                     {
-                      pattern: false,
+                      pattern: { bool: false },
                       expression: {
                         function: do,
                         expressions: [
@@ -184,108 +184,58 @@
       name: "diagonal passes",
       params: [rows, spacing],
       body: {
-        function: match,
-        subject: { function: is_finite, operand: rows },
-        cases: [
+        function: do,
+        expressions: [
+          { function: require, condition: { function: is_finite, operand: rows } },
           {
-            pattern: true,
-            expression: {
-              function: match,
-              subject: { function: equal, left: rows, right: { function: floor, operand: rows } },
-              cases: [
-                {
-                  pattern: true,
-                  expression: {
-                    function: match,
-                    subject: { function: less, left: { f64: 0x000000000000f0bf }, right: rows },
-                    cases: [
-                      {
-                        pattern: true,
-                        expression: {
-                          function: match,
-                          subject: { function: is_finite, operand: spacing },
-                          cases: [
-                            {
-                              pattern: true,
-                              expression: {
-                                function: match,
-                                subject: {
-                                  function: less,
-                                  left: { f64: 0x0000000000000000 },
-                                  right: spacing
-                                },
-                                cases: [
-                                  {
-                                    pattern: true,
-                                    expression: {
-                                      function: iterate,
-                                      initial: { f64: 0x000000000000f03f },
-                                      step: {
-                                        params: [state],
-                                        body: {
-                                          function: match,
-                                          subject: { function: less, left: rows, right: state },
-                                          cases: [
-                                            {
-                                              pattern: true,
-                                              expression: { absent: done }
-                                            },
-                                            {
-                                              pattern: false,
-                                              expression: {
-                                                function: do,
-                                                expressions: [
-                                                  {
-                                                    function: sample_pass,
-                                                    intercept: {
-                                                      function: subtract,
-                                                      left: {
-                                                        function: divide,
-                                                        left: {
-                                                          function: multiply,
-                                                          left: { f64: 0x0000000000000040 },
-                                                          right: state
-                                                        },
-                                                        right: {
-                                                          function: sum,
-                                                          left: rows,
-                                                          right: { f64: 0x000000000000f03f }
-                                                        }
-                                                      },
-                                                      right: { f64: 0x000000000000f03f }
-                                                    },
-                                                    spacing: spacing
-                                                  },
-                                                  {
-                                                    function: sum,
-                                                    left: state,
-                                                    right: { f64: 0x000000000000f03f }
-                                                  }
-                                                ]
-                                              }
-                                            }
-                                          ]
-                                        }
-                                      }
-                                    }
-                                  },
-                                  { pattern: false, expression: { absent: invalid_sampling } }
-                                ]
-                              }
-                            },
-                            { pattern: false, expression: { absent: invalid_sampling } }
-                          ]
-                        }
-                      },
-                      { pattern: false, expression: { absent: invalid_sampling } }
-                    ]
-                  }
-                },
-                { pattern: false, expression: { absent: invalid_sampling } }
-              ]
-            }
+            function: require,
+            condition: { function: equal, left: rows, right: { function: floor, operand: rows } }
           },
-          { pattern: false, expression: { absent: invalid_sampling } }
+          {
+            function: require,
+            condition: { function: less, left: { f64: 0x000000000000f0bf }, right: rows }
+          },
+          { function: require, condition: { function: is_finite, operand: spacing } },
+          {
+            function: require,
+            condition: { function: less, left: { f64: 0x0000000000000000 }, right: spacing }
+          },
+          {
+            function: iterate,
+            initial: { f64: 0x000000000000f03f },
+            step: {
+              params: [state],
+              body: {
+                function: match,
+                subject: { function: less, left: rows, right: state },
+                cases: [
+                  { pattern: { bool: true }, expression: { absent: done } },
+                  {
+                    pattern: { bool: false },
+                    expression: {
+                      function: do,
+                      expressions: [
+                        {
+                          function: sample_pass,
+                          intercept: {
+                            function: subtract,
+                            left: {
+                              function: divide,
+                              left: { function: multiply, left: { f64: 0x0000000000000040 }, right: state },
+                              right: { function: sum, left: rows, right: { f64: 0x000000000000f03f } }
+                            },
+                            right: { f64: 0x000000000000f03f }
+                          },
+                          spacing: spacing
+                        },
+                        { function: sum, left: state, right: { f64: 0x000000000000f03f } }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
         ]
       }
     },

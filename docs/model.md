@@ -96,7 +96,9 @@ there. `selection set` takes an explicit `path` and `value`, interpreted in
 the supplied document and view, so it can move selection to another location.
 An absent value clears selection only at the specified path. Reads observe
 staged writes; an explicitly declined or halted handler commits no effects.
-Ordinary absent results keep effects, including a setter's successful clear.
+Ordinary absent results keep preceding effects. Setters return `{}` on successful
+set or clear; absent remains an input convention for clearing, not its return value.
+Site and selection getters return their own missing-state reasons when empty.
 A function must decline before performing effects, including effects in its
 arguments or nested calls. Declining afterward halts the evaluation and prints
 an error. Only the complete editor operation is staged,

@@ -22,6 +22,7 @@ pub mod vocabulary {
     /// The text line's write-back rule: overlay the typed spelling
     /// onto the current record, other fields carried.
     pub const UPDATE: CellId = CellId::from_u128(0x27c58b96e1f4d03a8d17b62c94e05fa3);
+    pub const INVALID_INPUT: CellId = CellId::from_u128(0xce8afed4a11b74c359ac5c99aa48aae2);
 }
 
 pub fn value(text: impl Into<String>) -> Value {
@@ -73,7 +74,13 @@ pub fn functions() -> ForeignFunctions {
             let input = context.eval(input, environment)?;
             Ok(read(&input)
                 .and_then(|text| edit(text, current.as_ref()))
-                .unwrap_or_else(crate::libraries::absent::value))
+                .unwrap_or_else(|| {
+                    ::grap::absent::with_detail(
+                        vocabulary::INVALID_INPUT,
+                        line_edit::vocabulary::INPUT,
+                        input.clone(),
+                    )
+                }))
         }),
     )
 }
@@ -97,6 +104,10 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     let mut cells = Cells::new();
+    cells.set_value(
+        vocabulary::INVALID_INPUT,
+        name::record("input is not text", []),
+    );
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
     Library::named(

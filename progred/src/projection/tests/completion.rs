@@ -756,7 +756,10 @@ fn completion_insertion_never_invents_or_overwrites_selection_policy() {
         // A payload is data even when it looks like an application.
         (grap::vocabulary::FUNCTION, new_cell_id().into()),
     ]);
-    for payload in [custom.clone(), crate::libraries::absent::value()] {
+    for payload in [
+        custom.clone(),
+        crate::libraries::absent::with_reason(gid::new_cell_id()),
+    ] {
         let continuation = crate::libraries::selection::at(&[], payload.clone());
         let prepared = crate::completion::prepare(
             &src(&doc, &libraries),

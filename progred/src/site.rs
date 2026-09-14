@@ -196,7 +196,7 @@ fn event_foreign(
             .borrow()
             .annotation
             .clone()
-            .unwrap_or_else(absent::value));
+            .unwrap_or_else(|| absent::with_reason(site::vocabulary::NO_STATE)));
     }
     if function == selection_capability::vocabulary::GET {
         return Ok(staged
@@ -205,7 +205,9 @@ fn event_foreign(
             .as_ref()
             .filter(|(selected_path, _)| selected_path == path)
             .map(|(_, payload)| payload.clone())
-            .unwrap_or_else(absent::value));
+            .unwrap_or_else(|| {
+                absent::with_reason(selection_capability::vocabulary::NO_SELECTION)
+            }));
     }
     if function == selection_capability::vocabulary::SET {
         let Some(expression) = context.field(call, selection_capability::vocabulary::PATH) else {
@@ -234,7 +236,7 @@ fn event_foreign(
                 staged.select(path, value.clone());
             });
         }
-        return Ok(value);
+        return Ok(Value::record([]));
     }
     if function == site::vocabulary::SET {
         let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
@@ -242,15 +244,14 @@ fn event_foreign(
         };
         let value = context.eval(expression, environment)?;
         let value = (!absent::is_absent(&value)).then_some(value.clone());
-        let result = value.clone().unwrap_or_else(absent::value);
         return Ok(context.effect(|| {
             let mut staged = staged.borrow_mut();
             staged.annotation = value;
             staged.annotation_changed = true;
-            result
+            Value::record([])
         }));
     }
-    Ok(absent::value())
+    unreachable!("only site and selection capabilities are installed in this scope")
 }
 
 #[cfg(test)]
@@ -264,6 +265,69 @@ mod tests {
             Value::from(control::vocabulary::QUOTE),
             [(grap::vocabulary::EXPRESSION, value)],
         )
+    }
+
+    #[test]
+    fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
+        let stack = crate::stack::load();
+        for (get, set, reason) in [
+            (
+                site::vocabulary::GET,
+                site::vocabulary::SET,
+                site::vocabulary::NO_STATE,
+            ),
+            (
+                selection_capability::vocabulary::GET,
+                selection_capability::vocabulary::SET,
+                selection_capability::vocabulary::NO_SELECTION,
+            ),
+        ] {
+            let staged = RefCell::new(PendingChanges {
+                annotation: None,
+                annotation_changed: false,
+                selection: None,
+                selection_changed: false,
+            });
+            let foreign = |function,
+                           context: &mut grap::Context<'_>,
+                           call,
+                           environment: &grap::Environment| {
+                event_foreign(function, context, call, environment, &[], &staged)
+            };
+            let capabilities = [get, set];
+            let scope = grap::ForeignOverlay::new(&capabilities, &foreign);
+            let read = || {
+                grap::evaluate_scoped(&grap::call(get.into(), []), &stack.libraries, &scope, 100)
+                    .result
+            };
+            assert_eq!(read(), absent::with_reason(reason));
+            for payload in [
+                Value::from(vec![42]),
+                absent::with_reason(gid::new_cell_id()),
+            ] {
+                let expression = grap::call(
+                    set.into(),
+                    [
+                        (
+                            selection_capability::vocabulary::PATH,
+                            path_data::value(&[]),
+                        ),
+                        (site::vocabulary::VALUE, payload.clone()),
+                    ],
+                );
+                let evaluation = grap::evaluate_scoped(&expression, &stack.libraries, &scope, 100);
+                assert!(evaluation.completed);
+                assert_eq!(evaluation.result, Value::record([]));
+                assert_eq!(
+                    read(),
+                    if absent::is_absent(&payload) {
+                        absent::with_reason(reason)
+                    } else {
+                        payload
+                    }
+                );
+            }
+        }
     }
 
     #[test]
@@ -300,7 +364,7 @@ mod tests {
                             (
                                 site::vocabulary::VALUE,
                                 if clear {
-                                    absent::value()
+                                    absent::with_reason(gid::new_cell_id())
                                 } else {
                                     grap::call(get.into(), [])
                                 },
@@ -333,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn event_changes_commit_by_result_even_after_a_discarded_absent() {
+    fn event_changes_commit_with_an_ordinary_absent_but_not_a_decline() {
         let stack = crate::stack::load();
         let doc = Document {
             root: None,
@@ -368,14 +432,13 @@ mod tests {
                                     (site::vocabulary::VALUE, selection.clone()),
                                 ],
                             ),
-                            missing.into(),
                             result,
                         ]),
                     )],
                 ),
             )
         };
-        let accepted = function(Value::record([]));
+        let accepted = function(missing.into());
         let staged = evaluate(&accepted, [], &[], None, None, &sources, 100).unwrap();
         assert!(staged.annotation_changed && staged.selection_changed);
         assert_eq!(staged.annotation, Some(annotation.clone()));
@@ -538,7 +601,7 @@ mod tests {
         let handler = sequence([
             set_selection(
                 grap::call(site::vocabulary::PATH.into(), []),
-                absent::value(),
+                absent::with_reason(selection_capability::vocabulary::NO_SELECTION),
             ),
             Value::record([]),
         ]);

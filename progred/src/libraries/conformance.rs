@@ -339,7 +339,7 @@ fn single_precision_arithmetic_burns_like_f64() {
 }
 
 /// The prepared-call shortcut stays burn-invisible: an iterate step
-/// that immediately declines costs call(1) + function(1) + initial(1)
+/// that immediately finishes costs call(1) + function(1) + initial(1)
 /// + step lambda(1) + prepared call and function(2) + state bind(1) +
 /// body(1) = 8.
 #[test]
@@ -351,7 +351,10 @@ fn an_iterate_step_burns_like_an_ordinary_call() {
             (list::vocabulary::INITIAL, blob("start")),
             (
                 list::vocabulary::STEP,
-                grap::lambda([state], crate::libraries::absent::value()),
+                grap::lambda(
+                    [state],
+                    crate::libraries::absent::with_reason(list::vocabulary::FINISHED),
+                ),
             ),
         ],
     );

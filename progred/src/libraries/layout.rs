@@ -55,6 +55,7 @@ pub mod vocabulary {
     pub const CANVAS: CellId = CellId::from_u128(0xb33eff2d53a88f77c431b7c728a49f0f);
     pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0x120660d976130c8ba722d26b1a28c975);
     pub const INVALID_PROGRAM: CellId = CellId::from_u128(0xd0f97606bf2fe368cb9645e4bad8b977);
+    pub const INVALID_DRAWING: CellId = CellId::from_u128(0x3ff5ffa7414309b0ed4ed3f17ba5d5cd);
 
     // Generic display and event nodes.
     pub const DRAWING: CellId = CellId::from_u128(0x6889fa235b002be4c8b106d5f31dafbf);
@@ -917,6 +918,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::CANVAS, "canvas"),
         (vocabulary::LAYOUT_PROGRAM, "layout program"),
         (vocabulary::INVALID_PROGRAM, "invalid layout program"),
+        (vocabulary::INVALID_DRAWING, "invalid drawing arguments"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),
         (vocabulary::HOVERABLE, "hoverable"),

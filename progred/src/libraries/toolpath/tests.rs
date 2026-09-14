@@ -211,7 +211,7 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
 }
 
 #[test]
-fn invalid_ignored_commands_still_fail_the_recording() {
+fn invalid_commands_stop_do_before_later_emissions() {
     for expression in [
         point_call(LINE_TO, [1.0, 0.0, 0.0]),
         point_call(START_AT, [f64::NAN, 0.0, 0.0]),
@@ -234,6 +234,67 @@ fn invalid_ignored_commands_still_fail_the_recording() {
         assert!(absent::is_absent(&result.result));
         assert!(recording.commands.is_empty());
     }
+}
+
+#[test]
+fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
+    let reason = gid::new_cell_id();
+    let failure = ::grap::absent::with_detail(reason, X, f64::value(42.0));
+    let failed_map = call(
+        MAP_POINTS,
+        [
+            (MAPPER, ::grap::lambda([X, Y, Z], failure.clone())),
+            (
+                ::grap::vocabulary::EXPRESSION,
+                point_call(START_AT, [1.0; 3]),
+            ),
+        ],
+    );
+    let caught = call(
+        control::vocabulary::MATCH,
+        [
+            (control::vocabulary::VALUE, failed_map.clone()),
+            (
+                control::vocabulary::CASES,
+                Value::list([Value::record([
+                    (
+                        control::vocabulary::PATTERN,
+                        Value::record([(absent::vocabulary::ABSENT, reason.into())]),
+                    ),
+                    (
+                        ::grap::vocabulary::EXPRESSION,
+                        point_call(START_AT, [2.0; 3]),
+                    ),
+                ])]),
+            ),
+        ],
+    );
+    let (result, recording) = evaluate(
+        &sequence(vec![
+            point_call(START_AT, [0.0; 3]),
+            caught,
+            point_call(LINE_TO, [3.0; 3]),
+        ]),
+        1000,
+    );
+    assert!(result.completed);
+    assert_eq!(result.result, Value::record([]));
+    assert_eq!(
+        recording.commands,
+        [
+            Command::StartAt([0.0; 3]),
+            Command::StartAt([2.0; 3]),
+            Command::LineTo([3.0; 3])
+        ]
+    );
+
+    let (result, recording) = evaluate(
+        &sequence(vec![point_call(START_AT, [0.0; 3]), failed_map]),
+        1000,
+    );
+    assert!(result.completed);
+    assert_eq!(result.result, failure);
+    assert_eq!(recording.commands, [Command::StartAt([0.0; 3])]);
 }
 
 #[test]

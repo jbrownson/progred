@@ -111,7 +111,7 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
             ],
         ),
         call(PAD, [(CHILD, sequence([text("two"), text("children")]))]),
-        call(ALTERNATIVES, [(CHILDREN, sequence([]))]),
+        call(ALTERNATIVES, [(CHILDREN, Value::record([]))]),
     ];
     for program in programs {
         let (result, layout) = evaluate(&program, 10000);
@@ -122,6 +122,54 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
     assert!(!result.completed);
     assert!(layout.is_none());
     assert!(evaluate(&text("fresh evaluation"), 10000).1.is_some());
+}
+
+#[test]
+fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
+    let reason = gid::new_cell_id();
+    let failure =
+        ::grap::absent::with_detail(reason, VALUE, crate::libraries::text::value("detail"));
+    let failed = call(
+        ROW,
+        [(
+            CHILDREN,
+            sequence([text("discarded child"), failure.clone(), text("never")]),
+        )],
+    );
+    let (evaluation, layout) = evaluate(&failed, 1000);
+    assert!(evaluation.completed);
+    assert_eq!(evaluation.result, failure);
+    assert!(layout.is_none());
+    let recovered = call(
+        control::MATCH,
+        [
+            (control::VALUE, failed),
+            (
+                control::CASES,
+                Value::list([Value::record([
+                    (
+                        control::PATTERN,
+                        Value::record([(absent::vocabulary::ABSENT, reason.into())]),
+                    ),
+                    (::grap::vocabulary::EXPRESSION, text("recovered")),
+                ])]),
+            ),
+        ],
+    );
+    let (evaluation, layout) = evaluate(&recovered, 1000);
+    assert!(evaluation.completed);
+    assert_eq!(evaluation.result, Value::record([]));
+    assert!(
+        matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "recovered")
+    );
+
+    let empty = call(ROW, [(CHILDREN, sequence([]))]);
+    let (evaluation, layout) = evaluate(&empty, 1000);
+    assert_eq!(
+        evaluation.result,
+        absent::with_reason(control::MISSING_FINAL_EXPRESSION)
+    );
+    assert!(layout.is_none());
 }
 
 #[test]

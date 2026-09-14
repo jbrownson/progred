@@ -1,5 +1,5 @@
 use super::{
-    paths::{InvalidPath, MapPoints, Point3, Recording, Sink},
+    paths::{InvalidPath, MapPoints, Point3, Sink},
     run,
     vocabulary::*,
 };
@@ -55,16 +55,18 @@ impl Sink for Lines2D {
     }
 }
 
-fn fitted(recording: &Recording, size: Size) -> Option<BezPath> {
-    let mut lines = MapPoints {
+fn projected() -> MapPoints<Lines2D, impl FnMut(Point3) -> Result<Point3, InvalidPath>> {
+    MapPoints {
         sink: Lines2D::default(),
         map: |point| {
             let point = isometric(point);
             Ok([point.x, point.y, 0.0])
         },
-    };
-    recording.replay(&mut lines).ok()?;
-    let Lines2D { mut path, bounds } = lines.sink;
+    }
+}
+
+fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
+    let Lines2D { mut path, bounds } = lines;
     if let Some(bounds) = bounds {
         if !bounds.width().is_finite() || !bounds.height().is_finite() {
             return None;
@@ -102,8 +104,8 @@ pub(super) fn display(
     }
     let size = Size::new(width, height);
     Some(Layout::program(Rc::new(move |context, build| {
-        let mut recording = Recording::default();
-        let evaluation = run(&mut recording, |scope| {
+        let mut lines = projected();
+        let evaluation = run(&mut lines, |scope| {
             ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel as usize)
         });
         if !evaluation.completed || absent::is_absent(&evaluation.result) {
@@ -114,7 +116,7 @@ pub(super) fn display(
                 evaluation.remaining_fuel,
             );
         }
-        let Some(path) = fitted(&recording, size) else {
+        let Some(path) = fitted(lines.sink, size) else {
             return context.project.transient(
                 context.text,
                 build,
@@ -155,12 +157,12 @@ mod tests {
 
     #[test]
     fn fits_extents_and_preserves_disconnected_passes() {
-        let mut recording = Recording::default();
-        recording.start_at([0.0, 0.0, 0.0]).unwrap();
-        recording.line_to([1.0, 1.0, 0.0]).unwrap();
-        recording.start_at([1.0, 0.0, 0.0]).unwrap();
-        recording.line_to([0.0, 1.0, 0.0]).unwrap();
-        let path = fitted(&recording, Size::new(600.0, 300.0)).unwrap();
+        let mut lines = projected();
+        lines.start_at([0.0, 0.0, 0.0]).unwrap();
+        lines.line_to([1.0, 1.0, 0.0]).unwrap();
+        lines.start_at([1.0, 0.0, 0.0]).unwrap();
+        lines.line_to([0.0, 1.0, 0.0]).unwrap();
+        let path = fitted(lines.sink, Size::new(600.0, 300.0)).unwrap();
         assert_eq!(
             path.elements()
                 .iter()

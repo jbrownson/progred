@@ -24,6 +24,7 @@ pub mod vocabulary {
     pub const UPDATE: CellId = CellId::from_u128(0xd3fd7b475567d1881c9023c90bd9864c);
     pub const PICKER: CellId = CellId::from_u128(0xd30d721bc1db563c75f899cc15c10580);
     pub const HUE: CellId = CellId::from_u128(0x4d226747147aa5cc9e6629e34c43a366);
+    pub const INVALID_INPUT: CellId = CellId::from_u128(0x55167b59c5530135d0738c9d2f7d264b);
 }
 
 #[derive(Clone, Copy)]
@@ -256,7 +257,13 @@ fn functions() -> ForeignFunctions {
             let input = context.eval(input, environment)?;
             Ok(text::read(&input)
                 .and_then(|spelling| edit(spelling, Some(&current)))
-                .unwrap_or_else(crate::libraries::absent::value))
+                .unwrap_or_else(|| {
+                    ::grap::absent::with_detail(
+                        vocabulary::INVALID_INPUT,
+                        line_edit::vocabulary::INPUT,
+                        input.clone(),
+                    )
+                }))
         }),
     )
 }
@@ -346,6 +353,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     cells.set_value(vocabulary::UPDATE, name::record("color update", []));
     cells.set_value(vocabulary::PICKER, name::record("color picker", []));
     cells.set_value(vocabulary::HUE, name::record("hue", []));
+    cells.set_value(
+        vocabulary::INVALID_INPUT,
+        name::record("invalid color input", []),
+    );
     named::insert(&mut cells);
     Library::named(
         ID,

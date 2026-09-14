@@ -20,6 +20,7 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0xc3931b2321d6c783fee133acaa929738);
     pub const LEFT_NOT_U64: CellId = CellId::from_u128(0x64dd17fd81404f413122ffc00b452e2e);
     pub const RIGHT_NOT_U64: CellId = CellId::from_u128(0x1a13161cd3a0e5fa71455a277839bd32);
+    pub const INVALID_INPUT: CellId = CellId::from_u128(0x64082046ad013b14b42773624d8453f1);
     pub const OVERFLOW: CellId = CellId::from_u128(0x184f82a04d9cb7609238b2dd05ad5cd0);
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
 }
@@ -89,7 +90,13 @@ fn update(
     let input = context.eval(input, environment)?;
     Ok(crate::libraries::text::read(&input)
         .and_then(|text| number::edit(text, Some(&current), value))
-        .unwrap_or_else(absent::value))
+        .unwrap_or_else(|| {
+            ::grap::absent::with_detail(
+                vocabulary::INVALID_INPUT,
+                line_edit::vocabulary::INPUT,
+                input.clone(),
+            )
+        }))
 }
 
 fn binary(
@@ -178,6 +185,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     for (cell, reason) in [
         (vocabulary::LEFT_NOT_U64, "left is not u64"),
         (vocabulary::RIGHT_NOT_U64, "right is not u64"),
+        (vocabulary::INVALID_INPUT, "invalid u64 input"),
         (vocabulary::OVERFLOW, "u64 overflow"),
         (vocabulary::DIVISION_BY_ZERO, "division by zero"),
     ] {

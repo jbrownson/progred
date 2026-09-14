@@ -1268,7 +1268,7 @@ mod tests {
         input.value = Some(&value);
         assert!(lambda_name(&input).is_none());
 
-        let absent = crate::libraries::absent::value();
+        let absent = crate::libraries::absent::with_reason(gid::new_cell_id());
         input.value = Some(&absent);
         assert!(lambda_name(&input).is_none());
     }

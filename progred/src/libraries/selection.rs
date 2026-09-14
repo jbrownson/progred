@@ -16,6 +16,7 @@ pub mod vocabulary {
     pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
     pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
     pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
+    pub const NO_SELECTION: CellId = CellId::from_u128(0x3f6d3e25a51b978f0b607d6a8a4b8123);
 }
 
 pub fn edge() -> gid::Value {
@@ -48,6 +49,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::EDGE, "edge"),
         (vocabulary::PENDING, "pending"),
         (vocabulary::LABEL, "label"),
+        (vocabulary::NO_SELECTION, "no selection at this site"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -123,7 +125,10 @@ pub(crate) mod tests {
             gid::position::between(None, None).unwrap(),
         )];
         let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
-        for payload in [edge(), crate::libraries::absent::value()] {
+        for payload in [
+            edge(),
+            crate::libraries::absent::with_reason(vocabulary::NO_SELECTION),
+        ] {
             for selected in [None, Some(destination.clone()), Some(site.clone())] {
                 let initial = || crate::site::PendingChanges {
                     annotation: Some(Value::from(vec![42])),

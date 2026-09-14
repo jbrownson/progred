@@ -42,7 +42,25 @@ pub(super) fn program(
 
 struct Output {
     children: RefCell<Vec<Layout<crate::Editor, crate::frame::Hovered>>>,
-    failure: RefCell<Option<Value>>,
+}
+
+enum BuildError {
+    Absent(Value),
+    Halt(Halt),
+}
+
+impl From<Halt> for BuildError {
+    fn from(halt: Halt) -> Self {
+        Self::Halt(halt)
+    }
+}
+
+fn invalid(function: CellId) -> BuildError {
+    BuildError::Absent(::grap::absent::with_detail(
+        INVALID_PROGRAM,
+        ::grap::vocabulary::FUNCTION,
+        function.into(),
+    ))
 }
 
 impl Output {
@@ -58,8 +76,7 @@ impl Output {
 }
 
 /// Exactly one emitted root is a layout; no emission leaves the ordinary
-/// value result alone. Halt, explicit decline, or invalid builder input drops
-/// the entire output, even if a `do` ignored an intermediate failure.
+/// value result alone. A halt or final absent drops the entire output.
 pub fn run(
     target: impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
     evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
@@ -69,7 +86,6 @@ pub fn run(
 ) {
     let output = Output {
         children: RefCell::new(Vec::new()),
-        failure: RefCell::new(None),
     };
     let unit = Value::record([]);
     let emit =
@@ -80,36 +96,20 @@ pub fn run(
             environment,
             &output,
             &target,
-        )? {
-            Some(layout) => Ok(context.effect(|| {
+        ) {
+            Ok(layout) => Ok(context.effect(|| {
                 output.children.borrow_mut().push(layout);
                 unit.clone()
             })),
-            None => {
-                let error = ::grap::absent::with_detail(
-                    INVALID_PROGRAM,
-                    ::grap::vocabulary::FUNCTION,
-                    function.into(),
-                );
-                Ok(context.effect(|| {
-                    output
-                        .failure
-                        .borrow_mut()
-                        .get_or_insert_with(|| error.clone());
-                    error
-                }))
-            }
+            Err(BuildError::Absent(value)) => Ok(value),
+            Err(BuildError::Halt(halt)) => Err(halt),
         };
     let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
     let mut children = output.children.into_inner();
-    let failure = output
-        .failure
-        .into_inner()
-        .or_else(|| (children.len() > 1).then(|| absent::with_reason(INVALID_PROGRAM)));
-    let layout = if !evaluation.completed || absent::declines(&evaluation.result) {
+    let layout = if !evaluation.completed || absent::is_absent(&evaluation.result) {
         None
-    } else if let Some(error) = failure {
-        evaluation.result = error;
+    } else if children.len() > 1 {
+        evaluation.result = absent::with_reason(INVALID_PROGRAM);
         None
     } else {
         children.pop()
@@ -184,12 +184,12 @@ fn operation(
     environment: &Environment,
     output: &Output,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-) -> Result<Option<Layout<crate::Editor, crate::frame::Hovered>>, Halt> {
+) -> Result<Layout<crate::Editor, crate::frame::Hovered>, BuildError> {
     macro_rules! need {
         ($value:expr) => {
             match $value {
                 Some(value) => value,
-                None => return Ok(None),
+                None => return Err(invalid(function)),
             }
         };
     }
@@ -212,8 +212,8 @@ fn operation(
     macro_rules! children {
         ($body:expr) => {{
             let (result, children) = output.collect(|| context.eval($body, environment))?;
-            if absent::declines(&result) {
-                return Ok(None);
+            if absent::is_absent(&result) {
+                return Err(BuildError::Absent(result));
             }
             children
         }};
@@ -242,7 +242,7 @@ fn operation(
                 }
                 OVERLAY => layout_overlay(children),
                 ALTERNATIVES if !children.is_empty() => alternatives(children),
-                _ => return Ok(None),
+                _ => return Err(invalid(function)),
             }
         }
         PAD => {
@@ -294,12 +294,12 @@ fn operation(
             let ascent = number!(ASCENT, Some(0.0));
             let descent = number!(DESCENT, None);
             if width < 0.0 || ascent < 0.0 || descent < 0.0 {
-                return Ok(None);
+                return Err(invalid(function));
             }
             let remaining = context.remaining_fuel() as f64;
             let fuel = number!(FUEL, Some(remaining));
             if fuel < 0.0 || fuel.fract() != 0.0 || fuel > usize::MAX as f64 {
-                return Ok(None);
+                return Err(invalid(function));
             }
             let program = arg!(PROGRAM, |value| Some(value.clone()));
             crate::display::drawing_program(
@@ -340,7 +340,7 @@ fn operation(
         }
         _ => unreachable!("only advertised layout functions reach this scope"),
     };
-    Ok(Some(layout))
+    Ok(layout)
 }
 
 #[cfg(test)]

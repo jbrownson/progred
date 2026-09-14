@@ -22,6 +22,7 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
     pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
     pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
+    pub const INVALID_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
 }
 
 pub fn value(number: f32) -> Value {
@@ -90,7 +91,13 @@ fn update(
     let input = context.eval(input, environment)?;
     Ok(crate::libraries::text::read(&input)
         .and_then(|text| number::edit(text, current.as_ref(), value))
-        .unwrap_or_else(absent::value))
+        .unwrap_or_else(|| {
+            ::grap::absent::with_detail(
+                vocabulary::INVALID_INPUT,
+                line_edit::vocabulary::INPUT,
+                input.clone(),
+            )
+        }))
 }
 
 fn binary(
@@ -163,6 +170,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     for (cell, reason) in [
         (vocabulary::LEFT_NOT_F32, "left is not f32"),
         (vocabulary::RIGHT_NOT_F32, "right is not f32"),
+        (vocabulary::INVALID_INPUT, "invalid f32 input"),
     ] {
         cells.set_value(cell, absent::named_reason(reason));
     }

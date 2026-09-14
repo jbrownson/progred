@@ -1669,17 +1669,23 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
 }
 
 #[test]
-fn custom_update_can_discard_an_absent_and_return_a_value() {
+fn custom_update_can_bind_an_absent_and_return_a_value() {
     use crate::libraries::{control::vocabulary as c, line_edit::vocabulary as l};
     let missing = new_cell_id();
     let update = grap::lambda(
         [l::INPUT, l::CURRENT],
         grap::call(
-            Value::from(c::DO),
-            [(
-                c::EXPRESSIONS,
-                Value::list([Value::from(missing), Value::from(l::INPUT)]),
-            )],
+            Value::from(c::LET),
+            [
+                (
+                    c::BINDINGS,
+                    Value::list([Value::record([
+                        (c::BIND, Value::from(new_cell_id())),
+                        (c::VALUE, Value::from(missing)),
+                    ])]),
+                ),
+                (grap::vocabulary::EXPRESSION, Value::from(l::INPUT)),
+            ],
         ),
     );
     let libraries = core_libraries();

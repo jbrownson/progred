@@ -286,17 +286,21 @@ fn record_program(
                 unit.clone()
             })),
             layout_data::vocabulary::MOVE_TO | layout_data::vocabulary::LINE_TO => {
-                let (Some(x), Some(y)) = (
-                    context.field(call, layout_data::vocabulary::X),
-                    context.field(call, layout_data::vocabulary::Y),
-                ) else {
-                    return Ok(absent::value());
+                let Some(x) = context.field(call, layout_data::vocabulary::X) else {
+                    return Ok(context.missing_argument(layout_data::vocabulary::X));
+                };
+                let Some(y) = context.field(call, layout_data::vocabulary::Y) else {
+                    return Ok(context.missing_argument(layout_data::vocabulary::Y));
                 };
                 let (Some(x), Some(y)) = (
                     number(context, x, environment)?,
                     number(context, y, environment)?,
                 ) else {
-                    return Ok(absent::value());
+                    return Ok(::grap::absent::with_detail(
+                        layout_data::vocabulary::INVALID_DRAWING,
+                        absent::vocabulary::VALUE,
+                        context.value(call).clone(),
+                    ));
                 };
                 Ok(context.effect(|| {
                     if function == layout_data::vocabulary::MOVE_TO {
@@ -328,7 +332,11 @@ fn record_program(
                 let (Some(shape), Some(paint), Some(transform)) =
                     (shape, layout_data::read_paint(&paint), transform)
                 else {
-                    return Ok(absent::value());
+                    return Ok(::grap::absent::with_detail(
+                        layout_data::vocabulary::INVALID_DRAWING,
+                        absent::vocabulary::VALUE,
+                        context.value(call).clone(),
+                    ));
                 };
                 let cached = origins
                     .borrow()

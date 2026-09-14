@@ -33,6 +33,7 @@ pub mod vocabulary {
     pub const ACCUMULATOR: CellId = CellId::from_u128(0xb6bd623b43e80b7f039873ab5f6afa13);
     pub const STATE: CellId = CellId::from_u128(0x3775735ae4c156144c110ba819cb1e39);
     pub const INVALID_STEP: CellId = CellId::from_u128(0xfd524cb1a241f60ebdb192db4d9ce9c5);
+    pub const FINISHED: CellId = CellId::from_u128(0xb19fe726e3c2eab7a5d81cda12cf44b7);
 }
 
 fn evaluated(
@@ -149,6 +150,13 @@ fn functions() -> ForeignFunctions {
                     let result = context
                         .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
                     if result.is_absent() {
+                        if result
+                            .field(absent::vocabulary::ABSENT)
+                            .and_then(|reason| reason.as_cell())
+                            != Some(vocabulary::FINISHED)
+                        {
+                            break Ok(result);
+                        }
                         break Ok(RuntimeValue::record([
                             (vocabulary::LIST, RuntimeValue::list(items)),
                             (vocabulary::STATE, state),
@@ -210,7 +218,17 @@ fn functions() -> ForeignFunctions {
                     let next = context
                         .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
                     if next.is_absent() {
-                        break Ok(state);
+                        break Ok(
+                            if next
+                                .field(absent::vocabulary::ABSENT)
+                                .and_then(|reason| reason.as_cell())
+                                == Some(vocabulary::FINISHED)
+                            {
+                                state
+                            } else {
+                                next
+                            },
+                        );
                     }
                     state = next;
                 }
@@ -243,6 +261,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::NOT_LIST, "not a list"),
         (vocabulary::OUT_OF_BOUNDS, "list index out of bounds"),
         (vocabulary::INVALID_STEP, "invalid unfold step"),
+        (vocabulary::FINISHED, "iteration finished"),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -296,6 +315,51 @@ mod tests {
     }
 
     #[test]
+    fn iteration_and_unfold_only_consume_their_finished_reason() {
+        let state = vocabulary::STATE;
+        for operation in [vocabulary::ITERATE, vocabulary::UNFOLD] {
+            let initial = Value::from(vec![7]);
+            let failure = ::grap::absent::with_detail(
+                gid::new_cell_id(),
+                vocabulary::STATE,
+                Value::from(vec![8]),
+            );
+            for result in [failure.clone(), absent::with_reason(vocabulary::FINISHED)] {
+                let expression = call(
+                    operation,
+                    [
+                        (vocabulary::INITIAL, initial.clone()),
+                        (vocabulary::STEP, ::grap::lambda([state], result.clone())),
+                    ],
+                );
+                let evaluation =
+                    crate::libraries::test_evaluate(&expression, |_| None, &functions(), 100);
+                assert!(evaluation.completed);
+                assert_eq!(
+                    evaluation.result,
+                    if result == failure {
+                        failure.clone()
+                    } else if operation == vocabulary::ITERATE {
+                        initial.clone()
+                    } else {
+                        Value::record([
+                            (vocabulary::LIST, Value::list([])),
+                            (vocabulary::STATE, initial.clone()),
+                        ])
+                    }
+                );
+                let exhausted =
+                    crate::libraries::test_evaluate(&expression, |_| None, &functions(), 1);
+                assert!(!exhausted.completed);
+                assert_eq!(
+                    absent::reason(&exhausted.result),
+                    Some(::grap::absent::FUEL_EXHAUSTED)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn iterate_drives_a_step_without_collecting_intermediate_values() {
         use std::cell::Cell;
         use std::rc::Rc;
@@ -309,7 +373,7 @@ mod tests {
                 let call = step_calls.get();
                 step_calls.set(call + 1);
                 Ok(if call == 3 {
-                    absent::value()
+                    absent::with_reason(vocabulary::FINISHED)
                 } else {
                     Value::from(vec![call as u8])
                 })

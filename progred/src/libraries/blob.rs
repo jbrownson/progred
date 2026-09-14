@@ -1,7 +1,7 @@
 //! Hex spelling and editing for GID blobs.
 
 use crate::display::{Layout, ProjectionInput, TextFamily};
-use crate::libraries::{Library, absent, line_edit, name, text};
+use crate::libraries::{Library, line_edit, name, text};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{Cells, Value};
 
@@ -9,6 +9,8 @@ pub const ID: gid::CellId = gid::CellId::from_u128(0x4ab5da466a7c5f1202f5ef862f5
 
 pub mod vocabulary {
     pub const UPDATE: gid::CellId = gid::CellId::from_u128(0xb691acb5f895285755e9fc74d6da09e4);
+    pub const INVALID_INPUT: gid::CellId =
+        gid::CellId::from_u128(0xce1d043c5c2b81b1e5b9f8bc35bf54fb);
 }
 
 pub fn parse(text: &str) -> Option<Vec<u8>> {
@@ -49,7 +51,13 @@ pub fn functions() -> ForeignFunctions {
             let input = context.eval(input, environment)?;
             Ok(text::read(&input)
                 .and_then(|text| edit(text, None))
-                .unwrap_or_else(absent::value))
+                .unwrap_or_else(|| {
+                    ::grap::absent::with_detail(
+                        vocabulary::INVALID_INPUT,
+                        line_edit::vocabulary::INPUT,
+                        input.clone(),
+                    )
+                }))
         }),
     )
 }
@@ -73,6 +81,10 @@ pub fn display(
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UPDATE, name::record("blob update", []));
+    cells.set_value(
+        vocabulary::INVALID_INPUT,
+        name::record("invalid hex input", []),
+    );
     Library::named(
         ID,
         "blob",
@@ -84,6 +96,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::absent;
 
     #[test]
     fn hex_spelling_round_trips_every_byte_and_requires_complete_bytes() {

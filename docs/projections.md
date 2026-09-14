@@ -297,10 +297,12 @@ Leaf/recursion capabilities include `text`, `slot`, `descend`, `at`, and
 it does not construct a list of draw commands. Its optional fuel argument
 configures the later drawing evaluation, as with the stored drawing convention.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
-and text paint to the ink face. Other required inputs are validated. An invalid
-builder call, multiple root emissions, or evaluator halt discards all output;
-an invalid call cannot leave a partial layout even if `do` ignores its result.
-An intentionally empty layout can emit an empty row or column.
+and text paint to the ink face. Other required inputs are validated. Invalid
+builder calls return absents; containers propagate a failed child computation
+without emitting that container. A final absent, multiple root emissions, or
+evaluator halt discards all output. There is no sticky failure flag overriding
+Grap recovery. An intentionally empty layout can emit an empty row or column
+with `{}` as its child computation; an empty `do` is not a successful computation.
 
 The explicit boundary matters for composition: pane/viewport projection
 functions still return ordinary values. The existing `border` combinator wraps
@@ -367,8 +369,10 @@ A function must explicitly decline before performing effects. A decline after
 an effect halts evaluation with `{absent: effectful-decline, value: cause}` and
 prints an error to stderr. This contract remains useful to explicit compositions
 and event handlers, independently of cell resolution. It applies to Grap and Rust
-functions alike. Other absents remain ordinary results, including a successful
-selection clear or a non-callable result.
+functions alike. Other absents remain ordinary results, including a non-callable
+result. Effect-only commands, including selection and site-state setters, return
+`{}` on success, including when clearing state. Getters return specific absents
+when the requested state is missing.
 
 There are no per-call snapshots or rollback operations. The host stages the
 whole editor operation or drawing recording and discards that temporary output
@@ -389,6 +393,26 @@ accepts an explicit environment value and asks the evaluator to interpret its
 raw expression there. It is an ordinary library function.
 
 ## Control functions and absents
+
+`do` evaluates its expressions in order, returning the first absent unchanged
+or the last successful value. It short-circuits that sequence, not the evaluator:
+an enclosing `match` can handle its result. Earlier effects are not rolled back.
+An empty `do` returns `missing final expression`. Ordinary `let` and `where`
+bindings may bind absents without short-circuiting; a structural binding mismatch
+returns a pattern-mismatch absent.
+
+The logic library uses open `{bool: true-cell}` / `{bool: false-cell}` records.
+The payload is compared by identity, never evaluated or compared by its name.
+Its `require` function takes a `condition`, returning `{}` for true, a
+condition-not-met absent for false, or a not-boolean absent for another value.
+An absent condition propagates unchanged. This is an ordinary guard used in
+`do`, not evaluator syntax or a configurable bind mechanism.
+
+The list library's `iterate` and `unfold` finish only when a step returns
+`{absent: iteration-finished}`. They then return the previous state, and for
+`unfold` the accumulated items as well. Other absents propagate unchanged;
+actual evaluator halts still halt. `fold` remains an ordinary fold, allowing
+any accumulator value rather than imposing short-circuiting.
 
 The [control library](../progred/src/libraries/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
@@ -413,6 +437,9 @@ The reason cell supplies names and other static metadata. Occurrence fields
 can identify a missing cell, invalid value, or cycle. Code inspects identities,
 not human-readable diagnostic text. Hosts and tests inspect the returned value;
 there is no parallel Rust diagnostics list that can reject a successful result.
+There is no unspecified reason or zero-argument absence constructor. Each
+producer chooses a reason, reusing library reasons and adding occurrence details
+where useful. Failed atomic-editor conversions include the invalid input.
 
 An unmatched `match` preserves one mismatch unchanged or combines several as
 `{absent: no-alternative, causes: [...]}`. This is an ordinary absent, not an

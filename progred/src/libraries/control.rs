@@ -1,7 +1,7 @@
 //! Grap evaluation control supplied by Rust functions. `match`
 //! selects one case through structural matching, `let` and `where`
 //! extend an environment through sequential bindings, `do` evaluates
-//! expressions in order, and `quote` constructs data while evaluating
+//! expressions until the first absent, and `quote` constructs data while evaluating
 //! explicit unquotes.
 
 use crate::libraries::{Library, absent, name};
@@ -42,6 +42,8 @@ pub mod vocabulary {
     pub const INVALID_BINDING: CellId = CellId::from_u128(0x4ecae0db406e426aba1c02f2f04570ad);
     pub const INVALID_EXPRESSIONS: CellId = CellId::from_u128(0xa41a40f12691414971dbd9f788c291d6);
     pub const PATTERN_MISMATCH: CellId = CellId::from_u128(0xc44d3f1a71dea754a02bc14561a143b7);
+    pub const MISSING_FINAL_EXPRESSION: CellId =
+        CellId::from_u128(0x9e3fa2dd570e0b38a8b0053585f4dde2);
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -67,9 +69,13 @@ fn do_foreign(
     let mut result = None;
     for index in 0..count {
         let expression = context.elements(expressions).unwrap()[index];
-        result = Some(context.eval_runtime(expression, environment)?);
+        let value = context.eval_runtime(expression, environment)?;
+        if value.is_absent() {
+            return Ok(value);
+        }
+        result = Some(value);
     }
-    Ok(result.unwrap_or_else(|| absent::value().into()))
+    Ok(result.unwrap_or_else(|| absent::with_reason(vocabulary::MISSING_FINAL_EXPRESSION).into()))
 }
 
 fn quote_foreign(
@@ -316,7 +322,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                             let value = context.eval_runtime(*value, &environment)?;
                             match destructure(pattern, &value) {
                                 Ok(Some(bindings)) => environment.push_runtime(bindings),
-                                Ok(None) => return Ok(absent::value().into()),
+                                Ok(None) => return Ok(pattern_mismatch(pattern).into()),
                                 Err(InvalidBinder) => {
                                     return Ok(
                                         absent::with_reason(vocabulary::INVALID_BINDER).into()
@@ -362,7 +368,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                     } else if let Some(pattern) = pattern {
                         match destructure(pattern, &value) {
                             Ok(Some(bindings)) => environment.push_runtime(bindings),
-                            Ok(None) => return Ok(absent::value().into()),
+                            Ok(None) => return Ok(pattern_mismatch(pattern).into()),
                             Err(InvalidBinder) => {
                                 return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                             }
@@ -834,6 +840,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::INVALID_BINDING, "invalid binding"),
         (vocabulary::INVALID_EXPRESSIONS, "invalid expressions"),
         (vocabulary::PATTERN_MISMATCH, "pattern mismatch"),
+        (
+            vocabulary::MISSING_FINAL_EXPRESSION,
+            "missing final expression",
+        ),
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }
@@ -1031,7 +1041,74 @@ mod tests {
 
         assert_eq!(&*calls.borrow(), &[first, second]);
         assert_eq!(result, blob("second"));
-        assert!(absent::is_absent(&evaluate(&do_call([])).result));
+        assert_eq!(
+            evaluate(&do_call([])).result,
+            absent::with_reason(vocabulary::MISSING_FINAL_EXPRESSION)
+        );
+    }
+
+    #[test]
+    fn do_short_circuits_without_halting_or_rolling_back_effects() {
+        let emit = new_cell_id();
+        let log = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let output = log.clone();
+        let functions = functions().register(
+            emit,
+            ForeignFunction::new(move |context, call, environment| {
+                let value =
+                    context.eval(context.field(call, vocabulary::VALUE).unwrap(), environment)?;
+                Ok(context.effect(|| {
+                    output.borrow_mut().push(value);
+                    Value::record([])
+                }))
+            }),
+        );
+        let effect = |text| grap::call(emit.into(), [(vocabulary::VALUE, blob(text))]);
+        let run = |expression: &Value| {
+            crate::libraries::test_evaluate(expression, |_| None, &functions, 100)
+        };
+        for reason in [new_cell_id(), grap::absent::FUEL_EXHAUSTED] {
+            let failure = grap::absent::with_detail(reason, vocabulary::VALUE, blob("detail"));
+            let expression = do_call([effect("before"), failure.clone(), effect("never")]);
+            log.borrow_mut().clear();
+            let result = run(&expression);
+            assert!(result.completed);
+            assert_eq!(result.result, failure);
+            assert_eq!(*log.borrow(), [blob("before")]);
+
+            let recovered = match_call(
+                expression,
+                [case_arm(
+                    Value::record([(absent::vocabulary::ABSENT, reason.into())]),
+                    effect("recovered"),
+                )],
+            );
+            log.borrow_mut().clear();
+            let result = run(&recovered);
+            assert!(result.completed);
+            assert_eq!(result.result, Value::record([]));
+            assert_eq!(*log.borrow(), [blob("before"), blob("recovered")]);
+        }
+        // A pure decline is still an absent, even without any preceding effect.
+        log.borrow_mut().clear();
+        let result = run(&do_call([absent::decline(), effect("never")]));
+        assert!(result.completed);
+        assert_eq!(result.result, absent::decline());
+        assert!(log.borrow().is_empty());
+    }
+
+    #[test]
+    fn ordinary_bindings_may_contain_absents_without_short_circuiting() {
+        let binder = new_cell_id();
+        let failure = absent::with_reason(new_cell_id());
+        for function in [vocabulary::LET, vocabulary::WHERE] {
+            let expression = bindings_call(
+                function,
+                [binding_clause(binding(binder), failure.clone())],
+                blob("continues"),
+            );
+            assert_eq!(evaluate(&expression).result, blob("continues"));
+        }
     }
 
     #[test]
@@ -1352,7 +1429,10 @@ mod tests {
             [binding_clause(blob("expected"), blob("actual"))],
             blob("never"),
         );
-        assert_eq!(evaluate(&unmatched).result, absent::value());
+        assert_eq!(
+            evaluate(&unmatched).result,
+            pattern_mismatch(&blob("expected"))
+        );
     }
 
     #[test]
@@ -1441,13 +1521,9 @@ mod tests {
             ),
         ] {
             for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
-                let expected = reason.map(absent::with_reason).unwrap_or_else(|| {
-                    if function == vocabulary::MATCH {
-                        pattern_mismatch(&pattern)
-                    } else {
-                        absent::value()
-                    }
-                });
+                let expected = reason
+                    .map(absent::with_reason)
+                    .unwrap_or_else(|| pattern_mismatch(&pattern));
                 let clauses = Value::list([if function == vocabulary::MATCH {
                     case_arm(pattern.clone(), blob("never"))
                 } else {
