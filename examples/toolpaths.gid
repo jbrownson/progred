@@ -4,6 +4,9 @@
     "absent": d9c0a7145a38859a245640d3469cbcd4,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "ball_center": 98ebb26558b012da933f7ef59de28505,
+    "ball_path": cd273e42a347cb3aac2014cb998516a1,
+    "ball_radius": 5fdf6ba19c5bb61b6eb60ce694f38907,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
@@ -16,6 +19,9 @@
     "color": d6b4c91765541de967c02878c42d15ea,
     "condition": 91c786935eb5794b005582b8e7941bc2,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
+    "control_initial": 133b05e33c166614831f01de2365f49c,
+    "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
+    "controls": b9d3424b750ee1fbba4df638d995e236,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
     "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
     "cube": 650c98379ab879a6b902b0bc94305103,
@@ -77,14 +83,20 @@
     "multiply": d6f384c439d9d69996d545df422efd79,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
+    "normal_length": 421de040629c87a3f37d794d999ff3ed,
+    "nx": 351e707a08f74583029720db2c3a7da0,
+    "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "parameters": 6f0875ea2329b14673435cc13e2836d0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
     "preview_mesh_paths": 6b5562bf1e69f9671cf97ad54985e4d0,
     "program": f23c804bf137581b76605a51366d43b7,
+    "progress": 13feb828ce93822d8d72a3ef3765e2f0,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
@@ -95,16 +107,21 @@
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
+    "slider": e3c52729da1f3b54e99ef208ad9d9201,
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
     "square": 6164efe43a126d79bcd252a17a9453c1,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
     "state": 3775735ae4c156144c110ba819cb1e39,
     "step": 569e33fee165d346791e05c0e9cfea8e,
+    "stock_max": 607b5e9a8636c8258959709bf0c3506b,
+    "stock_min": 8ea1172ebbc67d795f0810ee5ca04d00,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "t": 97de1a6f95080533856024449272a3d1,
+    "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
+    "tool_radius": f2f53bdabd10e79d0a3161a57bb18dd8,
     "toolpaths": faaa4df9bd9bc104fc05c09a722f1ae9,
     "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
@@ -116,14 +133,203 @@
     "v0": a5204d915920fe26c29525020c2eae4e,
     "v1": d9722fd96f763e6016557b9e5cd485e7,
     "value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "view": 047d43dfc6ba836cd75a7c840f4b9df7,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
     "width": f33c672fef9d0d4561102410fd64129f,
+    "with_controls": 987acea0ded8eadb18f6b926e945cb0a,
     "x": ae582d23ec214f7e2896d91c1b6756f6,
     "y": 92227b03eda56073f7615c0688040b16,
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
   },
   "cells": {
+    progress: {
+      name: "Playback",
+    },
+    ball_center: {
+      name: "ball center",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: point,
+          y: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: {
+                right: ny,
+                function: multiply,
+                left: ball_radius,
+              },
+            },
+            function: sum,
+            left: y,
+          },
+          x: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: {
+                right: nx,
+                function: multiply,
+                left: ball_radius,
+              },
+            },
+            function: sum,
+            left: x,
+          },
+          z: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: ball_radius,
+            },
+            function: sum,
+            left: z,
+          },
+        },
+        bindings: [
+          {
+            subject: {
+              right: {
+                f64: 0x9a9999999999e93f,
+              },
+              function: divide,
+              left: {
+                right: {
+                  f64: 0x9a9999999999d93f,
+                },
+                function: sum,
+                left: x,
+              },
+            },
+            bind: u,
+          },
+          {
+            subject: {
+              right: {
+                f64: 0x9a9999999999e93f,
+              },
+              function: divide,
+              left: {
+                right: {
+                  f64: 0x9a9999999999d93f,
+                },
+                function: sum,
+                left: y,
+              },
+            },
+            bind: v,
+          },
+          {
+            subject: {
+              right: {
+                right: {
+                  right: {
+                    right: v,
+                    function: subtract,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  function: multiply,
+                  left: v,
+                },
+                function: multiply,
+                left: {
+                  right: {
+                    right: u,
+                    function: multiply,
+                    left: {
+                      f64: 0x0000000000000040,
+                    },
+                  },
+                  function: subtract,
+                  left: {
+                    f64: 0x000000000000f03f,
+                  },
+                },
+              },
+              function: multiply,
+              left: {
+                f64: 0x0000000000000440,
+              },
+            },
+            bind: nx,
+          },
+          {
+            subject: {
+              right: {
+                right: {
+                  right: {
+                    right: u,
+                    function: subtract,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  function: multiply,
+                  left: u,
+                },
+                function: multiply,
+                left: {
+                  right: {
+                    right: v,
+                    function: multiply,
+                    left: {
+                      f64: 0x0000000000000040,
+                    },
+                  },
+                  function: subtract,
+                  left: {
+                    f64: 0x000000000000f03f,
+                  },
+                },
+              },
+              function: multiply,
+              left: {
+                f64: 0x0000000000000440,
+              },
+            },
+            bind: ny,
+          },
+          {
+            subject: {
+              right: {
+                f64: 0x000000000000f03f,
+              },
+              function: hypot,
+              left: {
+                right: ny,
+                function: hypot,
+                left: nx,
+              },
+            },
+            bind: normal_length,
+          },
+        ],
+      },
+    },
+    ball_radius: {
+      name: "ball radius",
+      f64: 0x9a9999999999993f,
+    },
+    ball_path: {
+      name: "ball-center passes",
+      params: [],
+      body: {
+        function: map_points,
+        mapping: ball_center,
+        expression: {
+          function: crosshatch,
+        },
+      },
+    },
     center_depth: {
       name: "center depth",
     },
@@ -572,6 +778,15 @@
     normal: {
       name: "normal",
     },
+    normal_length: {
+      name: "normal length",
+    },
+    nx: {
+      name: "normal x",
+    },
+    ny: {
+      name: "normal y",
+    },
     rows: {
       name: "rows",
     },
@@ -879,60 +1094,123 @@
               height,
             ],
             body: {
-              min_z: {
-                f32: 0x9a9919bf,
-              },
-              mesh_depth: {
-                u64: 0x0500000000000000,
-              },
-              fuel: {
-                f64: 0x00000000006af840,
-              },
-              line_radius: {
-                f64: 0x7b14ae47e17a743f,
-              },
-              function: preview_mesh_paths,
-              value: {
-                function: quote,
-                expression: {
-                  scene: [
-                    {
-                      field: {
-                        unquote: {
-                          function: cube,
+              view: {
+                params: [
+                  value,
+                  width,
+                  height,
+                  parameters,
+                ],
+                body: {
+                  playback: {
+                    function: quote,
+                    expression: {
+                      progress: {
+                        unquote: parameters,
+                      },
+                      tool_length: {
+                        f64: 0x295c8fc2f528cc3f,
+                      },
+                      stock_max: {
+                        y: {
+                          f64: 0x9a9999999999e13f,
+                        },
+                        x: {
+                          f64: 0x9a9999999999e13f,
+                        },
+                        z: {
+                          f64: 0x9a9999999999e13f,
                         },
                       },
-                      color: {
-                        rgb: 0x5f96b4,
+                      stock_min: {
+                        y: {
+                          f64: 0x9a9999999999e1bf,
+                        },
+                        x: {
+                          f64: 0x9a9999999999e1bf,
+                        },
+                        z: {
+                          f64: 0x9a9999999999e1bf,
+                        },
+                      },
+                      tool_radius: {
+                        unquote: ball_radius,
                       },
                     },
-                  ],
+                  },
+                  min_z: {
+                    f32: 0x9a9919bf,
+                  },
+                  mesh_depth: {
+                    u64: 0x0500000000000000,
+                  },
+                  fuel: {
+                    f64: 0x0000000080841e41,
+                  },
+                  line_radius: {
+                    f64: 0x7b14ae47e17a743f,
+                  },
+                  function: preview_mesh_paths,
+                  value: {
+                    function: quote,
+                    expression: {
+                      scene: [
+                        {
+                          field: {
+                            unquote: {
+                              function: cube,
+                            },
+                          },
+                          color: {
+                            rgb: 0x5f96b4,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  max_x: {
+                    f32: 0x9a99193f,
+                  },
+                  max_y: {
+                    f32: 0x9a99193f,
+                  },
+                  height: height,
+                  color: {
+                    rgb: 0xf0ae50,
+                  },
+                  max_z: {
+                    f32: 0x9a99593f,
+                  },
+                  min_y: {
+                    f32: 0x9a9919bf,
+                  },
+                  program: value,
+                  width: width,
+                  min_x: {
+                    f32: 0x9a9919bf,
+                  },
                 },
               },
-              max_x: {
-                f32: 0x9a99193f,
-              },
-              max_y: {
-                f32: 0x9a99193f,
+              function: with_controls,
+              value: value,
+              controls: {
+                params: [],
+                body: {
+                  control_initial: {
+                    f64: 0x666666666666d63f,
+                  },
+                  control_key: {
+                    function: quote,
+                    expression: progress,
+                  },
+                  function: slider,
+                },
               },
               height: height,
-              color: {
-                rgb: 0xf0ae50,
-              },
-              max_z: {
-                f32: 0x9a99193f,
-              },
-              min_y: {
-                f32: 0x9a9919bf,
-              },
-              program: value,
               width: width,
-              min_x: {
-                f32: 0x9a9919bf,
-              },
             },
           },
-          value: crosshatch,
+          value: ball_path,
         },
       ],
     },
@@ -941,6 +1219,9 @@
       sample_pass,
       face,
       crosshatch,
+      ball_center,
+      ball_path,
+      ball_radius,
     ],
   },
 }

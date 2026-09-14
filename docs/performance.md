@@ -134,7 +134,7 @@ before/after runs when evaluating small changes.
 | Tanglecube orbit | 400 × 600 | 2 | Same camera sequence |
 | Gyroid sphere orbit | 400 × 600 | 2 | Same camera sequence |
 | Fidget cube orbit | 400 × 600 | 2 | Same camera sequence; remeshes the Rhino-derived cube at depth 5 |
-| Toolpath orbit | 400 × 600 | 2 | Same camera sequence; remeshed cube plus directly generated tube triangles |
+| Toolpath orbit | 400 × 600 | 2 | Same camera sequence; remeshed cube, compensated cutter paths, stock outline, and playback controls |
 
 The additional filters are `fidget_torus_profile_loop`,
 `fidget_tanglecube_profile_loop`, `fidget_gyroid_profile_loop`,
@@ -156,9 +156,18 @@ construction, cube remeshing at depth 5, and **CPU triangle rasterization**;
 Seatbelt exposed no GPU adapter. The first frame was 50.88 ms. These are
 headless viewport-build timings, not native GPU or input-to-display latency.
 
+After adding playback and Grap surface-normal compensation later that day, the
+same sandbox canary measured 66.34 ms median (70.03 ms maximum), first frame
+78.31 ms, with five warm-up and eight measured frames. This is a changed workload:
+it includes the extra Grap mapping, an evaluation-local seekable recording, cutter
+and stock geometry, and a measured control strip that reduces the raster height.
+It still uses CPU rasterization. It is not an isolated measurement of slider
+overhead and does not predict native GPU interaction latency.
+
 Fidget receives ordinary camera annotations at the viewport's source path. It
 uses the library's normal automatic backend: GPU when available, CPU fallback
-otherwise. Its 800 × 1200 raster is produced through the real preview projection,
+otherwise. Its assigned 800 × 1200 viewport (less controls where present) is
+rendered through the real preview projection,
 including field evaluation, Fidget lowering, rendering, and image construction.
 When the GPU path runs, its synchronous readback is included too. The harness
 does not identify which backend was used, so do not label these results as GPU

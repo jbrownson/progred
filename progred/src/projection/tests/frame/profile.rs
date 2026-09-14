@@ -297,7 +297,7 @@ fn fidget_orbit_profile(example: Example) {
     };
     let (view, mut context) = view.prepare(&doc);
     profile(
-        &format!("{example:?} orbit, 400x600 @2 (800x1200 raster), automatic backend"),
+        &format!("{example:?} orbit, 400x600 @2 viewport including controls, automatic backend"),
         |index| {
             context
                 .frame(view.frame(&doc, &orbit(view.root.as_deref().unwrap(), index)))
@@ -305,7 +305,8 @@ fn fidget_orbit_profile(example: Example) {
         },
         |bench| {
             let image = image(bench);
-            assert_eq!((image.width, image.height), (800, 1200));
+            assert_eq!(image.width, 800);
+            assert!(image.height > 0 && image.height <= (view.size.height * view.scale) as u32);
         },
     );
 }

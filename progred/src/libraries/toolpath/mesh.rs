@@ -8,6 +8,7 @@ use gid::Value;
 use nalgebra::Vector3;
 use std::{cell::RefCell, rc::Rc};
 
+mod playback;
 #[cfg(test)]
 mod tests;
 mod tubes;
@@ -17,12 +18,45 @@ pub(super) fn preview(
     call: ::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<Value, ::grap::Halt> {
-    super::fidget::preview_with(
+    let playback = match context.field(call, PLAYBACK) {
+        Some(expression) => {
+            let value = context.eval(expression, environment)?;
+            if absent::is_absent(&value) {
+                return Ok(value);
+            }
+            if playback::Settings::read(&value).is_none() {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            }
+            Some(value)
+        }
+        None => None,
+    };
+    let value = super::fidget::preview_with(
         context,
         call,
         environment,
         PREVIEW_MESH,
         fidget::mesh::preview,
+    )?;
+    Ok(
+        match (
+            playback,
+            value
+                .as_record()
+                .and_then(|r| r.get(&PREVIEW_MESH))
+                .and_then(Value::as_record),
+        ) {
+            (Some(playback), Some(fields)) => Value::record([(
+                PREVIEW_MESH,
+                Value::record(
+                    fields
+                        .iter()
+                        .map(|(k, v)| (*k, v.clone()))
+                        .chain([(PLAYBACK, playback)]),
+                ),
+            )]),
+            _ => value,
+        },
     )
 }
 
@@ -37,12 +71,22 @@ pub(super) fn display(
     let color = super::fidget::read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
     super::fidget::read_radius(radius)?;
     let fuel = super::read_fuel(f64::read(fields.get(&layout::vocabulary::FUEL)?)?)?;
+    let playback = match fields.get(&PLAYBACK) {
+        Some(value) => Some(playback::Settings::read(value)?),
+        None => None,
+    };
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let renderer = renderer.clone();
     let drawing = Layout::program(Rc::new(move |context, build| {
         let mut tubes = tubes::Tubes::new(radius, color).unwrap();
-        let evaluation = run(&mut tubes, |scope| {
+        let mut recording = Recording::default();
+        let sink: &mut dyn Sink<Error = InvalidPath> = if playback.is_some() {
+            &mut recording
+        } else {
+            &mut tubes
+        };
+        let evaluation = run(sink, |scope| {
             ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
         });
         if !evaluation.completed || absent::is_absent(&evaluation.result) {
@@ -54,6 +98,9 @@ pub(super) fn display(
             );
         }
         let drawing = (|| {
+            if let Some(settings) = &playback {
+                settings.draw(&recording, &mut tubes, radius, color).ok()?;
+            }
             // Exact depth ties keep the paths; both use the same depth buffer.
             fidget::mesh::append(&mut tubes.geometry, &model, depth)?;
             fidget::mesh::image(

@@ -13,7 +13,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Gold tube triangles on the meshed blue cube, in one depth-tested viewport |
+| 9 | `toolpaths.gid` | Slider-driven ball-end cutter playback over the meshed cube, with a stock outline |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -73,15 +73,18 @@ measurements using the actual example documents.
 Both the row loop and the sampling loop are editable example functions; only
 point emission and the generic mapping scope are native toolpath operations.
 The left viewport uses `preview paths mesh`: Fidget meshes the blue cube at depth
-5, and the path sink generates gold tube triangles directly. Both are rebuilt
-every frame and share one depth buffer; drag to orbit and scroll to zoom.
+5, and path segments become tube triangles in the same depth buffer. Drag to orbit
+and scroll to zoom. The slider below the viewport seeks by cutting distance,
+showing completed paths in gold, upcoming paths in gray, and the tool in orange.
 Edit/scrub the row counts, UV spacing,
 mapping constants, colors, or explicit line radius. The latter controls visual
-thickness, not cutter size. The paths are surface samples, not
-compensated cutter locations, and no links between passes are implied.
+thickness, not cutter size. A separate Grap mapping offsets surface samples along
+their normals by the editable ball radius. No links between passes are implied.
 Expand `panes` to change `mesh depth` or use `preview paths 3d` for the voxel
 comparison. The document includes its own copy of the cube definition; its parameters and
-the path mapping are independent. Cutter playback is not implemented yet.
+the path mapping are independent. The wire box shows a larger starting stock
+envelope, not simulated stock removal. Controls use per-view state without making
+the document unsaved. Every frame regenerates the paths and meshes; there is no cache.
 
 See [toolpaths](../docs/toolpaths.md) for the streaming interface, its optional
 recorder, and the boundary between this experiment and machining motion.

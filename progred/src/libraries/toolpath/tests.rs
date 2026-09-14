@@ -339,6 +339,49 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
 }
 
 #[test]
+fn example_ball_centers_offset_contact_points_along_the_normal() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let stack = crate::stack::load();
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &stack.libraries,
+    };
+    let mut contact = Recording::default();
+    let a = run(&mut contact, |scope| {
+        ::grap::apply_scoped(&names["crosshatch"].into(), [], &sources, scope, 100_000)
+    });
+    let mut centers = Recording::default();
+    let b = run(&mut centers, |scope| {
+        ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+    });
+    assert!(
+        a.completed && b.completed,
+        "contact {:?}, centers {:?}",
+        a.result,
+        b.result
+    );
+    assert!(!absent::is_absent(&b.result), "{:?}", b.result);
+    assert_eq!(contact.commands.len(), centers.commands.len());
+    let radius = f64::read(doc.cells.value(names["ball_radius"]).unwrap()).unwrap();
+    for (a, b) in contact.commands.iter().zip(&centers.commands) {
+        let (a, b) = match (a, b) {
+            (Command::StartAt(a), Command::StartAt(b))
+            | (Command::LineTo(a), Command::LineTo(b)) => (a, b),
+            _ => panic!("path boundaries must survive compensation"),
+        };
+        let [x, y, _] = *a;
+        let u = (x + 0.4) / 0.8;
+        let v = (y + 0.4) / 0.8;
+        let nx = 2.5 * (1.0 - 2.0 * u) * v * (1.0 - v);
+        let ny = 2.5 * (1.0 - 2.0 * v) * u * (1.0 - u);
+        let length = nx.hypot(ny).hypot(1.0);
+        for i in 0..3 {
+            assert!((b[i] - a[i] - radius * [nx, ny, 1.0][i] / length).abs() < 1e-12);
+        }
+    }
+}
+
+#[test]
 fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();

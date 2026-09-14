@@ -269,6 +269,34 @@ fn editor_toolpath_mesh_svg_capture() {
 }
 
 #[test]
+#[ignore = "writes remote-review captures at three playback positions"]
+fn editor_toolpath_playback_svg_captures() {
+    use crate::libraries::controls::vocabulary::STATE;
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    for (progress, file) in [
+        (0.0, "playback_start.svg"),
+        (0.35, "playback_middle.svg"),
+        (1.0, "playback_end.svg"),
+    ] {
+        let mut editor = crate::test_editor(doc.clone());
+        editor
+            .model
+            .workspace
+            .sync_declared(&crate::workspace::declarations(doc.root.as_ref()));
+        let pane = &mut editor.model.workspace.left.panes[0];
+        let path = crate::workspace::declarations(doc.root.as_ref())[0]
+            .path
+            .clone();
+        pane.view.annotations.set_field(
+            &path,
+            STATE,
+            Some(Value::record([(names["progress"], f64::value(progress))])),
+        );
+        render_editor(editor, kurbo::Size::new(1500.0, 1050.0), file);
+    }
+}
+
+#[test]
 fn svg_images_preserve_pixels_transform_and_nested_clips() {
     let image = ImageData {
         data: vec![12, 34, 56, 128, 78, 90, 123, 255].into(),
@@ -386,7 +414,7 @@ fn svg_bench_renders_numeric_type_labels() {
 
 #[test]
 fn svg_bench_renders_toolpath_source_and_preview() {
-    use crate::libraries::{presentation, toolpath};
+    use crate::libraries::{controls, presentation};
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     render(&doc, None, 760.0, "toolpaths_source.svg");
     let libraries = core_libraries();
@@ -394,7 +422,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let (value, viewport) =
         presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
-    assert_eq!(value.as_cell(), Some(names["crosshatch"]));
+    assert_eq!(value.as_cell(), Some(names["ball_path"]));
     let preview = grap::apply(
         viewport,
         [
@@ -411,7 +439,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
             .result
             .as_record()
             .unwrap()
-            .contains_key(&toolpath::vocabulary::PREVIEW_MESH)
+            .contains_key(&controls::vocabulary::WITH_CONTROLS)
     );
     let doc = Document {
         root: Some(preview.result),

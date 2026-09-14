@@ -2,7 +2,7 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    Libraries, Library, absent, blob, color, control, f32, f64, fidget, geometry,
+    Libraries, Library, absent, blob, color, control, controls, f32, f64, fidget, geometry,
     grap as grap_library, layout, line_edit, list, logic, name, number, presentation, random,
     selection, site, text, toolpath, u64, workspace,
 };
@@ -48,6 +48,7 @@ fn contributions() -> impl Iterator<Item = (gid::CellId, Library<crate::Editor, 
         (absent::ID, absent::library()),
         (color::ID, color::library()),
         (control::ID, control::library()),
+        (controls::ID, controls::library()),
         (number::ID, number::library()),
         (f32::ID, f32::library()),
         (f64::ID, f64::library()),

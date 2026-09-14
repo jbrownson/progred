@@ -13,13 +13,14 @@ Calling generators in sequence composes their output. `MapPoints` adapts another
 sink, so translation, reflection, surface mapping, and further adapters compose
 without recording intermediate paths.
 
-Tests use `Recording` as an optional initial representation: a native vector of
-start/line commands, with replay into any sink. The line preview instead consumes
+`Recording` is an optional initial representation: a native vector of
+start/line commands. Playback uses it for total distance and seeking; tests also
+replay it into other sinks. The line preview instead consumes
 emitted points directly into one projected vector path and its bounds; the 3D
 voxel preview consumes them into native Fidget fields, while the mesh preview
-emits tube vertices and indices directly. There is no
-intermediate command recording, GID command list, or opaque Rust program passed
-through Grap. Nothing is memoized across frames.
+emits tube vertices and indices directly when playback is not requested. There
+is no GID command list or opaque Rust program passed through Grap. Nothing is
+memoized across frames.
 
 Grap uses ordinary calls to scoped `start at`, `line to`, and
 `map points` functions. `do` supplies sequencing; lambdas supply reusable
@@ -70,8 +71,10 @@ z = 0.5 − 2u(1 − u)v(1 − v)
 This corresponds to a face-center depression of 0.125. The second sweep reflects
 the unit-square y coordinate before the same surface mapping. Unlike Rhino's
 finishing program, this example does not reverse row order for that second
-sweep, compensate for the ball radius/tool orientation, or construct linking
-curves. Those are separate future combinators. The first fixture covers one
+sweep or construct linking curves. The separate Grap `ball center` mapping
+offsets each contact point along the analytic surface normal by `ball radius`;
+`ball-center passes` wraps the contact generator with that mapping. The radius
+is shared by the mapping and preview tool. The first fixture covers one
 face only and retains the original model units without assigning a machine unit.
 
 ## Previews
@@ -110,8 +113,9 @@ meshing step is involved in the path geometry. Paths and model share the triangl
 renderer, camera, lighting, and depth buffer; no overlay or depth bias is used.
 Failed path generation discards the whole preview before meshing the model.
 
-Command+9's example uses this mesh viewport at depth 5: 42 gold paths (1,056
-segments) over a blue cube, with a 100,000-fuel budget. Every frame reruns the
+Command+9's example uses this mesh viewport at depth 5: 42 paths (1,056
+segments) over a blue cube, with a 500,000-fuel budget including Grap ball-radius
+compensation. Every frame reruns the
 Grap path program, generates the tubes, and remeshes the cube. There is no mesh
 or image cache. Native builds use GPU triangle drawing with synchronous readback;
 web/headless fallback uses the same geometry in the CPU triangle renderer.
@@ -150,7 +154,27 @@ measurement. The [cube meshing experiment](fidget-meshing-2026-09-13.md) motivat
 the current mesh viewport, which bypasses the GPU VM entirely and does not yet
 retain geometry across frames.
 
-Cutter playback, orientation, radius compensation, explicit links, stock
-removal, and machine/postprocessor output remain separate next steps. In
+## Playback
+
+The mesh preview accepts an optional `playback` record with `progress` (f64,
+0–1), `ball radius`, `tool length`, and `stock minimum` / `stock maximum` (f64
+`x`, `y`, `z` records). These are ordinary data, not control state. The example
+supplies progress from the reusable [controls](controls.md) library.
+
+The recording computes total cutting-segment length, then visits segments again,
+splitting the current segment at the requested distance. Completed segments are
+gold, upcoming segments gray, and the tool orange. Path starts do not contribute
+distance: the cursor jumps between disconnected passes rather than inventing
+linking moves. Progress is not machining time. Empty paths have no tool; zero
+length segments are well-defined. The visual tool is a vertical capsule with a
+ball tip: paths identify its ball center, and length measures tip to top.
+
+The example's wire box is 1.1 units on each axis around the one-unit model. It
+shows the starting stock envelope, **not stock removal or a collision check**.
+The finished model remains visible throughout playback. Geometry, path recording,
+and raster image are rebuilt for every frame, including slider drags.
+
+Variable orientation, explicit links, stock removal, and machine/postprocessor
+output remain separate next steps. In
 particular, the existing Fidget cube field is not an exact signed distance;
 subtracting a cutter radius from it would not implement a geometric offset.
