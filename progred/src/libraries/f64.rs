@@ -183,74 +183,86 @@ pub fn functions() -> ForeignFunctions {
                             input.clone(),
                         )
                     }))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::SUM,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left + right)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::MULTIPLY,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left * right)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::SUBTRACT,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left - right)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::DIVIDE,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left / right)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::SIN,
             ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::sin)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::COS,
             ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::cos)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::FLOOR,
             ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::floor)
-            }),
+            })
+            .tracked(),
         )
-        .register(vocabulary::LERP, ForeignFunction::runtime(lerp))
+        .register(vocabulary::LERP, ForeignFunction::runtime(lerp).tracked())
         .register(
             vocabulary::MIN,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, f64::min)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::MAX,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, f64::max)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::CEIL,
             ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::ceil)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::HYPOT,
             ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, f64::hypot)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::IS_FINITE,
@@ -258,7 +270,8 @@ pub fn functions() -> ForeignFunctions {
                 unary_value(context, call, environment, |value| {
                     logic::value(value.is_finite()).into()
                 })
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::LESS,
@@ -266,7 +279,8 @@ pub fn functions() -> ForeignFunctions {
                 binary_value(context, call, environment, |left, right| {
                     RuntimeValue::from_value(logic::value(left < right))
                 })
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::EQUAL,
@@ -274,7 +288,8 @@ pub fn functions() -> ForeignFunctions {
                 binary_value(context, call, environment, |left, right| {
                     RuntimeValue::from_value(logic::value(left == right))
                 })
-            }),
+            })
+            .tracked(),
         )
 }
 

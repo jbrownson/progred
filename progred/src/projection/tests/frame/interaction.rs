@@ -21,6 +21,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let node = project(
         ProjectDescription {
+            computations: None,
             view: &crate::test_root(),
             completions: None,
             sources: Sources {
@@ -97,6 +98,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let active = project(
         ProjectDescription {
+            computations: None,
             view: &crate::test_root(),
             completions: None,
             sources: Sources {

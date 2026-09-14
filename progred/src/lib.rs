@@ -5,6 +5,7 @@ mod annotations;
 mod command;
 mod commands;
 mod completion;
+mod computations;
 mod display;
 mod editing;
 mod filter;
@@ -292,6 +293,7 @@ pub(crate) enum QuitState {
 /// context is a cheap clone over shared font data). The dispatch
 /// world type.
 pub(crate) struct Editor {
+    pub(crate) computations: computations::Computations,
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
     pub(crate) state: RenderState,
@@ -449,6 +451,7 @@ fn new_editor(
     proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
 ) -> Editor {
     Editor {
+        computations: computations::Computations::default(),
         drawn_menu,
         state: RenderState::Suspended(None),
         #[cfg(not(target_arch = "wasm32"))]
@@ -1388,6 +1391,7 @@ impl Editor {
         self.finish_gesture();
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
+            computations,
             drawn_menu: _,
             state: _,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1413,6 +1417,7 @@ impl Editor {
         #[cfg(target_os = "macos")]
         let changed_path = *doc_path != path;
         *pending_discard = None;
+        *computations = computations::Computations::default();
         *pressed = false;
         *menu = menu::State::default();
         *binders = text_binders;

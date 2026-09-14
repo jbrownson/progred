@@ -97,8 +97,8 @@ measure an open RGBA picker; `_form_profile` runs both workloads.
 
 `BenchFrame` takes a document, source-qualified root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
-`BenchContext` retains the library stack, fonts, layout context, and text shaping
-cache. A `ProfileView` configures logical size and display scale, using zero
+`BenchContext` retains the library stack, fonts, layout context, text shaping,
+and caller-owned computation graph. A `ProfileView` configures logical size and display scale, using zero
 padding for viewport declarations and the editor's normal margin for a document
 view. The `profile` combinator takes a frame-producing closure and an output
 check. Other documents and state sequences can reuse it without changes to the
@@ -191,7 +191,8 @@ Both use CPU triangle rasterization because the sandbox has no Metal adapter.
 This compares usable implementations, not equal geometric approximations:
 Fidget can represent roofs and through-cuts, and depth 7 was chosen because
 depth 5 visibly distorted the narrow grooves. Completed path lines are now
-omitted. No expression, stock mesh, or image is cached across frames.
+omitted. At this checkpoint every expression, stock mesh, and image was
+recomputed; the later dependency-graph comparison below supersedes that policy.
 
 To separate the geometry costs from rasterization:
 
@@ -214,6 +215,27 @@ The dominant cost is CPU meshing, not constructing the sweep expressions.
 Native GPU triangle drawing will not remove that cost. Remeshing every frame
 is therefore expected to be choppy; retained geometry and asynchronous work
 remain separate design decisions, not hidden fallbacks in this experiment.
+
+### Dependency-tracked CAM geometry — 2026-09-14
+
+The same `fidget_toolpaths_profile_loop` (400 × 600 logical @2, playback 0.35,
+five warm-up and 60 measured orbit frames) before/after the general memo graph:
+
+| Configuration | Median | p95 | Maximum | First frame |
+| --- | ---: | ---: | ---: | ---: |
+| Recompute geometry each frame | 259.83 ms | 283.33 ms | 348.41 ms | 267.27 ms |
+| Dependency-tracked recording, stock, mesh | 12.22 ms | 12.58 ms | 12.82 ms | 271.14 ms |
+
+Both runs used the CPU triangle rasterizer because the build sandbox exposes no
+Metal adapter. This is roughly 21× faster warm orbiting, not faster meshing or
+an input-to-screen latency measurement. The image changes with the camera and is
+rendered every frame. Geometry edits and first demand still pay synchronous
+recording/meshing cost. See [the boundaries and limitations](incremental.md).
+
+A repeat measured 12.41 ms median / 12.90 ms p95 (286.19 ms first frame).
+The unchanged, uncached IoP canaries measured 26.12 ms for the picture and
+3.76 ms for source in this pass; there was no fresh pre-change IoP A/B run,
+so these are canary observations, not a quantified regression comparison.
 
 ### Interpreting viewport measurements
 

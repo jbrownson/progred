@@ -231,6 +231,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 }
 
 pub(crate) struct FrameDescription<'a> {
+    computations: &'a crate::computations::Computations,
     drawn_menu: bool,
     model: &'a Model,
     stack: &'a stack::Stack<Editor>,
@@ -389,6 +390,7 @@ impl Editor {
         self.sync_views();
         prepare_frame(
             FrameDescription {
+                computations: &self.computations,
                 drawn_menu: self.drawn_menu,
                 toggles: self.menu_toggles(),
                 availability: self.menu_availability(),
@@ -527,6 +529,7 @@ impl EditorRunner {
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
+    computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
@@ -570,6 +573,7 @@ fn project_workspace_view(
     };
     let projected = projection::project(
         projection::ProjectDescription {
+            computations: Some(computations),
             view: &view.root,
             completions: Some(&stack.completions),
             sources,
@@ -638,6 +642,7 @@ fn project_workspace_view(
 #[allow(clippy::too_many_arguments)]
 fn project_workspace(
     model: &Model,
+    computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
@@ -660,8 +665,17 @@ fn project_workspace(
             .view(&placed_view.root)
             .expect("workspace geometry only names live views");
         let rect = placed_view.rect;
-        let child =
-            project_workspace_view(model, stack, styles, tcx, sources, view, rect.size(), scale);
+        let child = project_workspace_view(
+            model,
+            computations,
+            stack,
+            styles,
+            tcx,
+            sources,
+            view,
+            rect.size(),
+            scale,
+        );
         body = measured::overlay_into(body, child, move |placement, _| {
             let rect = rect + placement.rect.origin().to_vec2();
             Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
@@ -739,6 +753,7 @@ fn project_frame(
     resources: FrameResources<'_>,
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
+        computations,
         drawn_menu,
         toggles,
         model,
@@ -748,6 +763,7 @@ fn project_frame(
         scale,
         viewport,
     } = *description;
+    computations.begin(model.doc.clone(), stack.libraries.clone());
     let FrameResources {
         fonts: font_cx,
         layouts: layout_cx,
@@ -788,6 +804,7 @@ fn project_frame(
     };
     let body = project_workspace(
         model,
+        computations,
         stack,
         &styles,
         &mut tcx,
@@ -1629,6 +1646,7 @@ mod frame_tests {
             crate::display::widget::frame::place(
                 project_workspace(
                     model,
+                    &crate::computations::Computations::default(),
                     &stack,
                     &styles,
                     &mut tcx,
@@ -1825,6 +1843,7 @@ mod frame_tests {
                 crate::display::widget::frame::place(
                     project_workspace_view(
                         &model,
+                        &crate::computations::Computations::default(),
                         &stack,
                         &styles,
                         &mut tcx,
@@ -1933,6 +1952,7 @@ mod frame_tests {
         let placed = crate::display::widget::frame::place(
             project_workspace(
                 &model,
+                &crate::computations::Computations::default(),
                 &stack,
                 &styles,
                 &mut tcx,
@@ -2077,6 +2097,7 @@ mod frame_tests {
         compute_hover(
             layout,
             &FrameDescription {
+                computations: &editor.computations,
                 drawn_menu: false,
                 model: &editor.model,
                 stack: &editor.stack,

@@ -10,6 +10,7 @@ mesh-experiment = []
 [dependencies]
 grap = { path = "../grap" }
 gid.workspace = true
+incremental.workspace = true
 measured = { path = "../ui/measured" }
 puri.workspace = true
 puri-widgets.workspace = true

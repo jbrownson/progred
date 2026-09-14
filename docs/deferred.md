@@ -88,12 +88,14 @@ not assume every absent warrants an alert.
 
 ## General computation reuse
 
-The canvas memo was removed because its validation observed less than evaluation
-could use. Current canvas programs record once per visible frame; text shaping
-is the cross-frame memo. Any future invalidation system must track actual
-lookup results, including absence, ordered definition sets, and foreign
-implementations. Settle the model before adding it. Do not reintroduce an
-ad-hoc cache or event-specific relevance checks.
+The former canvas memo observed less than evaluation could use. It remains
+removed; canvas programs record once per visible frame. The new general
+[computation graph](incremental.md) first serves CAM geometry and observes selected
+definitions, missing lookups, native implementations, and declared FFI inputs.
+Async execution, Grap-language memo boundaries, durability tiers, and further
+integrations are deferred. Future readers of ordered contributor sets must
+observe that set, not just a selected definition. Do not add an ad-hoc cache
+or event-specific relevance checks alongside this mechanism.
 
 The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.

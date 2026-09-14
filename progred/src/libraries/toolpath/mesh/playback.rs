@@ -1,7 +1,7 @@
 use super::super::stock::{BallEnd, Stock};
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(super) struct Settings {
     progress: f64,
     radius: f64,
@@ -31,12 +31,7 @@ mod tests {
                 stock_color: None,
             };
             let mut tubes = tubes::Tubes::new(0.02, color).unwrap();
-            assert!(
-                settings
-                    .draw(&path, &mut tubes, 0.02, color)
-                    .unwrap()
-                    .is_none()
-            );
+            settings.draw(&path, &mut tubes, 0.02, color).unwrap();
             let path_vertices: Vec<_> = tubes
                 .geometry
                 .vertices
@@ -95,30 +90,39 @@ impl Settings {
         })
     }
 
+    pub(super) fn remaining_stock(
+        &self,
+        path: &Recording,
+    ) -> Result<Option<fidget::SceneObject>, InvalidPath> {
+        let Some(color) = self.stock_color else {
+            return Ok(None);
+        };
+        let tool = BallEnd::new(self.radius, self.length).ok_or(InvalidPath::CoordinateRange)?;
+        let mut stock =
+            Stock::block(self.stock_min, self.stock_max).ok_or(InvalidPath::CoordinateRange)?;
+        path.playback(self.progress, |a, b, completed| {
+            if completed {
+                stock.cut(&tool, a, b)?;
+            }
+            Ok(())
+        })?;
+        Ok(Some(fidget::SceneObject {
+            tree: stock.into_field(),
+            color,
+        }))
+    }
+
     pub(super) fn draw(
         &self,
         path: &Recording,
         tubes: &mut tubes::Tubes,
         line_radius: f64,
         path_color: [u8; 3],
-    ) -> Result<Option<fidget::SceneObject>, InvalidPath> {
-        let tool = BallEnd::new(self.radius, self.length).ok_or(InvalidPath::CoordinateRange)?;
-        let mut stock = self
-            .stock_color
-            .map(|color| {
-                Stock::block(self.stock_min, self.stock_max)
-                    .map(|stock| (stock, color))
-                    .ok_or(InvalidPath::CoordinateRange)
-            })
-            .transpose()?;
+    ) -> Result<(), InvalidPath> {
         let center = path.playback(
             self.progress,
             |a, b, completed| -> Result<(), InvalidPath> {
-                if completed {
-                    if let Some((stock, _)) = &mut stock {
-                        stock.cut(&tool, a, b)?;
-                    }
-                } else {
+                if !completed {
                     tubes.style(line_radius, path_color)?;
                     tubes.start_at(a)?;
                     tubes.line_to(b)?;
@@ -130,11 +134,8 @@ impl Settings {
             tubes.style(self.radius, [225, 94, 58])?;
             tubes.ball_end(center, self.length)?;
         }
-        if let Some((stock, color)) = stock {
-            return Ok(Some(fidget::SceneObject {
-                tree: stock.into_field(),
-                color,
-            }));
+        if self.stock_color.is_some() {
+            return Ok(());
         }
         tubes.style(line_radius * 0.6, [137, 150, 163])?;
         for corner in 0..8 {
@@ -154,6 +155,6 @@ impl Settings {
                 }
             }
         }
-        Ok(None)
+        Ok(())
     }
 }

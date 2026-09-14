@@ -14,6 +14,8 @@ Start with:
   history, and persistence.
 - [Grap and projections](projections.md): evaluation, libraries, display
   composition, and host boundaries.
+- [Dependency-tracked computations](incremental.md): memo graphs, Grap observations,
+  and the first CAM integration.
 - [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
   drawing.
 - [Build security](build-security.md): sandboxed build/test commands.
@@ -30,7 +32,8 @@ and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
 dated measurement report.
 [Fidget meshing](fidget-meshing-2026-09-13.md) records the headless cube experiment
 and its quality limitations. The [mesh viewport](fidget-mesh.md) describes the
-subsequent in-app option, which deliberately remeshes every frame.
+subsequent in-app option. Its toolpath variant now retains dependency-tracked
+geometry; ordinary mesh previews still remesh each frame.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.

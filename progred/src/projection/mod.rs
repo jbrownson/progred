@@ -106,6 +106,7 @@ impl<World: 'static> Projection<World> {
 /// Read-only projection context threaded through every view.
 #[cfg_attr(test, derive(Clone))]
 pub(crate) struct Cx<'a> {
+    pub(crate) computations: Option<&'a crate::computations::Computations>,
     pub(crate) view: &'a crate::workspace::Root,
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
@@ -517,6 +518,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
 /// `root_path` let an editor pane begin at a value occurrence
 /// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a> {
+    pub computations: Option<&'a crate::computations::Computations>,
     pub view: &'a crate::workspace::Root,
     pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
@@ -551,6 +553,7 @@ fn prepare_project(
     tcx: &mut TextCtx,
 ) -> ChoiceGraph<HoverPass<crate::Editor>> {
     let ProjectDescription {
+        computations,
         view,
         completions,
         sources,
@@ -566,6 +569,7 @@ fn prepare_project(
     } = description;
     let projection = projection.cloned().unwrap_or_default();
     let cx = Cx {
+        computations,
         view,
         completions,
         sources,
@@ -751,6 +755,7 @@ fn prepare_transient_root(
     let ordinary_projection = projection.without_entry();
     let projection = &ordinary_projection;
     let result_cx = Cx {
+        computations: cx.computations,
         view: cx.view,
         completions: cx.completions,
         sources: cx.sources,

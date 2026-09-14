@@ -1,8 +1,8 @@
 # Toolpaths
 
 The toolpath library is an experimental path-geometry layer, not a machine
-program or a collision/clearance check. It adds no evaluator or editor-core
-cases and requires no new dependencies.
+program or a collision/clearance check. Its geometry remains library-owned;
+the mesh preview uses the general dependency-tracked computation runtime.
 
 ## Generation and interpretation
 
@@ -17,10 +17,10 @@ without recording intermediate paths.
 start/line commands. Playback uses it for total distance and seeking; tests also
 replay it into other sinks. The line preview instead consumes
 emitted points directly into one projected vector path and its bounds; the 3D
-voxel preview consumes them into native Fidget fields, while the mesh preview
-emits tube vertices and indices directly when playback is not requested. There
-is no GID command list or opaque Rust program passed through Grap. Nothing is
-memoized across frames.
+voxel preview consumes them into native Fidget fields. The mesh preview retains
+an observed recording, then emits tube vertices and indices from it. There is
+no GID command list or opaque Rust program passed through Grap. Final-encoding
+generators can still run directly against any sink without recording.
 
 Grap uses ordinary calls to scoped `start at`, `line to`, and
 `map points` functions. `do` supplies sequencing; lambdas supply reusable
@@ -116,9 +116,10 @@ Failed path generation discards the whole preview before meshing the model.
 
 Command+9's example uses this mesh viewport: 42 paths (1,056 segments), with a
 blue reference cube when stock is disabled, mesh depth 7, and a 500,000-fuel budget
-including Grap ball-radius compensation. Every frame reruns the Grap path
-program, generates the tubes, and rebuilds either the stock or reference mesh. There is no mesh
-or image cache. Native builds use GPU triangle drawing with synchronous readback;
+including Grap ball-radius compensation. Its [memo graph](incremental.md) records
+the path, prepares stock/tool geometry, and meshes only when observed inputs
+invalidate those stages. Camera changes render a fresh image from retained geometry.
+Native builds use GPU triangle drawing with synchronous readback;
 web/headless fallback uses the same geometry in the CPU triangle renderer.
 Expand `panes` to change `mesh depth` or replace `preview paths mesh` with
 `preview paths 3d` for comparison. Drag to orbit and scroll to zoom. The document
@@ -152,8 +153,8 @@ orbit drags, but remains choppy. A subsequent native trace of 50 renders at
 599 × 1280 × 640 averaged 234 ms (196–279 ms), with 215 ms on average in
 wait/readback. This is rendering time, not a complete input-to-display latency
 measurement. The [cube meshing experiment](fidget-meshing-2026-09-13.md) motivated
-the current mesh viewport, which bypasses the GPU VM entirely and does not yet
-retain geometry across frames.
+the current mesh viewport, which bypasses the GPU VM entirely. It now retains
+geometry through the general dependency graph.
 
 ## Playback
 
@@ -182,8 +183,11 @@ by −0.5…0.5 on all three axes, so the passes carve the indent into its top f
 without first removing an oversized stock allowance.
 Stock replaces the reference solid while enabled, avoiding coplanar surfaces
 where their boundaries coincide. It shares the paths' depth buffer, so intact
-material hides any path beneath it. There is no x-ray overlay or depth offset. Geometry, path recording,
-stock, and raster image are rebuilt for every frame, including slider drags.
+material hides any path beneath it. There is no x-ray overlay or depth offset.
+Slider changes rebuild stock and mesh while retaining the unchanged path recording.
+Path color and line thickness affect only the path/tool geometry layer; the stock
+expression and mesh are reused.
+Orbiting retains geometry; every new view still produces a fresh raster image.
 
 ### Fidget stock removal
 
@@ -208,7 +212,8 @@ still fixed along +Z; orientation is not inferred from the path's tangent.
 The remaining stock is a full 3D solid, so through cuts and material over a
 cavity are representable. Meshing still approximates the implicit surface, and
 coarse depths can visibly distort narrow grooves. Seeking backward reconstructs
-the expression from the initial block; no simulation history or mesh is cached.
+the expression from the initial block. The memo graph retains the latest result,
+not simulation history or a collection of meshes for earlier slider positions.
 Disconnected starts still have no linking cut. No holder or collision model is
 implied, and this models the programmed polyline, not controller-specific motion
 blending or physical cutting behavior.

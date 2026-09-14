@@ -235,7 +235,7 @@ pub fn run(
     let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
         result(operation(function, context, call, environment, &output))
     };
-    evaluate(&ForeignOverlay::new(EMITTERS, &emit))
+    evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
 }
 
 fn functions() -> ForeignFunctions {
@@ -244,17 +244,18 @@ fn functions() -> ForeignFunctions {
         .fold(ForeignFunctions::default(), |functions, &cell| {
             functions.register(
                 cell,
-                ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+                ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))).tracked(),
             )
         });
     functions
-        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview))
-        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview))
+        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview).tracked())
+        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview).tracked())
         .register(
             POINT,
             ForeignFunction::new(|context, call, environment| {
                 result(point(context, call, environment).map(point_value))
-            }),
+            })
+            .tracked(),
         )
         .register(
             PREVIEW,
@@ -278,7 +279,8 @@ fn functions() -> ForeignFunctions {
                         ]),
                     )]))
                 })())
-            }),
+            })
+            .tracked(),
         )
 }
 

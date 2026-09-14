@@ -49,6 +49,11 @@ Additional fields do not invalidate a recognized facet.
 
 ## Projection composition
 
+Explicit Rust memo boundaries can run whole Grap evaluations through the
+[dependency-tracking adapter](incremental.md#grap-and-foreign-calls).
+Ordinary projection/evaluation remains uncached. Foreign functions opt into
+tracked reads; unknown calls and unrecorded effects prevent reuse.
+
 Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial can decline; malformed shapes must
 remain accessible through a later projection or Raw. Raw uses the structural

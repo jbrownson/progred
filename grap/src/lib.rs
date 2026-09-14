@@ -11,6 +11,8 @@ use std::rc::Rc;
 #[cfg(test)]
 mod effect_tests;
 
+pub mod memo;
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -139,6 +141,7 @@ enum ForeignImplementation {
 #[derive(Clone)]
 pub struct ForeignFunction {
     implementation: ForeignImplementation,
+    tracked: bool,
 }
 
 /// One host definition. Native implementations retain their ordinary
@@ -172,6 +175,9 @@ impl Definition {
 
 pub trait Host {
     fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)>;
+    fn observe(&self, _observation: incremental::Observation) {}
+    fn untracked(&self) {}
+    fn effect(&self) {}
 }
 
 impl ForeignFunction {
@@ -179,6 +185,7 @@ impl ForeignFunction {
         call: impl Fn(&mut Context, Expression, &Environment) -> Result<Value, Halt> + 'static,
     ) -> Self {
         Self {
+            tracked: false,
             implementation: ForeignImplementation::Direct(Rc::new(
                 move |context, expression, environment| {
                     call(context, expression, environment).map(RuntimeValue::from_value)
@@ -191,6 +198,7 @@ impl ForeignFunction {
         call: impl Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
     ) -> Self {
         Self {
+            tracked: false,
             implementation: ForeignImplementation::Direct(Rc::new(call)),
         }
     }
@@ -204,8 +212,17 @@ impl ForeignFunction {
     /// would burn.
     pub fn staged(prepare: impl Fn(&Context, Expression) -> Stage + 'static) -> Self {
         Self {
+            tracked: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),
         }
+    }
+
+    /// Opt in only when all changing reads use Context::read/evaluation and
+    /// all observable writes use Context::effect. Captures must be immutable
+    /// or evaluation-local; hidden mutable state prevents sound memoization.
+    pub fn tracked(mut self) -> Self {
+        self.tracked = true;
+        self
     }
 }
 
@@ -825,6 +842,7 @@ type ScopedCall<'a> = dyn for<'context> Fn(
 pub struct ForeignOverlay<'a> {
     functions: &'a [CellId],
     call: &'a ScopedCall<'a>,
+    tracked: bool,
 }
 
 impl<'a> ForeignOverlay<'a> {
@@ -840,7 +858,18 @@ impl<'a> ForeignOverlay<'a> {
                 + 'a
             ),
     ) -> Self {
-        Self { functions, call }
+        Self {
+            functions,
+            call,
+            tracked: false,
+        }
+    }
+
+    /// The same observation contract as ForeignFunction::tracked. This does
+    /// not make emitted effects cacheable: their owner must record the output.
+    pub fn tracked(mut self) -> Self {
+        self.tracked = true;
+        self
     }
 
     fn handles(&self, function: CellId) -> bool {
@@ -997,8 +1026,15 @@ impl<'a> Context<'a> {
     /// Run an observable write to evaluation-local state. Foreign functions
     /// evaluate arguments and check applicability before entering this operation.
     pub fn effect<T>(&mut self, run: impl FnOnce() -> T) -> T {
+        self.host.effect();
         self.effects += 1;
         run()
+    }
+
+    pub fn read<T: 'static>(&self, input: &incremental::Input<T>) -> Rc<T> {
+        let (value, observation) = input.observed();
+        self.host.observe(observation);
+        value
     }
 
     fn checked_call(
@@ -1707,6 +1743,13 @@ impl<'a> Context<'a> {
         environment: &Environment,
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
     ) -> Result<RuntimeValue, Halt> {
+        let tracked = match foreign {
+            ResolvedForeign::Permanent { function, .. } => function.tracked,
+            ResolvedForeign::Scoped(_) => self.overlay.is_some_and(|overlay| overlay.tracked),
+        };
+        if !tracked {
+            self.host.untracked();
+        }
         let value = match foreign {
             ResolvedForeign::Permanent { function, .. } => match &function.implementation {
                 ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),

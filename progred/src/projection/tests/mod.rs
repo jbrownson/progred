@@ -143,6 +143,7 @@ fn editing_frame_at(
     };
     let measured = project(
         ProjectDescription {
+            computations: None,
             view: &crate::test_root(),
             completions: Some(&stack.completions),
             sources: Sources {

@@ -130,6 +130,7 @@ fn checked(operation: fn(u64, u64) -> Option<u64>, failure: CellId) -> ForeignFu
                 .unwrap_or_else(|| absent::with_reason(failure))
         })
     })
+    .tracked()
 }
 
 fn comparison(operation: fn(u64, u64) -> bool) -> ForeignFunction {
@@ -138,6 +139,7 @@ fn comparison(operation: fn(u64, u64) -> bool) -> ForeignFunction {
             logic::value(operation(left, right))
         })
     })
+    .tracked()
 }
 
 fn functions() -> ForeignFunctions {
@@ -163,7 +165,8 @@ fn functions() -> ForeignFunctions {
     ]
     .into_iter()
     .fold(
-        ForeignFunctions::default().register(vocabulary::UPDATE, ForeignFunction::new(update)),
+        ForeignFunctions::default()
+            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked()),
         |functions, (cell, function)| functions.register(cell, function),
     )
 }

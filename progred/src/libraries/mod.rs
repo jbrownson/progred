@@ -241,6 +241,9 @@ pub struct Libraries {
 }
 
 impl Libraries {
+    pub(crate) fn same_storage(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.entries, &other.entries)
+    }
     pub fn from_contributions<World, Hover>(
         entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
     ) -> (Self, Vec<Partial<World, Hover>>, Vec<CompletionProvider>) {

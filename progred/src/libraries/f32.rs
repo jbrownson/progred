@@ -127,6 +127,7 @@ fn arithmetic(operation: fn(f32, f32) -> f32) -> ForeignFunction {
             value(operation(left, right))
         })
     })
+    .tracked()
 }
 
 fn comparison(operation: fn(f32, f32) -> bool) -> ForeignFunction {
@@ -135,6 +136,7 @@ fn comparison(operation: fn(f32, f32) -> bool) -> ForeignFunction {
             logic::value(operation(left, right))
         })
     })
+    .tracked()
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -148,7 +150,8 @@ pub fn functions() -> ForeignFunctions {
     ]
     .into_iter()
     .fold(
-        ForeignFunctions::default().register(vocabulary::UPDATE, ForeignFunction::new(update)),
+        ForeignFunctions::default()
+            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked()),
         |functions, (cell, function)| functions.register(cell, function),
     )
 }

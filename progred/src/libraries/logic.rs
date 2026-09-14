@@ -62,7 +62,8 @@ fn functions() -> ForeignFunctions {
                     ),
                 }
             })
-        }),
+        })
+        .tracked(),
     )
 }
 

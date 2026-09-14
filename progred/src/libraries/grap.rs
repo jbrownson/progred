@@ -414,6 +414,16 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     }
     for (cell, value) in [
         (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
+        (::grap::memo::CYCLE, "computation cycle"),
+        (
+            ::grap::memo::INPUTS_CHANGED,
+            "inputs changed during computation",
+        ),
+        (
+            ::grap::memo::DIFFERENT_RUNTIME,
+            "computation belongs to another runtime",
+        ),
+        (::grap::memo::CANCELLED, "computation cancelled"),
         (
             ::grap::absent::EFFECTFUL_DECLINE,
             "declined after an effect",

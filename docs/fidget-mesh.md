@@ -23,10 +23,12 @@ their voxel preview functions.
 
 ## Frame behavior
 
-Every projected frame lowers and meshes each scene object's field with
+The ordinary Fidget mesh viewport lowers and meshes each scene object's field with
 Fidget's CPU VM and Manifold Dual Contouring, in the supplied model-space
 bounds. There is **no mesh or image cache**, including while orbiting, zooming,
-resizing, or editing. Meshing is currently synchronous.
+resizing, or editing. The CAM `preview paths mesh` variant now composes a
+[dependency-tracked recording/stock/mesh graph](incremental.md), retaining valid
+geometry while camera views change. Both remain synchronous on a miss.
 
 Native builds rasterize the resulting indexed triangles through a small WGPU
 pipeline with a depth buffer, opaque object colors, flat two-sided lighting,
@@ -34,8 +36,9 @@ and four-sample antialiasing. The image is read back synchronously and submitted
 through the existing canvas image operation. GPU device, pipeline, allocation
 capacity, and render targets are reusable resources; geometry, camera inputs,
 depth, and pixels are overwritten on every frame. There is no retained result
-or comparison of frame inputs. All of this belongs to the Fidget library;
-Grap, Puri, the layout algebra, and the editor frame loop are unchanged.
+in this rendering backend. Retention is outside it in the general computation
+graph. Rendering belongs to the Fidget library; there are no Fidget-specific
+cases in Grap, Puri, or the layout algebra.
 
 Web and GPU-unavailable native/headless environments use a depth-buffered CPU
 triangle rasterizer, without multisample antialiasing. GPU initialization and
@@ -66,12 +69,13 @@ does not fall back to CPU. It checks the shader, transparent background, empty
 draws, non-aligned readback row widths, and resource resizing/reuse.
 
 The existing `fidget_cube_profile_loop` and `fidget_toolpaths_profile_loop` now
-exercise mesh fixtures, including remeshing; their earlier voxel timings are not
+exercise mesh fixtures; the toolpath canary now reuses valid geometry, whereas
+the cube canary remeshes. Their earlier voxel timings are not
 unchanged baselines. The ignored
 `editor_mesh_svg_capture` test captures the full editor with this example without
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+9. These
 use the real partial and normal backend selection.
 
-Retained meshes, asynchronous generation, and direct GPU-texture composition
+Broader memo integration, asynchronous generation, and direct GPU-texture composition
 remain future work. In particular, this version still pays upload/readback costs
 even though it uses GPU triangle drawing.

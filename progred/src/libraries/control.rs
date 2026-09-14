@@ -48,11 +48,26 @@ pub mod vocabulary {
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(vocabulary::MATCH, ForeignFunction::staged(match_prepare))
-        .register(vocabulary::LET, ForeignFunction::staged(bindings_prepare))
-        .register(vocabulary::WHERE, ForeignFunction::staged(bindings_prepare))
-        .register(vocabulary::DO, ForeignFunction::runtime(do_foreign))
-        .register(vocabulary::QUOTE, ForeignFunction::runtime(quote_foreign))
+        .register(
+            vocabulary::MATCH,
+            ForeignFunction::staged(match_prepare).tracked(),
+        )
+        .register(
+            vocabulary::LET,
+            ForeignFunction::staged(bindings_prepare).tracked(),
+        )
+        .register(
+            vocabulary::WHERE,
+            ForeignFunction::staged(bindings_prepare).tracked(),
+        )
+        .register(
+            vocabulary::DO,
+            ForeignFunction::runtime(do_foreign).tracked(),
+        )
+        .register(
+            vocabulary::QUOTE,
+            ForeignFunction::runtime(quote_foreign).tracked(),
+        )
 }
 
 fn do_foreign(

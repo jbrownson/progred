@@ -186,6 +186,7 @@ fn place_with_annotations(
 }
 
 struct BenchContext {
+    computations: crate::computations::Computations,
     stack: crate::stack::Stack<World>,
     styles: crate::styles::Styles,
     fonts: parley::FontContext,
@@ -207,6 +208,7 @@ struct BenchFrame<'a> {
 impl BenchContext {
     fn new() -> Self {
         Self {
+            computations: crate::computations::Computations::default(),
             stack: crate::stack::load(),
             styles: crate::styles::editor(1.0),
             fonts: parley::FontContext::new(),
@@ -255,12 +257,14 @@ impl BenchContext {
             root,
         } = input;
         let Self {
+            computations,
             stack,
             styles,
             fonts,
             layouts,
             cache,
         } = self;
+        computations.begin(Rc::new(doc.clone()), stack.libraries.clone());
         let sources = Sources {
             doc,
             libraries: &stack.libraries,
@@ -280,6 +284,7 @@ impl BenchContext {
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
         let graph = prepare_project(
             ProjectDescription {
+                computations: Some(computations),
                 view: &crate::test_root(),
                 completions: Some(&stack.completions),
                 sources,

@@ -51,7 +51,7 @@ pub enum InvalidPath {
     CoordinateRange,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub struct Recording {
     pub commands: Vec<Command>,
 }
@@ -111,7 +111,6 @@ impl Recording {
         Ok(position)
     }
 
-    #[cfg(test)]
     pub fn replay<S: Sink + ?Sized>(&self, sink: &mut S) -> Result<(), S::Error> {
         for command in &self.commands {
             match *command {

@@ -1,4 +1,4 @@
-//! An opt-in triangle viewport. Geometry is rebuilt for every projected frame.
+//! An opt-in triangle viewport. Geometry and camera rendering are independent.
 
 use super::*;
 use fidget_engine::mesh::{Octree, Settings};
@@ -53,10 +53,21 @@ pub(crate) struct Vertex {
     pub(crate) color: [f32; 3],
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Geometry {
     pub(crate) vertices: Vec<Vertex>,
     pub(crate) indices: Vec<u32>,
+}
+
+impl Geometry {
+    pub(crate) fn append(&mut self, other: &Self) -> Option<()> {
+        let offset = u32::try_from(self.vertices.len()).ok()?;
+        u32::try_from(self.vertices.len().checked_add(other.vertices.len())?).ok()?;
+        self.vertices.extend_from_slice(&other.vertices);
+        self.indices
+            .extend(other.indices.iter().map(|index| offset + index));
+        Some(())
+    }
 }
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Geometry> {
@@ -66,36 +77,59 @@ fn generate(preview: &VolumePreview, depth: u8) -> Option<Geometry> {
 }
 
 pub(crate) fn append(out: &mut Geometry, preview: &VolumePreview, depth: u8) -> Option<()> {
-    let settings = Settings {
-        depth,
-        world_to_model: Translation3::from((preview.min + preview.max) / 2.0).to_homogeneous()
-            * Scale3::from((preview.max - preview.min) / 2.0).to_homogeneous(),
-        ..Default::default()
-    };
-    preview.objects.iter().try_for_each(|object| {
-        let shape = VmShape::from(object.tree.clone()).try_into().ok()?;
-        let mesh = Octree::build(&shape, &settings)?.walk_dual();
-        if !mesh
-            .vertices
-            .iter()
-            .all(|v| v.iter().all(|x| x.is_finite()))
-        {
-            return None;
+    Shape::from(preview).append(out, depth)
+}
+
+#[derive(Clone, PartialEq)]
+pub(crate) struct Shape {
+    pub objects: Vec<SceneObject>,
+    min: Vector3<f32>,
+    max: Vector3<f32>,
+}
+
+impl From<&VolumePreview> for Shape {
+    fn from(preview: &VolumePreview) -> Self {
+        Self {
+            objects: preview.objects.clone(),
+            min: preview.min,
+            max: preview.max,
         }
-        let offset = u32::try_from(out.vertices.len()).ok()?;
-        u32::try_from(out.vertices.len().checked_add(mesh.vertices.len())?).ok()?;
-        out.vertices
-            .extend(mesh.vertices.into_iter().map(|position| Vertex {
-                position,
-                color: object.color.map(|n| f32::from(n) / 255.0),
-            }));
-        out.indices.extend(
-            mesh.triangles
-                .into_iter()
-                .flat_map(|t| [t.x, t.y, t.z].map(|i| offset + i as u32)),
-        );
-        Some(())
-    })
+    }
+}
+
+impl Shape {
+    pub fn append(&self, out: &mut Geometry, depth: u8) -> Option<()> {
+        let settings = Settings {
+            depth,
+            world_to_model: Translation3::from((self.min + self.max) / 2.0).to_homogeneous()
+                * Scale3::from((self.max - self.min) / 2.0).to_homogeneous(),
+            ..Default::default()
+        };
+        self.objects.iter().try_for_each(|object| {
+            let shape = VmShape::from(object.tree.clone()).try_into().ok()?;
+            let mesh = Octree::build(&shape, &settings)?.walk_dual();
+            if !mesh
+                .vertices
+                .iter()
+                .all(|v| v.iter().all(|x| x.is_finite()))
+            {
+                return None;
+            }
+            let offset = u32::try_from(out.vertices.len()).ok()?;
+            u32::try_from(out.vertices.len().checked_add(mesh.vertices.len())?).ok()?;
+            out.vertices
+                .extend(mesh.vertices.into_iter().map(|position| Vertex {
+                    position,
+                    color: object.color.map(|n| f32::from(n) / 255.0),
+                }));
+            out.indices.extend(
+                mesh.triangles
+                    .into_iter()
+                    .flat_map(|t| [t.x, t.y, t.z].map(|i| offset + i as u32)),
+            );
+            Some(())
+        })
+    }
 }
 
 struct View {

@@ -233,7 +233,8 @@ See [layout continuations](layout-continuations.md) for the phase boundaries.
 A changed frame input remints a whole frame. The event-to-redraw pending frame
 stages the already-built successor for presentation; it avoids building it
 again at redraw. There is no event-specific list of changes considered
-irrelevant to rendering and no partial invalidation system.
+irrelevant to rendering. Explicit library computations may reuse results through
+the caller-owned [dependency graph](incremental.md); frame construction still runs.
 
 Pointer motion, pressed or unpressed, accumulates until a redraw or discrete
 event. Each dispatch receives one `PointerUpdate`: `coalesced` contains earlier
@@ -267,13 +268,14 @@ Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the
 same pointer-cancellation handlers and clears the adapter's pressed state.
 
-The approved cross-frame computation memo is caller-threaded text shaping.
+Cross-frame reuse consists of caller-threaded text shaping and the explicit
+caller-owned [computation graph](incremental.md), currently used by CAM geometry.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and
 the layout DAG do not reuse computation to construct later frames. The installed
 frame retains its hit tests, including recorded drawing shapes, alongside its
-handlers for subsequent input targeting. Replacement drops both. General dependency
-tracking is deferred; see [deferred work](deferred.md).
+handlers for subsequent input targeting. Replacement drops both. Neither Puri
+nor layout owns the computation graph or decides which library results to retain.
 
 ## Drawing and testing
 

@@ -929,6 +929,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     };
     let node = project(
         ProjectDescription {
+            computations: None,
             view: &crate::test_root(),
             completions: None,
             sources: Sources {

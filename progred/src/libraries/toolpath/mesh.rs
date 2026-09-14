@@ -8,6 +8,7 @@ use gid::Value;
 use nalgebra::Vector3;
 use std::{cell::RefCell, rc::Rc};
 
+mod computation;
 mod playback;
 #[cfg(test)]
 mod tests;
@@ -78,58 +79,57 @@ pub(super) fn display(
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let renderer = renderer.clone();
+    let settings = computation::Settings {
+        shape: (&model).into(),
+        radius,
+        color,
+        playback,
+    };
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let mut tubes = tubes::Tubes::new(radius, color).unwrap();
-        let mut recording = Recording::default();
-        let sink: &mut dyn Sink<Error = InvalidPath> = if playback.is_some() {
-            &mut recording
-        } else {
-            &mut tubes
-        };
-        let evaluation = run(sink, |scope| {
-            ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
-        });
-        if !evaluation.completed || absent::is_absent(&evaluation.result) {
-            return context.project.transient(
-                context.text,
-                build,
-                evaluation.result,
-                evaluation.remaining_fuel,
-            );
-        }
-        let mut scene = model.clone();
-        if let Some(settings) = &playback {
-            match settings.draw(&recording, &mut tubes, radius, color) {
-                Ok(Some(stock)) => scene.objects = vec![stock],
-                Ok(None) => {}
-                Err(_) => {
-                    return context.project.transient(
-                        context.text,
-                        build,
-                        absent::with_reason(INVALID_INPUT),
-                        evaluation.remaining_fuel,
-                    );
-                }
+        let local;
+        let computations = match context.inputs.computations {
+            Some(computations) => computations,
+            None => {
+                local = crate::computations::Computations::from_sources(context.inputs.sources);
+                &local
             }
-        }
-        let drawing = (|| {
-            fidget::mesh::append(&mut tubes.geometry, &scene, depth)?;
+        };
+        let computation = computations.at(context.inputs.view, context.path, || {
+            computation::Computation::new(
+                computations,
+                program.clone(),
+                fuel,
+                settings.clone(),
+                depth,
+            )
+        });
+        computation.program.set(program.clone());
+        computation.fuel.set(fuel);
+        computation.settings.set(settings.clone());
+        computation.depth.set(depth);
+        let geometry = computations.runtime.read(&computation.geometry);
+        let result = geometry
+            .as_ref()
+            .map_err(|error| (::grap::memo::failure(*error), fuel))
+            .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
+        let drawing = result.and_then(|(geometry, fuel)| {
             fidget::mesh::image(
-                &tubes.geometry,
+                geometry,
                 &model,
                 state.as_ref(),
                 scale,
                 &mut renderer.borrow_mut(),
             )
-        })();
+            .ok_or_else(|| {
+                (
+                    absent::with_reason(fidget::vocabulary::INVALID_FIELD),
+                    *fuel,
+                )
+            })
+        });
         match drawing {
-            Some(drawing) => drawing.measure(context, build),
-            None => context.project.transient(
-                context.text,
-                build,
-                absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                evaluation.remaining_fuel,
-            ),
+            Ok(drawing) => drawing.measure(context, build),
+            Err((value, fuel)) => context.project.transient(context.text, build, value, fuel),
         }
     }));
     Some(fidget::interactive_volume(drawing, input))

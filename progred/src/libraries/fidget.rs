@@ -691,7 +691,7 @@ fn zoom_handler(
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct SceneObject {
     pub(crate) tree: Tree,
     pub(crate) color: [u8; 3],

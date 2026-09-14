@@ -63,7 +63,8 @@ fn functions() -> ForeignFunctions {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 };
                 Ok(RuntimeValue::list(std::iter::once(item).chain(values)))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::CONCAT,
@@ -80,7 +81,8 @@ fn functions() -> ForeignFunctions {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 };
                 Ok(RuntimeValue::list(left.chain(right)))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::LENGTH,
@@ -92,7 +94,8 @@ fn functions() -> ForeignFunctions {
                     .list_len()
                     .map(|length| RuntimeValue::f64(length as f64))
                     .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST).into()))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::AT,
@@ -117,7 +120,8 @@ fn functions() -> ForeignFunctions {
                 Ok(list
                     .list_get(index)
                     .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS).into()))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::TAIL,
@@ -132,7 +136,8 @@ fn functions() -> ForeignFunctions {
                     return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS).into());
                 }
                 Ok(RuntimeValue::list(values))
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::UNFOLD,
@@ -171,7 +176,8 @@ fn functions() -> ForeignFunctions {
                     items.push(item);
                     state = next;
                 }
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::FOLD,
@@ -201,7 +207,8 @@ fn functions() -> ForeignFunctions {
                     )?;
                 }
                 Ok(accumulator)
-            }),
+            })
+            .tracked(),
         )
         .register(
             vocabulary::ITERATE,
@@ -232,7 +239,8 @@ fn functions() -> ForeignFunctions {
                     }
                     state = next;
                 }
-            }),
+            })
+            .tracked(),
         )
 }
 
