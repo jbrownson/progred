@@ -413,6 +413,17 @@ fn svg_bench_renders_numeric_type_labels() {
 }
 
 #[test]
+fn svg_bench_renders_numeric_operation_labels() {
+    let doc = Document {
+        root: Some(Value::list(
+            super::numbers::calls().into_iter().map(|(_, _, call)| call),
+        )),
+        cells: Cells::new(),
+    };
+    render(&doc, None, 440.0, "numeric_operation_labels.svg");
+}
+
+#[test]
 fn svg_bench_renders_toolpath_source_and_preview() {
     use crate::libraries::{controls, presentation};
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();

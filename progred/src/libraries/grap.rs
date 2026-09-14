@@ -35,11 +35,20 @@ fn spelling(env: &dyn crate::display::Env, cell: CellId) -> (String, Face) {
 pub(crate) fn shallow_cell(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    shallow_cell_with(input, |label| label)
+}
+
+pub(crate) fn shallow_cell_with(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    decorate: impl FnOnce(
+        Layout<crate::Editor, crate::frame::Hovered>,
+    ) -> Layout<crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let cell = input.value?.as_cell()?;
     let (spelling, face) = spelling(input.env, cell);
     let target = input.targets.current();
     Some(activatable(
-        faced(spelling, face),
+        decorate(faced(spelling, face)),
         target.hover,
         target.select,
     ))
@@ -233,6 +242,13 @@ fn standard_field_order(
 pub fn call_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    call_with_function(input, None)
+}
+
+pub(crate) fn call_with_function(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    function_projection: Option<crate::display::Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
     let function = fields.get(&FUNCTION)?;
     let parameters = function_parameters(function, &|cell| input.env.resolve(cell));
@@ -264,7 +280,12 @@ pub fn call_display(
         }
         _ => Vec::new(),
     };
-    let function = expression_at([Step::Key(FUNCTION)], function, &input.default_projection);
+    let function = at_local(
+        [Step::Key(FUNCTION)],
+        function,
+        function_projection.unwrap_or_else(|| crate::display::partial(shallow_cell)),
+        &input.default_projection,
+    );
     let arguments = record_with(
         fields
             .iter()

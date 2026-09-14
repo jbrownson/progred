@@ -368,5 +368,6 @@ mod fidget_source;
 mod interaction;
 mod iop_tree_native;
 mod layout;
+mod numbers;
 mod profile;
 mod svg;

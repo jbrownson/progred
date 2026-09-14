@@ -3,7 +3,9 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::{Face, Layout, ProjectionInput, overlay_value, row, subscript};
+use crate::display::{
+    Face, Layout, Partial, ProjectionInput, overlay_value, partial, row, subscript,
+};
 use crate::libraries::{Library, line_edit, name};
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
@@ -66,6 +68,51 @@ const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;
 
+fn with_representation(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    content: Layout<crate::Editor, crate::frame::Hovered>,
+    representation: CellId,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    row(
+        2.0,
+        [
+            content,
+            subscript(
+                input
+                    .env
+                    .name(representation)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| name::short_id(representation)),
+                Face::Dim,
+            ),
+        ],
+    )
+}
+
+pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate::frame::Hovered> {
+    partial(move |input| {
+        crate::libraries::grap::shallow_cell_with(input, |label| {
+            with_representation(input, label, representation)
+        })
+    })
+}
+
+pub(crate) fn calls(
+    representation: CellId,
+    operations: &'static [CellId],
+) -> Partial<crate::Editor, crate::frame::Hovered> {
+    let function_projection = operation(representation);
+    partial(move |input| {
+        let function = input
+            .value?
+            .as_record()?
+            .get(&::grap::vocabulary::FUNCTION)?
+            .as_cell()?;
+        operations.contains(&function).then_some(())?;
+        crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
+    })
+}
+
 pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
     fn magnitude(self) -> f64;
     fn minimum_precision() -> f64;
@@ -81,24 +128,15 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let original = input.value?;
-    let line = row(
-        2.0,
-        [
-            line_edit::layout(
-                number.to_string(),
-                line_edit::native(move |spelling, current| edit(spelling, current, encode)),
-                "",
-                "",
-            ),
-            subscript(
-                input
-                    .env
-                    .name(representation)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| name::short_id(representation)),
-                Face::Dim,
-            ),
-        ],
+    let line = with_representation(
+        input,
+        line_edit::layout(
+            number.to_string(),
+            line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+            "",
+            "",
+        ),
+        representation,
     );
     if !number.scrubbable() {
         return Some(line);

@@ -198,7 +198,20 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "u64",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::partial(display),
+        crate::display::compose_partials([
+            number::calls(
+                vocabulary::U64,
+                &[
+                    vocabulary::SUM,
+                    vocabulary::SUBTRACT,
+                    vocabulary::MULTIPLY,
+                    vocabulary::DIVIDE,
+                    vocabulary::LESS,
+                    vocabulary::EQUAL,
+                ],
+            ),
+            crate::display::partial(display),
+        ]),
     )
     .with_completions(|request| {
         (request.scope == crate::display::CompletionScope::Everything

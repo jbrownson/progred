@@ -150,7 +150,11 @@ pub fn binary_display(
                 precedence,
                 &input.default_projection,
             ),
-            crate::libraries::grap::shallow_descend(Step::Key(FUNCTION), &input.default_projection),
+            crate::display::descend_local(
+                Step::Key(FUNCTION),
+                number::operation(vocabulary::F64),
+                &input.default_projection,
+            ),
             operand(
                 vocabulary::RIGHT,
                 right,
@@ -427,6 +431,26 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
             crate::display::partial(binary_display),
+            number::calls(
+                vocabulary::F64,
+                &[
+                    vocabulary::SUM,
+                    vocabulary::MULTIPLY,
+                    vocabulary::SUBTRACT,
+                    vocabulary::DIVIDE,
+                    vocabulary::SIN,
+                    vocabulary::COS,
+                    vocabulary::LESS,
+                    vocabulary::EQUAL,
+                    vocabulary::FLOOR,
+                    vocabulary::MIN,
+                    vocabulary::MAX,
+                    vocabulary::CEIL,
+                    vocabulary::HYPOT,
+                    vocabulary::IS_FINITE,
+                    vocabulary::LERP,
+                ],
+            ),
             crate::display::partial(display),
         ]),
     )

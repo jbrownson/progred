@@ -128,6 +128,10 @@ cells and quoted data are unchanged; use sites remain shallow references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. This is a raw definition lookup, not evaluation of the callable.
+Numeric libraries decorate their math calls' function references with the same
+representation subscript used by literals. Both names come from definitions;
+the decorated label still selects the call's `function` field. A comparison's
+subscript identifies its operand representation, not its boolean result.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
 
