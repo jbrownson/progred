@@ -1,5 +1,41 @@
 # Frame performance checks
 
+## Headless editor captures
+
+The SVG exporter can capture a whole editor frame, including document views,
+panes, dividers, text, and embedded PNG images, without opening a window:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  editor_svg_captures -- --ignored --nocapture
+```
+
+This writes `editor_fidget.svg` and `editor_fidget_cube.svg` into
+`target/sandbox/build`. Each SVG is self-contained; raster images retain their
+transforms, transparency, and enclosing clips. The test helper accepts an editor
+state and window size and paints through the normal frame pipeline into a
+`DrawList`. OS window chrome and native menus are not included. PNG encoding and
+base64 are test-only dependencies.
+
+Fidget uses its normal backend selection; without GPU access in the build
+sandbox it uses CPU rendering, so lighting may differ from the native GPU view.
+These are layout/content captures, not pixel-exact Vello screenshots: glyphs
+use unhinted outlines, and the existing vector exporter supports solid brushes
+only. Open the SVGs in a browser, or convert them to PNG with `rsvg-convert`
+(from librsvg):
+
+```sh
+rsvg-convert target/sandbox/build/editor_fidget.svg \
+  -o target/sandbox/build/editor_fidget.png
+rsvg-convert target/sandbox/build/editor_fidget_cube.svg \
+  -o target/sandbox/build/editor_fidget_cube.png
+```
+
+Quick Look thumbnails can crop wide SVGs rather than preserve the viewport;
+use the SVG or the conversion above when checking the whole frame.
+
+## Frame timing
+
 The opt-in tests in `progred/src/projection/tests/frame/profile.rs` share one
 headless frame harness. They are not assertions about interactive frame rate,
 and ordinary builds and launches contain none of this instrumentation.

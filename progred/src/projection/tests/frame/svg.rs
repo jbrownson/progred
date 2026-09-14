@@ -1,9 +1,49 @@
 use super::*;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use kurbo::{BezPath, Shape as KurboShape};
+use peniko::{ImageAlphaType, ImageFormat};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::fmt::Write as _;
+
+fn image_png(image: &ImageData) -> Vec<u8> {
+    let mut rgba = image.data.as_ref().to_vec();
+    assert_eq!(
+        Some(rgba.len()),
+        image.format.size_in_bytes(image.width, image.height)
+    );
+    for pixel in rgba.chunks_exact_mut(4) {
+        match image.format {
+            ImageFormat::Rgba8 => {}
+            ImageFormat::Bgra8 => pixel.swap(0, 2),
+            _ => panic!("unsupported SVG image format"),
+        }
+        if image.alpha_type == ImageAlphaType::AlphaPremultiplied {
+            let alpha = u32::from(pixel[3]);
+            for channel in &mut pixel[..3] {
+                *channel = if alpha == 0 {
+                    0
+                } else {
+                    ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
+                };
+            }
+        }
+    }
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, image.width, image.height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&rgba).unwrap();
+    writer.finish().unwrap();
+    bytes
+}
+
+fn svg_transform(transform: Affine) -> String {
+    let [a, b, c, d, e, f] = transform.as_coeffs();
+    format!("matrix({a} {b} {c} {d} {e} {f})")
+}
 
 fn css(brush: &Brush) -> String {
     match brush {
@@ -71,9 +111,20 @@ fn svg_shape(shape: &Shape, transform: Affine) -> String {
 }
 
 pub(super) fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
+    write_clipped_cmds(out, cmds, &mut 0);
+}
+
+fn write_clipped_cmds(out: &mut String, cmds: &[DrawCmd], next_clip: &mut usize) {
     for cmd in cmds {
         match cmd {
-                DrawCmd::Image { .. } => panic!("the SVG bench does not encode raster images"),
+                DrawCmd::Image { image, transform } => writeln!(
+                    out,
+                    r#"<image width="{}" height="{}" transform="{}" href="data:image/png;base64,{}"/>"#,
+                    image.width,
+                    image.height,
+                    svg_transform(*transform),
+                    BASE64.encode(image_png(image))
+                ).unwrap(),
                 DrawCmd::Fill {
                     shape,
                     brush,
@@ -125,7 +176,16 @@ pub(super) fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
                     writeln!(out, r#"<path d="{}" fill="{}"/>"#, path.to_svg(), css(&run.brush))
                         .unwrap();
                 }
-                DrawCmd::Clip { children, .. } => write_cmds(out, children),
+                DrawCmd::Clip { shape, transform, children } => {
+                    let id = *next_clip;
+                    *next_clip += 1;
+                    writeln!(out,
+                        r##"<defs><clipPath id="clip{id}" clipPathUnits="userSpaceOnUse"><path d="{}"/></clipPath></defs><g clip-path="url(#clip{id})">"##,
+                        svg_shape(shape, *transform)
+                    ).unwrap();
+                    write_clipped_cmds(out, children, next_clip);
+                    writeln!(out, "</g>").unwrap();
+                }
             }
     }
 }
@@ -133,6 +193,10 @@ pub(super) fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
 fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
     let (bench, extent) = place(doc, selection, width);
     let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
+    write_svg(&bench.list, width, height, "#FFFFFF", out_path);
+}
+
+fn write_svg(list: &DrawList, width: f64, height: f64, background: &str, out_path: &str) {
     let mut out = String::new();
     writeln!(
             out,
@@ -141,10 +205,10 @@ fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &
         .unwrap();
     writeln!(
         out,
-        r##"<rect width="{width:.0}" height="{height:.0}" fill="#FFFFFF"/>"##
+        r#"<rect width="{width:.0}" height="{height:.0}" fill="{background}"/>"#
     )
     .unwrap();
-    write_cmds(&mut out, &bench.list.0);
+    write_cmds(&mut out, &list.0);
     writeln!(out, "</svg>").unwrap();
     std::fs::write(
         std::env::var_os("CARGO_TARGET_DIR")
@@ -154,6 +218,95 @@ fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &
         out,
     )
     .unwrap();
+}
+
+fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
+    let mut runner = crate::EditorRunner::new(editor);
+    let paint = runner.prepare_paint(1.0, size);
+    let mut list = DrawList::new();
+    puri::frame::render(paint.renders, &mut list);
+    write_svg(&list, size.width, size.height, "#F6F6F8", out_path);
+}
+
+#[test]
+#[ignore = "writes full-editor captures, including Fidget rasterization"]
+fn editor_svg_captures() {
+    use crate::command::Example;
+    for (example, file) in [
+        (Example::Fidget, "editor_fidget.svg"),
+        (Example::Cube, "editor_fidget_cube.svg"),
+    ] {
+        let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
+        render_editor(
+            crate::test_editor(doc),
+            kurbo::Size::new(1200.0, 900.0),
+            file,
+        );
+    }
+}
+
+#[test]
+fn svg_images_preserve_pixels_transform_and_nested_clips() {
+    let image = ImageData {
+        data: vec![12, 34, 56, 128, 78, 90, 123, 255].into(),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: 2,
+        height: 1,
+    };
+    let command = DrawCmd::Image {
+        image: image.clone(),
+        transform: Affine::new([2.0, 0.0, 0.0, 3.0, 10.0, 20.0]),
+    };
+    let clip = |children| DrawCmd::Clip {
+        shape: Shape::Rect(kurbo::Rect::new(0.0, 0.0, 4.0, 5.0)),
+        transform: Affine::translate((10.0, 20.0)),
+        children,
+    };
+    let mut svg = String::new();
+    write_cmds(&mut svg, &[clip(vec![clip(vec![command])]), clip(vec![])]);
+    assert!(svg.contains(r#"width="2" height="1" transform="matrix(2 0 0 3 10 20)""#));
+    for id in 0..3 {
+        assert_eq!(svg.matches(&format!(r#"id="clip{id}""#)).count(), 1);
+        assert!(svg.contains(&format!("clip-path=\"url(#clip{id})\"")));
+    }
+    assert!(svg.contains(&svg_shape(
+        &Shape::Rect(kurbo::Rect::new(10.0, 20.0, 14.0, 25.0)),
+        Affine::IDENTITY
+    )));
+    assert!(svg.contains("</g>\n</g>"));
+    let encoded = svg
+        .split_once("data:image/png;base64,")
+        .unwrap()
+        .1
+        .split('"')
+        .next()
+        .unwrap();
+    let png = BASE64.decode(encoded).unwrap();
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png))
+        .read_info()
+        .unwrap();
+    let mut pixels = vec![0; decoder.output_buffer_size().unwrap()];
+    let info = decoder.next_frame(&mut pixels).unwrap();
+    assert_eq!((info.width, info.height), (2, 1));
+    assert_eq!(pixels.as_slice(), image.data.as_ref());
+}
+
+#[test]
+fn svg_images_convert_bgra_and_premultiplied_alpha() {
+    let image = ImageData {
+        data: vec![16, 32, 64, 128, 0, 0, 0, 0].into(),
+        format: ImageFormat::Bgra8,
+        alpha_type: ImageAlphaType::AlphaPremultiplied,
+        width: 2,
+        height: 1,
+    };
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(image_png(&image)))
+        .read_info()
+        .unwrap();
+    let mut pixels = vec![0; decoder.output_buffer_size().unwrap()];
+    decoder.next_frame(&mut pixels).unwrap();
+    assert_eq!(pixels, [128, 64, 32, 128, 0, 0, 0, 0]);
 }
 
 #[test]

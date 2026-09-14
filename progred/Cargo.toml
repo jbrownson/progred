@@ -62,4 +62,6 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["
 raw-window-metal = "1.1.0"
 
 [dev-dependencies]
+base64 = "0.22.1"
+png = "0.18.1"
 skrifa.workspace = true
