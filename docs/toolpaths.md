@@ -59,16 +59,32 @@ return the list library's `iteration finished` absent at their endpoint rather
 than relying on a failed match. An excessive sampling request is bounded by
 evaluator fuel.
 
-The example maps two crossing sweeps to the top quadratic patch used by the
-Rhino cube (size 1, chamfer 0.1, center-control-point displacement 0.5):
+The example's cube function owns its size, chamfer, and control-point depth.
+It returns an ordinary geometry record with three Grap callables: `field`
+constructs the implicit solid, `top face` maps UV points to that surface, and
+`normal` gives the outward surface normal at a contact point. They capture the
+same dimensions. The implicit field is constructed only when requested; path
+generation does not construct or mesh a solid it does not consume. Dimensions
+and path arithmetic use f64; `f32 from f64` explicitly rounds the constants at
+the Fidget construction boundary.
+
+`crosshatch` takes the top-face mapping. `ball-center passes` obtains it and the
+normal function from the cube, then composes surface mapping and ball-radius
+compensation. Neither CAM function contains cube dimensions or a duplicate
+surface formula. The geometry's analytic normal is still authored alongside its
+surface, not automatically differentiated. Tests check both against the actual
+implicit field after edits to each cube parameter.
+
+For size `s`, chamfer `c`, and control-point depth `d`, the top patch is:
 
 ```
-x = 0.8(u − 0.5)
-y = 0.8(v − 0.5)
-z = 0.5 − 2u(1 − u)v(1 − v)
+x = (s − 2c)(u − 0.5)
+y = (s − 2c)(v − 0.5)
+z = s/2 − 4d u(1 − u)v(1 − v)
 ```
 
-This corresponds to a face-center depression of 0.125. The second sweep reflects
+The defaults `s = 1`, `c = 0.1`, `d = 0.5` give a face-center depression of
+0.125. The second sweep reflects
 the unit-square y coordinate before the same surface mapping. Unlike Rhino's
 finishing program, this example does not reverse row order for that second
 sweep or construct linking curves. The separate Grap `ball center` mapping
@@ -124,8 +140,9 @@ web/headless fallback uses the same geometry in the CPU triangle renderer.
 Expand `panes` to change `mesh depth` or replace `preview paths mesh` with
 `preview paths 3d` for comparison. Drag to orbit and scroll to zoom. The document
 contains its own copy of the cube definition so it is self-contained. Its
-surface mapping and cube parameters are independently editable; changing one
-does not automatically change the other.
+cube parameters drive both the reference solid and the toolpath's contact points
+and normals. The initial stock bounds remain independent: making a smaller part
+does not silently shrink the block being machined.
 
 In the voxel preview, many sampled segments produce much larger Fidget expressions
 than the model alone. This is a first static visualization, not a performance claim for large

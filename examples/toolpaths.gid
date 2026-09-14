@@ -35,8 +35,6 @@
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
-    "f32_divide": fbf1ebc4eeeea21f86af583f6ad85e71,
-    "f32_subtract": 5cd7408dab067d8b92c7a1bd9cda7b05,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "face": dfc8f0866c65bc9aa4162913a1cc446f,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
@@ -86,6 +84,7 @@
     "normal_length": 421de040629c87a3f37d794d999ff3ed,
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
+    "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
@@ -121,6 +120,7 @@
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "t": 97de1a6f95080533856024449272a3d1,
+    "to_f32": 73bd2225d2091ba893a5570e8e9bacff,
     "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
     "tool_radius": f2f53bdabd10e79d0a3161a57bb18dd8,
     "toolpaths": faaa4df9bd9bc104fc05c09a722f1ae9,
@@ -153,6 +153,7 @@
         x,
         y,
         z,
+        normal,
       ],
       body: {
         function: where,
@@ -188,7 +189,11 @@
             right: {
               right: normal_length,
               function: divide,
-              left: ball_radius,
+              left: {
+                right: nz,
+                function: multiply,
+                left: ball_radius,
+              },
             },
             function: sum,
             left: z,
@@ -197,113 +202,26 @@
         bindings: [
           {
             subject: {
-              right: {
-                f64: 0x9a9999999999e93f,
+              function: normal,
+              y: y,
+              x: x,
+              z: z,
+            },
+            pattern: {
+              y: {
+                bind: ny,
               },
-              function: divide,
-              left: {
-                right: {
-                  f64: 0x9a9999999999d93f,
-                },
-                function: sum,
-                left: x,
+              x: {
+                bind: nx,
+              },
+              z: {
+                bind: nz,
               },
             },
-            bind: u,
           },
           {
             subject: {
-              right: {
-                f64: 0x9a9999999999e93f,
-              },
-              function: divide,
-              left: {
-                right: {
-                  f64: 0x9a9999999999d93f,
-                },
-                function: sum,
-                left: y,
-              },
-            },
-            bind: v,
-          },
-          {
-            subject: {
-              right: {
-                right: {
-                  right: {
-                    right: v,
-                    function: subtract,
-                    left: {
-                      f64: 0x000000000000f03f,
-                    },
-                  },
-                  function: multiply,
-                  left: v,
-                },
-                function: multiply,
-                left: {
-                  right: {
-                    right: u,
-                    function: multiply,
-                    left: {
-                      f64: 0x0000000000000040,
-                    },
-                  },
-                  function: subtract,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-              },
-              function: multiply,
-              left: {
-                f64: 0x0000000000000440,
-              },
-            },
-            bind: nx,
-          },
-          {
-            subject: {
-              right: {
-                right: {
-                  right: {
-                    right: u,
-                    function: subtract,
-                    left: {
-                      f64: 0x000000000000f03f,
-                    },
-                  },
-                  function: multiply,
-                  left: u,
-                },
-                function: multiply,
-                left: {
-                  right: {
-                    right: v,
-                    function: multiply,
-                    left: {
-                      f64: 0x0000000000000040,
-                    },
-                  },
-                  function: subtract,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-              },
-              function: multiply,
-              left: {
-                f64: 0x0000000000000440,
-              },
-            },
-            bind: ny,
-          },
-          {
-            subject: {
-              right: {
-                f64: 0x000000000000f03f,
-              },
+              right: nz,
               function: hypot,
               left: {
                 right: ny,
@@ -324,11 +242,43 @@
       name: "ball-center passes",
       params: [],
       body: {
-        function: map_points,
-        mapping: ball_center,
+        function: where,
         expression: {
-          function: crosshatch,
+          function: map_points,
+          mapping: {
+            params: [
+              x,
+              y,
+              z,
+            ],
+            body: {
+              normal: normal,
+              function: ball_center,
+              y: y,
+              x: x,
+              z: z,
+            },
+          },
+          expression: {
+            function: crosshatch,
+            face: face,
+          },
         },
+        bindings: [
+          {
+            subject: {
+              function: cube,
+            },
+            pattern: {
+              normal: {
+                bind: normal,
+              },
+              face: {
+                bind: face,
+              },
+            },
+          },
+        ],
       },
     },
     center_depth: {
@@ -348,7 +298,9 @@
     },
     crosshatch: {
       name: "crosshatch",
-      params: [],
+      params: [
+        face,
+      ],
       body: {
         function: map_points,
         mapping: face,
@@ -541,79 +493,441 @@
       body: {
         function: where,
         expression: {
-          right: {
-            right: {
-              right: {
-                v: {
-                  axis: model_z,
-                },
-                function: chamfer_pair,
-                u: {
-                  axis: model_y,
-                },
-              },
-              function: model_max,
-              left: {
-                v: {
-                  axis: model_z,
-                },
-                function: chamfer_pair,
-                u: {
-                  axis: model_x,
+          function: quote,
+          expression: {
+            normal: {
+              unquote: {
+                params: [
+                  x,
+                  y,
+                  z,
+                ],
+                body: {
+                  function: where,
+                  expression: {
+                    function: point,
+                    y: ny,
+                    x: nx,
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  bindings: [
+                    {
+                      subject: {
+                        right: {
+                          right: half_face,
+                          function: multiply,
+                          left: {
+                            f64: 0x0000000000000040,
+                          },
+                        },
+                        function: divide,
+                        left: {
+                          right: half_face,
+                          function: sum,
+                          left: x,
+                        },
+                      },
+                      bind: u,
+                    },
+                    {
+                      subject: {
+                        right: {
+                          right: half_face,
+                          function: multiply,
+                          left: {
+                            f64: 0x0000000000000040,
+                          },
+                        },
+                        function: divide,
+                        left: {
+                          right: half_face,
+                          function: sum,
+                          left: y,
+                        },
+                      },
+                      bind: v,
+                    },
+                    {
+                      subject: {
+                        right: {
+                          right: {
+                            right: {
+                              right: v,
+                              function: subtract,
+                              left: {
+                                f64: 0x000000000000f03f,
+                              },
+                            },
+                            function: multiply,
+                            left: v,
+                          },
+                          function: multiply,
+                          left: {
+                            right: {
+                              right: u,
+                              function: multiply,
+                              left: {
+                                f64: 0x0000000000000040,
+                              },
+                            },
+                            function: subtract,
+                            left: {
+                              f64: 0x000000000000f03f,
+                            },
+                          },
+                        },
+                        function: multiply,
+                        left: {
+                          right: half_face,
+                          function: divide,
+                          left: {
+                            right: control_depth,
+                            function: multiply,
+                            left: {
+                              f64: 0x0000000000000040,
+                            },
+                          },
+                        },
+                      },
+                      bind: nx,
+                    },
+                    {
+                      subject: {
+                        right: {
+                          right: {
+                            right: {
+                              right: u,
+                              function: subtract,
+                              left: {
+                                f64: 0x000000000000f03f,
+                              },
+                            },
+                            function: multiply,
+                            left: u,
+                          },
+                          function: multiply,
+                          left: {
+                            right: {
+                              right: v,
+                              function: multiply,
+                              left: {
+                                f64: 0x0000000000000040,
+                              },
+                            },
+                            function: subtract,
+                            left: {
+                              f64: 0x000000000000f03f,
+                            },
+                          },
+                        },
+                        function: multiply,
+                        left: {
+                          right: half_face,
+                          function: divide,
+                          left: {
+                            right: control_depth,
+                            function: multiply,
+                            left: {
+                              f64: 0x0000000000000040,
+                            },
+                          },
+                        },
+                      },
+                      bind: ny,
+                    },
+                  ],
                 },
               },
             },
-            function: model_max,
-            left: {
-              v: {
-                axis: model_y,
-              },
-              function: chamfer_pair,
-              u: {
-                axis: model_x,
+            field: {
+              unquote: {
+                params: [],
+                body: {
+                  function: where,
+                  expression: {
+                    right: {
+                      right: {
+                        right: {
+                          v: {
+                            axis: model_z,
+                          },
+                          function: chamfer_pair,
+                          u: {
+                            axis: model_y,
+                          },
+                        },
+                        function: model_max,
+                        left: {
+                          v: {
+                            axis: model_z,
+                          },
+                          function: chamfer_pair,
+                          u: {
+                            axis: model_x,
+                          },
+                        },
+                      },
+                      function: model_max,
+                      left: {
+                        v: {
+                          axis: model_y,
+                        },
+                        function: chamfer_pair,
+                        u: {
+                          axis: model_x,
+                        },
+                      },
+                    },
+                    function: model_max,
+                    left: {
+                      right: {
+                        right: {
+                          v: {
+                            axis: model_y,
+                          },
+                          normal: {
+                            axis: model_z,
+                          },
+                          function: face_pair,
+                          u: {
+                            axis: model_x,
+                          },
+                        },
+                        function: model_max,
+                        left: {
+                          v: {
+                            axis: model_z,
+                          },
+                          normal: {
+                            axis: model_y,
+                          },
+                          function: face_pair,
+                          u: {
+                            axis: model_x,
+                          },
+                        },
+                      },
+                      function: model_max,
+                      left: {
+                        v: {
+                          axis: model_z,
+                        },
+                        normal: {
+                          axis: model_x,
+                        },
+                        function: face_pair,
+                        u: {
+                          axis: model_y,
+                        },
+                      },
+                    },
+                  },
+                  bindings: [
+                    {
+                      subject: {
+                        operand: half_size,
+                        function: to_f32,
+                      },
+                      bind: half_size,
+                    },
+                    {
+                      subject: {
+                        operand: half_face,
+                        function: to_f32,
+                      },
+                      bind: half_face,
+                    },
+                    {
+                      subject: {
+                        operand: center_depth,
+                        function: to_f32,
+                      },
+                      bind: center_depth,
+                    },
+                    {
+                      subject: {
+                        operand: edge_limit,
+                        function: to_f32,
+                      },
+                      bind: edge_limit,
+                    },
+                    {
+                      subject: {
+                        params: [
+                          coordinate,
+                        ],
+                        body: {
+                          right: {
+                            right: {
+                              operand: {
+                                right: half_face,
+                                function: model_divide,
+                                left: coordinate,
+                              },
+                              function: square,
+                            },
+                            function: model_subtract,
+                            left: {
+                              f32: 0x0000803f,
+                            },
+                          },
+                          function: model_max,
+                          left: {
+                            f32: 0x00000000,
+                          },
+                        },
+                      },
+                      bind: shoulder,
+                    },
+                    {
+                      subject: {
+                        params: [
+                          normal,
+                          u,
+                          v,
+                        ],
+                        body: {
+                          right: {
+                            right: {
+                              right: {
+                                coordinate: v,
+                                function: shoulder,
+                              },
+                              function: model_multiply,
+                              left: {
+                                coordinate: u,
+                                function: shoulder,
+                              },
+                            },
+                            function: model_multiply,
+                            left: center_depth,
+                          },
+                          function: model_sum,
+                          left: {
+                            right: half_size,
+                            function: model_subtract,
+                            left: {
+                              operand: normal,
+                              function: abs,
+                            },
+                          },
+                        },
+                      },
+                      bind: face_pair,
+                    },
+                    {
+                      subject: {
+                        params: [
+                          u,
+                          v,
+                        ],
+                        body: {
+                          right: edge_limit,
+                          function: model_subtract,
+                          left: {
+                            right: {
+                              operand: v,
+                              function: abs,
+                            },
+                            function: model_sum,
+                            left: {
+                              operand: u,
+                              function: abs,
+                            },
+                          },
+                        },
+                      },
+                      bind: chamfer_pair,
+                    },
+                  ],
+                },
               },
             },
-          },
-          function: model_max,
-          left: {
-            right: {
-              right: {
-                v: {
-                  axis: model_y,
+            face: {
+              unquote: {
+                params: [
+                  x,
+                  y,
+                  z,
+                ],
+                body: {
+                  function: point,
+                  y: {
+                    right: {
+                      right: half_face,
+                      function: multiply,
+                      left: {
+                        f64: 0x0000000000000040,
+                      },
+                    },
+                    function: multiply,
+                    left: {
+                      right: {
+                        f64: 0x000000000000e03f,
+                      },
+                      function: subtract,
+                      left: y,
+                    },
+                  },
+                  x: {
+                    right: {
+                      right: half_face,
+                      function: multiply,
+                      left: {
+                        f64: 0x0000000000000040,
+                      },
+                    },
+                    function: multiply,
+                    left: {
+                      right: {
+                        f64: 0x000000000000e03f,
+                      },
+                      function: subtract,
+                      left: x,
+                    },
+                  },
+                  z: {
+                    right: {
+                      right: {
+                        right: {
+                          right: {
+                            right: y,
+                            function: subtract,
+                            left: {
+                              f64: 0x000000000000f03f,
+                            },
+                          },
+                          function: multiply,
+                          left: y,
+                        },
+                        function: multiply,
+                        left: {
+                          right: {
+                            right: x,
+                            function: subtract,
+                            left: {
+                              f64: 0x000000000000f03f,
+                            },
+                          },
+                          function: multiply,
+                          left: x,
+                        },
+                      },
+                      function: multiply,
+                      left: {
+                        right: control_depth,
+                        function: multiply,
+                        left: {
+                          f64: 0x0000000000001040,
+                        },
+                      },
+                    },
+                    function: subtract,
+                    left: half_size,
+                  },
                 },
-                normal: {
-                  axis: model_z,
-                },
-                function: face_pair,
-                u: {
-                  axis: model_x,
-                },
-              },
-              function: model_max,
-              left: {
-                v: {
-                  axis: model_z,
-                },
-                normal: {
-                  axis: model_y,
-                },
-                function: face_pair,
-                u: {
-                  axis: model_x,
-                },
-              },
-            },
-            function: model_max,
-            left: {
-              v: {
-                axis: model_z,
-              },
-              normal: {
-                axis: model_x,
-              },
-              function: face_pair,
-              u: {
-                axis: model_y,
               },
             },
           },
@@ -621,28 +935,28 @@
         bindings: [
           {
             subject: {
-              f32: 0x0000803f,
+              f64: 0x000000000000f03f,
             },
             bind: size,
           },
           {
             subject: {
-              f32: 0xcdcccc3d,
+              f64: 0x9a9999999999b93f,
             },
             bind: chamfer,
           },
           {
             subject: {
-              f32: 0x0000003f,
+              f64: 0x000000000000e03f,
             },
             bind: control_depth,
           },
           {
             subject: {
               right: {
-                f32: 0x00000040,
+                f64: 0x0000000000000040,
               },
-              function: f32_divide,
+              function: divide,
               left: size,
             },
             bind: half_size,
@@ -650,7 +964,7 @@
           {
             subject: {
               right: chamfer,
-              function: f32_subtract,
+              function: subtract,
               left: half_size,
             },
             bind: half_face,
@@ -658,9 +972,9 @@
           {
             subject: {
               right: {
-                f32: 0x00008040,
+                f64: 0x0000000000001040,
               },
-              function: f32_divide,
+              function: divide,
               left: control_depth,
             },
             bind: center_depth,
@@ -668,98 +982,10 @@
           {
             subject: {
               right: chamfer,
-              function: f32_subtract,
+              function: subtract,
               left: size,
             },
             bind: edge_limit,
-          },
-          {
-            subject: {
-              params: [
-                coordinate,
-              ],
-              body: {
-                right: {
-                  right: {
-                    operand: {
-                      right: half_face,
-                      function: model_divide,
-                      left: coordinate,
-                    },
-                    function: square,
-                  },
-                  function: model_subtract,
-                  left: {
-                    f32: 0x0000803f,
-                  },
-                },
-                function: model_max,
-                left: {
-                  f32: 0x00000000,
-                },
-              },
-            },
-            bind: shoulder,
-          },
-          {
-            subject: {
-              params: [
-                normal,
-                u,
-                v,
-              ],
-              body: {
-                right: {
-                  right: {
-                    right: {
-                      coordinate: v,
-                      function: shoulder,
-                    },
-                    function: model_multiply,
-                    left: {
-                      coordinate: u,
-                      function: shoulder,
-                    },
-                  },
-                  function: model_multiply,
-                  left: center_depth,
-                },
-                function: model_sum,
-                left: {
-                  right: half_size,
-                  function: model_subtract,
-                  left: {
-                    operand: normal,
-                    function: abs,
-                  },
-                },
-              },
-            },
-            bind: face_pair,
-          },
-          {
-            subject: {
-              params: [
-                u,
-                v,
-              ],
-              body: {
-                right: edge_limit,
-                function: model_subtract,
-                left: {
-                  right: {
-                    operand: v,
-                    function: abs,
-                  },
-                  function: model_sum,
-                  left: {
-                    operand: u,
-                    function: abs,
-                  },
-                },
-              },
-            },
-            bind: chamfer_pair,
           },
         ],
       },
@@ -787,6 +1013,9 @@
     },
     ny: {
       name: "normal y",
+    },
+    nz: {
+      name: "normal z",
     },
     rows: {
       name: "rows",
@@ -990,77 +1219,6 @@
     },
     face: {
       name: "top face",
-      params: [
-        x,
-        y,
-        z,
-      ],
-      body: {
-        function: point,
-        y: {
-          right: {
-            f64: 0x9a9999999999e93f,
-          },
-          function: multiply,
-          left: {
-            right: {
-              f64: 0x000000000000e03f,
-            },
-            function: subtract,
-            left: y,
-          },
-        },
-        x: {
-          right: {
-            f64: 0x9a9999999999e93f,
-          },
-          function: multiply,
-          left: {
-            right: {
-              f64: 0x000000000000e03f,
-            },
-            function: subtract,
-            left: x,
-          },
-        },
-        z: {
-          right: {
-            right: {
-              right: {
-                right: {
-                  right: y,
-                  function: subtract,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                function: multiply,
-                left: y,
-              },
-              function: multiply,
-              left: {
-                right: {
-                  right: x,
-                  function: subtract,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                function: multiply,
-                left: x,
-              },
-            },
-            function: multiply,
-            left: {
-              f64: 0x0000000000000040,
-            },
-          },
-          function: subtract,
-          left: {
-            f64: 0x000000000000e03f,
-          },
-        },
-      },
     },
     u: {
       name: "u",
@@ -1164,7 +1322,22 @@
                         {
                           field: {
                             unquote: {
-                              function: cube,
+                              function: where,
+                              expression: {
+                                function: field,
+                              },
+                              bindings: [
+                                {
+                                  subject: {
+                                    function: cube,
+                                  },
+                                  pattern: {
+                                    field: {
+                                      bind: field,
+                                    },
+                                  },
+                                },
+                              ],
                             },
                           },
                           color: {
@@ -1223,7 +1396,6 @@
     toolpaths: [
       diagonals,
       sample_pass,
-      face,
       crosshatch,
       ball_center,
       ball_path,

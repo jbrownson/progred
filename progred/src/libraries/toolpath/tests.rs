@@ -1,6 +1,27 @@
 use super::{paths::*, *};
 use crate::libraries::{control, number};
 
+mod geometry;
+
+fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
+    let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
+    assert!(
+        result.completed && !absent::is_absent(&result.result),
+        "{:?}",
+        result.result
+    );
+    result.result
+}
+
+fn top_face(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
+    cube_geometry(sources, names)
+        .as_record()
+        .unwrap()
+        .get(&names["face"])
+        .unwrap()
+        .clone()
+}
+
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(function.into(), fields)
 }
@@ -348,7 +369,13 @@ fn example_ball_centers_offset_contact_points_along_the_normal() {
     };
     let mut contact = Recording::default();
     let a = run(&mut contact, |scope| {
-        ::grap::apply_scoped(&names["crosshatch"].into(), [], &sources, scope, 100_000)
+        ::grap::apply_scoped(
+            &names["crosshatch"].into(),
+            [(names["face"], top_face(&sources, &names))],
+            &sources,
+            scope,
+            500_000,
+        )
     });
     let mut centers = Recording::default();
     let b = run(&mut centers, |scope| {
@@ -391,7 +418,13 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     };
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
-        ::grap::apply_scoped(&names["crosshatch"].into(), [], &sources, scope, 100_000)
+        ::grap::apply_scoped(
+            &names["crosshatch"].into(),
+            [(names["face"], top_face(&sources, &names))],
+            &sources,
+            scope,
+            500_000,
+        )
     });
     assert!(
         evaluation.completed && !absent::is_absent(&evaluation.result),
@@ -550,7 +583,13 @@ fn example_tubes_compile_without_gpu_memory_operations() {
     };
     let mut tubes = super::fidget::Tubes::new(0.005).unwrap();
     let evaluation = run(&mut tubes, |scope| {
-        ::grap::apply_scoped(&names["crosshatch"].into(), [], &sources, scope, 100_000)
+        ::grap::apply_scoped(
+            &names["crosshatch"].into(),
+            [(names["face"], top_face(&sources, &names))],
+            &sources,
+            scope,
+            500_000,
+        )
     });
     assert!(evaluation.completed && !absent::is_absent(&evaluation.result));
     let paths = tubes.finish();

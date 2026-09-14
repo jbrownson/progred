@@ -233,9 +233,19 @@ rendered every frame. Geometry edits and first demand still pay synchronous
 recording/meshing cost. See [the boundaries and limitations](incremental.md).
 
 A repeat measured 12.41 ms median / 12.90 ms p95 (286.19 ms first frame).
+After refactoring the example so CAM consumes the cube's surface and normal
+functions, the same canary measured 12.13 ms median / 12.79 ms p95
+(276.27 ms first frame). Geometry-parameter regression tests also verify that
+cached paths invalidate on edits and equal freshly evaluated paths.
 The unchanged, uncached IoP canaries measured 26.12 ms for the picture and
 3.76 ms for source in this pass; there was no fresh pre-change IoP A/B run,
 so these are canary observations, not a quantified regression comparison.
+
+After separating stock meshing from path appearance and tightening memo failure
+recovery, the final run measured 12.51 ms median / 13.27 ms p95 / 14.26 ms maximum,
+with a 285.26 ms first frame. A regression test verifies that path color/thickness
+changes retain the identical shared stock-mesh result; playback and depth changes
+replace it.
 
 ### Interpreting viewport measurements
 

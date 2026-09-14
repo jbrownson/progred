@@ -13,6 +13,7 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
+    pub const FROM_F64: CellId = CellId::from_u128(0x73bd2225d2091ba893a5570e8e9bacff);
     pub const UPDATE: CellId = CellId::from_u128(0x9c34c242d73e090cbd62de1242ad74ae);
     pub const SUM: CellId = CellId::from_u128(0x257e5967d826e69d28929cf365667ae1);
     pub const SUBTRACT: CellId = CellId::from_u128(0x5cd7408dab067d8b92c7a1bd9cda7b05);
@@ -130,6 +131,26 @@ fn arithmetic(operation: fn(f32, f32) -> f32) -> ForeignFunction {
     .tracked()
 }
 
+fn from_f64(
+    context: &mut Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    let Some(operand) = context.field(call, number::vocabulary::OPERAND) else {
+        return Ok(context.missing_argument(number::vocabulary::OPERAND));
+    };
+    let operand = context.eval(operand, environment)?;
+    Ok(crate::libraries::f64::read(&operand)
+        .map(|number| value(number as f32))
+        .unwrap_or_else(|| {
+            ::grap::absent::with_detail(
+                vocabulary::INVALID_INPUT,
+                number::vocabulary::OPERAND,
+                operand,
+            )
+        }))
+}
+
 fn comparison(operation: fn(f32, f32) -> bool) -> ForeignFunction {
     ForeignFunction::new(move |context, call, environment| {
         binary(context, call, environment, |left, right| {
@@ -151,7 +172,11 @@ pub fn functions() -> ForeignFunctions {
     .into_iter()
     .fold(
         ForeignFunctions::default()
-            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked()),
+            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked())
+            .register(
+                vocabulary::FROM_F64,
+                ForeignFunction::new(from_f64).tracked(),
+            ),
         |functions, (cell, function)| functions.register(cell, function),
     )
 }
@@ -160,6 +185,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::F32, "f32"),
+        (vocabulary::FROM_F64, "f32 from f64"),
         (vocabulary::UPDATE, "f32 update"),
         (vocabulary::SUM, "+"),
         (vocabulary::SUBTRACT, "-"),
@@ -207,6 +233,46 @@ mod tests {
 
     fn evaluate(expression: &Value) -> Value {
         crate::libraries::test_evaluate(expression, |_| None, &functions(), 20).result
+    }
+
+    #[test]
+    fn conversion_from_f64_rounds_at_the_explicit_numeric_boundary() {
+        let convert = |operand| {
+            evaluate(&::grap::call(
+                vocabulary::FROM_F64.into(),
+                [(number::vocabulary::OPERAND, operand)],
+            ))
+        };
+        for number in [
+            0.0,
+            -0.0,
+            0.1,
+            -3.25,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::INFINITY,
+        ] {
+            let result = convert(crate::libraries::f64::value(number));
+            assert_eq!(read(&result).unwrap().to_bits(), (number as f32).to_bits());
+        }
+        assert!(
+            read(&convert(crate::libraries::f64::value(f64::NAN)))
+                .unwrap()
+                .is_nan()
+        );
+        let invalid = value(1.0);
+        assert_eq!(
+            convert(invalid.clone()),
+            ::grap::absent::with_detail(
+                vocabulary::INVALID_INPUT,
+                number::vocabulary::OPERAND,
+                invalid,
+            )
+        );
+        assert!(::grap::absent::is_absent(&evaluate(&::grap::call(
+            vocabulary::FROM_F64.into(),
+            [],
+        ))));
     }
 
     #[test]
