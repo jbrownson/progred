@@ -209,6 +209,46 @@ fn svg_bench_renders_numeric_type_labels() {
 }
 
 #[test]
+fn svg_bench_renders_toolpath_source_and_preview() {
+    use crate::libraries::{presentation, toolpath};
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    render(&doc, None, 760.0, "toolpaths_source.svg");
+    let libraries = core_libraries();
+    let sources = src(&doc, &libraries);
+    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let (value, viewport) =
+        presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
+    assert_eq!(value.as_cell(), Some(names["crosshatch"]));
+    let preview = grap::apply(
+        viewport,
+        [
+            (presentation::vocabulary::VALUE, value.clone()),
+            (layout_data::vocabulary::WIDTH, f64::value(700.0)),
+            (layout_data::vocabulary::HEIGHT, f64::value(500.0)),
+        ],
+        &sources,
+        1024,
+    );
+    assert!(preview.completed);
+    assert!(
+        preview
+            .result
+            .as_record()
+            .unwrap()
+            .contains_key(&toolpath::vocabulary::PREVIEW)
+    );
+    let doc = Document {
+        root: Some(preview.result),
+        cells: doc.cells,
+    };
+    let (bench, _) = place(&doc, None, 760.0);
+    assert!(bench.list.0.iter().any(|command| matches!(command,
+        DrawCmd::Stroke { shape: Shape::Path(path), .. } if path.elements().iter().filter(|p| matches!(p, kurbo::PathEl::MoveTo(_))).count() == 42
+    )));
+    render(&doc, None, 760.0, "toolpaths.svg");
+}
+
+#[test]
 fn svg_bench_renders_fidget_source() {
     use crate::command::Example;
     for (example, file) in [

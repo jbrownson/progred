@@ -30,6 +30,7 @@ pub mod random;
 pub mod selection;
 pub mod site;
 pub mod text;
+pub mod toolpath;
 pub mod u64;
 pub mod workspace;
 

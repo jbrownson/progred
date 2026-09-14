@@ -34,3 +34,5 @@ The [release checklist](release-checklist.md) covers distribution concerns.
 
 [Examples](../examples/README.md) lists the bundled documents, shortcuts, and
 the formulas behind the Fidget shapes.
+[Toolpaths](toolpaths.md) describes the first streaming CAM geometry library
+and its Rhino-derived line-preview example.

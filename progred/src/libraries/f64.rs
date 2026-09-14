@@ -28,6 +28,11 @@ pub mod vocabulary {
     pub const LESS: CellId = CellId::from_u128(0xed44dbf5b4cdf5c952e1ef00f219b655);
     pub const EQUAL: CellId = CellId::from_u128(0x22ab9aa3e7ce4f4f79a7039e1cc23773);
     pub const FLOOR: CellId = CellId::from_u128(0xd007814c5f6a6c38b025605b399473d4);
+    pub const MIN: CellId = CellId::from_u128(0x6daed3f67cff3da30767201e5a895f1a);
+    pub const MAX: CellId = CellId::from_u128(0x9dfc13c9c7e059da42ea74ef63897ce6);
+    pub const CEIL: CellId = CellId::from_u128(0xe1ddb3a620b61117d3873c163f603488);
+    pub const HYPOT: CellId = CellId::from_u128(0xfe79fe9c7be4542249fdf604ddf5f5ea);
+    pub const IS_FINITE: CellId = CellId::from_u128(0x1ff1fcec05b669eba2314ad52fe8e8f1);
     pub const LERP: CellId = CellId::from_u128(0x432ad7a31ef129e353e251419e690ca1);
     pub const PI: CellId = CellId::from_u128(0x9cd591f37312e563f52b7374a6cef5c0);
     pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
@@ -217,6 +222,38 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(vocabulary::LERP, ForeignFunction::runtime(lerp))
         .register(
+            vocabulary::MIN,
+            ForeignFunction::runtime(|context, call, environment| {
+                binary(context, call, environment, f64::min)
+            }),
+        )
+        .register(
+            vocabulary::MAX,
+            ForeignFunction::runtime(|context, call, environment| {
+                binary(context, call, environment, f64::max)
+            }),
+        )
+        .register(
+            vocabulary::CEIL,
+            ForeignFunction::runtime(|context, call, environment| {
+                unary(context, call, environment, f64::ceil)
+            }),
+        )
+        .register(
+            vocabulary::HYPOT,
+            ForeignFunction::runtime(|context, call, environment| {
+                binary(context, call, environment, f64::hypot)
+            }),
+        )
+        .register(
+            vocabulary::IS_FINITE,
+            ForeignFunction::runtime(|context, call, environment| {
+                unary_value(context, call, environment, |value| {
+                    logic::value(value.is_finite()).into()
+                })
+            }),
+        )
+        .register(
             vocabulary::LESS,
             ForeignFunction::runtime(|context, call, environment| {
                 binary_value(context, call, environment, |left, right| {
@@ -297,12 +334,23 @@ fn unary(
     environment: &Environment,
     operation: impl FnOnce(f64) -> f64,
 ) -> Result<RuntimeValue, Halt> {
+    unary_value(context, call, environment, |operand| {
+        RuntimeValue::f64(operation(operand))
+    })
+}
+
+fn unary_value(
+    context: &mut Context,
+    call: Expression,
+    environment: &Environment,
+    operation: impl FnOnce(f64) -> RuntimeValue,
+) -> Result<RuntimeValue, Halt> {
     let Some(operand) = context.field(call, vocabulary::OPERAND) else {
         return Ok(context.missing_runtime_argument(vocabulary::OPERAND));
     };
     Ok(context
         .eval_f64(operand, environment)?
-        .map(|operand| RuntimeValue::f64(operation(operand)))
+        .map(operation)
         .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }
 
@@ -324,6 +372,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::LESS, "<"),
         (vocabulary::EQUAL, "=="),
         (vocabulary::FLOOR, "floor"),
+        (vocabulary::MIN, "min"),
+        (vocabulary::MAX, "max"),
+        (vocabulary::CEIL, "ceil"),
+        (vocabulary::HYPOT, "hypot"),
+        (vocabulary::IS_FINITE, "is finite"),
         (vocabulary::LERP, "lerp"),
         (vocabulary::START, "start"),
         (vocabulary::END, "end"),
@@ -417,6 +470,51 @@ mod tests {
             Value::from(function),
             [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)],
         )
+    }
+
+    #[test]
+    fn extrema_rounding_and_norm_follow_the_numeric_contract() {
+        let evaluate = |expression: Value| {
+            crate::libraries::test_evaluate(&expression, |_| None, &functions(), 100).result
+        };
+        for (function, a, b, expected) in [
+            (vocabulary::MIN, -3.0, 2.0, -3.0),
+            (vocabulary::MAX, -3.0, 2.0, 2.0),
+            (vocabulary::HYPOT, 3.0, 4.0, 5.0),
+            (vocabulary::HYPOT, 3e200, 4e200, 5e200),
+        ] {
+            let actual = read(&evaluate(call(function, value(a), value(b)))).unwrap();
+            assert!((actual / expected - 1.0).abs() < 1e-14);
+            assert_eq!(
+                evaluate(call(function, Value::record([]), value(b))),
+                absent::with_reason(vocabulary::LEFT_NOT_F64),
+            );
+        }
+        let unary_call = |function: CellId, argument| {
+            grap::call(function.into(), [(vocabulary::OPERAND, argument)])
+        };
+        for (input, expected) in [(1.1, 2.0), (-1.1, -1.0), (2.0, 2.0)] {
+            assert_eq!(
+                evaluate(unary_call(vocabulary::CEIL, value(input))),
+                value(expected)
+            );
+        }
+        for input in [0.0, f64::MAX, f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            assert_eq!(
+                evaluate(unary_call(vocabulary::IS_FINITE, value(input))),
+                logic::value(input.is_finite()),
+            );
+        }
+        for function in [vocabulary::CEIL, vocabulary::IS_FINITE] {
+            assert_eq!(
+                evaluate(unary_call(function, Value::record([]))),
+                absent::with_reason(vocabulary::OPERAND_NOT_F64),
+            );
+            assert!(absent::is_absent(&evaluate(grap::call(
+                function.into(),
+                []
+            ))));
+        }
     }
 
     #[test]

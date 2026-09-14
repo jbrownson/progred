@@ -4,7 +4,7 @@ use crate::frame::Hovered;
 use crate::libraries::{
     Libraries, Library, absent, blob, color, control, f32, f64, fidget, geometry,
     grap as grap_library, layout, line_edit, list, logic, name, number, presentation, random,
-    selection, site, text, u64, workspace,
+    selection, site, text, toolpath, u64, workspace,
 };
 use crate::projection::Projection;
 
@@ -52,6 +52,7 @@ fn contributions() -> impl Iterator<Item = (gid::CellId, Library<crate::Editor, 
         (f32::ID, f32::library()),
         (f64::ID, f64::library()),
         (fidget::ID, fidget::library()),
+        (toolpath::ID, toolpath::library()),
         (grap_library::ID, grap_library::library()),
         (line_edit::ID, line_edit::library()),
         (u64::ID, u64::library()),

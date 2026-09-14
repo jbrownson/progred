@@ -1,7 +1,7 @@
 # Examples
 
 Open these files normally to edit and save them. The Examples menu opens a fresh
-copy instead; its shortcuts are Command+1…8 on macOS and Ctrl+1…8 in the drawn menu.
+copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the drawn menu.
 
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ copy instead; its shortcuts are Command+1…8 on macOS and Ctrl+1…8 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
+| 9 | `toolpaths.gid` | Streaming diagonal passes mapped onto the cube's curved top face |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -56,3 +57,16 @@ Rhino surfaces, parameter limitations, and what is not yet a CAM model.
 
 See [frame performance checks](../docs/performance.md) for repeatable orbit
 measurements using the actual example documents.
+
+## Toolpaths
+
+`toolpaths.gid` uses Grap to generate two diagonal sweeps and map their points.
+Both the row loop and the sampling loop are editable example functions; only
+point emission and the generic mapping scope are native toolpath operations.
+The left viewport shows a fitted, fixed-isometric line preview; resize the pane
+or edit/scrub the row counts, UV spacing, or mapping constants. This first view
+does not orbit or play back a cutter. The paths are surface samples, not
+compensated cutter locations, and no links between passes are implied.
+
+See [toolpaths](../docs/toolpaths.md) for the streaming interface, its optional
+recorder, and the boundary between this experiment and machining motion.
