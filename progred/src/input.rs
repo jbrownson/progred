@@ -2,6 +2,7 @@ use crate::frame::{Dispatch, frame_disposition};
 use crate::{Editor, EditorRunner, PendingPointer, PendingScroll, navigate, selection};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
+use std::borrow::Cow;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyboardEvent, Modifiers};
 use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType};
@@ -23,8 +24,14 @@ pub(super) fn window_pointer(position: Point, size: Size) -> Option<Point> {
         .then_some(position)
 }
 
-fn keyboard(editor: &mut Editor, dispatch: &Dispatch, event: &KeyboardEvent, scale: f64) -> bool {
-    let mut input = dispatch.context(None);
+fn keyboard(
+    editor: &mut Editor,
+    dispatch: &Dispatch,
+    hover: Option<&crate::frame::Hovered>,
+    event: &KeyboardEvent,
+    scale: f64,
+) -> bool {
+    let mut input = dispatch.context(hover.cloned());
     let geometry = dispatch.geometry(scale);
     // Structure pasted into a pending must bypass its text query. Other keys
     // reach text editing before falling through to structural operations.
@@ -121,14 +128,24 @@ impl EditorRunner {
         scale: f64,
         viewport: Size,
     ) -> bool {
-        self.update_frame(scale, viewport, |editor, dispatch, _| {
-            frame_disposition(keyboard(editor, dispatch, event, scale), false)
+        self.update_frame(scale, viewport, |editor, dispatch, hover| {
+            frame_disposition(keyboard(editor, dispatch, hover, event, scale), false)
         })
     }
 
     pub(crate) fn ime_event(&mut self, event: &ImeEvent, scale: f64, viewport: Size) -> bool {
-        self.update_frame(scale, viewport, |editor, dispatch, _| {
-            frame_disposition(dispatch.handler.dispatch_ime(editor, event), false)
+        self.update_frame(scale, viewport, |editor, dispatch, hover| {
+            frame_disposition(
+                dispatch
+                    .handler
+                    .dispatch(
+                        editor,
+                        Event::Ime(event),
+                        &mut dispatch.context(hover.cloned()),
+                    )
+                    .handled(),
+                false,
+            )
         })
     }
 
@@ -145,7 +162,7 @@ impl EditorRunner {
         match event {
             PointerEvent::Scroll(event) => {
                 if let Some(pending) = self.queue_scroll(PendingScroll {
-                    event: event.clone(),
+                    events: vec![event.clone()],
                     scale,
                     viewport,
                 }) {
@@ -201,7 +218,14 @@ impl EditorRunner {
                             editor.pressed = false;
                             (
                                 editor.finish_gesture()
-                                    || dispatch.handler.dispatch_pointer_up(editor, button),
+                                    || dispatch
+                                        .handler
+                                        .dispatch(
+                                            editor,
+                                            Event::PointerUp(button),
+                                            &mut dispatch.context(hover.cloned()),
+                                        )
+                                        .handled(),
                                 true,
                             )
                         }
@@ -212,7 +236,14 @@ impl EditorRunner {
                         PointerEvent::Cancel(pointer) => {
                             editor.pointer = None;
                             editor.pressed = false;
-                            let handled = dispatch.handler.dispatch_pointer_cancel(editor, pointer);
+                            let handled = dispatch
+                                .handler
+                                .dispatch(
+                                    editor,
+                                    Event::PointerCancel(pointer),
+                                    &mut dispatch.context(hover.cloned()),
+                                )
+                                .handled();
                             let resize_cancelled = editor.model.workspace.cancel_resize();
                             let gesture_cancelled = editor.finish_gesture();
                             (handled || resize_cancelled || gesture_cancelled, true)
@@ -226,15 +257,24 @@ impl EditorRunner {
     }
 
     fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
-        self.update_frame(pending.scale, pending.viewport, |editor, dispatch, _| {
-            frame_disposition(
-                dispatch
-                    .handler
-                    .dispatch_scroll(editor, &pending.event)
-                    .handled(),
-                false,
-            )
-        })
+        self.update_frame(
+            pending.scale,
+            pending.viewport,
+            |editor, dispatch, hover| {
+                let mut input = dispatch.context(hover.cloned());
+                frame_disposition(
+                    dispatch
+                        .handler
+                        .dispatch(
+                            editor,
+                            Event::Scroll(Cow::Borrowed(&pending.events)),
+                            &mut input,
+                        )
+                        .handled(),
+                    false,
+                )
+            },
+        )
     }
 
     fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
@@ -246,35 +286,43 @@ impl EditorRunner {
         self.editor.modifiers = pending.event.current.modifiers;
         self.probe_pointer(pending.scale);
         let hover_handled = self.dispatch_hover_changed();
-        self.update_frame(pending.scale, pending.viewport, |editor, dispatch, _| {
-            let event = &pending.event;
-            let samples: Vec<_> = puri::interact::pointer_samples(event)
-                .map(|sample| Point::new(sample.position.x, sample.position.y))
-                .collect();
-            let moved = editor.advance_gesture(&samples)
-                || dispatch.handler.dispatch_pointer_move(editor, event);
-            // Unclaimed touch motion scrolls through the same nested handlers.
-            let handled = moved
-                || (event.pointer.pointer_type == PointerType::Touch
-                    && dispatch
+        self.update_frame(
+            pending.scale,
+            pending.viewport,
+            |editor, dispatch, hover| {
+                let event = &pending.event;
+                let mut input = dispatch.context(hover.cloned());
+                let samples: Vec<_> = puri::interact::pointer_samples(event)
+                    .map(|sample| Point::new(sample.position.x, sample.position.y))
+                    .collect();
+                let moved = editor.advance_gesture(&samples)
+                    || dispatch
                         .handler
-                        .dispatch_scroll(
-                            editor,
-                            &PointerScrollEvent {
-                                pointer: event.pointer,
-                                delta: ScrollDelta::PixelDelta(
-                                    (
-                                        event.current.position.x - pending.start.x,
-                                        event.current.position.y - pending.start.y,
-                                    )
-                                        .into(),
-                                ),
-                                state: event.current.clone(),
-                            },
-                        )
-                        .handled());
-            frame_disposition(handled || hover_handled, false)
-        })
+                        .dispatch(editor, Event::PointerMove(event), &mut input)
+                        .handled();
+                // Unclaimed touch motion scrolls through the same nested handlers.
+                let handled = moved
+                    || (event.pointer.pointer_type == PointerType::Touch && {
+                        let scroll = puri::interact::pointer_samples(event)
+                            .scan(pending.start, |previous, sample| {
+                                let point = Point::new(sample.position.x, sample.position.y);
+                                let delta = point - *previous;
+                                *previous = point;
+                                Some(PointerScrollEvent {
+                                    pointer: event.pointer,
+                                    delta: ScrollDelta::PixelDelta((delta.x, delta.y).into()),
+                                    state: sample.clone(),
+                                })
+                            })
+                            .collect();
+                        dispatch
+                            .handler
+                            .dispatch(editor, Event::Scroll(Cow::Owned(scroll)), &mut input)
+                            .handled()
+                    });
+                frame_disposition(handled || hover_handled, false)
+            },
+        )
     }
 
     /// Scroll settles geometry before motion is dispatched. Its successor
@@ -468,6 +516,139 @@ mod tests {
                 ("hover", 5.0),
                 ("bind", 5.0)
             ]
+        );
+    }
+
+    #[test]
+    fn every_input_receives_the_installed_dispatch_context() {
+        use puri::handler::EventOutcome;
+        for kind in ["down", "up", "cancel", "move", "scroll", "key", "ime"] {
+            let log = Log::default();
+            let mut runner = instrumented_runner(&log);
+            runner.refresh_frame(1.0, VIEWPORT);
+            let root = runner.editor.model.workspace.document_root().clone();
+            let hover = crate::frame::Hovered::Blocked;
+            let mut pass = crate::display::widget::HoverPass::<(), _>::new(&Default::default());
+            pass.in_view(root.clone(), |pass| {
+                pass.visit(|output| {
+                    output.claim(crate::display::widget::frame::Probe::exact(
+                        puri::Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
+                        hover.clone(),
+                    ));
+                })
+            });
+            runner.frame.dispatch.hover_geometry =
+                pass.finish().bind(Default::default()).hover_geometry;
+            runner.frame.hover = Some(hover.clone());
+            runner.frame.dispatch.pointer_root = Some(root.clone());
+            let descends = runner.frame.dispatch.descends.clone();
+            let regions = runner.frame.dispatch.view_regions.clone();
+            let calls = Rc::new(std::cell::Cell::new(0));
+            runner.frame.dispatch.handler = puri::handler::Handler::from_function({
+                let calls = calls.clone();
+                move |_, event, input: &mut crate::placed::DispatchContext<Editor>| {
+                    if matches!(event, Event::HoverChanged) {
+                        return EventOutcome::decline(event);
+                    }
+                    assert_eq!(input.hovered(), Some(&hover), "{kind}");
+                    assert_eq!(input.root.as_ref(), Some(&root), "{kind}");
+                    assert!(Rc::ptr_eq(&input.descends, &descends), "{kind}");
+                    assert!(Rc::ptr_eq(&input.view_regions, &regions), "{kind}");
+                    calls.set(calls.get() + 1);
+                    EventOutcome::accept()
+                }
+            });
+            let button = PointerButtonEvent {
+                button: Some(puri::handler::PointerButton::Primary),
+                pointer: PointerInfo {
+                    pointer_id: None,
+                    persistent_device_id: None,
+                    pointer_type: PointerType::Mouse,
+                },
+                state: PointerState {
+                    position: (20.0, 20.0).into(),
+                    ..Default::default()
+                },
+            };
+            match kind {
+                "key" => {
+                    runner.keyboard_event(&key(), 1.0, VIEWPORT);
+                }
+                "ime" => {
+                    runner.ime_event(&ImeEvent::Commit("x".into()), 1.0, VIEWPORT);
+                }
+                _ => {
+                    let event = match kind {
+                        "down" => PointerEvent::Down(button),
+                        "up" => PointerEvent::Up(button),
+                        "cancel" => PointerEvent::Cancel(button.pointer),
+                        "move" => PointerEvent::Move(PointerUpdate {
+                            pointer: button.pointer,
+                            current: button.state,
+                            coalesced: vec![],
+                            predicted: vec![],
+                        }),
+                        "scroll" => PointerEvent::Scroll(PointerScrollEvent {
+                            pointer: button.pointer,
+                            state: button.state,
+                            delta: ScrollDelta::LineDelta(0.0, -1.0),
+                        }),
+                        _ => unreachable!(),
+                    };
+                    runner.pointer_event(&event, 1.0, VIEWPORT);
+                    runner.flush_pending_continuous();
+                }
+            }
+            assert_eq!(calls.get(), 1, "{kind}");
+        }
+    }
+
+    #[test]
+    fn scrolling_delivers_one_batch_and_builds_one_successor() {
+        let log = Log::default();
+        let mut runner = instrumented_runner(&log);
+        runner.refresh_frame(1.0, VIEWPORT);
+        log.take();
+        let events = [10.0, -10.0].map(|y| PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState {
+                position: (20.0, 20.0).into(),
+                ..Default::default()
+            },
+            delta: ScrollDelta::PixelDelta((0.0, y).into()),
+        });
+        runner.frame.dispatch.handler = puri::handler::Handler::new();
+        runner
+            .frame
+            .dispatch
+            .handler
+            .on_scroll_batch(|editor, events| {
+                assert_eq!(events.len(), 2);
+                puri::scroll::each(events, |event| {
+                    let (next, outcome) = crate::display::widget::scroll::offset(
+                        editor.model.workspace.document.scroll,
+                        event,
+                        1.0,
+                        VIEWPORT,
+                        kurbo::Vec2::new(0.0, 100.0),
+                    );
+                    editor.model.workspace.document.scroll = next;
+                    outcome
+                })
+            });
+        for event in events {
+            runner.pointer_event(&PointerEvent::Scroll(event), 1.0, VIEWPORT);
+        }
+        assert!(log.borrow().is_empty());
+        assert!(runner.flush_pending_continuous());
+        assert_eq!(runner.editor.model.workspace.document.scroll.y, 10.0);
+        assert_eq!(
+            log.take(),
+            [("project", 0.0), ("hover", 0.0), ("bind", 0.0)]
         );
     }
 

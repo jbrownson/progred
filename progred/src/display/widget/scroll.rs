@@ -99,7 +99,7 @@ mod tests {
                 None => assert!(accepts),
                 Some(Event::Scroll(remaining)) => {
                     assert!(!accepts);
-                    assert_eq!(remaining.delta, event.delta);
+                    assert_eq!(remaining[0].delta, event.delta);
                 }
                 _ => panic!("unexpected scroll remainder"),
             }
@@ -141,7 +141,7 @@ mod tests {
             let Some(Event::Scroll(result)) = outcome.remaining else {
                 panic!("expected unconsumed scroll");
             };
-            assert_eq!(result.delta, remaining);
+            assert_eq!(result[0].delta, remaining);
         }
     }
 

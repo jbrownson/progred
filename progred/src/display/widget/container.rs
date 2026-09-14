@@ -62,9 +62,17 @@ pub fn gate_starts<World: 'static, Input: 'static>(
     placement: Placement,
 ) -> Handler<World, Input> {
     Handler::from_function(move |world, event, input| {
+        if let Event::Scroll(events) = event {
+            return puri::scroll::filter(
+                events,
+                |event| {
+                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                },
+                |events| child.dispatch(world, Event::Scroll(events), input),
+            );
+        }
         let position = match &event {
             Event::PointerDown(event) => Some(event.state.position),
-            Event::Scroll(event) => Some(event.state.position),
             _ => None,
         };
         if position.is_some_and(|point| !placement.contains(Point::new(point.x, point.y))) {

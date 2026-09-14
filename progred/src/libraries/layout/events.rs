@@ -7,7 +7,7 @@ use gid::{CellId, Value};
 use puri::handler::{
     Event, EventOutcome, HasHandler, ImeEvent, KeyState, KeyboardEvent, Modifiers, PointerButton,
     PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
-    ScrollDelta, ScrollOutcome,
+    ScrollDelta,
 };
 use puri::{Placement, Point};
 use std::rc::Rc;
@@ -26,9 +26,38 @@ pub fn on_event(
             let function = function.clone();
             Box::new(move |output, placement| {
                 output.handler().on(move |world, event, _| {
+                    if let Event::Scroll(events) = event {
+                        return puri::scroll::filter(
+                            events,
+                            |event| {
+                                placement.contains(Point::new(
+                                    event.state.position.x,
+                                    event.state.position.y,
+                                ))
+                            },
+                            |events| {
+                                let value = event_value(
+                                    layout_data::vocabulary::SCROLL,
+                                    [(
+                                        layout_data::vocabulary::CONTENT,
+                                        Value::list(events.iter().map(|event| {
+                                            scroll_value(placement, scale, event, command)
+                                        })),
+                                    )],
+                                );
+                                let handled = crate::site::apply_event(
+                                    world,
+                                    root.clone(),
+                                    path.clone(),
+                                    function.clone(),
+                                    value,
+                                );
+                                EventOutcome::from_handled(Event::Scroll(events), handled)
+                            },
+                        );
+                    }
                     let point = match &event {
                         Event::PointerDown(event) => Some(event.state.position),
-                        Event::Scroll(event) => Some(event.state.position),
                         _ => None,
                     };
                     let handled = if point
@@ -57,7 +86,7 @@ pub fn on_event(
                                 command,
                             ),
                             Event::PointerCancel(event) => pointer_cancel_value(event),
-                            Event::Scroll(event) => scroll_value(placement, scale, event, command),
+                            Event::Scroll(_) => unreachable!(),
                             Event::Key(event) => key_value(event, command),
                             Event::Ime(event) => ime_value(event),
                             Event::HoverChanged => {
@@ -76,17 +105,7 @@ pub fn on_event(
                             value,
                         )
                     };
-                    match event {
-                        Event::Scroll(scroll) => {
-                            let outcome = if handled {
-                                ScrollOutcome::consume(&scroll)
-                            } else {
-                                ScrollOutcome::pass(&scroll)
-                            };
-                            outcome.into_event(scroll)
-                        }
-                        other => EventOutcome::from_handled(other, handled),
-                    }
+                    EventOutcome::from_handled(event, handled)
                 });
             })
         }),

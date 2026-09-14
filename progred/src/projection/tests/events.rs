@@ -295,19 +295,21 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         Some(crate::libraries::layout::vocabulary::TOUCH_CANCEL),
     );
 
+    let scrolls = [1.0, -2.0].map(|y| PointerScrollEvent {
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        delta: ScrollDelta::LineDelta(0.0, y),
+        state: state.clone(),
+    });
     assert!(
         handler
-            .dispatch_scroll(
+            .dispatch(
                 &mut events,
-                &PointerScrollEvent {
-                    pointer: PointerInfo {
-                        pointer_id: Some(PointerId::PRIMARY),
-                        persistent_device_id: None,
-                        pointer_type: PointerType::Mouse,
-                    },
-                    delta: ScrollDelta::LineDelta(0.0, 1.0),
-                    state,
-                },
+                puri::handler::Event::Scroll(std::borrow::Cow::Borrowed(&scrolls)),
+                &mut Default::default(),
             )
             .handled()
     );
@@ -326,6 +328,33 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     );
 
     use crate::libraries::layout::vocabulary as event_fields;
+    let batch = events
+        .model
+        .workspace
+        .document
+        .annotations
+        .at(&[])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&event_fields::CONTENT)
+        .unwrap()
+        .as_list()
+        .unwrap();
+    assert_eq!(
+        batch
+            .values()
+            .map(|event| f64::read(
+                event
+                    .as_record()
+                    .unwrap()
+                    .get(&event_fields::DELTA_Y)
+                    .unwrap()
+            )
+            .unwrap())
+            .collect::<Vec<_>>(),
+        [1.0, -2.0]
+    );
     let mut key = KeyboardEvent::default();
     key.modifiers = if cfg!(target_os = "macos") {
         Modifiers::META

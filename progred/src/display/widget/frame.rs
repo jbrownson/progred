@@ -10,7 +10,7 @@ use measured::{Measured, Output};
 use puri::draw::{Canvas, CanvasSink};
 use puri::frame::AfterHover;
 pub use puri::frame::Render;
-use puri::handler::{Event, Handler, HasHandler};
+use puri::handler::{Handler, HasHandler};
 use puri::hover::Claim;
 pub use puri::hover::Probe;
 use puri::{Affine, Placement, Point, Rect, Vec2};
@@ -455,6 +455,10 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         for descend in &mut self.descends {
             descend.root = Some(root.clone());
         }
+        self.handler = self
+            .handler
+            .take()
+            .map(|handler| view_handler(handler, root.clone()));
         let after = std::mem::take(&mut self.after_hover);
         let root = root.clone();
         self.after_hover.push(move |hover, output| {
@@ -462,26 +466,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             after.bind(hover, &mut child);
             output.renders.append(&mut child.renders);
             if let Some(handler) = &mut child.handler {
-                let root = root.clone();
-                let inner = std::mem::take(handler);
-                *handler = Handler::from_function(
-                    move |ctx, event, pointer: &mut DispatchContext<C, Hover>| {
-                        if matches!(
-                            event,
-                            Event::PointerDown(_)
-                                | Event::HoverChanged
-                                | Event::ModifiersChanged(_)
-                        ) {
-                            let outside = pointer.outside_view;
-                            pointer.outside_view = pointer.root.as_ref() != Some(&root);
-                            let outcome = inner.dispatch(ctx, event, pointer);
-                            pointer.outside_view = outside;
-                            outcome
-                        } else {
-                            inner.dispatch(ctx, event, pointer)
-                        }
-                    },
-                );
+                *handler = view_handler(std::mem::take(handler), root.clone());
             }
             if let Some(handler) = child.handler {
                 *output.handler() = std::mem::take(output.handler()).over(handler);
@@ -507,6 +492,19 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             hover_geometry: self.hover_geometry,
         }
     }
+}
+
+fn view_handler<C: 'static, H: 'static>(
+    inner: Handler<C, DispatchContext<C, H>>,
+    root: Root,
+) -> Handler<C, DispatchContext<C, H>> {
+    Handler::from_function(move |ctx, event, pointer: &mut DispatchContext<C, H>| {
+        let outside = pointer.outside_view;
+        pointer.outside_view = pointer.root.as_ref() != Some(&root);
+        let outcome = inner.dispatch(ctx, event, pointer);
+        pointer.outside_view = outside;
+        outcome
+    })
 }
 
 impl<H> Default for ResolvedHover<H> {
@@ -557,6 +555,49 @@ mod tests {
     use super::super::leaf;
     use super::*;
     use std::{cell::RefCell, rc::Rc};
+
+    #[test]
+    fn view_scope_hides_other_views_hover_without_hiding_input() {
+        use puri::handler::{
+            Event, EventOutcome, PointerInfo, PointerState, PointerType, PointerUpdate,
+        };
+        let own = Root::document();
+        let other = Root::document();
+        let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
+        for (id, root) in [(1, own.clone()), (2, other)] {
+            pass.in_view(root, |pass| {
+                pass.visit(|output| {
+                    output.handler().on(move |log, event, input| {
+                        log.push((id, input.hovered().copied()));
+                        EventOutcome::decline(event)
+                    });
+                    output.after_hover(move |_, output| {
+                        output.handler().on(move |log, event, input| {
+                            log.push((id + 10, input.hovered().copied()));
+                            EventOutcome::decline(event)
+                        });
+                    });
+                })
+            });
+        }
+        let handler = pass.finish().bind(Default::default()).handler.unwrap();
+        let update = PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            current: PointerState::default(),
+            coalesced: vec![],
+            predicted: vec![],
+        };
+        let mut input = DispatchContext::new(Some(own), Some(7));
+        let mut log = Vec::new();
+        handler.dispatch(&mut log, Event::PointerMove(&update), &mut input);
+        log.sort_by_key(|entry| entry.0);
+        assert_eq!(log, [(1, Some(7)), (2, None), (11, Some(7)), (12, None)]);
+        assert_eq!(input.hovered(), Some(&7));
+    }
 
     #[test]
     fn hover_runs_in_paint_order_and_handlers_run_front_to_back() {

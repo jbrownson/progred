@@ -170,15 +170,21 @@ consumer's layout composition, not to a Puri widget's return type.
 [`Handler`](../ui/puri/src/handler.rs) is one function over the input `Event`
 enum. It receives mutable caller state and explicit dispatch inputs, returning
 acceptance plus any unconsumed event. `over` tries the later contribution first
-and passes its remainder to the earlier contribution. Scroll may leave part of
-its delta; acceptance is preserved even when the next handler declines.
-The typed `on_key`, `on_scroll`, and pointer helpers are ordinary combinators
-over this interface. Wrappers forward the handler without unpacking channels.
+and passes its remainder to the earlier contribution. Scroll carries an ordered
+batch of original packets, including positions, timestamps, modifiers, and units.
+`on_scroll_batch` receives that batch intact. A handler may sum it, apply
+acceleration, or use the sample-wise `on_scroll` adapter. Partial consumption
+forwards the ordered unconsumed packets, with adjusted deltas where necessary;
+acceptance survives even when the next handler declines. Clipping divides a
+batch only at crossings of its bounds, retaining in-bounds runs as batches.
+The typed helpers are ordinary combinators over this interface.
 Widgets test their own geometry; Puri does not infer acceptance from state changes.
 
 Progred activation, picking, and raw pointer-down handlers use that same
 front-to-back chain. The dispatch context supplies the settled hover target,
-its owning view, and navigation data explicitly. Event acceptance controls
+its owning view, and navigation data explicitly for every event, including
+motion, scroll, release, and IME. View wrappers hide another view's hover without
+blocking input needed by active gestures. Event acceptance controls
 propagation; it does not tell the shell to infer a domain action or gesture.
 The accepting handler performs the action and installs any continuation.
 
@@ -250,8 +256,12 @@ Number scrubbing integrates the full precision path; state-drag callbacks receiv
 the latest logical displacement and the earlier displacements, letting Fidget
 orbit use only the latest. Raw Puri handlers receive the whole pointer update;
 Grap motion events expose earlier sample records under `coalesced` alongside
-their existing latest-position fields. Unclaimed touch motion uses the batch's
-total displacement for ordinary document scrolling.
+their existing latest-position fields. Scroll also reaches the handler as one
+batch before a single successor-frame build; the shell never sums or replays it.
+Sample-wise controls read current caller-owned state so successive samples do
+not overwrite each other. Grap scroll events expose the packet records as a list
+under `content`. Unclaimed touch motion produces a scroll batch from the observed
+position differences, preserving reversals and sample metadata.
 
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the

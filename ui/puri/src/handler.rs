@@ -49,17 +49,6 @@ impl<Remainder> Outcome<Remainder> {
 }
 
 impl ScrollOutcome {
-    pub fn into_event<'a>(self, original: Cow<'a, PointerScrollEvent>) -> EventOutcome<'a> {
-        if self.remaining == Self::consume(&original).remaining {
-            self.map(|_| None)
-        } else if self.remaining == original.delta {
-            self.map(|_| Some(Event::Scroll(original)))
-        } else {
-            let remaining = self.event(&original);
-            self.map(|_| remaining.map(|event| Event::Scroll(Cow::Owned(event))))
-        }
-    }
-
     pub fn pass(event: &PointerScrollEvent) -> Self {
         Self::unhandled(event.delta)
     }
@@ -93,15 +82,15 @@ pub enum ImeEvent {
     Commit(String),
 }
 
-/// Input, not editor actions. A scroll remainder may own its adjusted packet;
-/// ordinary dispatch borrows the platform packet without copying it.
+/// Input, not editor actions. Scroll retains every observed packet in order;
+/// a partially consumed batch may own its adjusted remainder.
 #[derive(Clone)]
 pub enum Event<'a> {
     PointerDown(&'a PointerButtonEvent),
     PointerMove(&'a PointerUpdate),
     PointerUp(&'a PointerButtonEvent),
     PointerCancel(&'a PointerInfo),
-    Scroll(Cow<'a, PointerScrollEvent>),
+    Scroll(Cow<'a, [PointerScrollEvent]>),
     Key(&'a KeyboardEvent),
     Ime(&'a ImeEvent),
     ModifiersChanged(&'a Modifiers),
@@ -206,7 +195,11 @@ impl<C, P> Handler<C, P> {
     where
         P: Default,
     {
-        self.dispatch(ctx, Event::Scroll(Cow::Borrowed(event)), &mut P::default())
+        self.dispatch(
+            ctx,
+            Event::Scroll(Cow::Borrowed(std::slice::from_ref(event))),
+            &mut P::default(),
+        )
     }
 
     pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool
@@ -324,13 +317,23 @@ impl<C: 'static, P: 'static> Handler<C, P> {
         });
     }
 
+    pub fn on_scroll_batch(
+        &mut self,
+        dispatch: impl for<'a> Fn(&mut C, Cow<'a, [PointerScrollEvent]>) -> EventOutcome<'a> + 'static,
+    ) {
+        self.on(move |ctx, event, _| match event {
+            Event::Scroll(scroll) => dispatch(ctx, scroll),
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    /// Opt into sample-wise handling, preserving partial remainders in order.
     pub fn on_scroll(
         &mut self,
         dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
     ) {
-        self.on(move |ctx, event, _| match event {
-            Event::Scroll(scroll) => dispatch(ctx, &scroll).into_event(scroll),
-            other => EventOutcome::decline(other),
+        self.on_scroll_batch(move |ctx, scroll| {
+            crate::scroll::each(scroll, |event| dispatch(ctx, event))
         });
     }
 
@@ -431,29 +434,82 @@ mod tests {
         let outcome = Handler::<()>::new().dispatch_scroll(&mut (), &event);
         assert!(!outcome.handled());
         assert!(matches!(outcome.remaining,
-            Some(Event::Scroll(Cow::Borrowed(remaining))) if std::ptr::eq(remaining, &event)
+            Some(Event::Scroll(Cow::Borrowed(remaining))) if std::ptr::eq(remaining.as_ptr(), &event)
         ));
+    }
+
+    #[test]
+    fn scroll_handlers_receive_whole_batches_and_forward_ordered_remainders() {
+        let events = [scroll(4.0), scroll(-8.0), scroll(12.0)];
+        let mut handler: Handler<Vec<Vec<ScrollDelta>>> = Handler::new();
+        handler.on_scroll_batch(|log, events| {
+            log.push(events.iter().map(|event| event.delta).collect());
+            EventOutcome::decline(Event::Scroll(events))
+        });
+        handler.on_scroll_batch(|log, events| {
+            assert_eq!(events.len(), 3);
+            log.push(events.iter().map(|event| event.delta).collect());
+            crate::scroll::each(events, |event| {
+                let ScrollDelta::LineDelta(x, y) = event.delta else {
+                    unreachable!()
+                };
+                if y < 0.0 {
+                    ScrollOutcome::consume(event)
+                } else {
+                    ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+                }
+            })
+        });
+        let mut log = Vec::new();
+        let outcome = handler.dispatch(&mut log, Event::Scroll(Cow::Borrowed(&events)), &mut ());
+        assert!(outcome.handled());
+        assert_eq!(
+            log,
+            [
+                vec![
+                    ScrollDelta::LineDelta(0.0, 4.0),
+                    ScrollDelta::LineDelta(0.0, -8.0),
+                    ScrollDelta::LineDelta(0.0, 12.0)
+                ],
+                vec![
+                    ScrollDelta::LineDelta(0.0, 2.0),
+                    ScrollDelta::LineDelta(0.0, 6.0)
+                ]
+            ]
+        );
+        let Some(Event::Scroll(remaining)) = outcome.remaining else {
+            panic!("expected remainder")
+        };
+        assert_eq!(remaining[0].state, events[0].state);
+        assert_eq!(remaining[1].state, events[2].state);
     }
 
     #[test]
     fn scroll_event_conversion_preserves_acceptance_without_a_phantom_remainder() {
         let zero = scroll(0.0);
-        let outcome = ScrollOutcome::pass(&zero).into_event(Cow::Borrowed(&zero));
+        let outcome = crate::scroll::each(
+            Cow::Borrowed(std::slice::from_ref(&zero)),
+            ScrollOutcome::pass,
+        );
         assert!(!outcome.handled());
         assert!(outcome.remaining.is_none());
         let event = scroll(4.0);
-        let outcome = ScrollOutcome::pass(&event).into_event(Cow::Borrowed(&event));
+        let outcome = crate::scroll::each(
+            Cow::Borrowed(std::slice::from_ref(&event)),
+            ScrollOutcome::pass,
+        );
         assert!(!outcome.handled());
         assert!(matches!(
             outcome.remaining,
             Some(Event::Scroll(Cow::Borrowed(_)))
         ));
-        let outcome = ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 2.0))
-            .into_event(Cow::Borrowed(&event));
+        let outcome = crate::scroll::each(Cow::Borrowed(std::slice::from_ref(&event)), |_| {
+            ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 2.0))
+        });
         assert!(outcome.handled());
         assert!(
             matches!(outcome.remaining, Some(Event::Scroll(Cow::Owned(remaining)))
-            if remaining.delta == ScrollDelta::LineDelta(0.0, 2.0))
+            if remaining[0].delta == ScrollDelta::LineDelta(0.0, 2.0))
         );
     }
 
@@ -632,7 +688,7 @@ mod tests {
         let result = outer.over(inner).dispatch_scroll(&mut log, &event);
         assert!(result.handled());
         assert!(matches!(result.remaining, Some(Event::Scroll(rest))
-            if rest.delta == ScrollDelta::LineDelta(0.0, 4.0)));
+            if rest[0].delta == ScrollDelta::LineDelta(0.0, 4.0)));
         assert_eq!(log, [8.0, 4.0]);
     }
 

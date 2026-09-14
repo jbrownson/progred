@@ -61,6 +61,7 @@ use gpu::{RenderContext, RenderSurface};
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
+#[cfg(test)]
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::{
@@ -186,7 +187,7 @@ pub(crate) struct PendingPaint {
 }
 
 struct PendingScroll {
-    event: PointerScrollEvent,
+    events: Vec<PointerScrollEvent>,
     scale: f64,
     viewport: Size,
 }
@@ -232,26 +233,9 @@ fn continuous_input(event: &WindowEvent) -> bool {
 }
 
 impl PendingScroll {
-    fn merge(&mut self, next: Self) -> Result<(), Self> {
-        let merged = self.scale == next.scale
-            && self.viewport == next.viewport
-            && match (&mut self.event.delta, next.event.delta) {
-                (ScrollDelta::PageDelta(x, y), ScrollDelta::PageDelta(next_x, next_y))
-                | (ScrollDelta::LineDelta(x, y), ScrollDelta::LineDelta(next_x, next_y)) => {
-                    *x += next_x;
-                    *y += next_y;
-                    true
-                }
-                (ScrollDelta::PixelDelta(delta), ScrollDelta::PixelDelta(next)) => {
-                    delta.x += next.x;
-                    delta.y += next.y;
-                    true
-                }
-                _ => false,
-            };
-        if merged {
-            self.event.pointer = next.event.pointer;
-            self.event.state = next.event.state;
+    fn merge(&mut self, mut next: Self) -> Result<(), Self> {
+        if self.scale == next.scale && self.viewport == next.viewport {
+            self.events.append(&mut next.events);
             Ok(())
         } else {
             Err(next)
@@ -1945,7 +1929,7 @@ mod shell_tests {
         let mut state = PointerState::default();
         state.position.x = x;
         PendingScroll {
-            event: PointerScrollEvent {
+            events: vec![PointerScrollEvent {
                 pointer: PointerInfo {
                     pointer_id: Some(PointerId::PRIMARY),
                     persistent_device_id: None,
@@ -1953,14 +1937,14 @@ mod shell_tests {
                 },
                 delta,
                 state,
-            },
+            }],
             scale: 2.0,
             viewport: Size::new(1800.0, 1280.0),
         }
     }
 
     #[test]
-    fn pending_scrolls_sum_same_kind_packets_and_keep_the_latest_state() {
+    fn pending_scrolls_preserve_packets_in_order_including_mixed_units() {
         let mut accumulated = pending(
             ScrollDelta::PixelDelta(PhysicalPosition::new(2.0, 3.0)),
             10.0,
@@ -1974,23 +1958,46 @@ mod shell_tests {
                 .is_ok()
         );
         assert_eq!(
-            accumulated.event.delta,
-            ScrollDelta::PixelDelta(PhysicalPosition::new(7.0, 10.0))
+            accumulated
+                .events
+                .iter()
+                .map(|event| (event.delta, event.state.position.x))
+                .collect::<Vec<_>>(),
+            [
+                (
+                    ScrollDelta::PixelDelta(PhysicalPosition::new(2.0, 3.0)),
+                    10.0
+                ),
+                (
+                    ScrollDelta::PixelDelta(PhysicalPosition::new(5.0, 7.0)),
+                    20.0
+                ),
+            ]
         );
-        assert_eq!(accumulated.event.state.position.x, 20.0);
         assert!(
             accumulated
                 .merge(pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0))
-                .is_err()
+                .is_ok()
         );
+        assert_eq!(
+            accumulated.events.last().unwrap().delta,
+            ScrollDelta::LineDelta(0.0, 1.0)
+        );
+        let mut resized = pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0);
+        resized.viewport.width += 1.0;
+        assert!(accumulated.merge(resized).is_err());
+        let mut rescaled = pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0);
+        rescaled.scale += 1.0;
+        assert!(accumulated.merge(rescaled).is_err());
     }
 
     fn pointer(x: f64) -> PendingPointer {
         let scroll = pending(ScrollDelta::LineDelta(0.0, 0.0), x);
+        let event = scroll.events.into_iter().next().unwrap();
         PendingPointer {
             event: PointerUpdate {
-                pointer: scroll.event.pointer,
-                current: scroll.event.state,
+                pointer: event.pointer,
+                current: event.state,
                 coalesced: vec![],
                 predicted: vec![],
             },

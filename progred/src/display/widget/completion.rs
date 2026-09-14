@@ -39,6 +39,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     entries: &[Entry<'_, C, H>],
     more: H,
     state: State,
+    current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
     command: fn(&Modifiers) -> bool,
 ) -> Measured<HoverPass<C, H>> {
@@ -122,17 +123,21 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         content,
         Vec2::new(0.0, scroll * scale),
         move |world, event| {
-            let (next, outcome) = scroll::offset(
-                Vec2::new(0.0, scroll),
-                event,
-                scale,
-                Size::new(viewport_extent.width, viewport_extent.height()),
-                Vec2::new(0.0, maximum),
-            );
-            if next.y != scroll {
-                scroll_view(world, next.y, choice, everything);
+            if let Some(scroll) = current_scroll(world) {
+                let (next, outcome) = scroll::offset(
+                    Vec2::new(0.0, scroll),
+                    event,
+                    scale,
+                    Size::new(viewport_extent.width, viewport_extent.height()),
+                    Vec2::new(0.0, maximum),
+                );
+                if next.y != scroll {
+                    scroll_view(world, next.y, choice, everything);
+                }
+                outcome
+            } else {
+                puri::handler::ScrollOutcome::pass(event)
             }
-            outcome
         },
     );
     let viewport = measured::overlay_into(

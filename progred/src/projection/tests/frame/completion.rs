@@ -186,6 +186,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
             0,
             0.0,
             true,
+            |_| Some(0.0),
             |_, _, _, _| {},
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
@@ -233,6 +234,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                 0,
                 0.0,
                 true,
+                |_| Some(0.0),
                 |_, _, _, _| {},
             );
             let placement =
@@ -315,6 +317,7 @@ fn completion_details_share_the_cards_right_edge() {
             0,
             0.0,
             true,
+            |_| Some(0.0),
             |_, _, _, _| {},
         );
         let origin = Point::new(37.0, 59.0);
@@ -377,6 +380,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             0,
             0.0,
             false,
+            |_| Some(0.0),
             |_, _, _, _| {},
         );
         let extent = card.extent;
@@ -446,6 +450,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             choice,
             scroll,
             everything,
+            |state| Some(state.0),
             |state, scroll, choice, everything| *state = (scroll, choice, everything),
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
@@ -485,6 +490,22 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .handled()
     );
     assert_eq!(state, (200.0, 0, false));
+    let mut batched = (0.0, 0, false);
+    let events = [scroll.clone(), scroll.clone()].map(|mut event| {
+        event.delta = ScrollDelta::LineDelta(0.0, -2.5);
+        event
+    });
+    assert!(
+        frame(batched, None)
+            .resolve_for_dispatch()
+            .dispatch(
+                &mut batched,
+                puri::handler::Event::Scroll(std::borrow::Cow::Borrowed(&events)),
+                &mut Default::default(),
+            )
+            .handled()
+    );
+    assert_eq!(batched, (200.0, 0, false));
     assert!((4..160).any(|y| matches!(
         frame(state, Some(Point::new(10.0,y as f64))).claim.map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(index)))) if index > 0
@@ -593,6 +614,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             state.view.1,
             state.view.0,
             state.view.2,
+            |state| Some(state.view.0),
             |state, scroll, choice, everything| state.view = (scroll, choice, everything),
         );
         let rect = card.extent.rect_at(Point::ZERO);
@@ -773,6 +795,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             state.view.1,
             state.view.0,
             state.view.2,
+            |state| Some(state.view.0),
             |state, scroll, choice, everything| state.view = (scroll, choice, everything),
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
@@ -956,6 +979,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         0,
         0.0,
         true,
+        |_| Some(0.0),
         |_, _, _, _| {},
     );
     let card_rect = card

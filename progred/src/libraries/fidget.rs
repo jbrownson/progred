@@ -946,7 +946,6 @@ fn display(
         )?;
         let target = input.targets.current();
         let hover = target.hover;
-        let state = input.state.cloned();
         Some(crate::display::widget::before(
             on_state_drag(
                 on_hover(drawing, hover.clone()),
@@ -957,11 +956,15 @@ fn display(
             Rc::new(move |context| {
                 let root = context.inputs.view.clone();
                 let path = context.path.to_vec();
-                let zoom = zoom_handler(state.as_ref());
                 crate::display::widget::scroll::scroll(
                     context.inputs.styles.scale,
-                    move |world, delta| {
-                        let (state, outcome) = zoom(delta);
+                    move |world: &mut crate::Editor, delta| {
+                        let state = world
+                            .model
+                            .workspace
+                            .view(&root)
+                            .and_then(|view| view.annotations.at(&path));
+                        let (state, outcome) = zoom_handler(state)(delta);
                         if let Some(state) = state {
                             crate::editing::annotate(world, &root, &path, state);
                         }

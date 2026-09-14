@@ -222,6 +222,8 @@ fn query_content(
         .map(Selection::completion_scroll)
         .unwrap_or(0.0);
     let root = cx.view.clone();
+    let scroll_root = root.clone();
+    let scroll_path = path.to_vec();
     let card = completion_card(
         tcx,
         cx.styles,
@@ -229,6 +231,18 @@ fn query_content(
         choice,
         scroll,
         everything,
+        move |world: &crate::Editor| {
+            world
+                .model
+                .selection
+                .as_ref()
+                .filter(|selection| {
+                    selection.root() == &scroll_root
+                        && selection.path() == scroll_path
+                        && selection.stage(&world.sources()) != Stage::Edge
+                })
+                .map(Selection::completion_scroll)
+        },
         move |world, scroll, choice, everything| {
             crate::editing::completion_view(world, &root, scroll, choice, everything)
         },
@@ -289,6 +303,7 @@ pub(super) fn completion_card<C: 'static>(
     choice: usize,
     scroll: f64,
     everything: bool,
+    current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
 ) -> Measured<HoverPass<C>> {
     let entries = entries
@@ -313,6 +328,7 @@ pub(super) fn completion_card<C: 'static>(
             scroll,
             everything,
         },
+        current_scroll,
         move |world, state| set_view(world, state.scroll, state.choice, state.everything),
         crate::modifiers::command,
     )
