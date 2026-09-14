@@ -235,6 +235,7 @@ fn editor_svg_captures() {
     for (example, file) in [
         (Example::Fidget, "editor_fidget.svg"),
         (Example::Cube, "editor_fidget_cube.svg"),
+        (Example::Toolpaths, "editor_toolpaths.svg"),
     ] {
         let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
         render_editor(
@@ -243,6 +244,28 @@ fn editor_svg_captures() {
             file,
         );
     }
+}
+
+#[test]
+#[ignore = "writes a full-editor capture of the mesh viewport"]
+fn editor_mesh_svg_capture() {
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::Cube.source()).unwrap();
+    render_editor(
+        crate::test_editor(doc),
+        kurbo::Size::new(1200.0, 900.0),
+        "editor_fidget_mesh.svg",
+    );
+}
+
+#[test]
+#[ignore = "writes a full-editor capture of the meshed model and streamed toolpaths"]
+fn editor_toolpath_mesh_svg_capture() {
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    render_editor(
+        crate::test_editor(doc),
+        kurbo::Size::new(1500.0, 1050.0),
+        "editor_toolpath_mesh.svg",
+    );
 }
 
 #[test]
@@ -388,17 +411,98 @@ fn svg_bench_renders_toolpath_source_and_preview() {
             .result
             .as_record()
             .unwrap()
-            .contains_key(&toolpath::vocabulary::PREVIEW)
+            .contains_key(&toolpath::vocabulary::PREVIEW_MESH)
     );
     let doc = Document {
         root: Some(preview.result),
         cells: doc.cells,
     };
     let (bench, _) = place(&doc, None, 760.0);
-    assert!(bench.list.0.iter().any(|command| matches!(command,
-        DrawCmd::Stroke { shape: Shape::Path(path), .. } if path.elements().iter().filter(|p| matches!(p, kurbo::PathEl::MoveTo(_))).count() == 42
-    )));
-    render(&doc, None, 760.0, "toolpaths.svg");
+    let image = bench
+        .list
+        .0
+        .iter()
+        .find_map(|command| match command {
+            DrawCmd::Image { image, .. } => Some(image),
+            _ => None,
+        })
+        .expect("the combined toolpath viewport renders an image");
+    let mut model = 0;
+    let mut paths = 0;
+    for pixel in image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0) {
+        model += usize::from(pixel[2] > pixel[0]);
+        paths += usize::from(u16::from(pixel[0]) > 2 * u16::from(pixel[2]));
+    }
+    assert!(model > 100 && paths > 100, "model {model}, paths {paths}");
+    write_svg(&bench.list, 760.0, 548.0, "#F6F6F8", "toolpaths.svg");
+}
+
+#[test]
+fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
+    use crate::libraries::{absent, color, control, f32, fidget, presentation, toolpath};
+    use toolpath::vocabulary as t;
+    let point = |function: CellId, x| {
+        grap::call(
+            function.into(),
+            [
+                (t::X, f64::value(x)),
+                (t::Y, f64::value(0.0)),
+                (t::Z, f64::value(0.0)),
+            ],
+        )
+    };
+    for preview in [t::PREVIEW_3D, t::PREVIEW_MESH] {
+        for (result, fuel, should_draw) in [
+            (Value::record([]), 1000, true),
+            (absent::with_reason(t::INVALID_INPUT), 1000, false),
+            (Value::record([]), 0, false),
+        ] {
+            let program = Value::record([
+                (grap::vocabulary::PARAMS, Value::list([])),
+                (
+                    grap::vocabulary::BODY,
+                    grap::call(
+                        control::vocabulary::DO.into(),
+                        [(
+                            control::vocabulary::EXPRESSIONS,
+                            Value::list([point(t::START_AT, 0.0), point(t::LINE_TO, 1.0), result]),
+                        )],
+                    ),
+                ),
+            ]);
+            let expression = grap::call(
+                preview.into(),
+                [
+                    (presentation::vocabulary::VALUE, f32::value(-1.0)),
+                    (t::PROGRAM, program),
+                    (t::LINE_RADIUS, f64::value(0.01)),
+                    (
+                        fidget::vocabulary::COLOR,
+                        Value::record([(color::vocabulary::RGB, vec![255, 128, 0].into())]),
+                    ),
+                    (layout_data::vocabulary::WIDTH, f64::value(32.0)),
+                    (layout_data::vocabulary::HEIGHT, f64::value(32.0)),
+                    (layout_data::vocabulary::FUEL, f64::value(fuel as f64)),
+                ],
+            );
+            let stack = crate::stack::load();
+            let result = grap::evaluate(&expression, &stack.libraries, 1000);
+            assert!(result.completed && !absent::is_absent(&result.result));
+            let doc = Document {
+                root: Some(result.result),
+                cells: Cells::new(),
+            };
+            let (bench, _) = place(&doc, None, 200.0);
+            assert_eq!(
+                bench
+                    .list
+                    .0
+                    .iter()
+                    .any(|cmd| matches!(cmd, DrawCmd::Image { .. })),
+                should_draw
+            );
+        }
+    }
 }
 
 #[test]

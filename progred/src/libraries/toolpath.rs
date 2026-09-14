@@ -9,6 +9,8 @@ use ::grap::{
 use gid::{CellId, Cells, Value};
 use std::{cell::RefCell, rc::Rc};
 
+mod fidget;
+mod mesh;
 pub mod paths;
 mod preview;
 #[cfg(test)]
@@ -28,6 +30,9 @@ pub mod vocabulary {
     pub const Y: CellId = CellId::from_u128(0x92227b03eda56073f7615c0688040b16);
     pub const Z: CellId = CellId::from_u128(0xece1c34e1fe1c2c45757d82d4ed6493d);
     pub const PREVIEW: CellId = CellId::from_u128(0xcdb8ec5a8c49550656067ace7eeb39b7);
+    pub const PREVIEW_3D: CellId = CellId::from_u128(0x90764cc11a9ad180a4be8319232f2f8b);
+    pub const PREVIEW_MESH: CellId = CellId::from_u128(0x6b5562bf1e69f9671cf97ad54985e4d0);
+    pub const LINE_RADIUS: CellId = CellId::from_u128(0x4de64314b3008dcdf01ac387dc68e63f);
     pub const PROGRAM: CellId = CellId::from_u128(0xf23c804bf137581b76605a51366d43b7);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0xa7763f9186b2c417fe1258246bb327db);
     pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0x1c905a1c1b3b904f8999fa61b3927897);
@@ -103,6 +108,29 @@ fn result(value: Result<Value, Error>) -> Result<Value, Halt> {
         Ok(value) => Ok(value),
         Err(Error::Invalid(value)) => Ok(value),
         Err(Error::Halt(halt)) => Err(halt),
+    }
+}
+
+fn read_fuel(value: f64) -> Option<usize> {
+    (value.is_finite() && value >= 0.0 && value.fract() == 0.0 && value < usize::MAX as f64)
+        .then_some(value as usize)
+}
+
+fn fuel(
+    context: &mut Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<usize, Error> {
+    if context.field(call, layout::vocabulary::FUEL).is_some() {
+        read_fuel(number(
+            context,
+            call,
+            environment,
+            layout::vocabulary::FUEL,
+        )?)
+        .ok_or_else(invalid)
+    } else {
+        Ok(::grap::DEFAULT_FUEL)
     }
 }
 
@@ -212,6 +240,8 @@ fn functions() -> ForeignFunctions {
             )
         });
     functions
+        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview))
+        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview))
         .register(
             POINT,
             ForeignFunction::new(|context, call, environment| {
@@ -229,21 +259,14 @@ fn functions() -> ForeignFunctions {
                     if width <= 0.0 || height <= 0.0 {
                         return Err(invalid());
                     }
-                    let fuel = if context.field(call, layout::vocabulary::FUEL).is_some() {
-                        number(context, call, environment, layout::vocabulary::FUEL)?
-                    } else {
-                        ::grap::DEFAULT_FUEL as f64
-                    };
-                    if fuel < 0.0 || fuel.fract() != 0.0 || fuel >= usize::MAX as f64 {
-                        return Err(invalid());
-                    }
+                    let fuel = fuel(context, call, environment)?;
                     Ok(Value::record([(
                         PREVIEW,
                         Value::record([
                             (PROGRAM, program),
                             (layout::vocabulary::WIDTH, f64::value(width)),
                             (layout::vocabulary::HEIGHT, f64::value(height)),
-                            (layout::vocabulary::FUEL, f64::value(fuel)),
+                            (layout::vocabulary::FUEL, f64::value(fuel as f64)),
                         ]),
                     )]))
                 })())
@@ -264,16 +287,29 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (Y, "y"),
         (Z, "z"),
         (PREVIEW, "preview paths"),
+        (PREVIEW_3D, "preview paths 3d"),
+        (PREVIEW_MESH, "preview paths mesh"),
+        (LINE_RADIUS, "line radius"),
         (PROGRAM, "program"),
         (INVALID_INPUT, "invalid toolpath input"),
         (OUTPUT_REQUIRED, "toolpath output required"),
     ] {
         cells.set_value(id, name::record(spelling, []));
     }
+    let renderer = Rc::new(RefCell::new(
+        crate::libraries::fidget::PreviewRenderer::default(),
+    ));
+    let mesh_renderer = Rc::new(RefCell::new(
+        crate::libraries::fidget::mesh::Renderer::default(),
+    ));
     Library::named(
         ID,
         "toolpaths",
         Definitions::from_parts(cells, functions()),
-        crate::display::partial(preview::display),
+        crate::display::compose_partials([
+            crate::display::partial(preview::display),
+            crate::display::partial(move |input| fidget::display(input, &renderer)),
+            crate::display::partial(move |input| mesh::display(input, &mesh_renderer)),
+        ]),
     )
 }

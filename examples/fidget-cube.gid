@@ -30,6 +30,7 @@
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
     "max_z": da0ed6603210813bf52a20df7bf27c7d,
+    "mesh_depth": 47114a01984bb53e1538906f13333f84,
     "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
     "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
     "min_z": 392a615eb91c6d64df871ec95831f89a,
@@ -40,7 +41,7 @@
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
-    "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
+    "preview_mesh": 95eec28ff8cc6ba67153f9dfc4021139,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
@@ -52,6 +53,7 @@
     "subtract": 90e22494757f01a2ddf9bea409c186ae,
     "sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
     "u": c55bbadf3e61435c3aeab495079d1b19,
+    "u64": fc77282178c2fa31b80aed2b8b6f7888,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
@@ -352,7 +354,10 @@
               min_z: {
                 f32: 0x9a9919bf,
               },
-              function: preview_3d,
+              mesh_depth: {
+                u64: 0x0500000000000000,
+              },
+              function: preview_mesh,
               projection_value: {
                 function: quote,
                 expression: {

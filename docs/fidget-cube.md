@@ -4,6 +4,8 @@ The editable model is [fidget-cube.gid](../examples/fidget-cube.gid), available
 as Examples → Fidget cube (Command+8 / Ctrl+8). Its source is a no-argument Grap
 function; the body constructs ordinary Fidget fields through existing library
 functions. There is no cube primitive in the evaluator or Fidget adapter.
+Its pane now uses the [mesh viewport](fidget-mesh.md) at depth 5. The implicit
+model is unchanged; `preview 3d` remains available for voxel-rendered comparison.
 
 ## Reference
 

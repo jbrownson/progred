@@ -95,10 +95,7 @@ pub(super) fn display(
     let program = fields.get(&PROGRAM)?.clone();
     let width = f64::read(fields.get(&layout::vocabulary::WIDTH)?)?;
     let height = f64::read(fields.get(&layout::vocabulary::HEIGHT)?)?;
-    let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
-    if fuel < 0.0 || fuel.fract() != 0.0 || fuel >= usize::MAX as f64 || !fuel.is_finite() {
-        return None;
-    }
+    let fuel = super::read_fuel(f64::read(fields.get(&layout::vocabulary::FUEL)?)?)?;
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return None;
     }
@@ -106,7 +103,7 @@ pub(super) fn display(
     Some(Layout::program(Rc::new(move |context, build| {
         let mut lines = projected();
         let evaluation = run(&mut lines, |scope| {
-            ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel as usize)
+            ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
         });
         if !evaluation.completed || absent::is_absent(&evaluation.result) {
             return context.project.transient(

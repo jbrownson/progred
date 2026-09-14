@@ -1,5 +1,8 @@
 # Frame performance checks
 
+The opt-in [Fidget meshing experiment](fidget-meshing-2026-09-13.md) measures
+CPU triangle generation from the cube document, independently of frame rendering.
+
 ## Headless editor captures
 
 The SVG exporter can capture a whole editor frame, including document views,
@@ -10,7 +13,7 @@ panes, dividers, text, and embedded PNG images, without opening a window:
   editor_svg_captures -- --ignored --nocapture
 ```
 
-This writes `editor_fidget.svg` and `editor_fidget_cube.svg` into
+This writes `editor_fidget.svg`, `editor_fidget_cube.svg`, and `editor_toolpaths.svg` into
 `target/sandbox/build`. Each SVG is self-contained; raster images retain their
 transforms, transparency, and enclosing clips. The test helper accepts an editor
 state and window size and paints through the normal frame pipeline into a
@@ -29,6 +32,8 @@ rsvg-convert target/sandbox/build/editor_fidget.svg \
   -o target/sandbox/build/editor_fidget.png
 rsvg-convert target/sandbox/build/editor_fidget_cube.svg \
   -o target/sandbox/build/editor_fidget_cube.png
+rsvg-convert target/sandbox/build/editor_toolpaths.svg \
+  -o target/sandbox/build/editor_toolpaths.png
 ```
 
 Quick Look thumbnails can crop wide SVGs rather than preserve the viewport;
@@ -128,13 +133,28 @@ before/after runs when evaluating small changes.
 | Torus orbit | 400 × 600 | 2 | Same camera sequence |
 | Tanglecube orbit | 400 × 600 | 2 | Same camera sequence |
 | Gyroid sphere orbit | 400 × 600 | 2 | Same camera sequence |
-| Fidget cube orbit | 400 × 600 | 2 | Same camera sequence; Rhino-derived quadratic faces |
+| Fidget cube orbit | 400 × 600 | 2 | Same camera sequence; remeshes the Rhino-derived cube at depth 5 |
+| Toolpath orbit | 400 × 600 | 2 | Same camera sequence; remeshed cube plus directly generated tube triangles |
 
 The additional filters are `fidget_torus_profile_loop`,
-`fidget_tanglecube_profile_loop`, `fidget_gyroid_profile_loop`, and
-`fidget_cube_profile_loop`. These use the
+`fidget_tanglecube_profile_loop`, `fidget_gyroid_profile_loop`,
+`fidget_cube_profile_loop`, and `fidget_toolpaths_profile_loop`. These use the
 same helper as the original Fidget canary, changing only the document. Their
 editable formulas and sources are described in [the examples guide](../examples/README.md).
+
+The cube and toolpath fixtures now use [mesh previews](fidget-mesh.md), not voxel
+rendering. Their current canaries include CPU meshing every frame, triangle
+rasterization, and native upload/readback when the GPU is available. The toolpath
+sink generates tube triangles directly, without implicit path fields. Earlier
+voxel timings are not unchanged baselines. Other Fidget canaries still use the voxel path
+described below.
+
+A 2026-09-13 sandboxed run of the mesh toolpath canary on the M3 Pro measured
+40.03 ms median (44.22 ms maximum) across eight frames after five warm-up frames,
+at an 800 × 1200 raster. This includes Grap path generation, direct tube mesh
+construction, cube remeshing at depth 5, and **CPU triangle rasterization**;
+Seatbelt exposed no GPU adapter. The first frame was 50.88 ms. These are
+headless viewport-build timings, not native GPU or input-to-display latency.
 
 Fidget receives ordinary camera annotations at the viewport's source path. It
 uses the library's normal automatic backend: GPU when available, CPU fallback

@@ -341,6 +341,12 @@ fn fidget_cube_profile_loop() {
 }
 
 #[test]
+#[ignore]
+fn fidget_toolpaths_profile_loop() {
+    fidget_orbit_profile(Example::Toolpaths);
+}
+
+#[test]
 fn complex_fidget_examples_render_visible_surfaces() {
     let side = 64;
     for example in [

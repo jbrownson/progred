@@ -373,3 +373,33 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     }
     assert_eq!(starts, 42);
 }
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn example_tubes_compile_without_gpu_memory_operations() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let stack = crate::stack::load();
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &stack.libraries,
+    };
+    let mut tubes = super::fidget::Tubes::new(0.005).unwrap();
+    let evaluation = run(&mut tubes, |scope| {
+        ::grap::apply_scoped(&names["crosshatch"].into(), [], &sources, scope, 100_000)
+    });
+    assert!(evaluation.completed && !absent::is_absent(&evaluation.result));
+    let paths = tubes.finish();
+    assert_eq!(paths.len(), 42);
+    for (index, tree) in paths.into_iter().enumerate() {
+        let shape = fidget_engine::vm::VmShape::from(tree);
+        assert!(
+            !shape.inner().data().iter_asm().any(|op| matches!(
+                op,
+                fidget_engine::compiler::RegOp::Load(..)
+                    | fidget_engine::compiler::RegOp::Store(..)
+            )),
+            "path {index} requires spilling, which Fidget's GPU interpreter does not implement"
+        );
+        fidget_engine::wgpu::RenderShape::new(&shape).unwrap();
+    }
+}

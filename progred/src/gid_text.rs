@@ -825,6 +825,7 @@ mod checked_in_files {
             Example::Tanglecube,
             Example::Gyroid,
             Example::Cube,
+            Example::Toolpaths,
         ] {
             let (doc, binders) = parse(example.source()).expect("the example parses");
             assert_eq!(print(&doc, &binders), example.source(), "{example:?}");

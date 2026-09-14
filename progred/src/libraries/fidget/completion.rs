@@ -26,6 +26,8 @@ enum Slot {
     Field,
     Parameters(Vec<CellId>),
     Number,
+    Size,
+    Depth,
     Axis,
 }
 
@@ -33,7 +35,13 @@ fn argument(parameters: &[CellId], field: CellId) -> Option<Slot> {
     parameters.contains(&field).then_some(())?;
     match field {
         LEFT | RIGHT | OPERAND | FIELD => Some(Slot::Field),
-        RADIUS | DELTA_X | DELTA_Y | DELTA_Z => Some(Slot::Number),
+        RADIUS | DELTA_X | DELTA_Y | DELTA_Z | MIN_X | MAX_X | MIN_Y | MAX_Y | MIN_Z | MAX_Z => {
+            Some(Slot::Number)
+        }
+        super::presentation::vocabulary::VALUE => Some(Slot::Expression),
+        crate::libraries::layout::vocabulary::WIDTH
+        | crate::libraries::layout::vocabulary::HEIGHT => Some(Slot::Size),
+        MESH_DEPTH => Some(Slot::Depth),
         _ => None,
     }
 }
@@ -43,7 +51,8 @@ fn called_shape(value: &Value) -> Option<CellId> {
         .as_record()?
         .get(&::grap::vocabulary::FUNCTION)?
         .as_cell()?;
-    (matches!(function, SPHERE | CIRCLE) || SHAPES.contains(&function)).then_some(function)
+    (matches!(function, SPHERE | CIRCLE | PREVIEW_MESH) || SHAPES.contains(&function))
+        .then_some(function)
 }
 
 fn call_parameters(request: &CompletionRequest<'_>, function: CellId) -> Option<Vec<CellId>> {
@@ -182,6 +191,12 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                 ),
             ]),
             (Slot::Number, CompletionKind::Value) => Some(f32::completions(request.query)),
+            (Slot::Size, CompletionKind::Value) => {
+                Some(crate::libraries::f64::completions(request.query))
+            }
+            (Slot::Depth, CompletionKind::Value) => {
+                Some(crate::libraries::u64::completions(request.query))
+            }
             (Slot::Axis, CompletionKind::Value) => Some(
                 [X, Y, Z]
                     .into_iter()

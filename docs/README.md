@@ -28,6 +28,9 @@ boundary, the frame stages, and their verification.
 [Performance checks](performance.md) describes the shared headless frame harness
 and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
 dated measurement report.
+[Fidget meshing](fidget-meshing-2026-09-13.md) records the headless cube experiment
+and its quality limitations. The [mesh viewport](fidget-mesh.md) describes the
+subsequent in-app option, which deliberately remeshes every frame.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.
@@ -35,4 +38,4 @@ The [release checklist](release-checklist.md) covers distribution concerns.
 [Examples](../examples/README.md) lists the bundled documents, shortcuts, and
 the formulas behind the Fidget shapes.
 [Toolpaths](toolpaths.md) describes the first streaming CAM geometry library
-and its Rhino-derived line-preview example.
+and its Rhino-derived combined model-and-path preview.

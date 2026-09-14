@@ -13,7 +13,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Streaming diagonal passes mapped onto the cube's curved top face |
+| 9 | `toolpaths.gid` | Gold tube triangles on the meshed blue cube, in one depth-tested viewport |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -50,9 +50,12 @@ chamfer `0.1`, and control-point depth `0.5`. The resulting face-center depressi
 is `0.125`, not `0.5`. Edit or scrub those constants in the source.
 
 The left viewport calls the function and wraps its result in a cyan scene object
-for `preview 3d`. The cube function itself still returns an ordinary field.
+for `preview mesh` at mesh depth 5. The cube function itself still returns an ordinary field.
 Its explicit bounds are −0.6…0.6, in the same model units; no geometry scaling
-or cube-specific Rust primitive is involved. Orbit and zoom work normally.
+or cube-specific Rust primitive is involved. Orbit and zoom work normally, with
+fresh CPU meshing on every frame and GPU triangle drawing on native platforms.
+Expand `panes` to change `mesh depth` or use `preview 3d` for comparison.
+See [the mesh viewport](../docs/fidget-mesh.md) for parameters and limitations.
 See [the geometry derivation](../docs/fidget-cube.md) for correspondence to the
 Rhino surfaces, parameter limitations, and what is not yet a CAM model.
 
@@ -69,10 +72,16 @@ measurements using the actual example documents.
 `toolpaths.gid` uses Grap to generate two diagonal sweeps and map their points.
 Both the row loop and the sampling loop are editable example functions; only
 point emission and the generic mapping scope are native toolpath operations.
-The left viewport shows a fitted, fixed-isometric line preview; resize the pane
-or edit/scrub the row counts, UV spacing, or mapping constants. This first view
-does not orbit or play back a cutter. The paths are surface samples, not
+The left viewport uses `preview paths mesh`: Fidget meshes the blue cube at depth
+5, and the path sink generates gold tube triangles directly. Both are rebuilt
+every frame and share one depth buffer; drag to orbit and scroll to zoom.
+Edit/scrub the row counts, UV spacing,
+mapping constants, colors, or explicit line radius. The latter controls visual
+thickness, not cutter size. The paths are surface samples, not
 compensated cutter locations, and no links between passes are implied.
+Expand `panes` to change `mesh depth` or use `preview paths 3d` for the voxel
+comparison. The document includes its own copy of the cube definition; its parameters and
+the path mapping are independent. Cutter playback is not implemented yet.
 
 See [toolpaths](../docs/toolpaths.md) for the streaming interface, its optional
 recorder, and the boundary between this experiment and machining motion.

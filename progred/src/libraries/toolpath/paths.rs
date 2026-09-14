@@ -49,6 +49,7 @@ pub enum Command {
 pub enum InvalidPath {
     NonFinitePoint,
     MissingStart,
+    CoordinateRange,
 }
 
 #[cfg(test)]

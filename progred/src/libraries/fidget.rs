@@ -23,6 +23,9 @@ use fidget_engine::{
 use gid::{CellId, Cells, Value};
 
 mod completion;
+pub(crate) mod mesh;
+#[cfg(all(test, feature = "mesh-experiment"))]
+mod mesh_experiment;
 mod projection;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
@@ -31,6 +34,13 @@ use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use puri::{Affine, ImageAlphaType, ImageData, ImageFormat, Size, Vec2};
 use std::{cell::RefCell, rc::Rc};
+
+#[cfg(not(target_arch = "wasm32"))]
+fn gpu_result<T, E: std::fmt::Debug>(stage: &str, result: Result<T, E>) -> Option<T> {
+    result
+        .inspect_err(|error| eprintln!("Fidget GPU {stage} failed: {error:?}; using CPU fallback"))
+        .ok()
+}
 
 const DEFAULT_PREVIEW_SIZE: f64 = 256.0;
 const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / 256.0;
@@ -64,6 +74,9 @@ pub mod vocabulary {
     pub const DIFFERENCE: CellId = CellId::from_u128(0xc621348e3c35e46e87c1994eb1a50965);
     pub const PREVIEW: CellId = CellId::from_u128(0x69662683bafef0d10c88d46245cb638f);
     pub const PREVIEW_3D: CellId = CellId::from_u128(0x9a8142ecc3124e873dd2ad955d28fb85);
+    pub const PREVIEW_MESH: CellId = CellId::from_u128(0x95eec28ff8cc6ba67153f9dfc4021139);
+    pub const MESH_DEPTH: CellId = CellId::from_u128(0x47114a01984bb53e1538906f13333f84);
+    pub const INVALID_MESH_DEPTH: CellId = CellId::from_u128(0xf1130a671f8af0a4444438a64450496c);
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
     pub const SCENE: CellId = CellId::from_u128(0xd6757ca4cb992116fe31ede39530709d);
     pub const COLOR: CellId = CellId::from_u128(0xd6b4c91765541de967c02878c42d15ea);
@@ -128,7 +141,7 @@ fn preview_value(
     else {
         return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
-    let validation = if marker == vocabulary::PREVIEW_3D {
+    let validation = if matches!(marker, vocabulary::PREVIEW_3D | vocabulary::PREVIEW_MESH) {
         scene_objects(&field).map(|_| ())
     } else {
         tree(&field).map(|_| ()).ok_or(vocabulary::INVALID_FIELD)
@@ -277,16 +290,25 @@ fn preview_function(
     )
 }
 
-fn preview_3d_function(
+pub(crate) fn preview_3d_function(
     context: &mut ::grap::Context,
     call: Expression,
     environment: &Environment,
+) -> Result<Value, Halt> {
+    volume_preview_function(context, call, environment, vocabulary::PREVIEW_3D)
+}
+
+fn volume_preview_function(
+    context: &mut ::grap::Context,
+    call: Expression,
+    environment: &Environment,
+    marker: CellId,
 ) -> Result<Value, Halt> {
     preview_value(
         context,
         call,
         environment,
-        vocabulary::PREVIEW_3D,
+        marker,
         [
             (vocabulary::MIN_X, -80.0),
             (vocabulary::MAX_X, 80.0),
@@ -345,6 +367,10 @@ pub fn functions() -> ForeignFunctions {
         vocabulary::PREVIEW_3D,
         ForeignFunction::new(preview_3d_function),
     )
+    .register(
+        vocabulary::PREVIEW_MESH,
+        ForeignFunction::new(mesh::preview),
+    )
 }
 
 fn one_marker(fields: &gid::Record) -> Option<CellId> {
@@ -382,6 +408,18 @@ fn parameters(marker: CellId) -> Option<&'static [CellId]> {
             Some(&[LEFT, RIGHT])
         }
         NEGATE | ABS | SQRT | SQUARE | SIN | COS => Some(&[OPERAND]),
+        PREVIEW_MESH => Some(&[
+            presentation::vocabulary::VALUE,
+            crate::libraries::layout::vocabulary::WIDTH,
+            crate::libraries::layout::vocabulary::HEIGHT,
+            MIN_X,
+            MAX_X,
+            MIN_Y,
+            MAX_Y,
+            MIN_Z,
+            MAX_Z,
+            MESH_DEPTH,
+        ]),
         _ => None,
     }
 }
@@ -653,9 +691,10 @@ fn zoom_handler(
     }
 }
 
-struct SceneObject {
-    tree: Tree,
-    color: [u8; 3],
+#[derive(Clone)]
+pub(crate) struct SceneObject {
+    pub(crate) tree: Tree,
+    pub(crate) color: [u8; 3],
 }
 
 fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
@@ -700,18 +739,24 @@ fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
         .collect()
 }
 
-struct VolumePreview {
-    objects: Vec<SceneObject>,
+#[derive(Clone)]
+pub(crate) struct VolumePreview {
+    pub(crate) objects: Vec<SceneObject>,
     size: Size,
     min: Vector3<f32>,
     max: Vector3<f32>,
 }
 
-fn volume_preview(value: &Value) -> Option<VolumePreview> {
-    let fields = value
-        .as_record()?
-        .get(&vocabulary::PREVIEW_3D)?
-        .as_record()?;
+pub(crate) fn volume_preview(value: &Value) -> Option<VolumePreview> {
+    volume_preview_fields(
+        value
+            .as_record()?
+            .get(&vocabulary::PREVIEW_3D)?
+            .as_record()?,
+    )
+}
+
+fn volume_preview_fields(fields: &gid::Record) -> Option<VolumePreview> {
     let preview = VolumePreview {
         objects: scene_objects(fields.get(&vocabulary::FIELD)?).ok()?,
         size: preview_size(fields)?,
@@ -730,7 +775,7 @@ fn volume_preview(value: &Value) -> Option<VolumePreview> {
         .min
         .iter()
         .zip(preview.max.iter())
-        .all(|(min, max)| min < max)
+        .all(|(min, max)| min.is_finite() && max.is_finite() && min < max)
         .then_some(preview)
 }
 
@@ -807,7 +852,7 @@ fn shade_geometry(pixel: GeometryPixel, color: [u8; 3], light: Vector3<f32>) -> 
     }
 }
 
-struct PreviewRenderer {
+pub(crate) struct PreviewRenderer {
     #[cfg(not(target_arch = "wasm32"))]
     gpu: GpuState,
 }
@@ -858,10 +903,12 @@ enum GpuState {
 impl GpuState {
     fn render(&mut self, objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
         if matches!(self, Self::Uninitialized) {
-            let gpu = pollster::block_on(Gpu::init());
-            *self = match gpu {
+            *self = match pollster::block_on(Gpu::init()) {
                 Ok(gpu) => Self::Available(GpuRenderer::new(gpu)),
-                Err(_) => Self::Unavailable,
+                Err(error) => {
+                    eprintln!("Fidget GPU initialization failed: {error:?}; using CPU fallback");
+                    Self::Unavailable
+                }
             };
         }
         match self {
@@ -917,24 +964,29 @@ impl GpuRenderer {
         } = self;
         merge.reset();
         for object in objects {
-            let shape = RenderShape::new(&VmShape::from(object.tree.clone())).ok()?;
-            voxel
-                .submit(
+            let shape = gpu_result(
+                "bytecode",
+                RenderShape::new(&VmShape::from(object.tree.clone())),
+            )?;
+            gpu_result(
+                "voxel submission",
+                voxel.submit(
                     &shape,
                     voxel_workspace,
                     &VoxelRenderConfig {
                         image_size: view.size,
                         world_to_model: view.world_to_model,
                     },
-                )
-                .ok()?;
-            effects
-                .submit_merge(
+                ),
+            )?;
+            gpu_result(
+                "merge submission",
+                effects.submit_merge(
                     voxel_workspace.output(),
                     effects::MergeSettings::default(),
                     merge,
-                )
-                .ok()?;
+                ),
+            )?;
         }
         let colors = objects
             .iter()
@@ -945,12 +997,16 @@ impl GpuRenderer {
                 ShapeColor::Rgb { r, g, b }
             })
             .collect::<Vec<_>>();
-        let colors = ShapeColorBuffers::new(&colors).ok()?;
-        effects
-            .submit_color(merge, &view.world_to_model, &colors, color_workspace, shade)
-            .ok()?;
-        effects.submit_ssao(merge, ssao).ok()?;
-        effects.submit_shade(merge, Some(ssao), shade).ok()?;
+        let colors = gpu_result("color bytecode", ShapeColorBuffers::new(&colors))?;
+        gpu_result(
+            "color submission",
+            effects.submit_color(merge, &view.world_to_model, &colors, color_workspace, shade),
+        )?;
+        gpu_result("SSAO submission", effects.submit_ssao(merge, ssao))?;
+        gpu_result(
+            "shade submission",
+            effects.submit_shade(merge, Some(ssao), shade),
+        )?;
         gpu.copy(shade.output(), read);
         Some(
             gpu.map(read)
@@ -962,18 +1018,17 @@ impl GpuRenderer {
     }
 }
 
-fn volume_display(
-    value: &Value,
-    camera: Camera,
+pub(crate) fn volume_display(
+    preview: &VolumePreview,
+    state: Option<&Value>,
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let preview = volume_preview(value)?;
     let raster_size = raster_size(preview.size, scale_factor)?;
     Some(image_layout(
         preview.size,
         raster_size,
-        renderer.render(&preview, camera, raster_size)?,
+        renderer.render(preview, camera(state), raster_size)?,
     ))
 }
 
@@ -986,45 +1041,51 @@ fn display(
         .as_record()
         .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
     {
-        let camera = camera(input.state);
         let drawing = volume_display(
-            input.value?,
-            camera,
+            &volume_preview(input.value?)?,
+            input.state,
             input.scale_factor,
             &mut renderer.borrow_mut(),
         )?;
-        let target = input.targets.current();
-        let hover = target.hover;
-        Some(crate::display::widget::before(
-            on_state_drag(
-                on_hover(drawing, hover.clone()),
-                hover,
-                target.select,
-                orbit_handler(input.state),
-            ),
-            Rc::new(move |context| {
-                let root = context.inputs.view.clone();
-                let path = context.path.to_vec();
-                crate::display::widget::scroll::scroll(
-                    context.inputs.styles.scale,
-                    move |world: &mut crate::Editor, delta| {
-                        let state = world
-                            .model
-                            .workspace
-                            .view(&root)
-                            .and_then(|view| view.annotations.at(&path));
-                        let (state, outcome) = zoom_handler(state)(delta);
-                        if let Some(state) = state {
-                            crate::editing::annotate(world, &root, &path, state);
-                        }
-                        outcome
-                    },
-                )
-            }),
-        ))
+        Some(interactive_volume(drawing, input))
     } else {
         slice_display(slice_preview(input.value?)?, input.scale_factor)
     }
+}
+
+pub(crate) fn interactive_volume(
+    drawing: Layout<crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    let target = input.targets.current();
+    let hover = target.hover;
+    crate::display::widget::before(
+        on_state_drag(
+            on_hover(drawing, hover.clone()),
+            hover,
+            target.select,
+            orbit_handler(input.state),
+        ),
+        Rc::new(move |context| {
+            let root = context.inputs.view.clone();
+            let path = context.path.to_vec();
+            crate::display::widget::scroll::scroll(
+                context.inputs.styles.scale,
+                move |world: &mut crate::Editor, delta| {
+                    let state = world
+                        .model
+                        .workspace
+                        .view(&root)
+                        .and_then(|view| view.annotations.at(&path));
+                    let (state, outcome) = zoom_handler(state)(delta);
+                    if let Some(state) = state {
+                        crate::editing::annotate(world, &root, &path, state);
+                    }
+                    outcome
+                },
+            )
+        }),
+    )
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -1050,6 +1111,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::DIFFERENCE, "difference"),
         (vocabulary::PREVIEW, "preview"),
         (vocabulary::PREVIEW_3D, "preview 3d"),
+        (vocabulary::PREVIEW_MESH, "preview mesh"),
+        (vocabulary::MESH_DEPTH, "mesh depth"),
         (vocabulary::FIELD, "field"),
         (vocabulary::SCENE, "scene"),
         (vocabulary::COLOR, "color"),
@@ -1077,6 +1140,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::INVALID_COLOR, "invalid opaque color"),
         (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
         (vocabulary::INVALID_SIZE, "invalid preview size"),
+        (
+            vocabulary::INVALID_MESH_DEPTH,
+            "mesh depth must be from 1 to 8",
+        ),
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
@@ -1113,6 +1180,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ),
     );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
+    let mesh_renderer = Rc::new(RefCell::new(mesh::Renderer::default()));
     Library::named(
         ID,
         "fidget",
@@ -1120,6 +1188,9 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::display::compose_partials([
             crate::display::partial(projection::field),
             crate::display::partial(move |input| display(input, &renderer)),
+            crate::display::partial(move |input| {
+                mesh::display(input, &mut mesh_renderer.borrow_mut())
+            }),
         ]),
     )
     .with_completions(completion::offers)

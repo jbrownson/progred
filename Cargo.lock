@@ -810,6 +810,7 @@ source = "git+https://github.com/mkeeter/fidget?rev=0c89e87e1b3a6d15cc0976ab6ff0
 dependencies = [
  "document-features",
  "fidget-core",
+ "fidget-mesh",
  "fidget-raster",
  "fidget-wgpu",
  "workspace-hack",
@@ -844,6 +845,20 @@ dependencies = [
  "serde",
  "strum",
  "thiserror 2.0.20",
+ "workspace-hack",
+]
+
+[[package]]
+name = "fidget-mesh"
+version = "0.5.0"
+source = "git+https://github.com/mkeeter/fidget?rev=0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6#0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6"
+dependencies = [
+ "arrayvec",
+ "fidget-core",
+ "nalgebra",
+ "ordered-float",
+ "rayon",
+ "static_assertions",
  "workspace-hack",
 ]
 
