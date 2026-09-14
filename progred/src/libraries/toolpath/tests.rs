@@ -417,6 +417,128 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     assert_eq!(starts, 42);
 }
 
+fn example_ball_path() -> (Recording, f64) {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let stack = crate::stack::load();
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &stack.libraries,
+    };
+    let mut recording = Recording::default();
+    let result = run(&mut recording, |scope| {
+        ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+    });
+    assert!(result.completed && !absent::is_absent(&result.result));
+    let radius = f64::read(doc.cells.value(names["ball_radius"]).unwrap()).unwrap();
+    (recording, radius)
+}
+
+#[test]
+fn example_stock_removal_is_seekable_and_only_removes_completed_cuts() {
+    let (recording, radius) = example_ball_path();
+    let tool = super::stock::BallEnd::new(radius, 0.22).unwrap();
+    let points: Vec<[f32; 3]> = (0..=20)
+        .flat_map(|y| {
+            (0..=20).flat_map(move |x| {
+                [0.38, 0.4, 0.45, 0.49]
+                    .map(|z| [x as f32 * 0.045 - 0.45, y as f32 * 0.045 - 0.45, z])
+            })
+        })
+        .collect();
+    let simulate = |progress| {
+        let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
+        recording
+            .playback::<InvalidPath>(progress, |a, b, completed| {
+                if completed {
+                    stock.cut(&tool, a, b)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        use fidget_engine::{shape::EzShape, vm::VmShape};
+        let shape = VmShape::from(stock.into_field());
+        let mut evaluator = VmShape::new_float_slice_eval();
+        let tape = shape.ez_float_slice_tape();
+        let coordinates: [Vec<_>; 3] =
+            std::array::from_fn(|i| points.iter().map(|p| p[i]).collect());
+        evaluator
+            .eval(&tape, &coordinates[0], &coordinates[1], &coordinates[2])
+            .unwrap()
+            .to_vec()
+    };
+    let start = simulate(0.0);
+    let middle = simulate(0.35);
+    let end = simulate(1.0);
+    let back = simulate(0.35);
+    let mut middle_changes = 0;
+    let mut final_changes = 0;
+    for (i, ((a, b), c)) in start.iter().zip(&middle).zip(&end).enumerate() {
+        assert!(*a < 0.0);
+        assert!(*b < 0.0 || *c >= 0.0, "removed stock must stay removed");
+        assert_eq!(*b, back[i]);
+        middle_changes += usize::from(*b > 0.0);
+        final_changes += usize::from(*c > 0.0);
+    }
+    assert!(middle_changes > 0 && final_changes > middle_changes);
+    assert!(end[0] < 0.0, "the corner remains stock");
+}
+
+#[test]
+#[ignore = "measures Fidget stock expression construction, compilation, and meshing"]
+fn stock_meshing_profile() {
+    use fidget_engine::{
+        mesh::{Octree, Settings},
+        vm::VmShape,
+    };
+    use nalgebra::{Scale3, Translation3};
+    use std::time::Instant;
+    let now = Instant::now();
+    let (recording, radius) = example_ball_path();
+    eprintln!(
+        "Fixture setup + Grap path generation: {:.2?}; {} segments",
+        now.elapsed(),
+        recording.segments().count()
+    );
+    let tool = super::stock::BallEnd::new(radius, 0.22).unwrap();
+    for progress in [0.0, 0.35, 1.0] {
+        for depth in [5, 6, 7] {
+            let now = Instant::now();
+            let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
+            recording
+                .playback::<InvalidPath>(progress, |a, b, completed| {
+                    if completed {
+                        stock.cut(&tool, a, b)?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            let expression = now.elapsed();
+            let now = Instant::now();
+            let shape = VmShape::from(stock.into_field()).try_into().unwrap();
+            let compile = now.elapsed();
+            let settings = Settings {
+                depth,
+                world_to_model: Translation3::new(0.0, 0.0, 0.125).to_homogeneous()
+                    * Scale3::new(0.6, 0.6, 0.725).to_homogeneous(),
+                ..Default::default()
+            };
+            let now = Instant::now();
+            let mesh = Octree::build(&shape, &settings).unwrap().walk_dual();
+            eprintln!(
+                "stock {progress:.2}, depth {depth}: expression {expression:.2?}, compile {compile:.2?}, mesh {:.2?}, {} triangles",
+                now.elapsed(),
+                mesh.triangles.len()
+            );
+            assert!(!mesh.triangles.is_empty());
+            assert!(
+                mesh.vertices
+                    .iter()
+                    .all(|v| v.iter().all(|x| x.is_finite()))
+            );
+        }
+    }
+}
+
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn example_tubes_compile_without_gpu_memory_operations() {

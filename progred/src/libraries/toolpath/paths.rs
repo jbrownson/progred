@@ -80,13 +80,13 @@ impl Recording {
     }
 
     /// Emit complete and upcoming segments, splitting the segment at the cursor.
-    pub fn playback(
+    pub fn playback<E: From<InvalidPath>>(
         &self,
         progress: f64,
-        mut emit: impl FnMut(Point3, Point3, bool) -> Result<(), InvalidPath>,
-    ) -> Result<Option<Point3>, InvalidPath> {
+        mut emit: impl FnMut(Point3, Point3, bool) -> Result<(), E>,
+    ) -> Result<Option<Point3>, E> {
         if !progress.is_finite() {
-            return Err(InvalidPath::NonFinitePoint);
+            return Err(InvalidPath::NonFinitePoint.into());
         }
         let mut remaining = progress.clamp(0.0, 1.0) * self.length()?;
         let mut position = None;
@@ -142,7 +142,7 @@ mod playback_tests {
         for (progress, expected) in [(0.0, 0.0), (0.25, 1.0), (0.5, 11.0), (1.0, 13.0)] {
             let mut completed = 0.0;
             let position = path
-                .playback(progress, |a, b, done| {
+                .playback::<InvalidPath>(progress, |a, b, done| {
                     assert!(distance(a, b) <= 3.0);
                     if done {
                         completed += distance(a, b);
@@ -157,13 +157,45 @@ mod playback_tests {
     }
 
     #[test]
+    fn playback_preserves_consumer_errors_and_stops_emitting() {
+        #[derive(Debug, PartialEq)]
+        enum Error {
+            Path(InvalidPath),
+            Consumer,
+        }
+        impl From<InvalidPath> for Error {
+            fn from(error: InvalidPath) -> Self {
+                Self::Path(error)
+            }
+        }
+        let mut path = Recording::default();
+        path.start_at([0.0; 3]).unwrap();
+        path.line_to([1.0; 3]).unwrap();
+        path.line_to([2.0; 3]).unwrap();
+        let mut calls = 0;
+        let result = path.playback(1.0, |_, _, _| {
+            calls += 1;
+            Err(Error::Consumer)
+        });
+        assert_eq!(result, Err(Error::Consumer));
+        assert_eq!(calls, 1);
+        assert_eq!(
+            path.playback::<Error>(f64::NAN, |_, _, _| panic!("invalid progress must not emit")),
+            Err(Error::Path(InvalidPath::NonFinitePoint)),
+        );
+    }
+
+    #[test]
     fn empty_zero_length_and_overflow_are_explicit() {
         let mut path = Recording::default();
-        assert_eq!(path.playback(0.5, |_, _, _| Ok(())).unwrap(), None);
+        assert_eq!(
+            path.playback::<InvalidPath>(0.5, |_, _, _| Ok(())).unwrap(),
+            None
+        );
         path.start_at([2.0; 3]).unwrap();
         path.line_to([2.0; 3]).unwrap();
         assert_eq!(
-            path.playback(0.5, |_, _, _| Ok(())).unwrap(),
+            path.playback::<InvalidPath>(0.5, |_, _, _| Ok(())).unwrap(),
             Some([2.0; 3])
         );
         path.start_at([-f64::MAX; 3]).unwrap();

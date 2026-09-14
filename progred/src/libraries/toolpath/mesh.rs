@@ -97,12 +97,23 @@ pub(super) fn display(
                 evaluation.remaining_fuel,
             );
         }
-        let drawing = (|| {
-            if let Some(settings) = &playback {
-                settings.draw(&recording, &mut tubes, radius, color).ok()?;
+        let mut scene = model.clone();
+        if let Some(settings) = &playback {
+            match settings.draw(&recording, &mut tubes, radius, color) {
+                Ok(Some(stock)) => scene.objects = vec![stock],
+                Ok(None) => {}
+                Err(_) => {
+                    return context.project.transient(
+                        context.text,
+                        build,
+                        absent::with_reason(INVALID_INPUT),
+                        evaluation.remaining_fuel,
+                    );
+                }
             }
-            // Exact depth ties keep the paths; both use the same depth buffer.
-            fidget::mesh::append(&mut tubes.geometry, &model, depth)?;
+        }
+        let drawing = (|| {
+            fidget::mesh::append(&mut tubes.geometry, &scene, depth)?;
             fidget::mesh::image(
                 &tubes.geometry,
                 &model,

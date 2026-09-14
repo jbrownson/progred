@@ -13,7 +13,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Slider-driven ball-end cutter playback over the meshed cube, with a stock outline |
+| 9 | `toolpaths.gid` | Slider-driven ball-end cutter and top-face stock removal over the meshed cube |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -72,18 +72,26 @@ measurements using the actual example documents.
 `toolpaths.gid` uses Grap to generate two diagonal sweeps and map their points.
 Both the row loop and the sampling loop are editable example functions; only
 point emission and the generic mapping scope are native toolpath operations.
-The left viewport uses `preview paths mesh`: Fidget meshes the blue cube at depth
-5, and path segments become tube triangles in the same depth buffer. Drag to orbit
+The left viewport uses `preview paths mesh`: path segments become tube triangles
+alongside the simulated stock. With stock disabled, Fidget meshes the blue
+reference cube instead. Drag to orbit
 and scroll to zoom. The slider below the viewport seeks by cutting distance,
-showing completed paths in gold, upcoming paths in gray, and the tool in orange.
+showing upcoming paths in gold and the tool in orange; completed paths disappear.
 Edit/scrub the row counts, UV spacing,
 mapping constants, colors, or explicit line radius. The latter controls visual
 thickness, not cutter size. A separate Grap mapping offsets surface samples along
 their normals by the editable ball radius. No links between passes are implied.
 Expand `panes` to change `mesh depth` or use `preview paths 3d` for the voxel
 comparison. The document includes its own copy of the cube definition; its parameters and
-the path mapping are independent. The wire box shows a larger starting stock
-envelope, not simulated stock removal. Controls use per-view state without making
+the path mapping are independent. Tan stock starts as a one-inch cube, bounded
+by −0.5…0.5 on every axis (one model unit means one inch in this example); completed
+cuts subtract continuous swept ball-end solids through Fidget. The block's
+uncut sides remain: this is top-face finishing, not a program that machines the
+entire cube. Expand `playback` to edit the stock bounds and color; removing its
+`stock` field returns to the wire envelope and reference model. `mesh depth`
+(7 in the example) controls stock and reference meshing, not toolpath spacing.
+Stock playback is currently mesh-only; the voxel comparison renders static paths
+and the reference model. Controls use per-view state without making
 the document unsaved. Every frame regenerates the paths and meshes; there is no cache.
 
 See [toolpaths](../docs/toolpaths.md) for the streaming interface, its optional

@@ -75,7 +75,8 @@ sweep or construct linking curves. The separate Grap `ball center` mapping
 offsets each contact point along the analytic surface normal by `ball radius`;
 `ball-center passes` wraps the contact generator with that mapping. The radius
 is shared by the mapping and preview tool. The first fixture covers one
-face only and retains the original model units without assigning a machine unit.
+face only. The example interprets one model unit as one inch; the runtime still
+uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
 ## Previews
 
@@ -113,10 +114,10 @@ meshing step is involved in the path geometry. Paths and model share the triangl
 renderer, camera, lighting, and depth buffer; no overlay or depth bias is used.
 Failed path generation discards the whole preview before meshing the model.
 
-Command+9's example uses this mesh viewport at depth 5: 42 paths (1,056
-segments) over a blue cube, with a 500,000-fuel budget including Grap ball-radius
-compensation. Every frame reruns the
-Grap path program, generates the tubes, and remeshes the cube. There is no mesh
+Command+9's example uses this mesh viewport: 42 paths (1,056 segments), with a
+blue reference cube when stock is disabled, mesh depth 7, and a 500,000-fuel budget
+including Grap ball-radius compensation. Every frame reruns the Grap path
+program, generates the tubes, and rebuilds either the stock or reference mesh. There is no mesh
 or image cache. Native builds use GPU triangle drawing with synchronous readback;
 web/headless fallback uses the same geometry in the CPU triangle renderer.
 Expand `panes` to change `mesh depth` or replace `preview paths mesh` with
@@ -163,18 +164,64 @@ supplies progress from the reusable [controls](controls.md) library.
 
 The recording computes total cutting-segment length, then visits segments again,
 splitting the current segment at the requested distance. Completed segments are
-gold, upcoming segments gray, and the tool orange. Path starts do not contribute
+hidden, upcoming segments use the requested path color, and the tool is orange.
+The current segment is split exactly at the playback position: only its upcoming
+portion is drawn. Path starts do not contribute
 distance: the cursor jumps between disconnected passes rather than inventing
 linking moves. Progress is not machining time. Empty paths have no tool; zero
-length segments are well-defined. The visual tool is a vertical capsule with a
-ball tip: paths identify its ball center, and length measures tip to top.
+length segments are well-defined. The visual tool is a vertical ball-end cutter,
+with a hemispherical tip and a flat-topped cylindrical flute. Paths identify its
+ball center, and length measures tip to top.
+Playback is generic over the consumer's error type, with conversion from path
+validation errors. The preview translates invalid geometry to ordinary absents.
 
-The example's wire box is 1.1 units on each axis around the one-unit model. It
-shows the starting stock envelope, **not stock removal or a collision check**.
-The finished model remains visible throughout playback. Geometry, path recording,
-and raster image are rebuilt for every frame, including slider drags.
+Without `stock`, the stock bounds draw a wire envelope. With that field, its
+record supplies an opaque `color`. The preview's ordinary `mesh depth` determines
+the stock mesh resolution too. Command+9 starts with a one-inch cube, bounded
+by −0.5…0.5 on all three axes, so the passes carve the indent into its top face
+without first removing an oversized stock allowance.
+Stock replaces the reference solid while enabled, avoiding coplanar surfaces
+where their boundaries coincide. It shares the paths' depth buffer, so intact
+material hides any path beneath it. There is no x-ray overlay or depth offset. Geometry, path recording,
+stock, and raster image are rebuilt for every frame, including slider drags.
 
-Variable orientation, explicit links, stock removal, and machine/postprocessor
-output remain separate next steps. In
+### Fidget stock removal
+
+`toolpath::stock::Stock` starts with a box-shaped Fidget field. Each completed
+segment, including the completed portion of the current segment, subtracts the
+continuous swept solid of a vertical `BallEnd` tool: `stock.max(-sweep)`.
+Fidget's ordinary CPU mesher builds triangles from the resulting expression;
+the preview uses the same triangle renderer as other mesh views. There is no
+heightfield, sampled stock grid, or fallback stock algorithm. The target model
+does not participate in removal: a bad path can cut past the intended surface.
+Stock mode does not mesh or draw that reference solid.
+
+A sweep unions the moving ball with the moving finite cylinder above its
+equator. The ball uses squared distance to a segment. For the cylinder, each
+query Z restricts which portion of the motion can contain that point; radial
+distance is minimized over that interval, with the overall end planes bounding
+it vertically. These are closed-form Fidget expressions, not sampled tool
+placements or a loop executed for each queried point. Horizontal, vertical,
+sloping, and zero-length segments share the same solid semantics. The tool is
+still fixed along +Z; orientation is not inferred from the path's tangent.
+
+The remaining stock is a full 3D solid, so through cuts and material over a
+cavity are representable. Meshing still approximates the implicit surface, and
+coarse depths can visibly distort narrow grooves. Seeking backward reconstructs
+the expression from the initial block; no simulation history or mesh is cached.
+Disconnected starts still have no linking cut. No holder or collision model is
+implied, and this models the programmed polyline, not controller-specific motion
+blending or physical cutting behavior.
+
+The example demonstrates top-face finishing only. At completion, stock remains
+around that face and on the other five sides; it is not yet a roughing program
+or a manufacturing simulation for the entire cube.
+
+Variable orientation, general tool profiles (including arcs and separate cutting
+and collision parts), explicit links, and machine/postprocessor output remain
+separate next steps. Mesh/non-mesh mode controls and render-quality controls can
+use the controls library later; path-generation tolerance belongs to the program
+and is distinct from mesh/raster resolution. Upcoming-path windows, transparency,
+and async/coarse-to-fine rendering are also deferred. In
 particular, the existing Fidget cube field is not an exact signed distance;
 subtracting a cutter radius from it would not implement a geometric offset.

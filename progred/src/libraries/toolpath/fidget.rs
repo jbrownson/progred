@@ -48,7 +48,7 @@ pub(super) fn coordinate(point: Point3) -> Result<[f32; 3], InvalidPath> {
         .ok_or(InvalidPath::CoordinateRange)
 }
 
-fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, InvalidPath> {
+pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, InvalidPath> {
     let direction = std::array::from_fn::<_, 3, _>(|i| b[i] - a[i]);
     let length_squared: f32 = direction.iter().map(|n| n * n).sum();
     if !length_squared.is_finite() {

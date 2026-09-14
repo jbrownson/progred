@@ -114,6 +114,7 @@
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
     "state": 3775735ae4c156144c110ba819cb1e39,
     "step": 569e33fee165d346791e05c0e9cfea8e,
+    "stock": c7dc9217fe6809ea89ba31d458706e5c,
     "stock_max": 607b5e9a8636c8258959709bf0c3506b,
     "stock_min": 8ea1172ebbc67d795f0810ee5ca04d00,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
@@ -1113,24 +1114,29 @@
                       },
                       stock_max: {
                         y: {
-                          f64: 0x9a9999999999e13f,
+                          f64: 0x000000000000e03f,
                         },
                         x: {
-                          f64: 0x9a9999999999e13f,
+                          f64: 0x000000000000e03f,
                         },
                         z: {
-                          f64: 0x9a9999999999e13f,
+                          f64: 0x000000000000e03f,
                         },
                       },
                       stock_min: {
                         y: {
-                          f64: 0x9a9999999999e1bf,
+                          f64: 0x000000000000e0bf,
                         },
                         x: {
-                          f64: 0x9a9999999999e1bf,
+                          f64: 0x000000000000e0bf,
                         },
                         z: {
-                          f64: 0x9a9999999999e1bf,
+                          f64: 0x000000000000e0bf,
+                        },
+                      },
+                      stock: {
+                        color: {
+                          rgb: 0xb89b6d,
                         },
                       },
                       tool_radius: {
@@ -1142,7 +1148,7 @@
                     f32: 0x9a9919bf,
                   },
                   mesh_depth: {
-                    u64: 0x0500000000000000,
+                    u64: 0x0700000000000000,
                   },
                   fuel: {
                     f64: 0x0000000080841e41,

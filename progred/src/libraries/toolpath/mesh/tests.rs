@@ -122,6 +122,36 @@ fn invalid_emissions_do_not_change_geometry_or_the_previous_point() {
 }
 
 #[test]
+fn visible_ball_end_matches_the_subtraction_tool_dimensions() {
+    let mut tubes = Tubes::new(0.25, [255; 3]).unwrap();
+    tubes.ball_end([0.0; 3], 1.0).unwrap();
+    assert_eq!(tubes.geometry.vertices[0].position.z, -0.25);
+    assert_eq!(tubes.geometry.vertices.last().unwrap().position.z, 0.75);
+    for v in &tubes.geometry.vertices {
+        let p = v.position;
+        assert!(p.z <= 0.75 && p.z >= -0.25);
+        if p.z < 0.0 {
+            assert!((p.norm() - 0.25).abs() < 1e-6);
+        } else {
+            assert!(p.xy().norm() <= 0.250001);
+        }
+    }
+    for t in tubes.geometry.indices.chunks_exact(3) {
+        let [a, b, c] = [t[0], t[1], t[2]].map(|i| tubes.geometry.vertices[i as usize].position);
+        let center = (a + b + c) / 3.0;
+        let normal = (b - a).cross(&(c - a));
+        let outward = if a.z == 0.75 && b.z == 0.75 && c.z == 0.75 {
+            Vector3::z()
+        } else if center.z < 0.0 {
+            center
+        } else {
+            Vector3::new(center.x, center.y, 0.0)
+        };
+        assert!(normal.dot(&outward) > 0.0);
+    }
+}
+
+#[test]
 fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
     let stack = crate::stack::load();
     for (depth, valid) in [(5, true), (0, false), (9, false)] {

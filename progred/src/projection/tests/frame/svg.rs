@@ -455,13 +455,17 @@ fn svg_bench_renders_toolpath_source_and_preview() {
             _ => None,
         })
         .expect("the combined toolpath viewport renders an image");
-    let mut model = 0;
+    let mut stock = 0;
     let mut paths = 0;
     for pixel in image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0) {
-        model += usize::from(pixel[2] > pixel[0]);
+        stock += usize::from(
+            pixel[0] > pixel[1]
+                && pixel[1] > pixel[2]
+                && u16::from(pixel[0]) < 2 * u16::from(pixel[2]),
+        );
         paths += usize::from(u16::from(pixel[0]) > 2 * u16::from(pixel[2]));
     }
-    assert!(model > 100 && paths > 100, "model {model}, paths {paths}");
+    assert!(stock > 100 && paths > 100, "stock {stock}, paths {paths}");
     write_svg(&bench.list, 760.0, 548.0, "#F6F6F8", "toolpaths.svg");
 }
 

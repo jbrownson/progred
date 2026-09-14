@@ -134,7 +134,7 @@ before/after runs when evaluating small changes.
 | Tanglecube orbit | 400 × 600 | 2 | Same camera sequence |
 | Gyroid sphere orbit | 400 × 600 | 2 | Same camera sequence |
 | Fidget cube orbit | 400 × 600 | 2 | Same camera sequence; remeshes the Rhino-derived cube at depth 5 |
-| Toolpath orbit | 400 × 600 | 2 | Same camera sequence; remeshed cube, compensated cutter paths, stock outline, and playback controls |
+| Toolpath orbit | 400 × 600 | 2 | Same camera sequence; compensated cutter paths, Fidget stock subtraction/meshing, and playback controls |
 
 The additional filters are `fidget_torus_profile_loop`,
 `fidget_tanglecube_profile_loop`, `fidget_gyroid_profile_loop`,
@@ -163,6 +163,59 @@ it includes the extra Grap mapping, an evaluation-local seekable recording, cutt
 and stock geometry, and a measured control strip that reduces the raster height.
 It still uses CPU rasterization. It is not an isolated measurement of slider
 overhead and does not predict native GPU interaction latency.
+
+With the now-removed heightfield stock-removal experiment enabled (160 grid cells per XY
+axis across the then-1.1-unit stock, progress 0.35), the same headless canary later measured 63.23 ms median
+(66.26 ms maximum), first frame 79.95 ms, again five warm-up/eight measured
+frames with CPU rasterization. This includes rebuilding the stock and its mesh
+on every frame. The small difference from the preceding 66.34 ms run is not an
+isolated speedup claim; it shows no obvious overall regression in this workload.
+Native GPU responsiveness still needs an interactive check.
+
+The fixture subsequently changed to one-inch stock and now omits the reference
+solid while stock is enabled, avoiding coplanar surfaces. The historical timings
+above include reference-cube meshing that this mode no longer performs.
+
+### Volumetric stock subtraction — 2026-09-14
+
+The heightfield experiment is replaced by ordinary Fidget box-minus-sweep
+expressions. The same M3 Pro sandbox canary (400 × 600 logical @2, playback 0.35,
+five warm-up and 60 measured frames) measured:
+
+| One-inch stock, no reference solid | Median | p95 | Maximum | First frame |
+| --- | ---: | ---: | ---: | ---: |
+| Heightfield, before replacement | 50.09 ms | 54.79 ms | 59.90 ms | 70.56 ms |
+| Fidget subtraction, mesh depth 7 | 256.91 ms | 272.24 ms | 311.57 ms | 283.39 ms |
+
+Both use CPU triangle rasterization because the sandbox has no Metal adapter.
+This compares usable implementations, not equal geometric approximations:
+Fidget can represent roofs and through-cuts, and depth 7 was chosen because
+depth 5 visibly distorted the narrow grooves. Completed path lines are now
+omitted. No expression, stock mesh, or image is cached across frames.
+
+To separate the geometry costs from rasterization:
+
+```bash
+./tools/sandbox-cargo test -p progred --release stock_meshing_profile -- --ignored --nocapture
+```
+
+One isolated run measured the following at depth 7. Each row is a single sample,
+not a median; meshing includes octree construction and dual-contour extraction.
+Fixture parsing, library setup, and Grap path generation are outside these
+columns (51.90 ms together in that run).
+
+| Playback | Build stock expression | Compile | Mesh + extract | Triangles |
+| --- | ---: | ---: | ---: | ---: |
+| 0% | 0.012 ms | 0.019 ms | 41.31 ms | 24,630 |
+| 35% | 0.333 ms | 8.17 ms | 218.18 ms | 61,266 |
+| 100% | 1.03 ms | 20.80 ms | 323.48 ms | 66,178 |
+
+The dominant cost is CPU meshing, not constructing the sweep expressions.
+Native GPU triangle drawing will not remove that cost. Remeshing every frame
+is therefore expected to be choppy; retained geometry and asynchronous work
+remain separate design decisions, not hidden fallbacks in this experiment.
+
+### Interpreting viewport measurements
 
 Fidget receives ordinary camera annotations at the viewport's source path. It
 uses the library's normal automatic backend: GPU when available, CPU fallback

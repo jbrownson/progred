@@ -13,6 +13,7 @@ mod fidget;
 mod mesh;
 pub mod paths;
 mod preview;
+pub mod stock;
 #[cfg(test)]
 mod tests;
 
@@ -42,6 +43,7 @@ pub mod vocabulary {
     pub const TOOL_LENGTH: CellId = CellId::from_u128(0x147708f5640ec6a4f9b6f4e4ffd2f7ab);
     pub const STOCK_MIN: CellId = CellId::from_u128(0x8ea1172ebbc67d795f0810ee5ca04d00);
     pub const STOCK_MAX: CellId = CellId::from_u128(0x607b5e9a8636c8258959709bf0c3506b);
+    pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
 }
 
 use paths::{InvalidPath, Point3, Sink};
@@ -303,6 +305,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (TOOL_LENGTH, "tool length"),
         (STOCK_MIN, "stock minimum"),
         (STOCK_MAX, "stock maximum"),
+        (STOCK, "stock"),
         (INVALID_INPUT, "invalid toolpath input"),
         (OUTPUT_REQUIRED, "toolpath output required"),
     ] {

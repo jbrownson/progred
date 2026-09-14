@@ -1,3 +1,4 @@
+use super::super::stock::{BallEnd, Stock};
 use super::*;
 
 #[derive(Clone)]
@@ -7,6 +8,53 @@ pub(super) struct Settings {
     length: f64,
     stock_min: Point3,
     stock_max: Point3,
+    stock_color: Option<[u8; 3]>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn completed_lines_disappear_including_the_completed_part_of_a_segment() {
+        let color = [20, 150, 230];
+        let mut path = Recording::default();
+        path.start_at([0.0; 3]).unwrap();
+        path.line_to([2.0, 0.0, 0.0]).unwrap();
+        for progress in [0.0, 0.25, 1.0] {
+            let settings = Settings {
+                progress,
+                radius: 0.1,
+                length: 0.5,
+                stock_min: [-3.0; 3],
+                stock_max: [3.0; 3],
+                stock_color: None,
+            };
+            let mut tubes = tubes::Tubes::new(0.02, color).unwrap();
+            assert!(
+                settings
+                    .draw(&path, &mut tubes, 0.02, color)
+                    .unwrap()
+                    .is_none()
+            );
+            let path_vertices: Vec<_> = tubes
+                .geometry
+                .vertices
+                .iter()
+                .filter(|v| v.color == color.map(|n| n as f32 / 255.0))
+                .collect();
+            if progress == 1.0 {
+                assert!(path_vertices.is_empty());
+            } else {
+                assert!(!path_vertices.is_empty());
+                let start = path_vertices
+                    .iter()
+                    .map(|v| v.position.x)
+                    .fold(f32::INFINITY, f32::min);
+                assert!((start - (2.0 * progress as f32 - 0.02)).abs() < 1e-6);
+            }
+        }
+    }
 }
 
 impl Settings {
@@ -17,7 +65,16 @@ impl Settings {
         let length = f64::read(r.get(&TOOL_LENGTH)?)?;
         let stock_min = super::super::read_point(r.get(&STOCK_MIN)?)?;
         let stock_max = super::super::read_point(r.get(&STOCK_MAX)?)?;
-        super::super::fidget::read_radius(radius)?;
+        let stock_color = match r.get(&STOCK) {
+            Some(value) => {
+                let fields = value.as_record()?;
+                Some(super::super::fidget::read_color(
+                    fields.get(&fidget::vocabulary::COLOR)?,
+                )?)
+            }
+            None => None,
+        };
+        BallEnd::new(radius, length)?;
         if !progress.is_finite()
             || !(0.0..=1.0).contains(&progress)
             || !length.is_finite()
@@ -34,6 +91,7 @@ impl Settings {
             length,
             stock_min,
             stock_max,
+            stock_color,
         })
     }
 
@@ -42,28 +100,41 @@ impl Settings {
         path: &Recording,
         tubes: &mut tubes::Tubes,
         line_radius: f64,
-        completed_color: [u8; 3],
-    ) -> Result<(), InvalidPath> {
-        let center = path.playback(self.progress, |a, b, completed| {
-            tubes.style(
-                line_radius,
+        path_color: [u8; 3],
+    ) -> Result<Option<fidget::SceneObject>, InvalidPath> {
+        let tool = BallEnd::new(self.radius, self.length).ok_or(InvalidPath::CoordinateRange)?;
+        let mut stock = self
+            .stock_color
+            .map(|color| {
+                Stock::block(self.stock_min, self.stock_max)
+                    .map(|stock| (stock, color))
+                    .ok_or(InvalidPath::CoordinateRange)
+            })
+            .transpose()?;
+        let center = path.playback(
+            self.progress,
+            |a, b, completed| -> Result<(), InvalidPath> {
                 if completed {
-                    completed_color
+                    if let Some((stock, _)) = &mut stock {
+                        stock.cut(&tool, a, b)?;
+                    }
                 } else {
-                    [145, 163, 178]
-                },
-            )?;
-            tubes.start_at(a)?;
-            tubes.line_to(b)
-        })?;
+                    tubes.style(line_radius, path_color)?;
+                    tubes.start_at(a)?;
+                    tubes.line_to(b)?;
+                }
+                Ok(())
+            },
+        )?;
         if let Some(center) = center {
             tubes.style(self.radius, [225, 94, 58])?;
-            tubes.start_at(center)?;
-            tubes.line_to([
-                center[0],
-                center[1],
-                center[2] + self.length - 2.0 * self.radius,
-            ])?;
+            tubes.ball_end(center, self.length)?;
+        }
+        if let Some((stock, color)) = stock {
+            return Ok(Some(fidget::SceneObject {
+                tree: stock.into_field(),
+                color,
+            }));
         }
         tubes.style(line_radius * 0.6, [137, 150, 163])?;
         for corner in 0..8 {
@@ -83,6 +154,6 @@ impl Settings {
                 }
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
