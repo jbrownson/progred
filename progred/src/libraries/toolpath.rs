@@ -15,6 +15,7 @@ mod mesh;
 pub mod paths;
 mod playback;
 mod preview;
+mod refined;
 pub mod stock;
 #[cfg(test)]
 mod tests;
@@ -35,6 +36,7 @@ pub mod vocabulary {
     pub const PREVIEW: CellId = CellId::from_u128(0xcdb8ec5a8c49550656067ace7eeb39b7);
     pub const PREVIEW_3D: CellId = CellId::from_u128(0x90764cc11a9ad180a4be8319232f2f8b);
     pub const PREVIEW_MESH: CellId = CellId::from_u128(0x6b5562bf1e69f9671cf97ad54985e4d0);
+    pub const PREVIEW_REFINED: CellId = CellId::from_u128(0x76f66199a77dd4a6f7af65f29f1cacf7);
     pub const LINE_RADIUS: CellId = CellId::from_u128(0x4de64314b3008dcdf01ac387dc68e63f);
     pub const PROGRAM: CellId = CellId::from_u128(0xf23c804bf137581b76605a51366d43b7);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0xa7763f9186b2c417fe1258246bb327db);
@@ -253,6 +255,10 @@ fn functions() -> ForeignFunctions {
         .register(PREVIEW_3D, ForeignFunction::new(fidget::preview).tracked())
         .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview).tracked())
         .register(
+            PREVIEW_REFINED,
+            ForeignFunction::new(refined::preview).tracked(),
+        )
+        .register(
             POINT,
             ForeignFunction::new(|context, call, environment| {
                 result(point(context, call, environment).map(point_value))
@@ -301,6 +307,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (PREVIEW, "preview paths"),
         (PREVIEW_3D, "preview paths 3d"),
         (PREVIEW_MESH, "preview paths mesh"),
+        (PREVIEW_REFINED, "preview paths refined"),
         (LINE_RADIUS, "line radius"),
         (PROGRAM, "program"),
         (PLAYBACK, "playback"),
@@ -325,7 +332,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::display::compose_partials([
             crate::display::partial(preview::display),
             crate::display::partial(fidget::display),
-            crate::display::partial(move |input| mesh::display(input, &mesh_renderer)),
+            crate::display::partial({
+                let renderer = mesh_renderer.clone();
+                move |input| mesh::display(input, &renderer)
+            }),
+            crate::display::partial(move |input| refined::display(input, &mesh_renderer)),
         ]),
     )
 }

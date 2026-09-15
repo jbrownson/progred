@@ -79,8 +79,11 @@ impl SoftwareScene {
 fn shading(config: &VoxelRenderConfig) -> impl Fn(GeometryPixel, [u8; 3]) -> [u8; 4] + use<> {
     let transform = config.mat();
     // Gradients are in sample coordinates; lighting is in the camera's orthonormal axes.
-    let normal_scale =
+    let mut normal_scale =
         Vector3::from_fn(|axis, _| transform.fixed_view::<3, 1>(0, axis).norm().recip());
+    // Fidget's sample Y points down the image; the mesh renderer's camera Y
+    // points up. Undo that reflection as well as the unequal sample spacing.
+    normal_scale.y = -normal_scale.y;
     let light = Vector3::new(0.35, -0.45, 1.0).normalize();
     move |pixel, color| {
         if pixel.depth == 0 {
@@ -158,6 +161,18 @@ mod tests {
             assert_eq!(views.last().unwrap().size.depth(), full.size.depth() * 4);
             assert!(request.refinements(128, 0).is_none());
             assert!(request.refinements(128, u32::MAX).is_none());
+        }
+    }
+
+    #[test]
+    fn doubling_first_resolution_skips_only_the_coarsest_level() {
+        for (width, height) in [(333.0, 751.0), (257.0, 129.0), (128.0, 64.0), (1.0, 1.0)] {
+            let request = request(width, height);
+            for first_max_edge in [128, 256] {
+                let sizes = request.resolutions(first_max_edge);
+                let skip = usize::from(sizes.len() > 1);
+                assert_eq!(request.resolutions(first_max_edge * 2), sizes[skip..]);
+            }
         }
     }
 
@@ -242,7 +257,6 @@ mod tests {
             let rotation = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians())
                 * Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
             let normal = rotation.inverse() * Vector3::new(0.3, 0.2, 1.0).normalize();
-            let normal = Vector3::new(normal.x, -normal.y, normal.z);
             let light = Vector3::new(0.35, -0.45, 1.0).normalize();
             let expected = (200.0 * (0.22 + 0.78 * normal.dot(&light).max(0.0))) as u8;
             for view in request.refinements(128, 4).unwrap() {

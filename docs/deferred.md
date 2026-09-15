@@ -109,11 +109,14 @@ model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
 both missed thin intersections and wrong-face normals but does not eliminate
 them. See the [tool-rim diagnostics](performance.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
-This is separate from Progred's scheduling policy: currently new input cancels
-even the first preview, which can starve display updates during continuous orbit.
-A proposed next step is to finish a coarse preview, retain only the newest
-pending request, and cancel superseded refinement. An old preview must remain
-explicitly stale rather than becoming the current computation's result.
+Command+9 now uses a retained mesh as the immediate camera-dependent fallback
+while current implicit images refine it. That removes the need to finish an
+obsolete coarse implicit image just to provide orbit feedback. Standalone
+implicit previews still cancel even their first stage on new input. Revisit
+finish-coarse scheduling only if a consumer without a usable fallback needs it;
+obsolete results must never become the current computation's result. Skipping
+intermediate meshes during rapid geometry edits is another possible policy,
+with the tradeoff of an older mesh when the user next orbits.
 
 ## Hover traversal order
 

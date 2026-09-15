@@ -23,9 +23,9 @@ fn top_face(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Bind
 }
 
 #[test]
-fn example_view_selects_both_renderers_with_the_same_playback_and_tool_diameter() {
+fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
     use crate::libraries::{controls::vocabulary as ui, layout::vocabulary as l, presentation};
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
     let sources = crate::sources::Sources {
         doc: &doc,
@@ -53,51 +53,40 @@ fn example_view_selects_both_renderers_with_the_same_playback_and_tool_diameter(
         .unwrap()
         .as_record()
         .unwrap();
-    for mode in [PREVIEW_MESH, PREVIEW_3D] {
-        let preview = ::grap::apply(
-            fields.get(&ui::VIEW).unwrap(),
-            [
-                (
-                    presentation::vocabulary::VALUE,
-                    fields
-                        .get(&presentation::vocabulary::VALUE)
-                        .unwrap()
-                        .clone(),
-                ),
-                (l::WIDTH, f64::value(400.0)),
-                (l::HEIGHT, f64::value(400.0)),
-                (
-                    ui::PARAMETERS,
-                    Value::record([
-                        (PROGRESS, f64::value(0.7)),
-                        (
-                            names["render_mode"],
-                            Value::record([(::grap::vocabulary::FFI, mode.into())]),
-                        ),
-                    ]),
-                ),
-            ],
-            &sources,
-            10_000,
-        );
-        assert!(preview.completed, "{:?}", preview.result);
-        let fields = preview
-            .result
-            .as_record()
-            .unwrap()
-            .get(&mode)
-            .expect("selected preview callable")
-            .as_record()
-            .unwrap();
-        let playback = fields.get(&PLAYBACK).unwrap();
-        assert!(super::playback::Settings::read(playback).is_some());
-        let playback = playback.as_record().unwrap();
-        assert_eq!(
-            f64::read(playback.get(&TOOL_DIAMETER).unwrap()),
-            Some(0.125)
-        );
-        assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
-    }
+    let preview = ::grap::apply(
+        fields.get(&ui::VIEW).unwrap(),
+        [
+            (
+                presentation::vocabulary::VALUE,
+                fields
+                    .get(&presentation::vocabulary::VALUE)
+                    .unwrap()
+                    .clone(),
+            ),
+            (l::WIDTH, f64::value(400.0)),
+            (l::HEIGHT, f64::value(400.0)),
+            (ui::PARAMETERS, Value::record([(PROGRESS, f64::value(0.7))])),
+        ],
+        &sources,
+        10_000,
+    );
+    assert!(preview.completed, "{:?}", preview.result);
+    let fields = preview
+        .result
+        .as_record()
+        .unwrap()
+        .get(&PREVIEW_REFINED)
+        .expect("refined preview callable")
+        .as_record()
+        .unwrap();
+    let playback = fields.get(&PLAYBACK).unwrap();
+    assert!(super::playback::Settings::read(playback).is_some());
+    let playback = playback.as_record().unwrap();
+    assert_eq!(
+        f64::read(playback.get(&TOOL_DIAMETER).unwrap()),
+        Some(0.125)
+    );
+    assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
 }
 
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {

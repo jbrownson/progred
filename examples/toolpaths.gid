@@ -21,7 +21,6 @@
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "control_initial": 133b05e33c166614831f01de2365f49c,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
-    "control_options": a84188d71fa018de8ad68c74da7e18e2,
     "controls": b9d3424b750ee1fbba4df638d995e236,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
     "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
@@ -41,7 +40,6 @@
     "face": dfc8f0866c65bc9aa4162913a1cc446f,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
     "false": 8fcc0a2e5f26c72efd9e917a28919801,
-    "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "floor": d007814c5f6a6c38b025605b399473d4,
@@ -95,13 +93,10 @@
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
-    "preview_mesh_paths": 6b5562bf1e69f9671cf97ad54985e4d0,
-    "preview_paths_3d": 90764cc11a9ad180a4be8319232f2f8b,
+    "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "program": f23c804bf137581b76605a51366d43b7,
     "progress": 13feb828ce93822d8d72a3ef3765e2f0,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
-    "radio": d3e46e8851004f6786bb6cf771ad1d87,
-    "render_mode": a42497c1b989b7d9fe24840dbd4ec3ba,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -150,9 +145,6 @@
   "cells": {
     progress: {
       name: "Playback",
-    },
-    render_mode: {
-      name: "Rendering",
     },
     ball_center: {
       name: "ball center",
@@ -1333,7 +1325,7 @@
                     line_radius: {
                       f64: 0x7b14ae47e17a743f,
                     },
-                    function: render_mode,
+                    function: preview_paths_refined,
                     value: {
                       function: quote,
                       expression: {
@@ -1395,9 +1387,6 @@
                         progress: {
                           bind: progress,
                         },
-                        render_mode: {
-                          bind: render_mode,
-                        },
                       },
                     },
                   ],
@@ -1420,32 +1409,6 @@
                           expression: progress,
                         },
                         function: slider,
-                      },
-                    },
-                    render_mode: {
-                      unquote: {
-                        control_key: {
-                          function: quote,
-                          expression: render_mode,
-                        },
-                        function: radio,
-                        control_options: {
-                          function: quote,
-                          expression: [
-                            {
-                              name: "Mesh",
-                              value: {
-                                ffi: preview_mesh_paths,
-                              },
-                            },
-                            {
-                              name: "Implicit",
-                              value: {
-                                ffi: preview_paths_3d,
-                              },
-                            },
-                          ],
-                        },
                       },
                     },
                   },

@@ -6,14 +6,14 @@ use incremental::{Input, Memo, Runtime};
 use std::sync::Arc;
 
 #[derive(Clone, PartialEq)]
-pub(super) struct Settings {
+pub(crate) struct Settings {
     pub shape: fidget::mesh::Shape,
     pub radius: f64,
     pub color: [u8; 3],
     pub playback: Option<playback::Settings>,
 }
 
-pub(super) struct ViewGeometry {
+pub(crate) struct ViewGeometry {
     pub geometry: Geometry,
     pub awaiting_first_surface: bool,
 }
@@ -48,14 +48,15 @@ impl Computation {
         let settings = runtime.input(settings);
         let depth = runtime.input(depth);
         let recording = recording(computations, program.clone(), fuel.clone());
-        let geometry = Layers::new(
-            runtime,
-            &computations.tasks,
+        let geometry = geometry(
+            computations,
             recording,
-            settings.clone(),
+            runtime.memo({
+                let settings = settings.clone();
+                move |read| Ok((*settings.read(read)).clone())
+            }),
             depth.clone(),
-        )
-        .combined(runtime);
+        );
         Self {
             program,
             fuel,
@@ -64,6 +65,23 @@ impl Computation {
             geometry,
         }
     }
+}
+
+/// Compose mesh layers over a caller's recording, independently of image rendering.
+pub(crate) fn geometry(
+    computations: &Computations,
+    recording: Memo<Recorded>,
+    settings: Memo<Settings>,
+    depth: Input<u8>,
+) -> Memo<Outcome<ViewGeometry>> {
+    Layers::new(
+        &computations.runtime,
+        &computations.tasks,
+        recording,
+        settings,
+        depth,
+    )
+    .combined(&computations.runtime)
 }
 
 struct Layers {
@@ -76,7 +94,7 @@ impl Layers {
         runtime: &Runtime,
         tasks: &Tasks,
         recording: Memo<Recorded>,
-        settings: Input<Settings>,
+        settings: Memo<Settings>,
         depth: Input<u8>,
     ) -> Self {
         let prepared = runtime.memo({
@@ -84,7 +102,7 @@ impl Layers {
             let settings = settings.clone();
             move |read| {
                 let record = recording.read(read)?;
-                let settings = settings.read(read);
+                let settings = settings.read(read)?;
                 let depth = *depth.read(read);
                 Ok(record.path().map(|_| {
                     (
@@ -120,7 +138,7 @@ impl Layers {
         let paths = runtime.memo_by(
             move |read| {
                 let record = recording.read(read)?;
-                let settings = settings.read(read);
+                let settings = settings.read(read)?;
                 Ok(path_geometry(&record, &settings))
             },
             |_, _| false,
@@ -307,7 +325,10 @@ mod tests {
             &runtime,
             &tasks,
             recording,
-            settings.clone(),
+            runtime.memo({
+                let settings = settings.clone();
+                move |read| Ok((*settings.read(read)).clone())
+            }),
             runtime.input(4),
         );
         let paths = layers.paths.clone();
@@ -455,7 +476,16 @@ mod tests {
         };
         let settings = runtime.input(props.clone());
         let depth = runtime.input(3);
-        let layers = Layers::new(&runtime, &tasks, recording, settings.clone(), depth.clone());
+        let layers = Layers::new(
+            &runtime,
+            &tasks,
+            recording,
+            runtime.memo({
+                let settings = settings.clone();
+                move |read| Ok((*settings.read(read)).clone())
+            }),
+            depth.clone(),
+        );
         let surface_node = runtime.memo_by(
             {
                 let surface = layers.surface.clone();

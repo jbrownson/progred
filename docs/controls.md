@@ -31,8 +31,8 @@ can be callables or any other ordinary data, not just indices or booleans. It
 emits labeled radio buttons and returns the selected value without evaluating
 it. `initial` defaults to the first option and must belong to the list. Stale or
 missing stored selection falls back to that initial value. It also requires the
-`with controls` scope. The CAM example offers its mesh and implicit preview
-callables this way, so the choice belongs to Grap, not the CAM renderer.
+`with controls` scope. Radio groups can offer preview callables this way; the
+current CAM example instead uses automatic refinement and only a playback slider.
 
 Control values live in the view's existing per-location annotations, under
 `control state`, keyed by the supplied identities. Two views are independent;

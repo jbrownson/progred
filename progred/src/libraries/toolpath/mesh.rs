@@ -8,7 +8,7 @@ use gid::Value;
 use nalgebra::Vector3;
 use std::{cell::RefCell, rc::Rc};
 
-mod computation;
+pub(super) mod computation;
 #[cfg(test)]
 mod tests;
 mod tubes;

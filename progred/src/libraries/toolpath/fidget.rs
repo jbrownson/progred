@@ -11,7 +11,7 @@ use gid::Value;
 use std::rc::Rc;
 use std::sync::Arc;
 
-mod computation;
+pub(super) mod computation;
 
 pub(super) struct Tubes {
     radius: f32,

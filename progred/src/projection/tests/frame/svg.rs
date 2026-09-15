@@ -7,6 +7,8 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::fmt::Write as _;
 
+mod refined;
+
 fn image_png(image: &ImageData) -> Vec<u8> {
     let mut rgba = image.data.as_ref().to_vec();
     assert_eq!(
@@ -364,21 +366,18 @@ fn editor_toolpath_progressive_svg_captures() {
 }
 
 fn cam_editor(mode: CellId) -> crate::Editor {
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    // Exercise each public preview using the same document, without adding a
+    // renderer-selection control to the production example.
+    let source = crate::command::Example::Toolpaths.source().replace(
+        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED
+            .simple()
+            .to_string(),
+        &mode.simple().to_string(),
+    );
+    let (doc, _) = crate::gid_text::parse(&source).unwrap();
     let declarations = crate::workspace::declarations(doc.root.as_ref());
     let mut editor = crate::test_editor(doc);
     editor.model.workspace.sync_declared(&declarations);
-    editor.model.workspace.left.panes[0]
-        .view
-        .annotations
-        .set_field(
-            &declarations[0].path,
-            crate::libraries::controls::vocabulary::STATE,
-            Some(Value::record([(
-                names["render_mode"],
-                Value::record([(::grap::vocabulary::FFI, mode.into())]),
-            )])),
-        );
     editor
 }
 
@@ -432,14 +431,11 @@ fn capture_cam_async(mode: CellId) {
     let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
     let mut controls = annotations
         .at(&path)
-        .unwrap()
-        .as_record()
-        .unwrap()
-        .get(&STATE)
-        .unwrap()
-        .as_record()
-        .unwrap()
-        .clone();
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&STATE))
+        .and_then(Value::as_record)
+        .cloned()
+        .unwrap_or_default();
     controls.insert(
         crate::libraries::toolpath::vocabulary::PROGRESS,
         f64::value(0.7),

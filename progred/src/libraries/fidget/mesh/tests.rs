@@ -175,6 +175,64 @@ fn depth_buffer_keeps_the_front_object_independent_of_order() {
     assert!(first.chunks_exact(4).all(|p| p[2] == 0));
 }
 
+#[test]
+fn mesh_and_implicit_views_agree_on_framing_and_flat_surface_lighting() {
+    let mut preview = sphere_preview();
+    preview.objects[0].tree = (Tree::z() - 0.1)
+        .max(-Tree::z() - 0.7)
+        .max(Tree::x().abs() - 0.75)
+        .max(Tree::y().abs() - 0.75);
+    let geometry = generate(&preview, 4).unwrap();
+    for (width, height) in [(96, 64), (64, 96)] {
+        for camera in [
+            Camera {
+                yaw: 0.0,
+                pitch: 0.0,
+                zoom: 1.0,
+            },
+            Camera {
+                yaw: 35.0,
+                pitch: 40.0,
+                zoom: 2.0,
+            },
+        ] {
+            let pixels = PixelRenderSize::new(width, height);
+            let mesh_view = view(&preview, camera, pixels).unwrap();
+            let voxel_view = volume_view(&preview, camera, pixels);
+            let to_model = voxel_view.world_to_model * voxel_view.size.screen_to_world();
+            for (x, y) in [(0.0, 0.0), (width as f32 * 0.5, height as f32 * 0.5)] {
+                let model = to_model.transform_point(&nalgebra::Point3::new(x, y, 1.0));
+                let view = mesh_view.model_to_view.transform_point(&model);
+                let screen_x = (view.x * mesh_view.projection[0] + 1.0) * width as f32 / 2.0;
+                let screen_y = (1.0 - view.y * mesh_view.projection[1]) * height as f32 / 2.0;
+                assert!((screen_x - x).abs() < 0.001);
+                // Fidget samples integer grid positions and flips Y about h-1.
+                // Triangle rasterization samples pixel centers; framing is the
+                // same despite this subpixel sampling convention.
+                assert!((screen_y - (y + 1.0)).abs() < 0.001);
+            }
+            let mesh = cpu::render(&geometry, &mesh_view).unwrap();
+            let implicit = cpu_volume(
+                &preview.objects,
+                &voxel_view,
+                &incremental::Cancellation::default(),
+            )
+            .unwrap();
+            let index = (height / 2 * width + width / 2) as usize * 4;
+            assert_eq!(mesh[index + 3], 255);
+            assert_eq!(implicit[index + 3], 255);
+            for channel in 0..3 {
+                assert!(
+                    mesh[index + channel].abs_diff(implicit[index + channel]) <= 1,
+                    "mesh {:?}, implicit {:?}",
+                    &mesh[index..index + 4],
+                    &implicit[index..index + 4]
+                );
+            }
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 #[ignore = "requires a GPU; does not use the CPU fallback"]

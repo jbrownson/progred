@@ -288,7 +288,18 @@ fn image(bench: &Bench) -> &ImageData {
 }
 
 fn fidget_orbit_profile(example: Example) {
-    let doc = fixture(example.source());
+    // This synchronous canary measures mesh orbit cost, not the background
+    // refinement sequence now requested by the interactive CAM example.
+    let source = if example == Example::Toolpaths {
+        use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
+        example.source().replace(
+            &PREVIEW_REFINED.simple().to_string(),
+            &PREVIEW_MESH.simple().to_string(),
+        )
+    } else {
+        example.source().to_owned()
+    };
+    let doc = fixture(&source);
     let path = first_viewport(&doc);
     let view = ProfileView {
         size: kurbo::Size::new(400.0, 600.0),

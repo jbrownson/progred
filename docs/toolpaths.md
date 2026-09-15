@@ -131,19 +131,33 @@ meshing step is involved in the path geometry. Paths and model share the triangl
 renderer, camera, lighting, and depth buffer; no overlay or depth bias is used.
 Failed path generation discards the whole preview before meshing the model.
 
-Command+9's example offers Mesh (initially selected) and Implicit radio buttons
-below playback: 42 paths (1,056
+`preview paths refined` takes the mesh preview's arguments and composes a mesh
+fallback with progressive software implicit images. It shares one observed path
+evaluation between the two interpretations. Both computations are requested,
+but neither needs the other's result. A current implicit image replaces the
+mesh; pending implicit work displays the available mesh at the current camera.
+An outdated stock mesh is desaturated, while tool/path geometry updates immediately.
+Implicit refinement starts at no more than 512 physical pixels on the longest
+edge, skipping the standalone implicit renderer's two coarsest levels. It roughly
+doubles XY resolution up to native size, then finishes with four-times depth
+sampling. The mesh supplies immediate feedback until the first current implicit
+image. Standalone mesh and implicit functions remain available.
+
+Command+9's example uses this refined preview with one playback slider: 42 paths (1,056
 segments), with a blue reference cube when stock is disabled and a 500,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
-retains the path recording and the selected renderer's expensive results.
+retains the shared path recording and both renderers' expensive results.
 Implicit requests a new software image in the background when inputs change,
 including the camera. Mesh retains geometry across camera changes; its optional
 `mesh depth` defaults to 6 (the previous mesh-only fixture used 7).
 It uses GPU triangle
 drawing on native builds, with a CPU triangle renderer for web/headless fallback.
-The example's Grap radio returns the chosen preview callable, and its view calls
-that function. Switching keeps the same camera and playback annotations; use
-Mesh to orbit quickly, then switch to Implicit to inspect that view.
+The example's Grap view calls `preview paths refined`; it contains no render-mode
+state or radio buttons. Orbiting immediately returns to the retained mesh, then
+matching implicit images take over when ready. Geometry changes request both a
+new stock mesh and new images. There is no special handling of drag events or
+inactivity delay. Both interpretations share camera framing and camera-space
+lighting (including conversion from Fidget's downward-pointing sample Y axis).
 Drag to orbit; scroll or pinch the Mac trackpad
 over the viewport to zoom. Pinch needs no modifier and shares the existing
 per-view camera state in both mesh and implicit previews. The document
@@ -183,7 +197,7 @@ geometry through the general dependency graph.
 
 ## Playback
 
-Both previews accept an optional `playback` record with `progress` (f64,
+All three volume previews accept an optional `playback` record with `progress` (f64,
 0–1), `tool diameter`, `tool length`, and `stock minimum` / `stock maximum` (f64
 `x`, `y`, `z` records). These are ordinary data, not control state. The example
 supplies progress from the reusable [controls](controls.md) library.
@@ -244,15 +258,17 @@ instructions including 794 loads/stores; at 1.0 it has 53,228 instructions
 including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
 both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
 valid on this backend. A further native submission of this known-unsupported
-program was deliberately avoided. Command+9's Implicit option uses the explicit
+program was deliberately avoided. Command+9's implicit refinement uses the explicit
 software path; GPU implicit CAM needs an upstream implementation before use.
 No GPU timeout or spill emulation was added. Ordinary Fidget voxel previews
 retain their existing backend selection. The ignored
 `editor_toolpath_implicit_async_svg_captures` test captures the checked-in
-example without opening a window; captures select the requested renderer through
-the same control annotation as the radio buttons.
+example without opening a window; standalone-renderer captures substitute the
+preview function in the test fixture.
 `editor_toolpath_progressive_svg_captures` captures intermediate resolutions
 through the full editor's normal async polling and frame pipeline.
+`editor_toolpath_refined_svg_captures` captures mesh/image handoffs, orbit fallback,
+and stale stock during playback with the production refined declaration.
 
 ### Fidget stock removal
 
@@ -298,7 +314,7 @@ Variable orientation, general tool profiles (including arcs and separate cutting
 and collision parts), explicit links, and machine/postprocessor output remain
 separate next steps. Render-quality controls can use the controls library later;
 path-generation tolerance belongs to the program
-and is distinct from mesh/raster resolution. Upcoming-path windows, transparency,
-and coarse-to-fine rendering are also deferred. In
+and is distinct from mesh/raster resolution. Upcoming-path windows and transparency
+are also deferred. In
 particular, the existing Fidget cube field is not an exact signed distance;
 subtracting a cutter radius from it would not implement a geometric offset.

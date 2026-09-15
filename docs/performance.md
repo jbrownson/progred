@@ -321,8 +321,8 @@ remain separate design decisions, not hidden fallbacks in this experiment.
 
 ### Dependency-tracked CAM geometry — 2026-09-14
 
-These measurements used the earlier mesh fixture. Command+9 now has a Mesh/Implicit
-radio selector and starts in Mesh. Its default mesh depth is 6 rather than 7,
+These measurements used the earlier mesh fixture. Command+9 now automatically
+refines its mesh fallback with implicit images. Its default mesh depth is 6 rather than 7,
 and the cutter diameter is now 0.125 inches; keep these geometry changes in mind
 when comparing fresh measurements with this table.
 
@@ -349,11 +349,38 @@ The unchanged, uncached IoP canaries measured 26.12 ms for the picture and
 3.76 ms for source in this pass; there was no fresh pre-change IoP A/B run,
 so these are canary observations, not a quantified regression comparison.
 
+The synchronous toolpath orbit canary explicitly selects `preview paths mesh`
+in its copy of the current fixture. It must not run the automatic renderer with
+an inline executor and mistake synchronous completion of the entire implicit
+refinement sequence for interactive orbit cost.
+
 After separating stock meshing from path appearance and tightening memo failure
 recovery, the final run measured 12.51 ms median / 13.27 ms p95 / 14.26 ms maximum,
 with a 285.26 ms first frame. A regression test verifies that path color/thickness
 changes retain the identical shared stock-mesh result; playback and depth changes
 replace it.
+
+### Automatic mesh/implicit handoff — 2026-09-15
+
+The headless `editor_toolpath_refined_svg_captures` test uses the production
+Command+9 document at 1000 × 750 logical @1 (333 × 750 viewport). Work is queued
+explicitly and executed on a worker; mesh painting uses the CPU triangle backend
+because Seatbelt exposes no Metal adapter. Before restoring intermediate implicit
+resolutions, one run measured an 8.30 ms full-editor
+orbit frame using the retained mesh, a current native-XY implicit image after
+358 ms, and final four-times-depth after 1155 ms. Playback's first frame took
+6.76 ms with the moved tool and desaturated previous stock, followed by 245 ms
+of meshing. These are single-run timings, not native input-to-display latency
+or a before/after speedup claim.
+
+Camera/framing tests compare both renderers, including rectangular views and zoom.
+The software normal conversion now also reverses sample Y into the upward camera
+axis used by triangle lighting, avoiding a light-direction change at handoff.
+
+The standalone mesh-orbit canary on the current fixture measured 10.29 ms median,
+10.75 ms p95, and 11.26 ms maximum over 60 frames after five warm-ups; its inline
+first frame took 221.67 ms. Fixture/depth changes prevent treating differences
+from the older depth-7 tables as a speedup attributable to this composition.
 
 ### Background CAM stock — 2026-09-14
 

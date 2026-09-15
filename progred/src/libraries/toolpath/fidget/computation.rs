@@ -1,11 +1,11 @@
-use super::super::computation::{Outcome, recording};
+use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
 use incremental::background::Availability;
 use incremental::{Input, Memo};
 
 #[derive(Clone, PartialEq)]
-pub(super) struct Settings {
+pub(crate) struct Settings {
     pub request: fidget::raster::Request,
     pub radius: f64,
     pub color: [u8; 3],
@@ -18,7 +18,7 @@ struct Request {
     settings: Settings,
 }
 
-pub(super) struct ViewImage {
+pub(crate) struct ViewImage {
     pub image: Option<puri::ImageData>,
     pub pending: bool,
     pub stale: bool,
@@ -38,29 +38,21 @@ impl Computation {
         fuel: usize,
         settings: Settings,
     ) -> Self {
-        Self::with_render(
-            computations,
+        let runtime = &computations.runtime;
+        let program = runtime.input(program);
+        let fuel = runtime.input(fuel);
+        let settings = runtime.input(settings);
+        let recording = recording(computations, program.clone(), fuel.clone());
+        let image = image(computations, recording, settings.clone(), 128);
+        Self {
             program,
             fuel,
             settings,
-            |request, fuel, cancel, publish| {
-                let scene = scene(request, fuel);
-                cancel.check()?;
-                match scene {
-                    Ok((scene, fuel)) => Ok(scene
-                        .render_software_progressive(128, 4, cancel, &mut |image| {
-                            publish(Ok((image, fuel)))
-                        })?
-                        .map(|image| (image, fuel))
-                        .ok_or_else(|| {
-                            (absent::with_reason(fidget::vocabulary::INVALID_FIELD), fuel)
-                        })),
-                    Err(failure) => Ok(Err(failure)),
-                }
-            },
-        )
+            image,
+        }
     }
 
+    #[cfg(test)]
     fn with_render(
         computations: &Computations,
         program: Value,
@@ -81,71 +73,7 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
-        let prepared = runtime.memo({
-            let settings = settings.clone();
-            move |read| {
-                let record = recording.read(read)?;
-                let settings = settings.read(read);
-                Ok(record.path().map(|_| {
-                    (
-                        Request {
-                            path: record.path.clone(),
-                            settings: (*settings).clone(),
-                        },
-                        record.evaluation.remaining_fuel,
-                    )
-                }))
-            }
-        });
-        let worker = computations.tasks.memo_progressive(
-            prepared.clone(),
-            move |request, cancel, publish| {
-                cancel.check()?;
-                match request {
-                    Ok((request, fuel)) => render(request, fuel, cancel, publish),
-                    Err(failure) => Ok(Err(failure)),
-                }
-            },
-        );
-        let image = runtime.memo_by(
-            move |read| {
-                // Invalid current programs replace old images immediately, without a worker round-trip.
-                let prepared = prepared.read(read)?;
-                let availability = worker.read(read)?;
-                let fuel = match &*prepared {
-                    Ok((_, fuel)) => *fuel,
-                    Err(failure) => return Ok(Err(failure.clone())),
-                };
-                Ok(match &*availability {
-                    Availability::Ready(image) | Availability::Refining(image) => image
-                        .as_ref()
-                        .as_ref()
-                        .map(|(image, fuel)| {
-                            (
-                                ViewImage {
-                                    image: Some(image.clone()),
-                                    pending: matches!(&*availability, Availability::Refining(_)),
-                                    stale: false,
-                                },
-                                *fuel,
-                            )
-                        })
-                        .map_err(Clone::clone),
-                    Availability::Pending { previous } => Ok((
-                        ViewImage {
-                            image: previous
-                                .as_deref()
-                                .and_then(|result| result.as_ref().ok())
-                                .map(|(image, _)| image.clone()),
-                            pending: true,
-                            stale: previous.is_some(),
-                        },
-                        fuel,
-                    )),
-                })
-            },
-            |_, _| false,
-        );
+        let image = image_with_render(computations, recording, settings.clone(), render);
         Self {
             program,
             fuel,
@@ -153,6 +81,116 @@ impl Computation {
             image,
         }
     }
+}
+
+/// Use the same observed program as other interpretations. The caller chooses
+/// the first image resolution independently of its fallback and scheduling.
+pub(crate) fn image(
+    computations: &Computations,
+    recording: Memo<Recorded>,
+    settings: Input<Settings>,
+    first_max_edge: u32,
+) -> Memo<Outcome<ViewImage>> {
+    image_with_render(
+        computations,
+        recording,
+        settings,
+        move |request, fuel, cancel, publish| {
+            let scene = scene(request, fuel);
+            cancel.check()?;
+            match scene {
+                Ok((scene, fuel)) => Ok(scene
+                    .render_software_progressive(first_max_edge, 4, cancel, &mut |image| {
+                        publish(Ok((image, fuel)))
+                    })?
+                    .map(|image| (image, fuel))
+                    .ok_or_else(|| (absent::with_reason(fidget::vocabulary::INVALID_FIELD), fuel))),
+                Err(failure) => Ok(Err(failure)),
+            }
+        },
+    )
+}
+
+fn image_with_render(
+    computations: &Computations,
+    recording: Memo<Recorded>,
+    settings: Input<Settings>,
+    render: impl Fn(
+        Request,
+        usize,
+        &incremental::Cancellation,
+        &mut dyn FnMut(Outcome<puri::ImageData>) -> Result<(), incremental::Error>,
+    ) -> Result<Outcome<puri::ImageData>, incremental::Error>
+    + Send
+    + Sync
+    + 'static,
+) -> Memo<Outcome<ViewImage>> {
+    let runtime = &computations.runtime;
+    let prepared = runtime.memo({
+        let settings = settings.clone();
+        move |read| {
+            let record = recording.read(read)?;
+            let settings = settings.read(read);
+            Ok(record.path().map(|_| {
+                (
+                    Request {
+                        path: record.path.clone(),
+                        settings: (*settings).clone(),
+                    },
+                    record.evaluation.remaining_fuel,
+                )
+            }))
+        }
+    });
+    let worker =
+        computations
+            .tasks
+            .memo_progressive(prepared.clone(), move |request, cancel, publish| {
+                cancel.check()?;
+                match request {
+                    Ok((request, fuel)) => render(request, fuel, cancel, publish),
+                    Err(failure) => Ok(Err(failure)),
+                }
+            });
+    runtime.memo_by(
+        move |read| {
+            // Invalid current programs replace old images immediately, without a worker round-trip.
+            let prepared = prepared.read(read)?;
+            let availability = worker.read(read)?;
+            let fuel = match &*prepared {
+                Ok((_, fuel)) => *fuel,
+                Err(failure) => return Ok(Err(failure.clone())),
+            };
+            Ok(match &*availability {
+                Availability::Ready(image) | Availability::Refining(image) => image
+                    .as_ref()
+                    .as_ref()
+                    .map(|(image, fuel)| {
+                        (
+                            ViewImage {
+                                image: Some(image.clone()),
+                                pending: matches!(&*availability, Availability::Refining(_)),
+                                stale: false,
+                            },
+                            *fuel,
+                        )
+                    })
+                    .map_err(Clone::clone),
+                Availability::Pending { previous } => Ok((
+                    ViewImage {
+                        image: previous
+                            .as_deref()
+                            .and_then(|result| result.as_ref().ok())
+                            .map(|(image, _)| image.clone()),
+                        pending: true,
+                        stale: previous.is_some(),
+                    },
+                    fuel,
+                )),
+            })
+        },
+        |_, _| false,
+    )
 }
 
 fn scene(request: Request, fuel: usize) -> Outcome<fidget::raster::Request> {

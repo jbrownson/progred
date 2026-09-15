@@ -197,6 +197,38 @@ uses 32/16/8-pixel tiles, with checks between root tiles. Expression constructio
 and compilation have before/after checks rather than immediate interruption.
 Obsolete results are discarded by the general scheduler.
 
+### Mesh fallback with implicit refinement
+
+`preview paths refined` (Command+9) composes those native mesh and image recipes
+over **one** recorded Grap evaluation. One settings input describes the current
+scene, playback, appearance, camera, and image size. A derived memo removes the
+camera and image size for mesh generation; equal derived settings retain the
+mesh. There is no event classification, orbit flag, inactivity timer, or second
+cache.
+
+Both interpretations are demanded independently. A current implicit image wins,
+including intermediate refinements. While it is pending, the viewport draws the
+available mesh synchronously using the current camera. The old implicit image
+is not used as the fallback. A mesh arriving after a current implicit image
+cannot replace it. Current errors remain visible rather than being hidden behind
+old successful output.
+
+On camera changes, the mesh remains current. On playback or geometry changes,
+the tool/path triangles update immediately and the old stock mesh is desaturated
+while its replacement is pending. Both jobs use the existing latest-replacement
+queue and cancellation checks. Meshing is requested first, but an image does not
+depend on its completion; each renderer can finish independently. This first
+composition keeps requesting a current mesh even while displaying an implicit
+image, preserving a useful fallback for subsequent camera motion.
+
+The mesh is the immediate draft stage. This composition starts implicit images
+at no more than 512 physical pixels on the longest edge, skipping the standalone
+implicit function's two coarsest (128-pixel-start) levels. It roughly doubles XY
+resolution up to native size, followed by the four-times-depth pass. Native
+resolution is always retained, including for small views. The individual renderer
+functions remain available, and no scheduling policy or domain types were added
+to the generic async runtime.
+
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.
 
