@@ -22,6 +22,10 @@ pub mod choices;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RowAlignment {
     Baseline,
+    /// Align top edges, retaining the chosen child's baseline, as columns do.
+    Top {
+        baseline: usize,
+    },
     Center,
 }
 
@@ -119,25 +123,25 @@ pub fn leaf_into<Out>(
 }
 
 pub fn row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
-    row_aligned(gap, children, false)
+    row_aligned(gap, children, RowAlignment::Baseline)
 }
 
 pub fn centered_row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
-    row_aligned(gap, children, true)
+    row_aligned(gap, children, RowAlignment::Center)
 }
 
 fn row_aligned<Out: 'static>(
     gap: f64,
     children: Vec<Measured<Out>>,
-    centered: bool,
+    alignment: RowAlignment,
 ) -> Measured<Out> {
-    let extent = row_extent(gap, centered, children.iter().map(|child| child.extent));
+    let extent = row_extent(gap, alignment, children.iter().map(|child| child.extent));
     leaf_into(extent, move |placement, out| {
         place_row(
             extent,
             placement,
             gap,
-            centered,
+            alignment,
             children,
             |child| child.extent,
             |child, placement| place_into(child, placement, out),
@@ -305,22 +309,36 @@ pub fn place_top_left<Out: Output>(layout: Measured<Out>, at: Point) -> Out {
 
 pub(crate) fn row_extent(
     gap: f64,
-    centered: bool,
+    alignment: RowAlignment,
     children: impl Iterator<Item = Extent>,
 ) -> Extent {
     let (mut extent, mut count) = (Extent::default(), 0usize);
+    let mut height: f64 = 0.0;
     for child in children {
         extent.width += child.width;
-        if centered {
-            if count == 0 || child.height() > extent.height() {
-                extent.ascent = child.ascent;
-                extent.descent = child.descent;
+        match alignment {
+            RowAlignment::Baseline => {
+                extent.ascent = extent.ascent.max(child.ascent);
+                extent.descent = extent.descent.max(child.descent);
             }
-        } else {
-            extent.ascent = extent.ascent.max(child.ascent);
-            extent.descent = extent.descent.max(child.descent);
+            RowAlignment::Center => {
+                if count == 0 || child.height() > extent.height() {
+                    extent.ascent = child.ascent;
+                    extent.descent = child.descent;
+                }
+            }
+            RowAlignment::Top { baseline } => {
+                height = height.max(child.height());
+                if count == baseline {
+                    extent.ascent = child.ascent;
+                }
+                extent.descent = height - extent.ascent;
+            }
         }
         count += 1;
+    }
+    if let RowAlignment::Top { baseline } = alignment {
+        assert!(count == 0 || baseline < count);
     }
     extent.width += gap * count.saturating_sub(1) as f64;
     extent
@@ -368,7 +386,7 @@ pub(crate) fn place_row<T>(
     extent: Extent,
     placement: Placement,
     gap: f64,
-    centered: bool,
+    alignment: RowAlignment,
     children: Vec<T>,
     extent_of: impl Fn(&T) -> Extent,
     mut place: impl FnMut(T, Placement),
@@ -377,10 +395,10 @@ pub(crate) fn place_row<T>(
     for child in children {
         let size = extent_of(&child);
         let y = placement.rect.y0
-            + if centered {
-                (extent.height() - size.height()) / 2.0
-            } else {
-                extent.ascent - size.ascent
+            + match alignment {
+                RowAlignment::Baseline => extent.ascent - size.ascent,
+                RowAlignment::Top { .. } => 0.0,
+                RowAlignment::Center => (extent.height() - size.height()) / 2.0,
             };
         let rect = size.rect_at(Point::new(x, y));
         place(
@@ -561,6 +579,29 @@ mod tests {
         assert_eq!(output[0].rect, Rect::new(1.0, 2.0, 6.0, 7.0));
         assert_eq!(output[0].available_rect, Rect::new(1.0, 2.0, 37.0, 7.0));
         assert_eq!(output[0].clip_rect, placement.clip_rect);
+    }
+
+    #[test]
+    fn top_aligned_row_exposes_the_chosen_baseline_to_its_parent() {
+        for fields_height in [10.0, 240.0] {
+            let tool = row_aligned(
+                12.0,
+                vec![
+                    probe(ext(110.0, 90.0, 90.0)),
+                    probe(ext(200.0, 8.0, fields_height - 8.0)),
+                ],
+                RowAlignment::Top { baseline: 1 },
+            );
+            let layout = row(6.0, vec![probe(ext(10.0, 8.0, 2.0)), tool]);
+            let output = place_top_left(layout, Point::new(20.0, 30.0));
+            let [arrow, picture, fields] = output.as_slice() else {
+                panic!("three placed children");
+            };
+            assert_eq!(arrow.rect.y0, fields.rect.y0);
+            assert_eq!(picture.rect.y0, fields.rect.y0);
+            assert_eq!(picture.rect.height(), 180.0);
+            assert_eq!(fields.rect.height(), fields_height);
+        }
     }
 
     #[test]

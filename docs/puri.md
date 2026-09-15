@@ -63,9 +63,10 @@ Canvas clips are separate: they constrain ink and can use arbitrary shapes.
 An axis-aligned layout clip neither describes nor replaces an arbitrary canvas
 clip. Clipping does not in itself remove navigation or active handlers.
 
-Progred composes boxes by width, ascent, and descent. Rows align baselines or
-centers; columns choose a baseline; wrappers pad, overlay, or decorate the
-result. [`measured::choices`](../ui/measured/src/choices.rs) settles
+Progred composes boxes by width, ascent, and descent. Rows align baselines,
+top edges, or centers; top-aligned rows and columns choose a child's baseline.
+Wrappers pad, overlay, or decorate the result.
+[`measured::choices`](../ui/measured/src/choices.rs) settles
 ordered alternatives over already measured leaves. The first preferred form
 whose natural width fits wins; otherwise the last form accommodates the
 available width. Selection does not reshape text or rerun projections.

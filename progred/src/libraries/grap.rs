@@ -10,7 +10,7 @@ pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
     RecordField, ResolvedCell, activatable, alternatives, at_local, col, completion, descend_local,
-    dim, faced, hug, record_with, row, selectable_bracket, shared, slot, transient,
+    dim, faced, hug, pad, record_with, row, selectable_bracket, shared, slot, transient,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -384,7 +384,7 @@ pub fn evaluate_display(
     let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-        col(0, 2.0, [expression, row(6.0, [shaft, result])]),
+        col(0, 2.0, [row(6.0, [expression, shaft]), pad(20.0, result)]),
     ]))
 }
 
@@ -975,6 +975,52 @@ mod tests {
         assert!(matches!(&inspect(&(result)),
             ProjectionCall::Transient { value, fuel: 7 } if *value == Value::from(vec![1])
         ));
+    }
+
+    #[test]
+    fn wrapped_evaluation_keeps_the_arrow_with_its_source_and_indents_the_result() {
+        let layout = projected(&env(), &wrapper(Value::from(vec![0]), [])).unwrap();
+        let Recorded::Alternatives(options) = layout else {
+            panic!("evaluation has responsive forms");
+        };
+        let Recorded::Row {
+            children: inline, ..
+        } = &options[0]
+        else {
+            panic!("inline evaluation");
+        };
+        let Recorded::Col {
+            baseline: 0,
+            children: wrapped,
+            ..
+        } = &options[1]
+        else {
+            panic!("wrapped evaluation uses its source baseline");
+        };
+        let Recorded::Row { children: head, .. } = &wrapped[0] else {
+            panic!("source and arrow stay on the same line");
+        };
+        let Recorded::Pad {
+            left,
+            child: result,
+            ..
+        } = &wrapped[1]
+        else {
+            panic!("result is indented below the source");
+        };
+        assert!(*left > 0.0);
+        assert_eq!(inline.len(), 3);
+        assert_eq!(wrapped.len(), 2);
+        assert_eq!(head.len(), 2);
+        // Both alternatives reuse the same projected occurrences and arrow.
+        for (inline, wrapped) in inline.iter().zip([&head[0], &head[1], &**result]) {
+            let (Recorded::Shared { id: a, .. }, Recorded::Shared { id: b, .. }) =
+                (inline, wrapped)
+            else {
+                panic!("evaluation children are shared across alternatives");
+            };
+            assert_eq!(a, b);
+        }
     }
 
     #[test]

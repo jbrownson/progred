@@ -542,11 +542,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 alignment,
                 gap,
                 children,
-            } => crate::row_extent(
-                *gap,
-                matches!(alignment, crate::RowAlignment::Center),
-                children.iter().map(|child| child.extent),
-            ),
+            } => crate::row_extent(*gap, *alignment, children.iter().map(|child| child.extent)),
             ChoiceKind::Col {
                 baseline,
                 gap,
@@ -585,7 +581,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 self.extent,
                 placement,
                 gap,
-                matches!(alignment, crate::RowAlignment::Center),
+                alignment,
                 children,
                 |child| child.extent,
                 |child, placement| child.place(placement, out),
@@ -686,6 +682,52 @@ mod choice_tests {
             },
             move |placement, out: &mut Recording| out.0.push((label, placement)),
         ))
+    }
+
+    #[test]
+    fn top_aligned_row_uses_the_selected_child_heights() {
+        for (available, height, label) in [(200.0, 180.0, "flat"), (130.0, 240.0, "tall")] {
+            let mut build = ChoiceBuild::default();
+            let picture = ChoiceLayout::fixed(crate::leaf_into(
+                Extent {
+                    width: 110.0,
+                    ascent: 90.0,
+                    descent: 90.0,
+                },
+                |placement, out: &mut Recording| out.0.push(("picture", placement)),
+            ));
+            let fields = build.alternatives(vec![
+                recording("flat", 60.0),
+                ChoiceLayout::fixed(crate::leaf_into(
+                    Extent {
+                        width: 8.0,
+                        ascent: 3.0,
+                        descent: 237.0,
+                    },
+                    |placement, out: &mut Recording| out.0.push(("tall", placement)),
+                )),
+            ]);
+            let root = ChoiceLayout::aligned_row(
+                crate::RowAlignment::Top { baseline: 1 },
+                12.0,
+                vec![picture, fields],
+            );
+            let layout = resolve_choices(build.finish(root), available, false);
+            assert_eq!(layout.extent.height(), height);
+            assert_eq!(layout.extent.ascent, 3.0);
+            let clip = Rect::new(30.0, 40.0, 200.0, 160.0);
+            let placement = Placement::new(layout.extent.rect_at(Point::new(20.0, 30.0)), clip);
+            let Recording(out) = crate::place(layout, placement);
+            assert_eq!(out[0].0, "picture");
+            assert_eq!(out[1].0, label);
+            assert_eq!(out[0].1.rect, Rect::new(20.0, 30.0, 130.0, 210.0));
+            assert_eq!(out[1].1.rect.origin(), Point::new(142.0, 30.0));
+            for (_, child) in out {
+                assert_eq!(child.clip_rect, clip);
+                assert_eq!(child.available_rect.y0, 30.0);
+                assert_eq!(child.available_rect.height(), height);
+            }
+        }
     }
 
     #[test]

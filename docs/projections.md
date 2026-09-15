@@ -147,8 +147,9 @@ are source projections only, independent of the opt-in rendered viewport.
 
 `{evaluate: expression}` is a Grap-library projection convention, not evaluator
 syntax. It shows the stored expression, an arrow, and the returned value from
-a transient read-only root. A result containing another `evaluate` field can
-invoke that projection again under the remaining fuel allowance. Ordinary
+a transient read-only root. When wrapped, the arrow stays with the stored
+expression and the result is indented underneath. A result containing another
+`evaluate` field can invoke that projection again under the remaining fuel allowance. Ordinary
 call-shaped values elsewhere remain editable data until explicitly evaluated.
 
 The presentation library offers an opt-in interpreter for
