@@ -37,8 +37,13 @@ fn settings_at(
     .unwrap();
     let playback = playback::Settings::read(&Value::record([
         (PROGRESS, f64::value(progress)),
-        (TOOL_DIAMETER, f64::value(0.2)),
-        (TOOL_LENGTH, f64::value(0.4)),
+        (PROFILE_TOLERANCE, f64::value(0.001)),
+        (
+            crate::libraries::toolpath::cutter::vocabulary::TOOL,
+            crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
+                .unwrap()
+                .value(),
+        ),
         (
             STOCK_MIN,
             Value::record([X, Y, Z].map(|k| (k, f64::value(-0.5)))),

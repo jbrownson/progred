@@ -1,9 +1,11 @@
 use super::{tubes::Tubes, *};
 
 fn draw(sink: &mut impl Sink<Error = InvalidPath>) {
-    sink.start_at([0.0; 3]).unwrap();
+    sink.start_at([0.0; 3], super::super::paths::Axis::Z)
+        .unwrap();
     sink.line_to([1.0, 0.5, 0.1]).unwrap();
-    sink.start_at([-1.0, 2.0, 0.5]).unwrap();
+    sink.start_at([-1.0, 2.0, 0.5], super::super::paths::Axis::Z)
+        .unwrap();
     sink.line_to([0.0, 2.5, 0.2]).unwrap();
 }
 
@@ -40,7 +42,9 @@ fn capsules_have_the_requested_radius_for_arbitrary_axes() {
         [1.0, 2.0, 3.0],
     ] {
         let mut tubes = Tubes::new(0.1, [255, 100, 20]).unwrap();
-        tubes.start_at([0.0; 3]).unwrap();
+        tubes
+            .start_at([0.0; 3], super::super::paths::Axis::Z)
+            .unwrap();
         tubes.line_to(end).unwrap();
         let end = Vector3::from(end.map(|v| v as f32));
         for vertex in &tubes.geometry.vertices {
@@ -64,9 +68,13 @@ fn capsules_have_the_requested_radius_for_arbitrary_axes() {
 #[test]
 fn path_breaks_do_not_emit_links_and_duplicate_points_are_spheres() {
     let mut tubes = Tubes::new(0.1, [255; 3]).unwrap();
-    tubes.start_at([100.0; 3]).unwrap();
+    tubes
+        .start_at([100.0; 3], super::super::paths::Axis::Z)
+        .unwrap();
     assert!(tubes.geometry.vertices.is_empty());
-    tubes.start_at([0.0; 3]).unwrap();
+    tubes
+        .start_at([0.0; 3], super::super::paths::Axis::Z)
+        .unwrap();
     tubes.line_to([0.0; 3]).unwrap();
     let sphere_vertices = tubes.geometry.vertices.len();
     assert!(
@@ -76,7 +84,9 @@ fn path_breaks_do_not_emit_links_and_duplicate_points_are_spheres() {
             .iter()
             .all(|v| (v.position.norm() - 0.1).abs() < 1e-6)
     );
-    tubes.start_at([10.0; 3]).unwrap();
+    tubes
+        .start_at([10.0; 3], super::super::paths::Axis::Z)
+        .unwrap();
     assert_eq!(tubes.geometry.vertices.len(), sphere_vertices);
     tubes.line_to([10.0; 3]).unwrap();
     assert_eq!(tubes.geometry.vertices.len(), 2 * sphere_vertices);
@@ -101,9 +111,11 @@ fn invalid_emissions_do_not_change_geometry_or_the_previous_point() {
     }
     let mut tubes = Tubes::new(0.1, [255; 3]).unwrap();
     assert_eq!(tubes.line_to([0.0; 3]), Err(InvalidPath::MissingStart));
-    tubes.start_at([0.0; 3]).unwrap();
+    tubes
+        .start_at([0.0; 3], super::super::paths::Axis::Z)
+        .unwrap();
     assert_eq!(
-        tubes.start_at([f64::NAN; 3]),
+        tubes.start_at([f64::NAN; 3], super::super::paths::Axis::Z),
         Err(InvalidPath::NonFinitePoint)
     );
     assert_eq!(
@@ -124,7 +136,17 @@ fn invalid_emissions_do_not_change_geometry_or_the_previous_point() {
 #[test]
 fn visible_ball_end_matches_the_subtraction_tool_dimensions() {
     let mut tubes = Tubes::new(0.25, [255; 3]).unwrap();
-    tubes.ball_end([0.0; 3], 1.0).unwrap();
+    tubes
+        .tool(
+            &super::super::cutter::Tool::ball(0.5, 1.0).unwrap(),
+            Pose {
+                tip: [0.0, 0.0, -0.25],
+                axis: Axis::Z,
+            },
+            [255; 3],
+            0.001,
+        )
+        .unwrap();
     assert_eq!(tubes.geometry.vertices[0].position.z, -0.25);
     assert_eq!(tubes.geometry.vertices.last().unwrap().position.z, 0.75);
     for v in &tubes.geometry.vertices {
@@ -148,6 +170,85 @@ fn visible_ball_end_matches_the_subtraction_tool_dimensions() {
             Vector3::new(center.x, center.y, 0.0)
         };
         assert!(normal.dot(&outward) > 0.0);
+    }
+}
+
+#[test]
+fn tilted_tool_vertices_lie_on_the_same_implicit_cutter() {
+    use fidget_engine::{shape::EzShape, vm::VmShape};
+    let tool = super::super::cutter::Tool::ball(0.125, 0.22).unwrap();
+    let pose = Pose {
+        tip: [0.1, -0.2, 0.4],
+        axis: Axis::new([1.0, -1.0, 2.0]).unwrap(),
+    };
+    // Line thickness is intentionally unrelated to the tool diameter.
+    let mut tubes = Tubes::new(0.001, [255; 3]).unwrap();
+    tubes.tool(&tool, pose, [225, 94, 58], 0.00025).unwrap();
+    let shape = VmShape::from(
+        tool.sweep(pose.tip, pose.tip, pose.axis, 0.001)
+            .unwrap()
+            .unwrap(),
+    );
+    let tape = shape.ez_float_slice_tape();
+    let mut evaluator = VmShape::new_float_slice_eval();
+    let xyz: [Vec<f32>; 3] = std::array::from_fn(|i| {
+        tubes
+            .geometry
+            .vertices
+            .iter()
+            .map(|v| v.position[i])
+            .collect()
+    });
+    assert!(
+        evaluator
+            .eval(&tape, &xyz[0], &xyz[1], &xyz[2])
+            .unwrap()
+            .iter()
+            .all(|v| v.abs() < 1e-6)
+    );
+}
+
+#[test]
+fn explicit_shoulders_make_annular_faces_with_outward_winding() {
+    use super::super::cutter::{Point, Section, SectionKind, Segment, Tool};
+    for (lower, upper) in [(0.25, 0.5), (0.5, 0.25)] {
+        let tool = Tool::new(vec![Section {
+            kind: SectionKind::Cutting,
+            start: Point::new(lower, 0.0),
+            profile: vec![
+                Segment::Line(Point::new(lower, 0.5)),
+                Segment::Shoulder(upper),
+                Segment::Line(Point::new(upper, 1.0)),
+            ],
+        }])
+        .unwrap();
+        let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
+        tubes
+            .tool(
+                &tool,
+                Pose {
+                    tip: [0.0; 3],
+                    axis: Axis::Z,
+                },
+                [255; 3],
+                0.001,
+            )
+            .unwrap();
+        let mut shoulder_triangles = 0;
+        for t in tubes.geometry.indices.chunks_exact(3) {
+            let [a, b, c] =
+                [t[0], t[1], t[2]].map(|i| tubes.geometry.vertices[i as usize].position);
+            if [a, b, c].iter().all(|p| p.z == 0.5) {
+                shoulder_triangles += 1;
+                assert!(
+                    [a, b, c].iter().all(|p| (p.xy().norm() - 0.25).abs() < 1e-6
+                        || (p.xy().norm() - 0.5).abs() < 1e-6),
+                    "annulus, not a disk"
+                );
+                assert!((b - a).cross(&(c - a)).z * (lower - upper) as f32 > 0.0);
+            }
+        }
+        assert_eq!(shoulder_triangles, 24);
     }
 }
 

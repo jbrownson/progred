@@ -1,5 +1,6 @@
 //! A path sink that builds Fidget geometry, sharing the ordinary 3D viewport.
 
+use super::cutter::{SectionKind, Tool};
 use super::playback;
 use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, result, vocabulary::*};
@@ -60,15 +61,23 @@ impl Draw for Tubes {
         Ok(())
     }
 
-    fn ball_end(&mut self, center: Point3, length: f64) -> Result<(), InvalidPath> {
-        let field = super::stock::BallEnd::new(f64::from(self.radius), length)
-            .ok_or(InvalidPath::CoordinateRange)?
-            .sweep(center, center)?;
+    fn tool(
+        &mut self,
+        tool: &Tool,
+        pose: Pose,
+        color: [u8; 3],
+        tolerance: f64,
+    ) -> Result<(), InvalidPath> {
         self.flush();
-        self.objects.push(fidget::SceneObject {
-            tree: field,
-            color: self.color,
-        });
+        for section in &tool.sections {
+            let field = section.sweep(tolerance, pose.tip, pose.tip, pose.axis)?;
+            let color = match section.kind {
+                SectionKind::Cutting => color,
+                SectionKind::NonCutting => [122, 138, 153],
+            };
+            self.objects
+                .push(fidget::SceneObject { tree: field, color });
+        }
         Ok(())
     }
 }
@@ -112,7 +121,7 @@ pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, Inv
 impl Sink for Tubes {
     type Error = InvalidPath;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error> {
+    fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
         let point = coordinate(point)?;
         self.paths.extend(self.path.take());
         self.previous = Some(point);
@@ -303,15 +312,15 @@ mod tests {
     #[test]
     fn tubes_preserve_breaks_and_do_not_draw_isolated_starts() {
         let mut tubes = Tubes::new(0.1).unwrap();
-        tubes.start_at([100.0; 3]).unwrap();
+        tubes.start_at([100.0; 3], Axis::Z).unwrap();
         assert!(tubes.path.is_none());
         assert!(tubes.paths.is_empty());
-        tubes.start_at([0.0; 3]).unwrap();
+        tubes.start_at([0.0; 3], Axis::Z).unwrap();
         tubes.line_to([1.0, 0.0, 0.0]).unwrap();
         tubes.line_to([2.0, 0.0, 0.0]).unwrap();
-        tubes.start_at([0.0, 2.0, 0.0]).unwrap();
+        tubes.start_at([0.0, 2.0, 0.0], Axis::Z).unwrap();
         tubes.line_to([1.0, 2.0, 0.0]).unwrap();
-        tubes.start_at([100.0; 3]).unwrap();
+        tubes.start_at([100.0; 3], Axis::Z).unwrap();
         let paths = tubes
             .scene()
             .into_iter()
@@ -331,10 +340,10 @@ mod tests {
     fn duplicate_points_are_spheres_and_invalid_emissions_leave_the_sink_unchanged() {
         let mut tubes = Tubes::new(0.1).unwrap();
         assert_eq!(tubes.line_to([0.0; 3]), Err(InvalidPath::MissingStart));
-        tubes.start_at([0.0; 3]).unwrap();
+        tubes.start_at([0.0; 3], Axis::Z).unwrap();
         tubes.line_to([0.0; 3]).unwrap();
         assert_eq!(
-            tubes.start_at([f64::NAN; 3]),
+            tubes.start_at([f64::NAN; 3], Axis::Z),
             Err(InvalidPath::NonFinitePoint)
         );
         assert_eq!(
@@ -364,9 +373,9 @@ mod tests {
     #[test]
     fn direct_and_recorded_paths_produce_the_same_fields() {
         fn draw(sink: &mut impl Sink<Error = InvalidPath>) {
-            sink.start_at([0.0; 3]).unwrap();
+            sink.start_at([0.0; 3], Axis::Z).unwrap();
             sink.line_to([1.0, 0.5, 0.1]).unwrap();
-            sink.start_at([-1.0, 0.0, 0.5]).unwrap();
+            sink.start_at([-1.0, 0.0, 0.5], Axis::Z).unwrap();
             sink.line_to([0.0, 0.5, 0.2]).unwrap();
         }
         let mut direct = Tubes::new(0.1).unwrap();

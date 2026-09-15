@@ -278,7 +278,11 @@ mod tests {
         );
         let next = || queue.lock().unwrap().pop_front().unwrap();
         let mut path = Recording::default();
-        path.start_at([-0.25, 0.0, 0.5]).unwrap();
+        path.start_at(
+            [-0.25, 0.0, 0.5],
+            crate::libraries::toolpath::paths::Axis::Z,
+        )
+        .unwrap();
         path.line_to([0.25, 0.0, 0.5]).unwrap();
         let path = Arc::new(path);
         let recording = runtime.memo(move |_| {
@@ -291,11 +295,16 @@ mod tests {
                 },
             })
         });
-        let playback = |progress| {
+        let playback = |progress, tolerance| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
-                (TOOL_DIAMETER, f64::value(0.2)),
-                (TOOL_LENGTH, f64::value(0.4)),
+                (PROFILE_TOLERANCE, f64::value(tolerance)),
+                (
+                    crate::libraries::toolpath::cutter::vocabulary::TOOL,
+                    crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
+                        .unwrap()
+                        .value(),
+                ),
                 (
                     STOCK_MIN,
                     Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
@@ -318,7 +327,7 @@ mod tests {
             shape: (&preview()).into(),
             radius: 0.01,
             color: [20, 150, 230],
-            playback: Some(playback(0.25)),
+            playback: Some(playback(0.25, 0.001)),
         };
         let settings = runtime.input(props.clone());
         let layers = Layers::new(
@@ -363,7 +372,7 @@ mod tests {
         let old_geometry = &old_surface.as_ref().as_ref().unwrap().0;
         assert!(!old_geometry.vertices.is_empty());
 
-        props.playback = Some(playback(0.75));
+        props.playback = Some(playback(0.75, 0.001));
         settings.set(props);
         let waiting = runtime.read(&combined).unwrap();
         let waiting = &waiting.as_ref().as_ref().unwrap().0;
@@ -434,7 +443,11 @@ mod tests {
         let tasks = Tasks::new(&runtime, incremental::background::Executor::inline(), || {});
         let recording = runtime.memo(move |_| {
             let mut path = Recording::default();
-            path.start_at([-0.25, 0.0, 0.5]).unwrap();
+            path.start_at(
+                [-0.25, 0.0, 0.5],
+                crate::libraries::toolpath::paths::Axis::Z,
+            )
+            .unwrap();
             path.line_to([0.25, 0.0, 0.5]).unwrap();
             Ok(Recorded {
                 path: Arc::new(path),
@@ -445,11 +458,16 @@ mod tests {
                 },
             })
         });
-        let playback = |progress| {
+        let playback = |progress, tolerance| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
-                (TOOL_DIAMETER, f64::value(0.2)),
-                (TOOL_LENGTH, f64::value(0.4)),
+                (PROFILE_TOLERANCE, f64::value(tolerance)),
+                (
+                    crate::libraries::toolpath::cutter::vocabulary::TOOL,
+                    crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
+                        .unwrap()
+                        .value(),
+                ),
                 (
                     STOCK_MIN,
                     Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
@@ -472,7 +490,7 @@ mod tests {
             shape: (&preview()).into(),
             radius: 0.01,
             color: [20, 150, 230],
-            playback: Some(playback(0.25)),
+            playback: Some(playback(0.25, 0.001)),
         };
         let settings = runtime.input(props.clone());
         let depth = runtime.input(3);
@@ -506,12 +524,22 @@ mod tests {
         props.radius = 0.02;
         settings.set(props.clone());
         assert!(Rc::ptr_eq(&surface, &runtime.read(&surface_node).unwrap()));
-        props.playback = Some(playback(0.75));
-        settings.set(props);
+        props.playback = Some(playback(0.75, 0.001));
+        settings.set(props.clone());
         let moved = runtime.read(&surface_node).unwrap();
         assert!(!Rc::ptr_eq(&surface, &moved));
+        props.playback = Some(playback(0.75, 0.01));
+        settings.set(props);
+        let accuracy_changed = runtime.read(&surface_node).unwrap();
+        assert!(
+            !Rc::ptr_eq(&moved, &accuracy_changed),
+            "accuracy is a stock computation input"
+        );
         depth.set(4);
-        assert!(!Rc::ptr_eq(&moved, &runtime.read(&surface_node).unwrap()));
+        assert!(!Rc::ptr_eq(
+            &accuracy_changed,
+            &runtime.read(&surface_node).unwrap()
+        ));
     }
 
     #[test]
@@ -637,8 +665,13 @@ mod tests {
 
         let mut playback = Value::record([
             (PROGRESS, f64::value(0.25)),
-            (TOOL_DIAMETER, f64::value(0.2)),
-            (TOOL_LENGTH, f64::value(0.4)),
+            (PROFILE_TOLERANCE, f64::value(0.001)),
+            (
+                crate::libraries::toolpath::cutter::vocabulary::TOOL,
+                crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
+                    .unwrap()
+                    .value(),
+            ),
             (
                 STOCK_MIN,
                 Value::record([X, Y, Z].map(|key| (key, f64::value(-1.0)))),

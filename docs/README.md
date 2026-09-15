@@ -42,5 +42,9 @@ The [release checklist](release-checklist.md) covers distribution concerns.
 the formulas behind the Fidget shapes.
 [Toolpaths](toolpaths.md) describes the first streaming CAM geometry library
 and its Rhino-derived combined model-and-path preview.
+[Tool profiles](tool-profiles.md) describes revolved cutter sections and the
+remaining tool-change/chamfer work.
+[Tool-sweep experiment](tool-sweep-experiment.md) records the test-only analytic
+bull-mill candidate and why it has not replaced the working approximation.
 [Controls](controls.md) describes reusable sliders and Grap control composition
 used by toolpath playback.

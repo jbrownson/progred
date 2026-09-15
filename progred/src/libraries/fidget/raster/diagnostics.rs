@@ -1,11 +1,7 @@
 //! Opt-in diagnostics over real stock geometry, without editor or window instrumentation.
 use super::*;
 use crate::libraries::f64;
-use crate::libraries::toolpath::{
-    self,
-    paths::Recording,
-    stock::{BallEnd, Stock},
-};
+use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
 fn paths() -> (Recording, f64) {
@@ -25,11 +21,11 @@ fn paths() -> (Recording, f64) {
 }
 
 fn stock(path: &Recording, radius: f64, progress: f64) -> Tree {
-    let tool = BallEnd::new(radius, 0.22).unwrap();
+    let tool = Tool::ball(radius * 2.0, 0.22).unwrap();
     let mut stock = Stock::block([-0.5; 3], [0.5; 3]).unwrap();
-    path.playback(progress, |a, b, complete| {
+    path.playback(progress, |a, b, axis, complete| {
         if complete {
-            stock.cut(&tool, a, b)?;
+            stock.cut(&tool, a, b, axis, 0.001)?;
         }
         Ok::<_, toolpath::paths::InvalidPath>(())
     })
@@ -100,9 +96,15 @@ fn implicit_tool_rim_diagnostic() {
     let height = length - radius;
     let preview = VolumePreview {
         objects: vec![SceneObject {
-            tree: BallEnd::new(f64::from(radius), f64::from(length))
+            tree: Tool::ball(f64::from(radius) * 2.0, f64::from(length))
                 .unwrap()
-                .sweep([0.0; 3], [0.0; 3])
+                .sweep(
+                    [0.0, 0.0, -f64::from(radius)],
+                    [0.0, 0.0, -f64::from(radius)],
+                    toolpath::paths::Axis::Z,
+                    0.001,
+                )
+                .unwrap()
                 .unwrap(),
             color: [225, 94, 58],
         }],

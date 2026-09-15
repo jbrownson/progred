@@ -6,12 +6,15 @@ the mesh preview uses the general dependency-tracked computation runtime.
 
 ## Generation and interpretation
 
-Rust generators call `paths::Sink::start_at` and `line_to` with finite 3D
-coordinates. A new start begins a separate path: it is neither a cutting link
+Rust generators call `paths::Sink::start_at(point, axis)` and `line_to(point)`
+with finite 3D tool-tip coordinates. The normalized axis points from the tip
+toward the spindle and stays fixed until the next start (3+2 positioning, not
+simultaneous orientation interpolation). A new start begins a separate path: it is neither a cutting link
 nor a rapid move from the previous endpoint. A line requires a preceding start.
 Calling generators in sequence composes their output. `MapPoints` adapts another
 sink, so translation, reflection, surface mapping, and further adapters compose
-without recording intermediate paths.
+without recording intermediate paths. It maps positions only, preserving axes;
+an arbitrary surface mapping does not define a cutter orientation.
 
 `Recording` is an optional initial representation: a native vector of
 start/line commands. Playback uses it for total distance and seeking; tests also
@@ -22,6 +25,8 @@ an observed recording, then emits tube vertices and indices from it. There is
 no GID command list or opaque Rust program passed through Grap. Final-encoding
 generators can still run directly against any sink without recording.
 
+Grap's `start at` accepts an optional `tool axis` x/y/z record, defaulting
+to +Z. Explicit zero or nonfinite axes fail without emitting a command.
 Grap uses ordinary calls to scoped `start at`, `line to`, and
 `map points` functions. `do` supplies sequencing; lambdas supply reusable
 generators. Emitters outside an installed output scope return `toolpath output
@@ -68,9 +73,12 @@ generation does not construct or mesh a solid it does not consume. Dimensions
 and path arithmetic use f64; `f32 from f64` explicitly rounds the constants at
 the Fidget construction boundary.
 
-`crosshatch` takes the top-face mapping. `ball-center passes` obtains it and the
-normal function from the cube, then composes surface mapping and ball-radius
-compensation. Neither CAM function contains cube dimensions or a duplicate
+`crosshatch` takes the top-face mapping, rigid orientation, setup-up, and a
+compensation function from the current fixed axis to a point mapping.
+`face passes` obtains the surface and normal functions from the cube, then
+composes surface mapping, ball-radius compensation, orientation, and the
+ball-center-to-tip shift.
+Neither CAM function contains cube dimensions or a duplicate
 surface formula. The geometry's analytic normal is still authored alongside its
 surface, not automatically differentiated. Tests check both against the actual
 implicit field after edits to each cube parameter.
@@ -86,13 +94,43 @@ z = s/2 − 4d u(1 − u)v(1 − v)
 The defaults `s = 1`, `c = 0.1`, `d = 0.5` give a face-center depression of
 0.125. The second sweep reflects
 the unit-square y coordinate before the same surface mapping. Unlike Rhino's
-finishing program, this example does not reverse row order for that second
-sweep or construct linking curves. The separate Grap `ball center` mapping
+finishing program, this example leaves the passes disconnected.
+The crossing family reverses its row order, as Rhino does. The separate Grap `ball center` mapping
 offsets each contact point along the analytic surface normal by `ball radius`;
-`ball-center passes` wraps the contact generator with that mapping. The editable
-`tool diameter` is 0.125 inches; both this mapping and the preview convert it to
-a radius of 0.0625. The first fixture covers one
-face only. The example interprets one model unit as one inch; the runtime still
+`ball tip` then applies the orientation and subtracts radius times the tool
+axis. The editable `tool diameter` is 0.125 inches; this mapping and the
+ball-tool constructor share that cell. `Op 1 · top and four sides` calls that same generator for
++Z, +X, +Y, −X, and −Y. The separately callable `Op 2 · bottom` uses
+the same generator for −Z, rotating the top-face coordinates 180° about X.
+The six signed-axis rotations and all machining policy are ordinary Grap
+functions in the document. `ball-tip passes` remains the top-only generator.
+`Preview · Op 1 + Op 2` sequences the two programs for the playback slider,
+retaining Op 1's removed stock into Op 2. It is a preview composition, not a
+single machine program: eventual export should target Op 1 and Op 2 separately.
+Both currently use part coordinates; there is no simulated stock flip,
+work-offset definition, or connecting move between setups.
+
+The editable `tilt (degrees)` defaults to 45 and must be strictly between 0
+and 90. The example assumes the usual clockwise spindle rotation, viewed from
+the spindle toward the tip. Each operation passes an explicit `setup up`
+vector: +Z for Op 1, −Z for the flipped Op 2, expressed in part coordinates.
+The ordinary Grap `pull direction` function selects the sign of each diagonal
+so its lean points toward setup-up. A horizontal tie keeps the positive
+diagonal direction. The axis is
+`cos(tilt) * face_normal + sin(tilt) * feed_direction`.
+Motion runs along that lean, pulling the cutter, with row progression along
+`feed_direction × face_normal` for the example's clockwise climb policy.
+Reversing the lean reverses both points within each pass and the row sequence;
+the reflected crossing family also reverses its row sequence. All of this is
+editable Grap, not a rule in the path sink or renderer.
+
+Tests check the spindle-facing hemisphere, pull direction, row progression,
+and unchanged sampled geometry on all six faces. These are reference-face
+rules, not a claim of collision clearance or verified engagement throughout
+every curved cut. Tilt changes the tool and swept volume, not the ball-center
+compensation. The example does not finish chamfers,
+plan indexing/retracts, model a holder/fixture, or perform collision checks.
+The example interprets one model unit as one inch; the runtime still
 uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
 ## Previews
@@ -143,10 +181,12 @@ doubles XY resolution up to native size, then finishes with four-times depth
 sampling. The mesh supplies immediate feedback until the first current implicit
 image. Standalone mesh and implicit functions remain available.
 
-Command+9's example uses this refined preview with one playback slider: 42 paths (1,056
-segments), with a blue reference cube when stock is disabled and a 500,000-fuel
+Command+9's example uses this refined preview with one playback slider: 252 paths (6,336
+segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
+Op 1 occupies the first five sixths of cutting distance; Op 2 finishes the bottom
+in the last sixth. The operation boundary adds no travel or cut.
 Implicit requests a new software image in the background when inputs change,
 including the camera. Mesh retains geometry across camera changes; its optional
 `mesh depth` defaults to 6 (the previous mesh-only fixture used 7).
@@ -198,7 +238,7 @@ geometry through the general dependency graph.
 ## Playback
 
 All three volume previews accept an optional `playback` record with `progress` (f64,
-0–1), `tool diameter`, `tool length`, and `stock minimum` / `stock maximum` (f64
+0–1), a `tool` profile, and `stock minimum` / `stock maximum` (f64
 `x`, `y`, `z` records). These are ordinary data, not control state. The example
 supplies progress from the reusable [controls](controls.md) library.
 
@@ -209,18 +249,21 @@ The current segment is split exactly at the playback position: only its upcoming
 portion is drawn. Path starts do not contribute
 distance: the cursor jumps between disconnected passes rather than inventing
 linking moves. Progress is not machining time. Empty paths have no tool; zero
-length segments are well-defined. The visual tool is a vertical ball-end cutter,
-with a hemispherical tip and a flat-topped cylindrical flute. Paths identify its
-ball center, and length measures tip to top. Diameter is converted to radius
-at the playback boundary. Both must be finite and positive, and tool length
-must be at least its diameter for this ball-end model.
+length segments are well-defined. Paths locate the tool tip. One validated
+`cutter::Tool` supplies revolved sections to mesh display, implicit display, and
+stock subtraction; non-cutting sections are gray and do not remove material.
+Tool geometry does not inherit dimensions from the path-line drawing style.
+See [tool profiles](tool-profiles.md) for its line/arc representation, exact
+linear-profile sweeps, and explicit arc approximation tolerance. The required
+`profile tolerance` is part of playback settings, not the tool definition;
+it controls curved-profile approximation for subtraction and tool display.
 Playback is generic over the consumer's error type, with conversion from path
 validation errors. The preview translates invalid geometry to ordinary absents.
 
 Without `stock`, the stock bounds draw a wire envelope. With that field, its
 record supplies an opaque `color`. The preview's ordinary `mesh depth` determines
 the stock mesh resolution too. Command+9 starts with a one-inch cube, bounded
-by −0.5…0.5 on all three axes, so the passes carve the indent into its top face
+by −0.5…0.5 on all three axes, so the two operations carve indents into all six faces
 without first removing an oversized stock allowance.
 Stock replaces the reference solid while enabled, avoiding coplanar surfaces
 where their boundaries coincide. It shares the paths' depth buffer, so intact
@@ -274,7 +317,7 @@ and stale stock during playback with the production refined declaration.
 
 `toolpath::stock::Stock` starts with a box-shaped Fidget field. Each completed
 segment, including the completed portion of the current segment, subtracts the
-continuous swept solid of a vertical `BallEnd` tool: `stock.max(-sweep)`.
+continuous swept solid of the tool's cutting sections: `stock.max(-sweep)`.
 The mesh preview uses Fidget's CPU mesher and the shared triangle renderer.
 The implicit preview renders the same expression directly with the voxel renderer.
 There is no
@@ -282,14 +325,16 @@ heightfield, sampled stock grid, or fallback stock algorithm. The target model
 does not participate in removal: a bad path can cut past the intended surface.
 Stock mode does not mesh or draw that reference solid.
 
-A sweep unions the moving ball with the moving finite cylinder above its
+The ball-profile lowering unions the moving ball with the moving finite cylinder above its
 equator. The ball uses squared distance to a segment. For the cylinder, each
-query Z restricts which portion of the motion can contain that point; radial
+query's cutter-local Z restricts which portion of the motion can contain that point; radial
 distance is minimized over that interval, with the overall end planes bounding
 it vertically. These are closed-form Fidget expressions, not sampled tool
 placements or a loop executed for each queried point. Horizontal, vertical,
 sloping, and zero-length segments share the same solid semantics. The tool is
-still fixed along +Z; orientation is not inferred from the path's tangent.
+fixed along each path's explicit axis; it is not inferred from the tangent.
+The same sweep is evaluated in an orthonormal cutter frame for tilted tools;
+it is not approximated by discrete placements.
 
 The remaining stock is a full 3D solid, so through cuts and material over a
 cavity are representable. Meshing still approximates the implicit surface, and
@@ -306,12 +351,13 @@ Disconnected starts still have no linking cut. No holder or collision model is
 implied, and this models the programmed polyline, not controller-specific motion
 blending or physical cutting behavior.
 
-The example demonstrates top-face finishing only. At completion, stock remains
-around that face and on the other five sides; it is not yet a roughing program
-or a manufacturing simulation for the entire cube.
+The example demonstrates indent finishing on all six faces in two operations.
+Op 1 leaves the bottom untouched; Op 2 cuts it. At completion, the
+chamfers remain unfinished; it is not yet a roughing program or
+a manufacturing simulation for the entire cube.
 
-Variable orientation, general tool profiles (including arcs and separate cutting
-and collision parts), explicit links, and machine/postprocessor output remain
+Variable orientation, collision checking for the non-cutting profiles, explicit
+links, and machine/postprocessor output remain
 separate next steps. Render-quality controls can use the controls library later;
 path-generation tolerance belongs to the program
 and is distinct from mesh/raster resolution. Upcoming-path windows and transparency

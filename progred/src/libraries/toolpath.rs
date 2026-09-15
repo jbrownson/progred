@@ -10,6 +10,7 @@ use gid::{CellId, Cells, Value};
 use std::{cell::RefCell, rc::Rc};
 
 mod computation;
+pub mod cutter;
 mod fidget;
 mod mesh;
 pub mod paths;
@@ -25,6 +26,7 @@ pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);
 pub mod vocabulary {
     use gid::CellId;
     pub const TOOLPATH: CellId = CellId::from_u128(0xfaaa4df9bd9bc104fc05c09a722f1ae9);
+    pub const TOOL_AXIS: CellId = CellId::from_u128(0xc674bd24061031aff48153e907df4d59);
     pub const START_AT: CellId = CellId::from_u128(0x0b3ea6a88bdb8a105704e4af8b7950a5);
     pub const LINE_TO: CellId = CellId::from_u128(0xe88873219d230571430941334a51600f);
     pub const MAP_POINTS: CellId = CellId::from_u128(0x923fb213d0e56383539b43b1fc807458);
@@ -45,12 +47,13 @@ pub mod vocabulary {
     pub const PROGRESS: CellId = CellId::from_u128(0x13feb828ce93822d8d72a3ef3765e2f0);
     pub const TOOL_DIAMETER: CellId = CellId::from_u128(0x900b8ac5725af07ea981455d015541bf);
     pub const TOOL_LENGTH: CellId = CellId::from_u128(0x147708f5640ec6a4f9b6f4e4ffd2f7ab);
+    pub const PROFILE_TOLERANCE: CellId = CellId::from_u128(0x4c3b5d5884e040ad1c226f37935ea68b);
     pub const STOCK_MIN: CellId = CellId::from_u128(0x8ea1172ebbc67d795f0810ee5ca04d00);
     pub const STOCK_MAX: CellId = CellId::from_u128(0x607b5e9a8636c8258959709bf0c3506b);
     pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
 }
 
-use paths::{InvalidPath, Point3, Sink};
+use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 
 const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS];
@@ -179,10 +182,10 @@ impl Emission<'_, '_, '_> {
 impl Sink for Emission<'_, '_, '_> {
     type Error = Error;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Error> {
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Error> {
         let point = self.point(point)?;
         self.context
-            .effect(|| self.output.sink.borrow_mut().start_at(point))
+            .effect(|| self.output.sink.borrow_mut().start_at(point, axis))
             .map_err(|_| invalid())
     }
 
@@ -206,7 +209,13 @@ fn operation(
             let point = point(context, call, environment)?;
             let mut emission = Emission { output, context };
             if function == START_AT {
-                emission.start_at(point)?;
+                let axis = if let Some(expression) = emission.context.field(call, TOOL_AXIS) {
+                    let value = emission.context.eval(expression, environment)?;
+                    Axis::new(read_point(&value).ok_or_else(invalid)?).ok_or_else(invalid)?
+                } else {
+                    Axis::Z
+                };
+                emission.start_at(point, axis)?;
             } else {
                 emission.line_to(point)?;
             }
@@ -297,6 +306,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     for (id, spelling) in [
         (TOOLPATH, "toolpaths"),
         (START_AT, "start at"),
+        (TOOL_AXIS, "tool axis"),
         (LINE_TO, "line to"),
         (MAP_POINTS, "map points"),
         (MAPPER, "mapping"),
@@ -314,6 +324,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (PROGRESS, "progress"),
         (TOOL_DIAMETER, "tool diameter"),
         (TOOL_LENGTH, "tool length"),
+        (PROFILE_TOLERANCE, "profile tolerance"),
         (STOCK_MIN, "stock minimum"),
         (STOCK_MAX, "stock maximum"),
         (STOCK, "stock"),
@@ -322,14 +333,18 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     ] {
         cells.set_value(id, name::record(spelling, []));
     }
+    for (id, spelling) in cutter::names() {
+        cells.set_value(id, name::record(spelling, []));
+    }
     let mesh_renderer = Rc::new(RefCell::new(
         crate::libraries::fidget::mesh::Renderer::default(),
     ));
     Library::named(
         ID,
         "toolpaths",
-        Definitions::from_parts(cells, functions()),
+        Definitions::from_parts(cells, cutter::functions(functions())),
         crate::display::compose_partials([
+            crate::display::partial(cutter::display),
             crate::display::partial(preview::display),
             crate::display::partial(fidget::display),
             crate::display::partial({

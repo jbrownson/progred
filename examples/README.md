@@ -13,7 +13,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Slider-driven ball-end cutter and stock removal; Mesh/Implicit radio selector |
+| 9 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -69,13 +69,16 @@ measurements using the actual example documents.
 
 ## Toolpaths
 
-`toolpaths.gid` uses Grap to generate two diagonal sweeps and map their points.
+`toolpaths.gid` uses Grap to generate two diagonal sweeps per face and map their points.
 Both the row loop and the sampling loop are editable example functions; only
 point emission and the generic mapping scope are native toolpath operations.
-The left viewport offers Mesh (default) and Implicit beside the playback controls.
-Mesh retains stock geometry for responsive orbiting; Implicit uses Fidget's
-software voxel renderer in a background job. Both preserve the camera and slider
-position when switching. With stock
+Separate callable programs define `Op 1 · top and four sides` and `Op 2 · bottom`;
+`Preview · Op 1 + Op 2` plays both, with Op 2 occupying the last sixth of the
+slider. They share part coordinates for preview but are intended for separate
+machine programs, not a linking move or an automatically planned stock flip.
+The left viewport combines retained mesh geometry for responsive orbiting with
+progressive implicit images from Fidget's software voxel renderer in a background
+job. Standalone mesh and implicit projections remain available. With stock
 disabled, it renders the blue reference cube instead. Drag to orbit
 and scroll to zoom. The controls overlay the bottom of the full-pane 3D view;
 the unlabelled slider seeks by cutting distance,
@@ -84,6 +87,16 @@ Edit/scrub the row counts, UV spacing,
 mapping constants, colors, or explicit line radius. The latter controls visual
 thickness, not cutter size. A separate Grap mapping offsets surface samples along
 their normals by half the editable tool diameter (initially 0.125 inches).
+The editable tilt defaults to 45°; each crossing family has a fixed cutter axis.
+The example chooses the lean away from the vise using each operation's explicit
+setup-up vector, pulls along that lean, and orders rows for clockwise climb
+cutting. This is not yet a fixture collision check.
+Path positions now locate the tip, after normal compensation and the axial
+ball-center-to-tip shift. At the end of the toolpaths list, `ball tool` evaluates
+the common constructor and `square tool` is an editable profile with a wider,
+tapered non-cutting shank. Each displays a mirrored 2D profile beside its data.
+The square tool is not yet used by the program: tool changes and chamfer passes
+are the next step. See [tool profiles](../docs/tool-profiles.md).
 No links between passes are implied. Mesh's optional `mesh depth` defaults to 6.
 Full-stock implicit GPU rendering is unsupported,
 so the software path is explicit, not a fallback after attempting a GPU render;
@@ -91,15 +104,15 @@ see [the limitation](../docs/toolpaths.md#playback).
 The document includes its own copy of the cube definition;
 its geometry drives the toolpath's contact points. Tan stock starts as a one-inch cube, bounded
 by −0.5…0.5 on every axis (one model unit means one inch in this example); completed
-cuts subtract continuous swept ball-end solids through Fidget. The block's
-uncut sides remain: this is top-face finishing, not a program that machines the
-entire cube. Expand `playback` to edit the stock bounds and color; removing its
+cuts subtract continuous swept ball-end solids through Fidget. Both operations
+together finish the six indents, but leave the chamfers untouched and do not
+plan roughing, links, or collision clearance. Expand `playback` to edit the stock bounds and color; removing its
 `stock` field returns to the wire envelope and reference model. Both preview
 functions support playback and stock removal. Controls use per-view state
 without making the document unsaved. The general dependency graph retains the
-path recording and latest result. The implicit preview dims its old image until
-a current coarse image arrives, then refines toward native resolution and finally
-four times the depth samples for cleaner sharp edges. An
+path recording and latest result. The combined preview shows its mesh while a
+current implicit image is pending, then refines toward native resolution and
+finally four times the depth samples for cleaner sharp edges. An
 ellipsis remains until refinement completes. New camera or playback input
 cancels the previous refinement sequence. The mesh
 preview instead moves the tool immediately while its old stock mesh is desaturated.

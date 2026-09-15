@@ -2,6 +2,7 @@ use super::{paths::*, *};
 use crate::libraries::{control, number};
 
 mod geometry;
+mod orientation;
 
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
     let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
@@ -83,8 +84,8 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
     assert!(super::playback::Settings::read(playback).is_some());
     let playback = playback.as_record().unwrap();
     assert_eq!(
-        f64::read(playback.get(&TOOL_DIAMETER).unwrap()),
-        Some(0.125)
+        super::cutter::Tool::read(playback.get(&super::cutter::vocabulary::TOOL).unwrap()),
+        super::cutter::Tool::ball(0.125, 0.22)
     );
     assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
 }
@@ -131,6 +132,9 @@ fn diagonals(
             [
                 (names["rows"], f64::value(rows)),
                 (names["spacing"], f64::value(spacing)),
+                (names["feed_direction"], f64::value(1.0)),
+                (names["row_direction"], f64::value(1.0)),
+                (TOOL_AXIS, point_value(Axis::Z.vector())),
             ],
             &sources,
             scope,
@@ -145,7 +149,7 @@ fn streaming_and_recording_are_interchangeable_consumers() {
     struct Count(usize, usize);
     impl Sink for Count {
         type Error = InvalidPath;
-        fn start_at(&mut self, _: Point3) -> Result<(), Self::Error> {
+        fn start_at(&mut self, _: Point3, _: Axis) -> Result<(), Self::Error> {
             self.0 += 1;
             Ok(())
         }
@@ -187,7 +191,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
         .commands
         .iter()
         .filter_map(|command| match *command {
-            Command::StartAt(p) => Some(p),
+            Command::StartAt(p, _) => Some(p),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -199,7 +203,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     let mut ends = Vec::new();
     for command in recording.commands {
         match command {
-            Command::StartAt(point) => {
+            Command::StartAt(point, _) => {
                 if let Some(p) = prior {
                     ends.push(p);
                 }
@@ -231,16 +235,16 @@ fn point_adapters_compose_and_keep_path_breaks() {
         sink: &mut translated,
         map: |[x, y, z]: Point3| Ok([x * 2.0, y, z]),
     };
-    scaled.start_at([1.0, 0.0, 0.0]).unwrap();
+    scaled.start_at([1.0, 0.0, 0.0], Axis::Z).unwrap();
     scaled.line_to([2.0, 0.0, 0.0]).unwrap();
-    scaled.start_at([3.0, 0.0, 0.0]).unwrap();
+    scaled.start_at([3.0, 0.0, 0.0], Axis::Z).unwrap();
     scaled.line_to([4.0, 0.0, 0.0]).unwrap();
     assert_eq!(
         recording.commands,
         vec![
-            Command::StartAt([12.0, 0.0, 0.0]),
+            Command::StartAt([12.0, 0.0, 0.0], Axis::Z),
             Command::LineTo([14.0, 0.0, 0.0]),
-            Command::StartAt([16.0, 0.0, 0.0]),
+            Command::StartAt([16.0, 0.0, 0.0], Axis::Z),
             Command::LineTo([18.0, 0.0, 0.0])
         ]
     );
@@ -292,8 +296,8 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
     assert_eq!(
         recording.commands,
         vec![
-            Command::StartAt([12.0, 0.0, 0.0]),
-            Command::StartAt([1.0, 0.0, 0.0])
+            Command::StartAt([12.0, 0.0, 0.0], Axis::Z),
+            Command::StartAt([1.0, 0.0, 0.0], Axis::Z)
         ]
     );
 }
@@ -370,8 +374,8 @@ fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
     assert_eq!(
         recording.commands,
         [
-            Command::StartAt([0.0; 3]),
-            Command::StartAt([2.0; 3]),
+            Command::StartAt([0.0; 3], Axis::Z),
+            Command::StartAt([2.0; 3], Axis::Z),
             Command::LineTo([3.0; 3])
         ]
     );
@@ -382,7 +386,7 @@ fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
     );
     assert!(result.completed);
     assert_eq!(result.result, failure);
-    assert_eq!(recording.commands, [Command::StartAt([0.0; 3])]);
+    assert_eq!(recording.commands, [Command::StartAt([0.0; 3], Axis::Z)]);
 }
 
 #[test]
@@ -427,7 +431,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
 }
 
 #[test]
-fn example_ball_centers_offset_contact_points_along_the_normal() {
+fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
@@ -438,7 +442,29 @@ fn example_ball_centers_offset_contact_points_along_the_normal() {
     let a = run(&mut contact, |scope| {
         ::grap::apply_scoped(
             &names["crosshatch"].into(),
-            [(names["face"], top_face(&sources, &names))],
+            [
+                (names["face"], top_face(&sources, &names)),
+                (
+                    names["compensation"],
+                    ::grap::evaluate(
+                        &::grap::lambda(
+                            [TOOL_AXIS],
+                            ::grap::lambda(
+                                [X, Y, Z],
+                                ::grap::call(
+                                    POINT.into(),
+                                    [X, Y, Z].map(|id| (id, Value::from(id))),
+                                ),
+                            ),
+                        ),
+                        &sources,
+                        100,
+                    )
+                    .result,
+                ),
+                (names["orientation"], names["top"].into()),
+                (names["setup_up"], point_value(Axis::Z.vector())),
+            ],
             &sources,
             scope,
             500_000,
@@ -457,9 +483,13 @@ fn example_ball_centers_offset_contact_points_along_the_normal() {
     assert!(!absent::is_absent(&b.result), "{:?}", b.result);
     assert_eq!(contact.commands.len(), centers.commands.len());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
+    let mut axis = Axis::Z;
     for (a, b) in contact.commands.iter().zip(&centers.commands) {
+        if let Command::StartAt(_, next) = b {
+            axis = *next;
+        }
         let (a, b) = match (a, b) {
-            (Command::StartAt(a), Command::StartAt(b))
+            (Command::StartAt(a, _), Command::StartAt(b, _))
             | (Command::LineTo(a), Command::LineTo(b)) => (a, b),
             _ => panic!("path boundaries must survive compensation"),
         };
@@ -470,7 +500,11 @@ fn example_ball_centers_offset_contact_points_along_the_normal() {
         let ny = 2.5 * (1.0 - 2.0 * v) * u * (1.0 - u);
         let length = nx.hypot(ny).hypot(1.0);
         for i in 0..3 {
-            assert!((b[i] - a[i] - radius * [nx, ny, 1.0][i] / length).abs() < 1e-12);
+            assert!(
+                (b[i] + radius * axis.vector()[i] - a[i] - radius * [nx, ny, 1.0][i] / length)
+                    .abs()
+                    < 1e-12
+            );
         }
     }
 }
@@ -487,7 +521,29 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     let evaluation = run(&mut recording, |scope| {
         ::grap::apply_scoped(
             &names["crosshatch"].into(),
-            [(names["face"], top_face(&sources, &names))],
+            [
+                (names["face"], top_face(&sources, &names)),
+                (
+                    names["compensation"],
+                    ::grap::evaluate(
+                        &::grap::lambda(
+                            [TOOL_AXIS],
+                            ::grap::lambda(
+                                [X, Y, Z],
+                                ::grap::call(
+                                    POINT.into(),
+                                    [X, Y, Z].map(|id| (id, Value::from(id))),
+                                ),
+                            ),
+                        ),
+                        &sources,
+                        100,
+                    )
+                    .result,
+                ),
+                (names["orientation"], names["top"].into()),
+                (names["setup_up"], point_value(Axis::Z.vector())),
+            ],
             &sources,
             scope,
             500_000,
@@ -501,7 +557,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     let mut starts = 0;
     for command in recording.commands {
         let [x, y, z] = match command {
-            Command::StartAt(p) => {
+            Command::StartAt(p, _) => {
                 starts += 1;
                 p
             }
@@ -536,7 +592,7 @@ fn example_ball_path() -> (Recording, f64) {
 #[test]
 fn example_stock_removal_is_seekable_and_only_removes_completed_cuts() {
     let (recording, radius) = example_ball_path();
-    let tool = super::stock::BallEnd::new(radius, 0.22).unwrap();
+    let tool = super::cutter::Tool::ball(radius * 2.0, 0.22).unwrap();
     let points: Vec<[f32; 3]> = (0..=20)
         .flat_map(|y| {
             (0..=20).flat_map(move |x| {
@@ -548,9 +604,9 @@ fn example_stock_removal_is_seekable_and_only_removes_completed_cuts() {
     let simulate = |progress| {
         let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
         recording
-            .playback::<InvalidPath>(progress, |a, b, completed| {
+            .playback::<InvalidPath>(progress, |a, b, axis, completed| {
                 if completed {
-                    stock.cut(&tool, a, b)?;
+                    stock.cut(&tool, a, b, axis, 0.001)?;
                 }
                 Ok(())
             })
@@ -599,15 +655,15 @@ fn stock_meshing_profile() {
         now.elapsed(),
         recording.segments().count()
     );
-    let tool = super::stock::BallEnd::new(radius, 0.22).unwrap();
+    let tool = super::cutter::Tool::ball(radius * 2.0, 0.22).unwrap();
     for progress in [0.0, 0.35, 1.0] {
         for depth in [5, 6, 7] {
             let now = Instant::now();
             let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
             recording
-                .playback::<InvalidPath>(progress, |a, b, completed| {
+                .playback::<InvalidPath>(progress, |a, b, axis, completed| {
                     if completed {
-                        stock.cut(&tool, a, b)?;
+                        stock.cut(&tool, a, b, axis, 0.001)?;
                     }
                     Ok(())
                 })
@@ -652,7 +708,29 @@ fn example_tubes_compile_without_gpu_memory_operations() {
     let evaluation = run(&mut tubes, |scope| {
         ::grap::apply_scoped(
             &names["crosshatch"].into(),
-            [(names["face"], top_face(&sources, &names))],
+            [
+                (names["face"], top_face(&sources, &names)),
+                (
+                    names["compensation"],
+                    ::grap::evaluate(
+                        &::grap::lambda(
+                            [TOOL_AXIS],
+                            ::grap::lambda(
+                                [X, Y, Z],
+                                ::grap::call(
+                                    POINT.into(),
+                                    [X, Y, Z].map(|id| (id, Value::from(id))),
+                                ),
+                            ),
+                        ),
+                        &sources,
+                        100,
+                    )
+                    .result,
+                ),
+                (names["orientation"], names["top"].into()),
+                (names["setup_up"], point_value(Axis::Z.vector())),
+            ],
             &sources,
             scope,
             500_000,

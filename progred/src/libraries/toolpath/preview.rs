@@ -1,3 +1,4 @@
+use super::paths::Axis;
 use super::{
     paths::{InvalidPath, MapPoints, Point3, Sink},
     run,
@@ -40,7 +41,7 @@ impl Lines2D {
 
 impl Sink for Lines2D {
     type Error = InvalidPath;
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error> {
+    fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
         let point = self.point(point)?;
         self.path.move_to(point);
         Ok(())
@@ -155,9 +156,9 @@ mod tests {
     #[test]
     fn fits_extents_and_preserves_disconnected_passes() {
         let mut lines = projected();
-        lines.start_at([0.0, 0.0, 0.0]).unwrap();
+        lines.start_at([0.0, 0.0, 0.0], Axis::Z).unwrap();
         lines.line_to([1.0, 1.0, 0.0]).unwrap();
-        lines.start_at([1.0, 0.0, 0.0]).unwrap();
+        lines.start_at([1.0, 0.0, 0.0], Axis::Z).unwrap();
         lines.line_to([0.0, 1.0, 0.0]).unwrap();
         let path = fitted(lines.sink, Size::new(600.0, 300.0)).unwrap();
         assert_eq!(

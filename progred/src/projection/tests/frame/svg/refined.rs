@@ -73,6 +73,96 @@ fn readme_svg_captures() {
 }
 
 #[test]
+#[ignore = "captures editable tool profiles without launching the app"]
+fn editor_tool_profiles_svg_captures() {
+    use crate::libraries::toolpath::cutter::Tool;
+    let (mut doc, names) =
+        crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let square = doc.cells.value(names["square_tool"]).unwrap().clone();
+    assert!(Tool::read(&square).is_some());
+    for (name, tool) in [
+        ("square", square),
+        ("ball", Tool::ball(0.125, 0.22).unwrap().value()),
+        ("bull", Tool::bull(0.125, 0.02, 0.22).unwrap().value()),
+    ] {
+        doc.root = Some(tool);
+        render(&doc, None, 800.0, &format!("tool_profile_{name}.svg"));
+    }
+    doc.root = Some(Value::record([(
+        ::grap::vocabulary::EVALUATE,
+        Value::Cell(names["ball_tool"]),
+    )]));
+    for width in [600.0, 1000.0, 2000.0] {
+        render(
+            &doc,
+            None,
+            width,
+            &format!("tool_profile_evaluated_{width}.svg"),
+        );
+    }
+    let selected = Selection::edge(&crate::test_root(), Vec::new());
+    render(
+        &doc,
+        Some(&selected),
+        600.0,
+        "tool_profile_evaluated_selected.svg",
+    );
+}
+
+#[test]
+#[ignore = "captures both tilted CAM operations without launching the app"]
+fn editor_toolpath_operations_svg_captures() {
+    fn has_image(commands: &[DrawCmd]) -> bool {
+        commands.iter().any(|command| match command {
+            DrawCmd::Image { .. } => true,
+            DrawCmd::Clip { children, .. } => has_image(children),
+            _ => false,
+        })
+    }
+    for (progress, pitch, file) in [
+        (0.3, 45.0, "cam_operations_op1.svg"),
+        (0.93, 135.0, "cam_operations_op2.svg"),
+        (1.0, 135.0, "cam_operations_complete.svg"),
+    ] {
+        let mut editor = cam_editor(t::PREVIEW_MESH);
+        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
+            .path
+            .clone();
+        editor.model.workspace.left.panes[0]
+            .view
+            .annotations
+            .set_field(
+                &path,
+                STATE,
+                Some(Value::record([(t::PROGRESS, f64::value(progress))])),
+            );
+        editor.model.workspace.left.panes[0]
+            .view
+            .annotations
+            .set_field(
+                &path,
+                f::CAMERA,
+                Some(Value::record([
+                    (f::YAW, crate::libraries::f32::value(30.0)),
+                    (f::PITCH, crate::libraries::f32::value(pitch)),
+                ])),
+            );
+        let start = Instant::now();
+        let size = kurbo::Size::new(1200.0, 900.0);
+        let mut runner = crate::EditorRunner::new(editor);
+        let paint = runner.prepare_paint(1.0, size);
+        let mut list = DrawList::new();
+        puri::frame::render(paint.renders, &mut list);
+        assert!(
+            has_image(&list.0),
+            "the combined operations must render, not show a fuel/geometry absent"
+        );
+        write_svg(&list, size.width, size.height, "#F6F6F8", file);
+        eprintln!("{file}: {:.2}s", start.elapsed().as_secs_f64());
+    }
+}
+
+#[test]
 #[ignore = "captures controls over zoomed-in CAM geometry in both renderers"]
 fn editor_toolpath_controls_overlay_svg_captures() {
     for (mode, file) in [

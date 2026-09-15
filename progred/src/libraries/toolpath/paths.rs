@@ -2,10 +2,52 @@
 
 pub type Point3 = [f64; 3];
 
+/// Unit vector from the tool tip toward the spindle. A path has one fixed
+/// axis (3+2 positioning); changing orientation requires starting a new path.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Axis(Point3);
+
+impl Axis {
+    pub const Z: Self = Self([0.0, 0.0, 1.0]);
+
+    pub fn new(vector: Point3) -> Option<Self> {
+        let scale = vector.into_iter().map(f64::abs).fold(0.0, f64::max);
+        if !vector.into_iter().all(f64::is_finite) || scale == 0.0 {
+            return None;
+        }
+        let scaled = vector.map(|v| v / scale);
+        let length = scaled[0].hypot(scaled[1]).hypot(scaled[2]);
+        Some(Self(scaled.map(|v| v / length)))
+    }
+
+    pub fn vector(self) -> Point3 {
+        self.0
+    }
+
+    pub fn basis(self) -> [nalgebra::Vector3<f32>; 3] {
+        use nalgebra::Vector3;
+        let z = Vector3::from(self.vector().map(|v| v as f32)).normalize();
+        let helper = if z.x.abs() < 0.9 {
+            Vector3::x()
+        } else {
+            Vector3::y()
+        };
+        let y = z.cross(&helper).normalize();
+        let x = y.cross(&z);
+        [x, y, z]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pose {
+    pub tip: Point3,
+    pub axis: Axis,
+}
+
 pub trait Sink {
     type Error;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error>;
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error>;
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error>;
 }
 
@@ -17,8 +59,8 @@ pub struct MapPoints<S, F> {
 impl<S: Sink, F: FnMut(Point3) -> Result<Point3, S::Error>> Sink for MapPoints<S, F> {
     type Error = S::Error;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error> {
-        self.sink.start_at((self.map)(point)?)
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
+        self.sink.start_at((self.map)(point)?, axis)
     }
 
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
@@ -29,8 +71,8 @@ impl<S: Sink, F: FnMut(Point3) -> Result<Point3, S::Error>> Sink for MapPoints<S
 impl<S: Sink + ?Sized> Sink for &mut S {
     type Error = S::Error;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error> {
-        (**self).start_at(point)
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
+        (**self).start_at(point, axis)
     }
 
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
@@ -40,7 +82,7 @@ impl<S: Sink + ?Sized> Sink for &mut S {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
-    StartAt(Point3),
+    StartAt(Point3, Axis),
     LineTo(Point3),
 }
 
@@ -57,22 +99,24 @@ pub struct Recording {
 }
 
 impl Recording {
-    pub fn segments(&self) -> impl Iterator<Item = (Point3, Point3)> + '_ {
+    pub fn segments(&self) -> impl Iterator<Item = (Point3, Point3, Axis)> + '_ {
         let mut previous = None;
+        let mut axis = Axis::Z;
         self.commands
             .iter()
             .filter_map(move |command| match *command {
-                Command::StartAt(point) => {
+                Command::StartAt(point, next_axis) => {
+                    axis = next_axis;
                     previous = Some(point);
                     None
                 }
-                Command::LineTo(point) => previous.replace(point).map(|start| (start, point)),
+                Command::LineTo(point) => previous.replace(point).map(|start| (start, point, axis)),
             })
     }
 
     /// Cutting distance only: starts carry no implicit rapid or linking motion.
     pub fn length(&self) -> Result<f64, InvalidPath> {
-        let length = self.segments().map(|(a, b)| distance(a, b)).sum::<f64>();
+        let length = self.segments().map(|(a, b, _)| distance(a, b)).sum::<f64>();
         length
             .is_finite()
             .then_some(length)
@@ -83,29 +127,29 @@ impl Recording {
     pub fn playback<E: From<InvalidPath>>(
         &self,
         progress: f64,
-        mut emit: impl FnMut(Point3, Point3, bool) -> Result<(), E>,
-    ) -> Result<Option<Point3>, E> {
+        mut emit: impl FnMut(Point3, Point3, Axis, bool) -> Result<(), E>,
+    ) -> Result<Option<Pose>, E> {
         if !progress.is_finite() {
             return Err(InvalidPath::NonFinitePoint.into());
         }
         let mut remaining = progress.clamp(0.0, 1.0) * self.length()?;
         let mut position = None;
-        for (a, b) in self.segments() {
-            position.get_or_insert(a);
+        for (a, b, axis) in self.segments() {
+            position.get_or_insert(Pose { tip: a, axis });
             let length = distance(a, b);
             if progress >= 1.0 || (remaining >= length && remaining > 0.0) {
-                emit(a, b, true)?;
+                emit(a, b, axis, true)?;
                 remaining = (remaining - length).max(0.0);
-                position = Some(b);
+                position = Some(Pose { tip: b, axis });
             } else if remaining > 0.0 {
                 let t = remaining / length;
                 let point = std::array::from_fn(|i| a[i] + t * (b[i] - a[i]));
-                emit(a, point, true)?;
-                emit(point, b, false)?;
-                position = Some(point);
+                emit(a, point, axis, true)?;
+                emit(point, b, axis, false)?;
+                position = Some(Pose { tip: point, axis });
                 remaining = 0.0;
             } else {
-                emit(a, b, false)?;
+                emit(a, b, axis, false)?;
             }
         }
         Ok(position)
@@ -114,7 +158,7 @@ impl Recording {
     pub fn replay<S: Sink + ?Sized>(&self, sink: &mut S) -> Result<(), S::Error> {
         for command in &self.commands {
             match *command {
-                Command::StartAt(point) => sink.start_at(point)?,
+                Command::StartAt(point, axis) => sink.start_at(point, axis)?,
                 Command::LineTo(point) => sink.line_to(point)?,
             }
         }
@@ -133,15 +177,15 @@ mod playback_tests {
     #[test]
     fn seeking_is_by_distance_and_never_draws_across_path_breaks() {
         let mut path = Recording::default();
-        path.start_at([0.0, 0.0, 0.0]).unwrap();
+        path.start_at([0.0, 0.0, 0.0], Axis::Z).unwrap();
         path.line_to([1.0, 0.0, 0.0]).unwrap();
-        path.start_at([10.0, 0.0, 0.0]).unwrap();
+        path.start_at([10.0, 0.0, 0.0], Axis::Z).unwrap();
         path.line_to([13.0, 0.0, 0.0]).unwrap();
         assert_eq!(path.length().unwrap(), 4.0);
         for (progress, expected) in [(0.0, 0.0), (0.25, 1.0), (0.5, 11.0), (1.0, 13.0)] {
             let mut completed = 0.0;
             let position = path
-                .playback::<InvalidPath>(progress, |a, b, done| {
+                .playback::<InvalidPath>(progress, |a, b, _, done| {
                     assert!(distance(a, b) <= 3.0);
                     if done {
                         completed += distance(a, b);
@@ -150,7 +194,13 @@ mod playback_tests {
                 })
                 .unwrap()
                 .unwrap();
-            assert_eq!(position, [expected, 0.0, 0.0]);
+            assert_eq!(
+                position,
+                Pose {
+                    tip: [expected, 0.0, 0.0],
+                    axis: Axis::Z
+                }
+            );
             assert_eq!(completed, progress * 4.0);
         }
     }
@@ -168,18 +218,20 @@ mod playback_tests {
             }
         }
         let mut path = Recording::default();
-        path.start_at([0.0; 3]).unwrap();
+        path.start_at([0.0; 3], Axis::Z).unwrap();
         path.line_to([1.0; 3]).unwrap();
         path.line_to([2.0; 3]).unwrap();
         let mut calls = 0;
-        let result = path.playback(1.0, |_, _, _| {
+        let result = path.playback(1.0, |_, _, _, _| {
             calls += 1;
             Err(Error::Consumer)
         });
         assert_eq!(result, Err(Error::Consumer));
         assert_eq!(calls, 1);
         assert_eq!(
-            path.playback::<Error>(f64::NAN, |_, _, _| panic!("invalid progress must not emit")),
+            path.playback::<Error>(f64::NAN, |_, _, _, _| panic!(
+                "invalid progress must not emit"
+            )),
             Err(Error::Path(InvalidPath::NonFinitePoint)),
         );
     }
@@ -188,16 +240,21 @@ mod playback_tests {
     fn empty_zero_length_and_overflow_are_explicit() {
         let mut path = Recording::default();
         assert_eq!(
-            path.playback::<InvalidPath>(0.5, |_, _, _| Ok(())).unwrap(),
+            path.playback::<InvalidPath>(0.5, |_, _, _, _| Ok(()))
+                .unwrap(),
             None
         );
-        path.start_at([2.0; 3]).unwrap();
+        path.start_at([2.0; 3], Axis::Z).unwrap();
         path.line_to([2.0; 3]).unwrap();
         assert_eq!(
-            path.playback::<InvalidPath>(0.5, |_, _, _| Ok(())).unwrap(),
-            Some([2.0; 3])
+            path.playback::<InvalidPath>(0.5, |_, _, _, _| Ok(()))
+                .unwrap(),
+            Some(Pose {
+                tip: [2.0; 3],
+                axis: Axis::Z
+            })
         );
-        path.start_at([-f64::MAX; 3]).unwrap();
+        path.start_at([-f64::MAX; 3], Axis::Z).unwrap();
         path.line_to([f64::MAX; 3]).unwrap();
         assert!(path.length().is_err());
     }
@@ -206,11 +263,11 @@ mod playback_tests {
 impl Sink for Recording {
     type Error = InvalidPath;
 
-    fn start_at(&mut self, point: Point3) -> Result<(), Self::Error> {
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
         if !point.into_iter().all(f64::is_finite) {
             return Err(InvalidPath::NonFinitePoint);
         }
-        self.commands.push(Command::StartAt(point));
+        self.commands.push(Command::StartAt(point, axis));
         Ok(())
     }
 

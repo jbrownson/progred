@@ -2,6 +2,90 @@ use super::*;
 use crate::libraries::f64 as f64_convention;
 
 #[test]
+fn tool_profile_click_selects_its_stored_or_evaluated_owner() {
+    let tool = crate::libraries::toolpath::cutter::Tool::ball(0.125, 0.22)
+        .unwrap()
+        .value();
+    let owner = new_cell_id();
+    let definition = new_cell_id();
+    for evaluated in [false, true] {
+        let value = if evaluated {
+            Value::record([(::grap::vocabulary::EVALUATE, Value::Cell(definition))])
+        } else {
+            tool.clone()
+        };
+        let mut cells = Cells::new();
+        cells.set_value(definition, tool.clone());
+        let doc = Document {
+            root: Some(Value::record([(owner, value.clone())])),
+            cells,
+        };
+        let path = vec![Step::Key(owner)];
+        let mut bench = BenchContext::new();
+        let mut text = TextCtx {
+            fonts: &mut bench.fonts,
+            layouts: &mut bench.layouts,
+            cache: &mut bench.cache,
+            scale: 1.0,
+        };
+        let node = project(
+            ProjectDescription {
+                computations: None,
+                view: &crate::test_root(),
+                completions: None,
+                sources: Sources {
+                    doc: &doc,
+                    libraries: &bench.stack.libraries,
+                },
+                root: Some(&value),
+                root_path: &path,
+                selection: None,
+                source_selection: None,
+                annotations: &Annotations::default(),
+                raw: false,
+                styles: &bench.styles,
+                width: 600.0,
+                projection: Some(&bench.stack.projection),
+            },
+            &mut text,
+        );
+        // Inside the 110 × 180 profile, clear of both its text and delimiters.
+        let pointer = Point::new(55.0, 90.0);
+        let rect = node.extent.rect_at(Point::ZERO);
+        let frame = crate::display::widget::frame::place(
+            node,
+            Placement::root(rect),
+            &crate::display::widget::HoverInput {
+                pointer: Some(pointer),
+                ..Default::default()
+            },
+        );
+        let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+        assert_eq!(
+            frame.claim.as_ref().map(|(_, claim)| claim),
+            Some(&Claim::Direct(target.clone()))
+        );
+        let mut world = crate::test_editor(doc.clone());
+        let document = world.model.doc.clone();
+        let mut event = press(pointer.x, false);
+        event.state.position.y = pointer.y;
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target)),
+        ));
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            path.as_slice()
+        );
+        assert!(
+            Rc::ptr_eq(&world.model.doc, &document),
+            "selection must not edit the tool"
+        );
+    }
+}
+
+#[test]
 fn sample_text_line_click_mounts_its_own_editor() {
     let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

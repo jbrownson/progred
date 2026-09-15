@@ -259,8 +259,13 @@ mod tests {
     fn playback(progress: f64) -> playback::Settings {
         playback::Settings::read(&Value::record([
             (PROGRESS, f64::value(progress)),
-            (TOOL_DIAMETER, f64::value(0.2)),
-            (TOOL_LENGTH, f64::value(0.4)),
+            (PROFILE_TOLERANCE, f64::value(0.001)),
+            (
+                crate::libraries::toolpath::cutter::vocabulary::TOOL,
+                crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
+                    .unwrap()
+                    .value(),
+            ),
             (
                 STOCK_MIN,
                 Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
@@ -457,7 +462,11 @@ mod tests {
     #[test]
     fn implicit_playback_uses_shared_stock_sweeps_and_groups_connected_segments() {
         let mut path = Recording::default();
-        path.start_at([-0.25, 0.0, 0.45]).unwrap();
+        path.start_at(
+            [-0.25, 0.0, 0.45],
+            crate::libraries::toolpath::paths::Axis::Z,
+        )
+        .unwrap();
         for x in [-0.125, 0.0, 0.125, 0.25] {
             path.line_to([x, 0.0, 0.45]).unwrap();
         }

@@ -3,46 +3,67 @@
     "abs": 9f71b219018a191fab7b726732645ab1,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
+    "angle": e44590bd0560cc22dcf6397197ce5635,
+    "axial": 1e87f4d476a2d51539d4c221b068b9f4,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_x": 854f507d94f7d7f2dd9ac31d9f0ab28e,
+    "axis_y": 422dbc64510c54c4b40c5f566e8af3ba,
+    "axis_z": c8eb119e773d8d40985eb3468478d9ad,
+    "back_face": b88716a8ffc675aff42ef7bdd2c68768,
     "ball_center": 98ebb26558b012da933f7ef59de28505,
+    "ball_mill": 79c14e901b08feb6c3ae78f1edb50ab9,
     "ball_path": cd273e42a347cb3aac2014cb998516a1,
     "ball_radius": 5fdf6ba19c5bb61b6eb60ce694f38907,
+    "ball_tip": 5caa858bf636751fe7731cc680a7cd41,
+    "ball_tool": a6b46be409fd39a211789adb29716a0a,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
+    "bottom_face": e05cb05bec16e656fd056d260441562f,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
     "color": d6b4c91765541de967c02878c42d15ea,
+    "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
     "condition": 91c786935eb5794b005582b8e7941bc2,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "control_initial": 133b05e33c166614831f01de2365f49c,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
     "controls": b9d3424b750ee1fbba4df638d995e236,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
+    "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
     "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
+    "crossing_passes": 60358199da0169a8a765ca701378007e,
     "cube": 650c98379ab879a6b902b0bc94305103,
+    "cut_axis": 7132cc8a45610a94bc5d8398b7023279,
     "cutter_diameter": 900b8ac5725af07ea981455d015541bf,
+    "cutting": d22a92c1020be6f690b5cb738b728fd3,
     "diagonals": 73ae7ca51317bcddf4ff4b33e10fc2e0,
+    "direction": 18bab55f244a06a0f0d30cfeb87c4c4f,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "done": b19fe726e3c2eab7a5d81cda12cf44b7,
+    "dot": 81b6551b0b5376142721b23ace40847f,
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
+    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "face": dfc8f0866c65bc9aa4162913a1cc446f,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
+    "face_paths": 2fd754abf2b4f15b441b8b545af455be,
     "false": 8fcc0a2e5f26c72efd9e917a28919801,
+    "feed_direction": 4f961bef2d597db99a7f3e7c2e211181,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "floor": d007814c5f6a6c38b025605b399473d4,
+    "front_face": c5586f3699073c5958c278b3f9e4cd1c,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
@@ -54,6 +75,7 @@
     "is_finite": 1ff1fcec05b669eba2314ad52fe8e8f1,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "left_face": 26c724208a09da7103cdd90bb5b4ae48,
     "lerp": 432ad7a31ef129e353e251419e690ca1,
     "less": ed44dbf5b4cdf5c952e1ef00f219b655,
     "let": f4f93c70910c4d8a8eeb8e049cc64c14,
@@ -80,35 +102,50 @@
     "model_z": c93e6bb743a9d90f85f8cdea3aabf5c1,
     "multiply": d6f384c439d9d69996d545df422efd79,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "non_cutting": 32ec688b8b412514e5a4ee4789b0e5d8,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "normal_length": 421de040629c87a3f37d794d999ff3ed,
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
+    "op1": b8cdf2aa2f55d823bcc0c67123fa2b56,
+    "op2": d0116cda22f0461688928cf2ba47184e,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "orientation": ddb447a86cf765e6a19f3c448882659e,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "parameters": 6f0875ea2329b14673435cc13e2836d0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
+    "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
+    "profile_radius": 0c43e0deeecda93da913261dc2786878,
+    "profile_tolerance": 4c3b5d5884e040ad1c226f37935ea68b,
     "program": f23c804bf137581b76605a51366d43b7,
     "progress": 13feb828ce93822d8d72a3ef3765e2f0,
+    "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
+    "right_face": 5999e385d066a0034fda21e9e280f265,
+    "row_direction": 6e582a6a57d4006a0820b079cb351685,
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
     "scene": d6757ca4cb992116fe31ede39530709d,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
+    "setup_up": 775e067bc167e68a3145d0a5f4bbc6e9,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
+    "sin": 9f62e0f56d92be74f6ae36378d889262,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
     "slider": e3c52729da1f3b54e99ef208ad9d9201,
+    "slope": add49f506cecac65e0da65e073ed9e80,
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
     "square": 6164efe43a126d79bcd252a17a9453c1,
+    "square_tool": 9aabe44cdff817c10ba34f605620dda2,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
     "state": 3775735ae4c156144c110ba819cb1e39,
@@ -120,10 +157,14 @@
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "t": 97de1a6f95080533856024449272a3d1,
+    "tilt": 6ebc95bf630e6b36be576e2b22834529,
     "to_f32": 73bd2225d2091ba893a5570e8e9bacff,
+    "tool": fbe28409798777a59a474570ec600c9a,
+    "tool_axis": c674bd24061031aff48153e907df4d59,
     "tool_diameter": d2f5197841dcac20dee27cf4cf3d7b1a,
     "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
     "toolpaths": faaa4df9bd9bc104fc05c09a722f1ae9,
+    "top": f64ba93e56b40a2df81a65508057dbf5,
     "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
@@ -143,8 +184,161 @@
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
   },
   "cells": {
+    op1: {
+      name: "Op 1 · top and four sides",
+      params: [],
+      body: {
+        expressions: [
+          {
+            function: face_paths,
+            setup_up: {
+              function: point,
+              y: {
+                f64: 0x0000000000000000,
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            orientation: top,
+          },
+          {
+            function: face_paths,
+            setup_up: {
+              function: point,
+              y: {
+                f64: 0x0000000000000000,
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            orientation: right_face,
+          },
+          {
+            function: face_paths,
+            setup_up: {
+              function: point,
+              y: {
+                f64: 0x0000000000000000,
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            orientation: back_face,
+          },
+          {
+            function: face_paths,
+            setup_up: {
+              function: point,
+              y: {
+                f64: 0x0000000000000000,
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            orientation: left_face,
+          },
+          {
+            function: face_paths,
+            setup_up: {
+              function: point,
+              y: {
+                f64: 0x0000000000000000,
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            orientation: front_face,
+          },
+        ],
+        function: do,
+      },
+    },
+    op2: {
+      name: "Op 2 · bottom",
+      params: [],
+      body: {
+        function: face_paths,
+        setup_up: {
+          function: point,
+          y: {
+            f64: 0x0000000000000000,
+          },
+          x: {
+            f64: 0x0000000000000000,
+          },
+          z: {
+            f64: 0x000000000000f0bf,
+          },
+        },
+        orientation: bottom_face,
+      },
+    },
     progress: {
       name: "Playback",
+    },
+    preview_operations: {
+      name: "Preview · Op 1 + Op 2",
+      params: [],
+      body: {
+        expressions: [
+          {
+            function: op1,
+          },
+          {
+            function: op2,
+          },
+        ],
+        function: do,
+      },
+    },
+    axis_x: {
+      name: "axis x",
+    },
+    axis_y: {
+      name: "axis y",
+    },
+    axis_z: {
+      name: "axis z",
+    },
+    back_face: {
+      name: "back face",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: z,
+        x: x,
+        z: {
+          right: y,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+      },
     },
     ball_center: {
       name: "ball center",
@@ -246,47 +440,167 @@
     ball_radius: {
       name: "ball radius",
     },
-    ball_path: {
-      name: "ball-center passes",
-      params: [],
+    ball_tip: {
+      name: "ball tip",
+      params: [
+        x,
+        y,
+        z,
+        normal,
+        orientation,
+        tool_axis,
+      ],
       body: {
         function: where,
         expression: {
-          function: map_points,
-          mapping: {
-            params: [
-              x,
-              y,
-              z,
-            ],
-            body: {
+          function: point,
+          y: {
+            right: {
+              right: axis_y,
+              function: multiply,
+              left: ball_radius,
+            },
+            function: subtract,
+            left: ny,
+          },
+          x: {
+            right: {
+              right: axis_x,
+              function: multiply,
+              left: ball_radius,
+            },
+            function: subtract,
+            left: nx,
+          },
+          z: {
+            right: {
+              right: axis_z,
+              function: multiply,
+              left: ball_radius,
+            },
+            function: subtract,
+            left: nz,
+          },
+        },
+        bindings: [
+          {
+            subject: {
               normal: normal,
               function: ball_center,
               y: y,
               x: x,
               z: z,
             },
+            pattern: {
+              y: {
+                bind: y,
+              },
+              x: {
+                bind: x,
+              },
+              z: {
+                bind: z,
+              },
+            },
           },
-          expression: {
-            function: crosshatch,
-            face: face,
-          },
-        },
-        bindings: [
           {
             subject: {
-              function: cube,
+              function: orientation,
+              y: y,
+              x: x,
+              z: z,
             },
             pattern: {
-              normal: {
-                bind: normal,
+              y: {
+                bind: ny,
               },
-              face: {
-                bind: face,
+              x: {
+                bind: nx,
+              },
+              z: {
+                bind: nz,
               },
             },
           },
+          {
+            subject: tool_axis,
+            pattern: {
+              y: {
+                bind: axis_y,
+              },
+              x: {
+                bind: axis_x,
+              },
+              z: {
+                bind: axis_z,
+              },
+            },
+          },
+          {
+            subject: {
+              right: {
+                f64: 0x0000000000000040,
+              },
+              function: divide,
+              left: tool_diameter,
+            },
+            bind: ball_radius,
+          },
         ],
+      },
+    },
+    ball_tool: {
+      name: "ball tool",
+      tool_length: {
+        f64: 0x295c8fc2f528cc3f,
+      },
+      function: ball_mill,
+      cutter_diameter: tool_diameter,
+    },
+    ball_path: {
+      name: "ball-tip passes",
+      params: [],
+      body: {
+        function: face_paths,
+        setup_up: {
+          function: point,
+          y: {
+            f64: 0x0000000000000000,
+          },
+          x: {
+            f64: 0x0000000000000000,
+          },
+          z: {
+            f64: 0x000000000000f03f,
+          },
+        },
+        orientation: top,
+      },
+    },
+    bottom_face: {
+      name: "bottom face",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: {
+          right: y,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        x: x,
+        z: {
+          right: z,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
       },
     },
     center_depth: {
@@ -298,6 +612,9 @@
     chamfer_pair: {
       name: "chamfer pair",
     },
+    compensation: {
+      name: "compensation",
+    },
     control_depth: {
       name: "control depth",
     },
@@ -308,22 +625,57 @@
       name: "crosshatch",
       params: [
         face,
+        orientation,
+        setup_up,
+        compensation,
       ],
       body: {
-        function: map_points,
-        mapping: face,
-        expression: {
-          expressions: [
-            {
-              function: diagonals,
-              spacing: {
-                f64: 0xb81e85eb51b89e3f,
-              },
-              rows: {
-                f64: 0x0000000000003540,
-              },
+        expressions: [
+          {
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {
+              f64: 0x000000000000f03f,
             },
-            {
+            orientation: orientation,
+            face: face,
+          },
+          {
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {
+              f64: 0x000000000000f0bf,
+            },
+            orientation: orientation,
+            face: face,
+          },
+        ],
+        function: do,
+      },
+    },
+    crossing_passes: {
+      name: "crossing passes",
+      params: [
+        orientation,
+        slope,
+        setup_up,
+        face,
+        compensation,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: map_points,
+          mapping: {
+            function: compensation,
+            tool_axis: tool_axis,
+          },
+          expression: {
+            function: map_points,
+            mapping: face,
+            expression: {
               function: map_points,
               mapping: {
                 params: [
@@ -334,10 +686,24 @@
                 body: {
                   function: point,
                   y: {
-                    right: y,
-                    function: subtract,
+                    right: {
+                      right: y,
+                      function: multiply,
+                      left: slope,
+                    },
+                    function: sum,
                     left: {
-                      f64: 0x000000000000f03f,
+                      right: {
+                        f64: 0x0000000000000040,
+                      },
+                      function: divide,
+                      left: {
+                        right: slope,
+                        function: subtract,
+                        left: {
+                          f64: 0x000000000000f03f,
+                        },
+                      },
                     },
                   },
                   x: x,
@@ -345,6 +711,12 @@
                 },
               },
               expression: {
+                feed_direction: direction,
+                row_direction: {
+                  right: direction,
+                  function: multiply,
+                  left: slope,
+                },
                 function: diagonals,
                 spacing: {
                   f64: 0xb81e85eb51b89e3f,
@@ -352,18 +724,44 @@
                 rows: {
                   f64: 0x0000000000003540,
                 },
+                tool_axis: tool_axis,
               },
             },
-          ],
-          function: do,
+          },
         },
+        bindings: [
+          {
+            subject: {
+              function: pull_direction,
+              setup_up: setup_up,
+              slope: slope,
+              orientation: orientation,
+            },
+            bind: direction,
+          },
+          {
+            subject: {
+              direction: direction,
+              function: cut_axis,
+              slope: slope,
+              orientation: orientation,
+            },
+            bind: tool_axis,
+          },
+        ],
       },
+    },
+    slope: {
+      name: "diagonal direction",
     },
     diagonals: {
       name: "diagonal passes",
       params: [
         rows,
         spacing,
+        tool_axis,
+        feed_direction,
+        row_direction,
       ],
       body: {
         expressions: [
@@ -443,31 +841,37 @@
                     expression: {
                       expressions: [
                         {
+                          feed_direction: feed_direction,
                           function: sample_pass,
                           spacing: spacing,
                           intercept: {
                             right: {
-                              f64: 0x000000000000f03f,
-                            },
-                            function: subtract,
-                            left: {
                               right: {
-                                right: {
-                                  f64: 0x000000000000f03f,
-                                },
-                                function: sum,
-                                left: rows,
+                                f64: 0x000000000000f03f,
                               },
-                              function: divide,
+                              function: subtract,
                               left: {
-                                right: state,
-                                function: multiply,
+                                right: {
+                                  right: {
+                                    f64: 0x000000000000f03f,
+                                  },
+                                  function: sum,
+                                  left: rows,
+                                },
+                                function: divide,
                                 left: {
-                                  f64: 0x0000000000000040,
+                                  right: state,
+                                  function: multiply,
+                                  left: {
+                                    f64: 0x0000000000000040,
+                                  },
                                 },
                               },
                             },
+                            function: multiply,
+                            left: row_direction,
                           },
+                          tool_axis: tool_axis,
                         },
                         {
                           right: {
@@ -489,11 +893,127 @@
         function: do,
       },
     },
+    dot: {
+      name: "dot product",
+      params: [
+        left,
+        right,
+      ],
+      body: {
+        function: where,
+        expression: {
+          right: {
+            right: z,
+            function: multiply,
+            left: nz,
+          },
+          function: sum,
+          left: {
+            right: {
+              right: y,
+              function: multiply,
+              left: ny,
+            },
+            function: sum,
+            left: {
+              right: x,
+              function: multiply,
+              left: nx,
+            },
+          },
+        },
+        bindings: [
+          {
+            subject: left,
+            pattern: {
+              y: {
+                bind: ny,
+              },
+              x: {
+                bind: nx,
+              },
+              z: {
+                bind: nz,
+              },
+            },
+          },
+          {
+            subject: right,
+            pattern: {
+              y: {
+                bind: y,
+              },
+              x: {
+                bind: x,
+              },
+              z: {
+                bind: z,
+              },
+            },
+          },
+        ],
+      },
+    },
     edge_limit: {
       name: "edge limit",
     },
     face_pair: {
       name: "face pair",
+    },
+    face_paths: {
+      name: "face passes",
+      params: [
+        orientation,
+        setup_up,
+      ],
+      body: {
+        function: where,
+        expression: {
+          compensation: {
+            params: [
+              tool_axis,
+            ],
+            body: {
+              params: [
+                x,
+                y,
+                z,
+              ],
+              body: {
+                normal: normal,
+                function: ball_tip,
+                y: y,
+                x: x,
+                tool_axis: tool_axis,
+                orientation: orientation,
+                z: z,
+              },
+            },
+          },
+          function: crosshatch,
+          setup_up: setup_up,
+          orientation: orientation,
+          face: face,
+        },
+        bindings: [
+          {
+            subject: {
+              function: cube,
+            },
+            pattern: {
+              normal: {
+                bind: normal,
+              },
+              face: {
+                bind: face,
+              },
+            },
+          },
+        ],
+      },
+    },
+    feed_direction: {
+      name: "feed direction",
     },
     cube: {
       name: "fidget cube",
@@ -1001,6 +1521,26 @@
     t: {
       name: "fraction",
     },
+    front_face: {
+      name: "front face",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: {
+          right: z,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        x: x,
+        z: y,
+      },
+    },
     half_face: {
       name: "half face",
     },
@@ -1009,6 +1549,26 @@
     },
     intercept: {
       name: "intercept",
+    },
+    left_face: {
+      name: "left face",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: y,
+        x: {
+          right: z,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        z: x,
+      },
     },
     normal: {
       name: "normal",
@@ -1025,6 +1585,84 @@
     nz: {
       name: "normal z",
     },
+    orientation: {
+      name: "orientation",
+    },
+    pull_direction: {
+      name: "pull direction",
+      params: [
+        orientation,
+        slope,
+        setup_up,
+      ],
+      body: {
+        subject: {
+          right: {
+            f64: 0x0000000000000000,
+          },
+          function: less,
+          left: {
+            right: setup_up,
+            function: dot,
+            left: {
+              function: orientation,
+              y: slope,
+              x: {
+                f64: 0x000000000000f03f,
+              },
+              z: {
+                f64: 0x0000000000000000,
+              },
+            },
+          },
+        },
+        function: match,
+        cases: [
+          {
+            pattern: {
+              bool: true,
+            },
+            expression: {
+              f64: 0x000000000000f0bf,
+            },
+          },
+          {
+            pattern: {
+              bool: false,
+            },
+            expression: {
+              f64: 0x000000000000f03f,
+            },
+          },
+        ],
+      },
+    },
+    direction: {
+      name: "pull sign",
+    },
+    right_face: {
+      name: "right face",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: y,
+        x: z,
+        z: {
+          right: x,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+      },
+    },
+    row_direction: {
+      name: "row direction",
+    },
     rows: {
       name: "rows",
     },
@@ -1033,6 +1671,8 @@
       params: [
         intercept,
         spacing,
+        tool_axis,
+        feed_direction,
       ],
       body: {
         function: let,
@@ -1040,8 +1680,43 @@
           expressions: [
             {
               function: start_at,
-              y: v0,
-              x: u0,
+              y: {
+                end: v1,
+                start: v0,
+                amount: {
+                  right: {
+                    f64: 0x0000000000000040,
+                  },
+                  function: divide,
+                  left: {
+                    right: feed_direction,
+                    function: subtract,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                },
+                function: lerp,
+              },
+              x: {
+                end: u1,
+                start: u0,
+                amount: {
+                  right: {
+                    f64: 0x0000000000000040,
+                  },
+                  function: divide,
+                  left: {
+                    right: feed_direction,
+                    function: subtract,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                },
+                function: lerp,
+              },
+              tool_axis: tool_axis,
               z: {
                 f64: 0x0000000000000000,
               },
@@ -1099,9 +1774,29 @@
                             bindings: [
                               {
                                 subject: {
-                                  right: segments,
-                                  function: divide,
-                                  left: state,
+                                  right: {
+                                    right: {
+                                      right: segments,
+                                      function: divide,
+                                      left: state,
+                                    },
+                                    function: multiply,
+                                    left: feed_direction,
+                                  },
+                                  function: sum,
+                                  left: {
+                                    right: {
+                                      f64: 0x0000000000000040,
+                                    },
+                                    function: divide,
+                                    left: {
+                                      right: feed_direction,
+                                      function: subtract,
+                                      left: {
+                                        f64: 0x000000000000f03f,
+                                      },
+                                    },
+                                  },
                                 },
                                 bind: t,
                               },
@@ -1216,6 +1911,9 @@
     segments: {
       name: "segments",
     },
+    setup_up: {
+      name: "setup up",
+    },
     shoulder: {
       name: "shoulder",
     },
@@ -1225,9 +1923,191 @@
     spacing: {
       name: "spacing",
     },
+    square_tool: {
+      name: "square tool",
+      tool: [
+        {
+          cutting: [
+            {
+              profile_radius: {
+                f64: 0x000000000000b03f,
+              },
+            },
+            {
+              axial: {
+                f64: 0x295c8fc2f528cc3f,
+              },
+            },
+          ],
+        },
+        {
+          non_cutting: [
+            {
+              axial: {
+                f64: 0x295c8fc2f528cc3f,
+              },
+            },
+            {
+              profile_radius: {
+                f64: 0x000000000000b03f,
+              },
+            },
+            {
+              profile_radius: {
+                f64: 0x000000000000b83f,
+              },
+              axial: {
+                f64: 0x666666666666d63f,
+              },
+            },
+            {
+              profile_radius: {
+                f64: 0x000000000000c03f,
+              },
+            },
+            {
+              axial: {
+                f64: 0x333333333333e33f,
+              },
+            },
+          ],
+        },
+      ],
+    },
+    tilt: {
+      name: "tilt (degrees)",
+      f64: 0x0000000000804640,
+    },
+    angle: {
+      name: "tilt (radians)",
+    },
+    cut_axis: {
+      name: "tilted axis",
+      params: [
+        orientation,
+        slope,
+        direction,
+      ],
+      body: {
+        expressions: [
+          {
+            function: require,
+            condition: {
+              operand: tilt,
+              function: is_finite,
+            },
+          },
+          {
+            function: require,
+            condition: {
+              right: tilt,
+              function: less,
+              left: {
+                f64: 0x0000000000000000,
+              },
+            },
+          },
+          {
+            function: require,
+            condition: {
+              right: {
+                f64: 0x0000000000805640,
+              },
+              function: less,
+              left: tilt,
+            },
+          },
+          {
+            function: where,
+            expression: {
+              function: orientation,
+              y: {
+                right: {
+                  right: {
+                    right: {
+                      right: {
+                        f64: 0x000000000000f03f,
+                      },
+                      function: hypot,
+                      left: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    function: divide,
+                    left: {
+                      operand: angle,
+                      function: sin,
+                    },
+                  },
+                  function: multiply,
+                  left: slope,
+                },
+                function: multiply,
+                left: direction,
+              },
+              x: {
+                right: {
+                  right: {
+                    right: {
+                      f64: 0x000000000000f03f,
+                    },
+                    function: hypot,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  function: divide,
+                  left: {
+                    operand: angle,
+                    function: sin,
+                  },
+                },
+                function: multiply,
+                left: direction,
+              },
+              z: {
+                operand: angle,
+                function: cos,
+              },
+            },
+            bindings: [
+              {
+                subject: {
+                  right: {
+                    right: {
+                      f64: 0x0000000000806640,
+                    },
+                    function: divide,
+                    left: pi,
+                  },
+                  function: multiply,
+                  left: tilt,
+                },
+                bind: angle,
+              },
+            ],
+          },
+        ],
+        function: do,
+      },
+    },
     tool_diameter: {
       name: "tool diameter",
       f64: 0x000000000000c03f,
+    },
+    top: {
+      name: "top",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: y,
+        x: x,
+        z: z,
+      },
     },
     face: {
       name: "top face",
@@ -1281,8 +2161,8 @@
                         progress: {
                           unquote: progress,
                         },
-                        tool_length: {
-                          f64: 0x295c8fc2f528cc3f,
+                        profile_tolerance: {
+                          f64: 0xfca9f1d24d62303f,
                         },
                         stock_max: {
                           y: {
@@ -1306,21 +2186,21 @@
                             f64: 0x000000000000e0bf,
                           },
                         },
-                        cutter_diameter: {
-                          unquote: tool_diameter,
-                        },
                         stock: {
                           color: {
                             rgb: 0xb89b6d,
                           },
                         },
+                        tool: {
+                          unquote: ball_tool,
+                        },
                       },
                     },
                     min_z: {
-                      f32: 0x9a9919bf,
+                      f32: 0x9a9959bf,
                     },
                     fuel: {
-                      f64: 0x0000000080841e41,
+                      f64: 0x0000000060e34641,
                     },
                     line_radius: {
                       f64: 0x7b14ae47e17a743f,
@@ -1359,10 +2239,10 @@
                       },
                     },
                     max_x: {
-                      f32: 0x9a99193f,
+                      f32: 0x9a99593f,
                     },
                     max_y: {
-                      f32: 0x9a99193f,
+                      f32: 0x9a99593f,
                     },
                     height: height,
                     color: {
@@ -1372,12 +2252,12 @@
                       f32: 0x9a99593f,
                     },
                     min_y: {
-                      f32: 0x9a9919bf,
+                      f32: 0x9a9959bf,
                     },
                     program: value,
                     width: width,
                     min_x: {
-                      f32: 0x9a9919bf,
+                      f32: 0x9a9959bf,
                     },
                   },
                   bindings: [
@@ -1418,17 +2298,27 @@
               width: width,
             },
           },
-          value: ball_path,
+          value: preview_operations,
         },
       ],
     },
     toolpaths: [
+      preview_operations,
+      op1,
+      op2,
       diagonals,
       sample_pass,
       crosshatch,
       ball_center,
       ball_path,
+      face_paths,
+      tilt,
       tool_diameter,
+      ball_tip,
+      {
+        evaluate: ball_tool,
+      },
+      square_tool,
     ],
   },
 }

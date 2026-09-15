@@ -656,7 +656,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let (value, viewport) =
         presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
-    assert_eq!(value.as_cell(), Some(names["ball_path"]));
+    assert_eq!(value.as_cell(), Some(names["preview_operations"]));
     let preview = grap::apply(
         viewport,
         [

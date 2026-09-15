@@ -16,6 +16,15 @@ Grap lambdas, cases, binding clauses, and control/operator calls now decline whe
 they cannot show an active insertion. That fixes those specific projections;
 it is not a general fallback policy for arbitrary facets such as line controls.
 
+## Shallow display for evaluate
+
+Revisit whether the `{evaluate: expression}` projection should be shallow,
+especially when the expression references a named cell such as the example's
+ball tool. Consider source-reference display separately from computed-result
+display, and how users inspect the underlying definition. This is an open
+projection/UX question, not a proposed change to evaluation semantics; current
+behavior remains unchanged until we review it.
+
 ## Selection destinations and history
 
 Plain selections now work with line controls' missing-state defaults, so paste,
@@ -104,6 +113,14 @@ from that implementation; timings are historical observations, not guarantees.
 
 ### Fidget refinement and sharp edges
 
+When we next examine Fidget internals for Progred's needs, revisit the
+[analytic tool-sweep experiment](tool-sweep-experiment.md). Its point signs pass
+the sampled checks, but meshing yields invalid vertices and is slower than the
+working approximation. Investigate stable gradients and interval behavior then,
+alongside incremental/progressive computation; do not turn the current tool
+profile work into a general analytic-sweep research project. This is not yet an
+identified upstream bug. Tool geometry no longer carries approximation tolerance.
+
 Future upstream investigation may cover reuse across progressive resolutions or
 model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
@@ -117,6 +134,17 @@ finish-coarse scheduling only if a consumer without a usable fallback needs it;
 obsolete results must never become the current computation's result. Skipping
 intermediate meshes during rapid geometry edits is another possible policy,
 with the tradeoff of an older mesh when the user next orbits.
+
+## CAM machine-axis alignment
+
+Revisit when generating G-code: prefer indexed orientations that let an
+individual knurling pass use only two linear axes, where the actual compensated
+trajectory and machine kinematics allow it. Surface-contact diagonals are
+planar, but normal-offset ball-center trajectories need not be. A rotated
+programming coordinate system alone does not imply fewer physical axes move.
+Do not flatten trajectories or alter geometry in the postprocessor without an
+explicit accuracy policy. Setup-up and pull/climb ordering are already explicit
+in the Grap example; machine rotary solutions and fixture clearance are not.
 
 ## Hover traversal order
 
