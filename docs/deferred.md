@@ -16,14 +16,15 @@ Grap lambdas, cases, binding clauses, and control/operator calls now decline whe
 they cannot show an active insertion. That fixes those specific projections;
 it is not a general fallback policy for arbitrary facets such as line controls.
 
-## Shallow display for evaluate
+## Discoverability of expression definitions
 
-Revisit whether the `{evaluate: expression}` projection should be shallow,
-especially when the expression references a named cell such as the example's
-ball tool. Consider source-reference display separately from computed-result
-display, and how users inspect the underlying definition. This is an open
-projection/UX question, not a proposed change to evaluation semantics; current
-behavior remains unchanged until we review it.
+Keep Grap expression references shallow, including the source shown by
+`{evaluate: expression}`. The toolpath example places an ordinary reference to
+the ball-tool cell immediately before its evaluation so the normal projection
+exposes its editable contents. Both occurrences reference the same definition;
+neither is a special declaration. Revisit navigation or expansion affordances
+if finding these definitions becomes a recurring problem, rather than changing
+`evaluate`'s projection now.
 
 ## Selection destinations and history
 

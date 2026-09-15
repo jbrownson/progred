@@ -2305,6 +2305,7 @@
       tilt,
       tool_diameter,
       ball_tip,
+      ball_tool,
       {
         evaluate: ball_tool,
       },
