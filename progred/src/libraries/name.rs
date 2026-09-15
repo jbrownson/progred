@@ -27,6 +27,43 @@ pub fn read(value: &Value) -> Option<&str> {
         .and_then(text::read)
 }
 
+/// An editable name uses the ordinary text editor, without literal quotes.
+pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
+    Some(crate::display::LineEdit {
+        prefix: String::new(),
+        suffix: String::new(),
+        ..text::editor(value)?
+    })
+}
+
+/// Explicitly include the stored name beside a facet's own presentation.
+/// This is decoration, not a binding or a record field/value pair.
+pub(crate) fn with_name(
+    input: &crate::display::ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    content: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    use crate::display::{Pending, descend_local, line_edit, partial, row};
+    let step = gid::Step::Key(vocabulary::NAME);
+    let has_name = input
+        .value
+        .and_then(Value::as_record)
+        .is_some_and(|fields| fields.contains_key(&vocabulary::NAME));
+    if !has_name && input.pending != Some(Pending::Child(step.clone())) {
+        return content;
+    }
+    row(
+        6.0,
+        [
+            descend_local(
+                step,
+                partial(|input| editor(input.value?).map(line_edit)),
+                &input.default_projection,
+            ),
+            content,
+        ],
+    )
+}
+
 pub(crate) fn short_id(cell: CellId) -> String {
     let hex = cell.simple().to_string();
     format!("…{}", &hex[hex.len() - 5..])

@@ -138,26 +138,28 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         ),
         representation,
     );
-    if !number.scrubbable() {
-        return Some(line);
-    }
-    let original = original.clone();
-    let target = input.targets.current();
-    Some(on_scrub(
-        line,
-        target.hover,
-        Rc::new(move || {
-            let original = original.clone();
-            let mut scrub = NumberScrub::new(number);
-            Box::new(move |event| {
-                let scrubbed = scrub.update(event);
-                ScrubUpdate {
-                    value: overlay_value(&original, encode(scrubbed.value)),
-                    spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
-                }
-            })
-        }),
-    ))
+    let line = if number.scrubbable() {
+        let original = original.clone();
+        let target = input.targets.current();
+        on_scrub(
+            line,
+            target.hover,
+            Rc::new(move || {
+                let original = original.clone();
+                let mut scrub = NumberScrub::new(number);
+                Box::new(move |event| {
+                    let scrubbed = scrub.update(event);
+                    ScrubUpdate {
+                        value: overlay_value(&original, encode(scrubbed.value)),
+                        spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
+                    }
+                })
+            }),
+        )
+    } else {
+        line
+    };
+    Some(name::with_name(input, line))
 }
 
 pub(crate) fn edit<N: std::str::FromStr>(

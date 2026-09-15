@@ -132,6 +132,11 @@ Numeric libraries decorate their math calls' function references with the same
 representation subscript used by literals. Both names come from definitions;
 the decorated label still selects the call's `function` field. A comparison's
 subscript identifies its operand representation, not its boolean result.
+Numeric facets explicitly include an optional stored name beside the number,
+separated by spacing rather than binding or record-field punctuation. The shared
+name decorator descends to the real `name` field with an unquoted text editor;
+the number retains its own editor and scrub target. This is opt-in library
+composition, not automatic merging of every matching facet's projection.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
 

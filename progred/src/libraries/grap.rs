@@ -77,24 +77,16 @@ fn declaration_name(
     name::read(input.value?)?;
     Some(descend_local(
         Step::Key(name::vocabulary::NAME),
-        crate::display::partial(|input| name_editor(input.value?).map(crate::display::line_edit)),
+        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
         &input.default_projection,
     ))
-}
-
-fn name_editor(value: &Value) -> Option<crate::display::LineEdit> {
-    Some(crate::display::LineEdit {
-        prefix: String::new(),
-        suffix: String::new(),
-        ..crate::libraries::text::editor(value)?
-    })
 }
 
 fn lambda_name(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     Some(match input.value {
-        Some(value) => crate::display::line_edit(name_editor(value)?),
+        Some(value) => crate::display::line_edit(name::editor(value)?),
         None => {
             input.selection.is_none().then_some(())?;
             let target = input.targets.current();
@@ -676,7 +668,7 @@ mod tests {
                     .get(&name::vocabulary::NAME)
                     .unwrap();
                 assert!(projection(&input(&env, value)).is_some());
-                let line = name_editor(value).unwrap();
+                let line = name::editor(value).unwrap();
                 assert_eq!(line.text, spelling);
                 assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
                 assert_eq!(
@@ -1326,7 +1318,7 @@ mod tests {
             .get(&name::vocabulary::NAME)
             .unwrap();
         assert!(projection(&relative_input(&env(), value)).is_some());
-        let line = name_editor(value).unwrap();
+        let line = name::editor(value).unwrap();
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
     }
 
@@ -1379,7 +1371,7 @@ mod tests {
             .get(&name::vocabulary::NAME)
             .unwrap();
         assert!(projection(&relative_input(&env(), value)).is_some());
-        let line = name_editor(value).unwrap();
+        let line = name::editor(value).unwrap();
         assert_eq!(line.text, "");
         assert_eq!(line.placeholder, None);
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
