@@ -6,8 +6,8 @@ use crate::libraries::{f64 as f64_convention, text};
 use gid::{CellId, Value};
 use puri::handler::{
     Event, EventOutcome, HasHandler, ImeEvent, KeyState, KeyboardEvent, Modifiers, PointerButton,
-    PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
-    ScrollDelta,
+    PointerButtonEvent, PointerGesture, PointerGestureEvent, PointerInfo, PointerScrollEvent,
+    PointerState, PointerType, PointerUpdate, ScrollDelta,
 };
 use puri::{Placement, Point};
 use std::rc::Rc;
@@ -56,6 +56,36 @@ pub fn on_event(
                             },
                         );
                     }
+                    if let Event::Gesture(events) = event {
+                        return puri::gesture::filter(
+                            events,
+                            |event| {
+                                placement.contains(Point::new(
+                                    event.state.position.x,
+                                    event.state.position.y,
+                                ))
+                            },
+                            |events| {
+                                let value = event_value(
+                                    layout_data::vocabulary::GESTURE,
+                                    [(
+                                        layout_data::vocabulary::CONTENT,
+                                        Value::list(events.iter().map(|event| {
+                                            gesture_value(placement, scale, event, command)
+                                        })),
+                                    )],
+                                );
+                                let handled = crate::site::apply_event(
+                                    world,
+                                    root.clone(),
+                                    path.clone(),
+                                    function.clone(),
+                                    value,
+                                );
+                                EventOutcome::from_handled(Event::Gesture(events), handled)
+                            },
+                        );
+                    }
                     let point = match &event {
                         Event::PointerDown(event) => Some(event.state.position),
                         _ => None,
@@ -86,7 +116,7 @@ pub fn on_event(
                                 command,
                             ),
                             Event::PointerCancel(event) => pointer_cancel_value(event),
-                            Event::Scroll(_) => unreachable!(),
+                            Event::Scroll(_) | Event::Gesture(_) => unreachable!(),
                             Event::Key(event) => key_value(event, command),
                             Event::Ime(event) => ime_value(event),
                             Event::HoverChanged => {
@@ -244,6 +274,43 @@ mod motion_tests {
     use puri::handler::PointerId;
 
     #[test]
+    fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
+        let event = PointerGestureEvent {
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState {
+                position: (25.0, 40.0).into(),
+                ..Default::default()
+            },
+            gesture: PointerGesture::Pinch(0.25),
+        };
+        let placement = Placement::root(puri::Rect::new(10.0, 20.0, 110.0, 120.0));
+        for scale in [1.0, 2.0] {
+            let value = gesture_value(placement, scale, &event, |m| m.meta());
+            let fields = value.as_record().unwrap();
+            assert_eq!(
+                fields.get(&layout_data::vocabulary::EVENT_KIND),
+                Some(&Value::Cell(layout_data::vocabulary::PINCH))
+            );
+            assert_eq!(
+                fields
+                    .get(&layout_data::vocabulary::DELTA)
+                    .and_then(f64_convention::read),
+                Some(0.25)
+            );
+            assert_eq!(
+                fields
+                    .get(&layout_data::vocabulary::X)
+                    .and_then(f64_convention::read),
+                Some(15.0)
+            );
+        }
+    }
+
+    #[test]
     fn grap_motion_preserves_the_batch_in_local_coordinates() {
         let placement = Placement::root(puri::Rect::new(10.0, 20.0, 110.0, 120.0));
         let sample = |x: f64| {
@@ -310,6 +377,24 @@ fn scroll_value(
         (layout_data::vocabulary::DELTA_Y, f64_convention::value(y)),
     ]);
     event_value(layout_data::vocabulary::SCROLL, fields)
+}
+
+fn gesture_value(
+    placement: Placement,
+    scale: f64,
+    event: &PointerGestureEvent,
+    command: fn(&Modifiers) -> bool,
+) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.state, command);
+    let (kind, delta) = match event.gesture {
+        PointerGesture::Pinch(delta) => (layout_data::vocabulary::PINCH, delta),
+        PointerGesture::Rotate(delta) => (layout_data::vocabulary::ROTATION, delta),
+    };
+    fields.push((
+        layout_data::vocabulary::DELTA,
+        f64_convention::value(f64::from(delta)),
+    ));
+    event_value(kind, fields)
 }
 
 fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {

@@ -66,7 +66,8 @@ use puri::handler::ImeEvent;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::{
-    PointerEvent, PointerId, PointerInfo, PointerScrollEvent, PointerType, PointerUpdate,
+    PointerEvent, PointerGestureEvent, PointerId, PointerInfo, PointerScrollEvent, PointerType,
+    PointerUpdate,
 };
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "ios")))]
@@ -189,8 +190,11 @@ pub(crate) struct PendingPaint {
     pub(crate) renders: Vec<placed::Render>,
 }
 
-struct PendingScroll {
-    events: Vec<PointerScrollEvent>,
+type PendingScroll = PendingBatch<PointerScrollEvent>;
+type PendingGesture = PendingBatch<PointerGestureEvent>;
+
+struct PendingBatch<T> {
+    events: Vec<T>,
     scale: f64,
     viewport: Size,
 }
@@ -228,6 +232,14 @@ fn continuous_input(event: &WindowEvent) -> bool {
         event,
         WindowEvent::MouseWheel { .. }
             | WindowEvent::CursorMoved { .. }
+            | WindowEvent::PinchGesture {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            }
+            | WindowEvent::RotationGesture {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            }
             | WindowEvent::Touch(winit::event::Touch {
                 phase: winit::event::TouchPhase::Moved,
                 ..
@@ -235,7 +247,7 @@ fn continuous_input(event: &WindowEvent) -> bool {
     )
 }
 
-impl PendingScroll {
+impl<T> PendingBatch<T> {
     fn merge(&mut self, mut next: Self) -> Result<(), Self> {
         if self.scale == next.scale && self.viewport == next.viewport {
             self.events.append(&mut next.events);
@@ -315,7 +327,7 @@ pub(crate) struct Editor {
     /// in the document.
     pub(crate) text_binders: gid_text::Binders,
     pub(crate) menu: menu::State,
-    /// Last pointer position, for anchoring pinch zoom.
+    /// Last observed pointer position, including outside-window drag motion.
     pub(crate) cursor: Point,
     /// The pointer position while it is inside the window. It is an
     /// input to placement's internal hover resolution.
@@ -339,10 +351,11 @@ pub(crate) struct EditorRunner {
     pub(crate) editor: Editor,
     pub(crate) frame: FrameState,
     cursor_icon: CursorIcon,
-    /// Consecutive scroll packets are one continuous displacement.
+    /// Consecutive scroll packets are a batch of observed samples.
     /// Hold them until paint or another event establishes an ordering
-    /// boundary, then dispatch their sum through the retained frame.
+    /// boundary, then dispatch the batch through the retained frame.
     pending_scroll: Option<PendingScroll>,
+    pending_gesture: Option<PendingGesture>,
     /// Pointer motion is continuous frame input, like scrolling.
     /// Keep the samples until paint or a
     /// discrete event establishes an ordering boundary. This is a
@@ -368,6 +381,7 @@ impl EditorRunner {
             frame: FrameState::default(),
             cursor_icon: CursorIcon::Default,
             pending_scroll: None,
+            pending_gesture: None,
             pending_pointer: None,
         }
     }
@@ -398,11 +412,13 @@ impl EditorRunner {
             editor,
             frame,
             pending_scroll,
+            pending_gesture,
             pending_pointer,
             cursor_icon: _,
         } = self;
         *frame = FrameState::default();
         *pending_scroll = None;
+        *pending_gesture = None;
         *pending_pointer = None;
         editor.replace_document(doc, path, text_binders);
         if let RenderState::Active { window, .. } = &editor.state {

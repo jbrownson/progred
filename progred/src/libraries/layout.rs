@@ -81,6 +81,10 @@ pub mod vocabulary {
     pub const TOUCH_END: CellId = CellId::from_u128(0x32b27cf0994b45208502d133d0da4eb2);
     pub const TOUCH_CANCEL: CellId = CellId::from_u128(0xf96ee39a16f748cc85b6ea8c99b46394);
     pub const SCROLL: CellId = CellId::from_u128(0x7b0de6ea9b052da4b40e5f97438d537c);
+    pub const GESTURE: CellId = CellId::from_u128(0x6043e90ba2b0030ddb6a395929256aa3);
+    pub const PINCH: CellId = CellId::from_u128(0xfb30e7915daec8c48748e26b55614cc1);
+    pub const ROTATION: CellId = CellId::from_u128(0x77267c709bca4d455769bad3abf39e26);
+    pub const DELTA: CellId = CellId::from_u128(0x913ddf518aeb0dd706ec0cbee6a03164);
     pub const KEY: CellId = CellId::from_u128(0xbabfda8d94c4a003ae22faf4a4a2fd01);
     pub const IME: CellId = CellId::from_u128(0x33b7ee93c08863b54d3106802a28d110);
     pub const HOVER_CHANGED: CellId = CellId::from_u128(0xc0776db8cfd8e86b29d854f629717d17);
@@ -938,6 +942,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::TOUCH_END, "touch end"),
         (vocabulary::TOUCH_CANCEL, "touch cancel"),
         (vocabulary::SCROLL, "scroll"),
+        (vocabulary::GESTURE, "gesture"),
+        (vocabulary::PINCH, "pinch"),
+        (vocabulary::ROTATION, "rotation"),
+        (vocabulary::DELTA, "delta"),
         (vocabulary::KEY, "key"),
         (vocabulary::IME, "ime"),
         (vocabulary::GAP, "gap"),

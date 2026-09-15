@@ -177,6 +177,10 @@ acceleration, or use the sample-wise `on_scroll` adapter. Partial consumption
 forwards the ordered unconsumed packets, with adjusted deltas where necessary;
 acceptance survives even when the next handler declines. Clipping divides a
 batch only at crossings of its bounds, retaining in-bounds runs as batches.
+Native pointer gestures use the same ordered-batch contract through
+`Event::Gesture`, `on_gesture_batch`, and the sample-wise `on_gesture` adapter.
+`interact::on_pinch` adds placement/clipping checks; widgets own the zoom policy.
+Pinch deltas are fractional scale changes, not pixels or scroll distances.
 The typed helpers are ordinary combinators over this interface.
 Widgets test their own geometry; Puri does not infer acceptance from state changes.
 
@@ -263,6 +267,11 @@ Sample-wise controls read current caller-owned state so successive samples do
 not overwrite each other. Grap scroll events expose the packet records as a list
 under `content`. Unclaimed touch motion produces a scroll batch from the observed
 position differences, preserving reversals and sample metadata.
+Pinch/rotation samples also wait for the redraw boundary, interleaving with
+pointer refreshes without forcing intermediate builds. Switching between scroll
+and gesture input flushes the earlier batch; gesture end/cancel also flushes.
+Grap handlers receive `gesture` events with sample records under `content`;
+each names `pinch` (fractional scale) or `rotation` (clockwise radians) and `delta`.
 
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the

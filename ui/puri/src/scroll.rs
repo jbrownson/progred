@@ -42,28 +42,14 @@ pub fn filter<'a>(
     includes: impl Fn(&PointerScrollEvent) -> bool,
     mut handle: impl for<'b> FnMut(Cow<'b, [PointerScrollEvent]>) -> EventOutcome<'b>,
 ) -> EventOutcome<'a> {
-    if events.iter().all(&includes) {
-        return handle(events);
-    }
-    if !events.iter().any(&includes) {
-        return EventOutcome::decline(Event::Scroll(events));
-    }
-    let mut remaining = Vec::new();
-    let mut handled = false;
-    for run in events.chunk_by(|a, b| includes(a) == includes(b)) {
-        if includes(&run[0]) {
-            let result = handle(Cow::Borrowed(run));
-            handled |= result.handled();
-            match result.remaining {
-                Some(Event::Scroll(rest)) => remaining.extend(rest.into_owned()),
-                None => {}
-                _ => panic!("a scroll handler returned a non-scroll remainder"),
-            }
-        } else {
-            remaining.extend_from_slice(run);
-        }
-    }
-    outcome(Cow::Owned(remaining), handled)
+    crate::batch::filter(events, includes, |events| {
+        handle(events).map(|remaining| match remaining {
+            Some(Event::Scroll(events)) => events,
+            None => Cow::Borrowed(&[][..]),
+            _ => panic!("a scroll handler returned a non-scroll remainder"),
+        })
+    })
+    .map(|events| (!events.is_empty()).then_some(Event::Scroll(events)))
 }
 
 /// Positive conversion factors: pixels per logical point, points per line,

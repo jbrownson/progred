@@ -691,6 +691,15 @@ fn zoom_handler(
     }
 }
 
+fn pinch_zoom(state: Option<&Value>, delta: f32) -> Option<Value> {
+    if !delta.is_finite() {
+        return None;
+    }
+    let initial = camera(state);
+    let zoom = (initial.zoom * (1.0 + delta)).clamp(0.05, 20.0);
+    (zoom != initial.zoom).then(|| with_camera(state, Camera { zoom, ..initial }))
+}
+
 #[derive(Clone, PartialEq)]
 pub(crate) struct SceneObject {
     pub(crate) tree: Tree,
@@ -1069,7 +1078,9 @@ pub(crate) fn interactive_volume(
         Rc::new(move |context| {
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
-            crate::display::widget::scroll::scroll(
+            let pinch_root = root.clone();
+            let pinch_path = path.clone();
+            let scroll = crate::display::widget::scroll::scroll(
                 context.inputs.styles.scale,
                 move |world: &mut crate::Editor, delta| {
                     let state = world
@@ -1083,7 +1094,26 @@ pub(crate) fn interactive_volume(
                     }
                     outcome
                 },
-            )
+            );
+            Box::new(move |output, placement| {
+                scroll(output, placement);
+                puri::interact::on_pinch(
+                    output,
+                    placement,
+                    move |world: &mut crate::Editor, delta| {
+                        let state = world
+                            .model
+                            .workspace
+                            .view(&pinch_root)
+                            .and_then(|view| view.annotations.at(&pinch_path));
+                        if let Some(state) = pinch_zoom(state, delta) {
+                            crate::editing::annotate(world, &pinch_root, &pinch_path, state);
+                        }
+                        // Own the gesture even at a zoom limit.
+                        true
+                    },
+                );
+            })
         }),
     )
 }
@@ -1821,6 +1851,33 @@ mod tests {
     #[test]
     fn horizontal_scroll_declines_camera_zoom() {
         assert!(zoom_handler(None)(Vec2 { x: 10.0, y: 0.0 }).0.is_none());
+    }
+
+    #[test]
+    fn pinch_zoom_uses_fractional_scale_and_keeps_other_annotations() {
+        let other = CellId::from_u128(1);
+        let original = Value::record([(other, Value::record([]))]);
+        let state = pinch_zoom(Some(&original), 0.25).unwrap();
+        assert_eq!(camera(Some(&state)).zoom, 1.25);
+        assert_eq!(
+            state.as_record().unwrap().get(&other),
+            original.as_record().unwrap().get(&other)
+        );
+        let state = pinch_zoom(Some(&state), -0.2).unwrap();
+        assert_eq!(camera(Some(&state)).zoom, 1.0);
+        assert!(pinch_zoom(Some(&state), 0.0).is_none());
+        assert!(pinch_zoom(Some(&state), f32::NAN).is_none());
+        assert!(pinch_zoom(Some(&state), f32::INFINITY).is_none());
+    }
+
+    #[test]
+    fn pinch_can_reverse_immediately_at_either_zoom_limit() {
+        for (delta, expected, reverse) in [(100.0, 20.0, -0.1), (-1.0, 0.05, 0.1)] {
+            let state = pinch_zoom(None, delta).unwrap();
+            assert_eq!(camera(Some(&state)).zoom, expected);
+            assert!(pinch_zoom(Some(&state), delta).is_none());
+            assert!(pinch_zoom(Some(&state), reverse).is_some());
+        }
     }
 
     #[test]

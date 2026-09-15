@@ -6,8 +6,26 @@ use crate::geometry::Placement;
 use crate::handler::HasHandler;
 use kurbo::Point;
 use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerState, PointerType, PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerGesture, PointerState, PointerType, PointerUpdate,
 };
+
+/// Pinch deltas are fractions of the current scale, independent of pixel density.
+/// The caller owns the zoom policy. Other gestures and out-of-bounds samples pass on.
+pub fn on_pinch<C: 'static, P: HasHandler<C>>(
+    p: &mut P,
+    placement: Placement,
+    action: impl Fn(&mut C, f32) -> bool + 'static,
+) {
+    p.handler().on_gesture(move |ctx, event| {
+        if let PointerGesture::Pinch(delta) = event.gesture {
+            delta.is_finite()
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && action(ctx, delta)
+        } else {
+            false
+        }
+    });
+}
 
 /// Observed motion in arrival order, ending with the current sample.
 /// Coalesced samples precede (and exclude) `current`; predictions are not input.
@@ -164,6 +182,52 @@ mod tests {
         fn handler(&mut self) -> &mut Handler<u32> {
             &mut self.handler
         }
+    }
+
+    #[test]
+    fn pinch_is_bounded_by_both_widget_and_clip() {
+        use crate::handler::{Event, PointerGestureEvent};
+        let mut frame = Frame {
+            handler: Handler::new(),
+        };
+        on_pinch(
+            &mut frame,
+            Placement::new(
+                kurbo::Rect::new(0.0, 0.0, 20.0, 20.0),
+                kurbo::Rect::new(0.0, 0.0, 10.0, 20.0),
+            ),
+            |count, delta| {
+                assert_eq!(delta, 0.25);
+                *count += 1;
+                true
+            },
+        );
+        let mut count = 0;
+        for (x, delta, accepted) in [
+            (5.0, 0.25, true),
+            (15.0, 0.25, false),
+            (25.0, 0.25, false),
+            (5.0, f32::NAN, false),
+        ] {
+            let pointer = down_at(x, 5.0);
+            let samples = [PointerGestureEvent {
+                pointer: pointer.pointer,
+                state: pointer.state,
+                gesture: PointerGesture::Pinch(delta),
+            }];
+            assert_eq!(
+                frame
+                    .handler
+                    .dispatch(
+                        &mut count,
+                        Event::Gesture(std::borrow::Cow::Borrowed(&samples)),
+                        &mut ()
+                    )
+                    .handled(),
+                accepted
+            );
+        }
+        assert_eq!(count, 1);
     }
 
     /// A 10x10 clickable at the origin that sets the selected id to 7.

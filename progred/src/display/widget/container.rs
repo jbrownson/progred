@@ -71,6 +71,15 @@ pub fn gate_starts<World: 'static, Input: 'static>(
                 |events| child.dispatch(world, Event::Scroll(events), input),
             );
         }
+        if let Event::Gesture(events) = event {
+            return puri::gesture::filter(
+                events,
+                |event| {
+                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                },
+                |events| child.dispatch(world, Event::Gesture(events), input),
+            );
+        }
         let position = match &event {
             Event::PointerDown(event) => Some(event.state.position),
             _ => None,

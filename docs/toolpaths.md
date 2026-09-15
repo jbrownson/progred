@@ -138,7 +138,9 @@ invalidate those stages. Camera changes render a fresh image from retained geome
 Native builds use GPU triangle drawing with synchronous readback;
 web/headless fallback uses the same geometry in the CPU triangle renderer.
 Expand `panes` to change `mesh depth` or replace `preview paths mesh` with
-`preview paths 3d` for comparison. Drag to orbit and scroll to zoom. The document
+`preview paths 3d` for comparison. Drag to orbit; scroll or pinch the Mac trackpad
+over the viewport to zoom. Pinch needs no modifier and shares the existing
+per-view camera state in both mesh and implicit previews. The document
 contains its own copy of the cube definition so it is self-contained. Its
 cube parameters drive both the reference solid and the toolpath's contact points
 and normals. The initial stock bounds remain independent: making a smaller part

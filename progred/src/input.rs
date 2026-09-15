@@ -1,5 +1,8 @@
 use crate::frame::{Dispatch, frame_disposition};
-use crate::{Editor, EditorRunner, PendingPointer, PendingScroll, navigate, selection};
+use crate::{
+    Editor, EditorRunner, PendingBatch, PendingGesture, PendingPointer, PendingScroll, navigate,
+    selection,
+};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
 use std::borrow::Cow;
@@ -14,6 +17,7 @@ pub(super) fn pointer_position(event: &PointerEvent) -> Option<Point> {
         }
         PointerEvent::Move(u) => Some(Point::new(u.current.position.x, u.current.position.y)),
         PointerEvent::Scroll(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
+        PointerEvent::Gesture(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
         _ => None,
     }
 }
@@ -63,26 +67,29 @@ fn keyboard(
         }
 }
 
-impl EditorRunner {
-    fn queue_scroll(&mut self, next: PendingScroll) -> Option<PendingScroll> {
-        match self.pending_scroll.take() {
-            None => {
-                self.pending_scroll = Some(next);
+fn queue_batch<T>(
+    slot: &mut Option<PendingBatch<T>>,
+    next: PendingBatch<T>,
+) -> Option<PendingBatch<T>> {
+    match slot.take() {
+        None => {
+            *slot = Some(next);
+            None
+        }
+        Some(mut pending) => match pending.merge(next) {
+            Ok(()) => {
+                *slot = Some(pending);
                 None
             }
-            Some(mut pending) => match pending.merge(next) {
-                Ok(()) => {
-                    self.pending_scroll = Some(pending);
-                    None
-                }
-                Err(next) => {
-                    self.pending_scroll = Some(next);
-                    Some(pending)
-                }
-            },
-        }
+            Err(next) => {
+                *slot = Some(next);
+                Some(pending)
+            }
+        },
     }
+}
 
+impl EditorRunner {
     fn queue_pointer(&mut self, next: PendingPointer) -> Option<PendingPointer> {
         match self.pending_pointer.take() {
             None => {
@@ -161,12 +168,36 @@ impl EditorRunner {
         }
         match event {
             PointerEvent::Scroll(event) => {
-                if let Some(pending) = self.queue_scroll(PendingScroll {
-                    events: vec![event.clone()],
-                    scale,
-                    viewport,
-                }) {
+                if let Some(pending) = self.pending_gesture.take() {
+                    self.dispatch_gesture_batch(pending);
+                }
+                if let Some(pending) = queue_batch(
+                    &mut self.pending_scroll,
+                    PendingScroll {
+                        events: vec![event.clone()],
+                        scale,
+                        viewport,
+                    },
+                ) {
                     self.dispatch_scroll_batch(pending);
+                }
+                true
+            }
+            PointerEvent::Gesture(event) => {
+                // Different continuous operations retain their arrival order.
+                // Ordinary pointer refreshes can still coalesce alongside them.
+                if let Some(pending) = self.pending_scroll.take() {
+                    self.dispatch_scroll_batch(pending);
+                }
+                if let Some(pending) = queue_batch(
+                    &mut self.pending_gesture,
+                    PendingGesture {
+                        events: vec![event.clone()],
+                        scale,
+                        viewport,
+                    },
+                ) {
+                    self.dispatch_gesture_batch(pending);
                 }
                 true
             }
@@ -277,6 +308,26 @@ impl EditorRunner {
         )
     }
 
+    fn dispatch_gesture_batch(&mut self, pending: PendingGesture) -> bool {
+        self.update_frame(
+            pending.scale,
+            pending.viewport,
+            |editor, dispatch, hover| {
+                frame_disposition(
+                    dispatch
+                        .handler
+                        .dispatch(
+                            editor,
+                            Event::Gesture(Cow::Borrowed(&pending.events)),
+                            &mut dispatch.context(hover.cloned()),
+                        )
+                        .handled(),
+                    false,
+                )
+            },
+        )
+    }
+
     fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
         self.editor.cursor = Point::new(
             pending.event.current.position.x,
@@ -325,9 +376,9 @@ impl EditorRunner {
         )
     }
 
-    /// Scroll settles geometry before motion is dispatched. Its successor
+    /// Scroll/gestures settle geometry before motion is dispatched. The successor
     /// already includes the latest pointer input; unhandled paired motion
-    /// therefore needs no second frame. Without a scroll frame, motion must
+    /// therefore needs no second frame. Without such a frame, motion must
     /// still refresh hover even if no handler accepts it.
     pub(crate) fn flush_pending_continuous(&mut self) -> bool {
         let pointer = self.pending_pointer.take();
@@ -335,6 +386,9 @@ impl EditorRunner {
             Some(pending) => self.dispatch_scroll_batch(pending),
             None => false,
         };
+        if let Some(pending) = self.pending_gesture.take() {
+            reminted |= self.dispatch_gesture_batch(pending);
+        }
         if let Some(pointer) = pointer {
             reminted |= self.dispatch_pointer_batch(&pointer);
             if !reminted {
@@ -522,7 +576,9 @@ mod tests {
     #[test]
     fn every_input_receives_the_installed_dispatch_context() {
         use puri::handler::EventOutcome;
-        for kind in ["down", "up", "cancel", "move", "scroll", "key", "ime"] {
+        for kind in [
+            "down", "up", "cancel", "move", "scroll", "gesture", "key", "ime",
+        ] {
             let log = Log::default();
             let mut runner = instrumented_runner(&log);
             runner.refresh_frame(1.0, VIEWPORT);
@@ -588,6 +644,13 @@ mod tests {
                             coalesced: vec![],
                             predicted: vec![],
                         }),
+                        "gesture" => {
+                            PointerEvent::Gesture(ui_events::pointer::PointerGestureEvent {
+                                pointer: button.pointer,
+                                state: button.state,
+                                gesture: ui_events::pointer::PointerGesture::Pinch(0.1),
+                            })
+                        }
                         "scroll" => PointerEvent::Scroll(PointerScrollEvent {
                             pointer: button.pointer,
                             state: button.state,
@@ -601,6 +664,72 @@ mod tests {
             }
             assert_eq!(calls.get(), 1, "{kind}");
         }
+    }
+
+    #[test]
+    fn pinch_packets_keep_their_context_and_build_one_successor() {
+        use puri::handler::{EventOutcome, PointerGesture};
+        use winit::event::{DeviceId, TouchPhase, WindowEvent};
+        let log = Log::default();
+        let mut runner = instrumented_runner(&log);
+        runner.refresh_frame(2.0, VIEWPORT);
+        log.take();
+        let device_id = DeviceId::dummy();
+        let motion = WindowEvent::CursorMoved {
+            device_id,
+            position: (25.0, 20.0).into(),
+        };
+        // Winit refreshes the pointer before every macOS magnification packet.
+        runner
+            .frame
+            .dispatch
+            .handler
+            .on_gesture_batch(|editor, events| {
+                assert_eq!(events.len(), 2);
+                let mut zoom = 1.0;
+                for event in events.iter() {
+                    assert_eq!(event.state.position.x, 25.0);
+                    let PointerGesture::Pinch(delta) = event.gesture else {
+                        panic!("expected pinch")
+                    };
+                    zoom *= 1.0 + f64::from(delta);
+                }
+                Rc::make_mut(&mut editor.model.doc).root = Some(f64::value(zoom));
+                EventOutcome::accept()
+            });
+        for _ in 0..2 {
+            let pinch = WindowEvent::PinchGesture {
+                device_id,
+                delta: 0.25,
+                phase: TouchPhase::Moved,
+            };
+            for event in [&motion, &pinch] {
+                assert!(!runner.flush_before_window_event(event));
+                let Some(crate::WindowEventTranslation::Pointer(pointer)) =
+                    crate::translate_window_event(&mut runner.editor.reducer, 2.0, event)
+                else {
+                    panic!("expected pointer event")
+                };
+                runner.pointer_event(&pointer, 2.0, VIEWPORT);
+            }
+        }
+        assert!(log.borrow().is_empty());
+        let end = WindowEvent::PinchGesture {
+            device_id,
+            delta: 0.0,
+            phase: TouchPhase::Ended,
+        };
+        assert!(runner.flush_before_window_event(&end));
+        assert!(runner.pending_gesture.is_none());
+        let log = log.take();
+        assert_eq!(
+            log.iter().filter(|(event, _)| *event == "project").count(),
+            1
+        );
+        assert_eq!(
+            runner.editor.model.doc.root.as_ref().and_then(f64::read),
+            Some(1.5625)
+        );
     }
 
     #[test]

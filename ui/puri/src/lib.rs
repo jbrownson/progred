@@ -5,12 +5,14 @@
 //! caller-supplied [`Placement`]; Puri owns no layout tree or traversal.
 //! See `docs/puri.md`.
 
+mod batch;
 pub mod delim;
 pub mod drag;
 pub mod draw;
 pub mod edit;
 pub mod frame;
 pub mod geometry;
+pub mod gesture;
 pub mod handler;
 pub mod hover;
 pub mod interact;

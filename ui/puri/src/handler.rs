@@ -6,8 +6,8 @@ use std::borrow::Cow;
 pub use ui_events::ScrollDelta;
 pub use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 pub use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
-    PointerType, PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerGesture, PointerGestureEvent, PointerId, PointerInfo,
+    PointerScrollEvent, PointerState, PointerType, PointerUpdate,
 };
 
 /// Acceptance is independent of whether state changed. The remainder can
@@ -82,8 +82,8 @@ pub enum ImeEvent {
     Commit(String),
 }
 
-/// Input, not editor actions. Scroll retains every observed packet in order;
-/// a partially consumed batch may own its adjusted remainder.
+/// Input, not editor actions. Scroll and gestures retain every observed packet
+/// in order; a partially consumed batch may own its adjusted remainder.
 #[derive(Clone)]
 pub enum Event<'a> {
     PointerDown(&'a PointerButtonEvent),
@@ -91,6 +91,7 @@ pub enum Event<'a> {
     PointerUp(&'a PointerButtonEvent),
     PointerCancel(&'a PointerInfo),
     Scroll(Cow<'a, [PointerScrollEvent]>),
+    Gesture(Cow<'a, [PointerGestureEvent]>),
     Key(&'a KeyboardEvent),
     Ime(&'a ImeEvent),
     ModifiersChanged(&'a Modifiers),
@@ -334,6 +335,25 @@ impl<C: 'static, P: 'static> Handler<C, P> {
     ) {
         self.on_scroll_batch(move |ctx, scroll| {
             crate::scroll::each(scroll, |event| dispatch(ctx, event))
+        });
+    }
+
+    pub fn on_gesture_batch(
+        &mut self,
+        dispatch: impl for<'a> Fn(&mut C, Cow<'a, [PointerGestureEvent]>) -> EventOutcome<'a> + 'static,
+    ) {
+        self.on(move |ctx, event, _| match event {
+            Event::Gesture(events) => dispatch(ctx, events),
+            other => EventOutcome::decline(other),
+        });
+    }
+
+    pub fn on_gesture(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerGestureEvent) -> bool + 'static,
+    ) {
+        self.on_gesture_batch(move |ctx, events| {
+            crate::gesture::each(events, |event| dispatch(ctx, event))
         });
     }
 
