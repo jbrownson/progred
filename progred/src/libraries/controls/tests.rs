@@ -3,7 +3,7 @@ use crate::display::test_support::{ResolveForDispatch, with_context};
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
 use measured::choices::{ChoiceBuild, resolve_choices};
-use puri::Placement;
+use puri::{Affine, DrawCmd, DrawList, Placement, Shape};
 
 const A: CellId = CellId::from_u128(1);
 const B: CellId = CellId::from_u128(2);
@@ -61,13 +61,19 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         let height = f64::read(value.as_record().unwrap().get(&HEIGHT).unwrap()).unwrap();
         self.0.replace(Some(value));
-        ChoiceLayout::fixed(widget::leaf(
+        ChoiceLayout::fixed(widget::paint(
             Extent {
                 width: 200.0,
                 ascent: height,
                 descent: 0.0,
             },
-            |_, _| {},
+            |canvas, placement| {
+                canvas.fill_shape(
+                    placement.rect.into(),
+                    puri::Color::from_rgb8(80, 140, 100).into(),
+                    Affine::IDENTITY,
+                );
+            },
         ))
     }
 }
@@ -183,7 +189,25 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, 300.0)),
         &Default::default(),
     );
-    let dispatch = placed.resolve_for_dispatch();
+    let frame = placed.bind(Default::default());
+    let mut drawing = DrawList::new();
+    puri::frame::render(frame.renders, &mut drawing);
+    assert!(matches!(
+        drawing.0.first(),
+        Some(DrawCmd::Fill { shape: Shape::Rect(rect), .. })
+            if *rect == Rect::new(0.0, 0.0, 200.0, 300.0)
+    ));
+    assert!(
+        drawing.0[1..].iter().all(|cmd| !matches!(
+            cmd,
+            DrawCmd::Fill {
+                shape: Shape::Rect(_) | Shape::RoundedRect(_),
+                ..
+            }
+        )),
+        "controls paint above the full view without a background strip hiding it"
+    );
+    let dispatch = frame.handler.unwrap();
     let mut editor = crate::test_editor(gid::Document {
         root: None,
         cells: Cells::new(),

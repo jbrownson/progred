@@ -9,7 +9,8 @@ It takes `controls` (a zero-argument Grap callable), `view` (a callable), `value
 3. Calls `view` with the original `value`, full `width` and `height`, and the
    controls function's ordinary return value under `parameters`.
 4. Projects the returned view and overlays the controls along its bottom edge.
-   The control surface paints above the view, clips to the pane, and blocks
+   Only the controls themselves paint above the view; no background strip hides
+   the image beneath them. The control surface clips to the pane and blocks
    pointer starts from reaching the view, including between controls.
 
 `parameters` can be a scalar, list, record, or any other ordinary Value. A

@@ -330,14 +330,6 @@ fn display(
         let controls =
             widget::before_place(measured::col(0, 0.0, controls), |placement, output| {
                 output.claim(puri::hover::Probe::occludes(placement));
-                output.render(move |canvas, _| {
-                    puri_widgets::panel::Panel {
-                        fill: Some(puri::Color::new([0.965, 0.965, 0.975, 0.9]).into()),
-                        border: None,
-                        radius: 0.0,
-                    }
-                    .place(canvas, placement);
-                });
                 // The padding is part of the control surface too, not an orbit handle.
                 output.handler().on_pointer_down(move |_, event| {
                     placement.contains(Point::new(event.state.position.x, event.state.position.y))

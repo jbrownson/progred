@@ -10,6 +10,32 @@ use std::{
 };
 
 #[test]
+#[ignore = "captures controls over zoomed-in CAM geometry in both renderers"]
+fn editor_toolpath_controls_overlay_svg_captures() {
+    for (mode, file) in [
+        (t::PREVIEW_MESH, "cam_controls_overlay_mesh.svg"),
+        (t::PREVIEW_3D, "cam_controls_overlay_implicit.svg"),
+    ] {
+        let mut editor = cam_editor(mode);
+        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
+            .path
+            .clone();
+        editor.model.workspace.left.panes[0]
+            .view
+            .annotations
+            .set_field(
+                &path,
+                f::CAMERA,
+                Some(Value::record([(
+                    f::ZOOM,
+                    crate::libraries::f32::value(4.0),
+                )])),
+            );
+        render_editor(editor, kurbo::Size::new(1000.0, 750.0), file);
+    }
+}
+
+#[test]
 #[ignore = "captures automatic mesh fallback and implicit refinements through the full editor"]
 fn editor_toolpath_refined_svg_captures() {
     let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
