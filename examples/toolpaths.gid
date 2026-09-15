@@ -1988,26 +1988,6 @@
             },
           },
           {
-            function: require,
-            condition: {
-              right: tilt,
-              function: less,
-              left: {
-                f64: 0x0000000000000000,
-              },
-            },
-          },
-          {
-            function: require,
-            condition: {
-              right: {
-                f64: 0x0000000000805640,
-              },
-              function: less,
-              left: tilt,
-            },
-          },
-          {
             function: where,
             expression: {
               function: orientation,

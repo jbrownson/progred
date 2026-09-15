@@ -114,11 +114,23 @@ fn example_program(name: &str) -> Recording {
 }
 
 #[test]
-fn tilted_pulling_requires_a_finite_angle_between_zero_and_ninety() {
+fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
     let (original, names) =
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
-    for angle in [-45.0, 0.0, 90.0, f64::NAN, f64::INFINITY, 10.0, 60.0] {
+    for angle in [
+        -45.0,
+        0.0,
+        10.0,
+        60.0,
+        90.0,
+        135.0,
+        180.0,
+        360.0,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ] {
         let mut doc = original.clone();
         doc.cells.set_value(names["tilt"], f64::value(angle));
         let sources = crate::sources::Sources {
@@ -130,18 +142,85 @@ fn tilted_pulling_requires_a_finite_angle_between_zero_and_ninety() {
             ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
         });
         assert!(result.completed);
-        if angle > 0.0 && angle < 90.0 {
+        if angle.is_finite() {
             assert!(!absent::is_absent(&result.result));
             let Command::StartAt(_, axis) = path.commands[0] else {
                 panic!("first path")
             };
             assert!((axis.vector()[2] - angle.to_radians().cos()).abs() < 1e-12);
+            for command in &path.commands {
+                let point = match command {
+                    Command::StartAt(point, axis) => {
+                        assert!(axis.vector().into_iter().all(f64::is_finite));
+                        if angle == 0.0 {
+                            assert_eq!(*axis, Axis::Z);
+                        }
+                        point
+                    }
+                    Command::LineTo(point) => point,
+                };
+                assert!(point.iter().all(|v| v.is_finite()));
+            }
         } else {
             assert!(absent::is_absent(&result.result));
             assert!(
                 path.commands.is_empty(),
                 "invalid tilt must not emit cutting moves"
             );
+        }
+    }
+}
+
+#[test]
+fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
+    let (mut doc, names) =
+        crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let stack = crate::stack::load();
+    let mut paths = Vec::new();
+    for angle in [45.0, 0.0] {
+        doc.cells.set_value(names["tilt"], f64::value(angle));
+        let sources = crate::sources::Sources {
+            doc: &doc,
+            libraries: &stack.libraries,
+        };
+        let mut path = Recording::default();
+        let result = run(&mut path, |scope| {
+            ::grap::apply_scoped(
+                &names["preview_operations"].into(),
+                [],
+                &sources,
+                scope,
+                3_000_000,
+            )
+        });
+        assert!(result.completed && !absent::is_absent(&result.result));
+        let mut axis = Axis::Z;
+        paths.push(
+            path.commands
+                .iter()
+                .map(|command| {
+                    let point = match command {
+                        Command::StartAt(point, next_axis) => {
+                            axis = *next_axis;
+                            if angle == 0.0 {
+                                let components = axis.vector().map(f64::abs);
+                                assert_eq!(components.into_iter().filter(|v| *v == 1.0).count(), 1);
+                                assert_eq!(components.into_iter().filter(|v| *v == 0.0).count(), 2);
+                            }
+                            point
+                        }
+                        Command::LineTo(point) => point,
+                    };
+                    std::array::from_fn::<_, 3, _>(|i| point[i] + 0.0625 * axis.vector()[i])
+                })
+                .collect::<Vec<_>>(),
+        );
+    }
+    assert_eq!(paths[0].len(), paths[1].len());
+    assert!(!paths[0].is_empty());
+    for (a, b) in paths[0].iter().zip(&paths[1]) {
+        for i in 0..3 {
+            assert!((a[i] - b[i]).abs() < 1e-12);
         }
     }
 }

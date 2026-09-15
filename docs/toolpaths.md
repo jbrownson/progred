@@ -110,19 +110,25 @@ single machine program: eventual export should target Op 1 and Op 2 separately.
 Both currently use part coordinates; there is no simulated stock flip,
 work-offset definition, or connecting move between setups.
 
-The editable `tilt (degrees)` defaults to 45 and must be strictly between 0
-and 90. The example assumes the usual clockwise spindle rotation, viewed from
-the spindle toward the tip. Each operation passes an explicit `setup up`
-vector: +Z for Op 1, −Z for the flipped Op 2, expressed in part coordinates.
+The editable `tilt (degrees)` defaults to 45 and accepts any finite angle;
+there is no machining-policy range guard. Zero points along the face normal,
+90 degrees along the chosen feed direction, and other angles use the same
+trigonometric calculation. The example assumes the usual clockwise spindle
+rotation, viewed from the spindle toward the tip. Each operation passes an
+explicit `setup up` vector: +Z for Op 1, −Z for the flipped Op 2, expressed in
+part coordinates.
 The ordinary Grap `pull direction` function selects the sign of each diagonal
 so its lean points toward setup-up. A horizontal tie keeps the positive
 diagonal direction. The axis is
 `cos(tilt) * face_normal + sin(tilt) * feed_direction`.
-Motion runs along that lean, pulling the cutter, with row progression along
+For positive tilts below 90 degrees, motion runs along that lean, pulling the
+cutter, with row progression along
 `feed_direction × face_normal` for the example's clockwise climb policy.
-Reversing the lean reverses both points within each pass and the row sequence;
-the reflected crossing family also reverses its row sequence. All of this is
+Choosing the opposite feed direction reverses both points within each pass and
+the row sequence; the reflected crossing family also reverses its row sequence. All of this is
 editable Grap, not a rule in the path sink or renderer.
+Other angles need not preserve the upward-lean or pulling assumptions; accepting
+the resulting geometry is not a collision-clearance or machining-safety check.
 
 Tests check the spindle-facing hemisphere, pull direction, row progression,
 and unchanged sampled geometry on all six faces. These are reference-face
