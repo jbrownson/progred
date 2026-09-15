@@ -39,6 +39,109 @@ rsvg-convert target/sandbox/build/editor_toolpaths.svg \
 Quick Look thumbnails can crop wide SVGs rather than preserve the viewport;
 use the SVG or the conversion above when checking the whole frame.
 
+The progressive CAM capture uses a worker thread and the normal completion-driven
+frame updates, saving each observed image size as `cam_progressive_N.svg`:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  editor_toolpath_progressive_svg_captures -- --ignored --nocapture
+```
+
+It reports elapsed times through headless painting, including earlier capture
+overhead, not native display latency. It also checks increasing resolution and
+that the final image fills the pane behind the controls. In one optimized run
+at 1000 × 750 @1, the 333 × 750 CAM pane showed 42 × 94 at 239 ms,
+84 × 188 at 503 ms, 167 × 375 at 919 ms, and native pixels at 1629 ms.
+These are a smoke check of the checked-in example, not a performance guarantee.
+
+### Implicit stock quality and cancellation investigation — 2026-09-14
+
+The opt-in `implicit_stock_diagnostics` and `implicit_normal_sampling_diagnostic`
+tests in `libraries/fidget/raster/diagnostics.rs` exercise the checked-in Grap
+toolpath's stock subtraction without a window. Run with the same optimized sandbox test command and
+`--ignored --nocapture`. The stock test writes `stock_*.png` captures.
+
+Two runs at 600 × 600, camera zoom 1.2, 0.125-inch diameter and 0.22-inch length
+measured stock-expression construction below 1 ms and compilation at 8–20 ms
+for playback 0.35, 0.7 and 1.0. Native stock rasterization ranged from roughly
+0.29 to 1.8 seconds. These isolate stock; they omit future-path/tool scene
+construction and editor work. They do not establish total interactive latency.
+
+The stock captures had no transparent gaps within occupied scanlines and no
+zero/nonfinite normals. Extra Z samples reduced jagged shading seams; rendering
+at twice X/Y resolution and box-filtering the shaded colors reduced aliasing.
+The latter diagnostic is a simple byte-space average, not the final production
+antialiasing policy. Neither observation identifies an arbitrary user screenshot.
+
+Fidget's pinned software renderer checks cancellation between top-level tiles,
+not inside their recursive evaluation. With the fully cut stock, its default
+`[128, 64, 32, 16, 8]` tiles rendered in 1.28 s and returned about 1.24 s after
+a cancellation requested 20 ms into rendering. `[64, 32, 16, 8]` took 0.73 s
+and 0.29 s respectively; `[32, 16, 8]` took 0.66 s and 18 ms. All three PNGs
+were byte-identical. These are local measurements, not bounds on cancellation.
+The outer request still rejects cancelled results even when Fidget finishes
+an already-running tile without observing its token. Smaller tiles use an
+existing public Fidget setting; no upstream modification is necessary.
+
+The normal diagnostic confirmed a separate integration defect: Fidget returns
+gradients in sampling coordinates. Our software shading originally normalized
+them without accounting for unequal sampling-axis scale. A fixed `x + z` plane
+changes from RGB 158 to 172 as resolution changes, although its physical normal
+is constant. Dividing gradient components by the lengths of the corresponding
+screen-to-model matrix columns recovers the same normal at every tested level.
+This is a shading correction, not a repair for missing geometry.
+
+The subsequent `implicit_tool_rim_diagnostic` isolates the user's cap/side seam
+with the actual ball-end tool expression (0.125-inch diameter, 0.22-inch length).
+It compares Fidget pixels against analytic ray intersections with the flat cap
+at 300 × 300, pitch 40 degrees. Of 9,635 rays strictly inside the cap rim, native
+depth sampling missed 39 and gave another 857 a non-cap normal. At 4× depth
+these counts were 17 and 194; at 16× depth they were 2 and 55. Captures are
+`tool_rim_z1.png`, `tool_rim_z4.png`, and `tool_rim_z16.png`. They reproduce the
+sawtooth rim without other scene objects. Initial captures used uncorrected
+shading; rerunning uses the current corrected lighting.
+These distinguish two finite-depth-sampling effects: a ray can traverse a thin
+cap/side wedge between samples without an inside sample, or its first inside
+sample can select the side's gradient rather than the cap's. The earlier stock
+scanline check did not exclude either behavior at the tool rim.
+
+Splitting those analytic cap intersections into near/far halves confirms that
+missing coverage is only the far-side problem in this fixture. At the current
+4× depth, the near half has zero missing pixels and 98 wrong-normal pixels;
+the far half has 17 missing pixels and 96 wrong-normal pixels. The near-side
+sawteeth are shaded cylinder-wall normals, not holes in the solid tool.
+
+### Software raster fixes and final depth refinement — 2026-09-14
+
+Production software shading now removes sample-axis scale from gradients;
+the fixed-plane diagnostic returns RGB 173 at every tested resolution.
+Regression tests cover camera rotation, zoom, rectangular images and the final
+depth pass. Software rasterization uses `[32, 16, 8]` tiles through Fidget's
+existing public setting. A same-process full-stock comparison measured 1.22 s
+with default tiles and 0.56 s with the smaller tiles. The resulting PNGs are
+byte-identical, and an ordinary test compares the two paths on a clipped sphere.
+
+CAM requests one additional native-size pass with 4× depth sampling. The native
+image is published first, while that pass runs; only the last result clears the
+pending indication. The multiplier is an explicit software-refinement argument,
+not a rule in the async scheduler. Depth refinement preserves the camera,
+render volume, X/Y coordinates and normal weighting. No supersampling or
+post-render gap filling is applied. Tests cover preserved geometry, final output,
+and cancellation after the native image but before the finer-depth pass.
+
+An optimized 1000 × 750 headless-editor run published 42 × 94 at 208 ms,
+84 × 188 at 395 ms, 167 × 375 at 567 ms, native 333 × 750 at 871 ms,
+and the same-size 4×-depth image at 1612 ms. These include prior capture overhead
+and are not native display timings or a controlled comparison with earlier runs.
+The capture test now records depth-only updates even though dimensions repeat.
+
+At 600 × 600, stock-only rasterization with the new tiles took 0.20–0.53 s
+across playback 0.35, 0.7 and 1.0; 4× depth took 0.42–1.25 s. Cancellation
+requested 20 ms into rendering returned after 7–204 ms over 18 native/finer-depth
+trials, most in tens of milliseconds. Default tiles in the same run delayed it
+1.19 s. These remain cooperative checks between root tiles, not a latency bound;
+expression construction and compilation still check only around their work.
+
 ## Frame timing
 
 The opt-in tests in `progred/src/projection/tests/frame/profile.rs` share one
@@ -217,6 +320,11 @@ is therefore expected to be choppy; retained geometry and asynchronous work
 remain separate design decisions, not hidden fallbacks in this experiment.
 
 ### Dependency-tracked CAM geometry — 2026-09-14
+
+These measurements used the earlier mesh fixture. Command+9 now has a Mesh/Implicit
+radio selector and starts in Mesh. Its default mesh depth is 6 rather than 7,
+and the cutter diameter is now 0.125 inches; keep these geometry changes in mind
+when comparing fresh measurements with this table.
 
 The same `fidget_toolpaths_profile_loop` (400 × 600 logical @2, playback 0.35,
 five warm-up and 60 measured orbit frames) before/after the general memo graph:

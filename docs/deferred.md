@@ -92,14 +92,28 @@ The former canvas memo observed less than evaluation could use. It remains
 removed; canvas programs record once per visible frame. The new general
 [computation graph](incremental.md) first serves CAM geometry and observes selected
 definitions, missing lookups, native implementations, and declared FFI inputs.
-Native CAM stock jobs now use the graph's generic background boundary. Browser
-workers, Grap-language memo/async boundaries, progressive quality, durability
+Native CAM stock jobs now use the graph's generic background boundary; implicit
+CAM jobs publish coarse-to-fine images through its progressive-result interface.
+Browser workers, Grap-language memo/async boundaries, user-facing quality controls, durability
 tiers, and further integrations are deferred. Future readers of ordered contributor sets must
 observe that set, not just a selected definition. Do not add an ad-hoc cache
 or event-specific relevance checks alongside this mechanism.
 
 The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
+
+### Fidget refinement and sharp edges
+
+Future upstream investigation may cover reuse across progressive resolutions or
+model edits, and more accurate surface-hit/normal evaluation at sharp edges.
+Current raster refinement recomputes each level; finer depth sampling reduces
+both missed thin intersections and wrong-face normals but does not eliminate
+them. See the [tool-rim diagnostics](performance.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
+This is separate from Progred's scheduling policy: currently new input cancels
+even the first preview, which can starve display updates during continuous orbit.
+A proposed next step is to finish a coarse preview, retain only the newest
+pending request, and cancel superseded refinement. An old preview must remain
+explicitly stale rather than becoming the current computation's result.
 
 ## Hover traversal order
 

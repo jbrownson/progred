@@ -142,3 +142,13 @@ impl Sink for Tubes {
         Ok(())
     }
 }
+
+impl playback::Draw for Tubes {
+    fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
+        self.style(radius, color)
+    }
+
+    fn ball_end(&mut self, center: Point3, length: f64) -> Result<(), InvalidPath> {
+        self.ball_end(center, length)
+    }
+}

@@ -27,6 +27,7 @@ pub(crate) mod mesh;
 #[cfg(all(test, feature = "mesh-experiment"))]
 mod mesh_experiment;
 mod projection;
+pub(crate) mod raster;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use crate::display::{Layout, ProjectionInput, on_hover, on_state_drag, widget};
@@ -570,9 +571,17 @@ fn image_layout(
         width: raster_size.width(),
         height: raster_size.height(),
     };
+    image_from_data(size, image, false)
+}
+
+pub(crate) fn image_from_data(
+    size: Size,
+    image: ImageData,
+    stale: bool,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
     let image_transform = Affine::scale_non_uniform(
-        size.width / f64::from(raster_size.width()),
-        size.height / f64::from(raster_size.height()),
+        size.width / f64::from(image.width),
+        size.height / f64::from(image.height),
     );
     Layout::widget(Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
@@ -587,6 +596,13 @@ fn image_layout(
                 let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
                     * Affine::scale(scale);
                 canvas.draw_image(image, transform * image_transform);
+                if stale {
+                    canvas.fill_shape(
+                        placement.rect.into(),
+                        puri::Color::new([0.9, 0.9, 0.9, 0.35]).into(),
+                        Affine::IDENTITY,
+                    );
+                }
             },
         )
     }))
@@ -748,7 +764,7 @@ fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
         .collect()
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct VolumePreview {
     pub(crate) objects: Vec<SceneObject>,
     size: Size,
@@ -823,42 +839,12 @@ fn volume_view(
     }
 }
 
-fn cpu_volume(objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
-    let config = VoxelRenderConfig {
-        world_to_model: view.world_to_model,
-        ..VoxelRenderConfig::from_size(view.size)
-    };
-    let mut image = vec![
-        (GeometryPixel::default(), [255; 3]);
-        view.size.width() as usize * view.size.height() as usize
-    ];
-    for object in objects {
-        let shape = VmShape::from(object.tree.clone());
-        let geometry = config.run(shape.try_into().ok()?);
-        for (output, pixel) in image.iter_mut().zip(geometry.iter()) {
-            if pixel.depth > output.0.depth {
-                *output = (*pixel, object.color);
-            }
-        }
-    }
-    let light = Vector3::new(0.35, -0.45, 1.0).normalize();
-    Some(
-        image
-            .iter()
-            .flat_map(|(pixel, color)| shade_geometry(*pixel, *color, light))
-            .collect(),
-    )
-}
-
-fn shade_geometry(pixel: GeometryPixel, color: [u8; 3], light: Vector3<f32>) -> [u8; 4] {
-    if pixel.depth == 0 {
-        [0, 0, 0, 0]
-    } else {
-        let normal = Vector3::from(pixel.normal).normalize();
-        let intensity = 0.22 + 0.78 * normal.dot(&light).max(0.0);
-        let [r, g, b] = color.map(|channel| (f32::from(channel) * intensity) as u8);
-        [r, g, b, 255]
-    }
+fn cpu_volume(
+    objects: &[SceneObject],
+    view: &VolumeView,
+    cancellation: &incremental::Cancellation,
+) -> Option<Vec<u8>> {
+    raster::SoftwareScene::new(objects, cancellation)?.render(view, cancellation)
 }
 
 pub(crate) struct PreviewRenderer {
@@ -895,7 +881,7 @@ impl PreviewRenderer {
         if let Some(image) = self.gpu.render(&preview.objects, &view) {
             return Some(image);
         }
-        cpu_volume(&preview.objects, &view)
+        cpu_volume(&preview.objects, &view, &Default::default())
     }
 }
 
@@ -1434,11 +1420,11 @@ mod tests {
     fn cpu_scene_merges_depth_before_shading_colors() {
         let view = test_volume_view();
         let mut objects = overlapping_objects();
-        assert_two_colors(&cpu_volume(&objects, &view).unwrap());
+        assert_two_colors(&cpu_volume(&objects, &view, &Default::default()).unwrap());
         objects.reverse();
-        assert_two_colors(&cpu_volume(&objects, &view).unwrap());
+        assert_two_colors(&cpu_volume(&objects, &view, &Default::default()).unwrap());
         objects[1].tree = objects[0].tree.clone();
-        let rgba = cpu_volume(&objects, &view).unwrap();
+        let rgba = cpu_volume(&objects, &view, &Default::default()).unwrap();
         assert!(
             rgba.chunks_exact(4)
                 .filter(|p| p[3] != 0)
@@ -1704,7 +1690,7 @@ mod tests {
                 let x = screen.fixed_view::<3, 1>(0, 0).norm();
                 let y = screen.fixed_view::<3, 1>(0, 1).norm();
                 assert!((x - y).abs() < 0.00001, "square pixels must stay square");
-                let rgba = cpu_volume(&preview.objects, &view).unwrap();
+                let rgba = cpu_volume(&preview.objects, &view, &Default::default()).unwrap();
                 assert_eq!(
                     rgba.len(),
                     raster.width() as usize * raster.height() as usize * 4
@@ -1762,7 +1748,7 @@ mod tests {
             ));
             let preview = volume_preview(&value).unwrap();
             let view = volume_view(&preview, Camera::default(), PixelRenderSize::from(64));
-            let rgba = cpu_volume(&preview.objects, &view).unwrap();
+            let rgba = cpu_volume(&preview.objects, &view, &Default::default()).unwrap();
             assert_eq!(rgba.len(), 64 * 64 * 4);
             assert!(
                 rgba.chunks_exact(4)

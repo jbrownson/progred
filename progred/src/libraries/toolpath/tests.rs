@@ -22,6 +22,84 @@ fn top_face(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Bind
         .clone()
 }
 
+#[test]
+fn example_view_selects_both_renderers_with_the_same_playback_and_tool_diameter() {
+    use crate::libraries::{controls::vocabulary as ui, layout::vocabulary as l, presentation};
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let (value, viewport) =
+        presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
+    let controls = ::grap::apply(
+        viewport,
+        [
+            (presentation::vocabulary::VALUE, value.clone()),
+            (l::WIDTH, f64::value(400.0)),
+            (l::HEIGHT, f64::value(500.0)),
+        ],
+        &sources,
+        10_000,
+    );
+    assert!(controls.completed);
+    let fields = controls
+        .result
+        .as_record()
+        .unwrap()
+        .get(&ui::WITH_CONTROLS)
+        .unwrap()
+        .as_record()
+        .unwrap();
+    for mode in [PREVIEW_MESH, PREVIEW_3D] {
+        let preview = ::grap::apply(
+            fields.get(&ui::VIEW).unwrap(),
+            [
+                (
+                    presentation::vocabulary::VALUE,
+                    fields
+                        .get(&presentation::vocabulary::VALUE)
+                        .unwrap()
+                        .clone(),
+                ),
+                (l::WIDTH, f64::value(400.0)),
+                (l::HEIGHT, f64::value(400.0)),
+                (
+                    ui::PARAMETERS,
+                    Value::record([
+                        (PROGRESS, f64::value(0.7)),
+                        (
+                            names["render_mode"],
+                            Value::record([(::grap::vocabulary::FFI, mode.into())]),
+                        ),
+                    ]),
+                ),
+            ],
+            &sources,
+            10_000,
+        );
+        assert!(preview.completed, "{:?}", preview.result);
+        let fields = preview
+            .result
+            .as_record()
+            .unwrap()
+            .get(&mode)
+            .expect("selected preview callable")
+            .as_record()
+            .unwrap();
+        let playback = fields.get(&PLAYBACK).unwrap();
+        assert!(super::playback::Settings::read(playback).is_some());
+        let playback = playback.as_record().unwrap();
+        assert_eq!(
+            f64::read(playback.get(&TOOL_DIAMETER).unwrap()),
+            Some(0.125)
+        );
+        assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
+    }
+}
+
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(function.into(), fields)
 }
@@ -389,7 +467,7 @@ fn example_ball_centers_offset_contact_points_along_the_normal() {
     );
     assert!(!absent::is_absent(&b.result), "{:?}", b.result);
     assert_eq!(contact.commands.len(), centers.commands.len());
-    let radius = f64::read(doc.cells.value(names["ball_radius"]).unwrap()).unwrap();
+    let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     for (a, b) in contact.commands.iter().zip(&centers.commands) {
         let (a, b) = match (a, b) {
             (Command::StartAt(a), Command::StartAt(b))
@@ -462,7 +540,7 @@ fn example_ball_path() -> (Recording, f64) {
         ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
     });
     assert!(result.completed && !absent::is_absent(&result.result));
-    let radius = f64::read(doc.cells.value(names["ball_radius"]).unwrap()).unwrap();
+    let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     (recording, radius)
 }
 
@@ -592,10 +670,10 @@ fn example_tubes_compile_without_gpu_memory_operations() {
         )
     });
     assert!(evaluation.completed && !absent::is_absent(&evaluation.result));
-    let paths = tubes.finish();
+    let paths = tubes.scene();
     assert_eq!(paths.len(), 42);
-    for (index, tree) in paths.into_iter().enumerate() {
-        let shape = fidget_engine::vm::VmShape::from(tree);
+    for (index, object) in paths.into_iter().enumerate() {
+        let shape = fidget_engine::vm::VmShape::from(object.tree);
         assert!(
             !shape.inner().data().iter_asm().any(|op| matches!(
                 op,

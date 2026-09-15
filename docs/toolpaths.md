@@ -89,8 +89,9 @@ the unit-square y coordinate before the same surface mapping. Unlike Rhino's
 finishing program, this example does not reverse row order for that second
 sweep or construct linking curves. The separate Grap `ball center` mapping
 offsets each contact point along the analytic surface normal by `ball radius`;
-`ball-center passes` wraps the contact generator with that mapping. The radius
-is shared by the mapping and preview tool. The first fixture covers one
+`ball-center passes` wraps the contact generator with that mapping. The editable
+`tool diameter` is 0.125 inches; both this mapping and the preview convert it to
+a radius of 0.0625. The first fixture covers one
 face only. The example interprets one model unit as one inch; the runtime still
 uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
@@ -130,15 +131,20 @@ meshing step is involved in the path geometry. Paths and model share the triangl
 renderer, camera, lighting, and depth buffer; no overlay or depth bias is used.
 Failed path generation discards the whole preview before meshing the model.
 
-Command+9's example uses this mesh viewport: 42 paths (1,056 segments), with a
-blue reference cube when stock is disabled, mesh depth 7, and a 500,000-fuel budget
-including Grap ball-radius compensation. Its [memo graph](incremental.md) records
-the path, prepares stock/tool geometry, and meshes only when observed inputs
-invalidate those stages. Camera changes render a fresh image from retained geometry.
-Native builds use GPU triangle drawing with synchronous readback;
-web/headless fallback uses the same geometry in the CPU triangle renderer.
-Expand `panes` to change `mesh depth` or replace `preview paths mesh` with
-`preview paths 3d` for comparison. Drag to orbit; scroll or pinch the Mac trackpad
+Command+9's example offers Mesh (initially selected) and Implicit radio buttons
+below playback: 42 paths (1,056
+segments), with a blue reference cube when stock is disabled and a 500,000-fuel
+budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
+retains the path recording and the selected renderer's expensive results.
+Implicit requests a new software image in the background when inputs change,
+including the camera. Mesh retains geometry across camera changes; its optional
+`mesh depth` defaults to 6 (the previous mesh-only fixture used 7).
+It uses GPU triangle
+drawing on native builds, with a CPU triangle renderer for web/headless fallback.
+The example's Grap radio returns the chosen preview callable, and its view calls
+that function. Switching keeps the same camera and playback annotations; use
+Mesh to orbit quickly, then switch to Implicit to inspect that view.
+Drag to orbit; scroll or pinch the Mac trackpad
 over the viewport to zoom. Pinch needs no modifier and shares the existing
 per-view camera state in both mesh and implicit previews. The document
 contains its own copy of the cube definition so it is self-contained. Its
@@ -177,8 +183,8 @@ geometry through the general dependency graph.
 
 ## Playback
 
-The mesh preview accepts an optional `playback` record with `progress` (f64,
-0–1), `ball radius`, `tool length`, and `stock minimum` / `stock maximum` (f64
+Both previews accept an optional `playback` record with `progress` (f64,
+0–1), `tool diameter`, `tool length`, and `stock minimum` / `stock maximum` (f64
 `x`, `y`, `z` records). These are ordinary data, not control state. The example
 supplies progress from the reusable [controls](controls.md) library.
 
@@ -191,7 +197,9 @@ distance: the cursor jumps between disconnected passes rather than inventing
 linking moves. Progress is not machining time. Empty paths have no tool; zero
 length segments are well-defined. The visual tool is a vertical ball-end cutter,
 with a hemispherical tip and a flat-topped cylindrical flute. Paths identify its
-ball center, and length measures tip to top.
+ball center, and length measures tip to top. Diameter is converted to radius
+at the playback boundary. Both must be finite and positive, and tool length
+must be at least its diameter for this ball-end model.
 Playback is generic over the consumer's error type, with conversion from path
 validation errors. The preview translates invalid geometry to ordinary absents.
 
@@ -203,18 +211,57 @@ without first removing an oversized stock allowance.
 Stock replaces the reference solid while enabled, avoiding coplanar surfaces
 where their boundaries coincide. It shares the paths' depth buffer, so intact
 material hides any path beneath it. There is no x-ray overlay or depth offset.
-Slider changes rebuild stock and mesh while retaining the unchanged path recording.
-Path color and line thickness affect only the path/tool geometry layer; the stock
+Slider changes retain the unchanged path recording. In the mesh preview,
+path color and line thickness affect only the path/tool geometry layer; the stock
 expression and mesh are reused.
-Orbiting retains geometry; every new view still produces a fresh raster image.
+Orbiting retains mesh geometry; every new view still produces a fresh raster image.
+The implicit preview renders stock, tool and paths together in one progressive
+async request. Its tool moves with each current image, not independently of the
+stock. The old image is dimmed until the first current coarse image arrives;
+current refinements restore normal colors, with an ellipsis until the final
+depth pass completes.
+The first pending frame reserves the viewport and shows an ellipsis. Refinement
+starts at at most 128 physical pixels on the longest edge, then doubles toward
+native resolution with a fixed camera and render volume, then performs one
+native-size pass with four times the depth samples to reduce sharp-edge artifacts.
+The normal native-resolution image remains visible during that last pass.
+New input cancels the old sequence. The controls overlay the bottom of the
+full-size view.
+Implicit CAM rendering explicitly uses the software voxel renderer, directly
+on the existing background executor. It does not attempt GPU evaluation first.
+Software rasterization uses 32/16/8-pixel tiles to bound uninterrupted work more
+finely. Lighting corrects sample-space gradients for unequal axis spacing, so
+depth refinement does not change the light direction or relative axis weighting.
+Web/default headless contexts use inline execution.
+
+**Experimental limitation (2026-09-14):** the CPU implicit captures complete and
+show correct playback. A native Metal run of the stock-removal example waited
+over a minute in GPU readback and was terminated. Small GPU color/constant-field
+tests pass. The bytecode diagnostic after accepting the updated Xcode license
+confirmed unsupported memory instructions in the stock expression: at progress
+0 it has 15 instructions and no memory operations; at 0.35 it has 17,473
+instructions including 794 loads/stores; at 1.0 it has 53,228 instructions
+including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
+both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
+valid on this backend. A further native submission of this known-unsupported
+program was deliberately avoided. Command+9's Implicit option uses the explicit
+software path; GPU implicit CAM needs an upstream implementation before use.
+No GPU timeout or spill emulation was added. Ordinary Fidget voxel previews
+retain their existing backend selection. The ignored
+`editor_toolpath_implicit_async_svg_captures` test captures the checked-in
+example without opening a window; captures select the requested renderer through
+the same control annotation as the radio buttons.
+`editor_toolpath_progressive_svg_captures` captures intermediate resolutions
+through the full editor's normal async polling and frame pipeline.
 
 ### Fidget stock removal
 
 `toolpath::stock::Stock` starts with a box-shaped Fidget field. Each completed
 segment, including the completed portion of the current segment, subtracts the
 continuous swept solid of a vertical `BallEnd` tool: `stock.max(-sweep)`.
-Fidget's ordinary CPU mesher builds triangles from the resulting expression;
-the preview uses the same triangle renderer as other mesh views. There is no
+The mesh preview uses Fidget's CPU mesher and the shared triangle renderer.
+The implicit preview renders the same expression directly with the voxel renderer.
+There is no
 heightfield, sampled stock grid, or fallback stock algorithm. The target model
 does not participate in removal: a bad path can cut past the intended surface.
 Stock mode does not mesh or draw that reference solid.
@@ -233,8 +280,8 @@ cavity are representable. Meshing still approximates the implicit surface, and
 coarse depths can visibly distort narrow grooves. Seeking backward reconstructs
 the expression from the initial block. The memo graph retains the latest result,
 not simulation history or a collection of meshes for earlier slider positions.
-On native builds, expression construction and stock meshing run in the general
-graph's background executor. Playback updates tool/path triangles immediately;
+In the native mesh preview, expression construction and stock meshing run in the
+general graph's background executor. Playback updates tool/path triangles immediately;
 old stock is desaturated until its replacement is ready. The first pending frame
 shows available tool/path geometry and an ellipsis. Cancellation uses Fidget's
 octree token, and superseded results are discarded. See the
@@ -249,8 +296,8 @@ or a manufacturing simulation for the entire cube.
 
 Variable orientation, general tool profiles (including arcs and separate cutting
 and collision parts), explicit links, and machine/postprocessor output remain
-separate next steps. Mesh/non-mesh mode controls and render-quality controls can
-use the controls library later; path-generation tolerance belongs to the program
+separate next steps. Render-quality controls can use the controls library later;
+path-generation tolerance belongs to the program
 and is distinct from mesh/raster resolution. Upcoming-path windows, transparency,
 and coarse-to-fine rendering are also deferred. In
 particular, the existing Fidget cube field is not an exact signed distance;

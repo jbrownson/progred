@@ -90,11 +90,15 @@ impl Slot {
 }
 
 pub enum Availability<T> {
-    Pending { previous: Option<Arc<T>> },
+    Pending {
+        previous: Option<Arc<T>>,
+    },
+    /// A usable result for the current request, with more work in progress.
+    Refining(Arc<T>),
     Ready(Arc<T>),
 }
 
-trait Completions {
+trait BackgroundNode {
     fn collect(&self) -> bool;
     fn close(&self);
 }
@@ -103,7 +107,7 @@ pub struct Tasks {
     runtime: Runtime,
     executor: Executor,
     wake: Arc<dyn Fn() + Send + Sync>,
-    nodes: RefCell<Vec<Weak<dyn Completions>>>,
+    nodes: RefCell<Vec<Weak<dyn BackgroundNode>>>,
 }
 
 impl Tasks {
@@ -129,7 +133,7 @@ impl Tasks {
         }
     }
 
-    /// Import completions between graph reads, never while evaluating a recipe.
+    /// Import worker reports between graph reads, never while evaluating a recipe.
     pub fn poll(&self) -> bool {
         let mut changed = false;
         self.nodes.borrow_mut().retain(|node| {
@@ -151,6 +155,21 @@ impl Tasks {
         prepare: Memo<I>,
         compute: impl Fn(I, &Cancellation) -> Result<T, Error> + Send + Sync + 'static,
     ) -> AsyncMemo<I, T> {
+        self.memo_progressive(prepare, move |input, cancel, _publish| {
+            compute(input, cancel)
+        })
+    }
+
+    /// A worker may publish intermediate values before returning its final one.
+    /// Publication uses the same generation validation and revision boundary as completion.
+    pub fn memo_progressive<I: Clone + Send + 'static, T: Send + Sync + 'static>(
+        &self,
+        prepare: Memo<I>,
+        compute: impl Fn(I, &Cancellation, &mut dyn FnMut(T) -> Result<(), Error>) -> Result<T, Error>
+        + Send
+        + Sync
+        + 'static,
+    ) -> AsyncMemo<I, T> {
         let (sender, receiver) = mpsc::channel();
         let node = Rc::new(AsyncNode {
             runtime: self.runtime.clone(),
@@ -171,14 +190,14 @@ impl Tasks {
                 generation: 0,
                 cancel: Cancellation::default(),
                 value: Rc::new(Availability::Pending { previous: None }),
-                completed: None,
+                pending_report: None,
                 failure: None,
                 changed: self.runtime.0.get(),
                 reusable: true,
                 closed: false,
             }),
         });
-        let source: Rc<dyn Completions> = node.clone();
+        let source: Rc<dyn BackgroundNode> = node.clone();
         let mut nodes = self.nodes.borrow_mut();
         nodes.retain(|node| node.strong_count() != 0);
         nodes.push(Rc::downgrade(&source));
@@ -195,14 +214,22 @@ impl Drop for Tasks {
     }
 }
 
-type Completion<T> = (u64, std::thread::Result<Result<T, Error>>);
+enum Report<T> {
+    Progress(T),
+    Finished(std::thread::Result<Result<T, Error>>),
+}
+
+type GenerationReport<T> = (u64, Report<T>);
+type Worker<I, T> = dyn Fn(I, &Cancellation, &mut dyn FnMut(T) -> Result<(), Error>) -> Result<T, Error>
+    + Send
+    + Sync;
 
 struct State<I, T> {
     input: Option<Rc<I>>,
     generation: u64,
     cancel: Cancellation,
     value: Rc<Availability<T>>,
-    completed: Option<Completion<T>>,
+    pending_report: Option<GenerationReport<T>>,
     failure: Option<Error>,
     changed: u64,
     reusable: bool,
@@ -212,11 +239,11 @@ struct State<I, T> {
 struct AsyncNode<I, T> {
     runtime: Runtime,
     prepare: Memo<I>,
-    compute: Arc<dyn Fn(I, &Cancellation) -> Result<T, Error> + Send + Sync>,
+    compute: Arc<Worker<I, T>>,
     wake: Arc<dyn Fn() + Send + Sync>,
     slot: Arc<Slot>,
-    sender: mpsc::Sender<Completion<T>>,
-    receiver: RefCell<mpsc::Receiver<Completion<T>>>,
+    sender: mpsc::Sender<GenerationReport<T>>,
+    receiver: RefCell<mpsc::Receiver<GenerationReport<T>>>,
     state: RefCell<State<I, T>>,
 }
 
@@ -278,11 +305,11 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                 .checked_add(1)
                 .expect("request generation exhausted");
             state.input = Some(input.clone());
-            state.completed = None;
+            state.pending_report = None;
             state.failure = None;
             let previous = match &*state.value {
                 Availability::Pending { previous } => previous.clone(),
-                Availability::Ready(value) => Some(value.clone()),
+                Availability::Ready(value) | Availability::Refining(value) => Some(value.clone()),
             };
             state.value = Rc::new(Availability::Pending { previous });
             state.changed = read.revision;
@@ -295,32 +322,48 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             self.slot.submit(Box::new(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     cancel.check()?;
-                    let value = compute(input, &cancel)?;
+                    let value = compute(input, &cancel, &mut |value| {
+                        cancel.check()?;
+                        sender
+                            .send((generation, Report::Progress(value)))
+                            .map_err(|_| Error::Cancelled)?;
+                        wake();
+                        Ok(())
+                    })?;
                     cancel.check()?;
                     Ok(value)
                 }));
-                if sender.send((generation, result)).is_ok() {
+                if sender.send((generation, Report::Finished(result))).is_ok() {
                     wake();
                 }
             }));
         }
         drop(state);
-        // A newly submitted job may complete inline before its first read.
-        // Later completions enter only through poll, at a new graph revision.
+        // A newly submitted job may publish inline before its first read.
+        // Later reports enter only through poll, at a new graph revision.
         if new_request {
             self.collect();
         }
         let mut state = self.state.borrow_mut();
-        if let Some((generation, completed)) = state.completed.take() {
+        if let Some((generation, report)) = state.pending_report.take() {
             if generation == state.generation {
                 state.changed = read.revision;
-                let completed = completed.unwrap_or_else(|panic| {
-                    state.input = None;
-                    std::panic::resume_unwind(panic)
-                });
-                match completed {
-                    Ok(value) => state.value = Rc::new(Availability::Ready(Arc::new(value))),
-                    Err(error) => state.failure = Some(error),
+                match report {
+                    Report::Progress(value) => {
+                        state.value = Rc::new(Availability::Refining(Arc::new(value)))
+                    }
+                    Report::Finished(completed) => {
+                        let completed = completed.unwrap_or_else(|panic| {
+                            state.input = None;
+                            std::panic::resume_unwind(panic)
+                        });
+                        match completed {
+                            Ok(value) => {
+                                state.value = Rc::new(Availability::Ready(Arc::new(value)))
+                            }
+                            Err(error) => state.failure = Some(error),
+                        }
+                    }
                 }
             }
         }
@@ -331,13 +374,13 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
     }
 }
 
-impl<I, T> Completions for AsyncNode<I, T> {
+impl<I, T> BackgroundNode for AsyncNode<I, T> {
     fn collect(&self) -> bool {
         let mut state = self.state.borrow_mut();
         let mut changed = false;
         for result in self.receiver.borrow_mut().try_iter() {
             if !state.closed && result.0 == state.generation {
-                state.completed = Some(result);
+                state.pending_report = Some(result);
                 changed = true;
             }
         }

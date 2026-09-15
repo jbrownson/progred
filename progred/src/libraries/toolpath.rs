@@ -9,9 +9,11 @@ use ::grap::{
 use gid::{CellId, Cells, Value};
 use std::{cell::RefCell, rc::Rc};
 
+mod computation;
 mod fidget;
 mod mesh;
 pub mod paths;
+mod playback;
 mod preview;
 pub mod stock;
 #[cfg(test)]
@@ -39,7 +41,7 @@ pub mod vocabulary {
     pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0x1c905a1c1b3b904f8999fa61b3927897);
     pub const PLAYBACK: CellId = CellId::from_u128(0x0955045e00d5d5f2139fb3ab19591c3e);
     pub const PROGRESS: CellId = CellId::from_u128(0x13feb828ce93822d8d72a3ef3765e2f0);
-    pub const TOOL_RADIUS: CellId = CellId::from_u128(0xf2f53bdabd10e79d0a3161a57bb18dd8);
+    pub const TOOL_DIAMETER: CellId = CellId::from_u128(0x900b8ac5725af07ea981455d015541bf);
     pub const TOOL_LENGTH: CellId = CellId::from_u128(0x147708f5640ec6a4f9b6f4e4ffd2f7ab);
     pub const STOCK_MIN: CellId = CellId::from_u128(0x8ea1172ebbc67d795f0810ee5ca04d00);
     pub const STOCK_MAX: CellId = CellId::from_u128(0x607b5e9a8636c8258959709bf0c3506b);
@@ -303,7 +305,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (PROGRAM, "program"),
         (PLAYBACK, "playback"),
         (PROGRESS, "progress"),
-        (TOOL_RADIUS, "ball radius"),
+        (TOOL_DIAMETER, "tool diameter"),
         (TOOL_LENGTH, "tool length"),
         (STOCK_MIN, "stock minimum"),
         (STOCK_MAX, "stock maximum"),
@@ -313,9 +315,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     ] {
         cells.set_value(id, name::record(spelling, []));
     }
-    let renderer = Rc::new(RefCell::new(
-        crate::libraries::fidget::PreviewRenderer::default(),
-    ));
     let mesh_renderer = Rc::new(RefCell::new(
         crate::libraries::fidget::mesh::Renderer::default(),
     ));
@@ -325,7 +324,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
             crate::display::partial(preview::display),
-            crate::display::partial(move |input| fidget::display(input, &renderer)),
+            crate::display::partial(fidget::display),
             crate::display::partial(move |input| mesh::display(input, &mesh_renderer)),
         ]),
     )

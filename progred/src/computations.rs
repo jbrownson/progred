@@ -138,7 +138,7 @@ mod tests {
             computations.runtime.memo(move |read| {
                 Ok(match &*worker.read(read)? {
                     Availability::Pending { .. } => None,
-                    Availability::Ready(value) => Some(**value),
+                    Availability::Ready(value) | Availability::Refining(value) => Some(**value),
                 })
             })
         };

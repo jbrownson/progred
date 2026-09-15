@@ -1,5 +1,16 @@
-use super::super::stock::{BallEnd, Stock};
-use super::*;
+use super::{
+    fidget::coordinate,
+    paths::*,
+    stock::{BallEnd, Stock},
+    vocabulary::*,
+};
+use crate::libraries::{f64, fidget};
+use gid::Value;
+
+pub(super) trait Draw: Sink<Error = InvalidPath> {
+    fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath>;
+    fn ball_end(&mut self, center: Point3, length: f64) -> Result<(), InvalidPath>;
+}
 
 #[derive(Clone, PartialEq)]
 pub(super) struct Settings {
@@ -16,6 +27,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn playback_accepts_an_eighth_inch_diameter_and_converts_it_to_radius() {
+        let settings = |diameter| {
+            Settings::read(&Value::record([
+                (PROGRESS, f64::value(0.35)),
+                (TOOL_DIAMETER, f64::value(diameter)),
+                (TOOL_LENGTH, f64::value(0.22)),
+                (STOCK_MIN, super::super::point_value([-0.5; 3])),
+                (STOCK_MAX, super::super::point_value([0.5; 3])),
+            ]))
+        };
+        assert_eq!(settings(0.125).unwrap().radius, 0.0625);
+        for diameter in [0.0, -0.125, 0.25, f64::INFINITY, f64::NAN] {
+            assert!(settings(diameter).is_none());
+        }
+    }
+
+    #[derive(Default)]
+    struct Drawing {
+        path: Recording,
+        tool: Option<Point3>,
+    }
+
+    impl Sink for Drawing {
+        type Error = InvalidPath;
+        fn start_at(&mut self, point: Point3) -> Result<(), InvalidPath> {
+            self.path.start_at(point)
+        }
+        fn line_to(&mut self, point: Point3) -> Result<(), InvalidPath> {
+            self.path.line_to(point)
+        }
+    }
+
+    impl Draw for Drawing {
+        fn style(&mut self, _: f64, _: [u8; 3]) -> Result<(), InvalidPath> {
+            Ok(())
+        }
+        fn ball_end(&mut self, center: Point3, _: f64) -> Result<(), InvalidPath> {
+            self.tool = Some(center);
+            Ok(())
+        }
+    }
+
+    #[test]
     fn completed_lines_disappear_including_the_completed_part_of_a_segment() {
         let color = [20, 150, 230];
         let mut path = Recording::default();
@@ -28,26 +82,17 @@ mod tests {
                 length: 0.5,
                 stock_min: [-3.0; 3],
                 stock_max: [3.0; 3],
-                stock_color: None,
+                stock_color: Some([180; 3]),
             };
-            let mut tubes = tubes::Tubes::new(0.02, color).unwrap();
-            settings.draw(&path, &mut tubes, 0.02, color).unwrap();
-            let path_vertices: Vec<_> = tubes
-                .geometry
-                .vertices
-                .iter()
-                .filter(|v| v.color == color.map(|n| n as f32 / 255.0))
-                .collect();
-            if progress == 1.0 {
-                assert!(path_vertices.is_empty());
-            } else {
-                assert!(!path_vertices.is_empty());
-                let start = path_vertices
-                    .iter()
-                    .map(|v| v.position.x)
-                    .fold(f32::INFINITY, f32::min);
-                assert!((start - (2.0 * progress as f32 - 0.02)).abs() < 1e-6);
+            let mut drawing = Drawing::default();
+            settings.draw(&path, &mut drawing, 0.02, color).unwrap();
+            let mut expected = Recording::default();
+            if progress < 1.0 {
+                expected.start_at([2.0 * progress, 0.0, 0.0]).unwrap();
+                expected.line_to([2.0, 0.0, 0.0]).unwrap();
             }
+            assert!(drawing.path == expected);
+            assert_eq!(drawing.tool, Some([2.0 * progress, 0.0, 0.0]));
         }
     }
 }
@@ -56,14 +101,14 @@ impl Settings {
     pub(super) fn read(value: &Value) -> Option<Self> {
         let r = value.as_record()?;
         let progress = f64::read(r.get(&PROGRESS)?)?;
-        let radius = f64::read(r.get(&TOOL_RADIUS)?)?;
+        let radius = f64::read(r.get(&TOOL_DIAMETER)?)? / 2.0;
         let length = f64::read(r.get(&TOOL_LENGTH)?)?;
-        let stock_min = super::super::read_point(r.get(&STOCK_MIN)?)?;
-        let stock_max = super::super::read_point(r.get(&STOCK_MAX)?)?;
+        let stock_min = super::read_point(r.get(&STOCK_MIN)?)?;
+        let stock_max = super::read_point(r.get(&STOCK_MAX)?)?;
         let stock_color = match r.get(&STOCK) {
             Some(value) => {
                 let fields = value.as_record()?;
-                Some(super::super::fidget::read_color(
+                Some(super::fidget::read_color(
                     fields.get(&fidget::vocabulary::COLOR)?,
                 )?)
             }
@@ -115,17 +160,21 @@ impl Settings {
     pub(super) fn draw(
         &self,
         path: &Recording,
-        tubes: &mut tubes::Tubes,
+        tubes: &mut impl Draw,
         line_radius: f64,
         path_color: [u8; 3],
     ) -> Result<(), InvalidPath> {
+        let mut end = None;
         let center = path.playback(
             self.progress,
             |a, b, completed| -> Result<(), InvalidPath> {
                 if !completed {
                     tubes.style(line_radius, path_color)?;
-                    tubes.start_at(a)?;
+                    if end != Some(a) {
+                        tubes.start_at(a)?;
+                    }
                     tubes.line_to(b)?;
+                    end = Some(b);
                 }
                 Ok(())
             },

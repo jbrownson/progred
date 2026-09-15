@@ -13,7 +13,7 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Slider-driven ball-end cutter and top-face stock removal over the meshed cube |
+| 9 | `toolpaths.gid` | Slider-driven ball-end cutter and stock removal; Mesh/Implicit radio selector |
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side
@@ -72,27 +72,37 @@ measurements using the actual example documents.
 `toolpaths.gid` uses Grap to generate two diagonal sweeps and map their points.
 Both the row loop and the sampling loop are editable example functions; only
 point emission and the generic mapping scope are native toolpath operations.
-The left viewport uses `preview paths mesh`: path segments become tube triangles
-alongside the simulated stock. With stock disabled, Fidget meshes the blue
-reference cube instead. Drag to orbit
-and scroll to zoom. The slider below the viewport seeks by cutting distance,
+The left viewport offers Mesh (default) and Implicit beside the playback controls.
+Mesh retains stock geometry for responsive orbiting; Implicit uses Fidget's
+software voxel renderer in a background job. Both preserve the camera and slider
+position when switching. With stock
+disabled, it renders the blue reference cube instead. Drag to orbit
+and scroll to zoom. The controls overlay the bottom of the full-pane 3D view;
+the unlabelled slider seeks by cutting distance,
 showing upcoming paths in gold and the tool in orange; completed paths disappear.
 Edit/scrub the row counts, UV spacing,
 mapping constants, colors, or explicit line radius. The latter controls visual
 thickness, not cutter size. A separate Grap mapping offsets surface samples along
-their normals by the editable ball radius. No links between passes are implied.
-Expand `panes` to change `mesh depth` or use `preview paths 3d` for the voxel
-comparison. The document includes its own copy of the cube definition; its parameters and
-the path mapping are independent. Tan stock starts as a one-inch cube, bounded
+their normals by half the editable tool diameter (initially 0.125 inches).
+No links between passes are implied. Mesh's optional `mesh depth` defaults to 6.
+Full-stock implicit GPU rendering is unsupported,
+so the software path is explicit, not a fallback after attempting a GPU render;
+see [the limitation](../docs/toolpaths.md#playback).
+The document includes its own copy of the cube definition;
+its geometry drives the toolpath's contact points. Tan stock starts as a one-inch cube, bounded
 by −0.5…0.5 on every axis (one model unit means one inch in this example); completed
 cuts subtract continuous swept ball-end solids through Fidget. The block's
 uncut sides remain: this is top-face finishing, not a program that machines the
 entire cube. Expand `playback` to edit the stock bounds and color; removing its
-`stock` field returns to the wire envelope and reference model. `mesh depth`
-(7 in the example) controls stock and reference meshing, not toolpath spacing.
-Stock playback is currently mesh-only; the voxel comparison renders static paths
-and the reference model. Controls use per-view state without making
-the document unsaved. Every frame regenerates the paths and meshes; there is no cache.
+`stock` field returns to the wire envelope and reference model. Both preview
+functions support playback and stock removal. Controls use per-view state
+without making the document unsaved. The general dependency graph retains the
+path recording and latest result. The implicit preview dims its old image until
+a current coarse image arrives, then refines toward native resolution and finally
+four times the depth samples for cleaner sharp edges. An
+ellipsis remains until refinement completes. New camera or playback input
+cancels the previous refinement sequence. The mesh
+preview instead moves the tool immediately while its old stock mesh is desaturated.
 
 See [toolpaths](../docs/toolpaths.md) for the streaming interface, its optional
 recorder, and the boundary between this experiment and machining motion.

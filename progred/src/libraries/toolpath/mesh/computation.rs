@@ -1,3 +1,4 @@
+use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
 use incremental::background::{AsyncMemo, Availability, Tasks};
@@ -11,27 +12,6 @@ pub(super) struct Settings {
     pub color: [u8; 3],
     pub playback: Option<playback::Settings>,
 }
-
-#[derive(PartialEq)]
-struct Recorded {
-    path: Arc<Recording>,
-    evaluation: ::grap::Evaluation,
-}
-
-impl Recorded {
-    fn path(&self) -> Result<&Recording, (Value, usize)> {
-        if self.evaluation.completed && !absent::is_absent(&self.evaluation.result) {
-            Ok(&self.path)
-        } else {
-            Err((
-                self.evaluation.result.clone(),
-                self.evaluation.remaining_fuel,
-            ))
-        }
-    }
-}
-
-type Outcome<T> = Result<(T, usize), (Value, usize)>;
 
 pub(super) struct ViewGeometry {
     pub geometry: Geometry,
@@ -67,25 +47,7 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let depth = runtime.input(depth);
-        let recording = runtime.memo({
-            let program = program.clone();
-            let fuel = fuel.clone();
-            let definitions = computations.definitions.clone();
-            move |read| {
-                let program = program.read(read);
-                let fuel = *fuel.read(read);
-                let mut path = Recording::default();
-                let evaluation = ::grap::memo::with_recorded_effects(&definitions, read, |host| {
-                    run(&mut path, |scope| {
-                        ::grap::apply_scoped(&program, [], host, scope, fuel)
-                    })
-                });
-                Ok(Recorded {
-                    path: Arc::new(path),
-                    evaluation,
-                })
-            }
-        });
+        let recording = recording(computations, program.clone(), fuel.clone());
         let geometry = Layers::new(
             runtime,
             &computations.tasks,
@@ -185,7 +147,7 @@ fn combine(
     let (paths, fuel) = paths.as_ref().map_err(Clone::clone)?;
     let mut geometry = paths.clone();
     let (surface, pending) = match surface {
-        Availability::Ready(value) => (Some(value.as_ref()), false),
+        Availability::Ready(value) | Availability::Refining(value) => (Some(value.as_ref()), false),
         Availability::Pending { previous } => (previous.as_deref(), true),
     };
     // A previous failure has no geometry to retain while a replacement is pending.
@@ -314,7 +276,7 @@ mod tests {
         let playback = |progress| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
-                (TOOL_RADIUS, f64::value(0.1)),
+                (TOOL_DIAMETER, f64::value(0.2)),
                 (TOOL_LENGTH, f64::value(0.4)),
                 (
                     STOCK_MIN,
@@ -465,7 +427,7 @@ mod tests {
         let playback = |progress| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
-                (TOOL_RADIUS, f64::value(0.1)),
+                (TOOL_DIAMETER, f64::value(0.2)),
                 (TOOL_LENGTH, f64::value(0.4)),
                 (
                     STOCK_MIN,
@@ -645,7 +607,7 @@ mod tests {
 
         let mut playback = Value::record([
             (PROGRESS, f64::value(0.25)),
-            (TOOL_RADIUS, f64::value(0.1)),
+            (TOOL_DIAMETER, f64::value(0.2)),
             (TOOL_LENGTH, f64::value(0.4)),
             (
                 STOCK_MIN,

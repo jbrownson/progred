@@ -93,6 +93,7 @@ non-blocking with a queued executor:
 ```rust
 enum Availability<T> {
     Pending { previous: Option<Arc<T>> },
+    Refining(Arc<T>),
     Ready(Arc<T>),
 }
 ```
@@ -103,20 +104,30 @@ and catching them makes a parent non-reusable just as for synchronous reads.
 Consumers choose whether to show a previous value, a placeholder, or some other
 representation; the scheduler never silently presents a stale value as ready.
 
+`Tasks::memo_progressive` supplies the worker an additional `publish(T)` callback.
+Each publication is a usable result for the **current** request, reported as
+`Refining`; returning the final result changes it to `Ready`. A new request
+retains the last published result as `Pending.previous`. Intermediate values use
+the same generation checks, owner-thread polling, and dependency invalidation as
+final results. Several reports arriving before a poll collapse to the latest.
+A final failure remains a failure, not a successful intermediate result.
+`memo` is the same mechanism without intermediate publications. The worker, not
+the graph runtime, decides what refinement means and which quality levels to run.
+
 Each node has at most one running job and one latest replacement. Changing the
 prepared snapshot cancels the old request and replaces any queued request. The
 executor bounds concurrent jobs and requeues replacements so other nodes can run.
-Completion carries a generation; the owner validates current prepared inputs
-before publishing it. Obsolete completions cannot overwrite newer state. Worker
+Each report carries a generation; the owner validates current prepared inputs
+before publishing it. Obsolete reports cannot overwrite newer state. Worker
 panics are transported and resumed on the owner thread, not converted into an
 eternal pending state. Cooperative cancellation calls registered callbacks once,
 allowing a native library's cancellation token to be connected directly.
 
 Workers notify a caller-supplied wake function. Between graph reads, `Tasks::poll`
 imports notifications and advances the graph revision; reads then publish current
-completions and invalidate dependents through the usual dependency mechanism.
-Once a request has been observed as pending, later reads in that same revision
-also see pending, even if the worker has finished. A new request may complete
+reports and invalidate dependents through the usual dependency mechanism.
+Once availability has been observed, later reads in that same revision
+see the same value, even if the worker has progressed. A new request may complete
 inline before its first observation. This keeps shared consumers consistent and
 prevents a completion from losing the wake that should refresh earlier readers.
 There is no timer polling loop. Dropping a node or its task owner cancels work;
@@ -154,12 +165,45 @@ token interrupts octree construction. Compilation and final dual-contour
 extraction have only before/after checks; cancellation is cooperative, not a
 promise of immediate interruption. Partial meshes are never published.
 
-This is the first integration. Ordinary Fidget mesh/voxel previews, IoP drawing,
-completions, and other UI projections are not converted.
+The implicit CAM `preview paths 3d` uses the same tracked recording and playback
+logic, but prepares a camera-dependent image request instead of a mesh request.
+The worker constructs the remaining-stock field, interprets future paths and
+the cutter as Fidget scene objects, then renders the scene progressively. Camera,
+image size, display scale, color and playback are explicit dependencies. Scrolling reuses
+the image; camera changes request a replacement without re-running the generator.
+The previous **whole image** is dimmed with an ellipsis while awaiting the first
+current image. Each current refinement replaces it at normal color; the ellipsis
+remains until the final depth refinement completes. Unlike the mesh preview,
+the tool cannot move independently within those pixels. Before any image is available,
+the correctly sized viewport shows an ellipsis.
+
+The implicit renderer starts with a maximum edge of 128 physical pixels and
+approximately doubles both dimensions on each pass, finishing at the exact
+native size, then adds one native-size pass with four times the depth samples.
+Every level uses the same camera and model-space render volume; image and depth
+sampling become finer together until the final depth-only pass. Pixel rounding
+does not change the aspect ratio. Scene compilation is shared within that worker job, but each
+voxel raster is independent: coarse pixels are not reused to compute finer ones.
+New input cancels the whole sequence and starts a new coarse request, retaining
+only the latest replacement in the ordinary async slot. The layout and controls
+do not change size as results refine.
+
+The implicit CAM request explicitly uses Fidget's software voxel renderer. It
+runs directly on the general background executor, without a GPU-owning thread,
+GPU submission, or fallback attempt. The GPU VM cannot execute the stock field's
+spill instructions; see [the backend limitation](toolpaths.md#playback).
+Cancellation connects to Fidget's voxel cancellation token; the software renderer
+uses 32/16/8-pixel tiles, with checks between root tiles. Expression construction
+and compilation have before/after checks rather than immediate interruption.
+Obsolete results are discarded by the general scheduler.
+
+Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
+projections are not converted.
 
 ## Deferred
 
-Grap path generation and image rasterization/readback remain synchronous. There
-is no browser-worker executor, progressive quality scheduler, durability tier,
+Grap path generation and mesh-preview rasterization/readback remain synchronous.
+The implicit CAM image job includes software rasterization. There is no
+browser-worker executor, user-facing quality controls, durability tier,
 or Grap-language memo/async syntax yet. Incremental lambda calculus and
 incremental Fidget algorithms remain separate research.

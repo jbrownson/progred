@@ -207,7 +207,8 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                 );
                 let center = read_point(&center.result).unwrap();
                 let length = normal[0].hypot(normal[1]).hypot(normal[2]);
-                let radius = f64::read(doc.cells.value(names["ball_radius"]).unwrap()).unwrap();
+                let radius =
+                    f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
                 for axis in 0..3 {
                     assert!(
                         (center[axis] - contact[axis] - radius * normal[axis] / length).abs()

@@ -23,6 +23,8 @@ pub mod vocabulary {
     pub const VIEW: CellId = CellId::from_u128(0x047d43dfc6ba836cd75a7c840f4b9df7);
     pub const PARAMETERS: CellId = CellId::from_u128(0x6f0875ea2329b14673435cc13e2836d0);
     pub const SLIDER: CellId = CellId::from_u128(0xe3c52729da1f3b54e99ef208ad9d9201);
+    pub const RADIO: CellId = CellId::from_u128(0xd3e46e8851004f6786bb6cf771ad1d87);
+    pub const OPTIONS: CellId = CellId::from_u128(0xa84188d71fa018de8ad68c74da7e18e2);
     pub const KEY: CellId = CellId::from_u128(0x600ed992016bae93f3c9ab48a9d7d7b5);
     pub const MINIMUM: CellId = CellId::from_u128(0x27d7b8d3c3a6a902ed495684e7bcd4d5);
     pub const MAXIMUM: CellId = CellId::from_u128(0x30113361e78c2e47bb88176ac834cac1);
@@ -59,12 +61,11 @@ fn constructor(
     Ok(Value::record([(WITH_CONTROLS, Value::record(fields))]))
 }
 
-fn read_state(state: Option<&Value>, key: CellId) -> Option<f64> {
-    f64::read(state?.as_record()?.get(&STATE)?.as_record()?.get(&key)?)
-        .filter(|value| value.is_finite())
+fn read_state(state: Option<&Value>, key: CellId) -> Option<&Value> {
+    state?.as_record()?.get(&STATE)?.as_record()?.get(&key)
 }
 
-fn set_state(state: Option<&Value>, key: CellId, value: f64) -> Value {
+fn set_state(state: Option<&Value>, key: CellId, value: Value) -> Value {
     let mut fields = state
         .and_then(Value::as_record)
         .cloned()
@@ -74,7 +75,7 @@ fn set_state(state: Option<&Value>, key: CellId, value: f64) -> Value {
         .and_then(Value::as_record)
         .cloned()
         .unwrap_or_default();
-    controls.insert(key, f64::value(value));
+    controls.insert(key, value);
     fields.insert(STATE, Value::Record(controls));
     Value::Record(fields)
 }
@@ -99,7 +100,7 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
             let value = set_state(
                 state,
                 self.key,
-                self.slider.value_at(self.rect, self.scale, *point),
+                f64::value(self.slider.value_at(self.rect, self.scale, *point)),
             );
             crate::editing::annotate(editor, &self.root, &self.path, value);
         }
@@ -107,20 +108,11 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
     }
 }
 
-fn slider_widget(key: CellId, label: String, slider: Slider, width: f64) -> Widget {
+fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         let root = context.inputs.view.clone();
         let path = context.path.to_vec();
-        let label = puri::text::text(
-            context.text,
-            &format!("{label}  {:.3}", slider.value),
-            &context.inputs.styles.label,
-        );
-        let metrics = label.metrics();
-        let label = widget::paint(widget::extent(metrics), move |canvas, placement| {
-            label.place(canvas, placement)
-        });
         let rail = widget::leaf(
             Extent {
                 width: width * scale,
@@ -151,10 +143,78 @@ fn slider_widget(key: CellId, label: String, slider: Slider, width: f64) -> Widg
                 });
             },
         );
-        measured::pad(
-            (PADDING_X * scale, PADDING_Y * scale).into(),
-            measured::col(0, 0.0, vec![label, rail]),
-        )
+        measured::pad((PADDING_X * scale, PADDING_Y * scale).into(), rail)
+    })
+}
+
+#[derive(Clone)]
+struct RadioOption {
+    label: String,
+    value: Value,
+}
+
+fn radio_options(value: &Value) -> Option<Vec<RadioOption>> {
+    let mut options = Vec::<RadioOption>::new();
+    for value in value.as_list()?.values() {
+        let fields = value.as_record()?;
+        let label = name::read(value)?.to_owned();
+        let value = fields.get(&VALUE)?.clone();
+        if options.iter().any(|option| option.value == value) {
+            return None;
+        }
+        options.push(RadioOption { label, value });
+    }
+    (!options.is_empty()).then_some(options)
+}
+
+fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: f64) -> Widget {
+    Rc::new(move |context| {
+        let scale = context.inputs.styles.scale;
+        let mut buttons = Vec::new();
+        for option in &options {
+            let label = puri::text::text(context.text, &option.label, &context.inputs.styles.label);
+            let label_extent = widget::extent(label.metrics());
+            let indicator_size = puri_widgets::radio::SIZE * scale;
+            let radio = puri_widgets::radio::Radio {
+                selected: option.value == selected,
+            };
+            let indicator = widget::paint(
+                Extent {
+                    width: indicator_size,
+                    ascent: indicator_size / 2.0,
+                    descent: indicator_size / 2.0,
+                },
+                move |canvas, placement| radio.draw(canvas, placement.rect, scale),
+            );
+            let label = widget::paint(label_extent, move |canvas, placement| {
+                label.place(canvas, placement)
+            });
+            let button = measured::centered_row(4.0 * scale, vec![indicator, label]);
+            let root = context.inputs.view.clone();
+            let path = context.path.to_vec();
+            let value = option.value.clone();
+            buttons.push(widget::before_place(button, move |placement, output| {
+                output.claim(puri::hover::Probe::occludes(placement));
+                puri::interact::clickable(output, placement, move |editor: &mut crate::Editor| {
+                    let state = editor
+                        .model
+                        .workspace
+                        .view(&root)
+                        .and_then(|v| v.annotations.at(&path));
+                    let state = set_state(state, key, value.clone());
+                    crate::editing::annotate(editor, &root, &path, state);
+                });
+            }));
+        }
+        let gap = 12.0 * scale;
+        let row_width = buttons.iter().map(|b| b.extent.width).sum::<f64>()
+            + gap * buttons.len().saturating_sub(1) as f64;
+        let group = if row_width <= width * scale {
+            measured::row(gap, buttons)
+        } else {
+            measured::col(0, 4.0 * scale, buttons)
+        };
+        measured::pad((PADDING_X * scale, PADDING_Y * scale).into(), group)
     })
 }
 
@@ -171,7 +231,7 @@ fn display(
         return None;
     }
     let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
-    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+    let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
         let Some(key) = context.field(call, KEY) else {
             return Ok(context.missing_argument(KEY));
         };
@@ -179,6 +239,35 @@ fn display(
         let Some(key) = key.as_cell() else {
             return Ok(absent::with_reason(INVALID_INPUT));
         };
+        if function == RADIO {
+            let Some(expression) = context.field(call, OPTIONS) else {
+                return Ok(context.missing_argument(OPTIONS));
+            };
+            let options = context.eval(expression, environment)?;
+            let Some(options) = radio_options(&options) else {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            };
+            let initial = match context.field(call, INITIAL) {
+                Some(expression) => context.eval(expression, environment)?,
+                None => options[0].value.clone(),
+            };
+            if !options.iter().any(|option| option.value == initial) {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            }
+            let selected = read_state(input.state, key)
+                .filter(|value| options.iter().any(|option| option.value == **value))
+                .cloned()
+                .unwrap_or(initial);
+            return Ok(context.effect(|| {
+                widgets.borrow_mut().push(radio_widget(
+                    key,
+                    options,
+                    selected.clone(),
+                    width - 2.0 * PADDING_X,
+                ));
+                selected
+            }));
+        }
         let mut number = |field, default| -> Result<Option<f64>, Halt> {
             match context.field(call, field) {
                 Some(expression) => context.eval_f64(expression, environment),
@@ -192,22 +281,25 @@ fn display(
         ) else {
             return Ok(absent::with_reason(INVALID_INPUT));
         };
-        let Some(slider) = Slider::new(min, max, read_state(input.state, key).unwrap_or(initial))
-        else {
+        let value = read_state(input.state, key)
+            .and_then(f64::read)
+            .filter(|value| value.is_finite())
+            .unwrap_or(initial);
+        let Some(slider) = Slider::new(min, max, value) else {
             return Ok(absent::with_reason(INVALID_INPUT));
         };
-        let label = input.env.name(key).unwrap_or("").to_owned();
         Ok(context.effect(|| {
             widgets
                 .borrow_mut()
-                .push(slider_widget(key, label, slider, width - 2.0 * PADDING_X));
+                .push(slider_widget(key, slider, width - 2.0 * PADDING_X));
             f64::value(slider.value)
         }))
     };
-    let evaluation =
-        input
-            .env
-            .apply_scoped(controls, &[], Some(&ForeignOverlay::new(&[SLIDER], &emit)));
+    let evaluation = input.env.apply_scoped(
+        controls,
+        &[],
+        Some(&ForeignOverlay::new(&[SLIDER, RADIO], &emit)),
+    );
     if !evaluation.completed || absent::is_absent(&evaluation.result) {
         return Some(display::transient(
             &evaluation.result,
@@ -217,15 +309,13 @@ fn display(
     let widgets = widgets.into_inner();
     Some(Layout::program(Rc::new(move |context, build| {
         let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
-        let controls_height: f64 = controls.iter().map(|c| c.extent.height()).sum();
-        let view_height = (height - controls_height / context.inputs.styles.scale).max(0.0);
         let result = ::grap::apply(
             &view,
             [
                 (VALUE, source.clone()),
                 (PARAMETERS, evaluation.result.clone()),
                 (WIDTH, f64::value(width)),
-                (HEIGHT, f64::value(view_height)),
+                (HEIGHT, f64::value(height)),
             ],
             &context.inputs.sources,
             evaluation.remaining_fuel,
@@ -234,13 +324,36 @@ fn display(
             context
                 .project
                 .transient(context.text, build, result.result, result.remaining_fuel);
-        ChoiceLayout::col(
-            0,
-            0.0,
-            std::iter::once(content)
-                .chain(controls.into_iter().map(ChoiceLayout::fixed))
-                .collect(),
-        )
+        if controls.is_empty() {
+            return content;
+        }
+        let controls =
+            widget::before_place(measured::col(0, 0.0, controls), |placement, output| {
+                output.claim(puri::hover::Probe::occludes(placement));
+                output.render(move |canvas, _| {
+                    puri_widgets::panel::Panel {
+                        fill: Some(puri::Color::new([0.965, 0.965, 0.975, 0.9]).into()),
+                        border: None,
+                        radius: 0.0,
+                    }
+                    .place(canvas, placement);
+                });
+                // The padding is part of the control surface too, not an orbit handle.
+                output.handler().on_pointer_down(move |_, event| {
+                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                });
+            });
+        ChoiceLayout::attach(content, ChoiceLayout::fixed(controls), |view, controls| {
+            measured::overlay_into(view, controls, |placement, extent| {
+                Some(puri::Placement::new(
+                    Rect::from_origin_size(
+                        (placement.rect.x0, placement.rect.y1 - extent.height()),
+                        extent.size(),
+                    ),
+                    placement.clip_rect.intersect(placement.rect),
+                ))
+            })
+        })
     })))
 }
 
@@ -252,6 +365,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (VIEW, "view"),
         (PARAMETERS, "parameters"),
         (SLIDER, "slider"),
+        (RADIO, "radio"),
+        (OPTIONS, "options"),
         (KEY, "key"),
         (MINIMUM, "minimum"),
         (MAXIMUM, "maximum"),
@@ -266,6 +381,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         .register(WITH_CONTROLS, ForeignFunction::new(constructor))
         .register(
             SLIDER,
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+        )
+        .register(
+            RADIO,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         );
     Library::named(

@@ -1,6 +1,6 @@
 //! Stream path segments into triangles alongside a meshed Fidget model.
 
-use super::{fidget::coordinate, paths::*, run, vocabulary::*};
+use super::{fidget::coordinate, paths::*, playback, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
 use fidget::mesh::{Geometry, Vertex};
@@ -9,7 +9,6 @@ use nalgebra::Vector3;
 use std::{cell::RefCell, rc::Rc};
 
 mod computation;
-mod playback;
 #[cfg(test)]
 mod tests;
 mod tubes;
@@ -19,45 +18,12 @@ pub(super) fn preview(
     call: ::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<Value, ::grap::Halt> {
-    let playback = match context.field(call, PLAYBACK) {
-        Some(expression) => {
-            let value = context.eval(expression, environment)?;
-            if absent::is_absent(&value) {
-                return Ok(value);
-            }
-            if playback::Settings::read(&value).is_none() {
-                return Ok(absent::with_reason(INVALID_INPUT));
-            }
-            Some(value)
-        }
-        None => None,
-    };
-    let value = super::fidget::preview_with(
+    super::fidget::preview_with(
         context,
         call,
         environment,
         PREVIEW_MESH,
         fidget::mesh::preview,
-    )?;
-    Ok(
-        match (
-            playback,
-            value
-                .as_record()
-                .and_then(|r| r.get(&PREVIEW_MESH))
-                .and_then(Value::as_record),
-        ) {
-            (Some(playback), Some(fields)) => Value::record([(
-                PREVIEW_MESH,
-                Value::record(
-                    fields
-                        .iter()
-                        .map(|(k, v)| (*k, v.clone()))
-                        .chain([(PLAYBACK, playback)]),
-                ),
-            )]),
-            _ => value,
-        },
     )
 }
 

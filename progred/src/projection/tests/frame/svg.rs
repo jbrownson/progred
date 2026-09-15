@@ -260,17 +260,129 @@ fn editor_mesh_svg_capture() {
 #[test]
 #[ignore = "writes a full-editor capture of the meshed model and streamed toolpaths"]
 fn editor_toolpath_mesh_svg_capture() {
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     render_editor(
-        crate::test_editor(doc),
+        cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_MESH),
         kurbo::Size::new(1500.0, 1050.0),
         "editor_toolpath_mesh.svg",
     );
 }
 
 #[test]
-#[ignore = "captures CAM's first pending frame and retained stock during an async update"]
+#[ignore = "captures mesh CAM's first pending frame and retained stock during an async update"]
 fn editor_toolpath_async_svg_captures() {
+    capture_cam_async(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
+}
+
+#[test]
+#[ignore = "captures async implicit CAM using the software renderer"]
+fn editor_toolpath_implicit_async_svg_captures() {
+    capture_cam_async(crate::libraries::toolpath::vocabulary::PREVIEW_3D);
+}
+
+#[test]
+#[ignore = "captures successive implicit refinements through the full editor, without a window"]
+fn editor_toolpath_progressive_svg_captures() {
+    use incremental::background::Executor;
+    use std::{
+        sync::mpsc,
+        time::{Duration, Instant},
+    };
+
+    fn image_sizes(commands: &[DrawCmd], sizes: &mut Vec<(u32, u32)>) {
+        for command in commands {
+            match command {
+                DrawCmd::Image { image, .. } => sizes.push((image.width, image.height)),
+                DrawCmd::Clip { children, .. } => image_sizes(children, sizes),
+                _ => {}
+            }
+        }
+    }
+
+    let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_3D);
+    let (send, receive) = mpsc::channel();
+    editor.computations = crate::computations::Computations::new(
+        Executor::new({
+            let send = send.clone();
+            move |job| {
+                let send = send.clone();
+                std::thread::spawn(move || {
+                    job();
+                    send.send(true).unwrap();
+                });
+            }
+        }),
+        move || {
+            send.send(false).unwrap();
+        },
+    );
+    let mut runner = crate::EditorRunner::new(editor);
+    let size = kurbo::Size::new(1000.0, 750.0);
+    let start = Instant::now();
+    runner.refresh_frame(1.0, size);
+    let mut seen = Vec::new();
+    loop {
+        let finished = receive.recv_timeout(Duration::from_secs(60)).unwrap();
+        if runner.editor.computations.tasks.poll() {
+            runner.refresh_frame(1.0, size);
+            let paint = runner.prepare_paint(1.0, size);
+            let mut list = DrawList::new();
+            puri::frame::render(paint.renders, &mut list);
+            let mut pixels = Vec::new();
+            image_sizes(&list.0, &mut pixels);
+            assert_eq!(pixels.len(), 1);
+            seen.push(pixels[0]);
+            eprintln!(
+                "implicit update {} {:?}: {:.2} ms",
+                seen.len(),
+                pixels[0],
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+            write_svg(
+                &list,
+                size.width,
+                size.height,
+                "#F6F6F8",
+                &format!("cam_progressive_{}.svg", seen.len()),
+            );
+        }
+        if finished {
+            break;
+        }
+    }
+    assert!(
+        seen.len() >= 2,
+        "the editor must display intermediate results"
+    );
+    for pair in seen.windows(2) {
+        assert!(pair[0].0 <= pair[1].0 && pair[0].1 <= pair[1].1);
+    }
+    assert_eq!(
+        seen.last().unwrap().1,
+        size.height as u32,
+        "the final raster fills the pane, including behind its controls"
+    );
+}
+
+fn cam_editor(mode: CellId) -> crate::Editor {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let declarations = crate::workspace::declarations(doc.root.as_ref());
+    let mut editor = crate::test_editor(doc);
+    editor.model.workspace.sync_declared(&declarations);
+    editor.model.workspace.left.panes[0]
+        .view
+        .annotations
+        .set_field(
+            &declarations[0].path,
+            crate::libraries::controls::vocabulary::STATE,
+            Some(Value::record([(
+                names["render_mode"],
+                Value::record([(::grap::vocabulary::FFI, mode.into())]),
+            )])),
+        );
+    editor
+}
+
+fn capture_cam_async(mode: CellId) {
     use crate::libraries::controls::vocabulary::STATE;
     use incremental::background::{Executor, Job};
     use std::{
@@ -278,8 +390,7 @@ fn editor_toolpath_async_svg_captures() {
         sync::{Arc, Mutex},
     };
 
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let mut editor = crate::test_editor(doc);
+    let mut editor = cam_editor(mode);
     let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
     editor.computations = crate::computations::Computations::new(
         Executor::new({
@@ -289,7 +400,7 @@ fn editor_toolpath_async_svg_captures() {
         || {},
     );
     let mut runner = crate::EditorRunner::new(editor);
-    let size = kurbo::Size::new(1500.0, 1050.0);
+    let size = kurbo::Size::new(1000.0, 750.0);
     let capture = |runner: &mut crate::EditorRunner, file| {
         let start = std::time::Instant::now();
         runner.refresh_frame(1.0, size);
@@ -307,7 +418,7 @@ fn editor_toolpath_async_svg_captures() {
         let start = std::time::Instant::now();
         std::thread::spawn(job).join().unwrap();
         eprintln!(
-            "stock worker {:.2} ms",
+            "preview worker {:.2} ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
         assert!(runner.editor.computations.tasks.poll());
@@ -318,14 +429,22 @@ fn editor_toolpath_async_svg_captures() {
     let path = crate::workspace::declarations(runner.editor.model.doc.root.as_ref())[0]
         .path
         .clone();
-    runner.editor.model.workspace.left.panes[0]
-        .view
-        .annotations
-        .set_field(
-            &path,
-            STATE,
-            Some(Value::record([(names["progress"], f64::value(0.7))])),
-        );
+    let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
+    let mut controls = annotations
+        .at(&path)
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&STATE)
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .clone();
+    controls.insert(
+        crate::libraries::toolpath::vocabulary::PROGRESS,
+        f64::value(0.7),
+    );
+    annotations.set_field(&path, STATE, Some(Value::Record(controls)));
     capture(&mut runner, "cam_async_updating.svg");
     assert_eq!(queue.lock().unwrap().len(), 1);
     complete(&mut runner);

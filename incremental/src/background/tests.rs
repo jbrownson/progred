@@ -24,9 +24,148 @@ fn observe(runtime: &Runtime, node: AsyncMemo<usize, usize>) -> Memo<(bool, Opti
     runtime.memo(move |read| {
         Ok(match &*node.read(read)? {
             Availability::Pending { previous } => (true, previous.as_deref().copied()),
-            Availability::Ready(value) => (false, Some(**value)),
+            Availability::Ready(value) | Availability::Refining(value) => (false, Some(**value)),
         })
     })
+}
+
+#[test]
+fn progressive_values_are_current_and_publish_only_between_revisions() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let prepared = runtime.memo(|_| Ok(10usize));
+    let (stage, staged) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+        for step in 0..2 {
+            publish(value + step)?;
+            stage.send(step).unwrap();
+            resumed.lock().unwrap().recv().unwrap();
+        }
+        Ok(value + 2)
+    });
+    let parent = runtime.memo(move |read| {
+        Ok(match &*node.read(read)? {
+            Availability::Pending { previous } => (0, previous.as_deref().copied()),
+            Availability::Refining(value) => (1, Some(**value)),
+            Availability::Ready(value) => (2, Some(**value)),
+        })
+    });
+    let first = runtime.read(&parent).unwrap();
+    assert_eq!(*first, (0, None));
+    let worker = std::thread::spawn(queue.next());
+    assert_eq!(staged.recv().unwrap(), 0);
+    assert!(Rc::ptr_eq(&first, &runtime.read(&parent).unwrap()));
+    assert!(tasks.poll());
+    let coarse = runtime.read(&parent).unwrap();
+    assert_eq!(*coarse, (1, Some(10)));
+    resume.send(()).unwrap();
+    assert_eq!(staged.recv().unwrap(), 1);
+    assert!(Rc::ptr_eq(&coarse, &runtime.read(&parent).unwrap()));
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (1, Some(11)));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (2, Some(12)));
+    assert_eq!(queue.len(), 0);
+}
+
+#[test]
+fn replacing_a_progressive_request_retains_its_preview_but_rejects_late_reports() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(1usize);
+    let prepared = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let (stage, staged) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+        publish(value * 10)?;
+        if value == 1 {
+            stage.send(()).unwrap();
+            resumed.lock().unwrap().recv().unwrap();
+            assert_eq!(publish(999), Err(Error::Cancelled));
+        }
+        Ok(value * 100)
+    });
+    let parent = observe(&runtime, node);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    let worker = std::thread::spawn(queue.next());
+    staged.recv().unwrap();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(10)));
+    input.set(2);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(10)));
+    input.set(3);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(10)));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(10)));
+    assert_eq!(queue.len(), 1);
+    queue.next()();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(300)));
+}
+
+#[test]
+fn unpublished_progress_is_discarded_if_inputs_changed_before_poll() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(1usize);
+    let prepared = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let (stage, staged) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+        publish(value)?;
+        stage.send(()).unwrap();
+        resumed.lock().unwrap().recv().unwrap();
+        Ok(value)
+    });
+    let observed = observe(&runtime, node);
+    runtime.read(&observed).unwrap();
+    let worker = std::thread::spawn(queue.next());
+    staged.recv().unwrap();
+    input.set(2);
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&observed).unwrap(), (true, None));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+}
+
+#[test]
+fn inline_progress_finishes_immediately_and_does_not_swallow_a_final_failure() {
+    let runtime = Runtime::default();
+    let tasks = Tasks::new(&runtime, Executor::inline(), || {});
+    let node = tasks.memo_progressive(runtime.memo(|_| Ok(0usize)), |_, _, publish| {
+        publish(1)?;
+        publish(2)?;
+        Ok(3)
+    });
+    assert_eq!(
+        *runtime.read(&observe(&runtime, node)).unwrap(),
+        (false, Some(3))
+    );
+    let node = tasks.memo_progressive(runtime.memo(|_| Ok(0usize)), |_, _, publish| {
+        publish(1)?;
+        Err(Error::Cancelled)
+    });
+    assert!(matches!(
+        runtime.read(&observe(&runtime, node)),
+        Err(Error::Cancelled)
+    ));
 }
 
 #[test]
@@ -147,7 +286,7 @@ fn inline_execution_and_ordinary_failure_values_complete_normally() {
     let node = tasks.memo(runtime.memo(|_| Ok(())), |(), _| Ok(Err::<(), _>("absent")));
     let observed = runtime.memo(move |read| {
         Ok(match &*node.read(read)? {
-            Availability::Ready(value) => Some(**value),
+            Availability::Ready(value) | Availability::Refining(value) => Some(**value),
             Availability::Pending { .. } => None,
         })
     });
@@ -172,7 +311,7 @@ fn a_recovered_worker_error_does_not_cache_the_fallback() {
     });
     let observed = runtime.memo(move |read| {
         Ok(node.read(read).ok().and_then(|value| match &*value {
-            Availability::Ready(value) => Some(**value),
+            Availability::Ready(value) | Availability::Refining(value) => Some(**value),
             Availability::Pending { .. } => None,
         }))
     });

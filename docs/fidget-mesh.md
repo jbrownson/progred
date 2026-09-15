@@ -17,9 +17,12 @@ to the structural fallback, as with the existing preview.
 Examples → Fidget cube (Command+8 / Ctrl+8) explicitly uses this function at
 depth 5. Expand the document's `panes` field to edit the call, change its depth,
 or replace its function with `preview 3d` for comparison. The toolpath example
-(Command+9 / Ctrl+9) uses `preview paths mesh`: the same meshed cube plus directly
-generated tube triangles in one depth buffer. The other Fidget examples retain
-their voxel preview functions.
+(Command+9 / Ctrl+9) offers Mesh and Implicit radio buttons, with Mesh selected
+initially. Mesh uses `preview paths mesh`: meshed stock plus directly generated
+tube triangles in one depth buffer. Implicit uses async software `preview paths 3d`.
+The other Fidget examples retain
+their voxel preview functions. Full-stock implicit GPU rendering is unsupported; see
+[toolpaths](toolpaths.md#playback).
 
 ## Frame behavior
 
@@ -71,10 +74,10 @@ The ignored `mesh_gpu_renders_and_reuses_buffers` test requires a real GPU and
 does not fall back to CPU. It checks the shader, transparent background, empty
 draws, non-aligned readback row widths, and resource resizing/reuse.
 
-The existing `fidget_cube_profile_loop` and `fidget_toolpaths_profile_loop` now
-exercise mesh fixtures; the toolpath canary now reuses valid geometry, whereas
-the cube canary remeshes. Their earlier voxel timings are not
-unchanged baselines. The ignored
+The existing `fidget_cube_profile_loop` exercises the mesh fixture and remeshes;
+`fidget_toolpaths_profile_loop` follows the Command+9 fixture, initially mesh
+rendering. The updated default depth and cutter size differ from prior baselines.
+The ignored
 `editor_mesh_svg_capture` test captures the full editor with this example without
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+9. These
 use the real partial and normal backend selection.

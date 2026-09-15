@@ -1,18 +1,25 @@
 //! A path sink that builds Fidget geometry, sharing the ordinary 3D viewport.
 
-use super::{Error, argument, invalid, number, paths::*, result, run, vocabulary::*};
+use super::playback;
+use super::playback::Draw;
+use super::{Error, argument, invalid, number, paths::*, result, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, color, f64, fidget, layout, presentation};
 use ::grap::{Context, Environment, Expression, Halt};
 use fidget_engine::context::Tree;
 use gid::Value;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
+use std::sync::Arc;
+
+mod computation;
 
 pub(super) struct Tubes {
     radius: f32,
     previous: Option<[f32; 3]>,
     path: Option<Tree>,
     paths: Vec<Tree>,
+    color: [u8; 3],
+    objects: Vec<fidget::SceneObject>,
 }
 
 impl Tubes {
@@ -22,12 +29,47 @@ impl Tubes {
             previous: None,
             path: None,
             paths: Vec::new(),
+            color: [255; 3],
+            objects: Vec::new(),
         })
     }
 
-    pub(super) fn finish(mut self) -> Vec<Tree> {
-        self.paths.extend(self.path);
-        self.paths
+    fn flush(&mut self) {
+        self.paths.extend(self.path.take());
+        self.objects
+            .extend(self.paths.drain(..).map(|tree| fidget::SceneObject {
+                tree,
+                color: self.color,
+            }));
+    }
+
+    pub(super) fn scene(mut self) -> Vec<fidget::SceneObject> {
+        self.flush();
+        self.objects
+    }
+}
+
+impl Draw for Tubes {
+    fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
+        let radius = read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
+        if self.radius != radius || self.color != color {
+            self.flush();
+            self.radius = radius;
+            self.color = color;
+        }
+        Ok(())
+    }
+
+    fn ball_end(&mut self, center: Point3, length: f64) -> Result<(), InvalidPath> {
+        let field = super::stock::BallEnd::new(f64::from(self.radius), length)
+            .ok_or(InvalidPath::CoordinateRange)?
+            .sweep(center, center)?;
+        self.flush();
+        self.objects.push(fidget::SceneObject {
+            tree: field,
+            color: self.color,
+        });
+        Ok(())
     }
 }
 
@@ -117,6 +159,17 @@ pub(super) fn preview_with(
     model: impl FnOnce(&mut Context, Expression, &Environment) -> Result<Value, Halt>,
 ) -> Result<Value, Halt> {
     result((|| {
+        let playback = match context.field(call, PLAYBACK) {
+            Some(expression) => {
+                let value = context.eval(expression, environment)?;
+                if absent::is_absent(&value) {
+                    return Ok(value);
+                }
+                playback::Settings::read(&value).ok_or_else(invalid)?;
+                Some((PLAYBACK, value))
+            }
+            None => None,
+        };
         let program = argument(context, call, PROGRAM)?;
         let program = context.eval(program, environment)?;
         if absent::is_absent(&program) {
@@ -136,20 +189,23 @@ pub(super) fn preview_with(
         }
         Ok(Value::record([(
             marker,
-            Value::record([
-                (presentation::vocabulary::VALUE, model),
-                (PROGRAM, program),
-                (LINE_RADIUS, f64::value(radius)),
-                (fidget::vocabulary::COLOR, color),
-                (layout::vocabulary::FUEL, f64::value(fuel as f64)),
-            ]),
+            Value::record(
+                [
+                    (presentation::vocabulary::VALUE, model),
+                    (PROGRAM, program),
+                    (LINE_RADIUS, f64::value(radius)),
+                    (fidget::vocabulary::COLOR, color),
+                    (layout::vocabulary::FUEL, f64::value(fuel as f64)),
+                ]
+                .into_iter()
+                .chain(playback),
+            ),
         )]))
     })())
 }
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    renderer: &Rc<RefCell<fidget::PreviewRenderer>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?.get(&PREVIEW_3D)?.as_record()?;
     let model = fidget::volume_preview(fields.get(&presentation::vocabulary::VALUE)?)?;
@@ -159,47 +215,60 @@ pub(super) fn display(
     let color = read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
     let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
     let fuel = super::read_fuel(fuel)?;
-    let state = input.state.cloned();
-    let scale = input.scale_factor;
-    let renderer = renderer.clone();
+    let request = fidget::raster::Request::new(model, input.state, input.scale_factor)?;
+    let size = request.size();
+    let settings = computation::Settings {
+        request,
+        radius,
+        color,
+        playback: match fields.get(&PLAYBACK) {
+            Some(value) => Some(playback::Settings::read(value)?),
+            None => None,
+        },
+    };
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let mut tubes = Tubes::new(radius).unwrap();
-        let evaluation = run(&mut tubes, |scope| {
-            ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
+        let local;
+        let computations = match context.inputs.computations {
+            Some(computations) => computations,
+            None => {
+                local = crate::computations::Computations::from_sources(context.inputs.sources);
+                &local
+            }
+        };
+        let computation = computations.at(context.inputs.view, context.path, || {
+            computation::Computation::new(computations, program.clone(), fuel, settings.clone())
         });
-        if !evaluation.completed || absent::is_absent(&evaluation.result) {
-            return context.project.transient(
-                context.text,
-                build,
-                evaluation.result,
-                evaluation.remaining_fuel,
-            );
-        }
-        let mut scene = model.clone();
-        // Paths go first so exact depth ties do not hide them behind the model.
-        scene.objects.splice(
-            0..0,
-            tubes
-                .finish()
-                .into_iter()
-                .map(|tree| fidget::SceneObject { tree, color }),
-        );
-        if scene.objects.len() > usize::from(u16::MAX) + 1 {
-            return context.project.transient(
-                context.text,
-                build,
-                absent::with_reason(fidget::vocabulary::INVALID_SCENE),
-                evaluation.remaining_fuel,
-            );
-        }
-        match fidget::volume_display(&scene, state.as_ref(), scale, &mut renderer.borrow_mut()) {
-            Some(drawing) => drawing.measure(context, build),
-            None => context.project.transient(
-                context.text,
-                build,
-                absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                evaluation.remaining_fuel,
-            ),
+        computation.program.set(program.clone());
+        computation.fuel.set(fuel);
+        computation.settings.set(settings.clone());
+        let image = computations.runtime.read(&computation.image);
+        let result = image
+            .as_ref()
+            .map_err(|error| (::grap::memo::failure(*error), fuel))
+            .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone));
+        match result {
+            Ok((image, _)) => {
+                let drawing = match &image.image {
+                    Some(data) => fidget::image_from_data(size, data.clone(), image.stale),
+                    None => Layout::widget(Rc::new(move |context| {
+                        crate::display::widget::leaf(
+                            crate::display::widget::Extent {
+                                width: size.width * context.inputs.styles.scale,
+                                ascent: size.height * context.inputs.styles.scale / 2.0,
+                                descent: size.height * context.inputs.styles.scale / 2.0,
+                            },
+                            |_, _| {},
+                        )
+                    })),
+                };
+                let drawing = if image.pending {
+                    crate::display::overlay([drawing, crate::display::dim("…")])
+                } else {
+                    drawing
+                };
+                drawing.measure(context, build)
+            }
+            Err((value, fuel)) => context.project.transient(context.text, build, value, fuel),
         }
     }));
     Some(fidget::interactive_volume(drawing, input))
@@ -243,7 +312,11 @@ mod tests {
         tubes.start_at([0.0, 2.0, 0.0]).unwrap();
         tubes.line_to([1.0, 2.0, 0.0]).unwrap();
         tubes.start_at([100.0; 3]).unwrap();
-        let paths = tubes.finish();
+        let paths = tubes
+            .scene()
+            .into_iter()
+            .map(|object| object.tree)
+            .collect::<Vec<_>>();
         assert_eq!(paths.len(), 2);
         assert!(sample(paths[0].clone(), [0.5, 0.0, 0.0]) < 0.0);
         assert!(sample(paths[0].clone(), [1.5, 0.0, 0.0]) < 0.0);
@@ -269,7 +342,11 @@ mod tests {
             Err(InvalidPath::CoordinateRange)
         );
         tubes.line_to([0.0; 3]).unwrap();
-        let paths = tubes.finish();
+        let paths = tubes
+            .scene()
+            .into_iter()
+            .map(|object| object.tree)
+            .collect::<Vec<_>>();
         assert_eq!(paths.len(), 1);
         assert!(sample(paths[0].clone(), [0.1, 0.0, 0.0]).abs() < 1e-6);
         for radius in [
@@ -298,6 +375,6 @@ mod tests {
         draw(&mut recording);
         let mut replayed = Tubes::new(0.1).unwrap();
         recording.replay(&mut replayed).unwrap();
-        assert_eq!(direct.finish(), replayed.finish());
+        assert!(direct.scene() == replayed.scene());
     }
 }
