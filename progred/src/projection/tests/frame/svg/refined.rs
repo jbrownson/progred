@@ -10,6 +10,69 @@ use std::{
 };
 
 #[test]
+#[ignore = "regenerates README screenshots, including the completed progressive CAM render"]
+fn readme_svg_captures() {
+    let size = kurbo::Size::new(1200.0, 900.0);
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::IopTree.source()).unwrap();
+    let mut editor = crate::test_editor(doc);
+    editor.model.workspace.left_width = 0.5;
+    render_editor(editor, size, "readme_iop.svg");
+
+    let mut editor = cam_editor(t::PREVIEW_REFINED);
+    editor.model.workspace.left_width = 0.5;
+    let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
+        .path
+        .clone();
+    let view = &mut editor.model.workspace.left.panes[0].view;
+    view.annotations.set_field(
+        &path,
+        STATE,
+        Some(Value::record([(t::PROGRESS, f64::value(0.3))])),
+    );
+    view.annotations.set_field(
+        &path,
+        f::CAMERA,
+        Some(Value::record([
+            (f::YAW, crate::libraries::f32::value(30.0)),
+            (f::PITCH, crate::libraries::f32::value(45.0)),
+            (f::ZOOM, crate::libraries::f32::value(1.7)),
+        ])),
+    );
+    // Queue the real jobs, then finish both before taking the screenshot. This
+    // runs every implicit refinement (including final depth refinement), not
+    // just the first published image or the mesh fallback.
+    let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
+    editor.computations = crate::computations::Computations::new(
+        Executor::new({
+            let queue = queue.clone();
+            move |job| queue.lock().unwrap().push_back(job)
+        }),
+        || eprintln!("README render: background result published"),
+    );
+    let mut runner = crate::EditorRunner::new(editor);
+    runner.refresh_frame(1.0, size);
+    assert_eq!(queue.lock().unwrap().len(), 2);
+    loop {
+        let job = queue.lock().unwrap().pop_front();
+        let Some(job) = job else { break };
+        let start = Instant::now();
+        std::thread::spawn(job).join().unwrap();
+        eprintln!(
+            "README render: worker finished in {:.2}s",
+            start.elapsed().as_secs_f64()
+        );
+    }
+    assert!(runner.editor.computations.tasks.poll());
+    runner.refresh_frame(1.0, size);
+    let paint = runner.prepare_paint(1.0, size);
+    let mut list = DrawList::new();
+    puri::frame::render(paint.renders, &mut list);
+    assert!(queue.lock().unwrap().is_empty());
+    assert!(!runner.editor.computations.tasks.poll());
+    write_svg(&list, size.width, size.height, "#F6F6F8", "readme_cam.svg");
+}
+
+#[test]
 #[ignore = "captures controls over zoomed-in CAM geometry in both renderers"]
 fn editor_toolpath_controls_overlay_svg_captures() {
     for (mode, file) in [
