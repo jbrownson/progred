@@ -13,11 +13,7 @@ impl Point {
         Self { radius, axial }
     }
     pub(super) fn valid(self) -> bool {
-        self.radius >= 0.0
-            && self.radius.is_finite()
-            && self.axial.is_finite()
-            && (self.radius == 0.0 || read_radius(self.radius).is_some())
-            && (self.axial as f32).is_finite()
+        self.radius >= 0.0 && self.radius.is_finite() && self.axial.is_finite()
     }
 }
 
@@ -181,14 +177,13 @@ impl Section {
                     end
                 }
             };
-            if !end.valid() || end.axial as f32 <= start.axial as f32 {
+            if !end.valid() || end.axial <= start.axial {
                 return None;
             }
             radius = radius.max(end.radius);
             start = end;
         }
-        read_radius(radius)?;
-        Some(Bounds {
+        (radius.is_finite() && radius > 0.0).then_some(Bounds {
             radius,
             min_axial: self.start.axial,
             max_axial: start.axial,
@@ -244,7 +239,7 @@ impl Section {
             if !matches!(segment, Segment::Shoulder(_))
                 && !points[previous..]
                     .windows(2)
-                    .all(|p| p[1].axial as f32 > p[0].axial as f32)
+                    .all(|p| p[1].axial > p[0].axial)
             {
                 return None;
             }
@@ -342,16 +337,15 @@ impl Tool {
             .iter()
             .map(Section::bounds)
             .collect::<Option<Vec<_>>>()?;
-        for (i, section) in sections.iter().enumerate() {
-            for j in 0..i {
-                if section.kind == sections[j].kind
-                    && bounds[i].min_axial as f32 <= bounds[j].max_axial as f32
-                    && bounds[j].min_axial as f32 <= bounds[i].max_axial as f32
-                {
-                    // Touching pieces belong in one profile with a shared
-                    // endpoint or shoulder, not independently capped solids.
-                    return None;
-                }
+        for i in 1..sections.len() {
+            // One tip-to-spindle contour, including across kind boundaries.
+            // Same-kind touching pieces belong in one connected profile, not
+            // independently capped solids. Different kinds may meet.
+            if bounds[i].min_axial < bounds[i - 1].max_axial
+                || (sections[i].kind == sections[i - 1].kind
+                    && bounds[i].min_axial <= bounds[i - 1].max_axial)
+            {
+                return None;
             }
         }
         Some(Self { sections })
@@ -402,12 +396,22 @@ impl Tool {
             return Err(InvalidPath::CoordinateRange);
         }
         let mut field: Option<Tree> = None;
+        let mut previous_end = None;
         for section in self
             .sections
             .iter()
             .filter(|s| s.kind == SectionKind::Cutting)
         {
+            let end = match section.profile.last() {
+                Some(Segment::Line(end) | Segment::Arc { end, .. }) => end,
+                _ => return Err(InvalidPath::CoordinateRange),
+            };
+            // Distinct cutting bands must stay distinct in the Fidget field.
+            if previous_end.is_some_and(|end| section.start.axial as f32 <= end) {
+                return Err(InvalidPath::CoordinateRange);
+            }
             let next = section.sweep(tolerance, a, b, axis)?;
+            previous_end = Some(end.axial as f32);
             field = Some(match field {
                 Some(f) => f.min(next),
                 None => next,
@@ -433,9 +437,13 @@ fn sweep_outline(points: &[Point], a: Point3, b: Point3, axis: Axis) -> Result<T
     let z = axis.basis()[2];
     let along = (Tree::x() - a[0]) * z.x + (Tree::y() - a[1]) * z.y + (Tree::z() - a[2]) * z.z;
     let dz = z.dot(&(nalgebra::Vector3::from(b) - nalgebra::Vector3::from(a)));
-    Ok(field
-        .max(points[0].axial as f32 + dz.min(0.0) - along.clone())
-        .max(along - (points.last().unwrap().axial as f32 + dz.max(0.0))))
+    let bottom = points[0].axial as f32 + dz.min(0.0);
+    let top = points.last().unwrap().axial as f32 + dz.max(0.0);
+    if [bottom, top].into_iter().all(f32::is_finite) {
+        Ok(field.max(bottom - along.clone()).max(along - top))
+    } else {
+        Err(InvalidPath::CoordinateRange)
+    }
 }
 
 /// Exact swept solid of one finite linear radius/axial band. At each query Z,
@@ -455,10 +463,25 @@ fn frustum(
     let d = basis.map(|v| v.dot(&direction));
     let z0 = start.axial as f32;
     let z1 = end.axial as f32;
-    let r0 = start.radius as f32;
-    let k = (end.radius as f32 - r0) / (z1 - z0);
+    let radius = |r| {
+        if r == 0.0 {
+            Ok(0.0)
+        } else {
+            read_radius(r).ok_or(InvalidPath::CoordinateRange)
+        }
+    };
+    let r0 = radius(start.radius)?;
+    let r1 = radius(end.radius)?;
+    let k = (r1 - r0) / (z1 - z0);
     let aa = d[0] * d[0] + d[1] * d[1] - (k * d[2]).powi(2);
-    if z1 <= z0 || !d.into_iter().chain([k, aa, r0 * r0]).all(f32::is_finite) {
+    let bottom = z0 + d[2].min(0.0);
+    let top = z1 + d[2].max(0.0);
+    if z1 <= z0
+        || !d
+            .into_iter()
+            .chain([z0, z1, k, aa, bottom, top])
+            .all(f32::is_finite)
+    {
         return Err(InvalidPath::CoordinateRange);
     }
     let world = [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]];
@@ -486,7 +509,7 @@ fn frustum(
     } else {
         at(lo).min(at(hi))
     };
-    let outside = (z0 + d[2].min(0.0) - p[2].clone()).max(p[2].clone() - (z1 + d[2].max(0.0)));
+    let outside = (bottom - p[2].clone()).max(p[2].clone() - top);
     // Axial band bounds select which radial inequality is applicable; they
     // aren't internal cap surfaces. Capping each band would leave zero sheets
     // inside the cutter where consecutive profile pieces meet. Only the whole

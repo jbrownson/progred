@@ -45,9 +45,10 @@ fn coordinate(fields: &gid::Record, id: CellId, previous: f64) -> Option<f64> {
     }
 }
 
-/// Lower origin-based moves to the connected bands consumed by the sweep.
+/// Lower moves to the connected bands consumed by the sweep. The caller owns
+/// the current point across cutting/non-cutting boundaries.
 /// Travel on the axis has no volume; radial edges at the ends are implicit caps.
-fn sections(value: &Value, kind: SectionKind) -> Option<Vec<Section>> {
+fn sections(value: &Value, kind: SectionKind, current: &mut Point) -> Option<Vec<Section>> {
     fn finish(section: &mut Section, result: &mut Vec<Section>, next: Point) {
         if matches!(section.profile.last(), Some(Segment::Shoulder(_))) {
             section.profile.pop();
@@ -64,10 +65,9 @@ fn sections(value: &Value, kind: SectionKind) -> Option<Vec<Section>> {
             result.push(previous);
         }
     }
-    let mut current = Point::new(0.0, 0.0);
     let mut section = Section {
         kind,
-        start: current,
+        start: *current,
         profile: Vec::new(),
     };
     let mut result = Vec::new();
@@ -104,23 +104,27 @@ fn sections(value: &Value, kind: SectionKind) -> Option<Vec<Section>> {
         } else {
             section.profile.push(Segment::Line(end));
         }
-        current = end;
+        *current = end;
     }
-    finish(&mut section, &mut result, current);
+    finish(&mut section, &mut result, *current);
     (!result.is_empty()).then_some(result)
 }
 
-fn profile_value(section: &Section) -> Value {
+fn profile_value(section: &Section, current: &mut Point) -> Value {
     let mut moves = Vec::new();
-    // Separate axial positioning from the first radius: combining them would
-    // describe a cone from the origin rather than an implicit starting cap.
-    if section.start.axial != 0.0 {
+    // Connected sections continue directly. A gap needs explicit travel along
+    // the axis, rather than an unintended cylinder or taper between the bands.
+    if section.start.axial != current.axial {
+        if current.radius != 0.0 {
+            moves.push(Value::record([(RADIUS, f64::value(0.0))]));
+            current.radius = 0.0;
+        }
         moves.push(Value::record([(AXIAL, f64::value(section.start.axial))]));
     }
-    if section.start.radius != 0.0 {
+    if section.start.radius != current.radius {
         moves.push(Value::record([(RADIUS, f64::value(section.start.radius))]));
     }
-    let mut current = section.start;
+    *current = section.start;
     for segment in &section.profile {
         let (end, arc) = match *segment {
             Segment::Line(end) => (end, None),
@@ -137,7 +141,7 @@ fn profile_value(section: &Section) -> Value {
             ),
         };
         let mut fields = Vec::new();
-        if end.radius != current.radius || end == current {
+        if end.radius != current.radius || end == *current {
             fields.push((RADIUS, f64::value(end.radius)));
         }
         if end.axial != current.axial {
@@ -145,13 +149,14 @@ fn profile_value(section: &Section) -> Value {
         }
         fields.extend(arc);
         moves.push(Value::record(fields));
-        current = end;
+        *current = end;
     }
     Value::list(moves)
 }
 
 impl Tool {
     pub fn value(&self) -> Value {
+        let mut current = Point::new(0.0, 0.0);
         Value::record([(
             TOOL,
             Value::list(self.sections.iter().map(|s| {
@@ -159,13 +164,14 @@ impl Tool {
                     SectionKind::Cutting => CUTTING,
                     SectionKind::NonCutting => NON_CUTTING,
                 };
-                Value::record([(kind, profile_value(s))])
+                Value::record([(kind, profile_value(s, &mut current))])
             })),
         )])
     }
 
     pub fn read(value: &Value) -> Option<Self> {
         let fields = value.as_record()?;
+        let mut current = Point::new(0.0, 0.0);
         let sections = fields
             .get(&TOOL)?
             .as_list()?
@@ -177,7 +183,7 @@ impl Tool {
                     (None, Some(shape)) => (SectionKind::NonCutting, shape),
                     _ => return None,
                 };
-                sections(shape, kind)
+                sections(shape, kind, &mut current)
             })
             .collect::<Option<Vec<_>>>()?;
         Self::new(sections.into_iter().flatten().collect())

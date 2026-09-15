@@ -246,6 +246,83 @@ fn profile_validity_and_bounds_do_not_depend_on_sampling() {
 }
 
 #[test]
+fn valid_profiles_survive_fidget_range_failures() {
+    for constructor in [Tool::square, Tool::ball] {
+        for (diameter, length) in [
+            (1e-30, 1e-29), // squared f32 radius underflows
+            (1e30, 1e31),   // squared f32 radius overflows
+            (1e50, 1e51),   // coordinates overflow f32
+            (1.0, 1e50),    // axial coordinate alone overflows f32
+        ] {
+            let tool = constructor(diameter, length).unwrap();
+            assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
+            assert!(tool.sections[0].outline(diameter * 0.001).is_some());
+            assert!(super::view::picture(&tool).is_some());
+            assert!(matches!(
+                tool.sweep([0.0; 3], [0.0; 3], Axis::Z, diameter * 0.001),
+                Err(InvalidPath::CoordinateRange)
+            ));
+        }
+    }
+}
+
+#[test]
+fn f64_profile_sampling_does_not_require_f32_axial_separation() {
+    let tool = Tool::new(vec![Section::taper(
+        Point::new(0.1, 0.5),
+        Point::new(0.1, 0.5 + 1e-10),
+        SectionKind::Cutting,
+    )])
+    .unwrap();
+    assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
+    assert_eq!(tool.sections[0].outline(0.001).unwrap().len(), 2);
+    assert!(super::view::picture(&tool).is_some());
+    assert!(matches!(
+        tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
+        Err(InvalidPath::CoordinateRange)
+    ));
+
+    let arc = Tool::new(vec![Section {
+        kind: SectionKind::Cutting,
+        start: Point::new(1.0, 1.0),
+        profile: vec![Segment::Arc {
+            end: Point::new(1.0, 1.000001),
+            radius: 0.0000005,
+            bend: Bend::Convex,
+        }],
+    }])
+    .unwrap();
+    assert!(arc.sections[0].outline(1e-10).unwrap().len() > 8);
+    assert!(matches!(
+        arc.sweep([0.0; 3], [0.0; 3], Axis::Z, 1e-10),
+        Err(InvalidPath::CoordinateRange)
+    ));
+}
+
+#[test]
+fn a_gap_that_collapses_in_fidget_does_not_invalidate_the_profile() {
+    let tool = Tool::new(vec![
+        Section::taper(
+            Point::new(0.1, 0.0),
+            Point::new(0.1, 0.5),
+            SectionKind::Cutting,
+        ),
+        Section::taper(
+            Point::new(0.1, 0.5 + 1e-10),
+            Point::new(0.1, 1.0),
+            SectionKind::Cutting,
+        ),
+    ])
+    .unwrap();
+    assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
+    assert!(super::view::picture(&tool).is_some());
+    assert!(matches!(
+        tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
+        Err(InvalidPath::CoordinateRange)
+    ));
+}
+
+#[test]
 fn one_tool_can_be_swept_at_different_accuracies() {
     let tool = Tool::bull(1.0, 0.2, 1.0).unwrap();
     let point = [[0.43, 0.0, 0.06]];

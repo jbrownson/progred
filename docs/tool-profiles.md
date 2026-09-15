@@ -10,9 +10,12 @@ A tool contains a `tool` list of sections. It describes geometry only, with no
 approximation tolerance or rendering-quality setting.
 Each section is `{cutting: [moves...]}` or `{non-cutting: [moves...]}`.
 The two tags are distinct library identities, not boolean values; a section
-must have exactly one of them. Each list starts implicitly at radius zero,
-axial zero. Moves use absolute `radius` and `axial` f64 coordinates; an omitted
-coordinate keeps its preceding value. A move must specify at least one.
+must have exactly one of them. The tool starts implicitly at radius zero,
+axial zero. Each subsequent section continues at the preceding section's final
+point: changing cutting/non-cutting status does not move or reset the contour.
+Moves use absolute `radius` and `axial` f64 coordinates; an omitted coordinate
+keeps its preceding value, including across section boundaries. A move must
+specify at least one.
 
 Without an arc field, a move is straight: radius-only makes a shoulder,
 axial-only extends the current radius, and both can describe a taper. An
@@ -44,21 +47,33 @@ segments is not implicit. Rendering tolerance does not change validity.
 Lowering removes starting/ending radial caps, coalesces consecutive radial
 moves, and splits connected bands at zero-radius axial travel. Travel on the
 axis contributes no material, allowing a non-cutting shank to start above the
-tip without creating a cone beneath it. Separate sections of the same kind require a
-positive axial gap (also after conversion to Fidget's f32 coordinates), rather
+tip without creating a cone beneath it. Sections stay in tip-to-spindle order;
+the axial coordinate cannot go backward at a kind boundary either. Separate
+sections of the same kind require a positive axial gap, rather
 than representing touching or overlapping independently capped solids. Cutting
 and non-cutting sections can meet. This is not yet a representation of hollow
 sections or arbitrary closed outlines that turn back axially. Invalid profiles
 decline the custom projection and remain visible as ordinary data; simulation
 rejects them.
 
+Profile validation and outline sampling use f64 geometry, without imposing a
+rendering backend's numeric limits. Fidget sweep construction checks its own
+f32 conversions and arithmetic, including segment heights and gaps between
+cutting bands that collapse at that precision. Such a sweep can fail while the
+tool definition remains valid and its 2D profile remains available. The mesh
+renderer likewise checks the vertices it produces, independently of Fidget's
+squared-radius limits.
+
 `ball mill`, `square mill`, and `bull mill` construct that same data, taking
 `tool diameter` and `tool length`; bull additionally takes
 `corner radius`. Native constructors have the same semantics. Composition
-is concatenation of disjoint section lists, not a separate composite-tool variant.
+is an ordered sequence of cutting/non-cutting runs, not independent profiles
+that each restart at the origin or a separate composite-tool variant.
 Non-cutting cylindrical and tapered shanks use ordinary endpoint moves; a
 radius-only move can join a narrower neck to a wider shank. Constructors emit
-the same compact format, including explicit axis-only positioning when needed.
+the same compact format, omitting redundant positioning at connected boundaries.
+An intentional axial gap requires going to radius zero, advancing axially, then
+setting the next radius; an axial move at a nonzero radius makes material.
 
 ## Interpretation
 

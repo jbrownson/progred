@@ -134,10 +134,18 @@ fn separate_same_kind_sections_require_a_gap_not_independent_touching_caps() {
     let section =
         |low, high, kind| Section::taper(Point::new(0.25, low), Point::new(0.25, high), kind);
     for kind in [SectionKind::Cutting, SectionKind::NonCutting] {
-        for start in [0.25, 0.5, 0.5 + 1e-10] {
+        for start in [0.25, 0.5] {
             assert!(Tool::new(vec![section(0.0, 0.5, kind), section(start, 1.0, kind)]).is_none());
         }
-        assert!(Tool::new(vec![section(0.6, 1.0, kind), section(0.0, 0.5, kind)]).is_some());
+        assert!(
+            Tool::new(vec![
+                section(0.0, 0.5, kind),
+                section(0.5 + 1e-10, 1.0, kind)
+            ])
+            .is_some()
+        );
+        assert!(Tool::new(vec![section(0.0, 0.5, kind), section(0.6, 1.0, kind)]).is_some());
+        assert!(Tool::new(vec![section(0.6, 1.0, kind), section(0.0, 0.5, kind)]).is_none());
     }
     assert!(
         Tool::new(vec![

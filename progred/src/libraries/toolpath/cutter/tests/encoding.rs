@@ -16,6 +16,117 @@ fn read(moves: impl IntoIterator<Item = Value>) -> Option<Tool> {
     )]))
 }
 
+fn mixed(
+    cutting: impl IntoIterator<Item = Value>,
+    non_cutting: impl IntoIterator<Item = Value>,
+) -> Value {
+    Value::record([(
+        TOOL,
+        Value::list([
+            Value::record([(CUTTING, Value::list(cutting))]),
+            Value::record([(NON_CUTTING, Value::list(non_cutting))]),
+        ]),
+    )])
+}
+
+#[test]
+fn non_cutting_continues_from_the_cutting_endpoint() {
+    let value = mixed(
+        [movement([(RADIUS, 0.0625)]), movement([(AXIAL, 0.22)])],
+        [movement([(AXIAL, 0.6)])],
+    );
+    let tool = Tool::read(&value).unwrap();
+    assert_eq!(tool.sections.len(), 2);
+    assert_eq!(tool.sections[1].kind, SectionKind::NonCutting);
+    assert_eq!(tool.sections[1].start, Point::new(0.0625, 0.22));
+    assert_eq!(
+        tool.sections[1].profile,
+        [Segment::Line(Point::new(0.0625, 0.6))]
+    );
+    assert_eq!(
+        tool.value(),
+        value,
+        "no redundant positioning moves at a kind boundary"
+    );
+}
+
+#[test]
+fn kind_boundaries_preserve_the_authored_endpoint_even_after_a_radial_cap() {
+    let value = mixed(
+        [
+            movement([(RADIUS, 0.1)]),
+            movement([(AXIAL, 0.2)]),
+            movement([(RADIUS, 0.2)]),
+        ],
+        [movement([(CONVEX_ARC, 0.1), (RADIUS, 0.3), (AXIAL, 0.3)])],
+    );
+    let tool = Tool::read(&value).unwrap();
+    assert_eq!(
+        tool.sections[0].profile,
+        [Segment::Line(Point::new(0.1, 0.2))]
+    );
+    assert_eq!(tool.sections[1].start, Point::new(0.2, 0.2));
+    assert_eq!(
+        tool.sections[1].profile,
+        [Segment::Arc {
+            end: Point::new(0.3, 0.3),
+            radius: 0.1,
+            bend: Bend::Convex,
+        }]
+    );
+    assert_eq!(Tool::read(&tool.value()), Some(tool));
+}
+
+#[test]
+fn explicit_axis_travel_preserves_gaps_between_kinds() {
+    let value = mixed(
+        [movement([(RADIUS, 0.1)]), movement([(AXIAL, 0.2)])],
+        [
+            movement([(RADIUS, 0.0)]),
+            movement([(AXIAL, 0.4)]),
+            movement([(RADIUS, 0.2)]),
+            movement([(AXIAL, 0.6)]),
+        ],
+    );
+    let tool = Tool::read(&value).unwrap();
+    assert_eq!(tool.sections.len(), 2);
+    assert_eq!(tool.sections[1].start, Point::new(0.2, 0.4));
+    assert_eq!(
+        tool.value(),
+        value,
+        "encoding must not fill the gap with a cylinder"
+    );
+    assert_eq!(Tool::read(&tool.value()), Some(tool));
+}
+
+#[test]
+fn changing_kind_does_not_allow_backtracking_along_the_axis() {
+    let value = mixed(
+        [movement([(RADIUS, 0.1)]), movement([(AXIAL, 0.4)])],
+        [
+            movement([(AXIAL, 0.2)]),
+            movement([(RADIUS, 0.2)]),
+            movement([(AXIAL, 0.6)]),
+        ],
+    );
+    assert!(Tool::read(&value).is_none());
+    assert!(
+        Tool::new(vec![
+            Section {
+                kind: SectionKind::Cutting,
+                start: Point::new(0.1, 0.0),
+                profile: vec![Segment::Line(Point::new(0.1, 0.4))]
+            },
+            Section {
+                kind: SectionKind::NonCutting,
+                start: Point::new(0.2, 0.2),
+                profile: vec![Segment::Line(Point::new(0.2, 0.6))]
+            },
+        ])
+        .is_none()
+    );
+}
+
 #[test]
 fn compact_square_and_bull_profiles_match_constructors() {
     assert_eq!(
@@ -102,7 +213,7 @@ fn arcs_can_inherit_radius_and_reject_impossible_or_backtracking_geometry() {
 }
 
 #[test]
-fn axis_travel_is_empty_and_each_profile_starts_at_the_origin() {
+fn axis_travel_is_empty_and_survives_value_roundtrip() {
     let tool = read([
         movement([(AXIAL, 0.2)]),
         movement([(RADIUS, 0.1)]),
@@ -153,11 +264,6 @@ fn invalid_coordinates_are_not_treated_as_missing() {
             movement([(RADIUS, f64::INFINITY)]),
             movement([(AXIAL, 0.2)]),
         ],
-        vec![
-            movement([(RADIUS, 1e300)]),
-            movement([(RADIUS, 0.2)]),
-            movement([(AXIAL, 0.2)]),
-        ],
     ] {
         assert!(read(moves.clone()).is_none(), "{moves:?}");
     }
@@ -166,6 +272,7 @@ fn invalid_coordinates_are_not_treated_as_missing() {
 #[test]
 fn redundant_caps_and_radial_steps_lower_without_extra_surfaces() {
     let tool = read([
+        movement([(RADIUS, 1e300)]),
         movement([(RADIUS, 0.1)]),
         movement([(RADIUS, 0.2)]),
         movement([(AXIAL, 0.4)]),

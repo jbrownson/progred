@@ -174,6 +174,36 @@ fn visible_ball_end_matches_the_subtraction_tool_dimensions() {
 }
 
 #[test]
+fn tool_mesh_checks_its_vertices_not_fidget_squared_radius_limits() {
+    use super::super::cutter::Tool;
+    let pose = Pose {
+        tip: [0.0; 3],
+        axis: Axis::Z,
+    };
+    let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
+    let large = Tool::square(1e20, 1e20).unwrap();
+    tubes.tool(&large, pose, [255; 3], 0.001).unwrap();
+    assert!(!tubes.geometry.indices.is_empty());
+    assert!(
+        tubes
+            .geometry
+            .vertices
+            .iter()
+            .all(|v| v.position.iter().all(|n| n.is_finite()))
+    );
+    assert!(matches!(
+        large.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
+        Err(InvalidPath::CoordinateRange)
+    ));
+
+    let overflow = Tool::square(1e50, 1e50).unwrap();
+    assert!(matches!(
+        tubes.tool(&overflow, pose, [255; 3], 0.001),
+        Err(InvalidPath::CoordinateRange)
+    ));
+}
+
+#[test]
 fn tilted_tool_vertices_lie_on_the_same_implicit_cutter() {
     use fidget_engine::{shape::EzShape, vm::VmShape};
     let tool = super::super::cutter::Tool::ball(0.125, 0.22).unwrap();

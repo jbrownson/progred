@@ -1943,16 +1943,6 @@
         {
           non_cutting: [
             {
-              axial: {
-                f64: 0x295c8fc2f528cc3f,
-              },
-            },
-            {
-              profile_radius: {
-                f64: 0x000000000000b03f,
-              },
-            },
-            {
               profile_radius: {
                 f64: 0x000000000000b83f,
               },
