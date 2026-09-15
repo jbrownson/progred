@@ -15,7 +15,7 @@ Start with:
 - [Grap and projections](projections.md): evaluation, libraries, display
   composition, and host boundaries.
 - [Dependency-tracked computations](incremental.md): memo graphs, Grap observations,
-  and the first CAM integration.
+  cancellable background jobs, and the first CAM integration.
 - [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
   drawing.
 - [Build security](build-security.md): sandboxed build/test commands.

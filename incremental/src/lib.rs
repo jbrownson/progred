@@ -5,6 +5,8 @@ use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
+pub mod background;
+
 #[cfg(test)]
 mod tests;
 
@@ -19,16 +21,38 @@ pub enum Error {
     Cancelled,
 }
 
+#[derive(Default)]
+struct CancelState {
+    cancelled: std::sync::atomic::AtomicBool,
+    callbacks: std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>,
+}
+
 #[derive(Clone, Default)]
-pub struct Cancellation(std::sync::Arc<std::sync::atomic::AtomicBool>);
+pub struct Cancellation(std::sync::Arc<CancelState>);
 
 impl Cancellation {
     pub fn cancel(&self) {
-        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.0
+            .cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let callbacks = std::mem::take(&mut *self.0.callbacks.lock().unwrap());
+        for callback in callbacks {
+            callback();
+        }
+    }
+
+    pub fn on_cancel(&self, callback: impl FnOnce() + Send + 'static) {
+        let mut callbacks = self.0.callbacks.lock().unwrap();
+        if self.0.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            drop(callbacks);
+            callback();
+        } else {
+            callbacks.push(Box::new(callback));
+        }
     }
 
     pub fn check(&self) -> Result<(), Error> {
-        if self.0.load(std::sync::atomic::Ordering::Relaxed) {
+        if self.0.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             Err(Error::Cancelled)
         } else {
             Ok(())

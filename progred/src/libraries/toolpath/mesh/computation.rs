@@ -1,6 +1,8 @@
 use super::*;
 use crate::computations::Computations;
+use incremental::background::{AsyncMemo, Availability, Tasks};
 use incremental::{Input, Memo, Runtime};
+use std::sync::Arc;
 
 #[derive(Clone, PartialEq)]
 pub(super) struct Settings {
@@ -12,7 +14,7 @@ pub(super) struct Settings {
 
 #[derive(PartialEq)]
 struct Recorded {
-    path: Recording,
+    path: Arc<Recording>,
     evaluation: ::grap::Evaluation,
 }
 
@@ -31,12 +33,25 @@ impl Recorded {
 
 type Outcome<T> = Result<(T, usize), (Value, usize)>;
 
+pub(super) struct ViewGeometry {
+    pub geometry: Geometry,
+    pub awaiting_first_surface: bool,
+}
+
+#[derive(Clone, PartialEq)]
+struct Surface {
+    path: Arc<Recording>,
+    model: fidget::mesh::Shape,
+    playback: Option<playback::Settings>,
+    depth: u8,
+}
+
 pub(super) struct Computation {
     pub program: Input<Value>,
     pub fuel: Input<usize>,
     pub settings: Input<Settings>,
     pub depth: Input<u8>,
-    pub geometry: Memo<Outcome<Geometry>>,
+    pub geometry: Memo<Outcome<ViewGeometry>>,
 }
 
 impl Computation {
@@ -65,11 +80,20 @@ impl Computation {
                         ::grap::apply_scoped(&program, [], host, scope, fuel)
                     })
                 });
-                Ok(Recorded { path, evaluation })
+                Ok(Recorded {
+                    path: Arc::new(path),
+                    evaluation,
+                })
             }
         });
-        let geometry =
-            Layers::new(runtime, recording, settings.clone(), depth.clone()).combined(runtime);
+        let geometry = Layers::new(
+            runtime,
+            &computations.tasks,
+            recording,
+            settings.clone(),
+            depth.clone(),
+        )
+        .combined(runtime);
         Self {
             program,
             fuel,
@@ -82,53 +106,55 @@ impl Computation {
 
 struct Layers {
     paths: Memo<Outcome<Geometry>>,
-    surface: Memo<Outcome<Geometry>>,
+    surface: AsyncMemo<Outcome<Surface>, Outcome<Geometry>>,
 }
 
 impl Layers {
     fn new(
         runtime: &Runtime,
+        tasks: &Tasks,
         recording: Memo<Recorded>,
         settings: Input<Settings>,
         depth: Input<u8>,
     ) -> Self {
-        let solid_settings = runtime.memo({
+        let prepared = runtime.memo({
+            let recording = recording.clone();
             let settings = settings.clone();
             move |read| {
-                let settings = settings.read(read);
-                Ok((settings.shape.clone(), settings.playback.clone()))
-            }
-        });
-        let shape = runtime.memo({
-            let recording = recording.clone();
-            move |read| {
                 let record = recording.read(read)?;
-                let settings = solid_settings.read(read)?;
-                Ok(remaining_shape(&record, &settings.0, settings.1.as_ref()))
+                let settings = settings.read(read);
+                let depth = *depth.read(read);
+                Ok(record.path().map(|_| {
+                    (
+                        Surface {
+                            path: record.path.clone(),
+                            model: settings.shape.clone(),
+                            playback: settings.playback.clone(),
+                            depth,
+                        },
+                        record.evaluation.remaining_fuel,
+                    )
+                }))
             }
         });
-        let surface = runtime.memo_by(
-            move |read| {
-                let shape = shape.read(read)?;
-                let depth = *depth.read(read);
-                Ok(match &*shape {
-                    Err(failure) => Err(failure.clone()),
-                    Ok((shape, fuel)) => {
-                        let mut geometry = Geometry::default();
-                        shape
-                            .append(&mut geometry, depth)
-                            .map(|()| (geometry, *fuel))
-                            .ok_or_else(|| {
-                                (
-                                    absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                                    *fuel,
-                                )
-                            })
-                    }
-                })
-            },
-            |_, _| false,
-        );
+        let surface = tasks.memo(prepared, |prepared, cancel| {
+            let (request, fuel) = match prepared {
+                Ok(request) => request,
+                Err(failure) => return Ok(Err(failure)),
+            };
+            cancel.check()?;
+            let shape = remaining_shape(&request, fuel);
+            cancel.check()?;
+            let (shape, fuel) = match shape {
+                Ok(shape) => shape,
+                Err(failure) => return Ok(Err(failure)),
+            };
+            let mut geometry = Geometry::default();
+            Ok(shape
+                .append_cancellable(&mut geometry, request.depth, cancel)?
+                .map(|()| (geometry, fuel))
+                .ok_or_else(|| (absent::with_reason(fidget::vocabulary::INVALID_FIELD), fuel)))
+        });
         let paths = runtime.memo_by(
             move |read| {
                 let record = recording.read(read)?;
@@ -140,38 +166,64 @@ impl Layers {
         Self { paths, surface }
     }
 
-    fn combined(self, runtime: &Runtime) -> Memo<Outcome<Geometry>> {
+    fn combined(self, runtime: &Runtime) -> Memo<Outcome<ViewGeometry>> {
         runtime.memo_by(
             move |read| {
                 let paths = self.paths.read(read)?;
                 let surface = self.surface.read(read)?;
-                Ok(match (&*paths, &*surface) {
-                    (Err(failure), _) | (_, Err(failure)) => Err(failure.clone()),
-                    (Ok((paths, fuel)), Ok((surface, _))) => {
-                        let mut geometry = paths.clone();
-                        geometry
-                            .append(surface)
-                            .map(|()| (geometry, *fuel))
-                            .ok_or_else(|| (absent::with_reason(INVALID_INPUT), *fuel))
-                    }
-                })
+                Ok(combine(&paths, &surface))
             },
             |_, _| false,
         )
     }
 }
 
-fn remaining_shape(
-    record: &Recorded,
-    model: &fidget::mesh::Shape,
-    playback: Option<&playback::Settings>,
-) -> Outcome<fidget::mesh::Shape> {
-    let path = record.path()?;
-    let fuel = record.evaluation.remaining_fuel;
-    let mut shape = model.clone();
-    if let Some(playback) = playback {
+fn combine(
+    paths: &Outcome<Geometry>,
+    surface: &Availability<Outcome<Geometry>>,
+) -> Outcome<ViewGeometry> {
+    let (paths, fuel) = paths.as_ref().map_err(Clone::clone)?;
+    let mut geometry = paths.clone();
+    let (surface, pending) = match surface {
+        Availability::Ready(value) => (Some(value.as_ref()), false),
+        Availability::Pending { previous } => (previous.as_deref(), true),
+    };
+    // A previous failure has no geometry to retain while a replacement is pending.
+    let surface = match surface {
+        Some(Ok((surface, _))) => Some(surface),
+        Some(Err(failure)) if !pending => return Err(failure.clone()),
+        _ => None,
+    };
+    if let Some(surface) = surface {
+        geometry
+            .append_colored(surface, |color| {
+                if pending {
+                    updating_color(color)
+                } else {
+                    color
+                }
+            })
+            .ok_or_else(|| (absent::with_reason(INVALID_INPUT), *fuel))?;
+    }
+    Ok((
+        ViewGeometry {
+            geometry,
+            awaiting_first_surface: pending && surface.is_none(),
+        },
+        *fuel,
+    ))
+}
+
+fn updating_color(color: [f32; 3]) -> [f32; 3] {
+    let gray = (color[0] + color[1] + color[2]) / 3.0;
+    color.map(|channel| 0.25 * channel + 0.75 * gray)
+}
+
+fn remaining_shape(request: &Surface, fuel: usize) -> Outcome<fidget::mesh::Shape> {
+    let mut shape = request.model.clone();
+    if let Some(playback) = &request.playback {
         if let Some(stock) = playback
-            .remaining_stock(path)
+            .remaining_stock(&request.path)
             .map_err(|_| (absent::with_reason(INVALID_INPUT), fuel))?
         {
             shape.objects = vec![stock];
@@ -229,14 +281,180 @@ mod tests {
     }
 
     #[test]
+    fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
+        use incremental::background::{Executor, Job};
+        use std::collections::VecDeque;
+        use std::sync::Mutex;
+
+        let runtime = Runtime::default();
+        let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
+        let tasks = Tasks::new(
+            &runtime,
+            Executor::new({
+                let queue = queue.clone();
+                move |job| queue.lock().unwrap().push_back(job)
+            }),
+            || {},
+        );
+        let next = || queue.lock().unwrap().pop_front().unwrap();
+        let mut path = Recording::default();
+        path.start_at([-0.25, 0.0, 0.5]).unwrap();
+        path.line_to([0.25, 0.0, 0.5]).unwrap();
+        let path = Arc::new(path);
+        let recording = runtime.memo(move |_| {
+            Ok(Recorded {
+                path: path.clone(),
+                evaluation: ::grap::Evaluation {
+                    result: Value::record([]),
+                    completed: true,
+                    remaining_fuel: 100,
+                },
+            })
+        });
+        let playback = |progress| {
+            playback::Settings::read(&Value::record([
+                (PROGRESS, f64::value(progress)),
+                (TOOL_RADIUS, f64::value(0.1)),
+                (TOOL_LENGTH, f64::value(0.4)),
+                (
+                    STOCK_MIN,
+                    Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
+                ),
+                (
+                    STOCK_MAX,
+                    Value::record([X, Y, Z].map(|key| (key, f64::value(0.5)))),
+                ),
+                (
+                    STOCK,
+                    Value::record([(
+                        fidget::vocabulary::COLOR,
+                        crate::libraries::color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                    )]),
+                ),
+            ]))
+            .unwrap()
+        };
+        let mut props = Settings {
+            shape: (&preview()).into(),
+            radius: 0.01,
+            color: [20, 150, 230],
+            playback: Some(playback(0.25)),
+        };
+        let settings = runtime.input(props.clone());
+        let layers = Layers::new(
+            &runtime,
+            &tasks,
+            recording,
+            settings.clone(),
+            runtime.input(4),
+        );
+        let paths = layers.paths.clone();
+        let surface = runtime.memo_by(
+            {
+                let surface = layers.surface.clone();
+                move |read| surface.read(read)
+            },
+            Rc::ptr_eq,
+        );
+        let combined = layers.combined(&runtime);
+        let first = runtime.read(&combined).unwrap();
+        assert!(first.as_ref().as_ref().unwrap().0.awaiting_first_surface);
+        assert!(
+            !first
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .0
+                .geometry
+                .indices
+                .is_empty()
+        );
+        next()();
+        assert!(tasks.poll());
+        let ready = runtime.read(&combined).unwrap();
+        assert!(!ready.as_ref().as_ref().unwrap().0.awaiting_first_surface);
+        let old_surface = runtime.read(&surface).unwrap();
+        let Availability::Ready(old_surface) = &**old_surface else {
+            panic!()
+        };
+        let old_geometry = &old_surface.as_ref().as_ref().unwrap().0;
+        assert!(!old_geometry.vertices.is_empty());
+
+        props.playback = Some(playback(0.75));
+        settings.set(props);
+        let waiting = runtime.read(&combined).unwrap();
+        let waiting = &waiting.as_ref().as_ref().unwrap().0;
+        assert!(!waiting.awaiting_first_surface);
+        let paths = runtime.read(&paths).unwrap();
+        let paths = &paths.as_ref().as_ref().unwrap().0;
+        let (new_paths, stale_stock) = waiting.geometry.vertices.split_at(paths.vertices.len());
+        assert_eq!(new_paths.len(), paths.vertices.len());
+        assert!(
+            new_paths
+                .iter()
+                .zip(&paths.vertices)
+                .all(|(a, b)| { a.position == b.position && a.color == b.color })
+        );
+        let tool_color = [225, 94, 58].map(|n| n as f32 / 255.0);
+        let tool_center = |geometry: &Geometry| {
+            let xs: Vec<_> = geometry
+                .vertices
+                .iter()
+                .filter(|v| v.color == tool_color)
+                .map(|v| v.position.x)
+                .collect();
+            (xs.iter().copied().fold(f32::INFINITY, f32::min)
+                + xs.iter().copied().fold(f32::NEG_INFINITY, f32::max))
+                / 2.0
+        };
+        assert!(
+            tool_center(&waiting.geometry)
+                > tool_center(&ready.as_ref().as_ref().unwrap().0.geometry)
+        );
+        assert_eq!(stale_stock.len(), old_geometry.vertices.len());
+        assert!(
+            stale_stock
+                .iter()
+                .zip(&old_geometry.vertices)
+                .all(|(a, b)| { a.position == b.position && a.color == updating_color(b.color) })
+        );
+        assert_eq!(queue.lock().unwrap().len(), 1);
+        next()();
+        tasks.poll();
+        let complete = runtime.read(&combined).unwrap();
+        let complete = &complete.as_ref().as_ref().unwrap().0.geometry;
+        let stock_color = [100, 180, 230].map(|n| n as f32 / 255.0);
+        assert!(
+            complete
+                .vertices
+                .iter()
+                .skip(paths.vertices.len())
+                .all(|v| v.color == stock_color)
+        );
+    }
+
+    #[test]
+    fn a_pending_replacement_does_not_retain_a_previous_absent_as_an_error() {
+        let paths = Ok((Geometry::default(), 100));
+        let failure = Err((absent::with_reason(INVALID_INPUT), 100));
+        let pending = Availability::Pending {
+            previous: Some(Arc::new(failure.clone())),
+        };
+        assert!(combine(&paths, &pending).unwrap().0.awaiting_first_surface);
+        let ready = Availability::Ready(Arc::new(failure));
+        assert!(combine(&paths, &ready).is_err());
+    }
+
+    #[test]
     fn path_appearance_changes_retain_the_stock_mesh() {
         let runtime = Runtime::default();
+        let tasks = Tasks::new(&runtime, incremental::background::Executor::inline(), || {});
         let recording = runtime.memo(move |_| {
             let mut path = Recording::default();
             path.start_at([-0.25, 0.0, 0.5]).unwrap();
             path.line_to([0.25, 0.0, 0.5]).unwrap();
             Ok(Recorded {
-                path,
+                path: Arc::new(path),
                 evaluation: ::grap::Evaluation {
                     result: Value::record([]),
                     completed: true,
@@ -275,29 +493,33 @@ mod tests {
         };
         let settings = runtime.input(props.clone());
         let depth = runtime.input(3);
-        let layers = Layers::new(&runtime, recording, settings.clone(), depth.clone());
-        let surface = runtime.read(&layers.surface).unwrap();
-        assert!(!surface.as_ref().as_ref().unwrap().0.indices.is_empty());
+        let layers = Layers::new(&runtime, &tasks, recording, settings.clone(), depth.clone());
+        let surface_node = runtime.memo_by(
+            {
+                let surface = layers.surface.clone();
+                move |read| surface.read(read)
+            },
+            Rc::ptr_eq,
+        );
+        let surface = runtime.read(&surface_node).unwrap();
+        let Availability::Ready(value) = &**surface else {
+            panic!("inline result is ready")
+        };
+        assert!(!value.as_ref().as_ref().unwrap().0.indices.is_empty());
         let paths = runtime.read(&layers.paths).unwrap();
         props.color = [250, 100, 20];
         settings.set(props.clone());
-        assert!(Rc::ptr_eq(
-            &surface,
-            &runtime.read(&layers.surface).unwrap()
-        ));
+        assert!(Rc::ptr_eq(&surface, &runtime.read(&surface_node).unwrap()));
         assert!(!Rc::ptr_eq(&paths, &runtime.read(&layers.paths).unwrap()));
         props.radius = 0.02;
         settings.set(props.clone());
-        assert!(Rc::ptr_eq(
-            &surface,
-            &runtime.read(&layers.surface).unwrap()
-        ));
+        assert!(Rc::ptr_eq(&surface, &runtime.read(&surface_node).unwrap()));
         props.playback = Some(playback(0.75));
         settings.set(props);
-        let moved = runtime.read(&layers.surface).unwrap();
+        let moved = runtime.read(&surface_node).unwrap();
         assert!(!Rc::ptr_eq(&surface, &moved));
         depth.set(4);
-        assert!(!Rc::ptr_eq(&moved, &runtime.read(&layers.surface).unwrap()));
+        assert!(!Rc::ptr_eq(&moved, &runtime.read(&surface_node).unwrap()));
     }
 
     #[test]
@@ -363,7 +585,16 @@ mod tests {
         });
         let graph = Computation::new(&computations, program.clone(), 10000, settings.clone(), 3);
         let first = computations.runtime.read(&graph.geometry).unwrap();
-        assert!(!first.as_ref().as_ref().unwrap().0.indices.is_empty());
+        assert!(
+            !first
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .0
+                .geometry
+                .indices
+                .is_empty()
+        );
         assert!(Rc::ptr_eq(
             &first,
             &computations.runtime.read(&graph.geometry).unwrap()
@@ -402,6 +633,7 @@ mod tests {
         let (a, a_fuel) = reused.as_ref().as_ref().unwrap();
         let (b, b_fuel) = recomputed.as_ref().as_ref().unwrap();
         assert_eq!(a_fuel, b_fuel);
+        let (a, b) = (&a.geometry, &b.geometry);
         assert_eq!(a.indices, b.indices);
         assert!(
             a.vertices

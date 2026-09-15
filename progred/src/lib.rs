@@ -92,6 +92,8 @@ use winit::window::{CursorIcon, Window, WindowId};
 
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
+    #[cfg(not(target_arch = "wasm32"))]
+    ComputationFinished,
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
     Command(Command),
@@ -450,8 +452,21 @@ fn new_editor(
     text_binders: gid_text::Binders,
     proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
 ) -> Editor {
+    #[cfg(target_arch = "wasm32")]
+    let computations = computations::Computations::default();
+    #[cfg(not(target_arch = "wasm32"))]
+    let computations = proxy
+        .clone()
+        .map(|proxy| {
+            let executor = incremental::background::Executor::threaded(std::num::NonZeroUsize::MIN)
+                .expect("start computation worker");
+            computations::Computations::new(executor, move || {
+                let _ = proxy.send_event(UserEvent::ComputationFinished);
+            })
+        })
+        .unwrap_or_default();
     Editor {
-        computations: computations::Computations::default(),
+        computations,
         drawn_menu,
         state: RenderState::Suspended(None),
         #[cfg(not(target_arch = "wasm32"))]
@@ -563,6 +578,23 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
         match event {
+            #[cfg(not(target_arch = "wasm32"))]
+            UserEvent::ComputationFinished => {
+                for runner in &mut self.editors {
+                    if runner.editor.computations.tasks.poll()
+                        && let RenderState::Active { window, .. } = &runner.editor.state
+                    {
+                        let window = window.clone();
+                        let size = window.inner_size();
+                        runner.refresh_frame(
+                            window.scale_factor(),
+                            Size::new(f64::from(size.width), f64::from(size.height)),
+                        );
+                        runner.sync_cursor(&window);
+                        window.request_redraw();
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             UserEvent::NativeMenu(event) => {
                 if let Some(command) = self.native_menu.command(&event) {
@@ -1417,7 +1449,7 @@ impl Editor {
         #[cfg(target_os = "macos")]
         let changed_path = *doc_path != path;
         *pending_discard = None;
-        *computations = computations::Computations::default();
+        computations.reset();
         *pressed = false;
         *menu = menu::State::default();
         *binders = text_binders;

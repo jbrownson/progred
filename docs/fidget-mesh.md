@@ -28,7 +28,10 @@ Fidget's CPU VM and Manifold Dual Contouring, in the supplied model-space
 bounds. There is **no mesh or image cache**, including while orbiting, zooming,
 resizing, or editing. The CAM `preview paths mesh` variant now composes a
 [dependency-tracked recording/stock/mesh graph](incremental.md), retaining valid
-geometry while camera views change. Both remain synchronous on a miss.
+geometry while camera views change. Native CAM stock construction/meshing now
+runs asynchronously; ordinary Fidget previews remain synchronous on a miss.
+While CAM updates, the viewport retains desaturated old stock beside the current
+tool/path. Web remains synchronous until a browser-worker executor is added.
 
 Native builds rasterize the resulting indexed triangles through a small WGPU
 pipeline with a depth buffer, opaque object colors, flat two-sided lighting,
@@ -76,6 +79,6 @@ unchanged baselines. The ignored
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+9. These
 use the real partial and normal backend selection.
 
-Broader memo integration, asynchronous generation, and direct GPU-texture composition
-remain future work. In particular, this version still pays upload/readback costs
+Broader memo/async integration and direct GPU-texture composition remain future
+work. In particular, this version still pays upload/readback costs
 even though it uses GPU triangle drawing.

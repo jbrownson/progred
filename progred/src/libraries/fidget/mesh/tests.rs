@@ -25,6 +25,18 @@ fn depth_is_bounded_and_defaults_to_six() {
 }
 
 #[test]
+fn cancellation_does_not_publish_a_partial_mesh() {
+    let cancel = incremental::Cancellation::default();
+    cancel.cancel();
+    let mut geometry = Geometry::default();
+    assert_eq!(
+        Shape::from(&sphere_preview()).append_cancellable(&mut geometry, 4, &cancel),
+        Err(incremental::Error::Cancelled)
+    );
+    assert!(geometry.vertices.is_empty());
+}
+
+#[test]
 fn mesh_function_returns_an_ordinary_declaration() {
     let stack = crate::stack::load();
     let doc = gid::Document {

@@ -92,8 +92,9 @@ The former canvas memo observed less than evaluation could use. It remains
 removed; canvas programs record once per visible frame. The new general
 [computation graph](incremental.md) first serves CAM geometry and observes selected
 definitions, missing lookups, native implementations, and declared FFI inputs.
-Async execution, Grap-language memo boundaries, durability tiers, and further
-integrations are deferred. Future readers of ordered contributor sets must
+Native CAM stock jobs now use the graph's generic background boundary. Browser
+workers, Grap-language memo/async boundaries, progressive quality, durability
+tiers, and further integrations are deferred. Future readers of ordered contributor sets must
 observe that set, not just a selected definition. Do not add an ad-hoc cache
 or event-specific relevance checks alongside this mechanism.
 

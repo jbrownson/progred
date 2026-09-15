@@ -269,6 +269,71 @@ fn editor_toolpath_mesh_svg_capture() {
 }
 
 #[test]
+#[ignore = "captures CAM's first pending frame and retained stock during an async update"]
+fn editor_toolpath_async_svg_captures() {
+    use crate::libraries::controls::vocabulary::STATE;
+    use incremental::background::{Executor, Job};
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
+
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let mut editor = crate::test_editor(doc);
+    let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
+    editor.computations = crate::computations::Computations::new(
+        Executor::new({
+            let queue = queue.clone();
+            move |job| queue.lock().unwrap().push_back(job)
+        }),
+        || {},
+    );
+    let mut runner = crate::EditorRunner::new(editor);
+    let size = kurbo::Size::new(1500.0, 1050.0);
+    let capture = |runner: &mut crate::EditorRunner, file| {
+        let start = std::time::Instant::now();
+        runner.refresh_frame(1.0, size);
+        let paint = runner.prepare_paint(1.0, size);
+        let mut list = DrawList::new();
+        puri::frame::render(paint.renders, &mut list);
+        eprintln!(
+            "{file}: frame {:.2} ms",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+        write_svg(&list, size.width, size.height, "#F6F6F8", file);
+    };
+    let complete = |runner: &mut crate::EditorRunner| {
+        let job = queue.lock().unwrap().pop_front().unwrap();
+        let start = std::time::Instant::now();
+        std::thread::spawn(job).join().unwrap();
+        eprintln!(
+            "stock worker {:.2} ms",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+        assert!(runner.editor.computations.tasks.poll());
+    };
+    capture(&mut runner, "cam_async_first.svg");
+    complete(&mut runner);
+    capture(&mut runner, "cam_async_ready.svg");
+    let path = crate::workspace::declarations(runner.editor.model.doc.root.as_ref())[0]
+        .path
+        .clone();
+    runner.editor.model.workspace.left.panes[0]
+        .view
+        .annotations
+        .set_field(
+            &path,
+            STATE,
+            Some(Value::record([(names["progress"], f64::value(0.7))])),
+        );
+    capture(&mut runner, "cam_async_updating.svg");
+    assert_eq!(queue.lock().unwrap().len(), 1);
+    complete(&mut runner);
+    capture(&mut runner, "cam_async_updated.svg");
+    assert!(queue.lock().unwrap().is_empty());
+}
+
+#[test]
 #[ignore = "writes remote-review captures at three playback positions"]
 fn editor_toolpath_playback_svg_captures() {
     use crate::libraries::controls::vocabulary::STATE;

@@ -231,6 +231,12 @@ cavity are representable. Meshing still approximates the implicit surface, and
 coarse depths can visibly distort narrow grooves. Seeking backward reconstructs
 the expression from the initial block. The memo graph retains the latest result,
 not simulation history or a collection of meshes for earlier slider positions.
+On native builds, expression construction and stock meshing run in the general
+graph's background executor. Playback updates tool/path triangles immediately;
+old stock is desaturated until its replacement is ready. The first pending frame
+shows available tool/path geometry and an ellipsis. Cancellation uses Fidget's
+octree token, and superseded results are discarded. See the
+[async boundary and limitations](incremental.md#background-computations).
 Disconnected starts still have no linking cut. No holder or collision model is
 implied, and this models the programmed polyline, not controller-specific motion
 blending or physical cutting behavior.
@@ -244,6 +250,6 @@ and collision parts), explicit links, and machine/postprocessor output remain
 separate next steps. Mesh/non-mesh mode controls and render-quality controls can
 use the controls library later; path-generation tolerance belongs to the program
 and is distinct from mesh/raster resolution. Upcoming-path windows, transparency,
-and async/coarse-to-fine rendering are also deferred. In
+and coarse-to-fine rendering are also deferred. In
 particular, the existing Fidget cube field is not an exact signed distance;
 subtracting a cutter radius from it would not implement a geometric offset.

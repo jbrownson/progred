@@ -60,10 +60,18 @@ pub(crate) struct Geometry {
 }
 
 impl Geometry {
-    pub(crate) fn append(&mut self, other: &Self) -> Option<()> {
+    pub(crate) fn append_colored(
+        &mut self,
+        other: &Self,
+        color: impl Fn([f32; 3]) -> [f32; 3],
+    ) -> Option<()> {
         let offset = u32::try_from(self.vertices.len()).ok()?;
         u32::try_from(self.vertices.len().checked_add(other.vertices.len())?).ok()?;
-        self.vertices.extend_from_slice(&other.vertices);
+        self.vertices
+            .extend(other.vertices.iter().map(|vertex| Vertex {
+                position: vertex.position,
+                color: color(vertex.color),
+            }));
         self.indices
             .extend(other.indices.iter().map(|index| offset + index));
         Some(())
@@ -99,15 +107,42 @@ impl From<&VolumePreview> for Shape {
 
 impl Shape {
     pub fn append(&self, out: &mut Geometry, depth: u8) -> Option<()> {
+        self.append_cancellable(out, depth, &incremental::Cancellation::default())
+            .ok()?
+    }
+
+    pub fn append_cancellable(
+        &self,
+        out: &mut Geometry,
+        depth: u8,
+        cancellation: &incremental::Cancellation,
+    ) -> Result<Option<()>, incremental::Error> {
+        cancellation.check()?;
+        let cancel = fidget_engine::render::CancelToken::new();
+        cancellation.on_cancel({
+            let cancel = cancel.clone();
+            move || cancel.cancel()
+        });
         let settings = Settings {
             depth,
+            cancel,
             world_to_model: Translation3::from((self.min + self.max) / 2.0).to_homogeneous()
                 * Scale3::from((self.max - self.min) / 2.0).to_homogeneous(),
             ..Default::default()
         };
-        self.objects.iter().try_for_each(|object| {
+        let result = self.objects.iter().try_for_each(|object| {
+            if cancellation.check().is_err() {
+                return None;
+            }
             let shape = VmShape::from(object.tree.clone()).try_into().ok()?;
-            let mesh = Octree::build(&shape, &settings)?.walk_dual();
+            let octree = Octree::build(&shape, &settings)?;
+            if cancellation.check().is_err() {
+                return None;
+            }
+            let mesh = octree.walk_dual();
+            if cancellation.check().is_err() {
+                return None;
+            }
             if !mesh
                 .vertices
                 .iter()
@@ -128,7 +163,9 @@ impl Shape {
                     .flat_map(|t| [t.x, t.y, t.z].map(|i| offset + i as u32)),
             );
             Some(())
-        })
+        });
+        cancellation.check()?;
+        Ok(result)
     }
 }
 

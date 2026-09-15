@@ -1,6 +1,6 @@
 # Dependency-tracked computations
 
-`incremental` is a synchronous, caller-owned graph, independent of GID, Grap,
+`incremental` is a caller-owned graph, independent of GID, Grap,
 Puri, and the editor. It retains explicit subcomputations, not frames or
 event-specific decisions about whether to rebuild the UI.
 
@@ -45,7 +45,8 @@ Handles identify computations explicitly; no execution path is guessed. The
 editor retains library-owned typed roots under its existing view identity and
 source-qualified location. Different viewports have independent roots. Unused
 roots are released after a pass without demand; replacing the document drops
-the graph. Each node retains only its latest result, not slider history.
+the graph. A synchronous node retains its latest result, not slider history.
+An asynchronous node can also retain that result while its replacement runs.
 
 ## Grap and foreign calls
 
@@ -77,33 +78,88 @@ reused; normally returned absents are ordinary retained results, even if their
 reason names cancellation or another halt. Completion status, not the reason,
 determines whether execution finished.
 
+## Background computations
+
+`background::Tasks::memo` connects a tracked preparation memo to an owned worker
+computation. Preparation reads the graph on its owner thread and returns an
+immutable, `Clone + Send` snapshot. The worker receives only that snapshot and a
+`Cancellation`; it cannot read the editor or the graph. Its function and captures
+must be thread-safe and must not perform unrecorded external effects. This is a
+split-phase native API, not an arbitrary Grap closure moved to another thread.
+
+The returned `AsyncMemo` is an ordinary dependency of other memos. Its read is
+non-blocking with a queued executor:
+
+```rust
+enum Availability<T> {
+    Pending { previous: Option<Arc<T>> },
+    Ready(Arc<T>),
+}
+```
+
+Pending is scheduling state, not an absent or an evaluator error. `T` can itself
+contain normally returned absents. Interrupted computations remain runtime errors,
+and catching them makes a parent non-reusable just as for synchronous reads.
+Consumers choose whether to show a previous value, a placeholder, or some other
+representation; the scheduler never silently presents a stale value as ready.
+
+Each node has at most one running job and one latest replacement. Changing the
+prepared snapshot cancels the old request and replaces any queued request. The
+executor bounds concurrent jobs and requeues replacements so other nodes can run.
+Completion carries a generation; the owner validates current prepared inputs
+before publishing it. Obsolete completions cannot overwrite newer state. Worker
+panics are transported and resumed on the owner thread, not converted into an
+eternal pending state. Cooperative cancellation calls registered callbacks once,
+allowing a native library's cancellation token to be connected directly.
+
+Workers notify a caller-supplied wake function. Between graph reads, `Tasks::poll`
+imports notifications and advances the graph revision; reads then publish current
+completions and invalidate dependents through the usual dependency mechanism.
+Once a request has been observed as pending, later reads in that same revision
+also see pending, even if the worker has finished. A new request may complete
+inline before its first observation. This keeps shared consumers consistent and
+prevents a completion from losing the wake that should refresh earlier readers.
+There is no timer polling loop. Dropping a node or its task owner cancels work;
+replacing a document starts a fresh graph with the same executor/wake capability.
+
+Native editor windows use a single background worker each. An application event
+imports completions and rebuilds the normal frame. Web and default headless
+contexts explicitly use the inline executor for now. Tests can supply a controlled
+queue or the threaded executor without a windowing harness.
+
 ## CAM integration
 
 The mesh toolpath viewport composes nested nodes:
 
 1. Run the Grap generator into a native recording and evaluation result.
-2. Select solid/playback settings independently of path appearance, then build
-   the remaining-stock Fidget expression from the recording.
-3. Mesh that expression at the requested depth.
+2. Prepare a worker snapshot: shared recording, solid/playback settings, and mesh
+   depth. Path appearance is not an input to this job.
+3. In the worker, construct the remaining-stock Fidget expression and mesh it.
 4. Separately interpret the recording into path/tool triangles with playback
    and appearance settings, then combine the two geometry layers.
 
 Camera, viewport size, and display scale are outside geometry generation. Orbit,
 zoom, and resize still build the whole UI and render a new image but reuse valid
-geometry. Playback changes retain the recording; depth changes also retain the
-stock expression. Path color or line thickness changes retain both the stock
-expression and its mesh. Program edits invalidate observed reads. Invalid
+geometry. Playback and depth changes retain the recording. The worker currently
+reconstructs the inexpensive stock expression when either changes. Path color or
+line thickness changes retain the stock mesh. Program edits invalidate observed reads. Invalid
 programs show their absence rather than a stale successful image. Native mesh/recording values
 never travel through Grap as opaque values.
+
+While the worker runs, tool motion and the remaining path update immediately.
+The last stock mesh stays visible, desaturated to indicate that it is outdated.
+Before any surface is available, the tool/path remain visible with an ellipsis.
+The current result restores the original colors. Fidget's supported cancellation
+token interrupts octree construction. Compilation and final dual-contour
+extraction have only before/after checks; cancellation is cooperative, not a
+promise of immediate interruption. Partial meshes are never published.
 
 This is the first integration. Ordinary Fidget mesh/voxel previews, IoP drawing,
 completions, and other UI projections are not converted.
 
 ## Deferred
 
-Cold loads and geometry edits still block. There is no async queue, progressive
-quality scheduler, durability tier, or Grap-language memo syntax. Cancellation is
-checked at graph boundaries and optionally inside recipes; it does not yet stop a
-running Fidget mesher. Async needs immutable job inputs, cooperative cancellation,
-latest-request coalescing, and generation-checked publication. Incremental lambda
-calculus and incremental Fidget algorithms remain separate research.
+Grap path generation and image rasterization/readback remain synchronous. There
+is no browser-worker executor, progressive quality scheduler, durability tier,
+or Grap-language memo/async syntax yet. Incremental lambda calculus and
+incremental Fidget algorithms remain separate research.

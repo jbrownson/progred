@@ -247,6 +247,33 @@ with a 285.26 ms first frame. A regression test verifies that path color/thickne
 changes retain the identical shared stock-mesh result; playback and depth changes
 replace it.
 
+### Background CAM stock — 2026-09-14
+
+The generic async boundary preserves the warm-orbit canary: 12.55 ms median /
+13.04 ms p95 / 13.64 ms maximum. This canary deliberately uses the inline
+headless executor, so its 297.26 ms first frame still includes all geometry work.
+
+The separate `editor_toolpath_async_svg_captures` check uses the full editor at
+1500 × 1050, a controlled queue, and an actual worker thread. It renders a frame
+before allowing each queued stock job to run. One release run measured:
+
+| Stage | Frame build and headless paint | Separate stock job |
+| --- | ---: | ---: |
+| First pending frame | 72.77 ms | 223.49 ms |
+| First ready frame | 11.78 ms | — |
+| Playback changed from 0.35 to 0.70, old stock visible | 9.78 ms | 282.46 ms |
+| Replacement stock ready | 10.03 ms | — |
+
+This verifies that the responding frame does not wait for meshing, not native
+input-to-display latency or performance under worker/UI CPU contention. Initial
+Grap path generation remains synchronous. The sandbox used CPU rasterization;
+SVG serialization is excluded. The test writes first/ready/updating/updated
+captures, including the stale-stock color treatment, without opening a window:
+
+```bash
+./tools/sandbox-cargo test -p progred --release editor_toolpath_async_svg_captures -- --ignored --nocapture
+```
+
 ### Interpreting viewport measurements
 
 Fidget receives ordinary camera annotations at the viewport's source path. It

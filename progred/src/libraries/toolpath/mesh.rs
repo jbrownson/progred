@@ -114,12 +114,19 @@ pub(super) fn display(
             .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
         let drawing = result.and_then(|(geometry, fuel)| {
             fidget::mesh::image(
-                geometry,
+                &geometry.geometry,
                 &model,
                 state.as_ref(),
                 scale,
                 &mut renderer.borrow_mut(),
             )
+            .map(|drawing| {
+                if geometry.awaiting_first_surface {
+                    crate::display::overlay([drawing, crate::display::dim("…")])
+                } else {
+                    drawing
+                }
+            })
             .ok_or_else(|| {
                 (
                     absent::with_reason(fidget::vocabulary::INVALID_FIELD),
