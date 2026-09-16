@@ -78,7 +78,12 @@ fn editor_tool_profiles_svg_captures() {
     use crate::libraries::toolpath::cutter::Tool;
     let (mut doc, names) =
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let square = doc.cells.value(names["square_tool"]).unwrap().clone();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let square = ::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000).result;
     assert!(Tool::read(&square).is_some());
     for (name, tool) in [
         ("square", square),

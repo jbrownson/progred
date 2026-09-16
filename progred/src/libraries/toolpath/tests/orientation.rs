@@ -196,7 +196,7 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         assert!(result.completed && !absent::is_absent(&result.result));
         let mut axis = Axis::Z;
         paths.push(
-            path.commands()
+            indent_commands(&path)
                 .iter()
                 .map(|command| {
                     let point = match command {
@@ -227,9 +227,10 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
 
 fn assert_face_copies(path: &Recording, faces: &[usize]) {
     let (top, _) = example_ball_path();
-    assert_eq!(path.commands().len(), top.commands().len() * faces.len());
+    let commands = indent_commands(path);
+    assert_eq!(commands.len(), top.commands().len() * faces.len());
     assert_eq!(
-        path.commands()
+        commands
             .iter()
             .filter(|c| matches!(c, Command::StartAt(..)))
             .count(),
@@ -237,7 +238,7 @@ fn assert_face_copies(path: &Recording, faces: &[usize]) {
     );
     for (&face, commands) in faces
         .iter()
-        .zip(path.commands().chunks_exact(top.commands().len()))
+        .zip(commands.chunks_exact(top.commands().len()))
     {
         // Ordering may reverse for access and climb, but the sampled geometry
         // must remain the same. Quantize only for this floating-point comparison.
@@ -260,6 +261,14 @@ fn assert_face_copies(path: &Recording, faces: &[usize]) {
         assert_eq!(points(commands, 0), points(&top.commands(), face));
         assert_pull_and_climb(commands, face);
     }
+}
+
+fn indent_commands(path: &Recording) -> Vec<Command> {
+    let ball = super::super::cutter::Tool::ball(0.125, 0.22).unwrap();
+    path.moves()
+        .filter(|(_, tool)| *tool == Some(&ball))
+        .map(|(command, _)| command)
+        .collect()
 }
 
 fn assert_pull_and_climb(commands: &[Command], face: usize) {
@@ -304,10 +313,9 @@ fn assert_pull_and_climb(commands: &[Command], face: usize) {
 
 // Evaluate actual Fidget subtraction at each face center and the interior.
 fn stock_samples(path: &Recording) -> Vec<f32> {
-    let tool = super::super::cutter::Tool::ball(0.125, 0.22).unwrap();
     let mut stock = super::super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
-    for (a, b, axis) in path.segments() {
-        stock.cut(&tool, a, b, axis, 0.001).unwrap();
+    for (a, b, axis, tool) in path.tool_segments() {
+        stock.cut(tool.unwrap(), a, b, axis, 0.001).unwrap();
     }
     use fidget_engine::{shape::EzShape, vm::VmShape};
     let shape = VmShape::from(stock.into_field());
@@ -358,7 +366,7 @@ fn op2_is_an_independent_bottom_program_and_preview_combines_without_a_link() {
     assert!(
         (preview.length().unwrap() - op1.length().unwrap() - op2.length().unwrap()).abs() < 1e-10
     );
-    assert_eq!(preview.segments().count(), 6336);
+    assert_eq!(preview.segments().count(), 6348);
     let values = stock_samples(&preview);
     assert!(values[..6].iter().all(|v| *v > 0.0), "{values:?}");
     assert!(values[6] < 0.0, "the cube interior must remain: {values:?}");

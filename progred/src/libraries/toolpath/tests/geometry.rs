@@ -4,7 +4,7 @@ use fidget_engine::{shape::EzShape, vm::VmShape};
 use gid::{Document, Step};
 use std::rc::Rc;
 
-fn set_parameter(doc: &mut Document, names: &Binders, name: &str, number: f64) {
+pub(super) fn set_parameter(doc: &mut Document, names: &Binders, name: &str, number: f64) {
     let definition = doc.cells.value(names["cube"]).unwrap();
     let bindings = definition
         .as_record()

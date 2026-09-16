@@ -1,6 +1,7 @@
 use super::{paths::*, *};
 use crate::libraries::{control, number};
 
+mod chamfers;
 mod geometry;
 mod orientation;
 mod scopes;

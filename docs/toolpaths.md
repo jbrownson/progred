@@ -80,9 +80,10 @@ than relying on a failed match. An excessive sampling request is bounded by
 evaluator fuel.
 
 The example's cube function owns its size, chamfer, and control-point depth.
-It returns an ordinary geometry record with three Grap callables: `field`
+It returns an ordinary geometry record with four Grap callables: `field`
 constructs the implicit solid, `top face` maps UV points to that surface, and
-`normal` gives the outward surface normal at a contact point. They capture the
+`normal` gives the outward surface normal at a contact point, and `chamfer edge`
+gives the centerline of a canonical chamfer. They capture the
 same dimensions. The implicit field is constructed only when requested; path
 generation does not construct or mesh a solid it does not consume. Dimensions
 and path arithmetic use f64; `f32 from f64` explicitly rounds the constants at
@@ -124,9 +125,42 @@ retaining Op 1's removed stock into Op 2. It is a preview composition, not a
 single machine program: eventual export should target Op 1 and Op 2 separately.
 Both currently use part coordinates; there is no simulated stock flip,
 work-offset definition, or connecting move between setups.
-Each operation wraps its indent passes in `with tool: ball tool`; playback no
-longer supplies a global cutter. Chamfer passes can be added as sibling
-square-tool groups within each operation.
+Each operation sequences a `with tool: ball tool` indent group and a sibling
+`with tool: square tool` chamfer group; playback supplies no global cutter.
+Op 1 contours the four top and four vertical edges. Op 2 contours the four
+bottom edges. The square tool switches in at those group boundaries without
+inventing a tool-change motion.
+
+### Side-contour chamfers
+
+The cube's `chamfer edge(t)` returns `(s/2 − s*t, (s−c)/2, (s−c)/2)`:
+the top/front chamfer centerline, extended to the stock's ends. `contour chamfer`
+puts the side of the square mill tangent to this plane, centered along its
+cutting length. With outward normal `n = (0,1,1)/√2`, spindle-facing axis
+`a = (0,−1,1)/√2`, cutter radius `r`, and cutting length `L`, the tip is
+`contact + r*n − (L/2)*a`. It emits one straight start/line pair. Feed is
+`a × n`, following the example's clockwise climb convention. `chamfer ring`
+composes ordinary Grap point mappings to repeat this along four edges;
+`cube chamfers` supplies the cube's contact geometry and shared tool dimensions.
+There is no Rust chamfer generator or mesh-derived path.
+
+The square profile is a Grap quote with spliced `square tool diameter` and
+`square cutting length` cells. The contour compensation reads those same
+cells; the tapered non-cutting neck and wider shank remain explicit profile
+data. Its defaults are 0.125-inch diameter and 0.22-inch cutting length.
+The canonical pass has sufficient diameter and cutting length for the default
+0.1-inch chamfer. This is a single full-length finishing pass, not a roughing
+strategy or an automatic check that arbitrary dimensions cover the chamfer.
+Changing the profile to a different cutting shape would also require changing
+this square-side compensation. The vertical-edge tool axes are horizontal;
+there is no fixture/holder clearance claim.
+
+Tests compare the actual Fidget swept subtraction for all twelve edges with
+the beveled cube's planes, and check edge coverage, tool scopes, compensation,
+and updates from edited cube/tool dimensions. Crosswise end-cut passes, which
+would step along each chamfer, remain a separate strategy to add.
+
+### Indent tilt and direction
 
 The editable `tilt (degrees)` defaults to 45 and accepts any finite angle;
 there is no machining-policy range guard. Zero points along the face normal,
@@ -152,8 +186,8 @@ Tests check the spindle-facing hemisphere, pull direction, row progression,
 and unchanged sampled geometry on all six faces. These are reference-face
 rules, not a claim of collision clearance or verified engagement throughout
 every curved cut. Tilt changes the tool and swept volume, not the ball-center
-compensation. The example does not finish chamfers,
-plan indexing/retracts, model a holder/fixture, or perform collision checks.
+compensation. The example does not plan indexing/retracts, model a holder/fixture,
+or perform collision checks.
 The example interprets one model unit as one inch; the runtime still
 uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
@@ -205,12 +239,14 @@ doubles XY resolution up to native size, then finishes with four-times depth
 sampling. The mesh supplies immediate feedback until the first current implicit
 image. Standalone mesh and implicit functions remain available.
 
-Command+9's example uses this refined preview with one playback slider: 252 paths (6,336
+Command+9's example uses this refined preview with one playback slider: 264 paths (6,348
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
-Op 1 occupies the first five sixths of cutting distance; Op 2 finishes the bottom
-in the last sixth. The operation boundary adds no travel or cut.
+Op 1 finishes its five indented faces and eight chamfers before Op 2 cuts the
+bottom indent and four remaining chamfers. Slider intervals follow cutting
+distance, including the twelve new full-length contours. The operation boundary
+adds no travel or cut.
 Implicit requests a new software image in the background when inputs change,
 including the camera. Mesh retains geometry across camera changes; its optional
 `mesh depth` defaults to 6 (the previous mesh-only fixture used 7).
@@ -290,7 +326,7 @@ validation errors. The preview translates invalid geometry to ordinary absents.
 Without `stock`, the stock bounds draw a wire envelope. With that field, its
 record supplies an opaque `color`. The preview's ordinary `mesh depth` determines
 the stock mesh resolution too. Command+9 starts with a one-inch cube, bounded
-by −0.5…0.5 on all three axes, so the two operations carve indents into all six faces
+by −0.5…0.5 on all three axes, so the two operations carve six indents and twelve chamfers
 without first removing an oversized stock allowance.
 Stock replaces the reference solid while enabled, avoiding coplanar surfaces
 where their boundaries coincide. It shares the paths' depth buffer, so intact
@@ -378,10 +414,9 @@ Disconnected starts still have no linking cut. No holder or collision model is
 implied, and this models the programmed polyline, not controller-specific motion
 blending or physical cutting behavior.
 
-The example demonstrates indent finishing on all six faces in two operations.
-Op 1 leaves the bottom untouched; Op 2 cuts it. At completion, the
-chamfers remain unfinished; it is not yet a roughing program or
-a manufacturing simulation for the entire cube.
+The example demonstrates indent and chamfer finishing in two operations.
+Op 1 leaves the bottom indent and its four chamfers for Op 2. It is not yet
+a roughing program or a manufacturing simulation for the entire cube.
 
 Variable orientation, collision checking for the non-cutting profiles, explicit
 links, and machine/postprocessor output remain

@@ -370,7 +370,9 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
         Tool::read(&::grap::evaluate(&Value::from(names["ball_tool"]), &sources, 1000).result)
             .is_some()
     );
-    let square = Tool::read(doc.cells.value(names["square_tool"]).unwrap()).unwrap();
+    let square =
+        Tool::read(&::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000).result)
+            .unwrap();
     assert_eq!(square.sections.len(), 2);
     assert_eq!(square.sections[0].kind, SectionKind::Cutting);
     assert_eq!(square.sections[1].kind, SectionKind::NonCutting);

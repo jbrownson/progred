@@ -128,13 +128,14 @@ display, and subtraction from shared stock. The example's ball-tool
 constructor references the same diameter cell as contact compensation. Its
 `ball tip` mapping first computes the ball center from the surface normal, then
 rotates and subtracts radius times the spindle-facing axis. The square-tool
-definition in the example includes a tapered neck and explicit shoulder to a
-wider non-cutting shank, and can be edited directly. It is ready for use, but
-the cube still cuts only its indents.
+definition is a Grap quote, sharing editable diameter and cutting-length cells
+with side-contour compensation. Its tapered neck and explicit shoulder to a
+wider non-cutting shank remain ordinary profile data. An `evaluate` entry shows
+the resulting profile beside the source definition.
 
-Next: add the two chamfer strategies as Grap functions in sibling square-tool
-groups. Op 1 owns the eight
-chamfers not touching the bottom; Op 2 owns the other four. Side contours follow
-the chamfer length; crosswise end passes step along that length. These simulate
+The example's sibling square-tool groups now make side-contour chamfer cuts.
+Op 1 owns the four top and four vertical edges; Op 2 owns the four bottom edges.
+Next: add crosswise end passes, stepping along the chamfer length, as another
+Grap strategy. These simulate
 the ideal tool envelope, not microscopic tooth marks. Fixture clearance, safe
 links, holders/collision checks, and machine/G-code output remain separate work.

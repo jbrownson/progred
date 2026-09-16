@@ -5,6 +5,7 @@
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": e44590bd0560cc22dcf6397197ce5635,
     "axial": 1e87f4d476a2d51539d4c221b068b9f4,
+    "axial_offset": fc3106b1d28e0f6073ca2377b9ba07b5,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
     "axis_x": 854f507d94f7d7f2dd9ac31d9f0ab28e,
     "axis_y": 422dbc64510c54c4b40c5f566e8af3ba,
@@ -25,10 +26,14 @@
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
+    "chamfer_edge": 53d67bcb2a0efe98ee416b8e8335ff6b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "chamfer_ring": 34487212300c3d464978ba26599fb47f,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
+    "compose_points": 799e01d49e65b5aa20285c3f958fb541,
     "condition": 91c786935eb5794b005582b8e7941bc2,
+    "contour_chamfer": e3bb9b579cb298a10aa72f7fda3bb0be,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "control_initial": 133b05e33c166614831f01de2365f49c,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
@@ -38,9 +43,11 @@
     "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
     "crossing_passes": 60358199da0169a8a765ca701378007e,
     "cube": 650c98379ab879a6b902b0bc94305103,
+    "cube_chamfers": 3e2d123b5ca89358f9e8d407292f0511,
     "cut_axis": 7132cc8a45610a94bc5d8398b7023279,
     "cutter_diameter": 900b8ac5725af07ea981455d015541bf,
     "cutting": d22a92c1020be6f690b5cb738b728fd3,
+    "cutting_length": 00ede4dd6db731555d83f644401b09ec,
     "diagonals": 73ae7ca51317bcddf4ff4b33e10fc2e0,
     "direction": 18bab55f244a06a0f0d30cfeb87c4c4f,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
@@ -68,6 +75,7 @@
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
     "half_size": f6e416437259d6867c11eced7923bf1c,
+    "half_turn": 1bfffd6a6c8897bbba3543d596f09262,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
     "hypot": fe79fe9c7be4542249fdf604ddf5f5ea,
     "initial": 24d55aeab9383d53899091958de88d21,
@@ -109,7 +117,9 @@
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
     "op1": b8cdf2aa2f55d823bcc0c67123fa2b56,
+    "op1_chamfers": 68680a50ef0b37d3c27fcae16349db6b,
     "op2": d0116cda22f0461688928cf2ba47184e,
+    "op2_chamfers": 8144d571cd69d3e4c48107b3b4e017c4,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "orientation": ddb447a86cf765e6a19f3c448882659e,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
@@ -127,7 +137,9 @@
     "program": f23c804bf137581b76605a51366d43b7,
     "progress": 13feb828ce93822d8d72a3ef3765e2f0,
     "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
+    "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "radial_offset": fb8446f4c4ccf00087add408de715de6,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -145,6 +157,7 @@
     "slope": add49f506cecac65e0da65e073ed9e80,
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
     "square": 6164efe43a126d79bcd252a17a9453c1,
+    "square_diameter": 238159ce4edc3084ab92ebc217776003,
     "square_tool": 9aabe44cdff817c10ba34f605620dda2,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
@@ -157,6 +170,7 @@
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
     "t": 97de1a6f95080533856024449272a3d1,
+    "three_quarter_turn": 80239b1dcea650a9747913d73c2ec7b2,
     "tilt": 6ebc95bf630e6b36be576e2b22834529,
     "to_f32": 73bd2225d2091ba893a5570e8e9bacff,
     "tool": fbe28409798777a59a474570ec600c9a,
@@ -169,6 +183,7 @@
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
     "u1": b64d80018a2257079ca8b6b617d9a6d9,
+    "unit_diagonal": e799e755ddb8523e9a59dff1323ac938,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "v0": a5204d915920fe26c29525020c2eae4e,
@@ -185,121 +200,170 @@
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
   },
   "cells": {
-    op1: {
-      name: "Op 1 · top and four sides",
+    op1_chamfers: {
+      name: "Op 1 · chamfers",
       params: [],
       body: {
         function: with_tool,
         expression: {
           expressions: [
             {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f03f,
-                },
-              },
+              function: cube_chamfers,
               orientation: top,
             },
             {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f03f,
-                },
-              },
+              function: cube_chamfers,
               orientation: right_face,
-            },
-            {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f03f,
-                },
-              },
-              orientation: back_face,
-            },
-            {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f03f,
-                },
-              },
-              orientation: left_face,
-            },
-            {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f03f,
-                },
-              },
-              orientation: front_face,
             },
           ],
           function: do,
         },
-        tool: ball_tool,
+        tool: square_tool,
+      },
+    },
+    op1: {
+      name: "Op 1 · top and four sides",
+      params: [],
+      body: {
+        expressions: [
+          {
+            function: with_tool,
+            expression: {
+              expressions: [
+                {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  orientation: top,
+                },
+                {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  orientation: right_face,
+                },
+                {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  orientation: back_face,
+                },
+                {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  orientation: left_face,
+                },
+                {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  orientation: front_face,
+                },
+              ],
+              function: do,
+            },
+            tool: ball_tool,
+          },
+          {
+            function: op1_chamfers,
+          },
+        ],
+        function: do,
       },
     },
     op2: {
       name: "Op 2 · bottom",
       params: [],
       body: {
+        expressions: [
+          {
+            function: with_tool,
+            expression: {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f0bf,
+                },
+              },
+              orientation: bottom_face,
+            },
+            tool: ball_tool,
+          },
+          {
+            function: op2_chamfers,
+          },
+        ],
+        function: do,
+      },
+    },
+    op2_chamfers: {
+      name: "Op 2 · chamfers",
+      params: [],
+      body: {
         function: with_tool,
         expression: {
-          function: face_paths,
-          setup_up: {
-            function: point,
-            y: {
-              f64: 0x0000000000000000,
-            },
-            x: {
-              f64: 0x0000000000000000,
-            },
-            z: {
-              f64: 0x000000000000f0bf,
-            },
-          },
+          function: cube_chamfers,
           orientation: bottom_face,
         },
-        tool: ball_tool,
+        tool: square_tool,
       },
     },
     progress: {
@@ -319,6 +383,9 @@
         ],
         function: do,
       },
+    },
+    axial_offset: {
+      name: "axial offset",
     },
     axis_x: {
       name: "axis x",
@@ -618,11 +685,291 @@
     chamfer: {
       name: "chamfer",
     },
+    chamfer_edge: {
+      name: "chamfer edge",
+    },
     chamfer_pair: {
       name: "chamfer pair",
     },
+    chamfer_ring: {
+      name: "chamfer ring",
+      params: [
+        chamfer_edge,
+        orientation,
+        cutter_diameter,
+        tool_length,
+      ],
+      body: {
+        expressions: [
+          {
+            tool_length: tool_length,
+            chamfer_edge: chamfer_edge,
+            function: contour_chamfer,
+            cutter_diameter: cutter_diameter,
+            orientation: {
+              right: orientation,
+              function: compose_points,
+              left: top,
+            },
+          },
+          {
+            tool_length: tool_length,
+            chamfer_edge: chamfer_edge,
+            function: contour_chamfer,
+            cutter_diameter: cutter_diameter,
+            orientation: {
+              right: orientation,
+              function: compose_points,
+              left: quarter_turn,
+            },
+          },
+          {
+            tool_length: tool_length,
+            chamfer_edge: chamfer_edge,
+            function: contour_chamfer,
+            cutter_diameter: cutter_diameter,
+            orientation: {
+              right: orientation,
+              function: compose_points,
+              left: half_turn,
+            },
+          },
+          {
+            tool_length: tool_length,
+            chamfer_edge: chamfer_edge,
+            function: contour_chamfer,
+            cutter_diameter: cutter_diameter,
+            orientation: {
+              right: orientation,
+              function: compose_points,
+              left: three_quarter_turn,
+            },
+          },
+        ],
+        function: do,
+      },
+    },
     compensation: {
       name: "compensation",
+    },
+    compose_points: {
+      name: "compose point mappings",
+      params: [
+        left,
+        right,
+      ],
+      body: {
+        params: [
+          x,
+          y,
+          z,
+        ],
+        body: {
+          function: where,
+          expression: {
+            function: left,
+            y: y,
+            x: x,
+            z: z,
+          },
+          bindings: [
+            {
+              subject: {
+                function: right,
+                y: y,
+                x: x,
+                z: z,
+              },
+              pattern: {
+                y: {
+                  bind: y,
+                },
+                x: {
+                  bind: x,
+                },
+                z: {
+                  bind: z,
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    contour_chamfer: {
+      name: "contour chamfer",
+      params: [
+        chamfer_edge,
+        orientation,
+        cutter_diameter,
+        tool_length,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: map_points,
+          mapping: {
+            params: [
+              x,
+              y,
+              z,
+            ],
+            body: {
+              function: orientation,
+              y: {
+                right: axial_offset,
+                function: sum,
+                left: {
+                  right: radial_offset,
+                  function: sum,
+                  left: y,
+                },
+              },
+              x: x,
+              z: {
+                right: axial_offset,
+                function: subtract,
+                left: {
+                  right: radial_offset,
+                  function: sum,
+                  left: z,
+                },
+              },
+            },
+          },
+          expression: {
+            expressions: [
+              {
+                function: where,
+                expression: {
+                  function: start_at,
+                  y: y,
+                  x: x,
+                  tool_axis: tool_axis,
+                  z: z,
+                },
+                bindings: [
+                  {
+                    subject: {
+                      function: chamfer_edge,
+                      t: {
+                        f64: 0x0000000000000000,
+                      },
+                    },
+                    pattern: {
+                      y: {
+                        bind: y,
+                      },
+                      x: {
+                        bind: x,
+                      },
+                      z: {
+                        bind: z,
+                      },
+                    },
+                  },
+                ],
+              },
+              {
+                function: where,
+                expression: {
+                  function: line_to,
+                  y: y,
+                  x: x,
+                  z: z,
+                },
+                bindings: [
+                  {
+                    subject: {
+                      function: chamfer_edge,
+                      t: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    pattern: {
+                      y: {
+                        bind: y,
+                      },
+                      x: {
+                        bind: x,
+                      },
+                      z: {
+                        bind: z,
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+            function: do,
+          },
+        },
+        bindings: [
+          {
+            subject: {
+              right: {
+                right: {
+                  f64: 0x000000000000f03f,
+                },
+                function: hypot,
+                left: {
+                  f64: 0x000000000000f03f,
+                },
+              },
+              function: divide,
+              left: {
+                f64: 0x000000000000f03f,
+              },
+            },
+            bind: unit_diagonal,
+          },
+          {
+            subject: {
+              right: unit_diagonal,
+              function: multiply,
+              left: {
+                right: {
+                  f64: 0x0000000000000040,
+                },
+                function: divide,
+                left: cutter_diameter,
+              },
+            },
+            bind: radial_offset,
+          },
+          {
+            subject: {
+              right: unit_diagonal,
+              function: multiply,
+              left: {
+                right: {
+                  f64: 0x0000000000000040,
+                },
+                function: divide,
+                left: tool_length,
+              },
+            },
+            bind: axial_offset,
+          },
+          {
+            subject: {
+              function: orientation,
+              y: {
+                right: unit_diagonal,
+                function: subtract,
+                left: {
+                  f64: 0x0000000000000000,
+                },
+              },
+              x: {
+                f64: 0x0000000000000000,
+              },
+              z: unit_diagonal,
+            },
+            bind: tool_axis,
+          },
+        ],
+      },
     },
     control_depth: {
       name: "control depth",
@@ -756,6 +1103,34 @@
               orientation: orientation,
             },
             bind: tool_axis,
+          },
+        ],
+      },
+    },
+    cube_chamfers: {
+      name: "cube chamfers",
+      params: [
+        orientation,
+      ],
+      body: {
+        function: where,
+        expression: {
+          tool_length: cutting_length,
+          chamfer_edge: chamfer_edge,
+          function: chamfer_ring,
+          cutter_diameter: square_diameter,
+          orientation: orientation,
+        },
+        bindings: [
+          {
+            subject: {
+              function: cube,
+            },
+            pattern: {
+              chamfer_edge: {
+                bind: chamfer_edge,
+              },
+            },
           },
         ],
       },
@@ -1178,6 +1553,47 @@
                 },
               },
             },
+            chamfer_edge: {
+              unquote: {
+                params: [
+                  t,
+                ],
+                body: {
+                  function: point,
+                  y: {
+                    right: {
+                      right: {
+                        f64: 0x0000000000000040,
+                      },
+                      function: divide,
+                      left: chamfer,
+                    },
+                    function: subtract,
+                    left: half_size,
+                  },
+                  x: {
+                    right: {
+                      right: t,
+                      function: multiply,
+                      left: size,
+                    },
+                    function: subtract,
+                    left: half_size,
+                  },
+                  z: {
+                    right: {
+                      right: {
+                        f64: 0x0000000000000040,
+                      },
+                      function: divide,
+                      left: chamfer,
+                    },
+                    function: subtract,
+                    left: half_size,
+                  },
+                },
+              },
+            },
             field: {
               unquote: {
                 params: [],
@@ -1556,6 +1972,32 @@
     half_size: {
       name: "half size",
     },
+    half_turn: {
+      name: "half turn Z",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: {
+          right: y,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        x: {
+          right: x,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        z: z,
+      },
+    },
     intercept: {
       name: "intercept",
     },
@@ -1648,6 +2090,29 @@
     },
     direction: {
       name: "pull sign",
+    },
+    quarter_turn: {
+      name: "quarter turn Z",
+      params: [
+        x,
+        y,
+        z,
+      ],
+      body: {
+        function: point,
+        y: x,
+        x: {
+          right: y,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        z: z,
+      },
+    },
+    radial_offset: {
+      name: "radial offset",
     },
     right_face: {
       name: "right face",
@@ -1932,46 +2397,83 @@
     spacing: {
       name: "spacing",
     },
+    cutting_length: {
+      name: "square cutting length",
+      f64: 0x295c8fc2f528cc3f,
+    },
     square_tool: {
       name: "square tool",
-      tool: [
-        {
-          cutting: [
-            {
-              profile_radius: {
-                f64: 0x000000000000b03f,
+      function: quote,
+      expression: {
+        tool: [
+          {
+            cutting: [
+              {
+                profile_radius: {
+                  unquote: {
+                    right: {
+                      f64: 0x0000000000000040,
+                    },
+                    function: divide,
+                    left: square_diameter,
+                  },
+                },
               },
-            },
-            {
-              axial: {
-                f64: 0x295c8fc2f528cc3f,
+              {
+                axial: {
+                  unquote: cutting_length,
+                },
               },
-            },
-          ],
-        },
-        {
-          non_cutting: [
-            {
-              profile_radius: {
-                f64: 0x000000000000b83f,
+            ],
+          },
+          {
+            non_cutting: [
+              {
+                profile_radius: {
+                  f64: 0x000000000000b83f,
+                },
+                axial: {
+                  f64: 0x666666666666d63f,
+                },
               },
-              axial: {
-                f64: 0x666666666666d63f,
+              {
+                profile_radius: {
+                  f64: 0x000000000000c03f,
+                },
               },
-            },
-            {
-              profile_radius: {
-                f64: 0x000000000000c03f,
+              {
+                axial: {
+                  f64: 0x333333333333e33f,
+                },
               },
-            },
-            {
-              axial: {
-                f64: 0x333333333333e33f,
-              },
-            },
-          ],
-        },
+            ],
+          },
+        ],
+      },
+    },
+    square_diameter: {
+      name: "square tool diameter",
+      f64: 0x000000000000c03f,
+    },
+    three_quarter_turn: {
+      name: "three-quarter turn Z",
+      params: [
+        x,
+        y,
+        z,
       ],
+      body: {
+        function: point,
+        y: {
+          right: x,
+          function: subtract,
+          left: {
+            f64: 0x0000000000000000,
+          },
+        },
+        x: y,
+        z: z,
+      },
     },
     tilt: {
       name: "tilt (degrees)",
@@ -2099,6 +2601,9 @@
     },
     u0: {
       name: "u start",
+    },
+    unit_diagonal: {
+      name: "unit diagonal",
     },
     v: {
       name: "v",
@@ -2296,6 +2801,16 @@
         evaluate: ball_tool,
       },
       square_tool,
+      {
+        evaluate: square_tool,
+      },
+      square_diameter,
+      cutting_length,
+      op1_chamfers,
+      op2_chamfers,
+      cube_chamfers,
+      chamfer_ring,
+      contour_chamfer,
     ],
   },
 }
