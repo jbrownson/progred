@@ -123,6 +123,16 @@ fn cam_render_profile() {
         preview
     };
     let cancel = incremental::Cancellation::default();
+    if std::env::var("CAM_SCENE_TILES").is_ok() {
+        let objects = paths
+            .iter()
+            .chain(tool.iter())
+            .chain(std::iter::once(&stock))
+            .cloned()
+            .collect();
+        implicit::raster::diagnostics::compare_scene_tiles(&preview(objects));
+        return;
+    }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     if std::env::var("CAM_JIT").is_ok() {
         implicit::raster::diagnostics::compare_jit(&preview(vec![stock]));

@@ -21,6 +21,12 @@ Local source changes, each including regression tests:
   an optional serialized completed/total root-tile callback for voxel renders,
   excluding unfinished cancelled tiles. This applies after the cancellation
   patch; it does not change sampling or geometry.
+- [Scene tiling patch](../docs/experiments/fidget-raster-scene.patch): render all
+  objects within each image tile before counting its pixels as complete. It
+  reuses the ordinary voxel worker and shared tile scheduler, keeps expressions
+  separate, and preserves depth, normals, and first-object depth ties. Progress
+  has a fixed image-pixel total, without timing estimates or object weights.
+  This applies after the progress patch.
 
 These patch files apply to upstream in the order listed, with no manifest adaptation, and are
 intended for upstream review. Nothing has been submitted or pushed upstream.

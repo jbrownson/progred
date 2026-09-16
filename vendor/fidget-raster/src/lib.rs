@@ -107,31 +107,15 @@ where
     W::Config: Send + Sync,
     C: EvalConfig + Send + Sync,
 {
-    use rayon::prelude::*;
-
     let is_cancelled = || eval_config.is_cancelled();
     if is_cancelled() {
         return None;
     }
 
-    let mut tiles = vec![];
-    let t = tile_sizes[0];
     let width = render_config.width() as usize;
     let height = render_config.height() as usize;
-    for i in 0..width.div_ceil(t) {
-        for j in 0..height.div_ceil(t) {
-            tiles.push(Tile::new(Point2::new(
-                i * tile_sizes[0],
-                j * tile_sizes[0],
-            )));
-        }
-    }
-
-    let progress = eval_config.progress();
-    let total = tiles.len();
-    if let Some(progress) = progress {
-        progress(0, total);
-    }
+    let tiles = tiles(width, height, tile_sizes[0]);
+    let progress = TileProgress::new(tiles.len(), eval_config.progress());
     let mut rh = RenderHandle::new(shape);
 
     let _ = rh.i_tape(&mut vec![]); // populate i_tape before cloning
@@ -139,38 +123,79 @@ where
         return None;
     }
     let ts = tile_sizes;
-    // Serialize callbacks as well as the counter: parallel tile completion must
-    // not deliver an older count after a newer one. No per-pixel synchronization.
-    let completed = std::sync::Mutex::new(0);
-    let report = || {
-        if let Some(progress) = progress {
-            let mut completed = completed.lock().unwrap();
-            *completed += 1;
-            progress(*completed, total);
-        }
-    };
     let init = || {
         let rh = rh.clone();
         let worker = W::new(render_config, ts, vars);
         (worker, rh)
     };
 
-    match eval_config.threads() {
+    run_tiles(tiles, eval_config, init, |(w, rh), tile| {
+        let pixels = w.render_tile(rh, tile, &is_cancelled)?;
+        progress.complete(1);
+        Some(pixels)
+    })
+}
+
+fn tiles(width: usize, height: usize, size: usize) -> Vec<Tile<2>> {
+    (0..width.div_ceil(size))
+        .flat_map(|x| {
+            (0..height.div_ceil(size))
+                .map(move |y| Tile::new(Point2::new(x * size, y * size)))
+        })
+        .collect()
+}
+
+// Serialize callbacks as well as the counter: parallel completion must not
+// deliver an older count after a newer one. Units are chosen by the caller.
+struct TileProgress<'a> {
+    completed: std::sync::Mutex<usize>,
+    total: usize,
+    report: Option<&'a (dyn Fn(usize, usize) + Sync)>,
+}
+
+impl<'a> TileProgress<'a> {
+    fn new(
+        total: usize,
+        report: Option<&'a (dyn Fn(usize, usize) + Sync)>,
+    ) -> Self {
+        if let Some(report) = report {
+            report(0, total);
+        }
+        Self {
+            completed: std::sync::Mutex::new(0),
+            total,
+            report,
+        }
+    }
+
+    fn complete(&self, units: usize) {
+        if let Some(report) = self.report {
+            let mut completed = self.completed.lock().unwrap();
+            *completed += units;
+            report(*completed, self.total);
+        }
+    }
+}
+
+fn run_tiles<S, O: Send, C: EvalConfig + Sync>(
+    tiles: Vec<Tile<2>>,
+    config: &C,
+    init: impl Fn() -> S + Send + Sync,
+    render: impl Fn(&mut S, Tile<2>) -> Option<O> + Send + Sync,
+) -> Option<Vec<(Tile<2>, O)>> {
+    let run = |state: &mut S, tile| {
+        if config.is_cancelled() {
+            Err(())
+        } else {
+            render(state, tile).map(|out| (tile, out)).ok_or(())
+        }
+    };
+    match config.threads() {
         None => {
-            let mut worker = W::new(render_config, tile_sizes, vars);
+            let mut state = init();
             tiles
                 .into_iter()
-                .map(|tile| {
-                    if eval_config.is_cancelled() {
-                        Err(())
-                    } else {
-                        let pixels = worker
-                            .render_tile(&mut rh, tile, &is_cancelled)
-                            .ok_or(())?;
-                        report();
-                        Ok((tile, pixels))
-                    }
-                })
+                .map(|tile| run(&mut state, tile))
                 .collect::<Result<Vec<_>, ()>>()
                 .ok()
         }
@@ -178,16 +203,7 @@ where
         Some(p) => p.run(|| {
             tiles
                 .into_par_iter()
-                .map_init(init, |(w, rh), tile| {
-                    if eval_config.is_cancelled() {
-                        Err(())
-                    } else {
-                        let pixels =
-                            w.render_tile(rh, tile, &is_cancelled).ok_or(())?;
-                        report();
-                        Ok((tile, pixels))
-                    }
-                })
+                .map_init(init, run)
                 .collect::<Result<Vec<_>, ()>>()
                 .ok()
         }),

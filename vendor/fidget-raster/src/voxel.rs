@@ -16,6 +16,9 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 /// Image containing depth and normal at each pixel
 pub type Image = GenericImage<GeometryPixel, RenderSize>;
 
+mod scene;
+pub use scene::{ScenePixel, render_scene};
+
 /// Size type for 3D rendering
 pub type RenderSize = fidget_core::render::VoxelSize;
 
@@ -52,9 +55,10 @@ pub struct EvalConfig<'a> {
     /// Token to cancel rendering
     pub cancel: CancelToken,
 
-    /// Optional completed/total root-tile callback. Calls are serialized, start
-    /// at zero, and count only completed tiles. This measures raster work units,
-    /// not time, and excludes compilation and final image assembly.
+    /// Optional completed/total callback. Single-shape renders count root tiles;
+    /// [`render_scene`] counts pixels whose complete scene tile is finished.
+    /// Calls are serialized and start at zero. Neither count estimates time;
+    /// compilation and final image assembly are outside the count.
     pub progress: Option<&'a (dyn Fn(usize, usize) + Sync)>,
 }
 
@@ -562,15 +566,10 @@ pub fn render<F: Function + RenderHints>(
                     let o = y * width + x;
                     if out[index].depth >= image[o].depth {
                         // Clamp voxels to the image depth
-                        let d = render_config.image_size.depth() - 1;
-                        if out[index].depth >= d {
-                            image[o] = GeometryPixel {
-                                depth: d + 1,
-                                normal: [0.0, 0.0, 1.0],
-                            };
-                        } else {
-                            image[o] = out[index];
-                        }
+                        image[o] = clamp_depth(
+                            out[index],
+                            render_config.image_size.depth(),
+                        );
                     }
                 }
                 index += 1;
@@ -578,6 +577,17 @@ pub fn render<F: Function + RenderHints>(
         }
     }
     Some(image)
+}
+
+fn clamp_depth(pixel: GeometryPixel, depth: u32) -> GeometryPixel {
+    if pixel.depth >= depth - 1 {
+        GeometryPixel {
+            depth,
+            normal: [0.0, 0.0, 1.0],
+        }
+    } else {
+        pixel
+    }
 }
 
 #[cfg(test)]

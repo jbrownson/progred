@@ -439,9 +439,13 @@ on the existing background executor. It does not attempt GPU evaluation first.
 On Apple Silicon macOS it uses Fidget's JIT with its recommended 64/16/8-pixel
 tiles; other platforms retain the VM with 32/16/8-pixel tiles. Meshing stays on
 the VM. The [local Fidget patches](../vendor/README.md) fix large AArch64 JIT
-tapes, check cancellation within raster subtiles, and report completed root tiles.
-Progress counts tiles rather than time remaining; compilation and image assembly
-are outside that count. Cancellation still cannot
+tapes and check cancellation within raster subtiles. Software scenes render all
+objects within each image tile, retaining separate expressions and preserving
+first-object wins on equal depths. Progress counts pixels in completed scene
+tiles, excluding padding at image edges, rather than giving every object equal
+weight. Its fixed total is the image's pixel count, not an estimate of time
+remaining. Compilation and final image assembly/shading are outside that count.
+Cancellation still cannot
 interrupt a single tape compilation/evaluation already in progress.
 Lighting corrects sample-space gradients for unequal axis spacing, so
 depth refinement does not change the light direction or relative axis weighting.

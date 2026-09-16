@@ -351,3 +351,54 @@ Omit `CAM_JIT_DEFAULT_TILES` to isolate backend differences with identical
 32/16/8 tiles. The test asserts equal images and meshes and measures cancellation,
 but contains no code-generation instrumentation. The normal application has no
 profiling switches or console timing output.
+
+## Follow-up: progress over finished scene tiles
+
+The former implicit progress bar summed equally weighted root tiles for each
+object. At half playback there are 349 objects, with the expensive stock last;
+finishing hundreds of small paths made the bar appear nearly finished before
+most stock work had run. Deeper subdivision counts would not fix that weighting.
+
+Software scenes now render every object's contribution inside each image tile,
+then count that tile's actual image pixels as finished. The denominator is
+`width * height`, excluding tile padding, independent of the number of objects.
+Expressions remain separate, with the same voxel evaluator, depth clamp, and
+first-object-wins tie rule. Root interval tapes are prepared once per pass;
+workers retain object-specific render handles while reusing evaluator scratch.
+Single-object raster entry points retain their existing tile-count callback.
+
+Compared both traversals on the same compiled scenes, alternating their order
+over three pairs per quality setting. Resolution was 333 × 750 with the default
+camera and JIT tiles, and the last pass had 4× depth. Every comparison asserted
+byte-identical final RGBA, including color/depth composition. The reference
+object-major traversal exists only in the diagnostic test.
+
+| Scene / pass | Object-major median | Tile-major median |
+| --- | ---: | ---: |
+| Half playback, native depth | 1.604 s | 1.208 s |
+| Half playback, final depth | 2.861 s | 2.112 s |
+| Full playback, native depth | 2.183 s | 2.151 s |
+| Full playback, final depth | 4.090 s | 4.044 s |
+
+Half-playback times improved about 25–26%; full-playback differences are small
+enough to treat as noise. These are headless measurements, not end-to-end app
+latency. The scene traversal avoids a separate parallel dispatch and full-image
+merge for each object; no claim is made about which cost explains the speedup.
+
+In the middle half-playback final-pass pair, the old bar reached 99% at 640 ms
+but finished at 2.90 s. Tile-major reached 25/50/75% at 236/478/1304 ms, and 99%
+near completion at 2.095 s; image assembly/shading finished about 2.5 ms later.
+Callbacks at the app boundary are throttled to 50 ms, so nearby milestones may
+arrive together. Progress is exact finished area, not elapsed-time prediction:
+uneven tile cost can still leave a slow tail. Compilation remains at zero, and
+the finished pixels are not yet published as partial images within a pass.
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  --config 'env.CAM_SCENE_TILES="1"' --config 'env.CAM_PROGRESS="0.5"' \
+  --config 'env.CAM_HEIGHT="750"' cam_render_profile -- --ignored --nocapture
+```
+
+Use `CAM_PROGRESS="1"` for the fully cut stock. Regression tests also exercise
+serial/parallel rendering, equal-depth ties, clipping, independently bound
+variables, empty scenes, cancellation, and exact edge-tile pixel counts.

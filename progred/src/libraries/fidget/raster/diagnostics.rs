@@ -4,6 +4,9 @@ use crate::libraries::f64;
 use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
+mod scene;
+pub(crate) use scene::compare_scene_tiles;
+
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod jit;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

@@ -66,63 +66,54 @@ impl SoftwareScene {
             world_to_model: view.world_to_model,
             ..VoxelRenderConfig::from_size(view.size)
         };
-        let mut image = vec![
-            (GeometryPixel::default(), [255; 3]);
-            view.size.width() as usize * view.size.height() as usize
-        ];
         // UI updates are bounded, not one whole editor frame per tile. Always
         // report stage boundaries; no timer or polling loop is needed.
         #[cfg(not(target_arch = "wasm32"))]
         let last_report = std::sync::Mutex::new(std::time::Instant::now());
-        for (object, (shape, color)) in self.objects.iter().enumerate() {
-            cancellation.check().ok()?;
-            let report = |completed, total| {
-                if let Some(progress) = progress {
-                    let completed = object * total + completed;
-                    let total = self.objects.len() * total;
-                    let boundary = completed == 0 || completed == total;
-                    #[cfg(not(target_arch = "wasm32"))]
-                    let report = {
-                        let mut last = last_report.lock().unwrap();
-                        let now = std::time::Instant::now();
-                        let report = boundary
-                            || now.duration_since(*last) >= std::time::Duration::from_millis(50);
-                        if report {
-                            *last = now;
-                        }
-                        report
-                    };
-                    // Browser work currently executes inline, so there is no UI
-                    // to update mid-pass (nor a native Instant clock).
-                    #[cfg(target_arch = "wasm32")]
-                    let report = boundary;
+        let report = |completed, total| {
+            if let Some(progress) = progress {
+                let boundary = completed == 0 || completed == total;
+                #[cfg(not(target_arch = "wasm32"))]
+                let report = {
+                    let mut last = last_report.lock().unwrap();
+                    let now = std::time::Instant::now();
+                    let report = boundary
+                        || now.duration_since(*last) >= std::time::Duration::from_millis(50);
                     if report {
-                        progress(Progress { completed, total });
+                        *last = now;
                     }
-                }
-            };
-            let eval = fidget_engine::raster::voxel::EvalConfig {
-                cancel: cancel.clone(),
-                tile_sizes: software_tiles(),
-                progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
-                ..Default::default()
-            };
-            let geometry = fidget_engine::raster::voxel::render(
-                shape.clone().try_into().ok()?,
-                &config,
-                &eval,
-            )?;
-            for (output, pixel) in image.iter_mut().zip(geometry.iter()) {
-                if pixel.depth > output.0.depth {
-                    *output = (*pixel, *color);
+                    report
+                };
+                // Browser work currently executes inline, so there is no UI
+                // to update mid-pass (nor a native Instant clock).
+                #[cfg(target_arch = "wasm32")]
+                let report = boundary;
+                if report {
+                    progress(Progress { completed, total });
                 }
             }
-        }
+        };
+        let eval = fidget_engine::raster::voxel::EvalConfig {
+            cancel,
+            tile_sizes: software_tiles(),
+            progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
+            ..Default::default()
+        };
+        let objects = self
+            .objects
+            .iter()
+            .map(|(shape, _)| shape.clone().try_into())
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let image = fidget_engine::raster::voxel::render_scene(&objects, &config, &eval)?;
         let shade = shading(&config);
         Some(
             image
                 .iter()
-                .flat_map(|(pixel, color)| shade(*pixel, *color))
+                .flat_map(|pixel| {
+                    let color = pixel.object.map_or([255; 3], |i| self.objects[i].1);
+                    shade(pixel.geometry, color)
+                })
                 .collect(),
         )
     }
@@ -274,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn progress_covers_all_scene_objects_and_resets_for_each_refinement() {
+    fn progress_counts_finished_scene_pixels_and_resets_for_each_refinement() {
         use std::sync::Mutex;
         let mut request = request(41.0, 27.0);
         request
@@ -289,6 +280,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let reports = reports.into_inner().unwrap();
+        let views = request.refinements(12, 4).unwrap();
         let mut stages = 0;
         let mut previous = None;
         for p in reports {
@@ -300,10 +292,14 @@ mod tests {
             } else {
                 assert!(p.fraction() >= previous.unwrap());
             }
-            assert_eq!(p.total % 2, 0, "both objects contribute to the pass total");
+            let view = &views[stages - 1];
+            assert_eq!(
+                p.total,
+                view.size.width() as usize * view.size.height() as usize
+            );
             previous = Some(p.fraction());
         }
-        assert_eq!(stages, request.refinements(12, 4).unwrap().len());
+        assert_eq!(stages, views.len());
         assert_eq!(previous, Some(1.0));
         let expected = request
             .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
