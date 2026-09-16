@@ -121,6 +121,11 @@ pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, Inv
 impl Sink for Tubes {
     type Error = InvalidPath;
 
+    fn end_path(&mut self) {
+        self.paths.extend(self.path.take());
+        self.previous = None;
+    }
+
     fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
         let point = coordinate(point)?;
         self.paths.extend(self.path.take());

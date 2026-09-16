@@ -21,6 +21,7 @@ fn isometric([x, y, z]: Point3) -> Point {
 struct Lines2D {
     path: BezPath,
     bounds: Option<Rect>,
+    started: bool,
 }
 
 impl Lines2D {
@@ -41,13 +42,17 @@ impl Lines2D {
 
 impl Sink for Lines2D {
     type Error = InvalidPath;
+    fn end_path(&mut self) {
+        self.started = false;
+    }
     fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
         let point = self.point(point)?;
         self.path.move_to(point);
+        self.started = true;
         Ok(())
     }
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        if self.bounds.is_none() {
+        if !self.started {
             return Err(InvalidPath::MissingStart);
         }
         let point = self.point(point)?;
@@ -67,7 +72,9 @@ fn projected() -> MapPoints<Lines2D, impl FnMut(Point3) -> Result<Point3, Invali
 }
 
 fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
-    let Lines2D { mut path, bounds } = lines;
+    let Lines2D {
+        mut path, bounds, ..
+    } = lines;
     if let Some(bounds) = bounds {
         if !bounds.width().is_finite() || !bounds.height().is_finite() {
             return None;

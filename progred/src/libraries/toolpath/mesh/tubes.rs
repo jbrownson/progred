@@ -149,6 +149,10 @@ impl Tubes {
 impl Sink for Tubes {
     type Error = InvalidPath;
 
+    fn end_path(&mut self) {
+        self.previous = None;
+    }
+
     fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
         self.previous = Some(Vector3::from(coordinate(point)?));
         Ok(())

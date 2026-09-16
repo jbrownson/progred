@@ -39,12 +39,6 @@ fn settings_at(
         (PROGRESS, f64::value(progress)),
         (PROFILE_TOLERANCE, f64::value(0.001)),
         (
-            crate::libraries::toolpath::cutter::vocabulary::TOOL,
-            crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
-                .unwrap()
-                .value(),
-        ),
-        (
             STOCK_MIN,
             Value::record([X, Y, Z].map(|k| (k, f64::value(-0.5)))),
         ),
@@ -138,6 +132,7 @@ impl Fixture {
                 )],
             ),
         );
+        let program = crate::libraries::toolpath::tests::tool_program(program);
         let graph = Computation::new(&computations, program, 10000, settings(0.0, 0.25), 3);
         Self {
             computations,

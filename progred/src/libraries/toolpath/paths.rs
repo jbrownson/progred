@@ -1,5 +1,7 @@
 //! Streaming path geometry. Starting a path never implies a connecting move.
 
+use super::cutter::Tool;
+
 pub type Point3 = [f64; 3];
 
 /// Unit vector from the tool tip toward the spindle. A path has one fixed
@@ -49,6 +51,29 @@ pub trait Sink {
 
     fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error>;
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error>;
+
+    /// End the current path, without emitting a connecting move.
+    fn end_path(&mut self);
+
+    /// Balanced scope notifications. Geometry-only consumers ignore the tool,
+    /// but must still respect the path boundary. Use `with_tool` for native code.
+    fn enter_tool(&mut self, _tool: &Tool) {
+        self.end_path();
+    }
+    fn leave_tool(&mut self) {
+        self.end_path();
+    }
+}
+
+pub fn with_tool<S: Sink + ?Sized, T>(
+    sink: &mut S,
+    tool: &Tool,
+    body: impl FnOnce(&mut S) -> T,
+) -> T {
+    sink.enter_tool(tool);
+    let result = body(sink);
+    sink.leave_tool();
+    result
 }
 
 pub struct MapPoints<S, F> {
@@ -66,6 +91,16 @@ impl<S: Sink, F: FnMut(Point3) -> Result<Point3, S::Error>> Sink for MapPoints<S
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
         self.sink.line_to((self.map)(point)?)
     }
+
+    fn end_path(&mut self) {
+        self.sink.end_path();
+    }
+    fn enter_tool(&mut self, tool: &Tool) {
+        self.sink.enter_tool(tool);
+    }
+    fn leave_tool(&mut self) {
+        self.sink.leave_tool();
+    }
 }
 
 impl<S: Sink + ?Sized> Sink for &mut S {
@@ -77,6 +112,16 @@ impl<S: Sink + ?Sized> Sink for &mut S {
 
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
         (**self).line_to(point)
+    }
+
+    fn end_path(&mut self) {
+        (**self).end_path();
+    }
+    fn enter_tool(&mut self, tool: &Tool) {
+        (**self).enter_tool(tool);
+    }
+    fn leave_tool(&mut self) {
+        (**self).leave_tool();
     }
 }
 
@@ -91,26 +136,61 @@ pub enum InvalidPath {
     NonFinitePoint,
     MissingStart,
     CoordinateRange,
+    MissingTool,
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Debug, PartialEq)]
+pub enum Entry {
+    Move(Command),
+    WithTool(Tool, Vec<Entry>),
+}
+
+#[derive(Default, Debug, PartialEq)]
 pub struct Recording {
-    pub commands: Vec<Command>,
+    pub entries: Vec<Entry>,
+    scopes: Vec<(Tool, Vec<Entry>)>,
+    started: bool,
 }
 
 impl Recording {
+    /// Visit moves with their enclosing tool, without allocating a flat copy.
+    pub fn moves(&self) -> impl Iterator<Item = (Command, Option<&Tool>)> + '_ {
+        let mut stack = vec![(self.entries.iter(), None)];
+        std::iter::from_fn(move || {
+            loop {
+                let (entries, tool) = stack.last_mut()?;
+                match entries.next() {
+                    Some(Entry::Move(command)) => return Some((*command, *tool)),
+                    Some(Entry::WithTool(tool, children)) => {
+                        stack.push((children.iter(), Some(tool)))
+                    }
+                    None => {
+                        stack.pop();
+                    }
+                }
+            }
+        })
+    }
+
     pub fn segments(&self) -> impl Iterator<Item = (Point3, Point3, Axis)> + '_ {
+        self.tool_segments().map(|(a, b, axis, _)| (a, b, axis))
+    }
+
+    pub fn tool_segments(
+        &self,
+    ) -> impl Iterator<Item = (Point3, Point3, Axis, Option<&Tool>)> + '_ {
         let mut previous = None;
         let mut axis = Axis::Z;
-        self.commands
-            .iter()
-            .filter_map(move |command| match *command {
+        self.moves()
+            .filter_map(move |(command, tool)| match command {
                 Command::StartAt(point, next_axis) => {
                     axis = next_axis;
                     previous = Some(point);
                     None
                 }
-                Command::LineTo(point) => previous.replace(point).map(|start| (start, point, axis)),
+                Command::LineTo(point) => previous
+                    .replace(point)
+                    .map(|start| (start, point, axis, tool)),
             })
     }
 
@@ -127,42 +207,48 @@ impl Recording {
     pub fn playback<E: From<InvalidPath>>(
         &self,
         progress: f64,
-        mut emit: impl FnMut(Point3, Point3, Axis, bool) -> Result<(), E>,
-    ) -> Result<Option<Pose>, E> {
+        mut emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
+    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
         if !progress.is_finite() {
             return Err(InvalidPath::NonFinitePoint.into());
         }
         let mut remaining = progress.clamp(0.0, 1.0) * self.length()?;
         let mut position = None;
-        for (a, b, axis) in self.segments() {
-            position.get_or_insert(Pose { tip: a, axis });
+        for (a, b, axis, tool) in self.tool_segments() {
+            position.get_or_insert((Pose { tip: a, axis }, tool));
             let length = distance(a, b);
             if progress >= 1.0 || (remaining >= length && remaining > 0.0) {
-                emit(a, b, axis, true)?;
+                emit(a, b, axis, tool, true)?;
                 remaining = (remaining - length).max(0.0);
-                position = Some(Pose { tip: b, axis });
+                position = Some((Pose { tip: b, axis }, tool));
             } else if remaining > 0.0 {
                 let t = remaining / length;
                 let point = std::array::from_fn(|i| a[i] + t * (b[i] - a[i]));
-                emit(a, point, axis, true)?;
-                emit(point, b, axis, false)?;
-                position = Some(Pose { tip: point, axis });
+                emit(a, point, axis, tool, true)?;
+                emit(point, b, axis, tool, false)?;
+                position = Some((Pose { tip: point, axis }, tool));
                 remaining = 0.0;
             } else {
-                emit(a, b, axis, false)?;
+                emit(a, b, axis, tool, false)?;
             }
         }
         Ok(position)
     }
 
     pub fn replay<S: Sink + ?Sized>(&self, sink: &mut S) -> Result<(), S::Error> {
-        for command in &self.commands {
-            match *command {
-                Command::StartAt(point, axis) => sink.start_at(point, axis)?,
-                Command::LineTo(point) => sink.line_to(point)?,
+        fn replay<S: Sink + ?Sized>(entries: &[Entry], sink: &mut S) -> Result<(), S::Error> {
+            for entry in entries {
+                match entry {
+                    Entry::Move(Command::StartAt(point, axis)) => sink.start_at(*point, *axis)?,
+                    Entry::Move(Command::LineTo(point)) => sink.line_to(*point)?,
+                    Entry::WithTool(tool, children) => {
+                        with_tool(sink, tool, |sink| replay(children, sink))?
+                    }
+                }
             }
+            Ok(())
         }
-        Ok(())
+        replay(&self.entries, sink)
     }
 }
 
@@ -185,7 +271,7 @@ mod playback_tests {
         for (progress, expected) in [(0.0, 0.0), (0.25, 1.0), (0.5, 11.0), (1.0, 13.0)] {
             let mut completed = 0.0;
             let position = path
-                .playback::<InvalidPath>(progress, |a, b, _, done| {
+                .playback::<InvalidPath>(progress, |a, b, _, _, done| {
                     assert!(distance(a, b) <= 3.0);
                     if done {
                         completed += distance(a, b);
@@ -195,7 +281,7 @@ mod playback_tests {
                 .unwrap()
                 .unwrap();
             assert_eq!(
-                position,
+                position.0,
                 Pose {
                     tip: [expected, 0.0, 0.0],
                     axis: Axis::Z
@@ -222,14 +308,14 @@ mod playback_tests {
         path.line_to([1.0; 3]).unwrap();
         path.line_to([2.0; 3]).unwrap();
         let mut calls = 0;
-        let result = path.playback(1.0, |_, _, _, _| {
+        let result = path.playback(1.0, |_, _, _, _, _| {
             calls += 1;
             Err(Error::Consumer)
         });
         assert_eq!(result, Err(Error::Consumer));
         assert_eq!(calls, 1);
         assert_eq!(
-            path.playback::<Error>(f64::NAN, |_, _, _, _| panic!(
+            path.playback::<Error>(f64::NAN, |_, _, _, _, _| panic!(
                 "invalid progress must not emit"
             )),
             Err(Error::Path(InvalidPath::NonFinitePoint)),
@@ -240,19 +326,22 @@ mod playback_tests {
     fn empty_zero_length_and_overflow_are_explicit() {
         let mut path = Recording::default();
         assert_eq!(
-            path.playback::<InvalidPath>(0.5, |_, _, _, _| Ok(()))
+            path.playback::<InvalidPath>(0.5, |_, _, _, _, _| Ok(()))
                 .unwrap(),
             None
         );
         path.start_at([2.0; 3], Axis::Z).unwrap();
         path.line_to([2.0; 3]).unwrap();
         assert_eq!(
-            path.playback::<InvalidPath>(0.5, |_, _, _, _| Ok(()))
+            path.playback::<InvalidPath>(0.5, |_, _, _, _, _| Ok(()))
                 .unwrap(),
-            Some(Pose {
-                tip: [2.0; 3],
-                axis: Axis::Z
-            })
+            Some((
+                Pose {
+                    tip: [2.0; 3],
+                    axis: Axis::Z
+                },
+                None
+            ))
         );
         path.start_at([-f64::MAX; 3], Axis::Z).unwrap();
         path.line_to([f64::MAX; 3]).unwrap();
@@ -267,18 +356,37 @@ impl Sink for Recording {
         if !point.into_iter().all(f64::is_finite) {
             return Err(InvalidPath::NonFinitePoint);
         }
-        self.commands.push(Command::StartAt(point, axis));
+        self.entries
+            .push(Entry::Move(Command::StartAt(point, axis)));
+        self.started = true;
         Ok(())
     }
 
     fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        if self.commands.is_empty() {
+        if !self.started {
             return Err(InvalidPath::MissingStart);
         }
         if !point.into_iter().all(f64::is_finite) {
             return Err(InvalidPath::NonFinitePoint);
         }
-        self.commands.push(Command::LineTo(point));
+        self.entries.push(Entry::Move(Command::LineTo(point)));
         Ok(())
+    }
+
+    fn end_path(&mut self) {
+        self.started = false;
+    }
+
+    fn enter_tool(&mut self, tool: &Tool) {
+        self.end_path();
+        self.scopes
+            .push((tool.clone(), std::mem::take(&mut self.entries)));
+    }
+
+    fn leave_tool(&mut self) {
+        self.end_path();
+        let (tool, parent) = self.scopes.pop().expect("balanced tool scope");
+        let children = std::mem::replace(&mut self.entries, parent);
+        self.entries.push(Entry::WithTool(tool, children));
     }
 }

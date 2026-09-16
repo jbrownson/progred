@@ -16,8 +16,8 @@ sink, so translation, reflection, surface mapping, and further adapters compose
 without recording intermediate paths. It maps positions only, preserving axes;
 an arbitrary surface mapping does not define a cutter orientation.
 
-`Recording` is an optional initial representation: a native vector of
-start/line commands. Playback uses it for total distance and seeking; tests also
+`Recording` is an optional initial representation: native start/line commands
+and nested tool groups. Playback uses it for total distance and seeking; tests also
 replay it into other sinks. The line preview instead consumes
 emitted points directly into one projected vector path and its bounds; the 3D
 voxel preview consumes them into native Fidget fields. The mesh preview retains
@@ -27,7 +27,7 @@ generators can still run directly against any sink without recording.
 
 Grap's `start at` accepts an optional `tool axis` x/y/z record, defaulting
 to +Z. Explicit zero or nonfinite axes fail without emitting a command.
-Grap uses ordinary calls to scoped `start at`, `line to`, and
+Grap uses ordinary calls to scoped `start at`, `line to`, `with tool`, and
 `map points` functions. `do` supplies sequencing; lambdas supply reusable
 generators. Emitters outside an installed output scope return `toolpath output
 required`. `map points` takes a callable under `mapping` and an unevaluated
@@ -36,6 +36,21 @@ the mapping returns an ordinary record with those fields (the `point` function
 constructs one). Nested mappings run inside-out and restore the surrounding
 mapping on exit, including on failure. Mapping functions are intended to
 compute coordinates, not emit more paths.
+
+`with tool` takes a `tool` expression and an unevaluated `expression` body.
+It evaluates and validates the tool once, then runs the body in that tool's
+scope. Nested scopes override locally; leaving restores the enclosing tool,
+including after a returned absent or evaluator halt. The body's result is
+returned unchanged. Entering and leaving a scope end the current path: the next
+line needs a new `start at`. There is no inferred rapid, linking cut, or physical
+tool-change motion. Unscoped paths remain drawable, but stock simulation rejects
+segments without a tool, including upcoming ones.
+
+Native code uses `paths::with_tool(sink, tool, body)`. The sink's balanced
+enter/leave notifications let streaming consumers interpret scopes without
+recording; point-only consumers just break the path. The recording interpreter
+retains nested groups and replay preserves them. These notifications are not
+separate Grap commands or a persistent global current-tool setting.
 
 The scoped output owns its mapping chain and sink. No mutable state is held by
 the library between evaluations. Each emitted sample consumes evaluator fuel,
@@ -109,6 +124,9 @@ retaining Op 1's removed stock into Op 2. It is a preview composition, not a
 single machine program: eventual export should target Op 1 and Op 2 separately.
 Both currently use part coordinates; there is no simulated stock flip,
 work-offset definition, or connecting move between setups.
+Each operation wraps its indent passes in `with tool: ball tool`; playback no
+longer supplies a global cutter. Chamfer passes can be added as sibling
+square-tool groups within each operation.
 
 The editable `tilt (degrees)` defaults to 45 and accepts any finite angle;
 there is no machining-policy range guard. Zero points along the face normal,
@@ -244,7 +262,7 @@ geometry through the general dependency graph.
 ## Playback
 
 All three volume previews accept an optional `playback` record with `progress` (f64,
-0–1), a `tool` profile, and `stock minimum` / `stock maximum` (f64
+0–1), `profile tolerance`, and `stock minimum` / `stock maximum` (f64
 `x`, `y`, `z` records). These are ordinary data, not control state. The example
 supplies progress from the reusable [controls](controls.md) library.
 
@@ -255,9 +273,12 @@ The current segment is split exactly at the playback position: only its upcoming
 portion is drawn. Path starts do not contribute
 distance: the cursor jumps between disconnected passes rather than inventing
 linking moves. Progress is not machining time. Empty paths have no tool; zero
-length segments are well-defined. Paths locate the tool tip. One validated
-`cutter::Tool` supplies revolved sections to mesh display, implicit display, and
+length segments are well-defined. Paths locate the tool tip. The recorded group
+supplies its validated `cutter::Tool` to mesh display, implicit display, and
 stock subtraction; non-cutting sections are gray and do not remove material.
+The cursor uses the tool of its current segment. At an exact segment endpoint it
+stays with that segment until progress advances; scope boundaries add no distance.
+Different tool groups subtract from the same stock in program order.
 Tool geometry does not inherit dimensions from the path-line drawing style.
 See [tool profiles](tool-profiles.md) for its line/arc representation, exact
 linear-profile sweeps, and explicit arc approximation tolerance. The required

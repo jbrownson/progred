@@ -39,10 +39,10 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
             )
         });
         if vector[0] == 3.0 {
-            assert_eq!(recording.commands, [Command::StartAt([0.0; 3], axis)]);
+            assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], axis)]);
         } else {
             assert!(absent::is_absent(&result.result));
-            assert!(recording.commands.is_empty());
+            assert!(recording.commands().is_empty());
         }
     }
 }
@@ -62,10 +62,10 @@ fn playback_changes_axis_at_path_breaks_without_an_interpolated_link() {
         (0.75, [0.0, 0.5, 0.0], x),
     ] {
         let pose = path
-            .playback::<InvalidPath>(progress, |_, _, _, _| Ok(()))
+            .playback::<InvalidPath>(progress, |_, _, _, _, _| Ok(()))
             .unwrap()
             .unwrap();
-        assert_eq!(pose, Pose { tip: center, axis });
+        assert_eq!(pose.0, Pose { tip: center, axis });
     }
     let mut mapped = Recording::default();
     path.replay(&mut MapPoints {
@@ -144,11 +144,11 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         assert!(result.completed);
         if angle.is_finite() {
             assert!(!absent::is_absent(&result.result));
-            let Command::StartAt(_, axis) = path.commands[0] else {
+            let Command::StartAt(_, axis) = path.commands()[0] else {
                 panic!("first path")
             };
             assert!((axis.vector()[2] - angle.to_radians().cos()).abs() < 1e-12);
-            for command in &path.commands {
+            for command in &path.commands() {
                 let point = match command {
                     Command::StartAt(point, axis) => {
                         assert!(axis.vector().into_iter().all(f64::is_finite));
@@ -164,7 +164,7 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         } else {
             assert!(absent::is_absent(&result.result));
             assert!(
-                path.commands.is_empty(),
+                path.commands().is_empty(),
                 "invalid tilt must not emit cutting moves"
             );
         }
@@ -196,7 +196,7 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         assert!(result.completed && !absent::is_absent(&result.result));
         let mut axis = Axis::Z;
         paths.push(
-            path.commands
+            path.commands()
                 .iter()
                 .map(|command| {
                     let point = match command {
@@ -227,9 +227,9 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
 
 fn assert_face_copies(path: &Recording, faces: &[usize]) {
     let (top, _) = example_ball_path();
-    assert_eq!(path.commands.len(), top.commands.len() * faces.len());
+    assert_eq!(path.commands().len(), top.commands().len() * faces.len());
     assert_eq!(
-        path.commands
+        path.commands()
             .iter()
             .filter(|c| matches!(c, Command::StartAt(..)))
             .count(),
@@ -237,7 +237,7 @@ fn assert_face_copies(path: &Recording, faces: &[usize]) {
     );
     for (&face, commands) in faces
         .iter()
-        .zip(path.commands.chunks_exact(top.commands.len()))
+        .zip(path.commands().chunks_exact(top.commands().len()))
     {
         // Ordering may reverse for access and climb, but the sampled geometry
         // must remain the same. Quantize only for this floating-point comparison.
@@ -257,7 +257,7 @@ fn assert_face_copies(path: &Recording, faces: &[usize]) {
             points.sort();
             points
         };
-        assert_eq!(points(commands, 0), points(&top.commands, face));
+        assert_eq!(points(commands, 0), points(&top.commands(), face));
         assert_pull_and_climb(commands, face);
     }
 }
@@ -344,15 +344,15 @@ fn op2_is_an_independent_bottom_program_and_preview_combines_without_a_link() {
 
     let preview = example_program("preview_operations");
     assert_eq!(
-        preview.commands,
-        op1.commands
+        preview.commands(),
+        op1.commands()
             .iter()
-            .chain(&op2.commands)
+            .chain(&op2.commands())
             .copied()
             .collect::<Vec<_>>()
     );
     assert!(matches!(
-        preview.commands[op1.commands.len()],
+        preview.commands()[op1.commands().len()],
         Command::StartAt(..)
     ));
     assert!(

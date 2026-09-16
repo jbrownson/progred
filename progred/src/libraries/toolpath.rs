@@ -30,6 +30,7 @@ pub mod vocabulary {
     pub const START_AT: CellId = CellId::from_u128(0x0b3ea6a88bdb8a105704e4af8b7950a5);
     pub const LINE_TO: CellId = CellId::from_u128(0xe88873219d230571430941334a51600f);
     pub const MAP_POINTS: CellId = CellId::from_u128(0x923fb213d0e56383539b43b1fc807458);
+    pub const WITH_TOOL: CellId = CellId::from_u128(0xd7c2368e471579d060460d3546158974);
     pub const MAPPER: CellId = CellId::from_u128(0xa33c6e235d5d94885fcb1afff59e94e5);
     pub const POINT: CellId = CellId::from_u128(0x61ca3de7d2601772ebedf8e2b2f5e0c5);
     pub const X: CellId = CellId::from_u128(0xae582d23ec214f7e2896d91c1b6756f6);
@@ -56,7 +57,7 @@ pub mod vocabulary {
 use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 
-const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS];
+const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, WITH_TOOL];
 
 fn point_value(point: Point3) -> Value {
     Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
@@ -177,11 +178,6 @@ impl Emission<'_, '_, '_> {
         }
         Ok(point)
     }
-}
-
-impl Sink for Emission<'_, '_, '_> {
-    type Error = Error;
-
     fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Error> {
         let point = self.point(point)?;
         self.context
@@ -228,6 +224,21 @@ fn operation(
             Rc::make_mut(&mut output.mappers.borrow_mut()).push(mapper);
             let value = context.eval(expression, environment);
             output.mappers.replace(parent);
+            return Ok(value?);
+        }
+        WITH_TOOL => {
+            let tool = argument(context, call, cutter::vocabulary::TOOL)?;
+            let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
+            let value = context.eval(tool, environment)?;
+            if absent::is_absent(&value) {
+                return Ok(value);
+            }
+            let tool = cutter::Tool::read(&value).ok_or_else(invalid)?;
+            // Release the sink borrow before evaluating the body: nested calls
+            // emit into it too. Always leave the scope, including on a halt.
+            context.effect(|| output.sink.borrow_mut().enter_tool(&tool));
+            let value = context.eval(expression, environment);
+            context.effect(|| output.sink.borrow_mut().leave_tool());
             return Ok(value?);
         }
         _ => unreachable!("only toolpath emitters are installed in this scope"),
@@ -309,6 +320,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (TOOL_AXIS, "tool axis"),
         (LINE_TO, "line to"),
         (MAP_POINTS, "map points"),
+        (WITH_TOOL, "with tool"),
         (MAPPER, "mapping"),
         (POINT, "point"),
         (X, "x"),

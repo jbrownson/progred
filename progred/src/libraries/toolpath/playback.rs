@@ -16,7 +16,6 @@ pub(super) trait Draw: Sink<Error = InvalidPath> {
 #[derive(Clone, PartialEq)]
 pub(super) struct Settings {
     progress: f64,
-    tool: Tool,
     profile_tolerance: f64,
     stock_min: Point3,
     stock_max: Point3,
@@ -28,27 +27,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn playback_reads_the_tool_profile_not_independent_dimensions() {
-        let tool = Tool::ball(0.125, 0.22).unwrap();
-        let settings = |tool: Value| {
-            Settings::read(&Value::record([
-                (PROGRESS, f64::value(0.35)),
-                (PROFILE_TOLERANCE, f64::value(0.001)),
-                (super::super::cutter::vocabulary::TOOL, tool),
-                (STOCK_MIN, super::super::point_value([-0.5; 3])),
-                (STOCK_MAX, super::super::point_value([0.5; 3])),
-            ]))
-        };
-        assert_eq!(settings(tool.value()).unwrap().tool, tool);
-        assert!(settings(Value::record([])).is_none());
-    }
-
-    #[test]
     fn accuracy_belongs_to_playback_and_is_required_and_validated() {
-        let tool = Tool::bull(0.125, 0.02, 0.22).unwrap();
         let mut fields = Value::record([
             (PROGRESS, f64::value(0.35)),
-            (super::super::cutter::vocabulary::TOOL, tool.value()),
             (STOCK_MIN, super::super::point_value([-0.5; 3])),
             (STOCK_MAX, super::super::point_value([0.5; 3])),
         ])
@@ -64,8 +45,6 @@ mod tests {
         let fine = Settings::read(&Value::Record(fields.clone())).unwrap();
         fields.insert(PROFILE_TOLERANCE, f64::value(0.01));
         let coarse = Settings::read(&Value::Record(fields)).unwrap();
-        assert_eq!(fine.tool, tool);
-        assert_eq!(fine.tool, coarse.tool);
         assert!(
             fine != coarse,
             "changing accuracy must invalidate computation inputs"
@@ -75,11 +54,14 @@ mod tests {
     #[derive(Default)]
     struct Drawing {
         path: Recording,
-        tool: Option<Point3>,
+        tool: Option<(Tool, Pose)>,
     }
 
     impl Sink for Drawing {
         type Error = InvalidPath;
+        fn end_path(&mut self) {
+            self.path.end_path();
+        }
         fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), InvalidPath> {
             self.path.start_at(point, axis)
         }
@@ -92,8 +74,8 @@ mod tests {
         fn style(&mut self, _: f64, _: [u8; 3]) -> Result<(), InvalidPath> {
             Ok(())
         }
-        fn tool(&mut self, _: &Tool, pose: Pose, _: [u8; 3], _: f64) -> Result<(), InvalidPath> {
-            self.tool = Some(pose.tip);
+        fn tool(&mut self, tool: &Tool, pose: Pose, _: [u8; 3], _: f64) -> Result<(), InvalidPath> {
+            self.tool = Some((tool.clone(), pose));
             Ok(())
         }
     }
@@ -102,12 +84,13 @@ mod tests {
     fn completed_lines_disappear_including_the_completed_part_of_a_segment() {
         let color = [20, 150, 230];
         let mut path = Recording::default();
+        path.enter_tool(&Tool::ball(0.2, 0.5).unwrap());
         path.start_at([0.0; 3], Axis::Z).unwrap();
         path.line_to([2.0, 0.0, 0.0]).unwrap();
+        path.leave_tool();
         for progress in [0.0, 0.25, 1.0] {
             let settings = Settings {
                 progress,
-                tool: Tool::ball(0.2, 0.5).unwrap(),
                 profile_tolerance: 0.001,
                 stock_min: [-3.0; 3],
                 stock_max: [3.0; 3],
@@ -123,7 +106,82 @@ mod tests {
                 expected.line_to([2.0, 0.0, 0.0]).unwrap();
             }
             assert!(drawing.path == expected);
-            assert_eq!(drawing.tool, Some([2.0 * progress, 0.0, 0.0]));
+            assert_eq!(drawing.tool.unwrap().1.tip, [2.0 * progress, 0.0, 0.0]);
+        }
+    }
+
+    fn settings(progress: f64) -> Settings {
+        Settings {
+            progress,
+            profile_tolerance: 0.001,
+            stock_min: [-1.0, -1.0, -0.5],
+            stock_max: [1.0, 1.0, 0.5],
+            stock_color: Some([180; 3]),
+        }
+    }
+
+    #[test]
+    fn playback_switches_tools_and_subtracts_both_from_one_stock() {
+        use fidget_engine::{shape::EzShape, vm::VmShape};
+        let small = Tool::square(0.2, 0.4).unwrap();
+        let large = Tool::square(0.4, 0.4).unwrap();
+        let mut path = Recording::default();
+        for (x, tool) in [(-0.5, &small), (0.5, &large)] {
+            with_tool(&mut path, tool, |path| {
+                path.start_at([x, -0.3, 0.0], Axis::Z).unwrap();
+                path.line_to([x, 0.3, 0.0]).unwrap();
+            });
+        }
+        let samples = |progress| {
+            let object = settings(progress).remaining_stock(&path).unwrap().unwrap();
+            let shape = VmShape::from(object.tree);
+            let mut evaluator = VmShape::new_float_slice_eval();
+            evaluator
+                .eval(
+                    &shape.ez_float_slice_tape(),
+                    &[-0.5, -0.36, 0.5, 0.64],
+                    &[0.0; 4],
+                    &[0.2; 4],
+                )
+                .unwrap()
+                .to_vec()
+        };
+        assert!(samples(0.0).iter().all(|v| *v < 0.0));
+        let halfway = samples(0.5);
+        assert_eq!(
+            halfway.iter().map(|v| *v > 0.0).collect::<Vec<_>>(),
+            [true, false, false, false]
+        );
+        assert_eq!(
+            samples(1.0).iter().map(|v| *v > 0.0).collect::<Vec<_>>(),
+            [true, false, true, true]
+        );
+        assert_eq!(samples(0.5), halfway);
+        for (progress, tool) in [(0.25, &small), (0.5, &small), (0.75, &large)] {
+            let mut drawing = Drawing::default();
+            settings(progress)
+                .draw(&path, &mut drawing, 0.01, [20, 150, 230])
+                .unwrap();
+            assert_eq!(&drawing.tool.unwrap().0, tool);
+        }
+    }
+
+    #[test]
+    fn untooled_paths_can_be_drawn_but_cannot_remove_stock() {
+        let mut path = Recording::default();
+        path.start_at([0.0; 3], Axis::Z).unwrap();
+        path.line_to([0.5, 0.0, 0.0]).unwrap();
+        let mut drawing = Drawing::default();
+        settings(0.5)
+            .draw(&path, &mut drawing, 0.01, [20, 150, 230])
+            .unwrap();
+        assert!(drawing.tool.is_none());
+        assert_eq!(drawing.path.segments().count(), 1);
+        for progress in [0.0, 0.5, 1.0] {
+            assert!(matches!(
+                settings(progress).remaining_stock(&path),
+                Err(InvalidPath::MissingTool)
+            ));
         }
     }
 }
@@ -132,7 +190,6 @@ impl Settings {
     pub(super) fn read(value: &Value) -> Option<Self> {
         let r = value.as_record()?;
         let progress = f64::read(r.get(&PROGRESS)?)?;
-        let tool = Tool::read(r.get(&super::cutter::vocabulary::TOOL)?)?;
         let profile_tolerance = f64::read(r.get(&PROFILE_TOLERANCE)?)?;
         let stock_min = super::read_point(r.get(&STOCK_MIN)?)?;
         let stock_max = super::read_point(r.get(&STOCK_MAX)?)?;
@@ -157,7 +214,6 @@ impl Settings {
         coordinate(stock_max).ok()?;
         Some(Self {
             progress,
-            tool,
             profile_tolerance,
             stock_min,
             stock_max,
@@ -174,9 +230,10 @@ impl Settings {
         };
         let mut stock =
             Stock::block(self.stock_min, self.stock_max).ok_or(InvalidPath::CoordinateRange)?;
-        path.playback(self.progress, |a, b, axis, completed| {
+        path.playback(self.progress, |a, b, axis, tool, completed| {
+            let tool = tool.ok_or(InvalidPath::MissingTool)?;
             if completed {
-                stock.cut(&self.tool, a, b, axis, self.profile_tolerance)?;
+                stock.cut(tool, a, b, axis, self.profile_tolerance)?;
             }
             Ok(())
         })?;
@@ -196,7 +253,7 @@ impl Settings {
         let mut end = None;
         let cursor = path.playback(
             self.progress,
-            |a, b, axis, completed| -> Result<(), InvalidPath> {
+            |a, b, axis, _, completed| -> Result<(), InvalidPath> {
                 if !completed {
                     tubes.style(line_radius, path_color)?;
                     if end != Some(a) {
@@ -208,8 +265,8 @@ impl Settings {
                 Ok(())
             },
         )?;
-        if let Some(pose) = cursor {
-            tubes.tool(&self.tool, pose, [225, 94, 58], self.profile_tolerance)?;
+        if let Some((pose, Some(tool))) = cursor {
+            tubes.tool(tool, pose, [225, 94, 58], self.profile_tolerance)?;
         }
         if self.stock_color.is_some() {
             return Ok(());

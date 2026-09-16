@@ -3,6 +3,13 @@ use crate::libraries::{control, number};
 
 mod geometry;
 mod orientation;
+mod scopes;
+
+impl Recording {
+    fn commands(&self) -> Vec<Command> {
+        self.moves().map(|(command, _)| command).collect()
+    }
+}
 
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
     let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
@@ -83,10 +90,7 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
     let playback = fields.get(&PLAYBACK).unwrap();
     assert!(super::playback::Settings::read(playback).is_some());
     let playback = playback.as_record().unwrap();
-    assert_eq!(
-        super::cutter::Tool::read(playback.get(&super::cutter::vocabulary::TOOL).unwrap()),
-        super::cutter::Tool::ball(0.125, 0.22)
-    );
+    assert!(!playback.contains_key(&super::cutter::vocabulary::TOOL));
     assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
 }
 
@@ -98,6 +102,26 @@ fn sequence(expressions: Vec<Value>) -> Value {
     call(
         control::vocabulary::DO,
         [(control::vocabulary::EXPRESSIONS, Value::list(expressions))],
+    )
+}
+
+fn tool_scope(tool: &cutter::Tool, expression: Value) -> Value {
+    call(
+        WITH_TOOL,
+        [
+            (cutter::vocabulary::TOOL, tool.value()),
+            (::grap::vocabulary::EXPRESSION, expression),
+        ],
+    )
+}
+
+pub(super) fn tool_program(program: Value) -> Value {
+    ::grap::lambda(
+        [],
+        tool_scope(
+            &cutter::Tool::ball(0.2, 0.4).unwrap(),
+            ::grap::call(program, []),
+        ),
     )
 }
 
@@ -149,6 +173,7 @@ fn streaming_and_recording_are_interchangeable_consumers() {
     struct Count(usize, usize);
     impl Sink for Count {
         type Error = InvalidPath;
+        fn end_path(&mut self) {}
         fn start_at(&mut self, _: Point3, _: Axis) -> Result<(), Self::Error> {
             self.0 += 1;
             Ok(())
@@ -188,7 +213,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
         result.result
     );
     let starts = recording
-        .commands
+        .commands()
         .iter()
         .filter_map(|command| match *command {
             Command::StartAt(p, _) => Some(p),
@@ -201,7 +226,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     );
     let mut prior = None;
     let mut ends = Vec::new();
-    for command in recording.commands {
+    for command in recording.commands() {
         match command {
             Command::StartAt(point, _) => {
                 if let Some(p) = prior {
@@ -240,7 +265,7 @@ fn point_adapters_compose_and_keep_path_breaks() {
     scaled.start_at([3.0, 0.0, 0.0], Axis::Z).unwrap();
     scaled.line_to([4.0, 0.0, 0.0]).unwrap();
     assert_eq!(
-        recording.commands,
+        recording.commands(),
         vec![
             Command::StartAt([12.0, 0.0, 0.0], Axis::Z),
             Command::LineTo([14.0, 0.0, 0.0]),
@@ -294,7 +319,7 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
         result.result
     );
     assert_eq!(
-        recording.commands,
+        recording.commands(),
         vec![
             Command::StartAt([12.0, 0.0, 0.0], Axis::Z),
             Command::StartAt([1.0, 0.0, 0.0], Axis::Z)
@@ -324,7 +349,7 @@ fn invalid_commands_stop_do_before_later_emissions() {
         );
         assert!(result.completed);
         assert!(absent::is_absent(&result.result));
-        assert!(recording.commands.is_empty());
+        assert!(recording.commands().is_empty());
     }
 }
 
@@ -372,7 +397,7 @@ fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
     assert!(result.completed);
     assert_eq!(result.result, Value::record([]));
     assert_eq!(
-        recording.commands,
+        recording.commands(),
         [
             Command::StartAt([0.0; 3], Axis::Z),
             Command::StartAt([2.0; 3], Axis::Z),
@@ -386,7 +411,7 @@ fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
     );
     assert!(result.completed);
     assert_eq!(result.result, failure);
-    assert_eq!(recording.commands, [Command::StartAt([0.0; 3], Axis::Z)]);
+    assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], Axis::Z)]);
 }
 
 #[test]
@@ -394,7 +419,7 @@ fn generation_is_fueled_and_requires_a_scoped_sink() {
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 1_000_000.0, 0.0001, 100);
     assert!(!result.completed);
-    assert!(recording.commands.len() <= 100);
+    assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
     let unscoped = ::grap::evaluate(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
     assert_eq!(unscoped.result, absent::with_reason(OUTPUT_REQUIRED));
@@ -419,12 +444,12 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
             "{:?}",
             result.result
         );
-        assert!(recording.commands.is_empty());
+        assert!(recording.commands().is_empty());
     }
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 0.0, 0.1, 1000);
     assert!(result.completed && !absent::is_absent(&result.result));
-    assert!(recording.commands.is_empty());
+    assert!(recording.commands().is_empty());
 
     let result = diagonals(&mut recording, 1.0, f64::from_bits(1), 1000);
     assert!(!result.completed);
@@ -481,10 +506,10 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
         b.result
     );
     assert!(!absent::is_absent(&b.result), "{:?}", b.result);
-    assert_eq!(contact.commands.len(), centers.commands.len());
+    assert_eq!(contact.commands().len(), centers.commands().len());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     let mut axis = Axis::Z;
-    for (a, b) in contact.commands.iter().zip(&centers.commands) {
+    for (a, b) in contact.commands().iter().zip(&centers.commands()) {
         if let Command::StartAt(_, next) = b {
             axis = *next;
         }
@@ -555,7 +580,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
         evaluation.result
     );
     let mut starts = 0;
-    for command in recording.commands {
+    for command in recording.commands() {
         let [x, y, z] = match command {
             Command::StartAt(p, _) => {
                 starts += 1;
@@ -604,7 +629,7 @@ fn example_stock_removal_is_seekable_and_only_removes_completed_cuts() {
     let simulate = |progress| {
         let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
         recording
-            .playback::<InvalidPath>(progress, |a, b, axis, completed| {
+            .playback::<InvalidPath>(progress, |a, b, axis, _, completed| {
                 if completed {
                     stock.cut(&tool, a, b, axis, 0.001)?;
                 }
@@ -661,7 +686,7 @@ fn stock_meshing_profile() {
             let now = Instant::now();
             let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
             recording
-                .playback::<InvalidPath>(progress, |a, b, axis, completed| {
+                .playback::<InvalidPath>(progress, |a, b, axis, _, completed| {
                     if completed {
                         stock.cut(&tool, a, b, axis, 0.001)?;
                     }

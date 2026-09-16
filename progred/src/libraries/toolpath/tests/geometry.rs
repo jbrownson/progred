@@ -101,9 +101,10 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
             },
             &names,
         );
-        assert_eq!(cached.commands, fresh.commands, "{name}");
+        assert_eq!(cached.commands(), fresh.commands(), "{name}");
         assert_ne!(
-            cached.commands, initial.commands,
+            cached.commands(),
+            initial.commands(),
             "{name} must change the toolpath"
         );
         assert!(Rc::ptr_eq(

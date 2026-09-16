@@ -23,7 +23,7 @@ fn paths() -> (Recording, f64) {
 fn stock(path: &Recording, radius: f64, progress: f64) -> Tree {
     let tool = Tool::ball(radius * 2.0, 0.22).unwrap();
     let mut stock = Stock::block([-0.5; 3], [0.5; 3]).unwrap();
-    path.playback(progress, |a, b, axis, complete| {
+    path.playback(progress, |a, b, axis, _, complete| {
         if complete {
             stock.cut(&tool, a, b, axis, 0.001)?;
         }

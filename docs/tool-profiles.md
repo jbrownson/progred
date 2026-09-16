@@ -122,8 +122,9 @@ playback tolerance; angular tessellation is display quality, not cut geometry.
 
 ## Current integration and next steps
 
-Playback still receives **one tool** in its settings, now a complete profile
-instead of independent diameter/length fields. The example's ball-tool
+Tool selection is a scoped `with tool` program combinator, not a playback
+setting. Nested groups retain their tools through recording, replay, cursor
+display, and subtraction from shared stock. The example's ball-tool
 constructor references the same diameter cell as contact compensation. Its
 `ball tip` mapping first computes the ball center from the surface normal, then
 rotates and subtracts radius times the spindle-facing axis. The square-tool
@@ -131,8 +132,8 @@ definition in the example includes a tapered neck and explicit shoulder to a
 wider non-cutting shank, and can be edited directly. It is ready for use, but
 the cube still cuts only its indents.
 
-Next: stream tool selection through `Sink`, recording, replay, and playback;
-then add the two chamfer strategies as Grap functions. Op 1 owns the eight
+Next: add the two chamfer strategies as Grap functions in sibling square-tool
+groups. Op 1 owns the eight
 chamfers not touching the bottom; Op 2 owns the other four. Side contours follow
 the chamfer length; crosswise end passes step along that length. These simulate
 the ideal tool envelope, not microscopic tooth marks. Fixture clearance, safe

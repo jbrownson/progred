@@ -278,12 +278,14 @@ mod tests {
         );
         let next = || queue.lock().unwrap().pop_front().unwrap();
         let mut path = Recording::default();
+        path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
         path.start_at(
             [-0.25, 0.0, 0.5],
             crate::libraries::toolpath::paths::Axis::Z,
         )
         .unwrap();
         path.line_to([0.25, 0.0, 0.5]).unwrap();
+        path.leave_tool();
         let path = Arc::new(path);
         let recording = runtime.memo(move |_| {
             Ok(Recorded {
@@ -299,12 +301,6 @@ mod tests {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
                 (PROFILE_TOLERANCE, f64::value(tolerance)),
-                (
-                    crate::libraries::toolpath::cutter::vocabulary::TOOL,
-                    crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
-                        .unwrap()
-                        .value(),
-                ),
                 (
                     STOCK_MIN,
                     Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
@@ -443,12 +439,14 @@ mod tests {
         let tasks = Tasks::new(&runtime, incremental::background::Executor::inline(), || {});
         let recording = runtime.memo(move |_| {
             let mut path = Recording::default();
+            path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
             path.start_at(
                 [-0.25, 0.0, 0.5],
                 crate::libraries::toolpath::paths::Axis::Z,
             )
             .unwrap();
             path.line_to([0.25, 0.0, 0.5]).unwrap();
+            path.leave_tool();
             Ok(Recorded {
                 path: Arc::new(path),
                 evaluation: ::grap::Evaluation {
@@ -462,12 +460,6 @@ mod tests {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
                 (PROFILE_TOLERANCE, f64::value(tolerance)),
-                (
-                    crate::libraries::toolpath::cutter::vocabulary::TOOL,
-                    crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
-                        .unwrap()
-                        .value(),
-                ),
                 (
                     STOCK_MIN,
                     Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
@@ -592,6 +584,7 @@ mod tests {
                 )],
             ),
         );
+        let program = crate::libraries::toolpath::tests::tool_program(program);
         let model = preview();
         let settings = Settings {
             shape: (&model).into(),
@@ -666,12 +659,6 @@ mod tests {
         let mut playback = Value::record([
             (PROGRESS, f64::value(0.25)),
             (PROFILE_TOLERANCE, f64::value(0.001)),
-            (
-                crate::libraries::toolpath::cutter::vocabulary::TOOL,
-                crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4)
-                    .unwrap()
-                    .value(),
-            ),
             (
                 STOCK_MIN,
                 Value::record([X, Y, Z].map(|key| (key, f64::value(-1.0)))),

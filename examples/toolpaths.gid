@@ -179,6 +179,7 @@
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
     "width": f33c672fef9d0d4561102410fd64129f,
     "with_controls": 987acea0ded8eadb18f6b926e945cb0a,
+    "with_tool": d7c2368e471579d060460d3546158974,
     "x": ae582d23ec214f7e2896d91c1b6756f6,
     "y": 92227b03eda56073f7615c0688040b16,
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
@@ -188,109 +189,117 @@
       name: "Op 1 · top and four sides",
       params: [],
       body: {
-        expressions: [
-          {
-            function: face_paths,
-            setup_up: {
-              function: point,
-              y: {
-                f64: 0x0000000000000000,
+        function: with_tool,
+        expression: {
+          expressions: [
+            {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
               },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: {
-                f64: 0x000000000000f03f,
-              },
+              orientation: top,
             },
-            orientation: top,
-          },
-          {
-            function: face_paths,
-            setup_up: {
-              function: point,
-              y: {
-                f64: 0x0000000000000000,
+            {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
               },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: {
-                f64: 0x000000000000f03f,
-              },
+              orientation: right_face,
             },
-            orientation: right_face,
-          },
-          {
-            function: face_paths,
-            setup_up: {
-              function: point,
-              y: {
-                f64: 0x0000000000000000,
+            {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
               },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: {
-                f64: 0x000000000000f03f,
-              },
+              orientation: back_face,
             },
-            orientation: back_face,
-          },
-          {
-            function: face_paths,
-            setup_up: {
-              function: point,
-              y: {
-                f64: 0x0000000000000000,
+            {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
               },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: {
-                f64: 0x000000000000f03f,
-              },
+              orientation: left_face,
             },
-            orientation: left_face,
-          },
-          {
-            function: face_paths,
-            setup_up: {
-              function: point,
-              y: {
-                f64: 0x0000000000000000,
+            {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
               },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: {
-                f64: 0x000000000000f03f,
-              },
+              orientation: front_face,
             },
-            orientation: front_face,
-          },
-        ],
-        function: do,
+          ],
+          function: do,
+        },
+        tool: ball_tool,
       },
     },
     op2: {
       name: "Op 2 · bottom",
       params: [],
       body: {
-        function: face_paths,
-        setup_up: {
-          function: point,
-          y: {
-            f64: 0x0000000000000000,
+        function: with_tool,
+        expression: {
+          function: face_paths,
+          setup_up: {
+            function: point,
+            y: {
+              f64: 0x0000000000000000,
+            },
+            x: {
+              f64: 0x0000000000000000,
+            },
+            z: {
+              f64: 0x000000000000f0bf,
+            },
           },
-          x: {
-            f64: 0x0000000000000000,
-          },
-          z: {
-            f64: 0x000000000000f0bf,
-          },
+          orientation: bottom_face,
         },
-        orientation: bottom_face,
+        tool: ball_tool,
       },
     },
     progress: {
@@ -2160,9 +2169,6 @@
                           color: {
                             rgb: 0xb89b6d,
                           },
-                        },
-                        tool: {
-                          unquote: ball_tool,
                         },
                       },
                     },
