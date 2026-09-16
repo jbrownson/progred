@@ -9,6 +9,16 @@ use std::fmt::Write as _;
 
 mod refined;
 
+/// Computed content owns annotations below the declaration that produced it.
+fn result_path(path: &[Step]) -> Path {
+    path.iter()
+        .cloned()
+        .chain([Step::Key(
+            crate::libraries::presentation::vocabulary::RESULT,
+        )])
+        .collect()
+}
+
 fn image_png(image: &ImageData) -> Vec<u8> {
     let mut rgba = image.data.as_ref().to_vec();
     assert_eq!(
@@ -473,7 +483,7 @@ fn capture_cam_async(mode: CellId) {
         .clone();
     let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
     let mut controls = annotations
-        .at(&path)
+        .at(&result_path(&path))
         .and_then(Value::as_record)
         .and_then(|fields| fields.get(&STATE))
         .and_then(Value::as_record)
@@ -483,7 +493,7 @@ fn capture_cam_async(mode: CellId) {
         crate::libraries::toolpath::vocabulary::PROGRESS,
         f64::value(0.7),
     );
-    annotations.set_field(&path, STATE, Some(Value::Record(controls)));
+    annotations.set_field(&result_path(&path), STATE, Some(Value::Record(controls)));
     capture(&mut runner, "cam_async_updating.svg");
     assert_eq!(queue.lock().unwrap().len(), 1);
     complete(&mut runner);
@@ -511,7 +521,7 @@ fn editor_toolpath_playback_svg_captures() {
             .path
             .clone();
         pane.view.annotations.set_field(
-            &path,
+            &result_path(&path),
             STATE,
             Some(Value::record([(names["progress"], f64::value(progress))])),
         );

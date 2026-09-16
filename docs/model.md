@@ -60,9 +60,9 @@ lets different occurrences highlight the same source without conflating two
 libraries' definitions of one cell. Both forms still need the caller's
 resolution context. Neither is an execution stack or global address.
 
-Computed values start the ordinary projection from a transient root. They are
-read-only and attribute selection to stored source where available; the editor
-does not fabricate writable paths for their children.
+Computed values use `at` at their own displayed occurrences. They and their
+children can be selected, copied, and folded, but have no document destination
+for edits. Selecting a result does not select its producing expression.
 
 ## Selection and editing
 
@@ -71,6 +71,36 @@ payload, and optional Rust editor. Its stages distinguish an existing edge,
 a pending value, and a pending record label. Annotation records live in a
 path-keyed [`Annotations`](../progred/src/annotations.rs) trie owned by the view;
 folding is one convention in those records.
+
+Selection also retains a native editing scope. Ordinary document projection
+uses its allocation-free identity case. A scope installs a **conject** at an
+occurrence: an ordinary function of the remaining projection path and a document
+path, returning `Option<DocumentPath>`. Reads and writes use the same function;
+there is no independently configurable read/write pair or inverse mapping.
+Several occurrences may conject to one source. Selection, navigation, and
+annotations stay occurrence-local, while source-linked hover uses the conject.
+Line editing, gestures, completion insertion, structural paste/deletion, and
+history retain that interpretation. Undo restores the scope with the selected
+path; scopes contain no document snapshot or borrow of the editor.
+If a projection changes what a selected occurrence means, its caller is
+responsible for clearing the selection when necessary; the editor does not
+try to repair arbitrary changes of interpretation.
+
+`descend` extends the current occurrence, `jump` gives a new occurrence an actual
+document source, and `at` projects a supplied value without a source. `None`
+means no document location, not a missing value: `Some(path)` can name an absent
+field and still offer editing. A library source is present but read-only.
+Ordinary descendants of `at` stay detached, including cell follows; an explicit
+`jump` can establish a source again. The outline UI has not yet been reorganized
+to use jumps.
+
+Copy and fold do not resolve an occurrence through conject. The shared
+projection boundary installs handlers that copy the displayed `Value` and
+change the occurrence's fold annotation using the default already determined
+during projection. This also works for source-less `at` values. Inner widget
+handlers take precedence (for example, copying a text selection). Structural
+cut copies that same value, then attempts deletion through the selection's
+conject; a source-less value can be copied but not deleted.
 
 Ordinary selection does not initialize editing state. Its role is derived from
 the current location: a writable missing value uses the pending picker, while

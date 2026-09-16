@@ -83,6 +83,7 @@ fn set_state(state: Option<&Value>, key: CellId, value: Value) -> Value {
 struct Drag {
     root: Root,
     path: gid::Path,
+    edits: crate::editing::Scope,
     key: CellId,
     slider: Slider,
     rect: Rect,
@@ -92,17 +93,14 @@ struct Drag {
 impl widget::gesture::Gesture<crate::Editor> for Drag {
     fn advance(&mut self, editor: &mut crate::Editor, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
-            let state = editor
-                .model
-                .workspace
-                .view(&self.root)
-                .and_then(|v| v.annotations.at(&self.path));
+            let mut editor = self.edits.open(crate::editing::Access::new(editor));
+            let state = editor.annotation(&self.root, &self.path);
             let value = set_state(
                 state,
                 self.key,
                 f64::value(self.slider.value_at(self.rect, self.scale, *point)),
             );
-            crate::editing::annotate(editor, &self.root, &self.path, value);
+            editor.annotate(&self.root, &self.path, value);
         }
         false
     }
@@ -113,6 +111,7 @@ fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
         let scale = context.inputs.styles.scale;
         let root = context.inputs.view.clone();
         let path = context.path.to_vec();
+        let edits = context.inputs.edits.clone();
         let rail = widget::leaf(
             Extent {
                 width: width * scale,
@@ -132,6 +131,7 @@ fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
                         Box::new(Drag {
                             root: root.clone(),
                             path: path.clone(),
+                            edits: edits.clone(),
                             key,
                             slider,
                             rect: placement.rect,
@@ -192,17 +192,15 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
             let button = measured::centered_row(4.0 * scale, vec![indicator, label]);
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
+            let edits = context.inputs.edits.clone();
             let value = option.value.clone();
             buttons.push(widget::before_place(button, move |placement, output| {
                 output.claim(puri::hover::Probe::occludes(placement));
                 puri::interact::clickable(output, placement, move |editor: &mut crate::Editor| {
-                    let state = editor
-                        .model
-                        .workspace
-                        .view(&root)
-                        .and_then(|v| v.annotations.at(&path));
+                    let mut editor = edits.open(crate::editing::Access::new(editor));
+                    let state = editor.annotation(&root, &path);
                     let state = set_state(state, key, value.clone());
-                    crate::editing::annotate(editor, &root, &path, state);
+                    editor.annotate(&root, &path, state);
                 });
             }));
         }
@@ -301,9 +299,11 @@ fn display(
         Some(&ForeignOverlay::new(&[SLIDER, RADIO], &emit)),
     );
     if !evaluation.completed || absent::is_absent(&evaluation.result) {
-        return Some(display::transient(
+        return Some(display::at(
+            [gid::Step::Key(
+                crate::libraries::presentation::vocabulary::RESULT,
+            )],
             &evaluation.result,
-            evaluation.remaining_fuel,
         ));
     }
     let widgets = widgets.into_inner();
@@ -318,12 +318,15 @@ fn display(
                 (HEIGHT, f64::value(height)),
             ],
             &context.inputs.sources,
-            evaluation.remaining_fuel,
+            ::grap::DEFAULT_FUEL,
         );
-        let content =
-            context
-                .project
-                .transient(context.text, build, result.result, result.remaining_fuel);
+        let content = display::at(
+            [gid::Step::Key(
+                crate::libraries::presentation::vocabulary::RESULT,
+            )],
+            &result.result,
+        )
+        .measure(context, build);
         if controls.is_empty() {
             return content;
         }

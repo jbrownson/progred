@@ -45,7 +45,13 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
-        let image = image(computations, recording, settings.clone(), 128, None);
+        let image = image(
+            computations,
+            recording,
+            settings.clone(),
+            128,
+            None,
+        );
         Self {
             program,
             fuel,
@@ -62,7 +68,6 @@ impl Computation {
         settings: Settings,
         render: impl Fn(
             Request,
-            usize,
             &incremental::Cancellation,
             &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
             &(dyn Fn(Progress) + Sync),
@@ -101,20 +106,19 @@ pub(crate) fn image(
         recording,
         settings,
         ready,
-        move |request, fuel, cancel, publish, progress| {
-            let scene = scene(request, fuel);
+        move |request, cancel, publish, progress| {
+            let scene = scene(request);
             cancel.check()?;
             match scene {
-                Ok((scene, fuel)) => Ok(scene
+                Ok(scene) => Ok(scene
                     .render_software_tiles(
                         first_max_edge,
                         4,
                         cancel,
-                        &mut |image| publish(Ok((image, fuel))),
+                        &mut |image| publish(Ok(image)),
                         Some(progress),
                     )?
-                    .map(|image| (image, fuel))
-                    .ok_or_else(|| (absent::with_reason(fidget::vocabulary::INVALID_FIELD), fuel))),
+                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))),
                 Err(failure) => Ok(Err(failure)),
             }
         },
@@ -128,7 +132,6 @@ fn image_with_render(
     ready: Option<Memo<bool>>,
     render: impl Fn(
         Request,
-        usize,
         &incremental::Cancellation,
         &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
         &(dyn Fn(Progress) + Sync),
@@ -143,14 +146,9 @@ fn image_with_render(
         move |read| {
             let record = recording.read(read)?;
             let settings = settings.read(read);
-            Ok(record.path().map(|_| {
-                (
-                    Request {
-                        path: record.path.clone(),
-                        settings: (*settings).clone(),
-                    },
-                    record.evaluation.remaining_fuel,
-                )
+            Ok(record.path().map(|_| Request {
+                path: record.path.clone(),
+                settings: (*settings).clone(),
             }))
         }
     });
@@ -170,7 +168,7 @@ fn image_with_render(
         move |request, cancel, publish, progress| {
             cancel.check()?;
             match request {
-                Ok((request, fuel)) => render(request, fuel, cancel, publish, progress),
+                Ok(request) => render(request, cancel, publish, progress),
                 Err(failure) => Ok(Err(failure)),
             }
         },
@@ -181,48 +179,39 @@ fn image_with_render(
             let prepared = prepared.read(read)?;
             let availability = worker.read(read)?;
             let progress = worker.progress(read)?;
-            let fuel = match &*prepared {
-                Ok((_, fuel)) => *fuel,
-                Err(failure) => return Ok(Err(failure.clone())),
-            };
+            if let Err(failure) = &*prepared {
+                return Ok(Err(failure.clone()));
+            }
             Ok(match &*availability {
                 Availability::Ready(image) | Availability::Refining(image) => image
                     .as_ref()
                     .as_ref()
-                    .map(|(image, fuel)| {
-                        (
-                            ViewImage {
-                                image: Some(image.clone()),
-                                pending: matches!(&*availability, Availability::Refining(_)),
-                                stale: false,
-                                progress,
-                            },
-                            *fuel,
-                        )
+                    .map(|image| ViewImage {
+                        image: Some(image.clone()),
+                        pending: matches!(&*availability, Availability::Refining(_)),
+                        stale: false,
+                        progress,
                     })
                     .map_err(Clone::clone),
-                Availability::Pending { previous } => Ok((
-                    ViewImage {
-                        image: previous
-                            .as_deref()
-                            .and_then(|result| result.as_ref().ok())
-                            .map(|(image, _)| image.clone()),
-                        pending: true,
-                        stale: previous.is_some(),
-                        progress,
-                    },
-                    fuel,
-                )),
+                Availability::Pending { previous } => Ok(ViewImage {
+                    image: previous
+                        .as_deref()
+                        .and_then(|result| result.as_ref().ok())
+                        .cloned(),
+                    pending: true,
+                    stale: previous.is_some(),
+                    progress,
+                }),
             })
         },
         |_, _| false,
     )
 }
 
-fn scene(request: Request, fuel: usize) -> Outcome<fidget::raster::Request> {
+fn scene(request: Request) -> Outcome<fidget::raster::Request> {
     let Request { path, settings } = request;
     let mut request = settings.request;
-    let invalid = || (absent::with_reason(INVALID_INPUT), fuel);
+    let invalid = || absent::with_reason(INVALID_INPUT);
     let mut tubes = Tubes::new(settings.radius).ok_or_else(invalid)?;
     tubes
         .style(settings.radius, settings.color)
@@ -239,9 +228,9 @@ fn scene(request: Request, fuel: usize) -> Outcome<fidget::raster::Request> {
     }
     request.preview.objects.splice(0..0, tubes.scene());
     if request.preview.objects.len() > usize::from(u16::MAX) + 1 {
-        Err((absent::with_reason(fidget::vocabulary::INVALID_SCENE), fuel))
+        Err(absent::with_reason(fidget::vocabulary::INVALID_SCENE))
     } else {
-        Ok((request, fuel))
+        Ok(request)
     }
 }
 
@@ -347,21 +336,18 @@ mod tests {
         let rendered = Arc::new(Mutex::new(Vec::new()));
         let graph = Computation::with_render(&computations, program, 10000, settings(0.0), {
             let rendered = rendered.clone();
-            move |request, fuel, cancel, _publish, _progress| {
+            move |request, cancel, _publish, _progress| {
                 cancel.check()?;
                 let mut rendered = rendered.lock().unwrap();
                 rendered.push(request);
-                Ok(Ok((
-                    puri::ImageData {
-                        data: vec![rendered.len() as u8, 0, 0, 255].into(),
-                        format: peniko::ImageFormat::Rgba8,
-                        alpha_type: peniko::ImageAlphaType::Alpha,
-                        width: 1,
-                        height: 1,
-                    }
-                    .into(),
-                    fuel,
-                )))
+                Ok(Ok(puri::ImageData {
+                    data: vec![rendered.len() as u8, 0, 0, 255].into(),
+                    format: peniko::ImageFormat::Rgba8,
+                    alpha_type: peniko::ImageAlphaType::Alpha,
+                    width: 1,
+                    height: 1,
+                }
+                .into()))
             }
         });
         let read = || computations.runtime.read(&graph.image).unwrap();
@@ -371,11 +357,11 @@ mod tests {
             assert!(computations.tasks.poll());
         };
         let first = read();
-        let first = &first.as_ref().as_ref().unwrap().0;
+        let first = &first.as_ref().as_ref().unwrap();
         assert!(first.pending && first.image.is_none());
         finish();
         let ready = read();
-        assert!(!ready.as_ref().as_ref().unwrap().0.pending);
+        assert!(!ready.as_ref().as_ref().unwrap().pending);
         assert!(Rc::ptr_eq(&ready, &read()));
 
         doc.cells.set_value(new_cell_id(), f64::value(9.0));
@@ -386,14 +372,14 @@ mod tests {
         );
         graph.settings.set(settings(30.0));
         let pending = read();
-        let pending = &pending.as_ref().as_ref().unwrap().0;
+        let pending = &pending.as_ref().as_ref().unwrap();
         assert!(pending.pending);
         assert_eq!(pending.image.as_ref().unwrap().image.data.data()[0], 1);
         graph.settings.set(settings(60.0));
-        assert!(read().as_ref().as_ref().unwrap().0.pending);
+        assert!(read().as_ref().as_ref().unwrap().pending);
         assert_eq!(queue.lock().unwrap().len(), 1);
         finish();
-        assert!(!read().as_ref().as_ref().unwrap().0.pending);
+        assert!(!read().as_ref().as_ref().unwrap().pending);
         {
             let rendered = rendered.lock().unwrap();
             assert_eq!(
@@ -407,7 +393,7 @@ mod tests {
 
         doc.cells.set_value(endpoint, f64::value(0.75));
         computations.begin(Rc::new(doc.clone()), stack.libraries.clone());
-        assert!(read().as_ref().as_ref().unwrap().0.pending);
+        assert!(read().as_ref().as_ref().unwrap().pending);
         finish();
         read();
         {
@@ -444,7 +430,7 @@ mod tests {
             ::grap::lambda([], Value::record([])),
             10000,
             settings(0.0),
-            move |_, fuel, _, publish, progress| {
+            move |_, _, publish, progress| {
                 let image = puri::ImageData {
                     data: vec![10, 20, 30, 255].into(),
                     format: peniko::ImageFormat::Rgba8,
@@ -452,25 +438,25 @@ mod tests {
                     width: 1,
                     height: 1,
                 };
-                publish(Ok((image.clone().into(), fuel)))?;
+                publish(Ok(image.clone().into()))?;
                 progress(Progress {
                     completed: 3,
                     total: 10,
                 });
                 published.send(()).unwrap();
                 resumed.lock().unwrap().recv().unwrap();
-                Ok(Ok((image.into(), fuel)))
+                Ok(Ok(image.into()))
             },
         );
         let read = || computations.runtime.read(&graph.image).unwrap();
         let initial = read();
-        assert!(initial.as_ref().as_ref().unwrap().0.image.is_none());
+        assert!(initial.as_ref().as_ref().unwrap().image.is_none());
         let job = queue.lock().unwrap().pop_front().unwrap();
         let worker = std::thread::spawn(job);
         receive.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(computations.tasks.poll());
         let partial = read();
-        let partial = &partial.as_ref().as_ref().unwrap().0;
+        let partial = &partial.as_ref().as_ref().unwrap();
         assert!(partial.pending && !partial.stale && partial.image.is_some());
         assert_eq!(
             partial.progress,
@@ -483,13 +469,13 @@ mod tests {
         worker.join().unwrap();
         assert!(computations.tasks.poll());
         let final_image = read();
-        let final_image = &final_image.as_ref().as_ref().unwrap().0;
+        let final_image = &final_image.as_ref().as_ref().unwrap();
         assert!(!final_image.pending && !final_image.stale);
         assert_eq!(final_image.progress, None);
 
         graph.settings.set(settings(30.0));
         let pending = read();
-        let pending = &pending.as_ref().as_ref().unwrap().0;
+        let pending = &pending.as_ref().as_ref().unwrap();
         assert!(pending.pending && pending.stale && pending.image.is_some());
         assert_eq!(pending.progress, None);
     }
@@ -512,7 +498,7 @@ mod tests {
         let playback = playback(0.5);
         let expected = playback.remaining_stock(&path).unwrap().unwrap();
         settings.playback = Some(playback);
-        let rendered = scene(Request { path, settings }, 100).unwrap().0;
+        let rendered = scene(Request { path, settings }).unwrap();
         assert_eq!(
             rendered.preview.objects.len(),
             3,

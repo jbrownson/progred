@@ -138,19 +138,19 @@ pub(crate) mod tests {
                 };
                 let mut native = initial();
                 assert!(at(&child, payload.clone())(
-                    &crate::sources::Sources {
+                    &crate::editing::Scope::default().view(crate::sources::Sources {
                         doc: &document,
                         libraries: &empty
-                    },
+                    }),
                     &site,
                     &mut native,
                 ));
                 let mut interpreted = initial();
                 assert!(crate::site::grap(grap_at(&child, payload.clone()), [])(
-                    &crate::sources::Sources {
+                    &crate::editing::Scope::default().view(crate::sources::Sources {
                         doc: &document,
                         libraries: &stack.libraries
-                    },
+                    }),
                     &site,
                     &mut interpreted,
                 ));

@@ -103,18 +103,35 @@ pub(crate) enum Hovered {
 /// Resolve source paths here once, not in each painted occurrence.
 fn attribute_hover(
     sources: &sources::Sources<'_>,
+    descends: &[navigate::Descend<Editor>],
+    root: Option<&workspace::Root>,
     completion: Option<&crate::completion::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
 ) -> placed::ResolvedHover {
     let visible = source_hover_visible(hovered.as_ref(), link);
+    let source_path = match &hovered {
+        Some(Hovered::Tree(hover::Hover::Value(path))) => descends
+            .iter()
+            .find(|d| d.root.as_ref() == root && d.path == *path)
+            .and_then(|d| d.scope.source(path))
+            .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref())),
+        _ => None,
+    };
     let hovered_secondary = match &hovered {
+        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
+            source_path.as_ref().and_then(|path| {
+                sources
+                    .resolve_path(path)
+                    .map(|value| hover::Secondary::from_path(sources, path.clone(), value))
+            })
+        }
         Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(sources, completion, hover),
         _ => None,
     };
     let hovered_trace = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(path))) if visible => {
-            Some(hover::SourceTrace::from_path(sources, path.clone()))
+        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
+            source_path.map(|path| hover::SourceTrace::from_path(sources, path))
         }
         Some(Hovered::Tree(hover::Hover::Drawing(source))) if visible => Some(source.clone()),
         _ => None,
@@ -250,7 +267,7 @@ pub(crate) struct FrameResources<'a> {
 
 struct PointerInput<'a> {
     position: Option<Point>,
-    previous: Option<&'a Hovered>,
+    previous: Option<(Option<&'a Root>, &'a Hovered)>,
     pressed: bool,
     link_sources: bool,
 }
@@ -281,13 +298,15 @@ fn compute_hover(
             } else {
                 pointer.position
             },
-            prior: pointer.previous,
+            prior: pointer.previous.map(|(_, hover)| hover),
             reach_px: HOVER_REACH_POINTS * description.scale,
             debug_geometry: description.model.view.debug_geometry,
         },
     );
     let (hover, pointer_root) = if pointer.pressed {
-        (pointer.previous.cloned(), None)
+        pointer.previous.map_or((None, None), |(root, hover)| {
+            (Some(hover.clone()), root.cloned())
+        })
     } else {
         hover_target(output.claim.take())
     };
@@ -296,6 +315,8 @@ fn compute_hover(
             doc: &description.model.doc,
             libraries: &description.stack.libraries,
         },
+        &output.descends,
+        pointer_root.as_ref(),
         output.completion.as_ref(),
         hover.clone(),
         pointer.link_sources,
@@ -386,7 +407,12 @@ impl Editor {
         }
     }
 
-    fn build_frame(&mut self, scale: f64, viewport: Size, previous: Option<Hovered>) -> Frame {
+    fn build_frame(
+        &mut self,
+        scale: f64,
+        viewport: Size,
+        previous: Option<(Option<Root>, Hovered)>,
+    ) -> Frame {
         self.sync_views();
         prepare_frame(
             FrameDescription {
@@ -407,7 +433,9 @@ impl Editor {
             },
             PointerInput {
                 position: self.pointer,
-                previous: previous.as_ref(),
+                previous: previous
+                    .as_ref()
+                    .map(|(root, hover)| (root.as_ref(), hover)),
                 pressed: self.pressed,
                 link_sources: crate::modifiers::link(&self.modifiers),
             },
@@ -417,15 +445,15 @@ impl Editor {
 
 impl EditorRunner {
     pub(crate) fn probe_pointer(&mut self, scale: f64) {
-        let (hover, pointer_root) = if self.editor.pressed {
-            (self.frame.hover.clone(), None)
-        } else {
-            hover_target(self.frame.dispatch.hover_geometry.probe(
-                self.editor.pointer,
-                self.frame.hover.as_ref(),
-                HOVER_REACH_POINTS * scale,
-            ))
-        };
+        // Retain the complete hover location throughout an active press.
+        if self.editor.pressed {
+            return;
+        }
+        let (hover, pointer_root) = hover_target(self.frame.dispatch.hover_geometry.probe(
+            self.editor.pointer,
+            self.frame.hover.as_ref(),
+            HOVER_REACH_POINTS * scale,
+        ));
         self.frame.hover = hover;
         self.frame.dispatch.pointer_root = pointer_root;
     }
@@ -458,7 +486,7 @@ impl EditorRunner {
     fn rebuild_frame(&mut self, scale: f64, viewport: Size) {
         let frame = self
             .editor
-            .build_frame(scale, viewport, self.frame.hover.clone());
+            .build_frame(scale, viewport, self.frame.hover_location());
         self.frame.pending_paint = Some(self.install_frame(frame, scale, viewport));
     }
 
@@ -874,6 +902,105 @@ mod frame_tests {
 
     type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
     const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
+
+    #[test]
+    fn source_hover_conjects_the_occurrence_in_its_own_view() {
+        let field = gid::new_cell_id();
+        let occurrence: Rc<[Step]> = Rc::from([Step::Key(gid::new_cell_id())]);
+        let mut editor = crate::test_editor(Document {
+            root: Some(Value::record([(
+                field,
+                crate::libraries::text::value("shared"),
+            )])),
+            cells: Cells::new(),
+        });
+        let root = editor.model.workspace.document_root().clone();
+        let source = vec![Step::Key(field)];
+        let scope = crate::editing::Scope::default().with_conject(
+            occurrence.to_vec(),
+            source.clone(),
+            crate::display::Conject::descend(),
+        );
+        let mut landmarks = [navigate::Descend::<Editor> {
+            path: occurrence.clone(),
+            root: Some(root.clone()),
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            select: Rc::new(|_, _| true),
+            scope,
+        }];
+        let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
+        let resolved = attribute_hover(
+            &editor.sources(),
+            &landmarks,
+            Some(&root),
+            None,
+            hover.clone(),
+            false,
+        );
+        let expected = hover::SourceTrace::Stored(Rc::from(source));
+        assert_eq!(resolved.hovered_trace, Some(expected.clone()));
+        assert_eq!(
+            resolved.hovered_secondary,
+            Some(hover::Secondary::from_trace(&expected))
+        );
+        // A held press must carry the owning view into successor attribution,
+        // not just preserve the displayed hover path.
+        let observed = Rc::new(std::cell::RefCell::new(None));
+        let captured = observed.clone();
+        let child = crate::display::widget::leaf(
+            measured::Extent::default(),
+            move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                output.after_hover(move |hover, _| {
+                    *captured.borrow_mut() =
+                        Some((hover.hovered_trace.clone(), hover.hovered_secondary.clone()));
+                });
+            },
+        );
+        let layout = crate::display::widget::navigation::landmark(
+            child,
+            occurrence.clone(),
+            Rc::new(|_, _| true),
+            landmarks[0].scope.clone(),
+        );
+        let frame = hover_frame(
+            &editor,
+            placed::in_view(layout, root.clone()),
+            None,
+            Some((Some(&root), hover.as_ref().unwrap())),
+            true,
+        );
+        assert_eq!(frame.dispatch.pointer_root, Some(root.clone()));
+        assert_eq!(
+            *observed.borrow(),
+            Some((
+                Some(expected.clone()),
+                Some(hover::Secondary::from_trace(&expected))
+            ))
+        );
+        // A detached occurrence must not acquire provenance even when its
+        // spelling also names real document data.
+        Rc::make_mut(&mut editor.model.doc).root = Some(Value::record([
+            (field, crate::libraries::text::value("shared")),
+            (
+                match occurrence[0] {
+                    Step::Key(key) => key,
+                    _ => unreachable!(),
+                },
+                crate::libraries::text::value("coincidence"),
+            ),
+        ]));
+        landmarks[0].scope = crate::editing::Scope::default().detached(occurrence.to_vec());
+        let resolved = attribute_hover(
+            &editor.sources(),
+            &landmarks,
+            Some(&root),
+            None,
+            hover,
+            false,
+        );
+        assert!(resolved.hovered_trace.is_none());
+        assert!(resolved.hovered_secondary.is_none());
+    }
 
     fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
         use crate::display::{Layout, partial, widget};
@@ -1520,6 +1647,7 @@ mod frame_tests {
         ];
         let descends = targets.map(
             |(source, rect)| navigate::Descend::<Option<gid::Resolution>> {
+                scope: Default::default(),
                 root: Some(root.clone()),
                 path: Rc::from([Step::Follow(source), Step::Key(call)]),
                 rect,
@@ -2042,7 +2170,7 @@ mod frame_tests {
                     &editor,
                     layout,
                     pointer.map(|x| Point::new(x, 5.0)),
-                    prior.as_ref(),
+                    prior.as_ref().map(|hover| (None, hover)),
                     pressed
                 )
                 .hover,
@@ -2078,7 +2206,7 @@ mod frame_tests {
                     &editor,
                     layout,
                     Some(Point::new(x, 5.0)),
-                    Some(&target),
+                    Some((None, &target)),
                     pressed
                 )
                 .hover,
@@ -2091,7 +2219,7 @@ mod frame_tests {
         editor: &Editor,
         layout: measured::Measured<HoverPass<Editor>>,
         position: Option<Point>,
-        previous: Option<&Hovered>,
+        previous: Option<(Option<&Root>, &Hovered)>,
         pressed: bool,
     ) -> Frame {
         compute_hover(
@@ -2128,7 +2256,7 @@ mod frame_tests {
         let frame =
             runner
                 .editor
-                .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover.clone());
+                .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover_location());
         assert_eq!(runner.frame.hover, Some(prior));
         assert_eq!(runner.frame.dispatch.line, 42.0);
         assert!(runner.frame.dispatch.descends.is_empty());
@@ -2143,12 +2271,13 @@ mod frame_tests {
     }
 
     #[test]
-    fn pressed_hover_skips_probes_and_unpressed_hover_keeps_the_owning_view() {
+    fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
         let editor = crate::test_editor(gid::Document {
             root: None,
             cells: gid::Cells::new(),
         });
         let root = editor.model.workspace.document_root().clone();
+        let prior_root = Root::pane(vec![Step::Key(gid::new_cell_id())]);
         let prior = Hovered::Tree(hover::Hover::Entry(7));
         for pressed in [true, false] {
             let calls = Rc::new(std::cell::Cell::new(0));
@@ -2172,7 +2301,7 @@ mod frame_tests {
                 &editor,
                 layout,
                 Some(Point::new(5.0, 5.0)),
-                Some(&prior),
+                Some((Some(&prior_root), &prior)),
                 pressed,
             );
             assert_eq!(calls.get(), usize::from(!pressed));
@@ -2186,7 +2315,11 @@ mod frame_tests {
             );
             assert_eq!(
                 frame.dispatch.pointer_root,
-                (!pressed).then(|| root.clone())
+                Some(if pressed {
+                    prior_root.clone()
+                } else {
+                    root.clone()
+                })
             );
             let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
                 root: None,
@@ -2208,8 +2341,17 @@ mod frame_tests {
             );
             assert_eq!(
                 runner.frame.dispatch.pointer_root,
-                (!pressed).then(|| root.clone())
+                Some(if pressed {
+                    prior_root.clone()
+                } else {
+                    root.clone()
+                })
             );
+            // Releasing allows the current geometry to choose a new owner.
+            runner.editor.pressed = false;
+            runner.probe_pointer(1.0);
+            assert_eq!(runner.frame.hover, Some(Hovered::Blocked));
+            assert_eq!(runner.frame.dispatch.pointer_root, Some(root.clone()));
         }
     }
 }

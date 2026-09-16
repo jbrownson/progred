@@ -480,7 +480,7 @@ mod tests {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
+        fn evaluate(&self, _: &Value) -> Value {
             unreachable!()
         }
     }

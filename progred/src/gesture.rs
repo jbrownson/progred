@@ -20,13 +20,20 @@ pub(crate) type Active<World> = Box<dyn Gesture<World>>;
 pub(crate) struct EditRun {
     root: Root,
     path: Path,
+    scope: crate::editing::Scope,
     recorded: bool,
 }
 
+#[cfg(test)]
 pub(crate) fn value_edit(root: Root, path: Path) -> EditRun {
+    scoped_value_edit(root, path, Default::default())
+}
+
+pub(crate) fn scoped_value_edit(root: Root, path: Path, scope: crate::editing::Scope) -> EditRun {
     EditRun {
         root,
         path,
+        scope,
         recorded: false,
     }
 }
@@ -47,16 +54,21 @@ impl EditRun {
         }) {
             false
         } else {
-            crate::editing::select(app, &self.root, &self.path);
+            self.scope
+                .open(crate::editing::Access::new(app))
+                .select(&self.root, &self.path);
             true
         }
     }
 
     pub(crate) fn write(&mut self, app: &mut Editor, value: Value) -> bool {
+        let Some(source) = self.scope.source(&self.path) else {
+            return false;
+        };
         write_value(
             &mut app.model,
             &app.stack.libraries,
-            &self.path,
+            &source,
             value,
             &mut self.recorded,
         )
@@ -71,12 +83,13 @@ impl EditRun {
             .filter(|selection| selection.root() == &self.root && selection.path() == self.path)
             .map(Selection::recorded)
         {
-            let mut next = Selection::from_payload(
+            let mut next = Selection::from_scoped_payload(
                 &self.root,
                 &Sources {
                     doc: &model.doc,
                     libraries,
                 },
+                self.scope.clone(),
                 self.path.clone(),
                 payload,
             );

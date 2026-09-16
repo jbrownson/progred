@@ -256,9 +256,17 @@ fn fidget_example() -> Document {
 
 fn orbit(path: &[Step], frame: usize) -> Annotations {
     use crate::libraries::{f32, fidget::vocabulary as f};
+    // The camera belongs to the viewport's computed result, not its declaration.
+    let path: Vec<_> = path
+        .iter()
+        .cloned()
+        .chain([Step::Key(
+            crate::libraries::presentation::vocabulary::RESULT,
+        )])
+        .collect();
     let mut annotations = Annotations::default();
     annotations.set_field(
-        path,
+        &path,
         f::CAMERA,
         Some(Value::record([
             (f::YAW, f32::value(30.0 + (frame % 180) as f32 * 2.0)),

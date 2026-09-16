@@ -38,15 +38,23 @@ pub enum ProjectionCall<W, H> {
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     },
+    DescendPath {
+        steps: Vec<Step>,
+        projection: Option<Partial<W, H>>,
+        default_projection: Option<Partial<W, H>>,
+    },
+    Jump {
+        steps: Vec<Step>,
+        document: Vec<Step>,
+        conject: crate::display::Conject,
+        projection: Option<Partial<W, H>>,
+        default_projection: Option<Partial<W, H>>,
+    },
     At {
         steps: Vec<Step>,
         value: Value,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-    },
-    Transient {
-        value: Value,
-        fuel: usize,
     },
     Other,
 }
@@ -114,12 +122,37 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         &self,
         _: &mut TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
-        step: Step,
+        steps: &[Step],
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
-        self.record(ProjectionCall::Descend {
-            step,
+        self.record(match steps {
+            [step] => ProjectionCall::Descend {
+                step: step.clone(),
+                projection,
+                default_projection,
+            },
+            _ => ProjectionCall::DescendPath {
+                steps: steps.to_vec(),
+                projection,
+                default_projection,
+            },
+        })
+    }
+    fn jump(
+        &self,
+        _: &mut TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
+        steps: Vec<Step>,
+        document: Vec<Step>,
+        conject: crate::display::Conject,
+        projection: Option<Partial<W, H>>,
+        default_projection: Option<Partial<W, H>>,
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
+        self.record(ProjectionCall::Jump {
+            steps,
+            document,
+            conject,
             projection,
             default_projection,
         })
@@ -140,15 +173,6 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
             default_projection,
         })
     }
-    fn transient(
-        &self,
-        _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
-        value: Value,
-        fuel: usize,
-    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
-        self.record(ProjectionCall::Transient { value, fuel })
-    }
 }
 
 pub fn with_context<W: 'static, H: 'static, R>(
@@ -167,6 +191,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(1.0);
     let cx = crate::projection::Cx {
+        edits: Default::default(),
         computations: None,
         view: &root,
         completions: None,
@@ -180,8 +205,6 @@ pub fn with_context<W: 'static, H: 'static, R>(
         selection: None,
         secondary: None,
         selected_trace: None,
-        source: crate::projection::Source::Stored,
-        fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
     };
     run(&mut widget::Context {
         text: &mut TextCtx {
@@ -214,11 +237,23 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         &self,
         _: &mut TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
-        _: Step,
+        _: &[Step],
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected descent")
+    }
+    fn jump(
+        &self,
+        _: &mut TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
+        _: Vec<Step>,
+        _: Vec<Step>,
+        _: crate::display::Conject,
+        _: Option<Partial<W, H>>,
+        _: Option<Partial<W, H>>,
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
+        panic!("unexpected jump")
     }
     fn at(
         &self,
@@ -230,14 +265,5 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected projection")
-    }
-    fn transient(
-        &self,
-        _: &mut TextCtx,
-        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
-        _: Value,
-        _: usize,
-    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
-        panic!("unexpected computed root")
     }
 }

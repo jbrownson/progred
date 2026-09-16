@@ -2,6 +2,7 @@
 //! and history.
 
 use crate::history;
+#[cfg(test)]
 use crate::libraries::Libraries;
 use crate::selection;
 use crate::workspace;
@@ -28,7 +29,7 @@ pub(crate) struct Model {
 
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
-    selection: Option<(workspace::Root, Path)>,
+    selection: Option<(workspace::Root, Path, crate::editing::Scope)>,
     folds: workspace::Folds,
 }
 
@@ -66,9 +67,13 @@ impl Model {
         Snapshot {
             doc: self.doc.clone(),
             selection: self.selection.as_ref().and_then(|selection| {
-                selection
-                    .history_path()
-                    .map(|path| (selection.root().clone(), path.to_vec()))
+                selection.history_path().map(|path| {
+                    (
+                        selection.root().clone(),
+                        path.to_vec(),
+                        selection.scope().clone(),
+                    )
+                })
             }),
             folds: self.workspace.folds(),
         }
@@ -86,15 +91,18 @@ impl Model {
             self.workspace
                 .sync_declared(&workspace::declarations(self.doc.root.as_ref()));
             self.workspace.restore_folds(restored.folds);
-            self.selection = restored
-                .selection
-                .map(|(root, path)| selection::Selection::edge(&root, path));
+            self.selection = restored.selection.map(|(root, path, scope)| {
+                let mut selection = selection::Selection::edge(&root, path);
+                selection.set_scope(scope);
+                selection
+            });
             true
         } else {
             false
         }
     }
 
+    #[cfg(test)]
     pub fn collapse(
         &mut self,
         libraries: &Libraries,
@@ -102,18 +110,32 @@ impl Model {
         path: &[Step],
         closed: Option<bool>,
     ) -> bool {
+        let sources = crate::sources::Sources {
+            doc: &self.doc,
+            libraries,
+        };
+        let Some(default) = selection::collapse_default(&sources, path) else {
+            return false;
+        };
+        self.set_collapsed(root, path, default, closed)
+    }
+
+    pub(crate) fn set_collapsed(
+        &mut self,
+        root: &workspace::Root,
+        path: &[Step],
+        default: bool,
+        closed: Option<bool>,
+    ) -> bool {
         let before = self.snapshot();
         let changed = self.workspace.view_mut(root).is_some_and(|view| {
-            let sources = crate::sources::Sources {
-                doc: &self.doc,
-                libraries,
-            };
-            match closed {
-                Some(closed) => {
-                    selection::set_collapse(&sources, &mut view.annotations, path, closed)
-                }
-                None => selection::toggle_collapse(&sources, &mut view.annotations, path),
+            let previous = crate::annotations::collapsed(&view.annotations, path, default);
+            let next = closed.unwrap_or(!previous);
+            if previous == next {
+                return false;
             }
+            crate::annotations::set_collapsed(&mut view.annotations, path, default, next);
+            true
         });
         if changed {
             selection::break_edit_run(self.selection.as_mut());

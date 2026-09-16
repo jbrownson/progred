@@ -85,8 +85,6 @@ impl Computation {
             mesh_settings,
             depth.clone(),
         );
-        // Skip the standalone renderer's two coarsest implicit levels: the mesh is
-        // already a useful draft. Keep the remaining XY and depth refinements.
         let mesh_ready = runtime.memo({
             let geometry = geometry.clone();
             move |read| {
@@ -94,9 +92,11 @@ impl Computation {
                     .read(read)?
                     .as_ref()
                     .as_ref()
-                    .is_ok_and(|(geometry, _)| !geometry.surface_pending))
+                    .is_ok_and(|geometry| !geometry.surface_pending))
             }
         });
+        // Skip the standalone renderer's two coarsest implicit levels: the mesh is
+        // already a useful draft. Keep the remaining XY and depth refinements.
         let image = implicit::computation::image(
             computations,
             recording,
@@ -114,12 +114,12 @@ impl Computation {
                     return Ok(View::Mesh(geometry, None));
                 }
                 Ok(match image.as_ref() {
-                    Ok((image, _)) if image.stale || image.image.is_none() => {
+                    Ok(image) if image.stale || image.image.is_none() => {
                         View::Mesh(geometry, image.progress)
                     }
                     // A current error is a result too; don't hide it behind old geometry.
                     _ => {
-                        let partial = image.as_ref().as_ref().is_ok_and(|(image, _)| {
+                        let partial = image.as_ref().as_ref().is_ok_and(|image| {
                             image.image.as_ref().is_some_and(|frame| frame.is_partial())
                         });
                         View::Implicit(image, partial.then_some(geometry))
@@ -192,10 +192,10 @@ pub(super) fn display(
         let view = computations.runtime.read(&computation.view);
         let drawing = view
             .as_ref()
-            .map_err(|error| (::grap::memo::failure(*error), fuel))
+            .map_err(|error| ::grap::memo::failure(*error))
             .and_then(|view| match view.as_ref() {
                 View::Mesh(geometry, progress) => {
-                    let (geometry, fuel) = geometry.as_ref().as_ref().map_err(Clone::clone)?;
+                    let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
                     let image = fidget::mesh::image(
                         &geometry.geometry,
                         &model,
@@ -203,23 +203,18 @@ pub(super) fn display(
                         scale,
                         &mut renderer.borrow_mut(),
                     )
-                    .ok_or_else(|| {
-                        (
-                            absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                            *fuel,
-                        )
-                    })?;
+                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
                     // Implicit refinement is pending, even when the fallback is current.
                     Ok(implicit::progress_bar(image, *progress))
                 }
                 View::Implicit(image, fallback) => {
-                    let (image, _) = image.as_ref().as_ref().map_err(Clone::clone)?;
+                    let image = image.as_ref().as_ref().map_err(Clone::clone)?;
                     let data = image
                         .image
                         .as_ref()
                         .expect("only current images refine the mesh");
                     let pixels = if let Some(fallback) = fallback {
-                        let (geometry, fuel) = fallback.as_ref().as_ref().map_err(Clone::clone)?;
+                        let geometry = fallback.as_ref().as_ref().map_err(Clone::clone)?;
                         let fallback = fidget::mesh::raster(
                             &geometry.geometry,
                             &model,
@@ -227,12 +222,7 @@ pub(super) fn display(
                             scale,
                             &mut renderer.borrow_mut(),
                         )
-                        .ok_or_else(|| {
-                            (
-                                absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                                *fuel,
-                            )
-                        })?;
+                        .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
                         data.over(&fallback)
                     } else {
                         data.image.clone()
@@ -247,7 +237,10 @@ pub(super) fn display(
             });
         match drawing {
             Ok(drawing) => drawing.measure(context, build),
-            Err((value, fuel)) => context.project.transient(context.text, build, value, fuel),
+            Err(value) => {
+                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
+                    .measure(context, build)
+            }
         }
     }));
     Some(fidget::interactive_volume(drawing, input))

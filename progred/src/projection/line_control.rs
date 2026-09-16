@@ -12,13 +12,16 @@ pub(crate) fn commit(
     let sources = Sources { doc, libraries };
     let next = selection
         .value_edit()
-        .filter(|_| writable_at(&sources, selection.path()))
+        .filter(|_| selection.writable(&sources))
         .and_then(|editor| {
-            let current = sources.resolve_path(selection.path());
+            let current = selection.value(&sources);
             update(&sources, editor.text(), current).filter(|next| current != Some(next))
         });
-    if next.is_some_and(|next| crate::selection::set_value(doc, libraries, selection.path(), next))
-    {
+    if next.is_some_and(|next| {
+        selection
+            .source_path()
+            .is_some_and(|path| crate::selection::set_value(doc, libraries, &path, next))
+    }) {
         let first = !selection.recorded();
         selection.preserve_recorded(true);
         first

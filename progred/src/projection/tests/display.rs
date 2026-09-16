@@ -29,7 +29,9 @@ fn projection_target_appends_relative_steps() {
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
-    use crate::display::{at_local, descend, descend_local, partial, row};
+    use crate::display::{
+        at_with_projection, compose_partials, descend, descend_local, partial, row,
+    };
     for use_at in [false, true] {
         for accepts in [false, true] {
             let field = new_cell_id();
@@ -55,11 +57,14 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                         0.0,
                         [
                             if use_at {
-                                at_local(
+                                at_with_projection(
                                     [Step::Key(field)],
                                     &nested,
-                                    local.clone(),
-                                    &input.default_projection,
+                                    Some(compose_partials([
+                                        local.clone(),
+                                        input.default_projection.clone(),
+                                    ])),
+                                    Some(input.default_projection.clone()),
                                 )
                             } else {
                                 descend_local(
@@ -93,8 +98,8 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
 }
 
 #[test]
-fn local_projection_receives_missing_values_without_leaking_through_follow_or_transient_roots() {
-    use crate::display::{descend, descend_local, partial, transient};
+fn local_projection_receives_missing_values_without_leaking_through_follow_or_at() {
+    use crate::display::{at, descend, descend_local, partial};
     for mode in 0..3 {
         let cell = new_cell_id();
         let field = new_cell_id();
@@ -107,7 +112,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_tr
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
                     0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
-                    1 => Some(transient(&Value::from(vec![7]), 100)),
+                    1 => Some(at([Step::Key(field)], &Value::from(vec![7]))),
                     _ => None,
                 }
             },
@@ -243,7 +248,7 @@ fn descents_replace_current_and_default_projections_independently() {
 
 #[test]
 fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
-    use crate::display::{at_scoped, descend, dim, partial, row};
+    use crate::display::{at_with_projection, compose_partials, descend, dim, partial, row};
     let scoped = new_cell_id();
     let ordinary = new_cell_id();
     let items = new_cell_id();
@@ -262,14 +267,16 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     let expected_root = root.clone();
     let projection = Projection::new([partial(move |input| {
         (input.value == Some(&expected_root)).then(|| {
+            let scoped_projection =
+                compose_partials([special.clone(), input.default_projection.clone()]);
             row(
                 0.0,
                 [
-                    at_scoped(
+                    at_with_projection(
                         [Step::Key(scoped)],
                         &nested,
-                        special.clone(),
-                        &input.default_projection,
+                        Some(scoped_projection.clone()),
+                        Some(scoped_projection),
                     ),
                     descend(Step::Key(ordinary), None, None),
                 ],

@@ -12,6 +12,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 pub mod builder;
+mod conject;
+pub use conject::Conject;
 mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
 pub mod profile;
@@ -305,9 +307,8 @@ impl<World: 'static, Hover: 'static> Layout<World, Hover> {
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
     /// Apply a callable to values without evaluating those arguments as expressions.
-    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> (Value, usize) {
-        let evaluation = self.apply_scoped(function, arguments, None);
-        (evaluation.result, evaluation.remaining_fuel)
+    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> Value {
+        self.apply_scoped(function, arguments, None).result
     }
 
     /// Borrow capabilities for this application only. Their output remains host-owned.
@@ -318,13 +319,12 @@ pub trait Env {
         scope: Option<&grap::ForeignOverlay<'_>>,
     ) -> grap::Evaluation;
 
-    /// Remaining fuel is the evaluator budget left after this call,
-    /// so a grap-shaped result can continue the same allowance.
-    fn evaluate(&self, expression: &Value) -> (Value, usize);
+    /// Evaluate an expression using the host's ordinary allowance.
+    fn evaluate(&self, expression: &Value) -> Value;
 
     /// Evaluate with an explicit allowance. Hosts that do not expose
     /// fuel may keep their ordinary behavior.
-    fn evaluate_with_fuel(&self, expression: &Value, _fuel: usize) -> (Value, usize) {
+    fn evaluate_with_fuel(&self, expression: &Value, _fuel: usize) -> Value {
         self.evaluate(expression)
     }
 
@@ -671,18 +671,97 @@ pub fn descend<World: 'static, Hover: 'static>(
         context.project.descend(
             context.text,
             build,
-            step.clone(),
+            std::slice::from_ref(&step),
             projection.clone(),
             default_projection.clone(),
         )
     }))
 }
 
+/// Descend through stored structure without projecting intermediate containers.
+pub fn descend_path<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+) -> Layout<World, Hover> {
+    descend_path_with_projection(steps, None, None)
+}
+
+pub fn descend_path_with_projection<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
+    let steps = steps.into();
+    Layout::program(Rc::new(move |context, build| {
+        context.project.descend(
+            context.text,
+            build,
+            &steps,
+            projection.clone(),
+            default_projection.clone(),
+        )
+    }))
+}
+
+/// Project a supplied value at an occurrence with no document source.
 pub fn at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
 ) -> Layout<World, Hover> {
     at_with_projection(steps, value, None, None)
+}
+
+/// Start projecting at an absolute document location while extending only the
+/// occurrence path by `steps`. Descendants conject back to that location.
+pub fn jump<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    document: impl Into<Vec<Step>>,
+) -> Layout<World, Hover> {
+    jump_with_conject(steps, document, Conject::descend(), None, None)
+}
+
+/// Low-level jump: the conject interprets the suffix below the new occurrence
+/// relative to `document`. It is also used to locate the value being projected.
+pub fn jump_with_conject<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    document: impl Into<Vec<Step>>,
+    conject: Conject,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
+    let steps = steps.into();
+    let document = document.into();
+    Layout::program(Rc::new(move |context, build| {
+        context.project.jump(
+            context.text,
+            build,
+            steps.clone(),
+            document.clone(),
+            conject.clone(),
+            projection.clone(),
+            default_projection.clone(),
+        )
+    }))
+}
+
+pub fn descend_path_local<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    descend_path_with_projection(
+        steps,
+        Some(compose_partials([projection, default.clone()])),
+        Some(default.clone()),
+    )
+}
+
+pub fn descend_path_scoped<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    let projection = compose_partials([projection, default.clone()]);
+    descend_path_with_projection(steps, Some(projection.clone()), Some(projection))
 }
 
 pub fn at_with_projection<World: 'static, Hover: 'static>(
@@ -716,43 +795,6 @@ pub fn descend_local<World: 'static, Hover: 'static>(
         Some(compose_partials([projection, default.clone()])),
         Some(default.clone()),
     )
-}
-
-pub fn at_local<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    value: &Value,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    at_with_projection(
-        steps,
-        value,
-        Some(compose_partials([projection, default.clone()])),
-        Some(default.clone()),
-    )
-}
-
-/// Extend the default for both this value and its descendants.
-pub fn at_scoped<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    value: &Value,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    let projection = compose_partials([projection, default.clone()]);
-    at_with_projection(steps, value, Some(projection.clone()), Some(projection))
-}
-
-pub fn transient<World: 'static, Hover: 'static>(
-    value: &Value,
-    fuel: usize,
-) -> Layout<World, Hover> {
-    let value = value.clone();
-    Layout::program(Rc::new(move |context, build| {
-        context
-            .project
-            .transient(context.text, build, value.clone(), fuel)
-    }))
 }
 
 pub fn alternatives<World: 'static, Hover: 'static>(
@@ -797,6 +839,47 @@ mod tests {
         None
     }
 
+    #[test]
+    fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
+        let steps = vec![Step::Key(gid::new_cell_id()), Step::Key(gid::new_cell_id())];
+        let source = vec![Step::Key(gid::new_cell_id())];
+        let layout: Layout<(), ()> =
+            descend_path_local(steps.clone(), partial(probe), &partial(probe));
+        match inspect(&layout) {
+            ProjectionCall::DescendPath {
+                steps: actual,
+                projection,
+                default_projection,
+            } => {
+                assert_eq!(actual, steps);
+                assert!(projection.is_some());
+                assert!(default_projection.is_some());
+            }
+            _ => panic!("stored traversal"),
+        }
+        let layout: Layout<(), ()> = jump(steps.clone(), source.clone());
+        match inspect(&layout) {
+            ProjectionCall::Jump {
+                steps: actual,
+                document,
+                conject,
+                projection,
+                default_projection,
+            } => {
+                assert_eq!(actual, steps);
+                assert_eq!(document, source);
+                assert_eq!(
+                    conject.apply(&steps, &document),
+                    Some([source, steps].concat())
+                );
+                assert!(projection.is_none());
+                assert!(default_projection.is_none());
+            }
+            _ => panic!("source jump"),
+        }
+        assert_eq!(Conject::detached().apply(&[], &[]), None);
+    }
+
     fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
         struct NoEval;
         impl Env for NoEval {
@@ -809,7 +892,7 @@ mod tests {
                 panic!("unexpected application")
             }
 
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
+            fn evaluate(&self, _: &Value) -> Value {
                 panic!("unexpected evaluation")
             }
         }

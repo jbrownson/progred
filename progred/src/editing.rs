@@ -4,6 +4,10 @@ use crate::{Editor, projection, selection, sources, sources::Sources, workspace:
 use gid::{Path, Step, Value};
 use puri::{Point, edit::EditCtx};
 
+mod scope;
+pub use scope::Read;
+pub(crate) use scope::{Access, Scope};
+
 pub(crate) fn select(app: &mut Editor, root: &Root, path: &[Step]) {
     let fresh = app.model.selection.as_ref().is_none_or(|current| {
         current.root() != root
@@ -22,15 +26,6 @@ pub(crate) fn select(app: &mut Editor, root: &Root, path: &[Step]) {
     }
 }
 
-pub(crate) fn select_payload(app: &mut Editor, root: &Root, path: Path, payload: Value) {
-    app.model.selection = Some(selection::Selection::from_payload(
-        root,
-        &app.sources(),
-        path,
-        payload,
-    ));
-}
-
 pub(crate) fn annotate(app: &mut Editor, root: &Root, path: &[Step], state: Value) -> bool {
     match app.model.workspace.view_mut(root) {
         Some(view) if view.annotations.at(path) != Some(&state) => {
@@ -41,6 +36,7 @@ pub(crate) fn annotate(app: &mut Editor, root: &Root, path: &[Step], state: Valu
     }
 }
 
+#[cfg(test)]
 pub(crate) fn insert(app: &mut Editor, root: &Root, path: &[Step]) {
     if let Some(pending) = selection::pending_after(root, &app.sources(), path) {
         app.model.selection = Some(pending);
@@ -125,8 +121,7 @@ pub(crate) fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation
         .selection
         .as_mut()
         .filter(|selection| {
-            selection.stage(&sources) != selection::Stage::Edge
-                && selection::writable_at(&sources, selection.path())
+            selection.stage(&sources) != selection::Stage::Edge && selection.writable(&sources)
         })
         .is_some_and(|selection| {
             selection.edit_query(|state| {
@@ -164,7 +159,7 @@ pub(crate) fn edit_line(
         selected.root() == root
             && selected.path() == path
             && selected.stage(&sources) == selection::Stage::Edge
-            && selection::writable_at(&sources, path)
+            && selected.writable(&sources)
     });
     let (handled, record) = match selected {
         Some(selected) => projection::line_control::edit(

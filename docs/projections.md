@@ -76,21 +76,45 @@ passed explicitly through recursion. A partial returns a `Layout<World, Hover>`
 program that calls the layout builder with box operations, Puri leaves, and
 opaque widget/preparation functions.
 
-`At`/`descend` extend provenance and accept independent optional replacements
+`at`/`descend`/`jump` accept independent optional replacements
 for the projection at their target and the default passed to descendants.
 Omitting either inherits it; supplying one replaces it without implicit
 composition. The total structural fallback still handles a declined result.
-`descend_local`/`at_local` compose a custom partial before the default only at
-the target. `at_scoped` passes that composition both here and below, so callers
-can intentionally establish a scope. Both build ordinary preparation functions,
-not path-bearing layout opcodes.
+`descend_local`/`descend_path_local` compose a custom partial before the default
+only at the target. `descend_path_scoped` passes that composition both here and
+below. `at_with_projection` accepts the same explicit partial compositions.
+These are ordinary preparation functions, not path-bearing layout opcodes.
+
+`descend` follows one step of the displayed structure; `descend_path` follows
+several without projecting intermediate containers. Both preserve the current
+location interpretation. `jump(steps, document_path)` extends the occurrence
+path by `steps` but reads from an absolute, source-qualified document path.
+Its descendants conject to that source. `jump_with_conject` supplies the lower
+level function, `(&projection_suffix, &document_path) -> Option<Path>`, used by
+both projection reads and later edits. No inverse is required.
+
+`at(steps, value)` instead projects the supplied value with no document source.
+Its conject returns `None`, including for ordinary descendants and cell follows.
+An explicit nested jump can establish a source. Existing stored-child partials
+use `descend_path`, not `at` with a copy of the source value. Computed results
+use the same `at` combinator, with a `Key(presentation::RESULT)` occurrence
+step distinguishing the result from its producing expression. This is a
+projection path, not a fabricated field or writable document location.
 
 Partials receive `Option<&Value>`: `None` means a missing location, not a GID
 absent or an empty string. `descend` offers the resolved value or its absence to
 the chosen partial; if it declines, the fallback renders structure for `Some`
 or the standard empty picker for `None`. There is no separate `missing` parameter
-and no fabricated value. The same source-qualified location supplies selection
-and writeability in either case.
+and no fabricated value. A missing value at a real source remains writable;
+having no source is distinct and does not offer document editing. Selection
+identity always belongs to the displayed occurrence.
+
+The common preparation boundary for `descend`, `at`, and `jump` supplies
+selected-value copy/cut and fold handlers below the projected widget's own
+handlers. Copy captures the actual projected value, not a document lookup.
+Fold captures the value's collapse default and updates only occurrence-local
+annotations; even an occurrence with no document source can copy and fold.
+Only the deletion half of cut requires a document destination.
 
 The lambda-name partial shows `λ` when the name is missing and unselected.
 Activation selects that missing location for entry. Once selected, the partial
@@ -175,16 +199,18 @@ rendered viewport.
 
 `{evaluate: expression}` is a Grap-library projection convention, not evaluator
 syntax. It shows the stored expression, an arrow, and the returned value from
-a transient read-only root. When wrapped, the arrow stays with the stored
-expression and the result is indented underneath. A result containing another
-`evaluate` field can invoke that projection again under the remaining fuel allowance. Ordinary
-call-shaped values elsewhere remain editable data until explicitly evaluated.
+its own read-only `at` occurrence. When wrapped, the arrow stays with the stored
+expression and the result is indented underneath. Result children are ordinary
+navigation stops and can be copied and folded independently. A result containing
+another `evaluate` field can invoke that projection again with an ordinary fresh
+evaluation allowance. Ordinary call-shaped values elsewhere remain editable data
+until explicitly evaluated.
 
 The presentation library offers an opt-in interpreter for
 `{value: source, projection: function}`. Pane views try it only at entry,
 following cells through their ordinary definition paths. The document view
 leaves the declaration as editable data. It applies the function to the source
-as data and projects the result from a transient root using the normal
+as data and projects the result with `at` using the normal
 projection. An absent result reveals the stored source using that same normal
 projection. Nested declarations remain data, including inside list or record
 panes and computed results. Entry intentionally follows cells to the first
@@ -193,10 +219,35 @@ The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
 Explicit `{render: expression}` values retain their ordinary display behavior.
 
+The presentation library also offers an opt-in record outline:
+`{outline: [field-a, field-b], field-a: ..., field-b: ...}`. The list orders
+field references, not copies of their contents. The actual list is projected
+at the top with the ordinary list combinator and a local element partial:
+each element shows the field's current name and toggles its section on click.
+Highlighted elements denote visible sections; several may be visible at once.
+The click selects that actual list element, so ordinary navigation, insertion,
+deletion, and picking still work. Removing an element removes only the reference,
+not the section's field.
+
+Visibility uses the existing undoable view fold at the section's real field
+path, without document edits or a separate tab-state convention. A section
+containing the active selection remains visible; toggling it selects the list
+element, so no editor is hidden beneath its caret. Section headings retain
+ordinary field selection, and section lists use the shared list projection
+with vertical spacing. Computed outlines use the same occurrence-local toggles;
+their fold defaults come from the displayed section values, not document lookup.
+The outline has no outer braces. Only unlisted fields appear in an ordinary
+record footer, omitted when there are no extras or pending field insertion.
+Its braces select the whole record; it has no separate fold state or control.
+Duplicate references show one section; a missing referenced field gets its
+ordinary empty picker. A malformed outline declines to the normal projection.
+This is a library presentation available at any record, not a special root or
+workspace model. Raw still projects the underlying record normally.
+
 Assigned-size panes instead use `{value: source, viewport: function}`. The editor
 recognizes this contract at pane entry and passes the settled logical `width`
-and `height` along with `value`. The result goes through the same transient
-layout lowering and handler machinery as other computed content. There is no
+and `height` along with `value`. The result goes through the same `at`
+projection and handler machinery as other computed content. There is no
 pane-size lookup FFI and no size field on every ordinary projection input.
 The pane supplies the clip and no padding or document scroll handler. The
 function may provide its own interactions, such as Fidget orbit and zoom.
@@ -220,7 +271,7 @@ only supplies offers, query state, document callbacks, and popup placement.
 The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.
 
-Grap's `descend` and `at` forms decode through the
+Grap's `descend`, `descend path`, `jump`, and `at` forms decode through the
 [path library](../progred/src/libraries/path.rs), also used by site and selection
 capabilities. Field keys, list positions, and source-qualified definition
 follows have one encoder/decoder. They produce ordinary preparation functions
@@ -306,6 +357,14 @@ committed unless the handler explicitly declines or evaluation halts. An ordinar
 absent result is still a completed result. Completion continuations
 use the same effect interpreter, staged together with the document insertion.
 
+Native editing scopes also pass through this Grap adapter. `site path` and
+selection paths name displayed occurrences; the host retains the interpretation
+used by later document edits. No mutable editor, scope handle, or opaque native
+value is encoded into GID. Completion continuations receive a read-only scoped
+view, so looking up their committed path reads the newly inserted source value.
+Scope construction and arbitrary Grap-defined editor wrappers are not exposed
+as Grap functions in this checkpoint.
+
 Drawing programs use scoped foreign operations for fills, strokes, paths,
 transforms, and clips. A temporary path builder belongs to that synchronous
 evaluation. A visible program records once in the frame; hover and painting
@@ -330,10 +389,16 @@ function evaluates it. `pad`, `bracket`, and interaction wrappers take a raw
 while evaluating a body. Successful operations return the ordinary empty record;
 their useful output remains in Rust.
 
-Leaf/recursion capabilities include `text`, `slot`, `descend`, `at`, and
-`transient`. `canvas` accepts width/ascent/descent and a drawing-program value;
+Leaf/recursion capabilities include `text`, `slot`, `descend`, `descend path`,
+`jump`, and `at`. `descend` takes `step`; `descend path` takes
+`steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
+All paths use the path library, with no opaque editor or scope value in Grap.
+Custom native conject functions are currently Rust-side; the Grap-facing jump
+provides the standard document-path interpretation.
+`canvas` accepts width/ascent/descent and a drawing-program value;
 it does not construct a list of draw commands. Its optional fuel argument
-configures the later drawing evaluation, as with the stored drawing convention.
+configures the later drawing evaluation, as with the stored drawing convention;
+omitting it uses the evaluator's ordinary default, not the layout call's remainder.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
 and text paint to the ink face. Other required inputs are validated. Invalid
 builder calls return absents; containers propagate a failed child computation
@@ -439,6 +504,15 @@ A function's returned value is not evaluated again.
 The registered `evaluate` function is distinct from the projection field. It
 accepts an explicit environment value and asks the evaluator to interpret its
 raw expression there. It is an ordinary library function.
+
+Fuel limits individual evaluator runs to help catch accidental runaway programs;
+it is not a security boundary. Calls within one evaluator context still spend
+that context's allowance. Separate projection evaluations start fresh and may
+specify their own budgets; the projection context retains no remaining-fuel
+state and does not clamp a nested render's requested budget. In particular,
+an endlessly self-reproducing projection can still hang the editor. Preventing
+all such loops is not a contract of the current fuel mechanism. Preview meshes,
+images, and display errors do not carry unused evaluator fuel through rendering.
 
 ## Control functions and absents
 

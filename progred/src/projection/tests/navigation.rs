@@ -119,6 +119,7 @@ fn command_a_selects_the_current_views_root() {
     ]
     .into_iter()
     .map(|(root, path)| Descend {
+        scope: Default::default(),
         root: Some(root.clone()),
         ..stop(path, 0.0, 0.0, 100.0, 20.0)
     })

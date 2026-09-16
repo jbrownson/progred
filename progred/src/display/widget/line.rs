@@ -39,7 +39,7 @@ pub fn view(
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
     let cx = context.inputs;
     let path = context.path;
-    let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, path);
+    let writable = cx.edits.writable(&cx.sources, path);
     let active = cx.selection.filter(|selection| {
         writable
             && selection.path() == path
@@ -50,6 +50,7 @@ pub fn view(
         .map(|selection| selection.initial_line(&line.text));
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
     let root = cx.view.clone();
+    let edits = cx.edits.clone();
     let path: Rc<[gid::Step]> = Rc::from(path);
     let style = context.inputs.styles.line_style(&line);
     let placeholder_style = TextStyle {
@@ -74,9 +75,12 @@ pub fn view(
             let root = root.clone();
             let path = path.clone();
             let line = line.clone();
+            let edits = edits.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
                 widget.install(output, placement, move |world, operation| {
-                    crate::editing::edit_line(world, &root, &path, &line, operation)
+                    edits
+                        .open(crate::editing::Access::new(world))
+                        .edit_line(&root, &path, &line, operation)
                 });
                 output.render(move |canvas, _| widget.draw(canvas, placement));
             })
@@ -107,10 +111,12 @@ pub fn view(
         let nav_root = root.clone();
         let nav_path = path.clone();
         let description = line.clone();
+        let nav_edits = edits.clone();
         let navigation: Select<crate::Editor> = Rc::new(move |world, direction| {
-            crate::editing::select(world, &nav_root, &nav_path);
+            let mut editor = nav_edits.open(crate::editing::Access::new(world));
+            editor.select(&nav_root, &nav_path);
             if direction == Some(Direction::Left) {
-                crate::editing::edit_line(world, &nav_root, &nav_path, &description, &|edit| {
+                editor.edit_line(&nav_root, &nav_path, &description, &|edit| {
                     edit.state.cursor_to_start();
                     true
                 });
@@ -130,10 +136,11 @@ pub fn view(
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && {
+                        let mut editor = edits.open(crate::editing::Access::new(world));
                         if !active {
-                            crate::editing::select(world, &root, &path);
+                            editor.select(&root, &path);
                         }
-                        crate::editing::edit_line(world, &root, &path, &line, &|edit| {
+                        editor.edit_line(&root, &path, &line, &|edit| {
                             edit.state.pointer_down(
                                 &presentation,
                                 edit.fonts,
@@ -168,7 +175,7 @@ mod tests {
             &crate::display::test_support::NoProject,
             |context| {
                 let mut cx = context.inputs.clone();
-                cx.source = crate::projection::Source::Transient { owner: &[] };
+                cx.edits = cx.edits.detached(vec![]);
                 let mut context = Context {
                     inputs: &cx,
                     project: context.project,

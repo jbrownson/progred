@@ -22,6 +22,7 @@ pub struct Landmark<World> {
     pub path: Rc<[Step]>,
     pub rect: Rect,
     pub select: Select<World>,
+    pub(crate) scope: crate::editing::Scope,
 }
 
 impl<World> Clone for Landmark<World> {
@@ -31,14 +32,16 @@ impl<World> Clone for Landmark<World> {
             path: self.path.clone(),
             rect: self.rect,
             select: self.select.clone(),
+            scope: self.scope.clone(),
         }
     }
 }
 
-pub fn landmark<World: 'static, H: 'static>(
+pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Rc<[Step]>,
     select: Select<World>,
+    scope: crate::editing::Scope,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
         pass.scope(
@@ -50,6 +53,7 @@ pub fn landmark<World: 'static, H: 'static>(
                     path,
                     rect: placement.rect,
                     select,
+                    scope,
                 });
                 output
             },
@@ -93,8 +97,13 @@ mod tests {
 
     #[test]
     fn only_the_nearest_landmark_consumes_a_controls_arrival_handler() {
-        let child = landmark(control(Some(select("control"))), path(), select("child"));
-        let child = landmark(child, path(), select("parent"));
+        let child = landmark(
+            control(Some(select("control"))),
+            path(),
+            select("child"),
+            Default::default(),
+        );
+        let child = landmark(child, path(), select("parent"), Default::default());
         let child = crate::display::widget::before_place(child, |_, output: &mut Frame| {
             output.on_arrival(Some(select("outside")));
         });
@@ -118,8 +127,13 @@ mod tests {
 
     #[test]
     fn sibling_landmarks_do_not_share_arrival_handlers() {
-        let first = landmark(control(Some(select("first"))), path(), select("unused"));
-        let second = landmark(control(None), path(), select("second"));
+        let first = landmark(
+            control(Some(select("first"))),
+            path(),
+            select("unused"),
+            Default::default(),
+        );
+        let second = landmark(control(None), path(), select("second"), Default::default());
         let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
         let output = crate::display::widget::frame::place(
             measured::row(0.0, vec![first, second]),
@@ -136,7 +150,12 @@ mod tests {
 
     #[test]
     fn unplaced_subtrees_do_not_contribute_landmarks() {
-        let child = landmark(control(Some(select("control"))), path(), select("unused"));
+        let child = landmark(
+            control(Some(select("control"))),
+            path(),
+            select("unused"),
+            Default::default(),
+        );
         let child = measured::around_into(child, |_, _, _| {});
         let output = crate::display::widget::frame::place(
             child,

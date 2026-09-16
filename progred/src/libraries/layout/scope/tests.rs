@@ -98,6 +98,51 @@ fn scoped_layout_calls_compose_through_grap_functions_and_nested_bodies() {
 }
 
 #[test]
+fn grap_recursion_calls_emit_the_same_native_location_operations() {
+    use crate::display::test_support::{ProjectionCall, inspect};
+    let steps = vec![
+        gid::Step::Key(gid::new_cell_id()),
+        gid::Step::Key(gid::new_cell_id()),
+    ];
+    let document = vec![gid::Step::Key(gid::new_cell_id())];
+    let encoded = crate::libraries::path::value(&steps);
+    let (result, layout) = evaluate(&call(DESCEND_PATH, [(STEPS, quote(encoded.clone()))]), 1000);
+    assert!(result.completed);
+    assert!(
+        matches!(inspect(&layout.unwrap()), ProjectionCall::DescendPath { steps: actual, .. } if actual == steps)
+    );
+    let (result, layout) = evaluate(
+        &call(
+            JUMP,
+            [
+                (STEPS, quote(encoded.clone())),
+                (
+                    DOCUMENT_PATH,
+                    quote(crate::libraries::path::value(&document)),
+                ),
+            ],
+        ),
+        1000,
+    );
+    assert!(result.completed);
+    assert!(
+        matches!(inspect(&layout.unwrap()), ProjectionCall::Jump { steps: actual, document: target, .. } if actual == steps && target == document)
+    );
+    let supplied = crate::libraries::text::value("computed");
+    let (result, layout) = evaluate(
+        &call(
+            AT,
+            [(STEPS, quote(encoded)), (VALUE, quote(supplied.clone()))],
+        ),
+        1000,
+    );
+    assert!(result.completed);
+    assert!(
+        matches!(inspect(&layout.unwrap()), ProjectionCall::At { steps: actual, value, .. } if actual == steps && value == supplied)
+    );
+}
+
+#[test]
 fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
     let programs = [
         sequence([text("valid"), call(TEXT, [])]),

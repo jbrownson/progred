@@ -2,7 +2,7 @@ use super::*;
 use crate::libraries::f64 as f64_convention;
 
 #[test]
-fn tool_profile_click_selects_its_stored_or_evaluated_owner() {
+fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
     let tool = crate::libraries::toolpath::cutter::Tool::ball(0.125, 0.22)
         .unwrap()
         .value();
@@ -60,7 +60,13 @@ fn tool_profile_click_selects_its_stored_or_evaluated_owner() {
                 ..Default::default()
             },
         );
-        let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+        let mut selected_path = path.clone();
+        if evaluated {
+            selected_path.push(Step::Key(
+                crate::libraries::presentation::vocabulary::RESULT,
+            ));
+        }
+        let target = Hovered::Tree(Hover::Value(Rc::from(selected_path.clone())));
         assert_eq!(
             frame.claim.as_ref().map(|(_, claim)| claim),
             Some(&Claim::Direct(target.clone()))
@@ -76,7 +82,7 @@ fn tool_profile_click_selects_its_stored_or_evaluated_owner() {
         ));
         assert_eq!(
             world.model.selection.as_ref().unwrap().path(),
-            path.as_slice()
+            selected_path.as_slice()
         );
         assert!(
             Rc::ptr_eq(&world.model.doc, &document),
@@ -266,11 +272,9 @@ fn gesture_place(
         &crate::display::test_support::NoProject,
         |context| {
             let mut cx = context.inputs.clone();
-            cx.source = if readonly {
-                Source::Transient { owner: &[] }
-            } else {
-                Source::Stored
-            };
+            if readonly {
+                cx.edits = cx.edits.detached(vec![]);
+            }
             before(&mut crate::display::widget::Context {
                 inputs: &cx,
                 project: context.project,

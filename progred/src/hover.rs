@@ -41,14 +41,17 @@ impl crate::display::widget::source::PathLookup for Sources<'_> {
         self.resolve_path(path)
     }
 }
-pub(crate) fn from_grap(origin: grap::SourceOrigin, input: &SourceTrace) -> SourceTrace {
+pub(crate) fn from_grap(
+    origin: grap::SourceOrigin,
+    input: Option<&SourceTrace>,
+) -> Option<SourceTrace> {
     match origin {
-        grap::SourceOrigin::Input(path) => input.descendant(&path),
-        grap::SourceOrigin::Cell { cell, source, path } => SourceTrace::InCell {
+        grap::SourceOrigin::Input(path) => input.map(|input| input.descendant(&path)),
+        grap::SourceOrigin::Cell { cell, source, path } => Some(SourceTrace::InCell {
             cell,
             source,
             path: path.into(),
-        },
+        }),
     }
 }
 
@@ -73,6 +76,32 @@ pub(crate) fn hover_secondary<C>(
 mod tests {
     use super::*;
     use gid::{Cells, Document, new_cell_id};
+
+    #[test]
+    fn detached_drawing_has_no_input_source_but_still_traces_called_cells() {
+        let path = vec![Step::Key(new_cell_id())];
+        assert_eq!(
+            from_grap(grap::SourceOrigin::Input(path.clone()), None),
+            None
+        );
+        let cell = new_cell_id();
+        let source = gid::Resolution::Document;
+        assert_eq!(
+            from_grap(
+                grap::SourceOrigin::Cell {
+                    cell,
+                    source,
+                    path: path.clone()
+                },
+                None
+            ),
+            Some(SourceTrace::InCell {
+                cell,
+                source,
+                path: path.into()
+            })
+        );
+    }
 
     fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
         let path: Rc<[Step]> = Rc::from(path);
@@ -139,10 +168,10 @@ mod tests {
                 let trace = SourceTrace::from_path(&sources, left_path.clone().into());
                 let input = SourceTrace::from_path(&sources, Rc::from(&left_path[..2]));
                 assert_eq!(
-                    trace,
+                    Some(trace.clone()),
                     crate::hover::from_grap(
                         grap::SourceOrigin::Input(vec![Step::Key(field)]),
-                        &input
+                        Some(&input)
                     )
                 );
                 assert_eq!(

@@ -82,8 +82,13 @@ pub fn on_state_drag(
             let path = context.path.to_vec();
             let annotation_root = root.clone();
             let annotation_path = path.clone();
+            let edits = context.inputs.edits.clone();
             let annotate: Annotate<crate::Editor> = Rc::new(move |world, value| {
-                crate::editing::annotate(world, &annotation_root, &annotation_path, value)
+                edits.open(crate::editing::Access::new(world)).annotate(
+                    &annotation_root,
+                    &annotation_path,
+                    value,
+                )
             });
             let handler = handler.clone();
             let on_press = on_press.clone();
@@ -122,11 +127,14 @@ pub fn on_point(
     before(
         child,
         Rc::new(move |context| {
-            if !context.inputs.source.transient()
-                && crate::selection::writable_at(&context.inputs.sources, context.path)
+            if context
+                .inputs
+                .edits
+                .writable(&context.inputs.sources, context.path)
             {
                 let root = context.inputs.view.clone();
                 let path = context.path.to_vec();
+                let edits = context.inputs.edits.clone();
                 let handler = handler.clone();
                 Box::new(move |output, placement| {
                     output.handler().on_pointer_down(move |world, event| {
@@ -137,7 +145,11 @@ pub fn on_point(
                                 point(
                                     placement.rect,
                                     handler.clone(),
-                                    crate::gesture::value_edit(root.clone(), path.clone()),
+                                    crate::gesture::scoped_value_edit(
+                                        root.clone(),
+                                        path.clone(),
+                                        edits.clone(),
+                                    ),
                                 ),
                                 &[at],
                             );

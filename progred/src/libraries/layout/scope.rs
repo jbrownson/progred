@@ -16,8 +16,9 @@ const FUNCTIONS: &[CellId] = &[
     TEXT,
     SLOT,
     DESCEND,
+    DESCEND_PATH,
+    JUMP,
     AT,
-    TRANSIENT,
     CANVAS,
     SELECTABLE,
     HOVERABLE,
@@ -126,13 +127,15 @@ pub(super) fn display(
         |scope| input.env.apply_scoped(function, &[], Some(scope)),
     );
     Some(layout.unwrap_or_else(|| {
-        crate::display::transient(
+        crate::display::at(
+            [gid::Step::Key(
+                crate::libraries::presentation::vocabulary::RESULT,
+            )],
             &if absent::is_absent(&evaluation.result) {
                 evaluation.result
             } else {
                 ::grap::absent::with_detail(INVALID_PROGRAM, VALUE, evaluation.result)
             },
-            evaluation.remaining_fuel,
         )
     }))
 }
@@ -281,13 +284,14 @@ fn operation(
         }
         SLOT => slot(),
         DESCEND => descend(arg!(STEP, crate::libraries::path::read_step), None, None),
+        DESCEND_PATH => crate::display::descend_path(arg!(STEPS, crate::libraries::path::read)),
+        JUMP => crate::display::jump(
+            arg!(STEPS, crate::libraries::path::read),
+            arg!(DOCUMENT_PATH, crate::libraries::path::read),
+        ),
         AT => {
             let steps = arg!(STEPS, crate::libraries::path::read);
             crate::display::at(steps, &arg!(VALUE, |value| Some(value.clone())))
-        }
-        TRANSIENT => {
-            let value = arg!(VALUE, |value| Some(value.clone()));
-            crate::display::transient(&value, context.remaining_fuel())
         }
         CANVAS => {
             let width = number!(WIDTH, None);
@@ -296,8 +300,7 @@ fn operation(
             if width < 0.0 || ascent < 0.0 || descent < 0.0 {
                 return Err(invalid(function));
             }
-            let remaining = context.remaining_fuel() as f64;
-            let fuel = number!(FUEL, Some(remaining));
+            let fuel = number!(FUEL, Some(::grap::DEFAULT_FUEL as f64));
             if fuel < 0.0 || fuel.fract() != 0.0 || fuel > usize::MAX as f64 {
                 return Err(invalid(function));
             }

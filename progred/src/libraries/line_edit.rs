@@ -24,7 +24,7 @@ pub fn grap(function: Value) -> LineUpdate {
                         .map(|current| (vocabulary::CURRENT, current)),
                 )
                 .collect::<Vec<_>>();
-        let (result, _) = env.apply(&function, &arguments);
+        let result = env.apply(&function, &arguments);
         (!crate::libraries::absent::is_absent(&result)).then_some(result)
     })
 }

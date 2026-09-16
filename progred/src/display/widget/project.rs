@@ -12,7 +12,17 @@ pub trait Project<World, Hover> {
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
-        step: Step,
+        steps: &[Step],
+        current: Option<Partial<World, Hover>>,
+        default: Option<Partial<World, Hover>>,
+    ) -> ChoiceLayout<HoverPass<World, Hover>>;
+    fn jump(
+        &self,
+        text: &mut TextCtx,
+        build: &mut ChoiceBuild<HoverPass<World, Hover>>,
+        steps: Vec<Step>,
+        document: Vec<Step>,
+        conject: crate::display::Conject,
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
@@ -24,12 +34,5 @@ pub trait Project<World, Hover> {
         value: Value,
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
-    ) -> ChoiceLayout<HoverPass<World, Hover>>;
-    fn transient(
-        &self,
-        text: &mut TextCtx,
-        build: &mut ChoiceBuild<HoverPass<World, Hover>>,
-        value: Value,
-        fuel: usize,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
 }

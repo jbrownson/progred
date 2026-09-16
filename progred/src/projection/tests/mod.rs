@@ -132,9 +132,18 @@ fn editing_frame_at(
     projection: Option<&Projection<EditingWorld>>,
     pointer: Option<Point>,
 ) -> crate::placed::HoverOutput<EditingWorld> {
+    editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
+}
+
+fn editing_frame_with_annotations(
+    world: &mut EditingWorld,
+    raw: bool,
+    projection: Option<&Projection<EditingWorld>>,
+    pointer: Option<Point>,
+    annotations: &Annotations,
+) -> crate::placed::HoverOutput<EditingWorld> {
     let stack = crate::stack::load();
     let styles = crate::styles::editor(1.0);
-    let annotations = Annotations::default();
     let mut tcx = TextCtx {
         fonts: &mut world.font_cx,
         layouts: &mut world.layout_cx,
@@ -154,7 +163,7 @@ fn editing_frame_at(
             root_path: &[],
             selection: world.model.selection.as_ref(),
             source_selection: world.model.selection.as_ref(),
-            annotations: &annotations,
+            annotations,
             raw,
             styles: &styles,
             width: 500.0,
@@ -261,6 +270,7 @@ const LINE: f64 = 16.0;
 
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
     Descend {
+        scope: Default::default(),
         root: None,
         path: Rc::from(path),
         rect: Rect::new(x0, y0, x1, y1),

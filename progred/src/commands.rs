@@ -1,6 +1,6 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 use crate::CLIPBOARD_FORMAT;
 use crate::Editor;
 use crate::modifiers;
@@ -12,6 +12,32 @@ use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
+    fn select_landmark_or_edge(
+        &mut self,
+        geometry: navigate::Geometry<'_>,
+        root: &crate::workspace::Root,
+        path: gid::Path,
+    ) {
+        if let Some(target) = geometry
+            .descends
+            .iter()
+            .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
+        {
+            (target.select)(self, None);
+        } else {
+            let scope = self
+                .model
+                .selection
+                .as_ref()
+                .map(|selection| selection.scope().clone())
+                .unwrap_or_default();
+            self.model.selection = None;
+            scope
+                .open(crate::editing::Access::new(self))
+                .select(root, &path);
+        }
+    }
+
     pub(crate) fn commit_completion(
         &mut self,
         value: Value,
@@ -22,6 +48,7 @@ impl Editor {
             return false;
         };
         let root = selection.root().clone();
+        let scope = selection.scope().clone();
         let Some(view) = self.model.workspace.view(&root) else {
             return false;
         };
@@ -41,13 +68,14 @@ impl Editor {
             self.model.history.record(before);
             self.refresh_title();
         }
-        crate::site::install(
+        crate::site::install_scoped(
             prepared.effects,
             &sources::Sources {
                 doc: &self.model.doc,
                 libraries: &self.stack.libraries,
             },
             &root,
+            scope,
             &prepared.path,
             &mut self.model.workspace.view_mut(&root).unwrap().annotations,
             &mut self.model.selection,
@@ -83,23 +111,27 @@ impl Editor {
             Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
+                let Some(source_path) = current.source_path().map(|path| path.into_owned()) else {
+                    return false;
+                };
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
                 let covered = current.recorded();
                 let before = self.model.snapshot();
-                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &path) && {
-                    if !covered {
-                        self.model.history.record(before);
-                        self.refresh_title();
+                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &source_path)
+                    && {
+                        if !covered {
+                            self.model.history.record(before);
+                            self.refresh_title();
+                        }
+                        let next =
+                            navigate::selection_after_delete(geometry.descends, Some(&root), &path);
+                        self.select_landmark_or_edge(geometry, &root, next);
+                        geometry.reveal_selection(self);
+                        true
                     }
-                    let next =
-                        navigate::selection_after_delete(geometry.descends, Some(&root), &path);
-                    self.model.selection = Some(selection::Selection::edge(&root, next));
-                    geometry.reveal_selection(self);
-                    true
-                }
             }
             _ => false,
         }
@@ -122,7 +154,7 @@ impl Editor {
                             .cloned()
                             .chain([gid::Step::Key(label)])
                             .collect();
-                        self.sources().resolve_path(&path).is_none()
+                        current.scope().read(&self.sources(), &path).is_none()
                     }) =>
             {
                 crate::libraries::selection::pending_at(&[])
@@ -132,44 +164,26 @@ impl Editor {
         self.commit_completion(id, None, Some(continuation))
     }
 
-    /// Structural copy/paste, the shell's fallback: a focused text
-    /// editor's own clipboard handling wins by dispatch order, so
-    /// these fire on structural selections. Deliberately
+    /// Structural paste, the shell's fallback after text editing.
+    /// Copy and cut belong to the selected projected occurrence. Deliberately
     /// NOT menu items — native menu accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
-    pub(crate) fn clipboard_key(
-        &mut self,
-        geometry: navigate::Geometry<'_>,
-        event: &KeyboardEvent,
-    ) -> bool {
+    pub(crate) fn paste_key(&mut self, event: &KeyboardEvent) -> bool {
         if !event.state.is_down() || !modifiers::command(&event.modifiers) {
             return false;
         }
         let Key::Character(c) = &event.key else {
             return false;
         };
-        match c.to_lowercase().as_str() {
-            "c" => self.copy_selection(),
-            "x" => self.copy_selection() && self.delete_selected_edge(geometry),
-            "v" => self.paste_clipboard(),
-            _ => false,
-        }
+        c.eq_ignore_ascii_case("v") && self.paste_clipboard()
     }
 
-    /// Copies the selected value — SHALLOW: a link is its identity
+    /// Copies the supplied projected value — SHALLOW: a link is its identity
     /// alone, no cell values travel; the value carries its own inline
     /// structure.
-    pub(crate) fn copy_selection(&mut self) -> bool {
-        let sources = self.sources();
-        let value = match &self.model.selection {
-            Some(selection) => sources.resolve_path(selection.path()).cloned(),
-            None => None,
-        };
-        let Some(value) = value else {
-            return false;
-        };
-        let (text, structural) = selection::to_clipboard(&value);
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
+        let (text, structural) = selection::to_clipboard(value);
+        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
         return clipboard_rs::ClipboardContext::new()
             .and_then(|cb| {
                 use clipboard_rs::Clipboard;
@@ -188,17 +202,17 @@ impl Editor {
                 }
             })
             .is_ok();
-        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
         {
             self.text_clipboard.text = Some(text);
-            self.text_clipboard.structure = structural.then_some(value);
+            self.text_clipboard.structure = structural.then(|| value.clone());
             true
         }
     }
 
     /// The private format's payload, when the clipboard carries one.
     pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
         {
             use clipboard_rs::Clipboard;
             let bytes = clipboard_rs::ClipboardContext::new()
@@ -206,7 +220,7 @@ impl Editor {
                 .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
             return selection::from_structure(&bytes);
         }
-        #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
         self.text_clipboard.structure.clone()
     }
 
@@ -255,6 +269,10 @@ impl Editor {
                 selection::from_clipboard(&text)
             }
         };
+        self.paste_value(value)
+    }
+
+    pub(crate) fn paste_value(&mut self, value: Value) -> bool {
         if self.pick_identity(value.clone()) {
             return true;
         }
@@ -266,16 +284,20 @@ impl Editor {
         }
         let root = current.root().clone();
         let path = current.path().to_vec();
+        let scope = current.scope().clone();
         // Idempotent pastes stay off the undo stack, as write_through
         // keeps no-op rewrites off it.
-        if self.sources().resolve_path(&path) == Some(&value) {
+        if current.value(&self.sources()) == Some(&value) {
             return true;
         }
-        let before = self.model.snapshot();
-        if selection::set_value(&mut self.model.doc, &self.stack.libraries, &path, value) {
-            self.model.history.record(before);
-            self.refresh_title();
-            self.model.selection = Some(selection::Selection::edge(&root, path));
+        if scope
+            .open(crate::editing::Access::new(self))
+            .replace(&path, value)
+        {
+            self.model.selection = None;
+            scope
+                .open(crate::editing::Access::new(self))
+                .select(&root, &path);
             true
         } else {
             false
@@ -314,15 +336,31 @@ impl Editor {
                             .as_ref()
                             .map(|current| current.root().clone())
                             .unwrap_or_else(|| self.model.workspace.document_root().clone());
+                        let scope = selection
+                            .as_ref()
+                            .map(|s| s.scope().clone())
+                            .unwrap_or_default();
                         let started = match selection.as_ref() {
                             Some(current) if modifiers::command(&event.modifiers) => {
-                                selection::pending_insert(&root, &sources, current.path(), shift)
+                                selection::pending_insert(
+                                    &root,
+                                    &scope.view(sources),
+                                    current.path(),
+                                    shift,
+                                )
                             }
-                            Some(current) => {
-                                selection::pending_enter(&root, &sources, current.path(), shift)
-                            }
+                            Some(current) => selection::pending_enter(
+                                &root,
+                                &scope.view(sources),
+                                current.path(),
+                                shift,
+                            ),
                             None => selection::pending_root(&root, &sources),
-                        };
+                        }
+                        .map(|mut pending| {
+                            pending.set_scope(scope);
+                            pending
+                        });
                         let began = started.is_some();
                         self.model.selection = started.or(selection);
                         if began {
@@ -346,9 +384,11 @@ impl Editor {
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
-                            self.model.selection = (!(back.is_empty()
-                                && self.model.doc.root.is_none()))
-                            .then(|| selection::Selection::edge(&root, back));
+                            if back.is_empty() && self.model.doc.root.is_none() {
+                                self.model.selection = None;
+                            } else {
+                                self.select_landmark_or_edge(geometry, &root, back);
+                            }
                             geometry.reveal_selection(self);
                             true
                         }
@@ -356,8 +396,12 @@ impl Editor {
                             if current.stage(&self.sources()) == selection::Stage::Label =>
                         {
                             let root = current.root().clone();
-                            self.model.selection =
-                                Some(selection::Selection::edge(&root, current.path().to_vec()));
+                            let path = current.path().to_vec();
+                            let scope = current.scope().clone();
+                            self.model.selection = None;
+                            scope
+                                .open(crate::editing::Access::new(self))
+                                .select(&root, &path);
                             geometry.reveal_selection(self);
                             true
                         }
@@ -368,31 +412,23 @@ impl Editor {
             }
     }
 
-    /// Space toggles the selection's collapse override, and Cmd+Up /
-    /// Cmd+Down close and open it — the fold axis of the keyboard's
-    /// third dimension, under the same keys that walk the rows. A
-    /// focused string editor claims Space first and types instead.
-    pub(crate) fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() {
-            return false;
+    /// Fold state belongs to an occurrence. Projection supplies its default;
+    /// no document lookup or writable source is needed to change it.
+    pub(crate) fn set_collapsed(
+        &mut self,
+        root: &crate::workspace::Root,
+        path: &[gid::Step],
+        default: bool,
+        closed: Option<bool>,
+    ) -> bool {
+        let changed = self.model.set_collapsed(root, path, default, closed);
+        if changed {
+            self.finish_gesture();
         }
-        let set = match &event.key {
-            Key::Character(c) if c.as_str() == " " => None,
-            Key::Named(NamedKey::ArrowUp) if modifiers::command(&event.modifiers) => Some(true),
-            Key::Named(NamedKey::ArrowDown) if modifiers::command(&event.modifiers) => Some(false),
-            _ => return false,
-        };
-        let Some(current) = &self.model.selection else {
-            return false;
-        };
-        if current.stage(&self.sources()) != selection::Stage::Edge {
-            return false;
-        }
-        let path = current.path().to_vec();
-        let root = current.root().clone();
-        self.collapse(&root, &path, set)
+        changed
     }
 
+    #[cfg(test)]
     pub(crate) fn collapse(
         &mut self,
         root: &crate::workspace::Root,

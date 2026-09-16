@@ -114,20 +114,22 @@ pub(super) fn display(
             ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
         });
         if !evaluation.completed || absent::is_absent(&evaluation.result) {
-            return context.project.transient(
-                context.text,
-                build,
-                evaluation.result,
-                evaluation.remaining_fuel,
-            );
+            return crate::display::at(
+                [gid::Step::Key(
+                    crate::libraries::presentation::vocabulary::RESULT,
+                )],
+                &evaluation.result,
+            )
+            .measure(context, build);
         }
         let Some(path) = fitted(lines.sink, size) else {
-            return context.project.transient(
-                context.text,
-                build,
-                absent::with_reason(INVALID_INPUT),
-                evaluation.remaining_fuel,
-            );
+            return crate::display::at(
+                [gid::Step::Key(
+                    crate::libraries::presentation::vocabulary::RESULT,
+                )],
+                &absent::with_reason(INVALID_INPUT),
+            )
+            .measure(context, build);
         };
         let scale = context.inputs.styles.scale;
         measured::choices::ChoiceLayout::fixed(widget::paint(

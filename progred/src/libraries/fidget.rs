@@ -1070,17 +1070,16 @@ pub(crate) fn interactive_volume(
             let path = context.path.to_vec();
             let pinch_root = root.clone();
             let pinch_path = path.clone();
+            let edits = context.inputs.edits.clone();
+            let pinch_edits = edits.clone();
             let scroll = crate::display::widget::scroll::scroll(
                 context.inputs.styles.scale,
                 move |world: &mut crate::Editor, delta| {
-                    let state = world
-                        .model
-                        .workspace
-                        .view(&root)
-                        .and_then(|view| view.annotations.at(&path));
+                    let mut editor = edits.open(crate::editing::Access::new(world));
+                    let state = editor.annotation(&root, &path);
                     let (state, outcome) = zoom_handler(state)(delta);
                     if let Some(state) = state {
-                        crate::editing::annotate(world, &root, &path, state);
+                        editor.annotate(&root, &path, state);
                     }
                     outcome
                 },
@@ -1091,13 +1090,10 @@ pub(crate) fn interactive_volume(
                     output,
                     placement,
                     move |world: &mut crate::Editor, delta| {
-                        let state = world
-                            .model
-                            .workspace
-                            .view(&pinch_root)
-                            .and_then(|view| view.annotations.at(&pinch_path));
+                        let mut editor = pinch_edits.open(crate::editing::Access::new(world));
+                        let state = editor.annotation(&pinch_root, &pinch_path);
                         if let Some(state) = pinch_zoom(state, delta) {
-                            crate::editing::annotate(world, &pinch_root, &pinch_path, state);
+                            editor.annotate(&pinch_root, &pinch_path, state);
                         }
                         // Own the gesture even at a zoom limit.
                         true
@@ -1924,7 +1920,7 @@ mod tests {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
+        fn evaluate(&self, _: &Value) -> Value {
             unreachable!()
         }
     }

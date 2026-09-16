@@ -260,7 +260,7 @@ fn record_program(
     program: &Value,
     sources: &Sources,
     faces: &Faces,
-    input: &SourceTrace,
+    input: Option<&SourceTrace>,
     fuel: usize,
 ) -> Recorded {
     let canvas = RefCell::new(DrawList::new());
@@ -348,7 +348,7 @@ fn record_program(
                     None => {
                         let source = context
                             .source_origin(call)
-                            .map(|origin| crate::hover::from_grap(origin, input));
+                            .and_then(|origin| crate::hover::from_grap(origin, input));
                         origins.borrow_mut().push((call, source.clone()));
                         source
                     }
@@ -398,13 +398,15 @@ pub(crate) fn program_leaf(
         descent: descent * scale,
     };
     let faces = Faces::new(cx.styles);
-    let input = SourceTrace::from_path(
-        &cx.sources,
-        path.iter()
-            .cloned()
-            .chain([Step::Key(layout_data::vocabulary::PROGRAM)])
-            .collect::<Rc<[Step]>>(),
-    );
+    let program_path: Vec<_> = path
+        .iter()
+        .cloned()
+        .chain([Step::Key(layout_data::vocabulary::PROGRAM)])
+        .collect();
+    let input = cx
+        .edits
+        .source(&program_path)
+        .map(|path| SourceTrace::from_path(&cx.sources, Rc::from(path.as_ref())));
     let document = cx.sources.doc.clone();
     let libraries = cx.sources.libraries.clone();
     let drawing = Rc::new(LazyCell::new(move || {
@@ -415,7 +417,7 @@ pub(crate) fn program_leaf(
                 libraries: &libraries,
             },
             &faces,
-            &input,
+            input.as_ref(),
             fuel,
         )
     }));
@@ -488,7 +490,10 @@ pub(crate) fn source_descend<'a, World>(
     source: &SourceTrace,
 ) -> Option<&'a crate::navigate::Descend<World>> {
     descends.iter().find(|descend| {
-        descend.root.is_some() && SourceTrace::from_path(sources, descend.path.clone()) == *source
+        descend.root.is_some()
+            && descend.scope.source(&descend.path).is_some_and(|path| {
+                SourceTrace::from_path(sources, Rc::from(path.as_ref())) == *source
+            })
     })
 }
 
@@ -557,7 +562,7 @@ mod tests {
                 libraries: &stack.libraries,
             },
             &Faces::new(&crate::styles::editor(1.0)),
-            &SourceTrace::Stored(Rc::from([])),
+            Some(&SourceTrace::Stored(Rc::from([]))),
             200,
         );
         assert!(drawing.commands.0.is_empty());
@@ -614,7 +619,7 @@ mod tests {
                 &grap::call(Value::from(function), []),
                 &sources,
                 &Faces::new(&crate::styles::editor(1.0)),
-                &SourceTrace::Stored(Rc::from([])),
+                Some(&SourceTrace::Stored(Rc::from([]))),
                 100,
             );
             assert_eq!(drawing.hits.len(), 1);

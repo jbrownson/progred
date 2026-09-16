@@ -12,9 +12,7 @@
 #[cfg(test)]
 use crate::display::ActionHandler;
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation, text};
-#[cfg(test)]
-use gid::Step;
-use gid::{CellId, Value};
+use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
@@ -46,8 +44,10 @@ pub mod vocabulary {
     pub const BRACKET: CellId = CellId::from_u128(0xc71e0f4b2d8a6395e6b34a08d15c97f2);
     pub const ALTERNATIVES: CellId = CellId::from_u128(0x62d9b3f0a47e158c37b60d2c81f5e94a);
     pub const DESCEND: CellId = CellId::from_u128(0x35c7a8e2f10d49b6d2f8016c4b9ea375);
+    pub const DESCEND_PATH: CellId = CellId::from_u128(0xfa9520a04e0c79e7ff78adc6e3f6e754);
+    pub const JUMP: CellId = CellId::from_u128(0x3cce33504c57677528fe92071248b6ff);
+    pub const DOCUMENT_PATH: CellId = CellId::from_u128(0xad54f4f4c0e5c4a41878247bc1363489);
     pub const AT: CellId = CellId::from_u128(0xe90d25c8b64a37f1084b92d7f3a65c1e);
-    pub const TRANSIENT: CellId = CellId::from_u128(0x7b3f9a05d1e284c6952e07b1c8d643fa);
 
     // Leaves.
     pub const TEXT: CellId = CellId::from_u128(0x08e64d1f3a92c5b7b7f0d38a165e29c4);
@@ -231,9 +231,10 @@ fn apply_border_projection(
     };
     let value = context.eval(value, environment)?;
     let projected = context.apply(&projection, [(presentation::vocabulary::VALUE, value)])?;
-    Ok(bordered(transient(projected, context.remaining_fuel())).into())
+    Ok(bordered(at([Step::Key(presentation::vocabulary::RESULT)], projected)).into())
 }
 
+#[cfg(test)]
 fn number(value: f64) -> Value {
     f64_convention::value(value)
 }
@@ -298,12 +299,15 @@ pub fn descend_step(step: Step) -> Value {
     )
 }
 
-pub fn transient(value: Value, fuel: usize) -> Value {
+pub fn at(steps: impl IntoIterator<Item = Step>, value: Value) -> Value {
     node(
-        vocabulary::TRANSIENT,
+        vocabulary::AT,
         Value::record([
             (vocabulary::VALUE, value),
-            (vocabulary::FUEL, number(fuel as f64)),
+            (
+                vocabulary::STEPS,
+                crate::libraries::path::value(&steps.into_iter().collect::<Vec<_>>()),
+            ),
         ]),
     )
 }
@@ -576,19 +580,21 @@ fn decode_with(
         let step = crate::libraries::path::read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
         return Some(descend(step, None, None));
     }
+    if let Some(content) = fields.get(&vocabulary::DESCEND_PATH) {
+        return Some(crate::display::descend_path(crate::libraries::path::read(
+            content,
+        )?));
+    }
+    if let Some(content) = fields.get(&vocabulary::JUMP) {
+        let content = content.as_record()?;
+        let steps = crate::libraries::path::read(content.get(&vocabulary::STEPS)?)?;
+        let document = crate::libraries::path::read(content.get(&vocabulary::DOCUMENT_PATH)?)?;
+        return Some(crate::display::jump(steps, document));
+    }
     if let Some(content) = fields.get(&vocabulary::AT) {
         let content = content.as_record()?;
         let steps = crate::libraries::path::read(content.get(&vocabulary::STEPS)?)?;
         return Some(crate::display::at(steps, content.get(&vocabulary::VALUE)?));
-    }
-    if let Some(content) = fields.get(&vocabulary::TRANSIENT) {
-        let content = content.as_record()?;
-        let fuel = read_number(content.get(&vocabulary::FUEL)?)?;
-        (fuel >= 0.0 && fuel.fract() == 0.0).then_some(())?;
-        return Some(crate::display::transient(
-            content.get(&vocabulary::VALUE)?,
-            fuel as usize,
-        ));
     }
     if let Some(content) = fields.get(&vocabulary::TEXT) {
         let content = content.as_record()?;
@@ -913,8 +919,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::BRACKET, "bracket"),
         (vocabulary::ALTERNATIVES, "alternatives"),
         (vocabulary::DESCEND, "descend"),
+        (vocabulary::DESCEND_PATH, "descend path"),
+        (vocabulary::JUMP, "jump"),
+        (vocabulary::DOCUMENT_PATH, "document path"),
         (vocabulary::AT, "at"),
-        (vocabulary::TRANSIENT, "transient"),
         (vocabulary::TEXT, "text"),
         (vocabulary::DRAWING, "drawing"),
         (vocabulary::PROGRAM, "program"),
@@ -1100,6 +1108,27 @@ mod tests {
         assert!(matches!((decoded(&value)).map(|layout| inspect(&layout)),
             Some(ProjectionCall::At { steps: decoded, value, .. }) if decoded == steps && value == child
         ));
+        let value = node(
+            vocabulary::DESCEND_PATH,
+            crate::libraries::path::value(&steps),
+        );
+        assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
+            Some(ProjectionCall::DescendPath { steps: decoded, .. }) if decoded == steps
+        ));
+        let document = vec![Step::Key(gid::new_cell_id())];
+        let value = node(
+            vocabulary::JUMP,
+            Value::record([
+                (vocabulary::STEPS, crate::libraries::path::value(&steps)),
+                (
+                    vocabulary::DOCUMENT_PATH,
+                    crate::libraries::path::value(&document),
+                ),
+            ]),
+        );
+        assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
+            Some(ProjectionCall::Jump { steps: decoded, document: target, .. }) if decoded == steps && target == document
+        ));
     }
 
     #[test]
@@ -1155,7 +1184,7 @@ mod tests {
             );
         };
         assert!(matches!(&inspect(&(child.as_ref())),
-            ProjectionCall::Transient { value, .. }
+            ProjectionCall::At { value, .. }
                 if value == &Value::record([(vocabulary::DRAWING, configuration)])
         ));
     }

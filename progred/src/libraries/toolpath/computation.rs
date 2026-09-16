@@ -6,7 +6,7 @@ use gid::Value;
 use incremental::{Input, Memo};
 use std::sync::Arc;
 
-pub(super) type Outcome<T> = Result<(T, usize), (Value, usize)>;
+pub(super) type Outcome<T> = Result<T, Value>;
 
 #[derive(PartialEq)]
 pub(super) struct Recorded {
@@ -15,14 +15,11 @@ pub(super) struct Recorded {
 }
 
 impl Recorded {
-    pub fn path(&self) -> Result<&Recording, (Value, usize)> {
+    pub fn path(&self) -> Outcome<&Recording> {
         if self.evaluation.completed && !absent::is_absent(&self.evaluation.result) {
             Ok(&self.path)
         } else {
-            Err((
-                self.evaluation.result.clone(),
-                self.evaluation.remaining_fuel,
-            ))
+            Err(self.evaluation.result.clone())
         }
     }
 }

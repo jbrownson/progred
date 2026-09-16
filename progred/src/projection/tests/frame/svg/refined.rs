@@ -10,6 +10,48 @@ use std::{
 };
 
 #[test]
+#[ignore = "captures the CAM outline without launching the app"]
+fn editor_cam_outline_svg_captures() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    // Source-only views: the same projection, with sections folded through
+    // ordinary view state. No special screenshot or outline state in production.
+    for (expanded, file) in [
+        ("settings_section", "cam_outline_overview.svg"),
+        ("tools_section", "cam_outline_tools.svg"),
+    ] {
+        let mut editor = crate::test_editor(doc.clone());
+        for key in [
+            "settings_section",
+            "geometry_section",
+            "tools_section",
+            "operations_section",
+            "strategies_section",
+            "helpers_section",
+        ] {
+            if key != expanded {
+                editor.collapse(&crate::test_root(), &[Step::Key(names[key])], Some(true));
+            }
+        }
+        // Project only the document here; its pane data remains present.
+        let (bench, extent) = place_with_annotations(
+            &editor.model.doc,
+            None,
+            &editor.model.workspace.document.annotations,
+            780.0,
+            None,
+            None,
+            None,
+        );
+        write_svg(&bench.list, 780.0, extent.height() + 48.0, "#F6F6F8", file);
+    }
+    render_editor(
+        cam_editor(t::PREVIEW_MESH),
+        kurbo::Size::new(1200.0, 1000.0),
+        "cam_outline_editor.svg",
+    );
+}
+
+#[test]
 #[ignore = "regenerates README screenshots, including the completed progressive CAM render"]
 fn readme_svg_captures() {
     let size = kurbo::Size::new(1200.0, 900.0);
@@ -25,12 +67,12 @@ fn readme_svg_captures() {
         .clone();
     let view = &mut editor.model.workspace.left.panes[0].view;
     view.annotations.set_field(
-        &path,
+        &result_path(&path),
         STATE,
         Some(Value::record([(t::PROGRESS, f64::value(0.3))])),
     );
     view.annotations.set_field(
-        &path,
+        &result_path(&result_path(&path)),
         f::CAMERA,
         Some(Value::record([
             (f::YAW, crate::libraries::f32::value(30.0)),
@@ -137,7 +179,7 @@ fn editor_toolpath_operations_svg_captures() {
             .view
             .annotations
             .set_field(
-                &path,
+                &result_path(&path),
                 STATE,
                 Some(Value::record([(t::PROGRESS, f64::value(progress))])),
             );
@@ -145,7 +187,7 @@ fn editor_toolpath_operations_svg_captures() {
             .view
             .annotations
             .set_field(
-                &path,
+                &result_path(&result_path(&path)),
                 f::CAMERA,
                 Some(Value::record([
                     (f::YAW, crate::libraries::f32::value(30.0)),
@@ -182,7 +224,7 @@ fn editor_toolpath_controls_overlay_svg_captures() {
             .view
             .annotations
             .set_field(
-                &path,
+                &result_path(&result_path(&path)),
                 f::CAMERA,
                 Some(Value::record([(
                     f::ZOOM,
@@ -283,7 +325,7 @@ fn editor_toolpath_refined_svg_captures() {
         .view
         .annotations
         .set_field(
-            &path,
+            &result_path(&result_path(&path)),
             f::CAMERA,
             Some(Value::record([
                 (f::YAW, crate::libraries::f32::value(55.0)),
@@ -298,7 +340,7 @@ fn editor_toolpath_refined_svg_captures() {
         .view
         .annotations
         .set_field(
-            &path,
+            &result_path(&path),
             STATE,
             Some(Value::record([(t::PROGRESS, f64::value(0.7))])),
         );

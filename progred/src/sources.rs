@@ -43,13 +43,12 @@ impl crate::display::Env for Sources<'_> {
         }
     }
 
-    fn evaluate(&self, expression: &Value) -> (Value, usize) {
+    fn evaluate(&self, expression: &Value) -> Value {
         self.evaluate_with_fuel(expression, grap::DEFAULT_FUEL)
     }
 
-    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> (Value, usize) {
-        let result = grap::evaluate(expression, self, fuel);
-        (result.result, result.remaining_fuel)
+    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> Value {
+        grap::evaluate(expression, self, fuel).result
     }
 
     fn name(&self, cell: CellId) -> Option<&str> {

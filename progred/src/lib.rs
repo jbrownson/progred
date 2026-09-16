@@ -142,7 +142,7 @@ pub(crate) enum RenderState {
 /// The pasteboard type structural copies ride under, beside their
 /// plain text; its PRESENCE is the structure/text distinction, so
 /// text that merely spells Value JSON is never mistaken for a copy.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
 
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
@@ -1212,7 +1212,7 @@ impl Editor {
                     .model
                     .selection
                     .as_ref()
-                    .and_then(|selection| self.sources().resolve_path(selection.path()))
+                    .and_then(|selection| selection.value(&self.sources()))
                     .is_some(),
             move_up: selected_root
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
@@ -1227,7 +1227,7 @@ impl Editor {
 
     fn open_selected_in_pane(&mut self, side: workspace::Side) -> bool {
         let next = self.model.selection.as_ref().and_then(|selection| {
-            let value = self.sources().resolve_path(selection.path())?.clone();
+            let value = selection.value(&self.sources())?.clone();
             workspace::append(self.model.doc.root.as_ref()?, side, value)
         });
         if let Some((value, path)) = next {

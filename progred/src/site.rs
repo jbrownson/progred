@@ -20,7 +20,8 @@ pub struct PendingChanges {
     pub selection_changed: bool,
 }
 
-pub type Continuation = Rc<dyn Fn(&Sources<'_>, &[gid::Step], &mut PendingChanges) -> bool>;
+pub type Continuation =
+    Rc<dyn Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool>;
 
 impl PendingChanges {
     pub fn select(&mut self, path: Path, payload: Value) {
@@ -41,7 +42,7 @@ impl PendingChanges {
 pub fn grap(
     function: Value,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)> + Clone,
-) -> impl Fn(&Sources<'_>, &[gid::Step], &mut PendingChanges) -> bool {
+) -> impl Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool {
     move |sources, path, staged| {
         if let Some(next) = evaluate(
             &function,
@@ -49,7 +50,7 @@ pub fn grap(
             path,
             staged.annotation.clone(),
             staged.selection.clone(),
-            sources,
+            &sources.sources,
             grap::DEFAULT_FUEL,
         ) {
             staged.annotation = next.annotation;
@@ -74,8 +75,9 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// Apply one event handler with its get/set functions bound to this
 /// projection site. Explicit decline or evaluator halt returns without
 /// committing any pending annotation or selection change.
-pub fn apply_event(
+pub(crate) fn apply_scoped_event(
     app: &mut Editor,
+    scope: crate::editing::Scope,
     root: Root,
     path: Path,
     function: Value,
@@ -99,19 +101,23 @@ pub fn apply_event(
         selection: current,
         selection_changed: false,
     };
-    let handled =
-        grap(function, [(layout::vocabulary::EVENT, event)])(&app.sources(), &path, &mut staged);
+    let handled = grap(function, [(layout::vocabulary::EVENT, event)])(
+        &scope.view(app.sources()),
+        &path,
+        &mut staged,
+    );
     if handled {
         let Some(view) = app.model.workspace.view_mut(&root) else {
             return false;
         };
-        install(
+        install_scoped(
             staged,
             &Sources {
                 doc: &app.model.doc,
                 libraries: &app.stack.libraries,
             },
             &root,
+            scope,
             &path,
             &mut view.annotations,
             &mut app.model.selection,
@@ -120,10 +126,31 @@ pub fn apply_event(
     handled
 }
 
+#[cfg(test)]
 pub(crate) fn install(
     staged: PendingChanges,
     sources: &Sources,
     root: &Root,
+    path: &[gid::Step],
+    annotations: &mut crate::annotations::Annotations,
+    selection: &mut Option<Selection>,
+) {
+    install_scoped(
+        staged,
+        sources,
+        root,
+        Default::default(),
+        path,
+        annotations,
+        selection,
+    );
+}
+
+pub(crate) fn install_scoped(
+    staged: PendingChanges,
+    sources: &Sources,
+    root: &Root,
+    scope: crate::editing::Scope,
     path: &[gid::Step],
     annotations: &mut crate::annotations::Annotations,
     selection: &mut Option<Selection>,
@@ -135,9 +162,12 @@ pub(crate) fn install(
         match staged.selection {
             Some((path, payload)) => {
                 let recorded = selection.as_ref().is_some_and(|selection| {
-                    selection.root() == root && selection.path() == path && selection.recorded()
+                    selection.root() == root
+                        && selection.path() == path
+                        && selection.scope().same_location(&scope, &path)
+                        && selection.recorded()
                 });
-                let mut next = Selection::from_payload(root, sources, path, payload);
+                let mut next = Selection::from_scoped_payload(root, sources, scope, path, payload);
                 next.preserve_recorded(recorded);
                 *selection = Some(next);
             }

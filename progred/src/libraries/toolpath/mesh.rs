@@ -76,9 +76,9 @@ pub(super) fn display(
         let geometry = computations.runtime.read(&computation.geometry);
         let result = geometry
             .as_ref()
-            .map_err(|error| (::grap::memo::failure(*error), fuel))
+            .map_err(|error| ::grap::memo::failure(*error))
             .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
-        let drawing = result.and_then(|(geometry, fuel)| {
+        let drawing = result.and_then(|geometry| {
             fidget::mesh::image(
                 &geometry.geometry,
                 &model,
@@ -93,16 +93,14 @@ pub(super) fn display(
                     drawing
                 }
             })
-            .ok_or_else(|| {
-                (
-                    absent::with_reason(fidget::vocabulary::INVALID_FIELD),
-                    *fuel,
-                )
-            })
+            .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))
         });
         match drawing {
             Ok(drawing) => drawing.measure(context, build),
-            Err((value, fuel)) => context.project.transient(context.text, build, value, fuel),
+            Err(value) => {
+                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
+                    .measure(context, build)
+            }
         }
     }));
     Some(fidget::interactive_volume(drawing, input))

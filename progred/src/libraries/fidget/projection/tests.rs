@@ -17,7 +17,7 @@ impl Env for Names {
         panic!("source projection must not evaluate")
     }
 
-    fn evaluate(&self, _: &Value) -> (Value, usize) {
+    fn evaluate(&self, _: &Value) -> Value {
         panic!("source projection must not evaluate")
     }
 
@@ -72,7 +72,7 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
     };
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
         assert!(
-            matches!(&inspect(&(unshared(child))), ProjectionCall::At { steps, .. }
+            matches!(&inspect(&(unshared(child))), ProjectionCall::DescendPath { steps, .. }
             if *steps == [Step::Key(SUM), Step::Key(key)])
         );
     }
@@ -169,8 +169,8 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
 fn coordinates_are_shallow_and_names_remain_editable_data() {
     let axis = node(AXIS, X.into());
     assert!(
-        matches!((field(&input(&axis))).map(|layout| inspect(&layout)), Some(ProjectionCall::At { steps, projection: Some(_), .. })
-        if steps == [Step::Key(AXIS)])
+        matches!((field(&input(&axis))).map(|layout| inspect(&layout)), Some(ProjectionCall::Descend { step, projection: Some(_), .. })
+        if step == Step::Key(AXIS))
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
     let Recorded::Alternatives(options) = field(&input(&named)).unwrap().record() else {
@@ -183,6 +183,6 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
         panic!()
     };
     assert!(
-        matches!(&inspect(&(&head[0])), ProjectionCall::At { steps, .. } if *steps == [Step::Key(name::vocabulary::NAME)])
+        matches!(&inspect(&(&head[0])), ProjectionCall::Descend { step, .. } if *step == Step::Key(name::vocabulary::NAME))
     );
 }

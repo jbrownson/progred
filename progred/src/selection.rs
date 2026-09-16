@@ -1,12 +1,13 @@
-//! Selection, collapse, and the writes they drive. Paths name
-//! locations in a [`Document`]; this module owns what is selected
-//! there and how authoring and mutation land.
+//! Selection, collapse, and the writes they drive. Selection paths name
+//! projected occurrences; their conject locates document data for mutations.
 
+#[cfg(test)]
 use crate::annotations::{self, Annotations};
 use crate::libraries::{Libraries, blob, f64 as f64_convention, text};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
+use gid::CellId;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
@@ -34,6 +35,7 @@ pub struct Selection {
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
+    scope: crate::editing::Scope,
     payload: Value,
     editor: Option<Editor>,
 }
@@ -57,9 +59,26 @@ impl Selection {
     /// boundary used by Grap capabilities after decoding the path.
     /// Editor fields are decoded once into
     /// their live owner, then removed from the stored payload.
+    #[cfg(test)]
     pub(crate) fn from_payload(
         root: &workspace::Root,
         sources: &Sources,
+        path: Path,
+        payload: Value,
+    ) -> Self {
+        Self::from_scoped_payload(
+            root,
+            sources,
+            crate::editing::Scope::default(),
+            path,
+            payload,
+        )
+    }
+
+    pub(crate) fn from_scoped_payload(
+        root: &workspace::Root,
+        sources: &Sources,
+        scope: crate::editing::Scope,
         path: Path,
         payload: Value,
     ) -> Self {
@@ -72,15 +91,16 @@ impl Selection {
             }
             _ => {
                 let editor = payload::editor_text(&payload)
-                    .filter(|_| writable_at(sources, &path))
+                    .filter(|_| scope.writable(sources, &path))
                     .map(|fallback| Editor {
                         line: payload::editor_line(&payload, &fallback),
-                        query: sources.resolve_path(&path).is_none(),
+                        query: scope.read(sources, &path).is_none(),
                         recorded: false,
                     });
                 Self {
                     root: root.clone(),
                     path,
+                    scope: scope.clone(),
                     payload: if editor.is_some() {
                         payload::without_editor(&payload)
                     } else {
@@ -90,6 +110,7 @@ impl Selection {
                 }
             }
         };
+        selection.scope = scope;
         selection.reset_completion_for_query();
         selection
     }
@@ -114,6 +135,26 @@ impl Selection {
 
     pub fn path(&self) -> &[Step] {
         &self.path
+    }
+
+    pub(crate) fn scope(&self) -> &crate::editing::Scope {
+        &self.scope
+    }
+
+    pub(crate) fn set_scope(&mut self, scope: crate::editing::Scope) {
+        self.scope = scope;
+    }
+
+    pub(crate) fn source_path(&self) -> Option<std::borrow::Cow<'_, [Step]>> {
+        self.scope.source(&self.path)
+    }
+
+    pub(crate) fn value<'a>(&self, sources: &Sources<'a>) -> Option<&'a Value> {
+        self.scope.read(sources, &self.path)
+    }
+
+    pub(crate) fn writable(&self, sources: &Sources<'_>) -> bool {
+        self.scope.writable(sources, &self.path)
     }
 
     pub fn root(&self) -> &workspace::Root {
@@ -144,10 +185,7 @@ impl Selection {
 
     pub fn stage(&self, sources: &Sources) -> Stage {
         match self.explicit_stage() {
-            Stage::Edge
-                if sources.resolve_path(&self.path).is_none()
-                    && writable_at(sources, &self.path) =>
-            {
+            Stage::Edge if self.value(sources).is_none() && self.writable(sources) => {
                 Stage::Pending
             }
             stage => stage,
@@ -296,6 +334,7 @@ fn edge_selection(root: &workspace::Root, path: Path, editor: Option<Editor>) ->
     Selection {
         root: root.clone(),
         path,
+        scope: Default::default(),
         payload: payload::edge(),
         editor,
     }
@@ -414,6 +453,7 @@ pub(crate) fn bare_edge(root: &workspace::Root, path: Path) -> Selection {
     Selection {
         root: root.clone(),
         path,
+        scope: Default::default(),
         payload: payload::edge(),
         editor: None,
     }
@@ -431,6 +471,7 @@ fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Select
     Selection {
         root: root.clone(),
         path,
+        scope: Default::default(),
         payload: payload::without_editor(&payload),
         editor: Some(Editor {
             line,
@@ -440,13 +481,44 @@ fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Select
     }
 }
 
-/// A new field on the record at `parent` — inline, or a link's cell
-/// value, normalized through Follow so the pending lands where the
-/// field will live. Only records take fields, by type. EXTERNAL
-/// cells — the library the authority — decline: a lone document
-/// value would introduce a new document definition. A document that
-/// already owns the traversed path authors freely.
-pub fn pending_edge(root: &workspace::Root, sources: &Sources, parent: Path) -> Option<Selection> {
+/// Read displayed locations through their conject while preserving occurrence
+/// paths for insertion and navigation. No source-to-occurrence inverse is needed.
+pub(crate) trait LocationRead {
+    fn resolve_path(&self, path: &[Step]) -> Option<&Value>;
+    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>>;
+    fn writable(&self, path: &[Step]) -> bool;
+}
+
+impl LocationRead for Sources<'_> {
+    fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
+        Sources::resolve_path(self, path)
+    }
+    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>> {
+        Sources::resolve(self, cell)
+    }
+    fn writable(&self, path: &[Step]) -> bool {
+        writable_at(self, path)
+    }
+}
+
+impl LocationRead for crate::editing::Read<'_, '_> {
+    fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
+        self.resolve_path(path)
+    }
+    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>> {
+        self.sources.resolve(cell)
+    }
+    fn writable(&self, path: &[Step]) -> bool {
+        self.writable(path)
+    }
+}
+
+/// A new field on a writable record, following a cell if needed.
+pub(crate) fn pending_edge(
+    root: &workspace::Root,
+    sources: &impl LocationRead,
+    parent: Path,
+) -> Option<Selection> {
     let value = sources.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
@@ -459,24 +531,22 @@ pub fn pending_edge(root: &workspace::Root, sources: &Sources, parent: Path) -> 
         }
         Value::Blob(_) | Value::List(_) => return None,
     };
-    writable_at(sources, &parent).then_some(())?;
+    sources.writable(&parent).then_some(())?;
     Some(query_selection(root, parent, payload::label("", 0)))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub fn pending_follow(
+pub(crate) fn pending_follow(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
     let cell = sources.resolve_path(path)?.as_cell()?;
     sources.resolve(cell).is_none().then_some(())?;
-    sources
-        .writable(cell, &Resolution::Document)
-        .then_some(())?;
     let mut followed = path.to_vec();
     followed.push(Step::Follow(Resolution::Document));
+    sources.writable(&followed).then_some(())?;
     Some(pending_value(root, followed))
 }
 
@@ -485,7 +555,7 @@ pub fn pending_follow(
 /// projection's gesture.
 fn pending_beside(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
     after: bool,
 ) -> Option<Selection> {
@@ -497,7 +567,7 @@ fn pending_beside(
     // Stated, not incidental: a list under an external cell takes no
     // minted siblings (the write would decline anyway, but a pending
     // that opens and cannot commit is an affordance lie).
-    writable_at(sources, parent_path).then_some(())?;
+    sources.writable(parent_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let index = positions.iter().position(|p| *p == position)?;
     let fresh = if after {
@@ -510,17 +580,17 @@ fn pending_beside(
     Some(pending_value(root, fresh_path))
 }
 
-pub fn pending_after(
+pub(crate) fn pending_after(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
     pending_beside(root, sources, path, true)
 }
 
-pub fn pending_before(
+pub(crate) fn pending_before(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
     pending_beside(root, sources, path, false)
@@ -532,7 +602,7 @@ pub fn pending_before(
 /// the owning cell must be writable, as in [`pending_edge`].
 fn pending_into_at(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
     end: bool,
 ) -> Option<Selection> {
@@ -548,7 +618,7 @@ fn pending_into_at(
         }
         Value::Blob(_) | Value::Record(_) => return None,
     };
-    writable_at(sources, &list_path).then_some(())?;
+    sources.writable(&list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let fresh = if end {
         position::between(positions.last().copied(), None)?
@@ -562,13 +632,17 @@ fn pending_into_at(
 
 /// Appends: "add to this list" goes at the end — the within chord's
 /// meaning on a list, where fields don't exist.
-pub fn pending_into(root: &workspace::Root, sources: &Sources, path: &[Step]) -> Option<Selection> {
+pub(crate) fn pending_into(
+    root: &workspace::Root,
+    sources: &impl LocationRead,
+    path: &[Step],
+) -> Option<Selection> {
     pending_into_at(root, sources, path, true)
 }
 
-pub fn pending_into_first(
+pub(crate) fn pending_into_first(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
     pending_into_at(root, sources, path, false)
@@ -579,9 +653,9 @@ pub fn pending_into_first(
 /// shift); a field value pends a new field on its parent; the root
 /// has nothing beside it and falls within — a field on a record, an
 /// appended element on a list.
-pub fn pending_enter(
+pub(crate) fn pending_enter(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
     before: bool,
 ) -> Option<Selection> {
@@ -603,9 +677,9 @@ pub fn pending_enter(
 /// the selected record or cell, an element appended into a list, or
 /// a bare cell's first value. With shift, the front instead —
 /// prepend. Atoms other than links have no within and decline.
-pub fn pending_insert(
+pub(crate) fn pending_insert(
     root: &workspace::Root,
-    sources: &Sources,
+    sources: &impl LocationRead,
     path: &[Step],
     front: bool,
 ) -> Option<Selection> {
@@ -720,6 +794,7 @@ pub fn set_value(
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
+#[cfg(test)]
 pub fn toggle_collapse(sources: &Sources, annotations: &mut Annotations, path: &[Step]) -> bool {
     match collapse_default(sources, path) {
         Some(default) => {
@@ -733,6 +808,7 @@ pub fn toggle_collapse(sources: &Sources, annotations: &mut Annotations, path: &
 
 /// The directional twin: close or open the value at `path` — the fold
 /// axis of keyboard navigation. Returns whether the state changed.
+#[cfg(test)]
 pub fn set_collapse(
     sources: &Sources,
     annotations: &mut Annotations,
@@ -751,6 +827,7 @@ pub fn set_collapse(
 /// The default collapse for the value at `path` — collapsed inside a
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
+#[cfg(test)]
 pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
     let value = sources.resolve_path(path)?;
     let in_cycle = value.as_cell().is_some_and(|cell| {

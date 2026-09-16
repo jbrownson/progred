@@ -9,8 +9,8 @@ use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
 use crate::display::{
-    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_local, centered_row,
-    col, dim, faced, hug, record_with, row, shared,
+    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, centered_row, col,
+    descend_path_local, dim, faced, hug, record_with, row, shared,
 };
 #[cfg(test)]
 use ::grap;
@@ -530,29 +530,26 @@ pub fn match_display(
     input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::MATCH).then_some(())?;
-    let subject = fields.get(&vocabulary::VALUE)?;
+    fields.get(&vocabulary::VALUE)?;
     let cases = fields.get(&vocabulary::CASES)?;
     cases.as_list()?;
     let head = row(
         4.0,
         [
-            crate::libraries::grap::shallow_at(
+            crate::libraries::grap::shallow_path(
                 [Step::Key(::grap::vocabulary::FUNCTION)],
-                function,
                 &input.default_projection,
             ),
-            crate::libraries::grap::expression_at(
+            crate::libraries::grap::expression_path(
                 [Step::Key(vocabulary::VALUE)],
-                subject,
                 &input.default_projection,
             ),
         ],
     );
     Some(hug(
         head,
-        at_local(
+        descend_path_local(
             [Step::Key(vocabulary::CASES)],
-            cases,
             crate::display::structure::list(Some(crate::display::partial(case_display))),
             &input.default_projection,
         ),
@@ -561,17 +558,11 @@ pub fn match_display(
     ))
 }
 
-fn pattern_at(
+fn pattern_path(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    crate::display::at_scoped(
-        steps,
-        value,
-        crate::display::partial(pattern_binder),
-        default,
-    )
+    crate::display::descend_path_scoped(steps, crate::display::partial(pattern_binder), default)
 }
 
 fn pattern_binder(
@@ -584,7 +575,7 @@ fn pattern_binder(
     Some(record_with(
         [(vocabulary::BIND, binder)],
         CellId::cmp,
-        |key, value| {
+        |key, _| {
             let target = input.targets.at([Step::Key(key)]);
             RecordField {
                 label: activatable(
@@ -595,9 +586,8 @@ fn pattern_binder(
                     target.hover,
                     target.select,
                 ),
-                value: crate::libraries::grap::declaration_at(
+                value: crate::libraries::grap::declaration_path(
                     [Step::Key(key)],
-                    value,
                     &input.default_projection,
                 ),
             }
@@ -610,7 +600,7 @@ fn case_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
-    let (pattern, expression) = case_parts(input.value?)?;
+    case_parts(input.value?)?;
     let expression_target = input
         .targets
         .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
@@ -619,17 +609,12 @@ fn case_display(
         centered_row(
             6.0,
             [
-                pattern_at(
-                    [Step::Key(vocabulary::PATTERN)],
-                    pattern,
-                    &input.default_projection,
-                ),
+                pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection),
                 arrow,
             ],
         ),
-        crate::libraries::grap::expression_at(
+        crate::libraries::grap::expression_path(
             [Step::Key(::grap::vocabulary::EXPRESSION)],
-            expression,
             &input.default_projection,
         ),
         6.0,
@@ -667,21 +652,18 @@ pub fn bindings_display(
     };
     let bindings = fields.get(&vocabulary::BINDINGS)?;
     bindings.as_list()?;
-    let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
-    let bindings = shared(at_local(
+    fields.get(&::grap::vocabulary::EXPRESSION)?;
+    let bindings = shared(descend_path_local(
         [Step::Key(vocabulary::BINDINGS)],
-        bindings,
         crate::display::structure::list(Some(crate::display::partial(binding_display))),
         &input.default_projection,
     ));
-    let function = shared(crate::libraries::grap::shallow_at(
+    let function = shared(crate::libraries::grap::shallow_path(
         [Step::Key(::grap::vocabulary::FUNCTION)],
-        function,
         &input.default_projection,
     ));
-    let expression = shared(crate::libraries::grap::expression_at(
+    let expression = shared(crate::libraries::grap::expression_path(
         [Step::Key(::grap::vocabulary::EXPRESSION)],
-        expression,
         &input.default_projection,
     ));
     match form {
@@ -735,27 +717,23 @@ fn binding_display(
     ) {
         (Some(binder), None) => {
             binder.as_cell()?;
-            crate::libraries::grap::declaration_at(
+            crate::libraries::grap::declaration_path(
                 [Step::Key(vocabulary::BIND)],
-                binder,
                 &input.default_projection,
             )
         }
-        (None, Some(pattern)) => pattern_at(
-            [Step::Key(vocabulary::PATTERN)],
-            pattern,
-            &input.default_projection,
-        ),
+        (None, Some(_)) => {
+            pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection)
+        }
         _ => return None,
     };
-    let value = fields.get(&vocabulary::VALUE)?;
+    fields.get(&vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
     let equals = activatable(dim("="), value_target.hover, value_target.select);
     Some(hug(
         centered_row(6.0, [left, equals]),
-        crate::libraries::grap::expression_at(
+        crate::libraries::grap::expression_path(
             [Step::Key(vocabulary::VALUE)],
-            value,
             &input.default_projection,
         ),
         6.0,
@@ -783,10 +761,9 @@ pub fn quote_display(
     input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
-    let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
-    let marker = at_local(
+    fields.get(&::grap::vocabulary::EXPRESSION)?;
+    let marker = descend_path_local(
         [Step::Key(::grap::vocabulary::FUNCTION)],
-        function,
         crate::display::partial(quote_marker),
         &input.default_projection,
     );
@@ -794,7 +771,7 @@ pub fn quote_display(
         2.0,
         [
             marker,
-            crate::display::at([Step::Key(::grap::vocabulary::EXPRESSION)], expression),
+            crate::display::descend_path([Step::Key(::grap::vocabulary::EXPRESSION)]),
         ],
     ))
 }
@@ -806,15 +783,14 @@ pub fn unquote_display(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
     input.pending.is_none().then_some(())?;
-    let expression = fields.get(&vocabulary::UNQUOTE)?;
+    fields.get(&vocabulary::UNQUOTE)?;
     let target = input.targets.current();
     Some(row(
         2.0,
         [
             activatable(dim("`"), target.hover, target.select),
-            crate::libraries::grap::expression_at(
+            crate::libraries::grap::expression_path(
                 [Step::Key(vocabulary::UNQUOTE)],
-                expression,
                 &input.default_projection,
             ),
         ],
@@ -835,14 +811,12 @@ pub fn do_display(
     Some(row(
         4.0,
         [
-            crate::libraries::grap::shallow_at(
+            crate::libraries::grap::shallow_path(
                 [Step::Key(::grap::vocabulary::FUNCTION)],
-                function,
                 &input.default_projection,
             ),
-            at_local(
+            descend_path_local(
                 [Step::Key(vocabulary::EXPRESSIONS)],
-                expressions,
                 crate::display::structure::list(Some(crate::display::partial(
                     crate::libraries::grap::shallow_cell,
                 ))),
@@ -921,8 +895,8 @@ mod tests {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, expression: &Value) -> (Value, usize) {
-            (expression.clone(), 0)
+        fn evaluate(&self, expression: &Value) -> Value {
+            expression.clone()
         }
     }
 
@@ -1302,21 +1276,20 @@ mod tests {
         let [marker, body] = children.as_slice() else {
             panic!("quote has a marker and expression");
         };
-        let ProjectionCall::At {
-            steps,
+        let ProjectionCall::Descend {
+            step,
             projection: Some(_),
             ..
         } = &inspect(&(marker))
         else {
             panic!("the marker retains the function-field location");
         };
-        assert_eq!(steps, &[Step::Key(grap::vocabulary::FUNCTION)]);
+        assert_eq!(step, &Step::Key(grap::vocabulary::FUNCTION));
 
-        let ProjectionCall::At { steps, value, .. } = &inspect(&(body)) else {
+        let ProjectionCall::Descend { step, .. } = &inspect(&(body)) else {
             panic!("the expression retains its field location");
         };
-        assert_eq!(steps, &[Step::Key(grap::vocabulary::EXPRESSION)]);
-        assert_eq!(value, &expression);
+        assert_eq!(step, &Step::Key(grap::vocabulary::EXPRESSION));
 
         let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
         let Recorded::Before { child, .. } = marker.record() else {
@@ -1774,15 +1747,15 @@ mod tests {
         else {
             panic!("let shares its bindings");
         };
-        let ProjectionCall::At {
-            steps,
+        let ProjectionCall::Descend {
+            step,
             projection: Some(_),
             ..
         } = &inspect(&(bindings.as_ref()))
         else {
             panic!("let descends to its bindings list");
         };
-        assert_eq!(steps, &[Step::Key(vocabulary::BINDINGS)]);
+        assert_eq!(step, &Step::Key(vocabulary::BINDINGS));
 
         let where_layout = bindings_display(&relative_projection_input(&where_call)).unwrap();
         let Recorded::Alternatives(where_options) = where_layout.record() else {
@@ -1795,8 +1768,8 @@ mod tests {
             panic!("where starts with its body");
         };
         assert!(matches!(&inspect(&(child.as_ref())),
-            ProjectionCall::At { steps, value, .. }
-                if *steps == [Step::Key(grap::vocabulary::EXPRESSION)] && *value == body
+            ProjectionCall::Descend { step, .. }
+                if *step == Step::Key(grap::vocabulary::EXPRESSION)
         ));
     }
 
@@ -1823,11 +1796,11 @@ mod tests {
             panic!("a binding head is vertically centered");
         };
         assert!(matches!(&inspect(&(&children[0])),
-            ProjectionCall::At {
-                steps,
+            ProjectionCall::Descend {
+                step,
                 projection: Some(_),
                 ..
-            } if *steps == [Step::Key(vocabulary::BIND)]
+            } if *step == Step::Key(vocabulary::BIND)
         ));
     }
 
@@ -1852,16 +1825,20 @@ mod tests {
         while let Recorded::Shared { child, .. } = arms {
             arms = child.as_ref();
         }
-        let ProjectionCall::At {
-            steps,
+        let ProjectionCall::Descend {
+            step,
             projection: Some(_),
-            value: cases,
             ..
         } = &inspect(&(arms))
         else {
             panic!("match descends to its cases list");
         };
-        assert_eq!(steps, &[Step::Key(vocabulary::CASES)]);
+        assert_eq!(step, &Step::Key(vocabulary::CASES));
+        let cases = expression
+            .as_record()
+            .unwrap()
+            .get(&vocabulary::CASES)
+            .unwrap();
 
         assert!(case_display(&relative_projection_input(cases)).is_none());
         let case = cases

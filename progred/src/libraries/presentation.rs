@@ -8,8 +8,10 @@
 use crate::libraries::{Library, absent, f64, layout, name};
 use gid::{Cells, Step};
 
+mod outline;
+
 pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3c13de);
-use crate::display::{Layout, ProjectionInput, transient};
+use crate::display::{Layout, ProjectionInput, at};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -19,6 +21,10 @@ pub mod vocabulary {
     pub const VIEWPORT: CellId = CellId::from_u128(0x709c987e4c2a110931d8597c4da68f69);
     /// The single argument of a projection function.
     pub const VALUE: CellId = CellId::from_u128(0x84d3ba81fd2a52ea37478f4a868106f4);
+    /// Ordered field references for an opt-in record outline.
+    pub const OUTLINE: CellId = CellId::from_u128(0xe6c0b2058b8468428d64576d953e2d62);
+    /// Occurrence step for a computed result, not a field in the source record.
+    pub const RESULT: CellId = CellId::from_u128(0x11098129f74918af8a0924f94c37df4f);
 }
 
 pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
@@ -40,7 +46,7 @@ pub fn viewport_display(
     if width <= 0.0 || height <= 0.0 {
         return Some(crate::display::row(0.0, []));
     }
-    let (result, fuel) = input.env.apply(
+    let result = input.env.apply(
         function,
         &[
             (vocabulary::VALUE, value.clone()),
@@ -51,7 +57,7 @@ pub fn viewport_display(
     Some(if absent::is_absent(&result) {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
-        transient(&result, fuel)
+        at([Step::Key(vocabulary::RESULT)], &result)
     })
 }
 
@@ -66,8 +72,8 @@ pub fn display(
         (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64)
             .then(|| input.env.evaluate_with_fuel(expression, fuel as usize))
     });
-    let (result, fuel) = evaluated.unwrap_or_else(|| input.env.evaluate(expression));
-    Some(transient(&result, fuel))
+    let result = evaluated.unwrap_or_else(|| input.env.evaluate(expression));
+    Some(at([Step::Key(vocabulary::RESULT)], &result))
 }
 
 /// Opt-in presentation of a declaration; not part of the library's
@@ -78,13 +84,13 @@ pub fn projected_display(
     let fields = input.value?.as_record()?;
     let value = fields.get(&vocabulary::VALUE)?;
     let function = fields.get(&vocabulary::PROJECTION)?;
-    let (result, fuel) = input
+    let result = input
         .env
         .apply(function, &[(vocabulary::VALUE, value.clone())]);
     Some(if absent::is_absent(&result) {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
-        transient(&result, fuel)
+        at([Step::Key(vocabulary::RESULT)], &result)
     })
 }
 
@@ -95,6 +101,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::PROJECTION, "projection"),
         (vocabulary::VIEWPORT, "viewport"),
         (vocabulary::VALUE, "value"),
+        (vocabulary::OUTLINE, "outline"),
+        (vocabulary::RESULT, "result"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -102,7 +110,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "presentation",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
-        crate::display::partial(display),
+        crate::display::compose_partials([
+            crate::display::partial(display),
+            crate::display::partial(outline::display),
+        ]),
     )
 }
 
@@ -143,7 +154,7 @@ mod tests {
                     completed: true,
                 }
             }
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
+            fn evaluate(&self, _: &Value) -> Value {
                 panic!("viewport sources are passed as data")
             }
         }
@@ -157,7 +168,7 @@ mod tests {
                 input, 420.5, 160.25
             )))
             .map(|layout| inspect(&layout)),
-            Some(ProjectionCall::Transient { fuel: 17, .. })
+            Some(ProjectionCall::At { steps, .. }) if steps == [Step::Key(vocabulary::RESULT)]
         ));
         assert!(matches!(
             projected(&declaration, &CheckArguments, |input| viewport_display(
@@ -184,8 +195,8 @@ mod tests {
             }
         }
 
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            (self.0.clone(), 17)
+        fn evaluate(&self, _: &Value) -> Value {
+            self.0.clone()
         }
     }
 
@@ -226,7 +237,7 @@ mod tests {
             ) -> ::grap::Evaluation {
                 panic!("authoring a declaration must not apply its projection")
             }
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
+            fn evaluate(&self, _: &Value) -> Value {
                 panic!("authoring a declaration must not evaluate it")
             }
         }
@@ -239,7 +250,7 @@ mod tests {
         assert!(projected(&value, &NoEvaluation, display).is_none());
         assert!(
             matches!((projected(&value, &EvaluateTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),
-            Some(ProjectionCall::Transient { value, fuel: 17 }) if value == result)
+            Some(ProjectionCall::At { value, .. }) if value == result)
         );
         assert!(matches!(
             (projected(
@@ -264,12 +275,12 @@ mod tests {
     }
 
     #[test]
-    fn render_projects_only_the_transient_evaluation_result() {
+    fn render_projects_only_the_evaluation_result() {
         let result = Value::from(b"picture".to_vec());
         let value = Value::record([(vocabulary::RENDER, Value::from(LEFT_VALUE))]);
         assert!(
             matches!((projected(&value, &EvaluateTo(result.clone()), display)).map(|layout| inspect(&layout)),
-                Some(ProjectionCall::Transient { value, fuel: 17 }) if value == result
+                Some(ProjectionCall::At { value, .. }) if value == result
             )
         );
     }

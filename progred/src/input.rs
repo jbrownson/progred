@@ -44,10 +44,9 @@ fn keyboard(
         || dispatch
             .handler
             .dispatch_key_with(editor, event, &mut input)
-        || editor.clipboard_key(geometry, event)
+        || editor.paste_key(event)
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
-        || editor.collapse_key(event)
         || match navigate::step_selection(
             &dispatch.descends,
             Some(

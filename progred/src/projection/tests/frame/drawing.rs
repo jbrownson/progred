@@ -322,6 +322,7 @@ fn drawing_frame(
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let cx = Cx {
+        edits: Default::default(),
         computations: None,
         view: &crate::test_root(),
         completions: None,
@@ -332,8 +333,6 @@ fn drawing_frame(
         selection: None,
         secondary: None,
         selected_trace: None,
-        source: Source::Stored,
-        fuel: std::cell::Cell::new(100),
     };
     crate::projection::drawing::program_leaf(
         &cx,
@@ -412,6 +411,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         );
         let mut pointer = placed::DispatchContext::new(None, Some(target));
         pointer.descends = Rc::from([crate::navigate::Descend {
+            scope: Default::default(),
             root: Some(crate::test_root()),
             path: Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]),
             rect: bounds,
@@ -556,6 +556,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         )))),
     );
     input.descends = Rc::from([crate::navigate::Descend {
+        scope: Default::default(),
         root: Some(source_view.clone()),
         path: path.clone(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),

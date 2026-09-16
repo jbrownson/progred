@@ -13,6 +13,22 @@ pub fn list_layout(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    list_with_layout(input, child, None)
+}
+
+/// The same editable list, with an explicit vertical presentation.
+pub fn vertical_list(
+    gap: f64,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Partial<crate::Editor, crate::frame::Hovered> {
+    partial(move |input| list_with_layout(input, child.clone(), Some(gap)))
+}
+
+fn list_with_layout(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+    vertical_gap: Option<f64>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let elements = input.value?.as_list()?;
     let mut positions = elements
         .iter()
@@ -35,6 +51,9 @@ pub fn list_layout(
             ))
         })
         .collect::<Vec<_>>();
+    if let Some(gap) = vertical_gap {
+        return Some(selectable_bracket(Delim::Bracket, col(0, gap, children)));
+    }
     let mut flat = Vec::new();
     for (index, layout) in children.iter().enumerate() {
         if let Some(previous) = index.checked_sub(1).and_then(|i| positions.get(i)) {
@@ -75,6 +94,17 @@ pub fn record_layout(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
     child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let keys = record_keys(input)?;
+    Some(record_heads(
+        keys.into_iter()
+            .map(|key| record_field(input, key, child(key))),
+        pending_field(input),
+    ))
+}
+
+pub(crate) fn record_keys(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Vec<CellId>> {
     let fields = input.value?.as_record()?;
     let mut keys = fields.keys().copied().collect::<Vec<_>>();
     if let Some(Pending::Child(Step::Key(key))) = &input.pending
@@ -90,30 +120,42 @@ pub fn record_layout(
             (None, None) => left.cmp(right),
         },
     );
-    let fields = keys.into_iter().map(|key| {
-        let label = match input.env.name(key) {
-            Some(name) => faced(name, Face::Label),
-            None => {
-                let hex = key.simple().to_string();
-                faced(format!("…{}", &hex[hex.len() - 5..]), Face::Id)
-            }
-        };
-        let target = input.targets.at([Step::Key(key)]);
-        let head = row(0.0, [label, dim(":")]);
-        RecordField {
-            label: if fields.contains_key(&key) {
-                activatable(head, target.hover, target.select)
-            } else {
-                pickable(head, target.hover, key.into())
-            },
-            value: descend(
-                Step::Key(key),
-                child(key).map(|p| compose_partials([p, input.default_projection.clone()])),
-                None,
-            ),
+    Some(keys)
+}
+
+pub(crate) fn record_field(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    key: CellId,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> RecordField<crate::Editor, crate::frame::Hovered> {
+    let fields = input.value.and_then(Value::as_record);
+    let label = match input.env.name(key) {
+        Some(name) => faced(name, Face::Label),
+        None => {
+            let hex = key.simple().to_string();
+            faced(format!("…{}", &hex[hex.len() - 5..]), Face::Id)
         }
-    });
-    let pending = matches!(input.pending, Some(Pending::Field)).then(|| {
+    };
+    let target = input.targets.at([Step::Key(key)]);
+    let head = row(0.0, [label, dim(":")]);
+    RecordField {
+        label: if fields.is_some_and(|fields| fields.contains_key(&key)) {
+            activatable(head, target.hover, target.select)
+        } else {
+            pickable(head, target.hover, key.into())
+        },
+        value: descend(
+            Step::Key(key),
+            child.map(|p| compose_partials([p, input.default_projection.clone()])),
+            None,
+        ),
+    }
+}
+
+pub(crate) fn pending_field(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    matches!(input.pending, Some(Pending::Field)).then(|| {
         block_hover(on_click(
             row(
                 0.0,
@@ -121,6 +163,5 @@ pub fn record_layout(
             ),
             Rc::new(|_| true),
         ))
-    });
-    Some(record_heads(fields, pending))
+    })
 }

@@ -23,7 +23,7 @@ impl display::Env for Host {
             None => ::grap::apply(function, args.iter().cloned(), &self.0, 10_000),
         }
     }
-    fn evaluate(&self, _: &Value) -> (Value, usize) {
+    fn evaluate(&self, _: &Value) -> Value {
         unreachable!()
     }
 }
@@ -35,7 +35,19 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         &self,
         _: &mut puri::text::TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
-        _: gid::Step,
+        _: &[gid::Step],
+        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+    ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
+        unreachable!()
+    }
+    fn jump(
+        &self,
+        _: &mut puri::text::TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
+        _: Vec<gid::Step>,
+        _: Vec<gid::Step>,
+        _: display::Conject,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
@@ -46,18 +58,9 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut puri::text::TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
-        _: Value,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
-    ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
-        unreachable!()
-    }
-    fn transient(
-        &self,
-        _: &mut puri::text::TextCtx,
-        _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         value: Value,
-        _: usize,
+        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         let height = f64::read(value.as_record().unwrap().get(&HEIGHT).unwrap()).unwrap();
         self.0.replace(Some(value));
@@ -154,6 +157,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
     let graph = with_context(&output, |context| {
         let libraries = &host.0;
         let inputs = crate::projection::Cx {
+            edits: Default::default(),
             sources: crate::sources::Sources {
                 doc: context.inputs.sources.doc,
                 libraries,

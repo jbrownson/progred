@@ -361,6 +361,7 @@ fn key(s: &str) -> Step {
 }
 
 mod completion;
+mod conject;
 mod declarations;
 mod drawing;
 mod fidget_cube;
@@ -369,5 +370,6 @@ mod interaction;
 mod iop_tree_native;
 mod layout;
 mod numbers;
+mod outline;
 mod profile;
 mod svg;

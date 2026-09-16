@@ -21,6 +21,7 @@ pub fn on_event(
         Rc::new(move |context| {
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
+            let edits = context.inputs.edits.clone();
             let command = crate::modifiers::command;
             let scale = context.inputs.styles.scale;
             let function = function.clone();
@@ -45,8 +46,7 @@ pub fn on_event(
                                         })),
                                     )],
                                 );
-                                let handled = crate::site::apply_event(
-                                    world,
+                                let handled = edits.open(crate::editing::Access::new(world)).grap(
                                     root.clone(),
                                     path.clone(),
                                     function.clone(),
@@ -75,8 +75,7 @@ pub fn on_event(
                                         })),
                                     )],
                                 );
-                                let handled = crate::site::apply_event(
-                                    world,
+                                let handled = edits.open(crate::editing::Access::new(world)).grap(
                                     root.clone(),
                                     path.clone(),
                                     function.clone(),
@@ -127,8 +126,7 @@ pub fn on_event(
                                 [modifier_field(modifiers, command)],
                             ),
                         };
-                        crate::site::apply_event(
-                            world,
+                        edits.open(crate::editing::Access::new(world)).grap(
                             root.clone(),
                             path.clone(),
                             function.clone(),

@@ -169,12 +169,12 @@ impl Fixture {
 #[test]
 fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let f = Fixture::new();
-    assert!(f.mesh().as_ref().as_ref().unwrap().0.awaiting_first_surface);
+    assert!(f.mesh().as_ref().as_ref().unwrap().awaiting_first_surface);
     assert_eq!(f.runs.get(), 1, "both interpretations share one evaluation");
     assert_eq!(f.queue.lock().unwrap().len(), 1, "only mesh work is ready");
     f.finish(0);
     let mesh = f.mesh();
-    assert!(!mesh.as_ref().as_ref().unwrap().0.awaiting_first_surface);
+    assert!(!mesh.as_ref().as_ref().unwrap().awaiting_first_surface);
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, None)));
 
@@ -203,7 +203,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let View::Implicit(image, None) = &*view else {
         panic!("replacement image")
     };
-    let image = &image.as_ref().as_ref().unwrap().0;
+    let image = &image.as_ref().as_ref().unwrap();
     assert!(!image.stale && !image.pending);
     let image = &image.image.as_ref().unwrap().image;
     assert_eq!((image.width, image.height), (48, 64));
@@ -220,10 +220,10 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     assert!(matches!(&*f.read(), View::Implicit(_, None)));
     f.graph.settings.set(settings(0.0, 0.75));
     let new = f.mesh();
-    assert!(!new.as_ref().as_ref().unwrap().0.awaiting_first_surface);
-    assert!(new.as_ref().as_ref().unwrap().0.surface_pending);
+    assert!(!new.as_ref().as_ref().unwrap().awaiting_first_surface);
+    assert!(new.as_ref().as_ref().unwrap().surface_pending);
     let tool_center = |view: &Outcome<mesh::computation::ViewGeometry>| {
-        let vertices = &view.as_ref().unwrap().0.geometry.vertices;
+        let vertices = &view.as_ref().unwrap().geometry.vertices;
         let xs: Vec<_> = vertices
             .iter()
             .filter(|v| v.color == [225, 94, 58].map(|v| v as f32 / 255.0))
@@ -242,7 +242,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
         "orbit retains the pending mesh"
     );
     f.graph.settings.set(settings(15.0, 0.9));
-    assert!(f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
     assert_eq!(
         f.queue.lock().unwrap().len(),
         1,
@@ -250,7 +250,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     );
     f.finish(0);
     let current = f.mesh();
-    assert!(!current.as_ref().as_ref().unwrap().0.surface_pending);
+    assert!(!current.as_ref().as_ref().unwrap().surface_pending);
     assert_eq!(
         f.queue.lock().unwrap().len(),
         1,
@@ -273,7 +273,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
     f.finish(0);
     f.mesh(); // Current mesh starts implicit work, but don't execute it yet.
     f.graph.settings.set(settings(0.0, 0.75));
-    assert!(f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
     let cancelled = f.queue.lock().unwrap().pop_front().unwrap();
     std::thread::spawn(cancelled).join().unwrap();
     assert!(
@@ -286,7 +286,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
         "only replacement mesh remains"
     );
     f.finish(0);
-    assert!(!f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, None)));
 }

@@ -388,12 +388,14 @@ mod tests {
         let other = Root::document();
         let descends = [
             Descend {
+                scope: Default::default(),
                 root: Some(other.clone()),
                 path: Rc::from([]),
                 rect: Rect::new(0.0, 0.0, 20.0, 20.0),
                 select: Rc::new(|_, _| false),
             },
             Descend {
+                scope: Default::default(),
                 root: Some(root.clone()),
                 path: Rc::from([]),
                 rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),

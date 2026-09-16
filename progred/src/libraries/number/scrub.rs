@@ -27,11 +27,14 @@ pub(crate) fn on_scrub(
     widget::before(
         child,
         Rc::new(move |context| {
-            if !context.inputs.source.transient()
-                && crate::selection::writable_at(&context.inputs.sources, context.path)
+            if context
+                .inputs
+                .edits
+                .writable(&context.inputs.sources, context.path)
             {
                 let root = context.inputs.view.clone();
                 let path = context.path.to_vec();
+                let edits = context.inputs.edits.clone();
                 let handler = handler.clone();
                 let scale = context.inputs.styles.scale;
                 widget::gesture::targeted(
@@ -40,7 +43,11 @@ pub(crate) fn on_scrub(
                     crate::editing::picking,
                     PartialEq::eq,
                     move |world, point| {
-                        let edit = crate::gesture::value_edit(root.clone(), path.clone());
+                        let edit = crate::gesture::scoped_value_edit(
+                            root.clone(),
+                            path.clone(),
+                            edits.clone(),
+                        );
                         if edit.select(world) {
                             crate::editing::start_gesture(
                                 world,

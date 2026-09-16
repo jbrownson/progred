@@ -1074,6 +1074,7 @@ mod tests {
                 *count += 10;
                 true
             }),
+            Default::default(),
         );
         let widget = container::floating(
             widget::leaf(Extent::default(), |_, _| {}),

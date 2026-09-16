@@ -151,7 +151,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                     selection_changed: false,
                 };
                 assert!(expected_continuation.as_ref().unwrap()(
-                    &sources,
+                    &crate::editing::Scope::default().view(sources),
                     &[],
                     &mut effects
                 ));

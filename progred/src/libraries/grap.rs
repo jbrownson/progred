@@ -9,8 +9,8 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
-    RecordField, ResolvedCell, activatable, alternatives, at_local, col, completion, descend_local,
-    dim, faced, hug, pad, record_with, row, selectable_bracket, shared, slot, transient,
+    RecordField, ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
+    descend_path_local, dim, faced, hug, pad, record_with, row, selectable_bracket, shared, slot,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -94,37 +94,29 @@ fn lambda_name(
     })
 }
 
-pub fn shallow_at(
+pub fn shallow_path(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    at_local(steps, value, crate::display::partial(shallow_cell), default)
+    descend_path_local(steps, crate::display::partial(shallow_cell), default)
 }
 
 /// A direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
-pub(crate) fn expression_at(
+pub(crate) fn expression_path(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    shallow_at(steps, value, default)
+    shallow_path(steps, default)
 }
 
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_at(
+pub(crate) fn declaration_path(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    at_local(
-        steps,
-        value,
-        crate::display::partial(declaration_cell),
-        default,
-    )
+    descend_path_local(steps, crate::display::partial(declaration_cell), default)
 }
 
 pub(crate) fn shallow_descend(
@@ -271,9 +263,8 @@ pub(crate) fn call_with_function(
         }
         _ => Vec::new(),
     };
-    let function = at_local(
+    let function = descend_path_local(
         [Step::Key(FUNCTION)],
-        function,
         function_projection.unwrap_or_else(|| crate::display::partial(shallow_cell)),
         &input.default_projection,
     );
@@ -291,12 +282,12 @@ pub(crate) fn call_with_function(
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => standard_field_order(input.env, left, right),
         },
-        |field, value| {
+        |field, _| {
             let (spelling, face) = field_spelling(input.env, field);
             let target = input.targets.at([Step::Key(field)]);
             RecordField {
                 label: activatable(faced(spelling, face), target.hover, target.select),
-                value: expression_at([Step::Key(field)], value, &input.default_projection),
+                value: expression_path([Step::Key(field)], &input.default_projection),
             }
         },
         trailing,
@@ -320,9 +311,8 @@ pub fn lambda_display(
         .values()
         .all(|param| param.as_cell().is_some())
         .then_some(())?;
-    let params = at_local(
+    let params = descend_path_local(
         [Step::Key(PARAMS)],
-        params,
         crate::display::structure::list(Some(crate::display::partial(declaration_cell))),
         &input.default_projection,
     );
@@ -377,17 +367,16 @@ pub fn ffi_display(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let ffi = input.value?.as_record()?.get(&FFI)?;
     ffi.as_cell()?;
-    Some(shallow_at([Step::Key(FFI)], ffi, &input.default_projection))
+    Some(shallow_path([Step::Key(FFI)], &input.default_projection))
 }
 
 pub fn evaluate_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let expression = input.value?.as_record()?.get(&EVALUATE)?;
-    let (result, fuel) = input.env.evaluate(expression);
-    let expression = shared(expression_at(
+    let result = input.env.evaluate(expression);
+    let expression = shared(expression_path(
         [Step::Key(EVALUATE)],
-        expression,
         &input.default_projection,
     ));
     let shaft_target = input.targets.current();
@@ -396,7 +385,12 @@ pub fn evaluate_display(
         shaft_target.hover,
         shaft_target.select,
     ));
-    let result = shared(transient(&result, fuel));
+    let result = shared(at(
+        [Step::Key(
+            crate::libraries::presentation::vocabulary::RESULT,
+        )],
+        &result,
+    ));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
         col(0, 2.0, [row(6.0, [expression, shaft]), pad(20.0, result)]),
@@ -557,8 +551,8 @@ mod tests {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            (self.result.clone(), 7)
+        fn evaluate(&self, _: &Value) -> Value {
+            self.result.clone()
         }
     }
 
@@ -646,7 +640,7 @@ mod tests {
                 panic!("declarations do not evaluate");
             }
 
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
+            fn evaluate(&self, _: &Value) -> Value {
                 panic!("declarations do not evaluate");
             }
 
@@ -820,7 +814,11 @@ mod tests {
                 doc: &document,
                 libraries: &Default::default(),
             };
-            assert!(call.on_commit.unwrap()(&sources, &[], &mut effects));
+            assert!(call.on_commit.unwrap()(
+                &crate::editing::Scope::default().view(sources),
+                &[],
+                &mut effects
+            ));
             assert_eq!(
                 effects.selection,
                 Some(match expected.first() {
@@ -911,7 +909,7 @@ mod tests {
                 panic!("unexpected projection application")
             }
 
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
+            fn evaluate(&self, _: &Value) -> Value {
                 panic!("completion does not evaluate the function")
             }
 
@@ -991,10 +989,11 @@ mod tests {
                 let Recorded::Row { children, .. } = argument else {
                     panic!("argument has a label and value");
                 };
-                let ProjectionCall::At { steps, .. } = &inspect(&(unshared(&children[2]))) else {
+                let ProjectionCall::Descend { step, .. } = &inspect(&(unshared(&children[2])))
+                else {
                     panic!("argument value retains its path");
                 };
-                let [Step::Key(field)] = steps.as_slice() else {
+                let Step::Key(field) = step else {
                     panic!("argument path is its field");
                 };
                 *field
@@ -1008,11 +1007,12 @@ mod tests {
         let layout = projected(&env(), &wrapper(expression.clone(), [])).unwrap();
         let (shown, result) = arms(&layout);
         assert!(matches!(&inspect(&(shown)),
-            ProjectionCall::At { steps, value, .. }
-                if *steps == [Step::Key(EVALUATE)] && *value == expression
+            ProjectionCall::Descend { step, .. }
+                if *step == Step::Key(EVALUATE)
         ));
         assert!(matches!(&inspect(&(result)),
-            ProjectionCall::Transient { value, fuel: 7 } if *value == Value::from(vec![1])
+            ProjectionCall::At { value, steps, .. } if *value == Value::from(vec![1])
+                && *steps == [Step::Key(crate::libraries::presentation::vocabulary::RESULT)]
         ));
     }
 
@@ -1089,13 +1089,13 @@ mod tests {
         .unwrap();
         let (_, shown) = arms(&layout);
         assert!(matches!(&inspect(&(shown)),
-            ProjectionCall::Transient { value, fuel: 7 } if *value == result
+            ProjectionCall::At { value, .. } if *value == result
         ));
         let layout = projected(&env(), &result).unwrap();
         let (nested, _) = arms(&layout);
         assert!(matches!(&inspect(&(nested)),
-            ProjectionCall::At { steps, value, .. }
-                if *steps == [Step::Key(EVALUATE)] && *value == inner
+            ProjectionCall::Descend { step, .. }
+                if *step == Step::Key(EVALUATE)
         ));
     }
 
@@ -1115,13 +1115,11 @@ mod tests {
             panic!("flat call first");
         };
         assert!(matches!(&inspect(&(unshared(&children[0]))),
-            ProjectionCall::At {
-                steps,
-                value,
+            ProjectionCall::Descend {
+                step,
                 projection: Some(_),
                 ..
-            } if *steps == [Step::Key(FUNCTION)]
-                && *value == Value::from(function)
+            } if *step == Step::Key(FUNCTION)
         ));
     }
 
@@ -1195,8 +1193,8 @@ mod tests {
                 panic!("unexpected projection application")
             }
 
-            fn evaluate(&self, _: &Value) -> (Value, usize) {
-                (Value::record([]), 0)
+            fn evaluate(&self, _: &Value) -> Value {
+                Value::record([])
             }
 
             fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
@@ -1281,11 +1279,11 @@ mod tests {
             } if *key == name::vocabulary::NAME
         ));
         assert!(matches!(&inspect(&(&head[1])),
-            ProjectionCall::At {
-                steps,
+            ProjectionCall::Descend {
+                step,
                 projection: Some(_),
                 ..
-            } if *steps == [Step::Key(PARAMS)]
+            } if *step == Step::Key(PARAMS)
         ));
         let Recorded::Before { child, .. } = &head[2] else {
             panic!("lambda arrow targets its body");

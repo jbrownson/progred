@@ -287,10 +287,10 @@ pub(super) fn display(
         let image = computations.runtime.read(&computation.image);
         let result = image
             .as_ref()
-            .map_err(|error| (::grap::memo::failure(*error), fuel))
+            .map_err(|error| ::grap::memo::failure(*error))
             .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone));
         match result {
-            Ok((image, _)) => {
+            Ok(image) => {
                 let drawing = match &image.image {
                     Some(data) => fidget::image_from_data(size, data.image.clone(), image.stale),
                     None => Layout::widget(Rc::new(move |context| {
@@ -311,7 +311,10 @@ pub(super) fn display(
                 };
                 drawing.measure(context, build)
             }
-            Err((value, fuel)) => context.project.transient(context.text, build, value, fuel),
+            Err(value) => {
+                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
+                    .measure(context, build)
+            }
         }
     }));
     Some(fidget::interactive_volume(drawing, input))

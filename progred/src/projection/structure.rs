@@ -38,7 +38,12 @@ fn blob_text(bytes: &[u8]) -> String {
 
 /// The editor-owned folded form shared by raw and custom projections.
 /// Active structural editors keep their containing value open.
-pub(super) fn collapsed_layout(cx: &Cx, path: &[Step], value: &Value) -> Option<View> {
+pub(super) fn collapsed_layout(
+    cx: &Cx,
+    path: &[Step],
+    value: &Value,
+    default: bool,
+) -> Option<View> {
     let delim = match value {
         Value::Cell(cell) => {
             let value = cx.sources.resolve(*cell)?;
@@ -61,7 +66,7 @@ pub(super) fn collapsed_layout(cx: &Cx, path: &[Step], value: &Value) -> Option<
     };
     Some(selectable(
         cx,
-        selectable_bracket(delim, toggle(dim("…"), path, cx)),
+        selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
         path,
         value,
         true,
@@ -91,17 +96,14 @@ fn selectable(cx: &Cx, child: View, path: &[Step], value: &Value, claim_hover: b
     }
 }
 
-fn toggle(child: View, path: &[Step], cx: &Cx) -> View {
+fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {
     let target: Rc<[Step]> = Rc::from(path);
     let root = cx.view.clone();
-    let writable = !cx.source.transient();
     activatable(
         crate::display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
         Hovered::Tree(Hover::Toggle(target.clone())),
         Rc::new(move |world| {
-            if writable {
-                world.collapse(&root, &target, None);
-            }
+            world.set_collapsed(&root, &target, default, None);
             true
         }),
     )

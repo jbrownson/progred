@@ -1,7 +1,7 @@
 use super::{one_marker, parameters, vocabulary::*};
 use crate::display::{
-    Delim, Face, Layout, ProjectionInput, activatable, alternatives, at, col, dim, faced, hug, row,
-    selectable_bracket, shared,
+    Delim, Face, Layout, ProjectionInput, activatable, alternatives, col, descend_path, dim, faced,
+    hug, row, selectable_bracket, shared,
 };
 use crate::libraries::name;
 use gid::{CellId, Step, Value};
@@ -46,7 +46,7 @@ fn operand(
     key: CellId,
     value: &Value,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let child = at([Step::Key(marker), Step::Key(key)], value);
+    let child = descend_path([Step::Key(marker), Step::Key(key)]);
     let needs_group = value
         .as_record()
         .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
@@ -120,7 +120,7 @@ pub(super) fn field(
     input.pending.is_none().then_some(())?;
     let (marker, content) = form(input.value?)?;
     let body = if marker == AXIS {
-        crate::libraries::grap::shallow_at([Step::Key(AXIS)], content, &input.default_projection)
+        crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)
     } else {
         let target = input.targets.current();
         let (spelling, face) = match input.env.name(marker) {
@@ -137,7 +137,10 @@ pub(super) fn field(
                 arguments(
                     parameters(marker)?
                         .iter()
-                        .map(|key| Some(at([Step::Key(marker), Step::Key(*key)], fields.get(key)?)))
+                        .map(|key| {
+                            fields.get(key)?;
+                            Some(descend_path([Step::Key(marker), Step::Key(*key)]))
+                        })
                         .collect::<Option<Vec<_>>>()?,
                 ),
                 0.0,
@@ -147,10 +150,10 @@ pub(super) fn field(
     };
     Some(
         match input.value?.as_record()?.get(&name::vocabulary::NAME) {
-            Some(name) => hug(
+            Some(_) => hug(
                 row(
                     6.0,
-                    [at([Step::Key(name::vocabulary::NAME)], name), dim("=")],
+                    [descend_path([Step::Key(name::vocabulary::NAME)]), dim("=")],
                 ),
                 body,
                 6.0,

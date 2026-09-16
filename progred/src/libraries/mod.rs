@@ -403,8 +403,8 @@ mod tests {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            (Value::record([]), 0)
+        fn evaluate(&self, _: &Value) -> Value {
+            Value::record([])
         }
     }
 

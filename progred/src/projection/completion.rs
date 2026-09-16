@@ -1,7 +1,7 @@
 //! Adapt completion offers and pending queries to the editor’s floating card.
 
 use super::{
-    Cx, SharedPath, Source, atom_content, edit_presentation, face_style, hover_block, hover_claim,
+    Cx, SharedPath, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
 use crate::completion::{Entry, Offers, completion_entries_with, constructor_entries};
@@ -54,7 +54,7 @@ pub(super) fn pending_view(
     path: Path,
     completions: Option<&crate::display::CompletionProvider>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let writable = !cx.source.transient() && crate::selection::writable_at(&cx.sources, &path);
+    let writable = cx.edits.writable(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
         writable
             && current.path() == path.as_slice()
@@ -74,26 +74,26 @@ fn pending_target(
     path: Path,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let (path, transient): (SharedPath, bool) = match cx.source {
-        Source::Transient { owner } if owner != path.as_slice() => return child,
-        Source::Transient { owner } => (Rc::from(owner), true),
-        Source::Stored => (Rc::from(path), false),
-    };
+    let path: SharedPath = Rc::from(path);
+    let edits = cx.edits.clone();
     let scale = cx.styles.scale;
     let selected = cx.selected(path.as_ref());
     let root = cx.view.clone();
-    let child = if transient {
-        child
-    } else {
+    let child = {
         let target = path.clone();
         let root = root.clone();
+        let edits = edits.clone();
+        let scope = edits.clone();
         crate::display::widget::navigation::landmark(
             child,
             path.clone(),
             Rc::new(move |ctx, _| {
-                crate::editing::select(ctx, &root, &target);
+                edits
+                    .open(crate::editing::Access::new(ctx))
+                    .select(&root, &target);
                 true
             }),
+            scope,
         )
     };
     before(child, move |p, placement| {
@@ -109,13 +109,13 @@ fn pending_target(
                 hover_highlight(scale, cv, outline);
             }
         });
-        if !transient {
-            hover_claim(p, placement, Hover::Value(path.clone()));
-        }
+        hover_claim(p, placement, Hover::Value(path.clone()));
         let target = path.clone();
         let root = root.clone();
         p.activate(Hovered::Tree(Hover::Value(target.clone())), move |ctx| {
-            crate::editing::select(ctx, &root, &target);
+            edits
+                .open(crate::editing::Access::new(ctx))
+                .select(&root, &target);
             true
         });
     })
@@ -150,6 +150,11 @@ fn query_content(
     let everything = cx.selection.is_some_and(Selection::completion_everything);
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
     let resolve = |cell| cx.sources.definition(cell);
+    // This is only reached for an active writable picker. Keep the boundary
+    // total if a caller supplies an unmapped occurrence anyway.
+    let Some(source_path) = cx.edits.source(path) else {
+        return placeholder_box(tcx, cx.styles);
+    };
     let request = crate::display::CompletionRequest {
         query: query.text(),
         kind: if labels {
@@ -162,7 +167,7 @@ fn query_content(
         } else {
             crate::display::CompletionScope::Suggested
         },
-        path,
+        path: &source_path,
         value_at: &value_at,
         resolve: &resolve,
     };

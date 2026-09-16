@@ -241,9 +241,9 @@ initial encodings remain available where recording is intentional.
 
 ## Projection recursion and controls
 
-`descend`, `at`, and `transient` build ordinary preparation functions using
+`descend`, `at`, and `jump` build ordinary preparation functions using
 an explicit [projection scope](../progred/src/display/widget/project.rs). The app
-supplies source lookup, cycle detection, provenance, fuel, and the selected
+supplies source lookup, cycle detection, conject, and the selected
 current/descendant partials. There are no corresponding Layout enum cases,
 and the editor no longer pattern-matches on Layout.
 
