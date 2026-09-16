@@ -81,10 +81,11 @@ evaluator fuel.
 
 The example's cube function owns its size, chamfer, and control-point depth.
 It returns an ordinary geometry record with four Grap callables: `field`
-constructs the implicit solid, `top face` maps UV points to that surface, and
+constructs the implicit solid, `top face` maps UV points to that surface,
 `normal` gives the outward surface normal at a contact point, and `chamfer edge`
 gives the centerline of a canonical chamfer. They capture the
-same dimensions. The implicit field is constructed only when requested; path
+same dimensions; the record also supplies its scalar `chamfer width`, `c√2`.
+The implicit field is constructed only when requested; path
 generation does not construct or mesh a solid it does not consume. Dimensions
 and path arithmetic use f64; `f32 from f64` explicitly rounds the constants at
 the Fidget construction boundary.
@@ -127,7 +128,7 @@ Both currently use part coordinates; there is no simulated stock flip,
 work-offset definition, or connecting move between setups.
 Each operation sequences a `with tool: ball tool` indent group and a sibling
 `with tool: square tool` chamfer group; playback supplies no global cutter.
-Op 1 contours the four top and four vertical edges. Op 2 contours the four
+Op 1 cuts the four top and four vertical chamfers. Op 2 cuts the four
 bottom edges. The square tool switches in at those group boundaries without
 inventing a tool-change motion.
 
@@ -140,8 +141,12 @@ cutting length. With outward normal `n = (0,1,1)/√2`, spindle-facing axis
 `a = (0,−1,1)/√2`, cutter radius `r`, and cutting length `L`, the tip is
 `contact + r*n − (L/2)*a`. It emits one straight start/line pair. Feed is
 `a × n`, following the example's clockwise climb convention. `chamfer ring`
-composes ordinary Grap point mappings to repeat this along four edges;
-`cube chamfers` supplies the cube's contact geometry and shared tool dimensions.
+composes ordinary Grap point mappings to repeat its supplied `strategy` along
+four edges; `cube chamfers` supplies the callable, contact geometry, and shared
+tool dimensions. Change its `strategy` argument from `crosswise chamfer` to
+`contour chamfer` to use these side cuts. There is no mode enum or special
+dispatch: the ring calls that function with the available geometry and settings,
+and each strategy consumes its declared parameters.
 There is no Rust chamfer generator or mesh-derived path.
 
 The square profile is a Grap quote with spliced `square tool diameter` and
@@ -157,8 +162,35 @@ there is no fixture/holder clearance claim.
 
 Tests compare the actual Fidget swept subtraction for all twelve edges with
 the beveled cube's planes, and check edge coverage, tool scopes, compensation,
-and updates from edited cube/tool dimensions. Crosswise end-cut passes, which
-would step along each chamfer, remain a separate strategy to add.
+and updates from edited cube/tool dimensions.
+
+### Crosswise end-cut chamfers
+
+The example defaults to the alternative `crosswise chamfer` callable. The square
+mill's axis is the outward chamfer normal `n`, with its flat tip directly on the
+plane. At each centerline sample, `crosswise row` emits one straight cut from
+`center − (width/2)*a` to `center + (width/2)*a`, where
+`a = (0,−1,1)/√2` is the across-chamfer direction. Both endpoints and the axis
+receive the ring's rigid orientation. No ball-radius or side-radius compensation
+is appropriate here: the tip plane itself is the contact plane.
+
+`chamfer stepover` defaults to 0.05 inches. For a straight edge of length `s`,
+the program uses `max(1, ceil(s/stepover))` intervals and includes both endpoints.
+The actual spacing is therefore no greater than the requested maximum. Every
+row cuts in the same direction; progression along the edge is
+`feed × normal`, using the same row-order convention as the indent passes.
+Each row starts a disconnected path: no return stroke, rapid, or linking cut
+is inferred. The row loop is Grap `iterate`; emission uses the existing
+`start at`, `line to`, and `map points` capabilities.
+
+Stepover must be finite and positive, and the computed interval count finite.
+Finer requests remain bounded by evaluator fuel, not silently capped. Stepover
+is not clamped to the tool diameter: oversized steps leave real uncut strips in
+the subtraction. Both current strategies assume this straight, planar 45-degree
+chamfer and a square cutting profile. They simulate the ideal revolved envelope,
+not tooth marks, runout, or surface-finish physics. Tests cover both swept solids,
+all edge orientations, width/spacing changes, invalid spacing, visible gaps from
+wide steps, and dependency invalidation when the callable or spacing changes.
 
 ### Indent tilt and direction
 
@@ -239,13 +271,14 @@ doubles XY resolution up to native size, then finishes with four-times depth
 sampling. The mesh supplies immediate feedback until the first current implicit
 image. Standalone mesh and implicit functions remain available.
 
-Command+9's example uses this refined preview with one playback slider: 264 paths (6,348
+Command+9's example uses this refined preview with one playback slider: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
 Op 1 finishes its five indented faces and eight chamfers before Op 2 cuts the
 bottom indent and four remaining chamfers. Slider intervals follow cutting
-distance, including the twelve new full-length contours. The operation boundary
+distance, including the chamfer passes. With the side-contour strategy selected,
+there are instead 264 paths (6,348 segments). The operation boundary
 adds no travel or cut.
 Implicit requests a new software image in the background when inputs change,
 including the camera. Mesh retains geometry across camera changes; its optional

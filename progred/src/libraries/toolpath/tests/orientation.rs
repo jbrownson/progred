@@ -366,7 +366,7 @@ fn op2_is_an_independent_bottom_program_and_preview_combines_without_a_link() {
     assert!(
         (preview.length().unwrap() - op1.length().unwrap() - op2.length().unwrap()).abs() < 1e-10
     );
-    assert_eq!(preview.segments().count(), 6348);
+    assert_eq!(preview.segments().count(), 6336 + 12 * 21);
     let values = stock_samples(&preview);
     assert!(values[..6].iter().all(|v| *v > 0.0), "{values:?}");
     assert!(values[6] < 0.0, "the cube interior must remain: {values:?}");

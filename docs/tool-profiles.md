@@ -133,9 +133,11 @@ with side-contour compensation. Its tapered neck and explicit shoulder to a
 wider non-cutting shank remain ordinary profile data. An `evaluate` entry shows
 the resulting profile beside the source definition.
 
-The example's sibling square-tool groups now make side-contour chamfer cuts.
+The example's sibling square-tool groups offer two Grap chamfer strategies:
+side contours and crosswise end cuts, selected by the `strategy` callable in
+`cube chamfers`. The latter is the default, with a shared 0.05-inch maximum
+stepover. Side compensation uses the shared diameter and cutting length;
+end cuts put the flat tip directly on the chamfer plane.
 Op 1 owns the four top and four vertical edges; Op 2 owns the four bottom edges.
-Next: add crosswise end passes, stepping along the chamfer length, as another
-Grap strategy. These simulate
-the ideal tool envelope, not microscopic tooth marks. Fixture clearance, safe
+Both simulate the ideal tool envelope, not microscopic tooth marks. Fixture clearance, safe
 links, holders/collision checks, and machine/G-code output remain separate work.
