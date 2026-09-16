@@ -963,6 +963,111 @@ fn flat_separators_claim_the_insert_between() {
 }
 
 #[test]
+fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() {
+    use crate::display as d;
+
+    let doc = Document {
+        root: Some(Value::list([
+            f64::value(1.0),
+            f64::value(2.0),
+            f64::value(3.0),
+        ])),
+        cells: Cells::new(),
+    };
+    let paths: Vec<Path> = doc
+        .root
+        .as_ref()
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .map(|position| vec![Step::Element(position.clone())])
+        .collect();
+    let mut world = crate::test_editor(doc);
+    // This fixture's viewport follows its content height. Leave room below
+    // the list so the completion popup does not cover the trailing comma.
+    let projection = world
+        .stack
+        .projection
+        .clone()
+        .with_entry(d::partial(|input| {
+            Some(d::padding(
+                (0.0, 0.0, 0.0, 400.0).into(),
+                d::structure::list_layout(input, None)?,
+            ))
+        }));
+    let project =
+        |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
+    let between = |frame: &placed::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
+        let rect = |path: &[Step]| {
+            frame
+                .descends
+                .iter()
+                .find(|d| d.path.as_ref() == path)
+                .unwrap()
+                .rect
+        };
+        let (left, right) = (rect(left), rect(right));
+        Point::new((left.x1 + right.x0) / 2.0, left.center().y)
+    };
+    let click = |world: &mut crate::Editor,
+                 frame: placed::HoverOutput<crate::Editor>,
+                 point: Point,
+                 after: &[Step]| {
+        let mut input = placed::DispatchContext::new(
+            Some(crate::test_root()),
+            Some(Hovered::Tree(Hover::Insert(Rc::from(after)))),
+        );
+        frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            world,
+            &PointerButtonEvent {
+                button: Some(PointerButton::Primary),
+                pointer: PointerInfo {
+                    pointer_id: Some(PointerId::PRIMARY),
+                    persistent_device_id: None,
+                    pointer_type: PointerType::Mouse,
+                },
+                state: PointerState {
+                    position: (point.x, point.y).into(),
+                    ..Default::default()
+                },
+            },
+            &mut input,
+        )
+    };
+    let frame = project(&mut world);
+    let point = between(&frame, &paths[1], &paths[2]);
+    assert!(click(&mut world, frame, point, &paths[1]));
+    let pending = world.model.selection.as_ref().unwrap().path().to_vec();
+    world.model.selection = Some(crate::selection::pending_with_query(
+        &crate::test_root(),
+        pending.clone(),
+        "x",
+    ));
+    for (left, right) in [(&paths[1], &pending), (&pending, &paths[2])] {
+        let frame = project(&mut world);
+        let point = between(&frame, left, right);
+        assert!(!matches!(
+            frame.hover_geometry.probe(Some(point), None, 0.0),
+            Some((_, Claim::Direct(Hovered::Tree(Hover::Insert(_)))))
+        ));
+        let payload = world.model.selection.as_ref().unwrap().payload();
+        // Neither comma installs an action, even if given its old target.
+        assert!(!click(&mut world, frame, point, left));
+        assert_eq!(world.model.selection.as_ref().unwrap().payload(), payload);
+    }
+
+    let frame = project(&mut world);
+    let point = between(&frame, &paths[0], &paths[1]);
+    assert!(matches!(
+        frame.hover_geometry.probe(Some(point), None, 0.0),
+        Some((_, Claim::Direct(Hovered::Tree(Hover::Insert(ref path))))) if path.as_ref() == paths[0]
+    ));
+    assert!(click(&mut world, frame, point, &paths[0]));
+    assert_ne!(world.model.selection.as_ref().unwrap().path(), pending);
+}
+
+#[test]
 fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     let doc = gap_document();
     let (bench, _) = place(&doc, None, 560.0);

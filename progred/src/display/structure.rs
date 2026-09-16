@@ -39,9 +39,13 @@ pub fn list_layout(
     for (index, layout) in children.iter().enumerate() {
         if let Some(previous) = index.checked_sub(1).and_then(|i| positions.get(i)) {
             let separator = dim(", ");
+            let beside_pending = matches!(
+                &input.pending,
+                Some(Pending::Child(Step::Element(position)))
+                    if position == previous || position == &positions[index]
+            );
             flat.push(
-                match input
-                    .writable
+                match (input.writable && !beside_pending)
                     .then(|| input.targets.insert_after(previous.clone()))
                     .flatten()
                 {
