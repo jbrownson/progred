@@ -356,6 +356,57 @@ fn recursive_patterns_keep_text_and_number_facets() {
 }
 
 #[test]
+fn unquote_preserves_expression_paths_and_local_shallow_references() {
+    let binding = new_cell_id();
+    let field = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(binding, name::record("size", []));
+    let expression_path = vec![
+        Step::Key(grap::vocabulary::EXPRESSION),
+        Step::Key(control::UNQUOTE),
+    ];
+    for expression in [binding.into(), Value::record([(field, binding.into())])] {
+        let direct_reference = expression.as_cell().is_some();
+        let doc = Document {
+            root: Some(grap::call(
+                control::QUOTE.into(),
+                [(
+                    grap::vocabulary::EXPRESSION,
+                    Value::record([(control::UNQUOTE, expression)]),
+                )],
+            )),
+            cells: cells.clone(),
+        };
+        let (bench, _) = place(&doc, None, 1200.0);
+        let has = |path: &[Step]| bench.descends.iter().any(|d| d.path.as_ref() == path);
+        assert!(has(&expression_path));
+        let mut followed = expression_path.clone();
+        if !direct_reference {
+            followed.push(Step::Key(field));
+        }
+        followed.push(Step::Follow(gid::Resolution::Document));
+        assert_eq!(has(&followed), !direct_reference);
+
+        let wrapper = bench
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == &expression_path[..1])
+            .unwrap()
+            .rect;
+        let body = bench
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == expression_path)
+            .unwrap()
+            .rect;
+        let marker = Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y);
+        let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(marker));
+        assert!(matches!(hovered.hit,
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == expression_path));
+    }
+}
+
+#[test]
 fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
     let extra = new_cell_id();
     let binder = new_cell_id();
@@ -364,6 +415,7 @@ fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
         .map(|(root, _)| root)
         .collect::<Vec<_>>();
     forms.extend([
+        Value::record([(control::UNQUOTE, text::value("expression"))]),
         grap::call(
             control::QUOTE.into(),
             [(grap::vocabulary::EXPRESSION, text::value("template"))],

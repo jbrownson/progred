@@ -798,6 +798,28 @@ pub fn quote_display(
     ))
 }
 
+/// Unquote marks an expression embedded in a quoted template. Like a field
+/// head, its prefix selects the expression at its actual stored location.
+pub fn unquote_display(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let fields = input.value?.as_record()?;
+    (fields.len() == 1 && input.pending.is_none()).then_some(())?;
+    let expression = fields.get(&vocabulary::UNQUOTE)?;
+    let target = input.targets.at([Step::Key(vocabulary::UNQUOTE)]);
+    Some(row(
+        2.0,
+        [
+            activatable(dim("`"), target.hover, target.select),
+            crate::libraries::grap::expression_at(
+                [Step::Key(vocabulary::UNQUOTE)],
+                expression,
+                &input.default_projection,
+            ),
+        ],
+    ))
+}
+
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
 pub fn do_display(
@@ -871,6 +893,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             crate::display::partial(bindings_display),
             crate::display::partial(do_display),
             crate::display::partial(quote_display),
+            crate::display::partial(unquote_display),
         ]),
     )
 }

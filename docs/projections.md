@@ -442,6 +442,14 @@ leaves by evaluating their expressions in the caller's environment. It never
 revisits a spliced result. Outside that traversal, an unquote-shaped record is
 ordinary data. There is no evaluator-level quote/literal form.
 
+The normal projection shows a compact quote call with a double-quote prefix,
+and a single-field `{unquote: expression}` record with a backtick prefix. The
+unquote prefix selects its expression at the stored field path; the expression
+uses Grap's local shallow-reference projection, while quoted data keeps its
+ordinary projection. Extra fields and active field insertion fall back to the
+full record/call display so the compact forms never hide data. These markers
+are display notation only, not new evaluator or text-bridge syntax.
+
 Semantic failure is an open GID record:
 
 ```text
