@@ -6,11 +6,14 @@ use incremental::background::Progress;
 #[cfg(test)]
 pub(crate) mod diagnostics;
 
+mod partial;
+pub(crate) use partial::Frame;
+
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use fidget_engine::jit::JitShape as SoftwareShape;
+use fidget_engine::jit::{JitFunction as SoftwareFunction, JitShape as SoftwareShape};
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-use fidget_engine::vm::VmShape as SoftwareShape;
+use fidget_engine::vm::{VmFunction as SoftwareFunction, VmShape as SoftwareShape};
 
 fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -29,7 +32,8 @@ pub(crate) struct Request {
 
 /// A worker-local compiled scene, shared by that request's resolution passes.
 pub(super) struct SoftwareScene {
-    objects: Vec<(SoftwareShape, [u8; 3])>,
+    scene: fidget_engine::raster::voxel::Scene<'static, SoftwareFunction>,
+    colors: Vec<[u8; 3]>,
 }
 
 impl SoftwareScene {
@@ -37,10 +41,13 @@ impl SoftwareScene {
         let mut compiled = Vec::with_capacity(objects.len());
         for object in objects {
             cancel.check().ok()?;
-            compiled.push((SoftwareShape::from(object.tree.clone()), object.color));
+            compiled.push(SoftwareShape::from(object.tree.clone()).try_into().ok()?);
         }
         cancel.check().ok()?;
-        Some(Self { objects: compiled })
+        Some(Self {
+            scene: fidget_engine::raster::voxel::Scene::new(compiled, &render_cancel(cancel))?,
+            colors: objects.iter().map(|o| o.color).collect(),
+        })
     }
 
     pub fn render(
@@ -57,11 +64,44 @@ impl SoftwareScene {
         cancellation: &incremental::Cancellation,
         progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Option<Vec<u8>> {
-        let cancel = fidget_engine::render::CancelToken::new();
-        cancellation.on_cancel({
-            let cancel = cancel.clone();
-            move || cancel.cancel()
-        });
+        let config = VoxelRenderConfig {
+            world_to_model: view.world_to_model,
+            ..VoxelRenderConfig::from_size(view.size)
+        };
+        let report = |completed, total| {
+            if let Some(progress) = progress {
+                progress(Progress { completed, total });
+            }
+        };
+        let eval = fidget_engine::raster::voxel::EvalConfig {
+            cancel: render_cancel(cancellation),
+            tile_sizes: software_tiles(),
+            progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
+            ..Default::default()
+        };
+        let pixels = self.scene.render(&config, &eval, None)?;
+        let shade = shading(&config);
+        Some(
+            pixels
+                .iter()
+                .flat_map(|pixel| {
+                    shade(
+                        pixel.geometry,
+                        pixel.object.map_or([255; 3], |i| self.colors[i]),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    fn render_tiles(
+        &self,
+        view: &VolumeView,
+        cancellation: &incremental::Cancellation,
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
+        tile_ready: &(dyn Fn(fidget_engine::raster::voxel::SceneTile<'_>) + Sync),
+    ) -> Option<()> {
+        let cancel = render_cancel(cancellation);
         let config = VoxelRenderConfig {
             world_to_model: view.world_to_model,
             ..VoxelRenderConfig::from_size(view.size)
@@ -99,24 +139,17 @@ impl SoftwareScene {
             progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
             ..Default::default()
         };
-        let objects = self
-            .objects
-            .iter()
-            .map(|(shape, _)| shape.clone().try_into())
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
-        let image = fidget_engine::raster::voxel::render_scene(&objects, &config, &eval)?;
-        let shade = shading(&config);
-        Some(
-            image
-                .iter()
-                .flat_map(|pixel| {
-                    let color = pixel.object.map_or([255; 3], |i| self.objects[i].1);
-                    shade(pixel.geometry, color)
-                })
-                .collect(),
-        )
+        self.scene.render_tiles(&config, &eval, tile_ready)
     }
+}
+
+fn render_cancel(cancellation: &incremental::Cancellation) -> fidget_engine::render::CancelToken {
+    let cancel = fidget_engine::render::CancelToken::new();
+    cancellation.on_cancel({
+        let cancel = cancel.clone();
+        move || cancel.cancel()
+    });
+    cancel
 }
 
 fn shading(config: &VoxelRenderConfig) -> impl Fn(GeometryPixel, [u8; 3]) -> [u8; 4] + use<> {
@@ -157,7 +190,7 @@ fn refine_depth(mut view: VolumeView, multiplier: u32) -> Option<VolumeView> {
 mod tests {
     use super::*;
 
-    fn request(width: f64, height: f64) -> Request {
+    pub(super) fn request(width: f64, height: f64) -> Request {
         Request::new(
             VolumePreview {
                 objects: vec![SceneObject {
@@ -526,43 +559,35 @@ impl Request {
         }
         Some(views)
     }
-
-    /// Publish up to native image resolution, then optionally refine depth in one final pass.
-    /// Completed rasters are independent; only scene compilation is shared within the job.
-    /// Uses software evaluation explicitly: the GPU VM cannot execute spilling tapes.
-    pub fn render_software_progressive(
+    /// Publish completed tile batches, retaining the previous level in
+    /// unfinished regions. The first level reports coverage for a mesh fallback.
+    pub fn render_software_tiles(
         &self,
         first_max_edge: u32,
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
-        publish: &mut dyn FnMut(ImageData) -> Result<(), incremental::Error>,
+        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Result<Option<ImageData>, incremental::Error> {
+    ) -> Result<Option<Frame>, incremental::Error> {
         cancel.check()?;
-        assert!(first_max_edge > 0);
         let Some(views) = self.refinements(first_max_edge, final_depth_multiplier) else {
             return Ok(None);
         };
         let scene = SoftwareScene::new(&self.preview.objects, cancel);
         cancel.check()?;
         let Some(scene) = scene else { return Ok(None) };
+        let mut previous = None;
         let mut views = views.into_iter().peekable();
         while let Some(view) = views.next() {
             cancel.check()?;
-            let rgba = scene.render_with_progress(&view, cancel, progress);
-            cancel.check()?;
-            let Some(rgba) = rgba else { return Ok(None) };
-            let image = ImageData {
-                data: rgba.into(),
-                format: ImageFormat::Rgba8,
-                alpha_type: ImageAlphaType::Alpha,
-                width: view.size.width(),
-                height: view.size.height(),
-            };
+            let frame =
+                partial::render(&scene, &view, previous.as_ref(), cancel, publish, progress)?;
+            let Some(frame) = frame else { return Ok(None) };
             if views.peek().is_none() {
-                return Ok(Some(image));
+                return Ok(Some(frame));
             }
-            publish(image)?;
+            publish(frame.clone())?;
+            previous = Some(frame.image);
         }
         unreachable!("the native resolution is always present")
     }

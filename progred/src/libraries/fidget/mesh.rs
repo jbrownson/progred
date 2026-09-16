@@ -252,11 +252,28 @@ pub(crate) fn image(
     scale_factor: f64,
     renderer: &mut Renderer,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    Some(image_from_data(
+        preview.size,
+        raster(geometry, preview, state, scale_factor, renderer)?,
+        false,
+    ))
+}
+
+/// Render the current camera to pixels, independently of the display wrapper.
+pub(crate) fn raster(
+    geometry: &Geometry,
+    preview: &VolumePreview,
+    state: Option<&Value>,
+    scale_factor: f64,
+    renderer: &mut Renderer,
+) -> Option<ImageData> {
     let pixels = raster_size(preview.size, scale_factor)?;
     let view = view(preview, camera(state), pixels)?;
-    Some(image_layout(
-        preview.size,
-        pixels,
-        renderer.render(geometry, &view)?,
-    ))
+    Some(ImageData {
+        data: renderer.render(geometry, &view)?.into(),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: pixels.width(),
+        height: pixels.height(),
+    })
 }

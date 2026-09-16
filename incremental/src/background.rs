@@ -183,7 +183,11 @@ impl Tasks {
     pub fn memo_progressive<I: Clone + Send + 'static, T: Send + Sync + 'static>(
         &self,
         prepare: Memo<I>,
-        compute: impl Fn(I, &Cancellation, &mut dyn FnMut(T) -> Result<(), Error>) -> Result<T, Error>
+        compute: impl Fn(
+            I,
+            &Cancellation,
+            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
+        ) -> Result<T, Error>
         + Send
         + Sync
         + 'static,
@@ -201,7 +205,7 @@ impl Tasks {
         compute: impl Fn(
             I,
             &Cancellation,
-            &mut dyn FnMut(T) -> Result<(), Error>,
+            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
             &(dyn Fn(Progress) + Sync),
         ) -> Result<T, Error>
         + Send
@@ -224,7 +228,7 @@ impl Tasks {
         compute: impl Fn(
             I,
             &Cancellation,
-            &mut dyn FnMut(T) -> Result<(), Error>,
+            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
             &(dyn Fn(Progress) + Sync),
         ) -> Result<T, Error>
         + Send
@@ -287,7 +291,7 @@ type GenerationReport<T> = (u64, Report<T>);
 type Worker<I, T> = dyn Fn(
         I,
         &Cancellation,
-        &mut dyn FnMut(T) -> Result<(), Error>,
+        &mut (dyn FnMut(T) -> Result<(), Error> + Send),
         &(dyn Fn(Progress) + Sync),
     ) -> Result<T, Error>
     + Send

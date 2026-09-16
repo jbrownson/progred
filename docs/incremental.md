@@ -111,6 +111,9 @@ retains the last published result as `Pending.previous`. Intermediate values use
 the same generation checks, owner-thread polling, and dependency invalidation as
 final results. Several reports arriving before a poll collapse to the latest.
 A final failure remains a failure, not a successful intermediate result.
+The publication callback is `Send`; a parallel computation may lend it to
+scoped workers under a mutex. Calls remain serialized, and it cannot outlive
+the job. This adds no task, queue, or scheduling policy.
 `memo` is the same mechanism without intermediate publications. The worker, not
 the graph runtime, decides what refinement means and which quality levels to run.
 

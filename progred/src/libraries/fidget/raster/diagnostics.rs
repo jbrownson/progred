@@ -4,8 +4,11 @@ use crate::libraries::f64;
 use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
+mod reference;
 mod scene;
+pub(crate) use scene::compare_scene_preparation;
 pub(crate) use scene::compare_scene_tiles;
+pub(crate) use scene::compare_tile_publication;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod jit;
@@ -285,13 +288,11 @@ fn implicit_stock_diagnostics() {
             let shade = shading(&config);
             let start = Instant::now();
             let eval = fidget_engine::raster::voxel::EvalConfig {
-                tile_sizes: Some(
-                    fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap(),
-                ),
+                tile_sizes: Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap()),
                 ..Default::default()
             };
             let image = fidget_engine::raster::voxel::render(
-                compiled.objects[0].0.clone().try_into().unwrap(),
+                compiled.scene.objects()[0].clone(),
                 &config,
                 &eval,
             )
@@ -393,7 +394,7 @@ fn implicit_stock_diagnostics() {
                 };
                 let start = Instant::now();
                 let image = fidget_engine::raster::voxel::render(
-                    compiled.objects[0].0.clone().try_into().unwrap(),
+                    compiled.scene.objects()[0].clone(),
                     &config,
                     &eval,
                 )
@@ -418,7 +419,7 @@ fn implicit_stock_diagnostics() {
                     when
                 });
                 let result = fidget_engine::raster::voxel::render(
-                    compiled.objects[0].0.clone().try_into().unwrap(),
+                    compiled.scene.objects()[0].clone(),
                     &config,
                     &eval,
                 );

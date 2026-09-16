@@ -292,7 +292,7 @@ pub(super) fn display(
         match result {
             Ok((image, _)) => {
                 let drawing = match &image.image {
-                    Some(data) => fidget::image_from_data(size, data.clone(), image.stale),
+                    Some(data) => fidget::image_from_data(size, data.image.clone(), image.stale),
                     None => Layout::widget(Rc::new(move |context| {
                         crate::display::widget::leaf(
                             crate::display::widget::Extent {

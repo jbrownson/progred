@@ -402,3 +402,56 @@ the finished pixels are not yet published as partial images within a pass.
 Use `CAM_PROGRESS="1"` for the fully cut stock. Regression tests also exercise
 serial/parallel rendering, equal-depth ties, clipping, independently bound
 variables, empty scenes, cancellation, and exact edge-tile pixel counts.
+
+## Follow-up: reusable preparation and tile publications
+
+Each request now prepares a scene once, retaining its root interval tapes for
+all refinement levels. View-specific simplified tapes remain worker-local.
+On the same 349-object half-playback scene, preparing root tapes took
+12.2–12.7 ms over three runs, versus roughly 0.96–1.09 s for the native-depth
+pass. This is a modest saving per later level, not a major speedup.
+
+The voxel worker also retains and clears its per-object tile buffer. Its size
+is fixed by that pass's root-tile dimensions; a changed size reallocates rather
+than relying on the previous allocation. A regression test checks the buffer
+address is reused and filled geometry cannot leak into an empty object. No
+isolated elapsed-time gain is claimed for this change.
+
+The scene API can now stream borrowed completed tiles without constructing a
+whole geometry image. Progred shades each tile once into a worker-owned RGBA
+assembly and publishes immutable snapshots at most once per 100 ms, plus level
+boundaries. Parallel callback assembly/publication is serialized, preventing an
+older snapshot from arriving after a newer one. The existing async generation
+and cancellation rules reject obsolete results; no new background task exists.
+
+During the first pass, explicit coverage distinguishes uncomputed pixels from
+completed transparent pixels. The refined viewport fills uncovered regions
+with its current mesh. Later levels start from the previous level's image and
+replace each tile, including transparent pixels. Pixel resampling between
+levels is deliberately nearest-neighbor; no computation is reused by Fidget's
+spatial evaluator beyond root preparation.
+
+An isolated three-pair comparison of the whole 512-edge → native → 4×-depth
+sequence at 333 × 750 alternated complete-pass and streaming output. Median
+times were 4.402 s and 4.024 s respectively; other runs varied enough that this
+should be read as no demonstrated throughput penalty, not a promised speedup.
+All final RGBA outputs were byte-identical. Streaming first published tiles at
+279–328 ms, versus 1.02–1.05 s for its first complete image. This measures worker
+rendering and snapshot creation, not editor redraw, mesh compositing, or display
+latency. The improvement sought here is visible progress during each pass.
+
+The headless full-editor capture also exercised mesh → partial image → completed
+image, orbit fallback, and playback replacement successfully. Its graphics
+adapter was unavailable, so it used the existing CPU triangle fallback for mesh
+display; those redraw timings are not representative of the app's Metal path.
+Intermediate and final captures were visually checked. The browser target also
+passes; its inline renderer does not publish mid-pass snapshots.
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  --config 'env.CAM_SCENE_PREPARE="1"' --config 'env.CAM_PROGRESS="0.5"' \
+  --config 'env.CAM_HEIGHT="750"' cam_render_profile -- --ignored --nocapture
+./tools/sandbox-cargo test --release -p progred --lib \
+  --config 'env.CAM_TILE_PUBLICATION="1"' --config 'env.CAM_PROGRESS="0.5"' \
+  --config 'env.CAM_HEIGHT="750"' cam_render_profile -- --ignored --nocapture
+```

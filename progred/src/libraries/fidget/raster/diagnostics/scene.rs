@@ -16,11 +16,11 @@ fn object_major(
         (GeometryPixel::default(), [255; 3]);
         view.size.width() as usize * view.size.height() as usize
     ];
-    for (object, (shape, color)) in scene.objects.iter().enumerate() {
+    for (object, (shape, color)) in scene.scene.objects().iter().zip(&scene.colors).enumerate() {
         let report = |completed, total| {
             progress(Progress {
                 completed: object * total + completed,
-                total: scene.objects.len() * total,
+                total: scene.colors.len() * total,
             })
         };
         let eval = fidget_engine::raster::voxel::EvalConfig {
@@ -28,9 +28,7 @@ fn object_major(
             progress: Some(&report),
             ..Default::default()
         };
-        let geometry =
-            fidget_engine::raster::voxel::render(shape.clone().try_into().unwrap(), &config, &eval)
-                .unwrap();
+        let geometry = fidget_engine::raster::voxel::render(shape.clone(), &config, &eval).unwrap();
         for (dst, src) in image.iter_mut().zip(geometry.iter()) {
             if src.depth > dst.0.depth {
                 *dst = (*src, *color);
@@ -90,6 +88,92 @@ pub(crate) fn compare_scene_tiles(preview: &VolumePreview) {
                 } else {
                     reference = Some(pixels);
                 }
+            }
+        }
+    }
+}
+
+pub(crate) fn compare_scene_preparation(preview: &VolumePreview) {
+    let cancel = incremental::Cancellation::default();
+    let scene = SoftwareScene::new(&preview.objects, &cancel).unwrap();
+    let view = volume_view(
+        preview,
+        Camera::default(),
+        raster_size(preview.size, 1.0).unwrap(),
+    );
+    let config = VoxelRenderConfig {
+        world_to_model: view.world_to_model,
+        ..VoxelRenderConfig::from_size(view.size)
+    };
+    let eval = fidget_engine::raster::voxel::EvalConfig {
+        tile_sizes: software_tiles(),
+        ..Default::default()
+    };
+    for round in 0..3 {
+        let start = Instant::now();
+        let prepared =
+            fidget_engine::raster::voxel::Scene::new(scene.scene.objects().to_vec(), &eval.cancel)
+                .unwrap();
+        let compilation = start.elapsed();
+        let start = Instant::now();
+        let pixels = prepared.render(&config, &eval, None).unwrap();
+        let render = start.elapsed();
+        let start = Instant::now();
+        let reused = prepared.render(&config, &eval, None).unwrap();
+        assert!(pixels.iter().eq(reused.iter()));
+        eprintln!(
+            "prepared scene round {round}: root compilation {compilation:?}, render {render:?}, reused {:?}",
+            start.elapsed()
+        );
+    }
+}
+
+pub(crate) fn compare_tile_publication(preview: &VolumePreview) {
+    let request = Request::new(preview.clone(), None, 1.0).unwrap();
+    let cancel = incremental::Cancellation::default();
+    let mut expected = None;
+    for round in 0..3 {
+        for streaming in if round % 2 == 0 {
+            [false, true]
+        } else {
+            [true, false]
+        } {
+            let start = Instant::now();
+            let mut reports = Vec::new();
+            let result = if streaming {
+                request
+                    .render_software_tiles(
+                        512,
+                        4,
+                        &cancel,
+                        &mut |frame| {
+                            reports.push((
+                                start.elapsed(),
+                                frame.image.width,
+                                frame.image.height,
+                                frame.is_partial(),
+                            ));
+                            Ok(())
+                        },
+                        None,
+                    )
+                    .unwrap()
+                    .unwrap()
+                    .image
+            } else {
+                request
+                    .render_software_progressive(512, 4, &cancel, &mut |_| Ok(()), None)
+                    .unwrap()
+                    .unwrap()
+            };
+            eprintln!(
+                "tile publication round {round} streaming={streaming}: {:?}; snapshots {reports:?}",
+                start.elapsed()
+            );
+            if let Some(expected) = &expected {
+                assert_eq!(result.data.data(), expected);
+            } else {
+                expected = Some(result.data.data().to_vec());
             }
         }
     }

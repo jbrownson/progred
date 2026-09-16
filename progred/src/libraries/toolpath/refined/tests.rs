@@ -176,7 +176,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let mesh = f.mesh();
     assert!(!mesh.as_ref().as_ref().unwrap().0.awaiting_first_surface);
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_)));
+    assert!(matches!(&*f.read(), View::Implicit(_, None)));
 
     f.graph.settings.set(settings(30.0, 0.25));
     assert!(
@@ -200,12 +200,12 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     assert_eq!(f.runs.get(), 1);
     f.finish(0);
     let view = f.read();
-    let View::Implicit(image) = &*view else {
+    let View::Implicit(image, None) = &*view else {
         panic!("replacement image")
     };
     let image = &image.as_ref().as_ref().unwrap().0;
     assert!(!image.stale && !image.pending);
-    let image = image.image.as_ref().unwrap();
+    let image = &image.image.as_ref().unwrap().image;
     assert_eq!((image.width, image.height), (48, 64));
     assert!(f.queue.lock().unwrap().is_empty());
 }
@@ -217,7 +217,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     f.finish(0);
     let old = f.mesh();
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_)));
+    assert!(matches!(&*f.read(), View::Implicit(_, None)));
     f.graph.settings.set(settings(0.0, 0.75));
     let new = f.mesh();
     assert!(!new.as_ref().as_ref().unwrap().0.awaiting_first_surface);
@@ -257,7 +257,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
         "now implicit work is ready"
     );
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_)));
+    assert!(matches!(&*f.read(), View::Implicit(_, None)));
     f.graph.settings.set(settings(30.0, 0.9));
     assert!(
         Rc::ptr_eq(&current, &f.mesh()),
@@ -288,7 +288,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
     f.finish(0);
     assert!(!f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_)));
+    assert!(matches!(&*f.read(), View::Implicit(_, None)));
 }
 
 #[test]
@@ -298,7 +298,7 @@ fn current_failure_is_not_hidden_by_a_previous_successful_render() {
     f.finish(0);
     f.read();
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_)));
+    assert!(matches!(&*f.read(), View::Implicit(_, None)));
     f.graph.fuel.set(0);
     let view = f.read();
     let View::Mesh(result, _) = &*view else {

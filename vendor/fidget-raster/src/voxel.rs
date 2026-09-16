@@ -17,7 +17,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 pub type Image = GenericImage<GeometryPixel, RenderSize>;
 
 mod scene;
-pub use scene::{ScenePixel, render_scene};
+pub use scene::{Scene, ScenePixel, SceneTile, render_scene};
 
 /// Size type for 3D rendering
 pub type RenderSize = fidget_core::render::VoxelSize;
@@ -260,9 +260,26 @@ impl<'a, F: Function> RenderWorker<'a, F> for Worker<'a, F> {
         tile: Tile<2>,
         is_cancelled: &impl Fn() -> bool,
     ) -> Option<Self::Output> {
+        self.render_tile_in_place(shape, tile, is_cancelled)?;
+        Some(std::mem::take(&mut self.out))
+    }
+}
+
+impl<F: Function> Worker<'_, F> {
+    /// Keep the tile buffer when the caller consumes it before the next object.
+    fn render_tile_in_place(
+        &mut self,
+        shape: &mut RenderHandle<F>,
+        tile: Tile<2>,
+        is_cancelled: &impl Fn() -> bool,
+    ) -> Option<()> {
         // Prepare local tile data to fill out
         let root_tile_size = self.tile_sizes[0];
-        self.out = Image::new(RenderSize::from(root_tile_size as u32));
+        if self.out.len() != root_tile_size * root_tile_size {
+            self.out = Image::new(RenderSize::from(root_tile_size as u32));
+        } else {
+            self.out.data.fill(GeometryPixel::default());
+        }
         for k in (0..self.image_size[2].div_ceil(root_tile_size as u32)).rev() {
             let tile = Tile::new(Point3::new(
                 tile.corner.x,
@@ -273,11 +290,8 @@ impl<'a, F: Function> RenderWorker<'a, F> for Worker<'a, F> {
                 break;
             }
         }
-        Some(std::mem::take(&mut self.out))
+        Some(())
     }
-}
-
-impl<F: Function> Worker<'_, F> {
     /// Returns the data offset of a row within a subtile
     pub(crate) fn tile_row_offset(&self, tile: Tile<3>, row: usize) -> usize {
         self.tile_sizes.pixel_offset(tile.add(Vector2::new(0, row)))

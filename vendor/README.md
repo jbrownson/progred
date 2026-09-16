@@ -27,6 +27,11 @@ Local source changes, each including regression tests:
   separate, and preserves depth, normals, and first-object depth ties. Progress
   has a fixed image-pixel total, without timing estimates or object weights.
   This applies after the progress patch.
+- [Scene refinement patch](../docs/experiments/fidget-raster-refinement.patch):
+  a prepared scene retains root interval tapes between passes, workers reuse
+  their per-object tile buffer, and an optional borrowed-tile callback exposes
+  finished regions before whole-image assembly. Callbacks may run concurrently;
+  consumers own publication/assembly policy. Applies after the scene tiling patch.
 
 These patch files apply to upstream in the order listed, with no manifest adaptation, and are
 intended for upstream review. Nothing has been submitted or pushed upstream.

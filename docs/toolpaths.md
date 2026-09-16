@@ -315,15 +315,17 @@ Failed path generation discards the whole preview before meshing the model.
 fallback with progressive software implicit images. It shares one observed path
 evaluation between the two interpretations. Implicit work waits for the current
 stock mesh; a geometry change cancels obsolete image work while meshing runs.
-A current implicit image replaces the mesh; pending implicit work displays the
-available mesh at the current camera. Orbiting after an implicit result therefore
+A current implicit image replaces the mesh tile by tile; unfinished regions of
+the first pass retain the available mesh at the current camera. Coverage is
+explicit, so completed transparent pixels erase the mesh rather than revealing
+it. Orbiting after an implicit result therefore
 returns to a current mesh, never an older stock result that it had overtaken.
 An outdated stock mesh is desaturated, while tool/path geometry updates immediately.
 Implicit refinement starts at no more than 512 physical pixels on the longest
 edge, skipping the standalone implicit renderer's two coarsest levels. It roughly
 doubles XY resolution up to native size, then finishes with four-times depth
-sampling. The mesh supplies immediate feedback until the first current implicit
-image. Standalone mesh and implicit functions remain available.
+sampling. Later passes retain the previous implicit image in unfinished regions.
+Standalone mesh and implicit functions remain available.
 
 Command+9's example uses this refined preview with one playback slider: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
@@ -431,7 +433,10 @@ The first pending frame reserves the viewport and shows the empty progress track
 starts at at most 128 physical pixels on the longest edge, then doubles toward
 native resolution with a fixed camera and render volume, then performs one
 native-size pass with four times the depth samples to reduce sharp-edge artifacts.
-The normal native-resolution image remains visible during that last pass.
+Completed tile batches progressively replace the normal native-resolution image
+during that last pass. Publications are limited to one per 100 ms, plus completed
+levels; completed empty pixels replace earlier pixels too. The standalone
+implicit preview has no mesh fallback, so its first pass fills an empty image.
 New input cancels the old sequence. The controls overlay the bottom of the
 full-size view.
 Implicit CAM rendering explicitly uses the software voxel renderer, directly
@@ -441,10 +446,14 @@ tiles; other platforms retain the VM with 32/16/8-pixel tiles. Meshing stays on
 the VM. The [local Fidget patches](../vendor/README.md) fix large AArch64 JIT
 tapes and check cancellation within raster subtiles. Software scenes render all
 objects within each image tile, retaining separate expressions and preserving
-first-object wins on equal depths. Progress counts pixels in completed scene
+first-object wins on equal depths. One prepared scene retains root interval
+tapes across the request's refinement levels; view-specific simplifications
+stay worker-local. Workers reuse a fixed-size per-object tile buffer.
+Progress counts pixels in completed scene
 tiles, excluding padding at image edges, rather than giving every object equal
 weight. Its fixed total is the image's pixel count, not an estimate of time
-remaining. Compilation and final image assembly/shading are outside that count.
+remaining. Root compilation is outside that count; streaming consumers shade
+and assemble each finished tile before it is counted.
 Cancellation still cannot
 interrupt a single tape compilation/evaluation already in progress.
 Lighting corrects sample-space gradients for unequal axis spacing, so

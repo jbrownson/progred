@@ -1,6 +1,7 @@
 use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
+use fidget::raster::Frame;
 use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
 
@@ -19,7 +20,7 @@ struct Request {
 }
 
 pub(crate) struct ViewImage {
-    pub image: Option<puri::ImageData>,
+    pub image: Option<Frame>,
     pub pending: bool,
     pub stale: bool,
     pub progress: Option<Progress>,
@@ -63,9 +64,9 @@ impl Computation {
             Request,
             usize,
             &incremental::Cancellation,
-            &mut dyn FnMut(Outcome<puri::ImageData>) -> Result<(), incremental::Error>,
+            &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
             &(dyn Fn(Progress) + Sync),
-        ) -> Result<Outcome<puri::ImageData>, incremental::Error>
+        ) -> Result<Outcome<Frame>, incremental::Error>
         + Send
         + Sync
         + 'static,
@@ -105,7 +106,7 @@ pub(crate) fn image(
             cancel.check()?;
             match scene {
                 Ok((scene, fuel)) => Ok(scene
-                    .render_software_progressive(
+                    .render_software_tiles(
                         first_max_edge,
                         4,
                         cancel,
@@ -129,9 +130,9 @@ fn image_with_render(
         Request,
         usize,
         &incremental::Cancellation,
-        &mut dyn FnMut(Outcome<puri::ImageData>) -> Result<(), incremental::Error>,
+        &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
         &(dyn Fn(Progress) + Sync),
-    ) -> Result<Outcome<puri::ImageData>, incremental::Error>
+    ) -> Result<Outcome<Frame>, incremental::Error>
     + Send
     + Sync
     + 'static,
@@ -357,7 +358,8 @@ mod tests {
                         alpha_type: peniko::ImageAlphaType::Alpha,
                         width: 1,
                         height: 1,
-                    },
+                    }
+                    .into(),
                     fuel,
                 )))
             }
@@ -386,7 +388,7 @@ mod tests {
         let pending = read();
         let pending = &pending.as_ref().as_ref().unwrap().0;
         assert!(pending.pending);
-        assert_eq!(pending.image.as_ref().unwrap().data.data()[0], 1);
+        assert_eq!(pending.image.as_ref().unwrap().image.data.data()[0], 1);
         graph.settings.set(settings(60.0));
         assert!(read().as_ref().as_ref().unwrap().0.pending);
         assert_eq!(queue.lock().unwrap().len(), 1);
@@ -450,14 +452,14 @@ mod tests {
                     width: 1,
                     height: 1,
                 };
-                publish(Ok((image.clone(), fuel)))?;
+                publish(Ok((image.clone().into(), fuel)))?;
                 progress(Progress {
                     completed: 3,
                     total: 10,
                 });
                 published.send(()).unwrap();
                 resumed.lock().unwrap().recv().unwrap();
-                Ok(Ok((image, fuel)))
+                Ok(Ok((image.into(), fuel)))
             },
         );
         let read = || computations.runtime.read(&graph.image).unwrap();
