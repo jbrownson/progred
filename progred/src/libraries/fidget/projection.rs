@@ -27,17 +27,15 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     let fields = value.as_record()?;
     let marker = one_marker(fields)?;
     (marker != TRANSLATE).then_some(())?;
-    fields
-        .keys()
-        .all(|field| *field == marker || *field == name::vocabulary::NAME)
-        .then_some(())?;
     let content = fields.get(&marker)?;
     if marker == AXIS {
         content.as_cell()?;
     } else {
         let expected = parameters(marker)?;
         let content = content.as_record()?;
-        (content.len() == expected.len() && expected.iter().all(|key| content.contains_key(key)))
+        expected
+            .iter()
+            .all(|key| content.contains_key(key))
             .then_some(())?;
     }
     Some((marker, content))

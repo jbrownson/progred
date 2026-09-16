@@ -103,7 +103,7 @@ fn grouping_preserves_the_expression_tree_without_reassociating() {
 }
 
 #[test]
-fn unshown_or_incomplete_fields_decline_instead_of_disappearing() {
+fn unrelated_fields_do_not_block_notation_or_change_grouping() {
     let extra = gid::new_cell_id();
     for value in [
         Value::record([
@@ -121,7 +121,30 @@ fn unshown_or_incomplete_fields_decline_instead_of_disappearing() {
                 (extra, number(3.0)),
             ]),
         ),
+    ] {
+        assert!(field(&input(&value)).is_some());
+        for (parent, key, grouped) in [
+            (MULTIPLY, LEFT, true),
+            (SUM, LEFT, false),
+            (SUM, RIGHT, true),
+        ] {
+            assert_eq!(
+                matches!(operand(parent, key, &value).record(), Recorded::Row { .. }),
+                grouped,
+            );
+        }
+    }
+    for value in [unary(SIN, number(1.0)), node(AXIS, X.into())] {
+        let enriched = Value::record(value.as_record().unwrap().update(extra, number(3.0)));
+        assert!(field(&input(&enriched)).is_some());
+    }
+}
+
+#[test]
+fn incomplete_malformed_and_conflicting_forms_still_decline() {
+    for value in [
         node(SUM, Value::record([(LEFT, number(1.0))])),
+        node(SUM, Value::record([(RIGHT, number(1.0))])),
         node(SIN, number(1.0)),
         node(AXIS, number(1.0)),
         Value::record([

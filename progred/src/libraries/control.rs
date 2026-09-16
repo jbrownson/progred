@@ -527,7 +527,7 @@ pub fn match_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 3 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::MATCH).then_some(())?;
     let subject = fields.get(&vocabulary::VALUE)?;
@@ -579,10 +579,10 @@ fn pattern_binder(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
     let fields = input.value?.as_record()?;
-    (fields.len() == 1).then_some(())?;
-    fields.get(&vocabulary::BIND)?.as_cell()?;
+    let binder = fields.get(&vocabulary::BIND)?;
+    binder.as_cell()?;
     Some(record_with(
-        fields.iter().map(|(key, value)| (*key, value)),
+        [(vocabulary::BIND, binder)],
         CellId::cmp,
         |key, value| {
             let target = input.targets.at([Step::Key(key)]);
@@ -609,7 +609,7 @@ fn pattern_binder(
 fn case_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    (input.value?.as_record()?.len() == 2 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let (pattern, expression) = case_parts(input.value?)?;
     let expression_target = input
         .targets
@@ -658,7 +658,7 @@ pub fn bindings_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 3 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     let form = match function.as_cell()? {
         vocabulary::LET => BindingForm::Let,
@@ -728,7 +728,7 @@ fn binding_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let left = match (
         fields.get(&vocabulary::BIND),
         fields.get(&vocabulary::PATTERN),
@@ -774,12 +774,13 @@ fn quote_marker(
 
 /// Quote reads as a small structural marker followed by its template,
 /// rather than as a generic call with a redundant `expression` label.
-/// Decorated calls fall through so this compact form never hides data.
+/// Unrelated fields do not change recognition. Active field insertion
+/// still uses the ordinary record/call projection.
 pub fn quote_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
     let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
@@ -798,15 +799,15 @@ pub fn quote_display(
     ))
 }
 
-/// Unquote marks an expression embedded in a quoted template. Like a field
-/// head, its prefix selects the expression at its actual stored location.
+/// Unquote marks an expression embedded in a quoted template. Its prefix
+/// is a handle for the whole unquote; the body keeps its own stored location.
 pub fn unquote_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 1 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let expression = fields.get(&vocabulary::UNQUOTE)?;
-    let target = input.targets.at([Step::Key(vocabulary::UNQUOTE)]);
+    let target = input.targets.current();
     Some(row(
         2.0,
         [
@@ -826,7 +827,7 @@ pub fn do_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    (fields.len() == 2 && input.pending.is_none()).then_some(())?;
+    input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::DO).then_some(())?;
     let expressions = fields.get(&vocabulary::EXPRESSIONS)?;
@@ -1150,7 +1151,7 @@ mod tests {
     }
 
     #[test]
-    fn do_projects_its_expression_list_without_hiding_extra_data() {
+    fn do_projects_its_expression_list_despite_unrelated_fields() {
         let expression = do_call([blob("first"), blob("second")]);
         let Recorded::Row { children, .. } = do_display(&relative_projection_input(&expression))
             .expect("coherent do projection")
@@ -1164,7 +1165,97 @@ mod tests {
             .as_record()
             .unwrap()
             .update(new_cell_id(), blob("extra"));
-        assert!(do_display(&relative_projection_input(&Value::record(decorated))).is_none());
+        assert!(do_display(&relative_projection_input(&Value::record(decorated))).is_some());
+    }
+
+    #[test]
+    fn compact_control_projections_recognize_required_fields_in_open_records() {
+        use crate::display::{Pending, partial};
+        let binder = new_cell_id();
+        for (projection, value) in [
+            (partial(match_display), match_call(blob("subject"), [])),
+            (partial(pattern_binder), binding(binder)),
+            (
+                partial(case_display),
+                case_arm(blob("pattern"), blob("body")),
+            ),
+            (
+                partial(bindings_display),
+                bindings_call(vocabulary::LET, [], blob("body")),
+            ),
+            (
+                partial(bindings_display),
+                bindings_call(vocabulary::WHERE, [], blob("body")),
+            ),
+            (partial(binding_display), bind_clause(binder, blob("value"))),
+            (
+                partial(binding_display),
+                binding_clause(blob("pattern"), blob("value")),
+            ),
+            (partial(do_display), do_call([blob("result")])),
+        ] {
+            let fields = value.as_record().unwrap();
+            let decorated = Value::record(fields.update(new_cell_id(), blob("metadata")).update(
+                name::vocabulary::NAME,
+                crate::libraries::text::value("named"),
+            ));
+            assert!(projection(&projection_input(&decorated)).is_some());
+            for key in fields.keys() {
+                let missing = Value::record(decorated.as_record().unwrap().without(key));
+                assert!(projection(&projection_input(&missing)).is_none());
+            }
+            let mut input = projection_input(&decorated);
+            input.pending = Some(Pending::Field);
+            assert!(projection(&input).is_none());
+        }
+    }
+
+    #[test]
+    fn compact_control_projections_still_decline_malformed_contents_and_conflicting_bindings() {
+        use crate::display::partial;
+        for (projection, value) in [
+            (
+                partial(match_display),
+                grap::call(
+                    vocabulary::MATCH.into(),
+                    [
+                        (vocabulary::VALUE, blob("subject")),
+                        (vocabulary::CASES, blob("not a list")),
+                    ],
+                ),
+            ),
+            (
+                partial(pattern_binder),
+                Value::record([(vocabulary::BIND, blob("not a cell"))]),
+            ),
+            (
+                partial(binding_display),
+                Value::record([
+                    (vocabulary::BIND, new_cell_id().into()),
+                    (vocabulary::PATTERN, blob("pattern")),
+                    (vocabulary::VALUE, blob("value")),
+                ]),
+            ),
+            (
+                partial(bindings_display),
+                grap::call(
+                    vocabulary::LET.into(),
+                    [
+                        (vocabulary::BINDINGS, blob("not a list")),
+                        (grap::vocabulary::EXPRESSION, blob("body")),
+                    ],
+                ),
+            ),
+            (
+                partial(do_display),
+                grap::call(
+                    vocabulary::DO.into(),
+                    [(vocabulary::EXPRESSIONS, blob("not a list"))],
+                ),
+            ),
+        ] {
+            assert!(projection(&projection_input(&value)).is_none());
+        }
     }
 
     #[test]
@@ -1173,6 +1264,31 @@ mod tests {
         let expression = grap::call(Value::from(function), []);
         let evaluation = evaluate(&quote_call(expression.clone()));
         assert_eq!(evaluation.result, expression);
+    }
+
+    #[test]
+    fn quote_preserves_value_wrappers_and_splices_inside_them() {
+        let expression = name::record(
+            "named expression",
+            [(grap::vocabulary::VALUE, new_cell_id().into())],
+        );
+        assert_eq!(evaluate(&quote_call(expression.clone())).result, expression);
+        let template = name::record(
+            "named expression",
+            [(
+                grap::vocabulary::VALUE,
+                Value::record([(vocabulary::UNQUOTE, blob("spliced"))]),
+            )],
+        );
+        let result = evaluate(&quote_call(template)).result;
+        assert_eq!(
+            result,
+            name::record(
+                "named expression",
+                [(grap::vocabulary::VALUE, blob("spliced"))]
+            ),
+        );
+        assert_eq!(evaluate(&result).result, blob("spliced"));
     }
 
     #[test]
@@ -1223,7 +1339,7 @@ mod tests {
     }
 
     #[test]
-    fn decorated_quotes_fall_through_instead_of_hiding_fields() {
+    fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
         let extra = new_cell_id();
         let quote = grap::call(
             Value::from(vocabulary::QUOTE),
@@ -1232,7 +1348,27 @@ mod tests {
                 (extra, blob("visible")),
             ],
         );
-        assert!(quote_display(&projection_input(&quote)).is_none());
+        assert!(quote_display(&projection_input(&quote)).is_some());
+        let unquote = name::record(
+            "named unquote",
+            [
+                (vocabulary::UNQUOTE, blob("body")),
+                (extra, blob("metadata")),
+            ],
+        );
+        assert!(unquote_display(&projection_input(&unquote)).is_some());
+        for malformed in [
+            Value::record([]),
+            Value::record([(grap::vocabulary::FUNCTION, vocabulary::QUOTE.into())]),
+            Value::record([(grap::vocabulary::EXPRESSION, blob("body"))]),
+            grap::call(
+                new_cell_id().into(),
+                [(grap::vocabulary::EXPRESSION, blob("body"))],
+            ),
+        ] {
+            assert!(quote_display(&projection_input(&malformed)).is_none());
+            assert!(unquote_display(&projection_input(&malformed)).is_none());
+        }
     }
 
     #[test]

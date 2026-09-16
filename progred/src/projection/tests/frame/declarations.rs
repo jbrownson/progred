@@ -1,6 +1,98 @@
 use super::*;
 use crate::libraries::control::vocabulary as control;
 
+#[test]
+fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
+    let cell = new_cell_id();
+    let follow = Step::Follow(gid::Resolution::Document);
+    let name_path = [follow.clone(), Step::Key(name::vocabulary::NAME)];
+    let value_path = [follow, Step::Key(grap::vocabulary::VALUE)];
+    let metadata = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        cell,
+        name::record(
+            "size",
+            [
+                (grap::vocabulary::VALUE, f64::value(1.0)),
+                (metadata, Value::record([])),
+            ],
+        ),
+    );
+    let mut world = crate::test_editor(Document {
+        root: Some(cell.into()),
+        cells,
+    });
+    for (path, typed) in [(&name_path[..], " label"), (&value_path[..], "2")] {
+        let frame = editing_frame(&mut world, false);
+        // Unrelated metadata does not disqualify the wrapper projection.
+        assert!(
+            !frame
+                .descends
+                .iter()
+                .any(|d| d.path.last() == Some(&Step::Key(metadata)))
+        );
+        let target = frame
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == path)
+            .unwrap();
+        assert!((target.select)(&mut world, None));
+        let frame = editing_frame(&mut world, false);
+        assert!(frame.resolve_for_dispatch().dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Character(typed.into()),
+                state: KeyState::Down,
+                ..Default::default()
+            },
+        ));
+    }
+    assert_eq!(
+        world.model.doc.cells.value(cell),
+        Some(&name::record(
+            "size label",
+            [
+                (grap::vocabulary::VALUE, f64::value(12.0)),
+                (metadata, Value::record([]))
+            ]
+        )),
+    );
+}
+
+#[test]
+fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow() {
+    let cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        cell,
+        name::record("expression", [(grap::vocabulary::VALUE, f64::value(1.0))]),
+    );
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([(grap::vocabulary::VALUE, cell.into())])),
+        cells,
+    });
+    let frame = editing_frame(&mut world, false);
+    let name_path = [Step::Key(name::vocabulary::NAME)];
+    let name_slot = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == name_path)
+        .unwrap();
+    assert!(!frame.descends.iter().any(|d| d.path.as_ref()
+        == [
+            Step::Key(grap::vocabulary::VALUE),
+            Step::Follow(gid::Resolution::Document)
+        ]));
+    let before = world.model.doc.clone();
+    assert!((name_slot.select)(&mut world, None));
+    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(
+        Rc::ptr_eq(&world.model.doc, &before),
+        "projecting and selecting a missing name must not write one"
+    );
+}
+
 fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     let parameters = Value::list([binder.into()]);
     let position = parameters.as_list().unwrap().keys().next().unwrap().clone();
@@ -112,7 +204,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
 }
 
 #[test]
-fn declaration_names_do_not_hide_metadata_or_new_fields() {
+fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessible() {
     let binder = new_cell_id();
     let extra = new_cell_id();
     let nested = new_cell_id();
@@ -120,7 +212,7 @@ fn declaration_names_do_not_hide_metadata_or_new_fields() {
     let mut cells = Cells::new();
     cells.set_value(binder, name::record("size", [(extra, nested.into())]));
     cells.set_value(nested, name::record("metadata", []));
-    let mut doc = Document {
+    let doc = Document {
         root: Some(root),
         cells,
     };
@@ -134,22 +226,26 @@ fn declaration_names_do_not_hide_metadata_or_new_fields() {
         .cloned()
         .chain([Step::Key(extra)])
         .collect::<Path>();
-    let (bench, _) = place(&doc, None, 1200.0);
+    let libraries = core_libraries();
+    let mut world = editing_world(&doc, &libraries);
     assert!(
-        bench
+        !editing_frame(&mut world, false)
             .descends
             .iter()
             .any(|d| d.path.as_ref() == &extra_path)
     );
-    let libraries = core_libraries();
-    doc.cells.set_value(binder, name::record("size", []));
+    assert!(
+        editing_frame(&mut world, true)
+            .descends
+            .iter()
+            .any(|d| d.path.as_ref() == &extra_path)
+    );
     let pending = pending_edge(
         &crate::test_root(),
         &src(&doc, &libraries),
         definition.clone(),
     )
     .unwrap();
-    let mut world = editing_world(&doc, &libraries);
     world.model.selection = Some(pending);
     assert!(editing_frame(&mut world, false).completion.is_some());
 }
@@ -387,27 +483,89 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         followed.push(Step::Follow(gid::Resolution::Document));
         assert_eq!(has(&followed), !direct_reference);
 
-        let wrapper = bench
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == &expression_path[..1])
-            .unwrap()
-            .rect;
-        let body = bench
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == expression_path)
-            .unwrap()
-            .rect;
-        let marker = Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y);
+        let marker_position = |descends: &[Descend<World>]| {
+            let wrapper = descends
+                .iter()
+                .find(|d| d.path.as_ref() == &expression_path[..1])
+                .unwrap()
+                .rect;
+            let body = descends
+                .iter()
+                .find(|d| d.path.as_ref() == expression_path)
+                .unwrap()
+                .rect;
+            Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y)
+        };
+        let marker = marker_position(&bench.descends);
         let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(marker));
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == expression_path));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == &expression_path[..1]));
+
+        let mut world = crate::test_editor(doc);
+        let marker = marker_position(&editing_frame(&mut world, false).descends);
+        let frame = editing_frame_at(&mut world, false, None, Some(marker));
+        let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
+            panic!("backtick hover");
+        };
+        let mut dispatch =
+            placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
+        let event = PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState {
+                position: (marker.x, marker.y).into(),
+                ..Default::default()
+            },
+        };
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut dispatch,
+        ));
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            &expression_path[..1]
+        );
     }
 }
 
 #[test]
-fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
+fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
+    let extra = new_cell_id();
+    for root in [
+        Value::record([(control::UNQUOTE, text::value("expression"))]),
+        grap::call(
+            control::QUOTE.into(),
+            [(grap::vocabulary::EXPRESSION, text::value("template"))],
+        ),
+    ] {
+        let mut world = crate::test_editor(Document {
+            cells: Cells::new(),
+            root: Some(Value::record(
+                root.as_record()
+                    .unwrap()
+                    .update(extra, text::value("metadata")),
+            )),
+        });
+        let has_metadata = |frame: &crate::placed::HoverOutput<World>| {
+            frame
+                .descends
+                .iter()
+                .any(|d| d.path.as_ref() == [Step::Key(extra)])
+        };
+        assert!(!has_metadata(&editing_frame(&mut world, false)));
+        assert!(has_metadata(&editing_frame(&mut world, true)));
+        world.model.selection = pending_edge(&crate::test_root(), &world.sources(), Vec::new());
+        assert!(editing_frame(&mut world, false).completion.is_some());
+    }
+}
+
+#[test]
+fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available() {
     let extra = new_cell_id();
     let binder = new_cell_id();
     let mut forms = declarations(binder)
@@ -415,11 +573,6 @@ fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
         .map(|(root, _)| root)
         .collect::<Vec<_>>();
     forms.extend([
-        Value::record([(control::UNQUOTE, text::value("expression"))]),
-        grap::call(
-            control::QUOTE.into(),
-            [(grap::vocabulary::EXPRESSION, text::value("template"))],
-        ),
         grap::call(
             control::DO.into(),
             [(control::EXPRESSIONS, Value::list([]))],
@@ -451,9 +604,15 @@ fn compact_grap_forms_expose_extra_fields_and_active_insertions() {
                     .update(extra, text::value("metadata")),
             )),
         };
-        let (bench, _) = place(&doc, None, 1200.0);
+        let mut world = editing_world(&doc, &libraries);
         assert!(
-            bench
+            !editing_frame(&mut world, false)
+                .descends
+                .iter()
+                .any(|d| d.path.as_ref() == [Step::Key(extra)])
+        );
+        assert!(
+            editing_frame(&mut world, true)
                 .descends
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])

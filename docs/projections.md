@@ -9,7 +9,7 @@ current requirements or verified statements of the owner's intent.
 ## Packages and libraries
 
 The [Grap runtime](../grap/src/lib.rs) depends only on GID. It implements
-lambda/application, environments, callable representations, fuel, source
+lambda/application, value wrappers, environments, callable representations, fuel, source
 origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
@@ -61,6 +61,13 @@ fallback alone. Specific domain projections precede general ones. Libraries
 contribute these functions explicitly; composition does not depend on registering
 them under a shared cell identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
+
+Recognition checks the fields a partial uses, not the absence of unrelated
+fields. Extra metadata may remain unshown in a compact projection; Raw exposes
+the stored record. Missing or malformed required contents decline normally,
+without reserving the record or blocking later partials. Explicit mutually
+exclusive tags within a convention still reject conflicts. Active field
+insertion can use the general presentation to keep its picker visible.
 
 [`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
@@ -120,11 +127,12 @@ Grap expression projections request shallow named-cell display at direct use
 sites. Compound forms choose their own children; inert containers, declaration
 metadata, and quoted data use the normal deep structural fallback. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
-only a text name projects as `(name)`: the usual cell parentheses surround an
+a text name projects as `(name)`: the usual cell parentheses surround an
 unquoted line editor at the real `Follow` → `name` path. This contextual
-projection is not in the default stack. Extra definition fields, malformed or
-missing names, and active field insertion retain structural display. Ordinary
-cells and quoted data are unchanged; use sites remain shallow references.
+projection is not in the default stack. Unrelated definition fields do not
+block it; malformed or missing names and active field insertion decline to the
+ordinary projection. Ordinary cells and quoted data are unchanged; use sites
+remain shallow references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. This is a raw definition lookup, not evaluation of the callable.
@@ -140,15 +148,30 @@ composition, not automatic merging of every matching facet's projection.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
 
+Grap's `{name: text, value: expression}` wrapper projects as `name = expression`.
+The name slot is always present: a missing name uses the normal empty picker,
+with the name library's string completions. The expression uses the local
+shallow-reference projection. Other metadata does not block recognition, and
+both editors retain their stored field paths. This is a named expression, not a
+`let` binding; the evaluator ignores its name. Named numeric facets remain
+independent of this Grap-specific wrapper.
+
+Within Grap's library, calls, lambdas, and value wrappers are tried in evaluator
+precedence order. Each remains an ordinary partial: malformed contents decline
+just like a missing required field, allowing the next partial to try. Recognition
+does not reserve a record or force structural fallback.
+
 The Fidget library projects field arithmetic as infix expressions, other scalar
 operations as named argument groups, and coordinates as shallow references.
 Grouping preserves the expression tree, including right-nested operations of
 equal precedence; it never reassociates floating-point arithmetic. Names come
 from ordinary definitions. Operands retain their stored paths and stock editing
 controls, while an operator targets its whole expression. Named fields expose
-their editable name beside the formula. Incomplete forms or extra fields decline
-to structural display; translation keeps its explicit named parameters. These
-are source projections only, independent of the opt-in rendered viewport.
+their editable name beside the formula. Unrelated fields on an operation or its
+operand record do not block notation or change grouping. Incomplete forms and
+conflicting operation tags decline; translation keeps its explicit named
+parameters. These are source projections only, independent of the opt-in
+rendered viewport.
 
 `{evaluate: expression}` is a Grap-library projection convention, not evaluator
 syntax. It shows the stored expression, an arrow, and the returned value from
@@ -335,6 +358,7 @@ Grap recognizes these shapes through its vocabulary cells:
 ```text
 {params: [parameter-cells...], body: expression}
 {function: callable-expression, parameter-cell: argument-expression, ...}
+{value: expression, ...}
 {closure: {params: [...], body: expression, environment: {...}}}
 {ffi: function-cell}
 ```
@@ -344,6 +368,15 @@ Grap-defined calls evaluate every declared argument before the body. Argument
 labels are cell identities, so reusing a library parameter cell is meaningful;
 its display name does not participate in binding. The ordered parameter list
 is the current representation, not a settled general pattern language.
+
+A value wrapper evaluates its `value` expression in the calling environment.
+It introduces no lexical binding and does not memoize a result: evaluating the
+same wrapper again evaluates its expression again. The name and unrelated
+metadata are ignored. Calls and complete lambda forms take precedence when a
+record contains several recognized forms. `let`/`where` retain their existing
+bind-once semantics and separate `value` field identity; they do not own or
+discover wrappers. As with calls, wrappers inside inert data or returned by a
+function remain data until explicitly evaluated.
 
 Cell evaluation checks lexical bindings first, then asks `Host::resolve` for one
 definition: the document's value, otherwise the first loaded library definition.
@@ -443,11 +476,13 @@ revisits a spliced result. Outside that traversal, an unquote-shaped record is
 ordinary data. There is no evaluator-level quote/literal form.
 
 The normal projection shows a compact quote call with a double-quote prefix,
-and a single-field `{unquote: expression}` record with a backtick prefix. The
-unquote prefix selects its expression at the stored field path; the expression
+and an `{unquote: expression}` record with a backtick prefix. The
+unquote prefix selects the whole unquote record; its body remains independently
+selectable at the stored field path. The expression
 uses Grap's local shallow-reference projection, while quoted data keeps its
-ordinary projection. Extra fields and active field insertion fall back to the
-full record/call display so the compact forms never hide data. These markers
+ordinary projection. Unrelated fields do not block either compact projection;
+Raw still exposes them. Active field insertion falls back to the full record/call
+display. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
 Semantic failure is an open GID record:

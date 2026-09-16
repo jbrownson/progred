@@ -1,6 +1,6 @@
-//! A live projection for a record with an `evaluate` field. The evaluator
-//! does not observe this field; a host that never loads this
-//! projection never sees it.
+//! Grap vocabulary and source projections, including named value wrappers.
+//! The live `evaluate` projection is separate from evaluator syntax: a host
+//! that never loads it never gives that field evaluation behavior.
 
 use crate::libraries::name::short_id;
 use crate::libraries::{Library, absent, name};
@@ -12,7 +12,7 @@ use crate::display::{
     RecordField, ResolvedCell, activatable, alternatives, at_local, col, completion, descend_local,
     dim, faced, hug, pad, record_with, row, selectable_bracket, shared, slot, transient,
 };
-use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
+use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod vocabulary {
@@ -73,7 +73,6 @@ fn declaration_name(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
-    (input.value?.as_record()?.len() == 1).then_some(())?;
     name::read(input.value?)?;
     Some(descend_local(
         Step::Key(name::vocabulary::NAME),
@@ -113,7 +112,7 @@ pub(crate) fn expression_at(
     shallow_at(steps, value, default)
 }
 
-/// Declaration cells keep their parentheses, with a name-only definition
+/// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
 pub(crate) fn declaration_at(
     steps: impl Into<Vec<Step>>,
@@ -311,10 +310,6 @@ pub fn lambda_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
-    fields
-        .keys()
-        .all(|key| matches!(*key, PARAMS | BODY) || *key == name::vocabulary::NAME)
-        .then_some(())?;
     match &input.pending {
         None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY))) => (),
         _ => return None,
@@ -342,6 +337,34 @@ pub fn lambda_display(
     Some(hug(
         head,
         expression_descend(Step::Key(BODY), &input.default_projection),
+        6.0,
+        20.0,
+    ))
+}
+
+/// A named expression, not a lexical binding. The name slot is always
+/// present in the projection; only the value field matters to evaluation.
+pub fn value_display(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let fields = input.value?.as_record()?;
+    fields.get(&VALUE)?;
+    match &input.pending {
+        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE))) => (),
+        _ => return None,
+    }
+    let name = descend_local(
+        Step::Key(name::vocabulary::NAME),
+        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
+        &input.default_projection,
+    );
+    let target = input.targets.at([Step::Key(VALUE)]);
+    Some(hug(
+        row(
+            3.0,
+            [name, activatable(dim("="), target.hover, target.select)],
+        ),
+        expression_descend(Step::Key(VALUE), &input.default_projection),
         6.0,
         20.0,
     ))
@@ -416,6 +439,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (::grap::vocabulary::FUNCTION, "function"),
         (::grap::vocabulary::PARAMS, "params"),
         (::grap::vocabulary::BODY, "body"),
+        (::grap::vocabulary::VALUE, "value"),
         (::grap::vocabulary::CLOSURE, "closure"),
         (::grap::vocabulary::ENVIRONMENT, "environment"),
         (::grap::vocabulary::FFI, "ffi"),
@@ -455,12 +479,13 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "grap",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        // Projection order mirrors evaluator precedence: the explicit
-        // Grap-result wrapper, calls, lambdas, then FFI values.
+        // Calls, lambdas, and value wrappers follow evaluator precedence,
+        // but ordinary partial failures still try the next projection.
         crate::display::compose_partials([
             crate::display::partial(evaluate_display),
             crate::display::partial(call_display),
             crate::display::partial(lambda_display),
+            crate::display::partial(value_display),
             crate::display::partial(ffi_display),
         ]),
     )
@@ -681,21 +706,43 @@ mod tests {
     }
 
     #[test]
-    fn compact_declarations_decline_extra_fields_invalid_names_and_active_insertions() {
+    fn compact_declarations_ignore_metadata_but_decline_invalid_names_and_active_insertions() {
         let env = env();
         for value in [
             Value::record([]),
-            name::record("size", [(new_cell_id(), Value::record([]))]),
             Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]),
         ] {
             assert!(declaration_name(&input(&env, &value)).is_none());
         }
-        let value = name::record("size", []);
+        let value = name::record("size", [(new_cell_id(), Value::record([]))]);
         let mut input = input(&env, &value);
+        assert!(declaration_name(&input).is_some());
         input.pending = Some(Pending::Field);
         assert!(declaration_name(&input).is_none());
         input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
         assert!(declaration_name(&input).is_none());
+    }
+
+    #[test]
+    fn value_projection_leaves_competing_forms_to_composition() {
+        let env = env();
+        let malformed_lambda = Value::record([
+            (PARAMS, Value::record([])),
+            (BODY, Value::record([])),
+            (VALUE, Value::record([])),
+        ]);
+        let input = input(&env, &malformed_lambda);
+        assert!(lambda_display(&input).is_none());
+        assert!(value_display(&input).is_some());
+        assert!((library().projection)(&input).is_some());
+
+        let call = Value::record([(FUNCTION, Value::record([])), (VALUE, Value::record([]))]);
+        let input = ProjectionInput {
+            value: Some(&call),
+            ..input
+        };
+        assert!(call_display(&input).is_some());
+        assert!(value_display(&input).is_some());
     }
 
     #[test]
@@ -1263,7 +1310,10 @@ mod tests {
     #[test]
     fn an_unfinished_lambda_keeps_its_missing_body_visible() {
         let env = env();
-        let definition = Value::record([(PARAMS, Value::list([]))]);
+        let definition = Value::record([
+            (PARAMS, Value::list([])),
+            (new_cell_id(), Value::record([])),
+        ]);
         let mut input = relative_input(&env, &definition);
         assert!(lambda_display(&input).is_some());
         input.pending = Some(Pending::Child(Step::Key(BODY)));
@@ -1278,10 +1328,6 @@ mod tests {
                 PARAMS,
                 Value::list([crate::libraries::text::value("not a cell")]),
             )]),
-            Value::record([
-                (PARAMS, Value::list([])),
-                (new_cell_id(), Value::record([])),
-            ]),
         ] {
             assert!(lambda_display(&relative_input(&env, &malformed)).is_none());
         }
@@ -1291,7 +1337,11 @@ mod tests {
     fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         let definition = name::record(
             "tree",
-            [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
+            [
+                (PARAMS, Value::list([])),
+                (BODY, Value::from(vec![1])),
+                (new_cell_id(), Value::record([])),
+            ],
         );
         let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {

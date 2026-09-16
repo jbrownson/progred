@@ -107,7 +107,6 @@ fn precedence(function: CellId) -> Option<Precedence> {
 
 fn expression_precedence(value: &Value) -> Option<Precedence> {
     let fields = value.as_record()?;
-    (fields.len() == 3).then_some(())?;
     fields.get(&vocabulary::LEFT)?;
     fields.get(&vocabulary::RIGHT)?;
     fields.get(&FUNCTION)?.as_cell().and_then(precedence)
@@ -141,7 +140,7 @@ pub fn binary_display(
     let precedence = precedence(function.as_cell()?)?;
     let left = fields.get(&vocabulary::LEFT)?;
     let right = fields.get(&vocabulary::RIGHT)?;
-    (fields.len() == 3).then_some(row(
+    Some(row(
         6.0,
         [
             operand(
@@ -700,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_notation_declines_calls_with_unshown_fields() {
+    fn binary_notation_ignores_unrelated_fields_without_changing_grouping() {
         let extra = new_cell_id();
         let call = grap::call(
             Value::from(vocabulary::SUM),
@@ -710,7 +709,30 @@ mod tests {
                 (extra, value(3.0)),
             ],
         );
-        assert!(binary_display(&projection_input(&call)).is_none());
+        assert!(binary_display(&projection_input(&call)).is_some());
+        assert!(matches!(
+            expression_precedence(&call),
+            Some(Precedence::Sum)
+        ));
+        let default = crate::display::partial(|_| None);
+        for (parent, field, grouped) in [
+            (Precedence::Product, vocabulary::LEFT, true),
+            (Precedence::Sum, vocabulary::LEFT, false),
+            (Precedence::Sum, vocabulary::RIGHT, true),
+        ] {
+            assert_eq!(
+                matches!(
+                    operand(field, &call, parent, &default).record(),
+                    Recorded::Row { .. }
+                ),
+                grouped,
+            );
+        }
+        for key in [FUNCTION, vocabulary::LEFT, vocabulary::RIGHT] {
+            let incomplete = Value::record(call.as_record().unwrap().without(&key));
+            assert!(binary_display(&projection_input(&incomplete)).is_none());
+            assert!(expression_precedence(&incomplete).is_none());
+        }
     }
 
     #[test]

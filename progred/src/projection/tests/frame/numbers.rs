@@ -235,7 +235,7 @@ fn numeric_operation_labels_read_both_names_from_the_graph() {
 }
 
 #[test]
-fn numeric_call_decoration_does_not_hide_extra_arguments() {
+fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
     let extra = new_cell_id();
     for (_, _, call) in calls() {
         let call = Value::record(
@@ -249,10 +249,19 @@ fn numeric_call_decoration_does_not_hide_extra_arguments() {
             cells: Cells::new(),
         };
         let (bench, _) = place(&doc, None, 900.0);
+        let mut world = crate::test_editor(doc.clone());
+        let raw = editing_frame(&mut world, true);
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {
+            if *field != extra {
+                assert!(
+                    bench
+                        .descends
+                        .iter()
+                        .any(|d| d.path.as_ref() == [Step::Key(*field)])
+                );
+            }
             assert!(
-                bench
-                    .descends
+                raw.descends
                     .iter()
                     .any(|d| d.path.as_ref() == [Step::Key(*field)])
             );

@@ -19,6 +19,7 @@ pub mod vocabulary {
     pub const FUNCTION: CellId = CellId::from_u128(0x751fca4373debdd0b7e6eb73e08d684b);
     pub const PARAMS: CellId = CellId::from_u128(0x195b378d0d31d90ab0d7366c15346b70);
     pub const BODY: CellId = CellId::from_u128(0x986143866eda2e2fbf9ab8484357a0c9);
+    pub const VALUE: CellId = CellId::from_u128(0x5adde9ececa6ad57c81a3b2907e75e08);
     pub const CLOSURE: CellId = CellId::from_u128(0xdb39600f3ed07398c77ac120deb108a8);
     pub const ENVIRONMENT: CellId = CellId::from_u128(0xe910025c710c25c43d0a5b296378f374);
     pub const FFI: CellId = CellId::from_u128(0x912adb7252d689659b6de9eeeb827658);
@@ -962,6 +963,7 @@ enum OriginNode {
 enum Form {
     Data,
     Cell(CellIndex),
+    Value(Expression),
     Call {
         function: Expression,
     },
@@ -1141,6 +1143,19 @@ impl<'a> Context<'a> {
                         self.lower_with(fields.get(&vocabulary::BODY).unwrap(), descend_data, child)
                     },
                 }
+            }
+            Value::Record(fields) if fields.contains_key(&vocabulary::VALUE) => {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|(field, value)| {
+                        let child = self.child_origin(origin, gid::Step::Key(*field));
+                        (*field, self.lower_with(value, descend_data, child))
+                    })
+                    .collect();
+                let value = lowered_field(&fields, vocabulary::VALUE)
+                    .expect("the source record contains a value field");
+                lowered_fields = Some(fields);
+                Form::Value(value)
             }
             Value::Record(fields) => {
                 if descend_data {
@@ -1357,6 +1372,9 @@ impl<'a> Context<'a> {
             }),
             Form::Cell(index) => {
                 thunk(move |context, environment| context.eval_cell(index, environment))
+            }
+            Form::Value(value) => {
+                thunk(move |context, environment| context.eval_runtime(value, environment))
             }
             Form::Call { function } => self.compile_call(expression, function),
             Form::Lambda { parameters, body } => {
@@ -2436,6 +2454,146 @@ mod tests {
             10,
         );
         assert_eq!(evaluation.result, value);
+    }
+
+    #[test]
+    fn value_wrappers_evaluate_only_their_expression_in_the_calling_environment() {
+        let parameter = new_cell_id();
+        let metadata = new_cell_id();
+        let wrapper = Value::record([
+            (vocabulary::VALUE, parameter.into()),
+            (metadata, new_cell_id().into()),
+        ]);
+        let expression = call(lambda([parameter], wrapper), [(parameter, blob("local"))]);
+        let evaluation = evaluate(
+            &expression,
+            |_| panic!("neither the bound parameter nor wrapper metadata needs resolving"),
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(evaluation.result, blob("local"));
+        assert!(evaluation.completed);
+    }
+
+    #[test]
+    fn value_wrappers_can_be_anonymous_nested_and_callable() {
+        let parameter = new_cell_id();
+        let cell = new_cell_id();
+        let wrapper = Value::record([(
+            vocabulary::VALUE,
+            Value::record([(vocabulary::VALUE, lambda([parameter], parameter.into()))]),
+        )]);
+        let evaluation = evaluate(
+            &call(cell.into(), [(parameter, blob("argument"))]),
+            |queried| (queried == cell).then(|| wrapper.clone()),
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(evaluation.result, blob("argument"));
+    }
+
+    #[test]
+    fn referencing_a_value_wrapper_again_reruns_its_expression() {
+        let cell = new_cell_id();
+        let function = new_cell_id();
+        let first = new_cell_id();
+        let second = new_cell_id();
+        let calls = Rc::new(Cell::new(0));
+        let count = calls.clone();
+        let foreign = ForeignFunctions::default().register(
+            function,
+            ForeignFunction::new(move |context, _, _| {
+                Ok(context.effect(|| {
+                    count.set(count.get() + 1);
+                    blob("result")
+                }))
+            }),
+        );
+        let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
+        let evaluation = evaluate(
+            &call(
+                lambda([first, second], first.into()),
+                [(first, cell.into()), (second, cell.into())],
+            ),
+            |queried| (queried == cell).then(|| wrapper.clone()),
+            &foreign,
+            40,
+        );
+        assert_eq!(evaluation.result, blob("result"));
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn value_wrappers_do_not_evaluate_inside_data_or_foreign_results() {
+        let wrapper = Value::record([(vocabulary::VALUE, new_cell_id().into())]);
+        let foreign_cell = new_cell_id();
+        let result = wrapper.clone();
+        let foreign = ForeignFunctions::default().register(
+            foreign_cell,
+            ForeignFunction::new(move |_, _, _| Ok(result.clone())),
+        );
+        for data in [
+            Value::list([wrapper.clone()]),
+            Value::record([(new_cell_id(), wrapper.clone())]),
+        ] {
+            assert_eq!(
+                evaluate(&data, |_| panic!("inert data"), &foreign, 10).result,
+                data,
+            );
+        }
+        assert_eq!(
+            evaluate(&call(foreign_cell.into(), []), |_| None, &foreign, 10).result,
+            wrapper,
+        );
+    }
+
+    #[test]
+    fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
+        let foreign = ForeignFunctions::default();
+        let absent = absent::value(absent::MISSING_ARGUMENT);
+        let wrapper = Value::record([(vocabulary::VALUE, absent.clone())]);
+        let evaluation = evaluate(&wrapper, |_| None, &foreign, 10);
+        assert_eq!(evaluation.result, absent);
+        assert!(evaluation.completed);
+        let exhausted = evaluate(&wrapper, |_| None, &foreign, 2);
+        assert_eq!(exhausted.result, absent::value(absent::FUEL_EXHAUSTED));
+        assert!(!exhausted.completed);
+
+        let cell = new_cell_id();
+        let wrapper = Value::record([(vocabulary::VALUE, cell.into())]);
+        let cycle = evaluate(&cell.into(), |_| Some(wrapper.clone()), &foreign, 20);
+        assert_eq!(absent::reason(&cycle.result), Some(absent::CELL_CYCLE));
+    }
+
+    #[test]
+    fn value_wrappers_preserve_the_inner_expression_source() {
+        let cell = new_cell_id();
+        let function = new_cell_id();
+        let functions = [function];
+        let origin = RefCell::new(None);
+        let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
+            *origin.borrow_mut() = context.source_origin(call);
+            Ok(blob("result"))
+        };
+        let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
+        let evaluation = super::evaluate_scoped(
+            &cell.into(),
+            &definitions_from_parts(
+                |queried| (queried == cell).then(|| wrapper.clone()),
+                &ForeignFunctions::default(),
+            ),
+            &ForeignOverlay::new(&functions, &scoped),
+            20,
+        );
+        assert_eq!(evaluation.result, blob("result"));
+        assert_eq!(
+            origin.into_inner(),
+            Some(SourceOrigin::Cell {
+                cell,
+                source: Resolution::Document,
+                path: vec![gid::Step::Key(vocabulary::VALUE)],
+            }),
+        );
     }
 
     #[test]

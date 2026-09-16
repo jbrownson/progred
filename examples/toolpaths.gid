@@ -82,6 +82,7 @@
     "front_face": c5586f3699073c5958c278b3f9e4cd1c,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "grap_value": 5adde9ececa6ad57c81a3b2907e75e08,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
     "half_size": f6e416437259d6867c11eced7923bf1c,
     "half_turn": 1bfffd6a6c8897bbba3543d596f09262,
@@ -651,11 +652,13 @@
     },
     ball_tool: {
       name: "ball tool",
-      tool_length: {
-        f64: 0x295c8fc2f528cc3f,
+      grap_value: {
+        tool_length: {
+          f64: 0x295c8fc2f528cc3f,
+        },
+        function: ball_mill,
+        cutter_diameter: tool_diameter,
       },
-      function: ball_mill,
-      cutter_diameter: tool_diameter,
     },
     ball_path: {
       name: "ball-tip passes",
@@ -2810,52 +2813,54 @@
     },
     square_tool: {
       name: "square tool",
-      function: quote,
-      expression: {
-        tool: [
-          {
-            cutting: [
-              {
-                profile_radius: {
-                  unquote: {
-                    right: {
-                      f64: 0x0000000000000040,
+      grap_value: {
+        function: quote,
+        expression: {
+          tool: [
+            {
+              cutting: [
+                {
+                  profile_radius: {
+                    unquote: {
+                      right: {
+                        f64: 0x0000000000000040,
+                      },
+                      function: divide,
+                      left: square_diameter,
                     },
-                    function: divide,
-                    left: square_diameter,
                   },
                 },
-              },
-              {
-                axial: {
-                  unquote: cutting_length,
+                {
+                  axial: {
+                    unquote: cutting_length,
+                  },
                 },
-              },
-            ],
-          },
-          {
-            non_cutting: [
-              {
-                profile_radius: {
-                  f64: 0x000000000000b83f,
+              ],
+            },
+            {
+              non_cutting: [
+                {
+                  profile_radius: {
+                    f64: 0x000000000000b83f,
+                  },
+                  axial: {
+                    f64: 0x666666666666d63f,
+                  },
                 },
-                axial: {
-                  f64: 0x666666666666d63f,
+                {
+                  profile_radius: {
+                    f64: 0x000000000000c03f,
+                  },
                 },
-              },
-              {
-                profile_radius: {
-                  f64: 0x000000000000c03f,
+                {
+                  axial: {
+                    f64: 0x333333333333e33f,
+                  },
                 },
-              },
-              {
-                axial: {
-                  f64: 0x333333333333e33f,
-                },
-              },
-            ],
-          },
-        ],
+              ],
+            },
+          ],
+        },
       },
     },
     square_diameter: {
