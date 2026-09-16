@@ -434,8 +434,14 @@ New input cancels the old sequence. The controls overlay the bottom of the
 full-size view.
 Implicit CAM rendering explicitly uses the software voxel renderer, directly
 on the existing background executor. It does not attempt GPU evaluation first.
-Software rasterization uses 32/16/8-pixel tiles to bound uninterrupted work more
-finely. Lighting corrects sample-space gradients for unequal axis spacing, so
+On Apple Silicon macOS it uses Fidget's JIT with its recommended 64/16/8-pixel
+tiles; other platforms retain the VM with 32/16/8-pixel tiles. Meshing stays on
+the VM. The [local Fidget patches](../vendor/README.md) fix large AArch64 JIT
+tapes, check cancellation within raster subtiles, and report completed root tiles.
+Progress counts tiles rather than time remaining; compilation and image assembly
+are outside that count. Cancellation still cannot
+interrupt a single tape compilation/evaluation already in progress.
+Lighting corrects sample-space gradients for unequal axis spacing, so
 depth refinement does not change the light direction or relative axis weighting.
 Web/default headless contexts use inline execution.
 

@@ -1,5 +1,13 @@
 # Frame performance checks
 
+The [multi-operation CAM rendering investigation](cam-render-profiling-2026-09-15.md)
+separates stock, tool, path, mesh and progressive-render costs, checks job reuse,
+and records expression-grouping experiments and a tested local CPU JIT fix.
+The JIT roughly halves full-stock implicit time with its recommended tiles,
+at a cancellation-latency cost; meshing does not improve. The application uses
+the patched JIT for implicit rendering on Apple Silicon macOS, retaining the VM
+for meshing and other platforms.
+
 The opt-in [Fidget meshing experiment](fidget-meshing-2026-09-13.md) measures
 CPU triangle generation from the cube document, independently of frame rendering.
 

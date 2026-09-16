@@ -1,0 +1,375 @@
+diff --git a/fidget-jit/src/aarch64/float_slice.rs b/fidget-jit/src/aarch64/float_slice.rs
+index f645b8d..e60997c 100644
+--- a/fidget-jit/src/aarch64/float_slice.rs
++++ b/fidget-jit/src/aarch64/float_slice.rs
+@@ -126,7 +126,11 @@ impl Assembler for FloatSliceAssembler {
+             // finalize().
+ 
+             ; cmp x2, 0
+-            ; b.eq ->E // function exit
++            // Conditional branches reach only +/-1 MiB; the tape can be
++            // larger. Use the wider unconditional branch for the long jump.
++            ; b.ne ->B
++            ; b ->E // function exit
++            ; ->B:
+ 
+             // Loop body: math begins below
+         );
+@@ -142,20 +146,24 @@ impl Assembler for FloatSliceAssembler {
+     fn build_load(&mut self, dst_reg: u8, src_mem: u32) {
+         assert!((dst_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(src_mem) + STACK_SIZE;
+-        assert!(sp_offset < 65536);
+-        dynasm!(self.0.ops
+-            ; ldr Q(reg(dst_reg)), [sp, sp_offset]
+-        )
++        if sp_offset < 65536 {
++            dynasm!(self.0.ops; ldr Q(reg(dst_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; ldr Q(reg(dst_reg)), [sp, x9]);
++        }
+     }
+ 
+     /// Writes from `src_reg` to `dst_mem`
+     fn build_store(&mut self, dst_mem: u32, src_reg: u8) {
+         assert!((src_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(dst_mem) + STACK_SIZE;
+-        assert!(sp_offset < 65536);
+-        dynasm!(self.0.ops
+-            ; str Q(reg(src_reg)), [sp, sp_offset]
+-        )
++        if sp_offset < 65536 {
++            dynasm!(self.0.ops; str Q(reg(src_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; str Q(reg(src_reg)), [sp, x9]);
++        }
+     }
+     /// Copies the given input to `out_reg`
+     fn build_input(&mut self, out_reg: u8, src_arg: u32) {
+diff --git a/fidget-jit/src/aarch64/grad_slice.rs b/fidget-jit/src/aarch64/grad_slice.rs
+index 6329029..ede843b 100644
+--- a/fidget-jit/src/aarch64/grad_slice.rs
++++ b/fidget-jit/src/aarch64/grad_slice.rs
+@@ -127,7 +127,11 @@ impl Assembler for GradSliceAssembler {
+             // finalize().
+ 
+             ; cmp x2, 0
+-            ; b.eq ->E // function exit
++            // Conditional branches reach only +/-1 MiB; the tape can be
++            // larger. Use the wider unconditional branch for the long jump.
++            ; b.ne ->B
++            ; b ->E // function exit
++            ; ->B:
+ 
+             // Loop body: math begins below
+         );
+@@ -143,19 +147,23 @@ impl Assembler for GradSliceAssembler {
+     fn build_load(&mut self, dst_reg: u8, src_mem: u32) {
+         assert!((dst_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(src_mem) + STACK_SIZE;
+-        assert!(sp_offset < 65536);
+-        dynasm!(self.0.ops
+-            ; ldr Q(reg(dst_reg)), [sp, sp_offset]
+-        )
++        if sp_offset < 65536 {
++            dynasm!(self.0.ops; ldr Q(reg(dst_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; ldr Q(reg(dst_reg)), [sp, x9]);
++        }
+     }
+     /// Writes from `src_reg` to `dst_mem`
+     fn build_store(&mut self, dst_mem: u32, src_reg: u8) {
+         assert!((src_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(dst_mem) + STACK_SIZE;
+-        assert!(sp_offset < 65536);
+-        dynasm!(self.0.ops
+-            ; str Q(reg(src_reg)), [sp, sp_offset]
+-        )
++        if sp_offset < 65536 {
++            dynasm!(self.0.ops; str Q(reg(src_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; str Q(reg(src_reg)), [sp, x9]);
++        }
+     }
+     /// Copies the given input to `out_reg`
+     fn build_input(&mut self, out_reg: u8, src_arg: u32) {
+diff --git a/fidget-jit/src/aarch64/interval.rs b/fidget-jit/src/aarch64/interval.rs
+index 67bc889..042e347 100644
+--- a/fidget-jit/src/aarch64/interval.rs
++++ b/fidget-jit/src/aarch64/interval.rs
+@@ -108,15 +108,23 @@ impl Assembler for IntervalAssembler {
+     fn build_load(&mut self, dst_reg: u8, src_mem: u32) {
+         assert!((dst_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(src_mem) + STACK_SIZE;
+-        assert!(sp_offset <= 32768);
+-        dynasm!(self.0.ops ; ldr D(reg(dst_reg)), [sp, sp_offset])
++        if sp_offset < 32768 {
++            dynasm!(self.0.ops; ldr D(reg(dst_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; ldr D(reg(dst_reg)), [sp, x9]);
++        }
+     }
+     /// Writes from `src_reg` to `dst_mem`
+     fn build_store(&mut self, dst_mem: u32, src_reg: u8) {
+         assert!((src_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(dst_mem) + STACK_SIZE;
+-        assert!(sp_offset <= 32768);
+-        dynasm!(self.0.ops ; str D(reg(src_reg)), [sp, sp_offset])
++        if sp_offset < 32768 {
++            dynasm!(self.0.ops; str D(reg(src_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; str D(reg(src_reg)), [sp, x9]);
++        }
+     }
+     /// Copies the given input to `out_reg`
+     fn build_input(&mut self, out_reg: u8, src_arg: u32) {
+diff --git a/fidget-jit/src/aarch64/mod.rs b/fidget-jit/src/aarch64/mod.rs
+index 1512fff..afe4fd9 100644
+--- a/fidget-jit/src/aarch64/mod.rs
++++ b/fidget-jit/src/aarch64/mod.rs
+@@ -29,3 +29,6 @@ pub mod float_slice;
+ pub mod grad_slice;
+ pub mod interval;
+ pub mod point;
++
++#[cfg(test)]
++mod tests;
+diff --git a/fidget-jit/src/aarch64/point.rs b/fidget-jit/src/aarch64/point.rs
+index cae89c2..eaa244b 100644
+--- a/fidget-jit/src/aarch64/point.rs
++++ b/fidget-jit/src/aarch64/point.rs
+@@ -105,15 +105,23 @@ impl Assembler for PointAssembler {
+     fn build_load(&mut self, dst_reg: u8, src_mem: u32) {
+         assert!((dst_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(src_mem) + STACK_SIZE;
+-        assert!(sp_offset <= 16384);
+-        dynasm!(self.0.ops ; ldr S(reg(dst_reg)), [sp, sp_offset])
++        if sp_offset < 16384 {
++            dynasm!(self.0.ops; ldr S(reg(dst_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; ldr S(reg(dst_reg)), [sp, x9]);
++        }
+     }
+     /// Writes from `src_reg` to `dst_mem`
+     fn build_store(&mut self, dst_mem: u32, src_reg: u8) {
+         assert!((src_reg as usize) < REGISTER_LIMIT);
+         let sp_offset = self.0.stack_pos(dst_mem) + STACK_SIZE;
+-        assert!(sp_offset <= 16384);
+-        dynasm!(self.0.ops ; str S(reg(src_reg)), [sp, sp_offset])
++        if sp_offset < 16384 {
++            dynasm!(self.0.ops; str S(reg(src_reg)), [sp, sp_offset]);
++        } else {
++            self.0.load_offset(sp_offset as usize);
++            dynasm!(self.0.ops; str S(reg(src_reg)), [sp, x9]);
++        }
+     }
+     /// Copies the given input to `out_reg`
+     fn build_input(&mut self, out_reg: u8, src_arg: u32) {
+diff --git a/fidget-jit/src/lib.rs b/fidget-jit/src/lib.rs
+index e927aab..3bd2348 100644
+--- a/fidget-jit/src/lib.rs
++++ b/fidget-jit/src/lib.rs
+@@ -354,18 +354,28 @@ impl<T> AssemblerData<T> {
+ #[cfg(target_arch = "aarch64")]
+ #[allow(clippy::unnecessary_cast)] // dynasm-rs#106
+ impl<T> AssemblerData<T> {
++    // x9 is caller-saved and scratch in all four evaluators. Do not use a
++    // callee-saved register to materialize an address or adjust the stack.
++    fn load_offset(&mut self, offset: usize) {
++        dynasm!(self.ops; movz x9, (offset & 0xffff) as u32);
++        for shift in [16, 32, 48] {
++            let part = ((offset >> shift) & 0xffff) as u32;
++            if part != 0 {
++                dynasm!(self.ops; movk x9, part, lsl shift);
++            }
++        }
++    }
++
+     fn push_stack(&mut self) {
+         if self.mem_offset < 4096 {
+             dynasm!(self.ops
+                 ; sub sp, sp, self.mem_offset as u32
+             );
+-        } else if self.mem_offset < 65536 {
++        } else {
++            self.load_offset(self.mem_offset);
+             dynasm!(self.ops
+-                ; mov w28, self.mem_offset as u32
+-                ; sub sp, sp, w28
++                ; sub sp, sp, x9
+             );
+-        } else {
+-            panic!("invalid mem offset: {} is too large", self.mem_offset);
+         }
+     }
+ 
+@@ -375,13 +385,11 @@ impl<T> AssemblerData<T> {
+             dynasm!(self.ops
+                 ; add sp, sp, self.mem_offset as u32
+             );
+-        } else if self.mem_offset < 65536 {
++        } else {
++            self.load_offset(self.mem_offset);
+             dynasm!(self.ops
+-                ; mov w9, self.mem_offset as u32
+-                ; add sp, sp, w9
++                ; add sp, sp, x9
+             );
+-        } else {
+-            panic!("invalid mem offset: {}", self.mem_offset);
+         }
+ 
+         dynasm!(self.ops
+@@ -405,7 +413,7 @@ struct MmapAssembler {
+     global_labels: [Option<AssemblyOffset>; 26],
+     local_labels: [Option<AssemblyOffset>; 26],
+ 
+-    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 2>,
++    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 3>,
+     local_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 8>,
+ }
+ 
+diff --git a/fidget-jit/src/aarch64/tests.rs b/fidget-jit/src/aarch64/tests.rs
+new file mode 100644
+index 0000000..d21b336
+--- /dev/null
++++ b/fidget-jit/src/aarch64/tests.rs
+@@ -0,0 +1,131 @@
++use crate::{
++    Assembler, JitBulkFnPointer, MmapAssembler, REGISTER_LIMIT,
++    float_slice::FloatSliceAssembler, grad_slice::GradSliceAssembler,
++    interval::IntervalAssembler, mmap::Mmap, point::PointAssembler,
++};
++use dynasmrt::dynasm;
++use fidget_core::types::{Grad, Interval};
++
++// Deliberately use just a few instructions in a large frame. This isolates
++// addressing from the register allocator and keeps every boundary affordable.
++fn spill_roundtrip<A: Assembler>(slot: u32) -> Mmap {
++    let mut asm = A::init(Mmap::new(4096).unwrap(), slot as usize + 1);
++    asm.build_input(0, 0);
++    asm.build_store(slot, 0);
++    // Exercise the function-call save/restore area with the large spill live.
++    asm.build_sin(0, 0);
++    asm.build_load(1, slot);
++    asm.build_output(1, 0);
++    asm.finalize().unwrap()
++}
++
++fn tracing_roundtrip<A: Assembler>(slot: u32, input: A::Data)
++where
++    A::Data: Copy + PartialEq + std::fmt::Debug,
++{
++    let mmap = spill_roundtrip::<A>(slot);
++    // Check x28 without letting an ABI violation corrupt the Rust caller.
++    // x4 holds the generated function; x0..x3 keep its ordinary arguments.
++    let mut shim = MmapAssembler::from(Mmap::new(4096).unwrap());
++    dynasm!(shim
++        ; stp x28, x30, [sp, -16]!
++        ; mov x28, 0x1234
++        ; blr x4
++        ; mov x0, x28
++        ; ldp x28, x30, [sp], 16
++        ; ret
++    );
++    let shim = shim.finalize().unwrap();
++    let call: unsafe extern "C" fn(
++        *const A::Data,
++        *mut u8,
++        *mut u8,
++        *mut A::Data,
++        *const std::ffi::c_void,
++    ) -> u64 = unsafe { std::mem::transmute(shim.as_ptr()) };
++    let mut output = std::mem::MaybeUninit::uninit();
++    let preserved = unsafe {
++        call(
++            &input,
++            std::ptr::null_mut(),
++            std::ptr::null_mut(),
++            output.as_mut_ptr(),
++            mmap.as_ptr(),
++        )
++    };
++    assert_eq!(preserved, 0x1234, "callee-saved x28 was clobbered");
++    assert_eq!(input, unsafe { output.assume_init() });
++}
++
++fn bulk_roundtrip<A: Assembler>(slot: u32, input: &[A::Data])
++where
++    A::Data: Copy + Default + PartialEq + std::fmt::Debug,
++{
++    let mmap = spill_roundtrip::<A>(slot);
++    let call: JitBulkFnPointer<A::Data> =
++        unsafe { std::mem::transmute(mmap.as_ptr()) };
++    let mut output = vec![A::Data::default(); input.len()];
++    unsafe { call(&input.as_ptr(), &output.as_mut_ptr(), input.len() as u64) };
++    assert_eq!(input, output);
++}
++
++#[test]
++fn large_spill_frames() {
++    // Fixed prefixes: point 0xb0, interval 0x100, float 0x230, grad 0x220.
++    // Test immediately below, at, and above each immediate's byte limit,
++    // as well as the 64 KiB frame boundary and a realistic large stock frame.
++    for bytes in [4096, 16384, 32768, 65536, 262144] {
++        for delta in [-1, 0, 1] {
++            for (width, prefix) in [(4, 0xb0), (8, 0x100), (16, 0x230)] {
++                let slot = (REGISTER_LIMIT as i32
++                    + (bytes - prefix) / width
++                    + delta) as u32;
++                match width {
++                    4 => tracing_roundtrip::<PointAssembler>(slot, 1.25),
++                    8 => tracing_roundtrip::<IntervalAssembler>(
++                        slot,
++                        Interval::new(-1.0, 2.5),
++                    ),
++                    _ => {
++                        bulk_roundtrip::<FloatSliceAssembler>(
++                            slot,
++                            &[1.0, -2.0, 3.25, 4.5, 5.0, 6.0, 7.0, 8.0],
++                        );
++                        bulk_roundtrip::<GradSliceAssembler>(
++                            slot + 1,
++                            &[
++                                Grad::new(1.0, 2.0, 3.0, 4.0),
++                                Grad::new(5.0, 6.0, 7.0, 8.0),
++                            ],
++                        );
++                    }
++                }
++            }
++        }
++    }
++}
++
++#[test]
++fn large_bulk_loop_bodies() {
++    macro_rules! check {
++        ($assembler:ty, $input:expr) => {{
++            let mut asm = <$assembler>::init(Mmap::new(4096).unwrap(), REGISTER_LIMIT);
++            asm.build_input(0, 0);
++            for _ in 0..262_144 {
++                dynasm!(asm.0.ops; nop);
++            }
++            asm.build_output(0, 0);
++            let mmap = asm.finalize().unwrap();
++            let call: JitBulkFnPointer<_> = unsafe { std::mem::transmute(mmap.as_ptr()) };
++            let input = $input;
++            let mut output = [Default::default(); 8];
++            // Both the empty exit and multiple iterations cross the long body.
++            unsafe { call(&input.as_ptr(), &output.as_mut_ptr(), 0) };
++            assert_eq!(output, [Default::default(); 8]);
++            unsafe { call(&input.as_ptr(), &output.as_mut_ptr(), 8) };
++            assert_eq!(input, output);
++        }};
++    }
++    check!(FloatSliceAssembler, [1.25f32; 8]);
++    check!(GradSliceAssembler, [Grad::new(1.0, 2.0, 3.0, 4.0); 8]);
++}

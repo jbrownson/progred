@@ -20,7 +20,14 @@ members = [
     "ui/puri-vello",
     "ui/puri-web",
     "ui/uig",
+    "vendor/fidget-jit",
+    "vendor/fidget-raster",
 ]
+
+# Small, reviewed patches against the pinned upstream revision; see vendor/README.md.
+[patch."https://github.com/mkeeter/fidget"]
+fidget-jit = { path = "vendor/fidget-jit" }
+fidget-raster = { path = "vendor/fidget-raster" }
 
 [workspace.dependencies]
 getrandom = "0.3"

@@ -1,0 +1,167 @@
+diff --git a/fidget-raster/src/lib.rs b/fidget-raster/src/lib.rs
+index 2a79fb1..847b394 100644
+--- a/fidget-raster/src/lib.rs
++++ b/fidget-raster/src/lib.rs
+@@ -127,6 +127,11 @@ where
+         }
+     }
+ 
++    let progress = eval_config.progress();
++    let total = tiles.len();
++    if let Some(progress) = progress {
++        progress(0, total);
++    }
+     let mut rh = RenderHandle::new(shape);
+ 
+     let _ = rh.i_tape(&mut vec![]); // populate i_tape before cloning
+@@ -134,6 +139,16 @@ where
+         return None;
+     }
+     let ts = tile_sizes;
++    // Serialize callbacks as well as the counter: parallel tile completion must
++    // not deliver an older count after a newer one. No per-pixel synchronization.
++    let completed = std::sync::Mutex::new(0);
++    let report = || {
++        if let Some(progress) = progress {
++            let mut completed = completed.lock().unwrap();
++            *completed += 1;
++            progress(*completed, total);
++        }
++    };
+     let init = || {
+         let rh = rh.clone();
+         let worker = W::new(render_config, ts, vars);
+@@ -152,6 +167,7 @@ where
+                         let pixels = worker
+                             .render_tile(&mut rh, tile, &is_cancelled)
+                             .ok_or(())?;
++                        report();
+                         Ok((tile, pixels))
+                     }
+                 })
+@@ -168,6 +184,7 @@ where
+                     } else {
+                         let pixels =
+                             w.render_tile(rh, tile, &is_cancelled).ok_or(())?;
++                        report();
+                         Ok((tile, pixels))
+                     }
+                 })
+@@ -181,6 +198,9 @@ where
+ pub(crate) trait EvalConfig {
+     fn threads(&self) -> Option<&ThreadPool>;
+     fn is_cancelled(&self) -> bool;
++    fn progress(&self) -> Option<&(dyn Fn(usize, usize) + Sync)> {
++        None
++    }
+ }
+ 
+ /// Trait for things that have a width and height in pixels
+diff --git a/fidget-raster/src/voxel.rs b/fidget-raster/src/voxel.rs
+index 42645a8..587d5b9 100644
+--- a/fidget-raster/src/voxel.rs
++++ b/fidget-raster/src/voxel.rs
+@@ -51,6 +51,11 @@ pub struct EvalConfig<'a> {
+ 
+     /// Token to cancel rendering
+     pub cancel: CancelToken,
++
++    /// Optional completed/total root-tile callback. Calls are serialized, start
++    /// at zero, and count only completed tiles. This measures raster work units,
++    /// not time, and excludes compilation and final image assembly.
++    pub progress: Option<&'a (dyn Fn(usize, usize) + Sync)>,
+ }
+ 
+ impl crate::EvalConfig for EvalConfig<'_> {
+@@ -60,6 +65,9 @@ impl crate::EvalConfig for EvalConfig<'_> {
+     fn is_cancelled(&self) -> bool {
+         self.cancel.is_cancelled()
+     }
++    fn progress(&self) -> Option<&(dyn Fn(usize, usize) + Sync)> {
++        self.progress
++    }
+ }
+ 
+ impl Default for EvalConfig<'_> {
+@@ -68,6 +76,7 @@ impl Default for EvalConfig<'_> {
+             tile_sizes: None,
+             threads: Some(&ThreadPool::Global),
+             cancel: CancelToken::new(),
++            progress: None,
+         }
+     }
+ }
+@@ -574,6 +583,73 @@ pub fn render<F: Function + RenderHints>(
+ #[cfg(test)]
+ mod test {
+     use super::*;
++
++    #[test]
++    fn progress_counts_completed_tiles_in_order_without_changing_pixels() {
++        use fidget_core::context::Tree;
++        use std::sync::Mutex;
++        let cfg = RenderConfig::from_size(40.into());
++        let shape = VmShape::from(Tree::x() + Tree::y());
++        for threads in [None, Some(&ThreadPool::Global)] {
++            let reports = Mutex::new(Vec::new());
++            let report = |completed, total| {
++                reports.lock().unwrap().push((completed, total))
++            };
++            let eval = EvalConfig {
++                threads,
++                tile_sizes: Some(TileSizes::new(&[16, 8]).unwrap()),
++                progress: Some(&report),
++                ..Default::default()
++            };
++            let actual =
++                render(shape.clone().try_into().unwrap(), &cfg, &eval).unwrap();
++            assert_eq!(
++                *reports.lock().unwrap(),
++                (0..=9).map(|n| (n, 9)).collect::<Vec<_>>()
++            );
++            let eval = EvalConfig {
++                progress: None,
++                ..eval
++            };
++            let expected =
++                render(shape.clone().try_into().unwrap(), &cfg, &eval).unwrap();
++            for (a, b) in actual.iter().zip(expected.iter()) {
++                assert_eq!(a.depth, b.depth);
++                assert_eq!(a.normal, b.normal);
++            }
++        }
++    }
++
++    #[test]
++    fn cancelled_tiles_do_not_report_completion() {
++        use fidget_core::context::Tree;
++        use std::sync::Mutex;
++        let reports = Mutex::new(Vec::new());
++        let cancel = CancelToken::new();
++        let report = |completed, total| {
++            reports.lock().unwrap().push((completed, total));
++            if completed == 1 {
++                cancel.cancel();
++            }
++        };
++        let eval = EvalConfig {
++            threads: None,
++            tile_sizes: Some(TileSizes::new(&[16, 8]).unwrap()),
++            cancel: cancel.clone(),
++            progress: Some(&report),
++        };
++        let shape = VmShape::from(Tree::x());
++        assert!(
++            render(
++                shape.try_into().unwrap(),
++                &RenderConfig::from_size(40.into()),
++                &eval
++            )
++            .is_none()
++        );
++        assert_eq!(*reports.lock().unwrap(), [(0, 9), (1, 9)]);
++    }
++
+     #[test]
+     fn cancellation_discards_a_partly_rendered_last_tile() {
+         use fidget_core::{context::Tree, vm::VmFunction};

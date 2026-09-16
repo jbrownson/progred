@@ -32,6 +32,10 @@ pollster.workspace = true
 puri-vello = { path = "../ui/puri-vello" }
 vello.workspace = true
 
+# The patched AArch64 JIT is tested on Apple Silicon macOS. Other targets retain VM.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+fidget-engine = { package = "fidget", git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6", default-features = false, features = ["jit"] }
+
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 clipboard-rs = "0.3.3"
 rfd = "0.17"

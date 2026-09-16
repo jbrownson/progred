@@ -272,6 +272,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "byteorder-lite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -652,6 +658,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "dynasm"
+version = "5.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd358e74d2f8d71a11b7a2c51c67ad5df3de06003b0596875e47bc09126c894e"
+dependencies = [
+ "bitflags 2.13.1",
+ "byteorder",
+ "lazy_static",
+ "proc-macro-error3",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "dynasmrt"
+version = "5.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6efe03f6bd356ae85eeea7ee14c2bf54e664a949d089d238364b5a99afbc4116"
+dependencies = [
+ "byteorder",
+ "dynasm",
+ "fnv",
+ "memmap2",
+]
+
+[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -810,6 +843,7 @@ source = "git+https://github.com/mkeeter/fidget?rev=0c89e87e1b3a6d15cc0976ab6ff0
 dependencies = [
  "document-features",
  "fidget-core",
+ "fidget-jit",
  "fidget-mesh",
  "fidget-raster",
  "fidget-wgpu",
@@ -849,6 +883,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fidget-jit"
+version = "0.5.0"
+dependencies = [
+ "arrayvec",
+ "dynasmrt",
+ "fidget-core",
+ "libc",
+ "static_assertions",
+ "windows 0.62.2",
+ "workspace-hack",
+]
+
+[[package]]
 name = "fidget-mesh"
 version = "0.5.0"
 source = "git+https://github.com/mkeeter/fidget?rev=0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6#0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6"
@@ -865,7 +912,6 @@ dependencies = [
 [[package]]
 name = "fidget-raster"
 version = "0.5.1"
-source = "git+https://github.com/mkeeter/fidget?rev=0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6#0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6"
 dependencies = [
  "fidget-core",
  "nalgebra",
@@ -925,6 +971,12 @@ dependencies = [
  "futures-sink",
  "spin",
 ]
+
+[[package]]
+name = "fnv"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
@@ -1599,6 +1651,12 @@ dependencies = [
  "polycool",
  "smallvec 1.15.2",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
@@ -2547,6 +2605,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
  "toml_edit",
+]
+
+[[package]]
+name = "proc-macro-error-attr3"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e564d14133360e1ae169ffde5da25881b5fa47261665b8e5713c212c27799da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "proc-macro-error3"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f0d4471b3436c22106b21913b1dda531558918ae9b7ec55d58aa84b43552233"
+dependencies = [
+ "proc-macro-error-attr3",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]

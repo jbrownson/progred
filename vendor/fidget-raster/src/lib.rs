@@ -1,0 +1,549 @@
+//! 2D and 3D rendering
+//!
+//! To render something, build a configuration object then call its `run`
+//! function, e.g. [`pixel::RenderConfig::run`] and
+//! [`voxel::RenderConfig::run`].
+#![warn(missing_docs)]
+use fidget_core::{
+    eval::Function,
+    render::{ImageSize, RenderHandle, ThreadPool, TileSizes},
+    shape::{Shape, ShapeVars},
+};
+use nalgebra::{Const, OPoint, Point2, Vector2};
+use rayon::prelude::*;
+use zerocopy::{Immutable, IntoBytes};
+
+pub mod effects;
+pub mod pixel;
+pub mod voxel;
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct Tile<const N: usize> {
+    /// Corner of this tile, in global screen (pixel) coordinates
+    pub corner: OPoint<usize, Const<N>>,
+}
+
+impl<const N: usize> Tile<N> {
+    /// Build a new tile from its global coordinates
+    #[inline]
+    pub(crate) fn new(corner: OPoint<usize, Const<N>>) -> Tile<N> {
+        Tile { corner }
+    }
+
+    /// Converts a relative position within the tile into a global position
+    ///
+    /// This function operates in pixel space, using the `.xy` coordinates
+    pub(crate) fn add(&self, pos: Vector2<usize>) -> Point2<usize> {
+        let corner = Point2::new(self.corner[0], self.corner[1]);
+        corner + pos
+    }
+}
+
+/// Helper struct to borrow from [`TileSizes`]
+///
+/// This object has the same guarantees as `TileSizes`, but trims items off the
+/// front of the `Vec<usize>` based on the image size.
+#[derive(Copy, Clone)]
+pub(crate) struct TileSizesRef<'a>(&'a [usize]);
+
+impl<'a> std::ops::Index<usize> for TileSizesRef<'a> {
+    type Output = usize;
+
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.0[i]
+    }
+}
+
+impl TileSizesRef<'_> {
+    /// Builds a new `TileSizesRef` based on the maximum tile size
+    fn new(tiles: &TileSizes, max_size: usize) -> TileSizesRef<'_> {
+        let i = tiles
+            .iter()
+            .position(|t| *t < max_size)
+            .unwrap_or(tiles.len())
+            .saturating_sub(1);
+        TileSizesRef(&tiles[i..])
+    }
+
+    /// Returns the last (smallest) tile size
+    pub fn last(&self) -> usize {
+        *self.0.last().unwrap()
+    }
+
+    /// Gets a tile size by index
+    pub fn get(&self, i: usize) -> Option<usize> {
+        self.0.get(i).copied()
+    }
+
+    /// Returns the data offset of a global pixel position within a root tile
+    ///
+    /// The root tile is implicit: it's set by the largest tile size and aligned
+    /// to multiples of that size.
+    #[inline]
+    pub(crate) fn pixel_offset(&self, pos: Point2<usize>) -> usize {
+        // Find the relative position within the root tile
+        let x = pos.x % self.0[0];
+        let y = pos.y % self.0[0];
+
+        // Apply the relative offset and find the data index
+        x + y * self.0[0]
+    }
+}
+
+/// Grand unified render function
+///
+/// This handles tile generation and building + calling render workers in
+/// parallel (using [`rayon`] for parallelism at the tile level).
+///
+/// It returns a set of output tiles, or `None` if rendering has been cancelled
+pub(crate) fn render_tiles<'a, F: Function, W: RenderWorker<'a, F>, C>(
+    shape: Shape<F>,
+    vars: &'a ShapeVars<f32>,
+    render_config: &'a W::Config,
+    eval_config: &'a C,
+    tile_sizes: TileSizesRef<'a>,
+) -> Option<Vec<(Tile<2>, W::Output)>>
+where
+    W::Config: Send + Sync,
+    C: EvalConfig + Send + Sync,
+{
+    use rayon::prelude::*;
+
+    let is_cancelled = || eval_config.is_cancelled();
+    if is_cancelled() {
+        return None;
+    }
+
+    let mut tiles = vec![];
+    let t = tile_sizes[0];
+    let width = render_config.width() as usize;
+    let height = render_config.height() as usize;
+    for i in 0..width.div_ceil(t) {
+        for j in 0..height.div_ceil(t) {
+            tiles.push(Tile::new(Point2::new(
+                i * tile_sizes[0],
+                j * tile_sizes[0],
+            )));
+        }
+    }
+
+    let progress = eval_config.progress();
+    let total = tiles.len();
+    if let Some(progress) = progress {
+        progress(0, total);
+    }
+    let mut rh = RenderHandle::new(shape);
+
+    let _ = rh.i_tape(&mut vec![]); // populate i_tape before cloning
+    if is_cancelled() {
+        return None;
+    }
+    let ts = tile_sizes;
+    // Serialize callbacks as well as the counter: parallel tile completion must
+    // not deliver an older count after a newer one. No per-pixel synchronization.
+    let completed = std::sync::Mutex::new(0);
+    let report = || {
+        if let Some(progress) = progress {
+            let mut completed = completed.lock().unwrap();
+            *completed += 1;
+            progress(*completed, total);
+        }
+    };
+    let init = || {
+        let rh = rh.clone();
+        let worker = W::new(render_config, ts, vars);
+        (worker, rh)
+    };
+
+    match eval_config.threads() {
+        None => {
+            let mut worker = W::new(render_config, tile_sizes, vars);
+            tiles
+                .into_iter()
+                .map(|tile| {
+                    if eval_config.is_cancelled() {
+                        Err(())
+                    } else {
+                        let pixels = worker
+                            .render_tile(&mut rh, tile, &is_cancelled)
+                            .ok_or(())?;
+                        report();
+                        Ok((tile, pixels))
+                    }
+                })
+                .collect::<Result<Vec<_>, ()>>()
+                .ok()
+        }
+
+        Some(p) => p.run(|| {
+            tiles
+                .into_par_iter()
+                .map_init(init, |(w, rh), tile| {
+                    if eval_config.is_cancelled() {
+                        Err(())
+                    } else {
+                        let pixels =
+                            w.render_tile(rh, tile, &is_cancelled).ok_or(())?;
+                        report();
+                        Ok((tile, pixels))
+                    }
+                })
+                .collect::<Result<Vec<_>, ()>>()
+                .ok()
+        }),
+    }
+}
+
+/// Helper trait for tiled rendering configuration
+pub(crate) trait EvalConfig {
+    fn threads(&self) -> Option<&ThreadPool>;
+    fn is_cancelled(&self) -> bool;
+    fn progress(&self) -> Option<&(dyn Fn(usize, usize) + Sync)> {
+        None
+    }
+}
+
+/// Trait for things that have a width and height in pixels
+pub trait RenderSize {
+    /// Width of the render, in voxels or pixels
+    fn width(&self) -> u32;
+    /// Height of the render, in voxels or pixels
+    fn height(&self) -> u32;
+}
+
+/// Helper trait for a tiled renderer worker
+pub(crate) trait RenderWorker<'a, F: Function> {
+    type Config: RenderSize;
+    type Output: Send;
+
+    /// Build a new worker
+    ///
+    /// Workers are typically built on a per-thread basis
+    fn new(
+        cfg: &'a Self::Config,
+        tile_sizes: TileSizesRef<'a>,
+        vars: &'a ShapeVars<f32>,
+    ) -> Self;
+
+    /// Render a single tile, or None if cancellation interrupts its work.
+    fn render_tile(
+        &mut self,
+        shape: &mut RenderHandle<F>,
+        tile: Tile<2>,
+        is_cancelled: &impl Fn() -> bool,
+    ) -> Option<Self::Output>;
+}
+
+/// Generic image type
+///
+/// The image is laid out in row-major order, and can be indexed either by a
+/// `usize` index or a `(row, column)` tuple.
+///
+/// ```text
+///        0 ------------> width (columns)
+///        |             |
+///        |             |
+///        |             |
+///        V--------------
+///   height (rows)
+///
+/// Users will likely be using one of the image typedefs ([`voxel::Image`] and
+/// [`pixel::Image`]).
+/// ```
+#[derive(Clone)]
+pub struct Image<P, S = ImageSize> {
+    data: Vec<P>,
+    size: S,
+}
+
+impl RenderSize for pixel::RenderSize {
+    fn width(&self) -> u32 {
+        self.width()
+    }
+    fn height(&self) -> u32 {
+        self.height()
+    }
+}
+
+impl RenderSize for voxel::RenderSize {
+    fn width(&self) -> u32 {
+        self.width()
+    }
+    fn height(&self) -> u32 {
+        self.height()
+    }
+}
+
+impl<P: Send, S: RenderSize + Sync> Image<P, S> {
+    /// Generates an image by computing a per-pixel function
+    ///
+    /// This should be called on the _output_ image; the closure takes `(x, y)`
+    /// tuples and is expected to capture one or more source images.
+    pub fn apply_effect<F: Fn(usize, usize) -> P + Send + Sync>(
+        &mut self,
+        f: F,
+        threads: Option<&ThreadPool>,
+    ) {
+        let r = |(y, row): (usize, &mut [P])| {
+            for (x, v) in row.iter_mut().enumerate() {
+                *v = f(x, y);
+            }
+        };
+
+        if let Some(threads) = threads {
+            threads.run(|| {
+                self.data
+                    .par_chunks_mut(self.size.width() as usize)
+                    .enumerate()
+                    .for_each(r)
+            })
+        } else {
+            self.data
+                .chunks_mut(self.size.width() as usize)
+                .enumerate()
+                .for_each(r)
+        }
+    }
+}
+
+impl<P: IntoBytes + Immutable, S: RenderSize> Image<P, S> {
+    /// Returns the raw bytes of the image
+    pub fn as_bytes(&self) -> &[u8] {
+        self.data.as_bytes()
+    }
+}
+
+impl<P, S: Default> Default for Image<P, S> {
+    fn default() -> Self {
+        Image {
+            data: vec![],
+            size: S::default(),
+        }
+    }
+}
+
+impl<P: Default + Clone, S: RenderSize> Image<P, S> {
+    /// Builds a new image filled with `P::default()`
+    pub fn new(size: S) -> Self {
+        Self {
+            data: vec![
+                P::default();
+                size.width() as usize * size.height() as usize
+            ],
+            size,
+        }
+    }
+}
+
+impl<P, S: Clone> Image<P, S> {
+    /// Returns the image size
+    pub fn size(&self) -> S {
+        self.size.clone()
+    }
+
+    /// Generates an image by mapping a simple function over each pixel
+    pub fn map<T, F: Fn(&P) -> T>(&self, f: F) -> Image<T, S> {
+        let data = self.data.iter().map(f).collect();
+        Image {
+            data,
+            size: self.size.clone(),
+        }
+    }
+
+    /// Returns the pixel data as a slice
+    pub fn as_slice(&self) -> &[P] {
+        &self.data
+    }
+
+    /// Decomposes the image into its components
+    pub fn take(self) -> (Vec<P>, S) {
+        (self.data, self.size)
+    }
+}
+
+impl<P, S: RenderSize> Image<P, S> {
+    /// Returns the image width
+    pub fn width(&self) -> usize {
+        self.size.width() as usize
+    }
+
+    /// Returns the image height
+    pub fn height(&self) -> usize {
+        self.size.height() as usize
+    }
+
+    /// Checks a `(row, column)` position
+    ///
+    /// Returns the input position in the 1D array if valid; panics otherwise
+    fn decode_position(&self, pos: (usize, usize)) -> usize {
+        let (row, col) = pos;
+        assert!(
+            row < self.height(),
+            "row ({row}) must be less than image height ({})",
+            self.height()
+        );
+        assert!(
+            col < self.width(),
+            "column ({col}) must be less than image width ({})",
+            self.width()
+        );
+        row * self.width() + col
+    }
+
+    /// Builds an image from its components
+    ///
+    /// Returns an error if `data` does not match the number of pixels in `size`
+    pub fn build(data: Vec<P>, size: S) -> Result<Self, BadPixelCount> {
+        let expected = u64::from(size.width()) * u64::from(size.height());
+        let actual = data.len();
+        if expected != actual as u64 {
+            return Err(BadPixelCount {
+                expected,
+                actual,
+                width: size.width(),
+                height: size.height(),
+            });
+        }
+        Ok(Self { data, size })
+    }
+}
+
+impl<P, S> Image<P, S> {
+    /// Iterates over pixel values
+    pub fn iter(&self) -> impl Iterator<Item = &P> + '_ {
+        self.data.iter()
+    }
+
+    /// Returns the number of pixels in the image
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Checks whether the image is empty
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+}
+
+impl<'a, P: 'a, S> IntoIterator for &'a Image<P, S> {
+    type Item = &'a P;
+    type IntoIter = std::slice::Iter<'a, P>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+impl<P, S> IntoIterator for Image<P, S> {
+    type Item = P;
+    type IntoIter = std::vec::IntoIter<P>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.into_iter()
+    }
+}
+
+impl<P, S> std::ops::Index<usize> for Image<P, S> {
+    type Output = P;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl<P, S> std::ops::IndexMut<usize> for Image<P, S> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data[index]
+    }
+}
+
+macro_rules! define_image_index {
+    ($ty:ty) => {
+        impl<P, S> std::ops::Index<$ty> for Image<P, S> {
+            type Output = [P];
+            fn index(&self, index: $ty) -> &Self::Output {
+                &self.data[index]
+            }
+        }
+
+        impl<P, S> std::ops::IndexMut<$ty> for Image<P, S> {
+            fn index_mut(&mut self, index: $ty) -> &mut Self::Output {
+                &mut self.data[index]
+            }
+        }
+    };
+}
+
+define_image_index!(std::ops::Range<usize>);
+define_image_index!(std::ops::RangeTo<usize>);
+define_image_index!(std::ops::RangeFrom<usize>);
+define_image_index!(std::ops::RangeInclusive<usize>);
+define_image_index!(std::ops::RangeToInclusive<usize>);
+define_image_index!(std::ops::RangeFull);
+
+/// Indexes an image with `(row, col)`
+impl<P, S: RenderSize> std::ops::Index<(usize, usize)> for Image<P, S> {
+    type Output = P;
+    fn index(&self, pos: (usize, usize)) -> &Self::Output {
+        let index = self.decode_position(pos);
+        &self.data[index]
+    }
+}
+
+impl<P, S: RenderSize> std::ops::IndexMut<(usize, usize)> for Image<P, S> {
+    fn index_mut(&mut self, pos: (usize, usize)) -> &mut Self::Output {
+        let index = self.decode_position(pos);
+        &mut self.data[index]
+    }
+}
+
+impl<P: Default + Copy + Clone> Image<P, voxel::RenderSize> {
+    /// Returns the image depth in voxels
+    pub fn depth(&self) -> usize {
+        self.size.depth() as usize
+    }
+}
+
+/// Three-channel color image
+pub type ColorImage = Image<[u8; 3]>;
+
+/// Error type for image builder
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error(
+    "bad pixel count: expected {expected} ({width} × {height}), got {actual}"
+)]
+pub struct BadPixelCount {
+    /// Expected pixel count from size
+    pub expected: u64,
+    /// Actual pixel count in data
+    pub actual: usize,
+    /// Expected width
+    pub width: u32,
+    /// Expected height
+    pub height: u32,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn image_construction() {
+        let i = Image::build(vec![1, 2, 3, 4, 5, 6], ImageSize::new(2, 3));
+        assert!(i.is_ok());
+
+        let i = Image::build(vec![1, 2, 3, 4, 5, 6], ImageSize::new(3, 2));
+        assert!(i.is_ok());
+
+        let i = Image::build(vec![1, 2, 3, 4, 5], ImageSize::new(2, 3));
+        let Err(e) = i else {
+            panic!("expected error, got valid image");
+        };
+        assert_eq!(
+            e,
+            BadPixelCount {
+                expected: 6,
+                actual: 5,
+                width: 2,
+                height: 3,
+            }
+        );
+    }
+}

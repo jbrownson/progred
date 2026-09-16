@@ -3,9 +3,21 @@
 use super::*;
 
 #[cfg(test)]
-mod diagnostics;
+pub(crate) mod diagnostics;
 
-const SOFTWARE_TILE_SIZES: &[usize] = &[32, 16, 8];
+// Meshing keeps VmShape independently; JIT benefits the much denser raster work.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+use fidget_engine::jit::JitShape as SoftwareShape;
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+use fidget_engine::vm::VmShape as SoftwareShape;
+
+fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    // Use JIT's own recommendation; smaller VM tiles waste time generating code.
+    return None;
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
+}
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Request {
@@ -16,7 +28,7 @@ pub(crate) struct Request {
 
 /// A worker-local compiled scene, shared by that request's resolution passes.
 pub(super) struct SoftwareScene {
-    objects: Vec<(VmShape, [u8; 3])>,
+    objects: Vec<(SoftwareShape, [u8; 3])>,
 }
 
 impl SoftwareScene {
@@ -24,7 +36,7 @@ impl SoftwareScene {
         let mut compiled = Vec::with_capacity(objects.len());
         for object in objects {
             cancel.check().ok()?;
-            compiled.push((VmShape::from(object.tree.clone()), object.color));
+            compiled.push((SoftwareShape::from(object.tree.clone()), object.color));
         }
         cancel.check().ok()?;
         Some(Self { objects: compiled })
@@ -42,7 +54,7 @@ impl SoftwareScene {
         });
         let eval = fidget_engine::raster::voxel::EvalConfig {
             cancel,
-            tile_sizes: Some(fidget_engine::render::TileSizes::new(SOFTWARE_TILE_SIZES).unwrap()),
+            tile_sizes: software_tiles(),
             ..Default::default()
         };
         let config = VoxelRenderConfig {
@@ -279,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn smaller_tiles_preserve_the_shaded_result() {
+    fn software_backend_preserves_the_vm_shaded_result() {
         let mut request = request(96.0, 72.0);
         request.preview.objects[0].tree =
             (Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.25).max(Tree::z());

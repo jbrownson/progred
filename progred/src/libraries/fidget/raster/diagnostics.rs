@@ -4,6 +4,67 @@ use crate::libraries::f64;
 use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod jit;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub(crate) use jit::compare_jit;
+
+pub(crate) fn compare_tiles(preview: &VolumePreview) {
+    let shapes: Vec<_> = preview
+        .objects
+        .iter()
+        .map(|o| VmShape::from(o.tree.clone()))
+        .collect();
+    let view = volume_view(
+        preview,
+        Camera::default(),
+        raster_size(preview.size, 1.0).unwrap(),
+    );
+    let config = VoxelRenderConfig {
+        world_to_model: view.world_to_model,
+        ..VoxelRenderConfig::from_size(view.size)
+    };
+    let mut reference: Option<Vec<GeometryPixel>> = None;
+    for tiles in [
+        &[32, 16, 8][..],
+        &[64, 32, 16, 8],
+        &[128, 64, 32, 16, 8],
+        &[256, 128, 64, 32, 16, 8],
+    ] {
+        let eval = fidget_engine::raster::voxel::EvalConfig {
+            tile_sizes: Some(fidget_engine::render::TileSizes::new(tiles).unwrap()),
+            ..Default::default()
+        };
+        let start = Instant::now();
+        let mut image = vec![
+            GeometryPixel::default();
+            view.size.width() as usize * view.size.height() as usize
+        ];
+        for shape in &shapes {
+            let pixels = fidget_engine::raster::voxel::render(
+                shape.clone().try_into().unwrap(),
+                &config,
+                &eval,
+            )
+            .unwrap();
+            for (dst, src) in image.iter_mut().zip(pixels.iter()) {
+                if src.depth > dst.depth {
+                    *dst = *src;
+                }
+            }
+        }
+        let elapsed = start.elapsed();
+        let differences = reference
+            .as_ref()
+            .map(|r| r.iter().zip(&image).filter(|(a, b)| a != b).count())
+            .unwrap_or(0);
+        eprintln!("tiles {tiles:?}: {elapsed:?}; {differences} differing geometry pixels");
+        if reference.is_none() {
+            reference = Some(image);
+        }
+    }
+}
+
 fn paths() -> (Recording, f64) {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
@@ -222,7 +283,7 @@ fn implicit_stock_diagnostics() {
             let start = Instant::now();
             let eval = fidget_engine::raster::voxel::EvalConfig {
                 tile_sizes: Some(
-                    fidget_engine::render::TileSizes::new(SOFTWARE_TILE_SIZES).unwrap(),
+                    fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap(),
                 ),
                 ..Default::default()
             };

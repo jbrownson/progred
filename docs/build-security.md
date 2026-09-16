@@ -110,6 +110,23 @@ existing `im`, `sized-chunks`, `bitmaps`, and `ttf-parser` versions, including
 unsoundness advisories for the first two. This review does not establish that
 the dependency graph is safe; sandboxed builds remain required.
 
+On 2026-09-15, two packages from that same revision were
+[vendored with local patches](../vendor/README.md): large-tape AArch64 JIT fixes
+and finer-grained raster cancellation. No other Fidget source was changed.
+JIT is enabled only for Apple Silicon macOS implicit rasterization; meshing and
+other platforms retain VM evaluation. Registry additions for `dynasmrt` and its
+assembler dependencies resolved with the seven-day minimum; unrelated locked
+versions were retained. A fresh RustSec scan found no new advisories, retaining
+the six existing warnings described above. The JIT build script only checks CPU
+features; compilation still runs inside Seatbelt.
+
+The macOS bundle now declares Apple's
+[allow-JIT entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.allow-jit)
+for Fidget's `MAP_JIT` mappings and per-thread write/execute protection. It does
+not allow arbitrary unsigned executable memory or disable hardened runtime or
+App Sandbox. The 196 headless JIT tests were also exercised in a minimal signed
+bundle with the same entitlements; this is not a GUI interaction test.
+
 ### Sandbox boundaries
 
 `sandbox-fetch` downloads the locked dependency graph into a Cargo home under
@@ -143,8 +160,9 @@ repository deliberately does not modify the user's global Rust tooling.
 
 `sandbox-app` packages the isolated release binary as
 `target/sandbox/app/Progred.app`, enables Apple's App Sandbox, and signs it
-ad hoc for local use. Its only additional capability is read/write access to
-files explicitly chosen through the app's native Open and Save panels. Launch
+ad hoc for local use. Its additional capabilities are read/write access to
+files explicitly chosen through the app's native Open and Save panels, and
+JIT-compiled code as described above. Launch
 that bundle, rather than using `cargo run`, to retain the runtime sandbox:
 
 ```sh

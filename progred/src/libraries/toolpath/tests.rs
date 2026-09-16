@@ -4,6 +4,7 @@ use crate::libraries::{control, number};
 mod chamfers;
 mod geometry;
 mod orientation;
+mod render_profile;
 mod scopes;
 
 impl Recording {
