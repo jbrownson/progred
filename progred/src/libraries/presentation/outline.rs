@@ -1,117 +1,166 @@
-//! An opt-in outline of an ordinary record. Ordering names fields, not
-//! copied values; all editing continues through their original locations.
+//! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
-use crate::display::{self as d, Layout, ProjectionInput, widget};
+use crate::display::{self as d, Layout, ProjectionInput};
 use crate::frame::Hovered;
-use gid::{CellId, Step, Value};
-use puri::Canvas;
+use gid::{CellId, Path, Step, Value};
 use std::rc::Rc;
 
-/// Repeated references describe one section. Unlisted fields remain in
-/// the ordinary record footer; the outline itself is the editable tab list.
 fn sections(value: &Value) -> Option<Vec<CellId>> {
-    let order = value.as_record()?.get(&OUTLINE)?.as_list()?;
-    let mut keys = Vec::new();
-    for (_, value) in order {
-        let key = value.as_cell()?;
-        if key != OUTLINE && !keys.contains(&key) {
-            keys.push(key);
-        }
-    }
-    Some(keys)
+    value
+        .as_record()?
+        .get(&OUTLINE)?
+        .as_list()?
+        .values()
+        .map(Value::as_cell)
+        .collect()
 }
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, Hovered>,
 ) -> Option<Layout<crate::Editor, Hovered>> {
     let keys = sections(input.value?)?;
+    let fields = input.value?.as_record()?.clone();
     let footer = extras(input, &keys);
-    let bodies = keys
-        .iter()
-        .map(|key| {
-            let field = d::structure::record_field(
-                input,
-                *key,
-                Some(d::structure::vertical_list(16.0, None)),
-            );
-            d::col(0, 8.0, [field.label, d::pad(18.0, field.value)])
-        })
-        .collect::<Vec<_>>();
-
+    let label = d::structure::record_label(input, OUTLINE);
     Some(Layout::program(Rc::new(move |context, build| {
-        let root = context.inputs.view.clone();
-        let sections: Rc<[Section]> = keys
-            .iter()
-            .map(|key| {
-                let path: Rc<[Step]> = context
-                    .path
-                    .iter()
-                    .cloned()
-                    .chain([Step::Key(*key)])
-                    .collect();
-                let default_closed = context
-                    .value
-                    .and_then(Value::as_record)
-                    .and_then(|fields| fields.get(key))
-                    .and_then(|value| {
-                        crate::selection::collapse_default_for_value(
-                            &context.inputs.sources,
-                            value,
-                            false,
-                        )
-                    })
-                    .unwrap_or(false);
-                let selected = context
-                    .inputs
-                    .selection
-                    .is_some_and(|selection| selection.path().starts_with(&path));
-                Section {
-                    key: *key,
-                    visible: selected
-                        || !crate::annotations::collapsed(
-                            context.inputs.annotations,
-                            &path,
-                            default_closed,
-                        ),
-                    path,
-                    default_closed,
-                }
-            })
-            .collect();
-        let tabs = d::structure::list(Some(d::partial({
-            let sections = sections.clone();
+        let source = context
+            .inputs
+            .edits
+            .source(context.path)
+            .map(|path| path.into_owned());
+        let entries = d::partial({
+            let fields = fields.clone();
             move |input| {
-                let key = input.value?.as_cell()?;
-                match sections.iter().find(|section| section.key == key) {
-                    Some(section) => section_tab(input, section, &root),
-                    None => crate::libraries::grap::shallow_cell(input),
-                }
+                let elements = input.value?.as_list()?;
+                let heading = d::partial({
+                    let fields = fields.clone();
+                    move |input| heading(input, &fields)
+                });
+                d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
+                    let Some(key) = elements.get(&position).and_then(Value::as_cell) else {
+                        return heading;
+                    };
+                    section(
+                        position,
+                        key,
+                        heading,
+                        source.as_deref(),
+                        &fields,
+                        &input.default_projection,
+                    )
+                })
             }
-        })));
-        let strip = d::descend(Step::Key(OUTLINE), Some(tabs), None);
-        let visible = sections
-            .iter()
-            .zip(&bodies)
-            .filter(|(section, _)| section.visible)
-            .map(|(_, body)| body.clone());
+        });
         d::col(
             0,
             24.0,
-            [strip].into_iter().chain(visible).chain(footer.clone()),
+            [d::col(
+                0,
+                8.0,
+                [
+                    label.clone(),
+                    d::descend(Step::Key(OUTLINE), Some(entries), None),
+                ],
+            )]
+            .into_iter()
+            .chain(footer.clone()),
         )
         .measure(context, build)
     })))
 }
 
-/// These are frame-local props for real sibling locations, not tab identities
-/// or a second store of visibility state.
-#[derive(Clone)]
-struct Section {
+fn section(
+    position: gid::Position,
     key: CellId,
-    path: Rc<[Step]>,
-    default_closed: bool,
-    visible: bool,
+    heading: Layout<crate::Editor, Hovered>,
+    source: Option<&[Step]>,
+    fields: &gid::Record,
+    default_projection: &d::Partial<crate::Editor, Hovered>,
+) -> Layout<crate::Editor, Hovered> {
+    let value = fields.get(&key).cloned();
+    let steps = [Step::Element(position), Step::Key(key)];
+    let body_projection = Some(d::compose_partials([
+        d::structure::list_column(16.0, None),
+        default_projection.clone(),
+    ]));
+    let body = match source {
+        Some(source) => d::jump_with_conject(
+            steps.clone(),
+            source
+                .iter()
+                .cloned()
+                .chain([Step::Key(key)])
+                .collect::<Path>(),
+            d::Conject::descend(),
+            body_projection,
+            None,
+        ),
+        None => match &value {
+            Some(value) => d::at_with_projection(steps.clone(), value, body_projection, None),
+            None => d::slot(),
+        },
+    };
+    Layout::program(Rc::new(move |context, build| {
+        let path: Path = context.path.iter().cloned().chain(steps.clone()).collect();
+        let (_, visible) = visibility(context.inputs, &path, value.as_ref());
+        d::col(
+            0,
+            8.0,
+            [heading.clone()]
+                .into_iter()
+                .chain(visible.then(|| d::pad(18.0, body.clone()))),
+        )
+        .measure(context, build)
+    }))
+}
+
+fn visibility(
+    cx: &crate::projection::Cx<'_>,
+    path: &[Step],
+    value: Option<&Value>,
+) -> (bool, bool) {
+    let default_closed = value
+        .and_then(|value| crate::selection::collapse_default_for_value(&cx.sources, value, false))
+        .unwrap_or(false);
+    let selected = cx.selection.is_some_and(|s| s.path().starts_with(path));
+    let visible = selected || !crate::annotations::collapsed(cx.annotations, path, default_closed);
+    (default_closed, visible)
+}
+
+fn heading(
+    input: &ProjectionInput<'_, crate::Editor, Hovered>,
+    fields: &gid::Record,
+) -> Option<Layout<crate::Editor, Hovered>> {
+    let key = input.value?.as_cell()?;
+    let value = fields.get(&key).cloned();
+    let target = input.targets.current();
+    crate::libraries::grap::shallow_cell_with(input, move |label| {
+        Layout::program(Rc::new(move |context, build| {
+            let path: Path = context
+                .path
+                .iter()
+                .cloned()
+                .chain([Step::Key(key)])
+                .collect();
+            let (default_closed, visible) = visibility(context.inputs, &path, value.as_ref());
+            let root = context.inputs.view.clone();
+            let select = target.select.clone();
+            d::on_activate(
+                d::row(
+                    6.0,
+                    [d::dim(if visible { "▾" } else { "▸" }), label.clone()],
+                ),
+                target.hover.clone(),
+                Rc::new(move |editor| {
+                    editor.set_collapsed(&root, &path, default_closed, Some(visible));
+                    select(editor);
+                    true
+                }),
+            )
+            .measure(context, build)
+        }))
+    })
 }
 
 fn extras(
@@ -131,79 +180,19 @@ fn extras(
     }
 }
 
-fn section_tab(
-    input: &ProjectionInput<'_, crate::Editor, Hovered>,
-    section: &Section,
-    root: &crate::workspace::Root,
-) -> Option<Layout<crate::Editor, Hovered>> {
-    let target = input.targets.current();
-    let hover = target.hover;
-    let select = target.select;
-    let section = section.clone();
-    let root = root.clone();
-    crate::libraries::grap::shallow_cell_with(input, move |label| {
-        let label = d::pad(4.0, label);
-        let label = if section.visible {
-            widget::before(
-                label,
-                Rc::new(move |context| {
-                    let brush = context.inputs.styles.accent_wash.brush.clone();
-                    Box::new(move |output, placement| {
-                        output.render(move |canvas, _| {
-                            canvas.fill(placement.rect, brush, puri::Affine::IDENTITY);
-                        });
-                    })
-                }),
-            )
-        } else {
-            label
-        };
-        d::on_activate(
-            label,
-            hover,
-            Rc::new(move |editor| {
-                editor.finish_gesture();
-                let before = editor.model.snapshot();
-                let Some(view) = editor.model.workspace.view_mut(&root) else {
-                    return false;
-                };
-                // A section may contain any value, including a scalar
-                // or a missing field. Its visibility is still one fold
-                // at that real location, not a new UI-state convention.
-                crate::annotations::set_collapsed(
-                    &mut view.annotations,
-                    &section.path,
-                    section.default_closed,
-                    section.visible,
-                );
-                // The click selects the actual outline element, keeping
-                // structural editing available and any hidden caret out.
-                select(editor);
-                crate::selection::break_edit_run(editor.model.selection.as_mut());
-                editor.model.history.record(before);
-                true
-            }),
-        )
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn outline_order_is_explicit_and_open_to_unrelated_fields() {
+    fn outline_order_preserves_repeated_occurrences_and_unrelated_fields() {
         let a = CellId::from_u128(1);
         let b = CellId::from_u128(2);
         let value = Value::record([
-            (
-                OUTLINE,
-                Value::list([b.into(), a.into(), b.into(), OUTLINE.into()]),
-            ),
+            (OUTLINE, Value::list([b.into(), a.into(), b.into()])),
             (a, Value::record([])),
         ]);
-        assert_eq!(sections(&value), Some(vec![b, a]));
-        // A missing section remains a real editable location, not a fabricated value.
+        assert_eq!(sections(&value), Some(vec![b, a, b]));
         assert!(!value.as_record().unwrap().contains_key(&b));
         assert!(
             sections(&Value::record([(

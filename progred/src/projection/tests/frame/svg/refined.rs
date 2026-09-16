@@ -16,21 +16,37 @@ fn editor_cam_outline_svg_captures() {
     // Source-only views: the same projection, with sections folded through
     // ordinary view state. No special screenshot or outline state in production.
     for (expanded, file) in [
-        ("settings_section", "cam_outline_overview.svg"),
-        ("tools_section", "cam_outline_tools.svg"),
+        (names["settings_section"], "cam_outline_overview.svg"),
+        (names["tools_section"], "cam_outline_tools.svg"),
+        (
+            crate::libraries::workspace::vocabulary::PANES,
+            "cam_outline_panes.svg",
+        ),
     ] {
         let mut editor = crate::test_editor(doc.clone());
-        for key in [
-            "settings_section",
-            "geometry_section",
-            "tools_section",
-            "operations_section",
-            "strategies_section",
-            "helpers_section",
-        ] {
-            if key != expanded {
-                editor.collapse(&crate::test_root(), &[Step::Key(names[key])], Some(true));
-            }
+        let outline = crate::libraries::presentation::vocabulary::OUTLINE;
+        let entries = doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&outline)
+            .unwrap()
+            .as_list()
+            .unwrap();
+        for (position, value) in entries {
+            let key = value.as_cell().unwrap();
+            editor.set_collapsed(
+                &crate::test_root(),
+                &[
+                    Step::Key(outline),
+                    Step::Element(position.clone()),
+                    Step::Key(key),
+                ],
+                false,
+                Some(key != expanded),
+            );
         }
         // Project only the document here; its pane data remains present.
         let (bench, extent) = place_with_annotations(

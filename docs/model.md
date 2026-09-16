@@ -91,8 +91,10 @@ document source, and `at` projects a supplied value without a source. `None`
 means no document location, not a missing value: `Some(path)` can name an absent
 field and still offer editing. A library source is present but read-only.
 Ordinary descendants of `at` stay detached, including cell follows; an explicit
-`jump` can establish a source again. The outline UI has not yet been reorganized
-to use jumps.
+`jump` can establish a source again. Outline list entries project their referenced
+fields through jumps: the heading is the real list element, and its body has an
+occurrence beneath that element. Repeating a field yields independent folds and
+selection locations while both bodies edit the same source field.
 
 Copy and fold do not resolve an occurrence through conject. The shared
 projection boundary installs handlers that copy the displayed `Value` and

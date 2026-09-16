@@ -9,26 +9,44 @@ pub fn list(
     partial(move |input| list_layout(input, child.clone()))
 }
 
-pub fn list_layout(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    list_with_layout(input, child, None)
-}
-
-/// The same editable list, with an explicit vertical presentation.
-pub fn vertical_list(
+/// An editable list without brackets or commas; items retain the standard
+/// occurrence paths, child projections, and pending insertion behavior.
+pub fn list_column(
     gap: f64,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
-    partial(move |input| list_with_layout(input, child.clone(), Some(gap)))
+    partial(move |input| list_column_with(input, gap, child.clone(), |_, entry| entry))
 }
 
-fn list_with_layout(
+/// Compose content beside each projected item, outside that item's value
+/// boundary. The list still owns element paths and pending insertion slots.
+pub(crate) fn list_column_with(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    gap: f64,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+    item: impl Fn(
+        gid::Position,
+        Layout<crate::Editor, crate::frame::Hovered>,
+    ) -> Layout<crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let entries = list_entries(input, child)?;
+    Some(if entries.is_empty() {
+        selectable_bracket(Delim::Bracket, row(0.0, []))
+    } else {
+        col(
+            0,
+            gap,
+            entries
+                .into_iter()
+                .map(|(position, entry)| item(position, entry)),
+        )
+    })
+}
+
+fn list_entries(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-    vertical_gap: Option<f64>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)>> {
     let elements = input.value?.as_list()?;
     let mut positions = elements
         .iter()
@@ -41,19 +59,26 @@ fn list_with_layout(
         positions.sort();
     }
     let child = child.map(|p| compose_partials([p, input.default_projection.clone()]));
-    let children = positions
-        .iter()
-        .map(|position| {
-            shared(descend(
-                Step::Element(position.clone()),
-                child.clone(),
-                None,
-            ))
-        })
-        .collect::<Vec<_>>();
-    if let Some(gap) = vertical_gap {
-        return Some(selectable_bracket(Delim::Bracket, col(0, gap, children)));
-    }
+    Some(
+        positions
+            .into_iter()
+            .map(|position| {
+                let layout = shared(descend(
+                    Step::Element(position.clone()),
+                    child.clone(),
+                    None,
+                ));
+                (position, layout)
+            })
+            .collect(),
+    )
+}
+
+pub fn list_layout(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let (positions, children): (Vec<_>, Vec<_>) = list_entries(input, child)?.into_iter().unzip();
     let mut flat = Vec::new();
     for (index, layout) in children.iter().enumerate() {
         if let Some(previous) = index.checked_sub(1).and_then(|i| positions.get(i)) {
@@ -128,6 +153,22 @@ pub(crate) fn record_field(
     key: CellId,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> RecordField<crate::Editor, crate::frame::Hovered> {
+    RecordField {
+        label: record_label(input, key),
+        value: descend(
+            Step::Key(key),
+            child.map(|p| compose_partials([p, input.default_projection.clone()])),
+            None,
+        ),
+    }
+}
+
+/// The ordinary field-name presentation and interaction, independent of how
+/// the enclosing record arranges its fields.
+pub(crate) fn record_label(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    key: CellId,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
     let fields = input.value.and_then(Value::as_record);
     let label = match input.env.name(key) {
         Some(name) => faced(name, Face::Label),
@@ -138,17 +179,10 @@ pub(crate) fn record_field(
     };
     let target = input.targets.at([Step::Key(key)]);
     let head = row(0.0, [label, dim(":")]);
-    RecordField {
-        label: if fields.is_some_and(|fields| fields.contains_key(&key)) {
-            activatable(head, target.hover, target.select)
-        } else {
-            pickable(head, target.hover, key.into())
-        },
-        value: descend(
-            Step::Key(key),
-            child.map(|p| compose_partials([p, input.default_projection.clone()])),
-            None,
-        ),
+    if fields.is_some_and(|fields| fields.contains_key(&key)) {
+        activatable(head, target.hover, target.select)
+    } else {
+        pickable(head, target.hover, key.into())
     }
 }
 

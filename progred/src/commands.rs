@@ -427,20 +427,4 @@ impl Editor {
         }
         changed
     }
-
-    #[cfg(test)]
-    pub(crate) fn collapse(
-        &mut self,
-        root: &crate::workspace::Root,
-        path: &[gid::Step],
-        closed: Option<bool>,
-    ) -> bool {
-        let changed = self
-            .model
-            .collapse(&self.stack.libraries, root, path, closed);
-        if changed {
-            self.finish_gesture();
-        }
-        changed
-    }
 }

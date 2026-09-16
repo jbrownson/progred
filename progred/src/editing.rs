@@ -36,13 +36,6 @@ pub(crate) fn annotate(app: &mut Editor, root: &Root, path: &[Step], state: Valu
     }
 }
 
-#[cfg(test)]
-pub(crate) fn insert(app: &mut Editor, root: &Root, path: &[Step]) {
-    if let Some(pending) = selection::pending_after(root, &app.sources(), path) {
-        app.model.selection = Some(pending);
-    }
-}
-
 pub(crate) fn start_gesture(
     app: &mut Editor,
     continuation: Box<dyn crate::display::widget::gesture::Gesture<Editor>>,

@@ -221,26 +221,37 @@ Explicit `{render: expression}` values retain their ordinary display behavior.
 
 The presentation library also offers an opt-in record outline:
 `{outline: [field-a, field-b], field-a: ..., field-b: ...}`. The list orders
-field references, not copies of their contents. The actual list is projected
-at the top with the ordinary list combinator and a local element partial:
-each element shows the field's current name and toggles its section on click.
-Highlighted elements denote visible sections; several may be visible at once.
-The click selects that actual list element, so ordinary navigation, insertion,
-deletion, and picking still work. Removing an element removes only the reference,
-not the section's field.
+field references, not copies of their contents. The ordinary `outline:` field
+label selects the list and reads its displayed name from the current definition.
+The list sits below the label without another indent, giving record and list
+selections distinct bounds even without extra fields. Select-all still reaches
+the root; deleting the outline field leaves the remaining record in its ordinary
+presentation. The list uses a vertical, unbracketed presentation with a local
+element partial for the field's name and
+disclosure heading. An item-composition callback adds the indented body outside
+the heading's cell boundary, so reference selection and library tint cover only
+the heading, not the separately projected source field. There is no separate
+toggle strip or selected-tab color. The same list-entry combinator
+supplies stable element paths and pending insertion for both ordinary bracketed
+lists and these columns. Empty columns retain an ordinary empty-list handle.
 
-Visibility uses the existing undoable view fold at the section's real field
-path, without document edits or a separate tab-state convention. A section
-containing the active selection remains visible; toggling it selects the list
-element, so no editor is hidden beneath its caret. Section headings retain
-ordinary field selection, and section lists use the shared list projection
-with vertical spacing. Computed outlines use the same occurrence-local toggles;
-their fold defaults come from the displayed section values, not document lookup.
-The outline has no outer braces. Only unlisted fields appear in an ordinary
-record footer, omitted when there are no extras or pending field insertion.
-Its braces select the whole record; it has no separate fold state or control.
-Duplicate references show one section; a missing referenced field gets its
-ordinary empty picker. A malformed outline declines to the normal projection.
+A heading selects the real list element, so navigation, insertion, deletion,
+and picking remain list operations. Removing an entry removes only the reference,
+not the source field. The body uses `jump` at `outline / element / field` to the
+source record's field, composing with any enclosing conject. Repeated entries
+therefore share document edits but have independent selection and fold state.
+Section lists use the same unbracketed column with spacing between items.
+Computed outlines use `at` for their bodies instead: copy and folding remain
+available without inventing a document source.
+
+Visibility uses the existing undoable fold annotation at each body occurrence,
+without document edits or a separate state store. Clicking a heading folds its
+body and selects the heading, keeping selection out of hidden content. The
+outline has no outer braces. Only unlisted fields appear in an ordinary record
+footer, omitted when there are no extras or pending field insertion. Its braces
+select the whole record; it has no separate fold state or control. A missing
+referenced source field gets its ordinary empty picker. A malformed outline
+declines to the normal projection.
 This is a library presentation available at any record, not a special root or
 workspace model. Raw still projects the underlying record normally.
 
