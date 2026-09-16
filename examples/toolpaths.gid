@@ -2,10 +2,11 @@
   "binders": {
     "abs": 9f71b219018a191fab7b726732645ab1,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
+    "action": d61047fd27a4906d8cd0034d36ad55ad,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": e44590bd0560cc22dcf6397197ce5635,
     "axial": 1e87f4d476a2d51539d4c221b068b9f4,
-    "axial_offset": fc3106b1d28e0f6073ca2377b9ba07b5,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
     "axis_x": 854f507d94f7d7f2dd9ac31d9f0ab28e,
     "axis_y": 422dbc64510c54c4b40c5f566e8af3ba,
@@ -26,16 +27,17 @@
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
-    "chamfer_edge": 53d67bcb2a0efe98ee416b8e8335ff6b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "chamfer_pass": 2a4f688c267d9c27975018f4f0a1b440,
     "chamfer_ring": 34487212300c3d464978ba26599fb47f,
     "chamfer_stepover": fb027d8b1e4955251d78caa3695efdd8,
-    "chamfer_width": 1d23c30a09732d044759282969c23ca6,
+    "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
-    "compose_points": 799e01d49e65b5aa20285c3f958fb541,
     "condition": 91c786935eb5794b005582b8e7941bc2,
+    "contact_height": 7f0ab3541e671a55a1b4593a2e54484c,
     "contour_chamfer": e3bb9b579cb298a10aa72f7fda3bb0be,
+    "contour_pass": 9889f13ee9513b7e2fd600595fe551a9,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "control_initial": 133b05e33c166614831f01de2365f49c,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
@@ -45,10 +47,11 @@
     "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
     "crossing_passes": 60358199da0169a8a765ca701378007e,
     "crosswise_chamfer": 6bf30421968e3aac8b148be33306297b,
-    "crosswise_row": f0e4bfd883ed1ee72f2bbbc4e96ed7f6,
     "cube": 650c98379ab879a6b902b0bc94305103,
     "cube_chamfers": 3e2d123b5ca89358f9e8d407292f0511,
+    "curve": ce7ef50c2548c3a07fb35390a5570406,
     "cut_axis": 7132cc8a45610a94bc5d8398b7023279,
+    "cut_strip": 7f997b75953d161eaf38f6f2096c3471,
     "cutter_diameter": 900b8ac5725af07ea981455d015541bf,
     "cutting": d22a92c1020be6f690b5cb738b728fd3,
     "cutting_length": 00ede4dd6db731555d83f644401b09ec,
@@ -58,11 +61,11 @@
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "done": b19fe726e3c2eab7a5d81cda12cf44b7,
     "dot": 81b6551b0b5376142721b23ace40847f,
-    "edge_length": 14801b8ce05f15d0f5b66e5e03ec8e25,
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "evenly_spaced": 19307c3d1b09e230632c61a9f88170b5,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
@@ -70,6 +73,7 @@
     "face": dfc8f0866c65bc9aa4162913a1cc446f,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
     "face_paths": 2fd754abf2b4f15b441b8b545af455be,
+    "factor": e3eaeacd73376db4ec0b94ea9a4faee3,
     "false": 8fcc0a2e5f26c72efd9e917a28919801,
     "feed_direction": 4f961bef2d597db99a7f3e7c2e211181,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
@@ -89,11 +93,14 @@
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_face": 26c724208a09da7103cdd90bb5b4ae48,
+    "length": 52ce1d9d7a07fc917126f7ce3f2e20c1,
     "lerp": 432ad7a31ef129e353e251419e690ca1,
     "less": ed44dbf5b4cdf5c952e1ef00f219b655,
     "let": f4f93c70910c4d8a8eeb8e049cc64c14,
+    "line": 01cfce0acb730dfb2dcf3e57dc12889e,
     "line_radius": 4de64314b3008dcdf01ac387dc68e63f,
     "line_to": e88873219d230571430941334a51600f,
+    "map_axes": 5d5bf7f3beb0c1cba07226bab9683852,
     "map_points": 923fb213d0e56383539b43b1fc807458,
     "mapping": a33c6e235d5d94885fcb1afff59e94e5,
     "match": b3f6a62e4926889bcfcd338025f4a6f9,
@@ -121,6 +128,7 @@
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
+    "offset": 879a809cb198076af71cc1164d761a00,
     "op1": b8cdf2aa2f55d823bcc0c67123fa2b56,
     "op1_chamfers": 68680a50ef0b37d3c27fcae16349db6b,
     "op2": d0116cda22f0461688928cf2ba47184e,
@@ -129,12 +137,14 @@
     "orientation": ddb447a86cf765e6a19f3c448882659e,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "parallel_strokes": 058f67b593d4c41d00e53c2e5409a5c7,
     "parameters": 6f0875ea2329b14673435cc13e2836d0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
+    "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
     "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "profile_radius": 0c43e0deeecda93da913261dc2786878,
@@ -144,14 +154,15 @@
     "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
     "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
-    "radial_offset": fb8446f4c4ccf00087add408de715de6,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_face": 5999e385d066a0034fda21e9e280f265,
+    "rotate_paths": acbb966cac9d34d8a150c48c5b4094a1,
     "row_direction": 6e582a6a57d4006a0820b079cb351685,
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
+    "scaled_point": dfb16dc785610b93fa62389983e57594,
     "scene": d6757ca4cb992116fe31ede39530709d,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "setup_up": 775e067bc167e68a3145d0a5f4bbc6e9,
@@ -163,6 +174,7 @@
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
     "square": 6164efe43a126d79bcd252a17a9453c1,
     "square_diameter": 238159ce4edc3084ab92ebc217776003,
+    "square_side_offset": d5e2e43a5cdf9e90a3fad816b0fe0cfd,
     "square_tool": 9aabe44cdff817c10ba34f605620dda2,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
@@ -172,8 +184,8 @@
     "stock": c7dc9217fe6809ea89ba31d458706e5c,
     "stock_max": 607b5e9a8636c8258959709bf0c3506b,
     "stock_min": 8ea1172ebbc67d795f0810ee5ca04d00,
-    "strategy": 711bb3375b38f4ac190c0f4efe021547,
-    "stroke_offset": 25b0aa162a927cafbbbb62654a1a23bb,
+    "strip": f6f8d44aa583af44e8f79aae060ca93a,
+    "stroke": f7935102335e159a8ca68d215258bea0,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
@@ -187,16 +199,17 @@
     "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
     "toolpaths": faaa4df9bd9bc104fc05c09a722f1ae9,
     "top": f64ba93e56b40a2df81a65508057dbf5,
+    "translated_points": 63ef0b4b59f4168765663a45938abf3e,
     "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
     "u1": b64d80018a2257079ca8b6b617d9a6d9,
-    "unit_diagonal": e799e755ddb8523e9a59dff1323ac938,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "v0": a5204d915920fe26c29525020c2eae4e,
     "v1": d9722fd96f763e6016557b9e5cd485e7,
     "value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "vector": cd6c67e9d2143ed60ce52b6e68db9396,
     "view": 047d43dfc6ba836cd75a7c840f4b9df7,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
@@ -392,8 +405,11 @@
         function: do,
       },
     },
-    axial_offset: {
-      name: "axial offset",
+    across: {
+      name: "across",
+    },
+    action: {
+      name: "action",
     },
     axis_x: {
       name: "axis x",
@@ -693,308 +709,80 @@
     chamfer: {
       name: "chamfer",
     },
-    chamfer_edge: {
-      name: "chamfer edge",
-    },
     chamfer_pair: {
       name: "chamfer pair",
-    },
-    chamfer_ring: {
-      name: "chamfer ring",
-      params: [
-        chamfer_edge,
-        orientation,
-        cutter_diameter,
-        tool_length,
-        strategy,
-        chamfer_width,
-        stepover,
-      ],
-      body: {
-        expressions: [
-          {
-            tool_length: tool_length,
-            chamfer_width: chamfer_width,
-            stepover: stepover,
-            chamfer_edge: chamfer_edge,
-            function: strategy,
-            cutter_diameter: cutter_diameter,
-            orientation: {
-              right: orientation,
-              function: compose_points,
-              left: top,
-            },
-          },
-          {
-            tool_length: tool_length,
-            chamfer_width: chamfer_width,
-            stepover: stepover,
-            chamfer_edge: chamfer_edge,
-            function: strategy,
-            cutter_diameter: cutter_diameter,
-            orientation: {
-              right: orientation,
-              function: compose_points,
-              left: quarter_turn,
-            },
-          },
-          {
-            tool_length: tool_length,
-            chamfer_width: chamfer_width,
-            stepover: stepover,
-            chamfer_edge: chamfer_edge,
-            function: strategy,
-            cutter_diameter: cutter_diameter,
-            orientation: {
-              right: orientation,
-              function: compose_points,
-              left: half_turn,
-            },
-          },
-          {
-            tool_length: tool_length,
-            chamfer_width: chamfer_width,
-            stepover: stepover,
-            chamfer_edge: chamfer_edge,
-            function: strategy,
-            cutter_diameter: cutter_diameter,
-            orientation: {
-              right: orientation,
-              function: compose_points,
-              left: three_quarter_turn,
-            },
-          },
-        ],
-        function: do,
-      },
     },
     chamfer_stepover: {
       name: "chamfer stepover",
       f64: 0x9a9999999999a93f,
     },
-    chamfer_width: {
-      name: "chamfer width",
+    chamfer_strip: {
+      name: "chamfer strip",
     },
     compensation: {
       name: "compensation",
     },
-    compose_points: {
-      name: "compose point mappings",
+    contact_height: {
+      name: "contact height",
+    },
+    contour_chamfer: {
+      name: "contour chamfer",
       params: [
-        left,
-        right,
+        cutter_diameter,
+        contact_height,
       ],
       body: {
         params: [
-          x,
-          y,
-          z,
+          strip,
         ],
         body: {
           function: where,
           expression: {
-            function: left,
-            y: y,
-            x: x,
-            z: z,
+            function: map_points,
+            mapping: {
+              function: translated_points,
+              offset: {
+                normal: normal,
+                function: square_side_offset,
+                contact_height: contact_height,
+                cutter_diameter: cutter_diameter,
+                tool_axis: tool_axis,
+              },
+            },
+            expression: {
+              end: {
+                function: curve,
+                t: {
+                  f64: 0x000000000000f03f,
+                },
+              },
+              start: {
+                function: curve,
+                t: {
+                  f64: 0x0000000000000000,
+                },
+              },
+              function: line,
+              tool_axis: tool_axis,
+            },
           },
           bindings: [
             {
-              subject: {
-                function: right,
-                y: y,
-                x: x,
-                z: z,
-              },
+              subject: strip,
               pattern: {
-                y: {
-                  bind: y,
+                normal: {
+                  bind: normal,
                 },
-                x: {
-                  bind: x,
+                curve: {
+                  bind: curve,
                 },
-                z: {
-                  bind: z,
+                across: {
+                  bind: tool_axis,
                 },
               },
             },
           ],
         },
-      },
-    },
-    contour_chamfer: {
-      name: "contour chamfer",
-      params: [
-        chamfer_edge,
-        orientation,
-        cutter_diameter,
-        tool_length,
-      ],
-      body: {
-        function: where,
-        expression: {
-          function: map_points,
-          mapping: {
-            params: [
-              x,
-              y,
-              z,
-            ],
-            body: {
-              function: orientation,
-              y: {
-                right: axial_offset,
-                function: sum,
-                left: {
-                  right: radial_offset,
-                  function: sum,
-                  left: y,
-                },
-              },
-              x: x,
-              z: {
-                right: axial_offset,
-                function: subtract,
-                left: {
-                  right: radial_offset,
-                  function: sum,
-                  left: z,
-                },
-              },
-            },
-          },
-          expression: {
-            expressions: [
-              {
-                function: where,
-                expression: {
-                  function: start_at,
-                  y: y,
-                  x: x,
-                  tool_axis: tool_axis,
-                  z: z,
-                },
-                bindings: [
-                  {
-                    subject: {
-                      function: chamfer_edge,
-                      t: {
-                        f64: 0x0000000000000000,
-                      },
-                    },
-                    pattern: {
-                      y: {
-                        bind: y,
-                      },
-                      x: {
-                        bind: x,
-                      },
-                      z: {
-                        bind: z,
-                      },
-                    },
-                  },
-                ],
-              },
-              {
-                function: where,
-                expression: {
-                  function: line_to,
-                  y: y,
-                  x: x,
-                  z: z,
-                },
-                bindings: [
-                  {
-                    subject: {
-                      function: chamfer_edge,
-                      t: {
-                        f64: 0x000000000000f03f,
-                      },
-                    },
-                    pattern: {
-                      y: {
-                        bind: y,
-                      },
-                      x: {
-                        bind: x,
-                      },
-                      z: {
-                        bind: z,
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-            function: do,
-          },
-        },
-        bindings: [
-          {
-            subject: {
-              right: {
-                right: {
-                  f64: 0x000000000000f03f,
-                },
-                function: hypot,
-                left: {
-                  f64: 0x000000000000f03f,
-                },
-              },
-              function: divide,
-              left: {
-                f64: 0x000000000000f03f,
-              },
-            },
-            bind: unit_diagonal,
-          },
-          {
-            subject: {
-              right: unit_diagonal,
-              function: multiply,
-              left: {
-                right: {
-                  f64: 0x0000000000000040,
-                },
-                function: divide,
-                left: cutter_diameter,
-              },
-            },
-            bind: radial_offset,
-          },
-          {
-            subject: {
-              right: unit_diagonal,
-              function: multiply,
-              left: {
-                right: {
-                  f64: 0x0000000000000040,
-                },
-                function: divide,
-                left: tool_length,
-              },
-            },
-            bind: axial_offset,
-          },
-          {
-            subject: {
-              function: orientation,
-              y: {
-                right: unit_diagonal,
-                function: subtract,
-                left: {
-                  f64: 0x0000000000000000,
-                },
-              },
-              x: {
-                f64: 0x0000000000000000,
-              },
-              z: unit_diagonal,
-            },
-            bind: tool_axis,
-          },
-        ],
       },
     },
     control_depth: {
@@ -1136,306 +924,78 @@
     crosswise_chamfer: {
       name: "crosswise chamfer",
       params: [
-        chamfer_edge,
-        chamfer_width,
-        orientation,
         stepover,
       ],
       body: {
-        expressions: [
-          {
-            function: require,
-            condition: {
-              operand: stepover,
-              function: is_finite,
-            },
-          },
-          {
-            function: require,
-            condition: {
-              right: stepover,
-              function: less,
-              left: {
-                f64: 0x0000000000000000,
-              },
-            },
-          },
-          {
-            function: require,
-            condition: {
-              operand: chamfer_width,
-              function: is_finite,
-            },
-          },
-          {
-            function: where,
-            expression: {
-              expressions: [
-                {
-                  function: require,
-                  condition: {
-                    operand: segments,
-                    function: is_finite,
-                  },
-                },
-                {
-                  initial: {
-                    f64: 0x0000000000000000,
-                  },
-                  step: {
-                    params: [
-                      state,
-                    ],
-                    body: {
-                      subject: {
-                        right: state,
-                        function: less,
-                        left: segments,
-                      },
-                      function: match,
-                      cases: [
-                        {
-                          pattern: {
-                            bool: true,
-                          },
-                          expression: {
-                            absent: done,
-                          },
-                        },
-                        {
-                          pattern: {
-                            bool: false,
-                          },
-                          expression: {
-                            expressions: [
-                              {
-                                stroke_offset: stroke_offset,
-                                chamfer_edge: chamfer_edge,
-                                function: crosswise_row,
-                                t: {
-                                  right: segments,
-                                  function: divide,
-                                  left: state,
-                                },
-                                tool_axis: tool_axis,
-                                orientation: orientation,
-                              },
-                              {
-                                right: {
-                                  f64: 0x000000000000f03f,
-                                },
-                                function: sum,
-                                left: state,
-                              },
-                            ],
-                            function: do,
-                          },
-                        },
-                      ],
-                    },
-                  },
-                  function: iterate,
-                },
-              ],
-              function: do,
-            },
-            bindings: [
-              {
-                subject: {
-                  function: chamfer_edge,
-                  t: {
-                    f64: 0x0000000000000000,
-                  },
-                },
-                pattern: {
-                  y: {
-                    bind: ny,
-                  },
-                  x: {
-                    bind: nx,
-                  },
-                  z: {
-                    bind: nz,
-                  },
-                },
-              },
-              {
-                subject: {
-                  function: chamfer_edge,
-                  t: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                pattern: {
-                  y: {
-                    bind: y,
-                  },
-                  x: {
-                    bind: x,
-                  },
-                  z: {
-                    bind: z,
-                  },
-                },
-              },
-              {
-                subject: {
-                  right: {
-                    right: nz,
-                    function: subtract,
-                    left: z,
-                  },
-                  function: hypot,
-                  left: {
-                    right: {
-                      right: ny,
-                      function: subtract,
-                      left: y,
-                    },
-                    function: hypot,
-                    left: {
-                      right: nx,
-                      function: subtract,
-                      left: x,
-                    },
-                  },
-                },
-                bind: edge_length,
-              },
-              {
-                subject: {
-                  right: {
-                    operand: {
-                      right: stepover,
-                      function: divide,
-                      left: edge_length,
-                    },
-                    function: ceil,
-                  },
-                  function: max,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                bind: segments,
-              },
-              {
-                subject: {
-                  right: {
-                    right: {
-                      f64: 0x000000000000f03f,
-                    },
-                    function: hypot,
-                    left: {
-                      f64: 0x000000000000f03f,
-                    },
-                  },
-                  function: divide,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                bind: unit_diagonal,
-              },
-              {
-                subject: {
-                  right: {
-                    f64: 0x0000000000000040,
-                  },
-                  function: divide,
-                  left: {
-                    right: unit_diagonal,
-                    function: multiply,
-                    left: chamfer_width,
-                  },
-                },
-                bind: stroke_offset,
-              },
-              {
-                subject: {
-                  function: orientation,
-                  y: unit_diagonal,
-                  x: {
-                    f64: 0x0000000000000000,
-                  },
-                  z: unit_diagonal,
-                },
-                bind: tool_axis,
-              },
-            ],
-          },
+        params: [
+          strip,
         ],
-        function: do,
-      },
-    },
-    crosswise_row: {
-      name: "crosswise row",
-      params: [
-        chamfer_edge,
-        orientation,
-        t,
-        stroke_offset,
-        tool_axis,
-      ],
-      body: {
-        function: where,
-        expression: {
-          function: map_points,
-          mapping: orientation,
+        body: {
+          function: where,
           expression: {
             expressions: [
               {
-                function: start_at,
-                y: {
-                  right: stroke_offset,
-                  function: sum,
-                  left: y,
-                },
-                x: x,
-                tool_axis: tool_axis,
-                z: {
-                  right: stroke_offset,
-                  function: subtract,
-                  left: z,
+                function: require,
+                condition: {
+                  operand: width,
+                  function: is_finite,
                 },
               },
               {
-                function: line_to,
-                y: {
-                  right: stroke_offset,
-                  function: subtract,
-                  left: y,
+                stepover: stepover,
+                length: length,
+                function: parallel_strokes,
+                offset: {
+                  function: scaled_point,
+                  vector: across,
+                  factor: {
+                    right: {
+                      f64: 0x0000000000000040,
+                    },
+                    function: divide,
+                    left: width,
+                  },
                 },
-                x: x,
-                z: {
-                  right: stroke_offset,
-                  function: sum,
-                  left: z,
+                curve: curve,
+                stroke: {
+                  params: [
+                    start,
+                    end,
+                  ],
+                  body: {
+                    end: end,
+                    start: start,
+                    function: line,
+                    tool_axis: normal,
+                  },
                 },
               },
             ],
             function: do,
           },
+          bindings: [
+            {
+              subject: strip,
+              pattern: {
+                normal: {
+                  bind: normal,
+                },
+                length: {
+                  bind: length,
+                },
+                curve: {
+                  bind: curve,
+                },
+                across: {
+                  bind: across,
+                },
+                width: {
+                  bind: width,
+                },
+              },
+            },
+          ],
         },
-        bindings: [
-          {
-            subject: {
-              function: chamfer_edge,
-              t: t,
-            },
-            pattern: {
-              y: {
-                bind: y,
-              },
-              x: {
-                bind: x,
-              },
-              z: {
-                bind: z,
-              },
-            },
-          },
-        ],
       },
     },
     cube_chamfers: {
@@ -1446,31 +1006,45 @@
       body: {
         function: where,
         expression: {
-          tool_length: cutting_length,
-          chamfer_width: chamfer_width,
-          stepover: chamfer_stepover,
-          chamfer_edge: chamfer_edge,
-          strategy: crosswise_chamfer,
           function: chamfer_ring,
-          cutter_diameter: square_diameter,
-          orientation: orientation,
+          program: {
+            params: [],
+            body: {
+              function: rotate_paths,
+              orientation: orientation,
+              program: {
+                params: [],
+                body: {
+                  function: cut_strip,
+                  strip: strip,
+                },
+              },
+            },
+          },
         },
         bindings: [
+          {
+            subject: chamfer_pass,
+            bind: cut_strip,
+          },
           {
             subject: {
               function: cube,
             },
             pattern: {
-              chamfer_width: {
-                bind: chamfer_width,
-              },
-              chamfer_edge: {
-                bind: chamfer_edge,
+              chamfer_strip: {
+                bind: strip,
               },
             },
           },
         ],
       },
+    },
+    curve: {
+      name: "curve",
+    },
+    cut_strip: {
+      name: "cut strip",
     },
     slope: {
       name: "diagonal direction",
@@ -1675,11 +1249,148 @@
         ],
       },
     },
-    edge_length: {
-      name: "edge length",
-    },
     edge_limit: {
       name: "edge limit",
+    },
+    chamfer_pass: {
+      name: "end-cut chamfer pass",
+      stepover: chamfer_stepover,
+      function: crosswise_chamfer,
+    },
+    evenly_spaced: {
+      name: "evenly spaced",
+      params: [
+        length,
+        stepover,
+        action,
+      ],
+      body: {
+        expressions: [
+          {
+            function: require,
+            condition: {
+              operand: length,
+              function: is_finite,
+            },
+          },
+          {
+            function: require,
+            condition: {
+              right: length,
+              function: less,
+              left: {
+                f64: 0x0000000000000000,
+              },
+            },
+          },
+          {
+            function: require,
+            condition: {
+              operand: stepover,
+              function: is_finite,
+            },
+          },
+          {
+            function: require,
+            condition: {
+              right: stepover,
+              function: less,
+              left: {
+                f64: 0x0000000000000000,
+              },
+            },
+          },
+          {
+            function: where,
+            expression: {
+              expressions: [
+                {
+                  function: require,
+                  condition: {
+                    operand: segments,
+                    function: is_finite,
+                  },
+                },
+                {
+                  initial: {
+                    f64: 0x0000000000000000,
+                  },
+                  step: {
+                    params: [
+                      state,
+                    ],
+                    body: {
+                      subject: {
+                        right: state,
+                        function: less,
+                        left: segments,
+                      },
+                      function: match,
+                      cases: [
+                        {
+                          pattern: {
+                            bool: true,
+                          },
+                          expression: {
+                            absent: done,
+                          },
+                        },
+                        {
+                          pattern: {
+                            bool: false,
+                          },
+                          expression: {
+                            expressions: [
+                              {
+                                function: action,
+                                t: {
+                                  right: segments,
+                                  function: divide,
+                                  left: state,
+                                },
+                              },
+                              {
+                                right: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                function: sum,
+                                left: state,
+                              },
+                            ],
+                            function: do,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  function: iterate,
+                },
+              ],
+              function: do,
+            },
+            bindings: [
+              {
+                subject: {
+                  right: {
+                    operand: {
+                      right: stepover,
+                      function: divide,
+                      left: length,
+                    },
+                    function: ceil,
+                  },
+                  function: max,
+                  left: {
+                    f64: 0x000000000000f03f,
+                  },
+                },
+                bind: segments,
+              },
+            ],
+          },
+        ],
+        function: do,
+      },
     },
     face_pair: {
       name: "face pair",
@@ -1736,6 +1447,9 @@
         ],
       },
     },
+    factor: {
+      name: "factor",
+    },
     feed_direction: {
       name: "feed direction",
     },
@@ -1747,21 +1461,6 @@
         expression: {
           function: quote,
           expression: {
-            chamfer_width: {
-              unquote: {
-                right: {
-                  right: {
-                    f64: 0x000000000000f03f,
-                  },
-                  function: hypot,
-                  left: {
-                    f64: 0x000000000000f03f,
-                  },
-                },
-                function: multiply,
-                left: chamfer,
-              },
-            },
             normal: {
               unquote: {
                 params: [
@@ -1905,47 +1604,6 @@
                       bind: ny,
                     },
                   ],
-                },
-              },
-            },
-            chamfer_edge: {
-              unquote: {
-                params: [
-                  t,
-                ],
-                body: {
-                  function: point,
-                  y: {
-                    right: {
-                      right: {
-                        f64: 0x0000000000000040,
-                      },
-                      function: divide,
-                      left: chamfer,
-                    },
-                    function: subtract,
-                    left: half_size,
-                  },
-                  x: {
-                    right: {
-                      right: t,
-                      function: multiply,
-                      left: size,
-                    },
-                    function: subtract,
-                    left: half_size,
-                  },
-                  z: {
-                    right: {
-                      right: {
-                        f64: 0x0000000000000040,
-                      },
-                      function: divide,
-                      left: chamfer,
-                    },
-                    function: subtract,
-                    left: half_size,
-                  },
                 },
               },
             },
@@ -2153,6 +1811,149 @@
                 },
               },
             },
+            chamfer_strip: {
+              normal: {
+                unquote: {
+                  function: point,
+                  y: {
+                    right: {
+                      right: {
+                        f64: 0x000000000000f03f,
+                      },
+                      function: hypot,
+                      left: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    function: divide,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  x: {
+                    f64: 0x0000000000000000,
+                  },
+                  z: {
+                    right: {
+                      right: {
+                        f64: 0x000000000000f03f,
+                      },
+                      function: hypot,
+                      left: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    function: divide,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                },
+              },
+              length: {
+                unquote: size,
+              },
+              curve: {
+                unquote: {
+                  params: [
+                    t,
+                  ],
+                  body: {
+                    function: point,
+                    y: {
+                      right: {
+                        right: {
+                          f64: 0x0000000000000040,
+                        },
+                        function: divide,
+                        left: chamfer,
+                      },
+                      function: subtract,
+                      left: half_size,
+                    },
+                    x: {
+                      right: {
+                        right: t,
+                        function: multiply,
+                        left: size,
+                      },
+                      function: subtract,
+                      left: half_size,
+                    },
+                    z: {
+                      right: {
+                        right: {
+                          f64: 0x0000000000000040,
+                        },
+                        function: divide,
+                        left: chamfer,
+                      },
+                      function: subtract,
+                      left: half_size,
+                    },
+                  },
+                },
+              },
+              across: {
+                unquote: {
+                  function: point,
+                  y: {
+                    right: {
+                      right: {
+                        right: {
+                          f64: 0x000000000000f03f,
+                        },
+                        function: hypot,
+                        left: {
+                          f64: 0x000000000000f03f,
+                        },
+                      },
+                      function: divide,
+                      left: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    function: subtract,
+                    left: {
+                      f64: 0x0000000000000000,
+                    },
+                  },
+                  x: {
+                    f64: 0x0000000000000000,
+                  },
+                  z: {
+                    right: {
+                      right: {
+                        f64: 0x000000000000f03f,
+                      },
+                      function: hypot,
+                      left: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    function: divide,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                },
+              },
+              width: {
+                unquote: {
+                  right: {
+                    right: {
+                      f64: 0x000000000000f03f,
+                    },
+                    function: hypot,
+                    left: {
+                      f64: 0x000000000000f03f,
+                    },
+                  },
+                  function: multiply,
+                  left: chamfer,
+                },
+              },
+            },
             face: {
               unquote: {
                 params: [
@@ -2298,6 +2099,37 @@
         ],
       },
     },
+    chamfer_ring: {
+      name: "four rotated copies",
+      params: [
+        program,
+      ],
+      body: {
+        expressions: [
+          {
+            function: rotate_paths,
+            orientation: top,
+            program: program,
+          },
+          {
+            function: rotate_paths,
+            orientation: quarter_turn,
+            program: program,
+          },
+          {
+            function: rotate_paths,
+            orientation: half_turn,
+            program: program,
+          },
+          {
+            function: rotate_paths,
+            orientation: three_quarter_turn,
+            program: program,
+          },
+        ],
+        function: do,
+      },
+    },
     t: {
       name: "fraction",
     },
@@ -2376,6 +2208,9 @@
         z: x,
       },
     },
+    length: {
+      name: "length",
+    },
     normal: {
       name: "normal",
     },
@@ -2391,8 +2226,120 @@
     nz: {
       name: "normal z",
     },
+    offset: {
+      name: "offset",
+    },
     orientation: {
       name: "orientation",
+    },
+    parallel_strokes: {
+      name: "parallel strokes",
+      params: [
+        curve,
+        length,
+        offset,
+        stepover,
+        stroke,
+      ],
+      body: {
+        stepover: stepover,
+        length: length,
+        function: evenly_spaced,
+        action: {
+          params: [
+            t,
+          ],
+          body: {
+            function: where,
+            expression: {
+              end: {
+                right: offset,
+                function: point_sum,
+                left: coordinate,
+              },
+              start: {
+                right: {
+                  function: scaled_point,
+                  vector: offset,
+                  factor: {
+                    f64: 0x000000000000f0bf,
+                  },
+                },
+                function: point_sum,
+                left: coordinate,
+              },
+              function: stroke,
+            },
+            bindings: [
+              {
+                subject: {
+                  function: curve,
+                  t: t,
+                },
+                bind: coordinate,
+              },
+            ],
+          },
+        },
+      },
+    },
+    point_sum: {
+      name: "point sum",
+      params: [
+        left,
+        right,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: point,
+          y: {
+            right: ny,
+            function: sum,
+            left: y,
+          },
+          x: {
+            right: nx,
+            function: sum,
+            left: x,
+          },
+          z: {
+            right: nz,
+            function: sum,
+            left: z,
+          },
+        },
+        bindings: [
+          {
+            subject: left,
+            pattern: {
+              y: {
+                bind: y,
+              },
+              x: {
+                bind: x,
+              },
+              z: {
+                bind: z,
+              },
+            },
+          },
+          {
+            subject: right,
+            pattern: {
+              y: {
+                bind: ny,
+              },
+              x: {
+                bind: nx,
+              },
+              z: {
+                bind: nz,
+              },
+            },
+          },
+        ],
+      },
     },
     pull_direction: {
       name: "pull direction",
@@ -2466,9 +2413,6 @@
         z: z,
       },
     },
-    radial_offset: {
-      name: "radial offset",
-    },
     right_face: {
       name: "right face",
       params: [
@@ -2485,6 +2429,24 @@
           function: subtract,
           left: {
             f64: 0x0000000000000000,
+          },
+        },
+      },
+    },
+    rotate_paths: {
+      name: "rotate paths",
+      params: [
+        orientation,
+        program,
+      ],
+      body: {
+        function: map_points,
+        mapping: orientation,
+        expression: {
+          function: map_axes,
+          mapping: orientation,
+          expression: {
+            function: program,
           },
         },
       },
@@ -2737,6 +2699,50 @@
         ],
       },
     },
+    scaled_point: {
+      name: "scaled vector",
+      params: [
+        vector,
+        factor,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: point,
+          y: {
+            right: factor,
+            function: multiply,
+            left: y,
+          },
+          x: {
+            right: factor,
+            function: multiply,
+            left: x,
+          },
+          z: {
+            right: factor,
+            function: multiply,
+            left: z,
+          },
+        },
+        bindings: [
+          {
+            subject: vector,
+            pattern: {
+              y: {
+                bind: y,
+              },
+              x: {
+                bind: x,
+              },
+              z: {
+                bind: z,
+              },
+            },
+          },
+        ],
+      },
+    },
     segments: {
       name: "segments",
     },
@@ -2745,6 +2751,18 @@
     },
     shoulder: {
       name: "shoulder",
+    },
+    contour_pass: {
+      name: "side-cut chamfer pass",
+      function: contour_chamfer,
+      contact_height: {
+        right: {
+          f64: 0x0000000000000040,
+        },
+        function: divide,
+        left: cutting_length,
+      },
+      cutter_diameter: square_diameter,
     },
     size: {
       name: "size",
@@ -2755,6 +2773,40 @@
     cutting_length: {
       name: "square cutting length",
       f64: 0x295c8fc2f528cc3f,
+    },
+    square_side_offset: {
+      name: "square side contact offset",
+      params: [
+        cutter_diameter,
+        contact_height,
+        normal,
+        tool_axis,
+      ],
+      body: {
+        right: {
+          function: scaled_point,
+          vector: tool_axis,
+          factor: {
+            right: contact_height,
+            function: subtract,
+            left: {
+              f64: 0x0000000000000000,
+            },
+          },
+        },
+        function: point_sum,
+        left: {
+          function: scaled_point,
+          vector: normal,
+          factor: {
+            right: {
+              f64: 0x0000000000000040,
+            },
+            function: divide,
+            left: cutter_diameter,
+          },
+        },
+      },
     },
     square_tool: {
       name: "square tool",
@@ -2813,11 +2865,75 @@
     stepover: {
       name: "stepover",
     },
-    strategy: {
-      name: "strategy",
+    line: {
+      name: "straight cut",
+      params: [
+        start,
+        end,
+        tool_axis,
+      ],
+      body: {
+        expressions: [
+          {
+            function: where,
+            expression: {
+              function: start_at,
+              y: y,
+              x: x,
+              tool_axis: tool_axis,
+              z: z,
+            },
+            bindings: [
+              {
+                subject: start,
+                pattern: {
+                  y: {
+                    bind: y,
+                  },
+                  x: {
+                    bind: x,
+                  },
+                  z: {
+                    bind: z,
+                  },
+                },
+              },
+            ],
+          },
+          {
+            function: where,
+            expression: {
+              function: line_to,
+              y: y,
+              x: x,
+              z: z,
+            },
+            bindings: [
+              {
+                subject: end,
+                pattern: {
+                  y: {
+                    bind: y,
+                  },
+                  x: {
+                    bind: x,
+                  },
+                  z: {
+                    bind: z,
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        function: do,
+      },
     },
-    stroke_offset: {
-      name: "stroke offset",
+    strip: {
+      name: "strip",
+    },
+    stroke: {
+      name: "stroke",
     },
     three_quarter_turn: {
       name: "three-quarter turn Z",
@@ -2957,6 +3073,29 @@
     face: {
       name: "top face",
     },
+    translated_points: {
+      name: "translated points",
+      params: [
+        offset,
+      ],
+      body: {
+        params: [
+          x,
+          y,
+          z,
+        ],
+        body: {
+          right: offset,
+          function: point_sum,
+          left: {
+            function: point,
+            y: y,
+            x: x,
+            z: z,
+          },
+        },
+      },
+    },
     u: {
       name: "u",
     },
@@ -2966,9 +3105,6 @@
     u0: {
       name: "u start",
     },
-    unit_diagonal: {
-      name: "unit diagonal",
-    },
     v: {
       name: "v",
     },
@@ -2977,6 +3113,9 @@
     },
     v0: {
       name: "v start",
+    },
+    vector: {
+      name: "vector",
     },
   },
   "root": {
@@ -3173,11 +3312,20 @@
       op1_chamfers,
       op2_chamfers,
       chamfer_stepover,
+      chamfer_pass,
+      contour_pass,
       cube_chamfers,
       chamfer_ring,
       contour_chamfer,
       crosswise_chamfer,
-      crosswise_row,
+      evenly_spaced,
+      parallel_strokes,
+      line,
+      square_side_offset,
+      rotate_paths,
+      translated_points,
+      point_sum,
+      scaled_point,
     ],
   },
 }

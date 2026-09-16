@@ -343,6 +343,16 @@ fn invalid_commands_stop_do_before_later_emissions() {
                 ),
             ],
         ),
+        call(
+            MAP_AXES,
+            [
+                (MAPPER, ::grap::lambda([X, Y, Z], point_value([0.0; 3]))),
+                (
+                    ::grap::vocabulary::EXPRESSION,
+                    point_call(START_AT, [0.0; 3]),
+                ),
+            ],
+        ),
     ] {
         let (result, recording) = evaluate(
             &sequence(vec![expression, point_call(START_AT, [0.0; 3])]),
@@ -356,10 +366,16 @@ fn invalid_commands_stop_do_before_later_emissions() {
 
 #[test]
 fn a_handled_failure_does_not_poison_output_or_leak_a_mapping_scope() {
+    for mapping in [MAP_POINTS, MAP_AXES] {
+        handled_mapping_failure(mapping);
+    }
+}
+
+fn handled_mapping_failure(mapping: CellId) {
     let reason = gid::new_cell_id();
     let failure = ::grap::absent::with_detail(reason, X, f64::value(42.0));
     let failed_map = call(
-        MAP_POINTS,
+        mapping,
         [
             (MAPPER, ::grap::lambda([X, Y, Z], failure.clone())),
             (

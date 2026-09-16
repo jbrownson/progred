@@ -27,18 +27,201 @@ fn square_tool(sources: &Sources<'_>, names: &Binders) -> Tool {
 }
 
 fn set_strategy(doc: &mut gid::Document, names: &Binders, strategy: &str) {
+    let configured = match strategy {
+        "crosswise_chamfer" => names["chamfer_pass"],
+        "contour_chamfer" => names["contour_pass"],
+        _ => panic!("unknown test recipe"),
+    };
+    let definition = doc.cells.value(names["cube_chamfers"]).unwrap();
+    let bindings = definition
+        .as_record()
+        .unwrap()
+        .get(&names["body"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&names["bindings"])
+        .unwrap()
+        .as_list()
+        .unwrap();
     let path = [
         gid::Step::Key(names["body"]),
-        gid::Step::Key(names["expression"]),
-        gid::Step::Key(names["strategy"]),
+        gid::Step::Key(names["bindings"]),
+        gid::Step::Element(bindings.keys().next().unwrap().clone()),
+        gid::Step::Key(names["subject"]),
     ];
-    let value = crate::spine::set(
-        doc.cells.value(names["cube_chamfers"]),
-        &path,
-        names[strategy].into(),
-    )
-    .unwrap();
+    let value = crate::spine::set(Some(definition), &path, configured.into()).unwrap();
     doc.cells.set_value(names["cube_chamfers"], value);
+}
+
+#[test]
+fn configured_recipes_work_on_an_independent_planar_strip() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let curve = ::grap::lambda(
+        [names["t"]],
+        call(
+            POINT,
+            [
+                (
+                    X,
+                    call(
+                        f64::vocabulary::SUBTRACT,
+                        [
+                            (number::vocabulary::LEFT, f64::value(10.0)),
+                            (
+                                number::vocabulary::RIGHT,
+                                call(
+                                    f64::vocabulary::MULTIPLY,
+                                    [
+                                        (number::vocabulary::LEFT, f64::value(4.0)),
+                                        (number::vocabulary::RIGHT, names["t"].into()),
+                                    ],
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+                (Y, f64::value(20.0)),
+                (Z, f64::value(30.0)),
+            ],
+        ),
+    );
+    let curve = ::grap::evaluate(&curve, &sources, 1000).result;
+    let strip = Value::record([
+        (names["curve"], curve),
+        (names["length"], f64::value(4.0)),
+        (names["width"], f64::value(0.3)),
+        (names["normal"], point_value([0.0, 1.0, 0.0])),
+        (names["across"], point_value([0.0, 0.0, 1.0])),
+    ]);
+    for (recipe, expected) in [
+        (
+            call(
+                names["crosswise_chamfer"],
+                [(names["stepover"], f64::value(2.0))],
+            ),
+            vec![
+                ([10.0, 20.0, 29.85], [10.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
+                ([8.0, 20.0, 29.85], [8.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
+                ([6.0, 20.0, 29.85], [6.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
+            ],
+        ),
+        (
+            call(
+                names["contour_chamfer"],
+                [
+                    (names["cutter_diameter"], f64::value(0.2)),
+                    (names["contact_height"], f64::value(0.4)),
+                ],
+            ),
+            vec![([10.0, 20.1, 29.6], [6.0, 20.1, 29.6], [0.0, 0.0, 1.0])],
+        ),
+    ] {
+        // Configuration is pure and can be evaluated without any path output.
+        let configured = ::grap::evaluate(&recipe, &sources, 1000);
+        assert!(configured.completed && !absent::is_absent(&configured.result));
+        let mut path = Recording::default();
+        let result = run(&mut path, |scope| {
+            ::grap::apply_scoped(
+                &configured.result,
+                [(names["strip"], strip.clone())],
+                &sources,
+                scope,
+                10_000,
+            )
+        });
+        assert!(
+            result.completed && !absent::is_absent(&result.result),
+            "{:?}",
+            result.result
+        );
+        let actual: Vec<_> = path
+            .segments()
+            .map(|(a, b, axis)| (a, b, axis.vector()))
+            .collect();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let expression = call(
+        names["evenly_spaced"],
+        [
+            (names["length"], f64::value(0.37)),
+            (names["stepover"], f64::value(0.1)),
+            (
+                names["action"],
+                ::grap::lambda(
+                    [names["t"]],
+                    call(
+                        START_AT,
+                        [
+                            (X, names["t"].into()),
+                            (Y, f64::value(0.0)),
+                            (Z, f64::value(0.0)),
+                        ],
+                    ),
+                ),
+            ),
+        ],
+    );
+    let mut path = Recording::default();
+    let result = run(&mut path, |scope| {
+        ::grap::evaluate_scoped(&expression, &sources, scope, 10_000)
+    });
+    assert!(result.completed && !absent::is_absent(&result.result));
+    assert_eq!(
+        path.commands(),
+        [0.0, 0.25, 0.5, 0.75, 1.0].map(|t| Command::StartAt([t, 0.0, 0.0], Axis::Z))
+    );
+
+    let expression = call(
+        names["chamfer_ring"],
+        [(
+            PROGRAM,
+            ::grap::lambda(
+                [],
+                call(
+                    names["line"],
+                    [
+                        (names["start"], point_value([1.0, 0.0, 0.0])),
+                        (names["end"], point_value([2.0, 0.0, 0.0])),
+                        (TOOL_AXIS, point_value([0.0, 1.0, 0.0])),
+                    ],
+                ),
+            ),
+        )],
+    );
+    let mut path = Recording::default();
+    let result = run(&mut path, |scope| {
+        ::grap::evaluate_scoped(&expression, &sources, scope, 10_000)
+    });
+    assert!(result.completed && !absent::is_absent(&result.result));
+    let actual: Vec<_> = path
+        .segments()
+        .map(|(a, b, axis)| (a, b, axis.vector()))
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            ([1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            ([0.0, 1.0, 0.0], [0.0, 2.0, 0.0], [-1.0, 0.0, 0.0]),
+            ([-1.0, 0.0, 0.0], [-2.0, 0.0, 0.0], [0.0, -1.0, 0.0]),
+            ([0.0, -1.0, 0.0], [0.0, -2.0, 0.0], [1.0, 0.0, 0.0]),
+        ]
+    );
 }
 
 #[test]

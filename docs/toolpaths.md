@@ -27,8 +27,8 @@ generators can still run directly against any sink without recording.
 
 Grap's `start at` accepts an optional `tool axis` x/y/z record, defaulting
 to +Z. Explicit zero or nonfinite axes fail without emitting a command.
-Grap uses ordinary calls to scoped `start at`, `line to`, `with tool`, and
-`map points` functions. `do` supplies sequencing; lambdas supply reusable
+Grap uses ordinary calls to scoped `start at`, `line to`, `with tool`,
+`map points`, and `map axes` functions. `do` supplies sequencing; lambdas supply reusable
 generators. Emitters outside an installed output scope return `toolpath output
 required`. `map points` takes a callable under `mapping` and an unevaluated
 `expression`. For each emitted point, it calls the mapping with `x`, `y`, `z`;
@@ -36,6 +36,18 @@ the mapping returns an ordinary record with those fields (the `point` function
 constructs one). Nested mappings run inside-out and restore the surrounding
 mapping on exit, including on failure. Mapping functions are intended to
 compute coordinates, not emit more paths.
+
+`map axes` has the same scoped mapping/body interface, but maps the spindle-facing
+direction on `start at`, leaving positions untouched. The resulting axis must be
+finite and nonzero and is normalized before emission. Nested axis maps apply
+inside-out; both kinds restore their scope on success, absence, and evaluator
+halt. Maps should be pure. Mapping a path's axis does not change the axis of an
+already-started path: a new orientation requires a new `start at`, as before.
+The example's ordinary Grap `rotate paths(orientation, program)` composes both
+maps with the same rotation callable. Its input must be a linear rotation about
+the origin, not a point mapping with translation or arbitrary deformation.
+Translate the resulting path separately with `map points`; translation must not
+affect a direction vector. Neither operation records intermediate paths.
 
 `with tool` takes a `tool` expression and an unevaluated `expression` body.
 It evaluates and validates the tool once, then runs the body in that tool's
@@ -80,11 +92,14 @@ than relying on a failed match. An excessive sampling request is bounded by
 evaluator fuel.
 
 The example's cube function owns its size, chamfer, and control-point depth.
-It returns an ordinary geometry record with four Grap callables: `field`
-constructs the implicit solid, `top face` maps UV points to that surface,
-`normal` gives the outward surface normal at a contact point, and `chamfer edge`
-gives the centerline of a canonical chamfer. They capture the
-same dimensions; the record also supplies its scalar `chamfer width`, `c√2`.
+It returns an ordinary geometry record: `field` constructs the implicit solid,
+`top face` maps UV points to that surface, `normal` gives the outward surface
+normal at a contact point, and `chamfer strip` describes a canonical planar
+chamfer. The strip contains a centerline `curve(t)`, its `length`, its `width`
+(`c√2`), the outward `normal`, and the unit `across` direction. These outputs
+share the underlying dimensions. Paths and implicit geometry are constructed
+from that common description; straightforward paths are not recovered from the
+implicit field or mesh.
 The implicit field is constructed only when requested; path
 generation does not construct or mesh a solid it does not consume. Dimensions
 and path arithmetic use f64; `f32 from f64` explicitly rounds the constants at
@@ -132,21 +147,55 @@ Op 1 cuts the four top and four vertical chamfers. Op 2 cuts the four
 bottom edges. The square tool switches in at those group boundaries without
 inventing a tool-change motion.
 
+### Chamfer composition
+
+The example keeps algorithms as ordinary Grap functions, not a strategy enum
+or a record containing the union of every strategy's settings:
+
+- `straight cut(start, end, tool axis)` emits one disconnected straight path.
+- `evenly spaced(length, stepover, action)` calls `action(t)` at normalized
+  positions including both endpoints. Length and maximum stepover must be finite
+  and positive; intervals are `max(1, ceil(length/stepover))`. It streams calls,
+  not a list. A consumer using a curve must supply its arc length and an
+  arc-length-normalized parameterization; the current strip has a straight curve.
+- `parallel strokes(curve, length, offset, stepover, stroke)` uses that sampler,
+  calling `stroke(start, end)` from `curve(t) - offset` to `curve(t) + offset`.
+  It knows nothing about the cutter or its axis. `stroke` can be a straight cut
+  or a different supplied computation.
+- `square side contact offset(diameter, contact height, normal, tool axis)`
+  computes the contact-to-tip displacement for a cylindrical side contact.
+  The unit normal and unit axis must be perpendicular. This is specific contact
+  geometry, not a general compensation solver for arbitrary profiles.
+- `contour chamfer(diameter, contact height)` and `crosswise chamfer(stepover)`
+  return ordinary closures accepting a `strip`. Configuration needs no output
+  scope; calling the configured closure emits paths. Neither recipe knows the
+  cube's angle, edge rotations, or global parameter cells.
+- `four rotated copies(program)` (binder `chamfer_ring`) executes a supplied
+  zero-argument program at four quarter-turns. It has no cutter/spacing/geometry
+  parameters. `cube chamfers` supplies the configured program: first orient the
+  canonical strip's cut, then repeat that oriented cut around world Z.
+
+`end-cut chamfer pass` (`chamfer_pass`) and `side-cut chamfer pass`
+(`contour_pass`) are the two configured recipes exposed in the source list.
+The `cut strip` binding in `cube chamfers` selects one, before repetition.
+Change that binding's subject from the end-cut pass to the side-cut pass to
+switch recipes. The contour configuration shares diameter and cutting-length
+cells with the square profile and explicitly chooses half the cutting length
+as contact height. The end-cut configuration only reads stepover. Tool selection
+remains the enclosing `with tool` group, separate from these contact functions;
+choosing a different tool shape still requires a matching contact recipe.
+The recipes do not infer tool compatibility from an arbitrary profile.
+
 ### Side-contour chamfers
 
-The cube's `chamfer edge(t)` returns `(s/2 − s*t, (s−c)/2, (s−c)/2)`:
+The cube's chamfer strip `curve(t)` returns `(s/2 − s*t, (s−c)/2, (s−c)/2)`:
 the top/front chamfer centerline, extended to the stock's ends. `contour chamfer`
-puts the side of the square mill tangent to this plane, centered along its
-cutting length. With outward normal `n = (0,1,1)/√2`, spindle-facing axis
+puts the side of the square mill tangent to this plane, at the configured
+contact height. With outward normal `n = (0,1,1)/√2`, spindle-facing axis
 `a = (0,−1,1)/√2`, cutter radius `r`, and cutting length `L`, the tip is
 `contact + r*n − (L/2)*a`. It emits one straight start/line pair. Feed is
-`a × n`, following the example's clockwise climb convention. `chamfer ring`
-composes ordinary Grap point mappings to repeat its supplied `strategy` along
-four edges; `cube chamfers` supplies the callable, contact geometry, and shared
-tool dimensions. Change its `strategy` argument from `crosswise chamfer` to
-`contour chamfer` to use these side cuts. There is no mode enum or special
-dispatch: the ring calls that function with the available geometry and settings,
-and each strategy consumes its declared parameters.
+`a × n`, following the example's clockwise climb convention. Repetition and
+rotation are composed outside the recipe, as described above.
 There is no Rust chamfer generator or mesh-derived path.
 
 The square profile is a Grap quote with spliced `square tool diameter` and
@@ -167,8 +216,8 @@ and updates from edited cube/tool dimensions.
 ### Crosswise end-cut chamfers
 
 The example defaults to the alternative `crosswise chamfer` callable. The square
-mill's axis is the outward chamfer normal `n`, with its flat tip directly on the
-plane. At each centerline sample, `crosswise row` emits one straight cut from
+mill's axis is the strip's outward normal `n`, with its flat tip directly on the
+plane. At each centerline sample, `parallel strokes` emits one straight cut from
 `center − (width/2)*a` to `center + (width/2)*a`, where
 `a = (0,−1,1)/√2` is the across-chamfer direction. Both endpoints and the axis
 receive the ring's rigid orientation. No ball-radius or side-radius compensation
@@ -186,11 +235,14 @@ is inferred. The row loop is Grap `iterate`; emission uses the existing
 Stepover must be finite and positive, and the computed interval count finite.
 Finer requests remain bounded by evaluator fuel, not silently capped. Stepover
 is not clamped to the tool diameter: oversized steps leave real uncut strips in
-the subtraction. Both current strategies assume this straight, planar 45-degree
-chamfer and a square cutting profile. They simulate the ideal revolved envelope,
+the subtraction. Both recipes assume a straight planar strip with constant,
+orthonormal normal/across directions and a square cutting profile. The cube
+supplies a 45-degree strip, but that angle is not part of the recipes. They simulate the ideal revolved envelope,
 not tooth marks, runout, or surface-finish physics. Tests cover both swept solids,
 all edge orientations, width/spacing changes, invalid spacing, visible gaps from
 wide steps, and dependency invalidation when the callable or spacing changes.
+Independent-strip tests also exercise both recipes away from the cube's 45-degree
+frame; the shape and direction are explicit inputs rather than hidden constants.
 
 ### Indent tilt and direction
 

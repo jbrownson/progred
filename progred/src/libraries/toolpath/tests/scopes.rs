@@ -150,6 +150,86 @@ fn point_mapping_preserves_tool_scopes() {
 }
 
 #[test]
+fn axis_mapping_composes_inside_out_and_is_independent_of_translation() {
+    let negate = |value| {
+        call(
+            f64::vocabulary::SUBTRACT,
+            [
+                (number::vocabulary::LEFT, f64::value(0.0)),
+                (number::vocabulary::RIGHT, value),
+            ],
+        )
+    };
+    let turn_y = ::grap::lambda(
+        [X, Y, Z],
+        call(POINT, [(X, Z.into()), (Y, Y.into()), (Z, negate(X.into()))]),
+    );
+    let turn_z = ::grap::lambda(
+        [X, Y, Z],
+        call(POINT, [(X, negate(Y.into())), (Y, X.into()), (Z, Z.into())]),
+    );
+    let translated = ::grap::lambda(
+        [X, Y, Z],
+        call(
+            POINT,
+            [X, Y, Z].map(|key| {
+                (
+                    key,
+                    call(
+                        f64::vocabulary::SUM,
+                        [
+                            (number::vocabulary::LEFT, key.into()),
+                            (number::vocabulary::RIGHT, f64::value(5.0)),
+                        ],
+                    ),
+                )
+            }),
+        ),
+    );
+    let mapped = |function, mapper, expression| {
+        call(
+            function,
+            [
+                (MAPPER, mapper),
+                (::grap::vocabulary::EXPRESSION, expression),
+            ],
+        )
+    };
+    let tool = cutter::Tool::square(0.125, 0.25).unwrap();
+    let expression = sequence(vec![
+        mapped(
+            MAP_POINTS,
+            translated,
+            mapped(
+                MAP_AXES,
+                turn_z,
+                mapped(MAP_AXES, turn_y, tool_scope(&tool, line(0.0))),
+            ),
+        ),
+        line(10.0),
+    ]);
+    let (result, path) = evaluate(&expression, 1000);
+    assert!(
+        result.completed && !absent::is_absent(&result.result),
+        "{:?}",
+        result.result
+    );
+    let segments: Vec<_> = path.tool_segments().collect();
+    assert_eq!(
+        segments,
+        [
+            (
+                [5.0; 3],
+                [5.0, 6.0, 5.0],
+                Axis::new([0.0, 1.0, 0.0]).unwrap(),
+                Some(&tool)
+            ),
+            ([10.0, 0.0, 0.0], [10.0, 1.0, 0.0], Axis::Z, None),
+        ]
+    );
+}
+
+#[test]
 fn editing_a_tool_invalidates_the_recording_even_when_points_are_unchanged() {
     use crate::{computations::Computations, sources::Sources};
     let tool_id = gid::new_cell_id();

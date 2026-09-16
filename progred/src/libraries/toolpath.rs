@@ -30,6 +30,7 @@ pub mod vocabulary {
     pub const START_AT: CellId = CellId::from_u128(0x0b3ea6a88bdb8a105704e4af8b7950a5);
     pub const LINE_TO: CellId = CellId::from_u128(0xe88873219d230571430941334a51600f);
     pub const MAP_POINTS: CellId = CellId::from_u128(0x923fb213d0e56383539b43b1fc807458);
+    pub const MAP_AXES: CellId = CellId::from_u128(0x5d5bf7f3beb0c1cba07226bab9683852);
     pub const WITH_TOOL: CellId = CellId::from_u128(0xd7c2368e471579d060460d3546158974);
     pub const MAPPER: CellId = CellId::from_u128(0xa33c6e235d5d94885fcb1afff59e94e5);
     pub const POINT: CellId = CellId::from_u128(0x61ca3de7d2601772ebedf8e2b2f5e0c5);
@@ -57,7 +58,7 @@ pub mod vocabulary {
 use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 
-const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, WITH_TOOL];
+const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL];
 
 fn point_value(point: Point3) -> Value {
     Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
@@ -153,6 +154,26 @@ fn fuel(
 struct Output<'a> {
     sink: RefCell<&'a mut dyn Sink<Error = InvalidPath>>,
     mappers: RefCell<Rc<Vec<Value>>>,
+    axis_mappers: RefCell<Rc<Vec<Value>>>,
+}
+
+fn mapped_point(
+    context: &mut Context,
+    mappers: &RefCell<Rc<Vec<Value>>>,
+    mut point: Point3,
+) -> Result<Point3, Error> {
+    let mappers = mappers.borrow().clone();
+    for mapper in mappers.iter().rev() {
+        let value = context.apply(mapper, [X, Y, Z].into_iter().zip(point.map(f64::value)))?;
+        point = read_point(&value).ok_or_else(|| {
+            if absent::is_absent(&value) {
+                Error::Invalid(value)
+            } else {
+                invalid()
+            }
+        })?;
+    }
+    Ok(point)
 }
 
 struct Emission<'a, 'b, 'c> {
@@ -161,25 +182,22 @@ struct Emission<'a, 'b, 'c> {
 }
 
 impl Emission<'_, '_, '_> {
-    fn point(&mut self, mut point: Point3) -> Result<Point3, Error> {
+    fn point(&mut self, point: Point3) -> Result<Point3, Error> {
         self.context.burn()?;
-        let mappers = self.output.mappers.borrow().clone();
-        for mapper in mappers.iter().rev() {
-            let value = self
-                .context
-                .apply(mapper, [X, Y, Z].into_iter().zip(point.map(f64::value)))?;
-            point = read_point(&value).ok_or_else(|| {
-                if absent::is_absent(&value) {
-                    Error::Invalid(value)
-                } else {
-                    invalid()
-                }
-            })?;
-        }
-        Ok(point)
+        mapped_point(self.context, &self.output.mappers, point)
     }
     fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Error> {
         let point = self.point(point)?;
+        let axis = if self.output.axis_mappers.borrow().is_empty() {
+            axis
+        } else {
+            Axis::new(mapped_point(
+                self.context,
+                &self.output.axis_mappers,
+                axis.vector(),
+            )?)
+            .ok_or_else(invalid)?
+        };
         self.context
             .effect(|| self.output.sink.borrow_mut().start_at(point, axis))
             .map_err(|_| invalid())
@@ -216,14 +234,19 @@ fn operation(
                 emission.line_to(point)?;
             }
         }
-        MAP_POINTS => {
+        MAP_POINTS | MAP_AXES => {
             let mapper = argument(context, call, MAPPER)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
             let mapper = context.eval(mapper, environment)?;
-            let parent = output.mappers.borrow().clone();
-            Rc::make_mut(&mut output.mappers.borrow_mut()).push(mapper);
+            let mappers = if function == MAP_POINTS {
+                &output.mappers
+            } else {
+                &output.axis_mappers
+            };
+            let parent = mappers.borrow().clone();
+            Rc::make_mut(&mut mappers.borrow_mut()).push(mapper);
             let value = context.eval(expression, environment);
-            output.mappers.replace(parent);
+            mappers.replace(parent);
             return Ok(value?);
         }
         WITH_TOOL => {
@@ -255,6 +278,7 @@ pub fn run(
     let output = Output {
         sink: RefCell::new(sink),
         mappers: RefCell::new(Rc::new(Vec::new())),
+        axis_mappers: RefCell::new(Rc::new(Vec::new())),
     };
     let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
         result(operation(function, context, call, environment, &output))
@@ -320,6 +344,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (TOOL_AXIS, "tool axis"),
         (LINE_TO, "line to"),
         (MAP_POINTS, "map points"),
+        (MAP_AXES, "map axes"),
         (WITH_TOOL, "with tool"),
         (MAPPER, "mapping"),
         (POINT, "point"),
