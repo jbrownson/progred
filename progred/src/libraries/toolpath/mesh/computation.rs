@@ -16,6 +16,8 @@ pub(crate) struct Settings {
 pub(crate) struct ViewGeometry {
     pub geometry: Geometry,
     pub awaiting_first_surface: bool,
+    /// True even when `geometry` includes a retained, outdated stock surface.
+    pub surface_pending: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -189,6 +191,7 @@ fn combine(
         ViewGeometry {
             geometry,
             awaiting_first_surface: pending && surface.is_none(),
+            surface_pending: pending,
         },
         *fuel,
     ))

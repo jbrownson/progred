@@ -114,6 +114,21 @@ A final failure remains a failure, not a successful intermediate result.
 `memo` is the same mechanism without intermediate publications. The worker, not
 the graph runtime, decides what refinement means and which quality levels to run.
 
+`memo_reporting` additionally supplies a thread-safe work-progress callback;
+`AsyncMemo::progress` observes its latest completed/total counts through the same
+graph revision and generation checks. Counts do not make a result ready or
+replace an intermediate value. They reset on a new request and disappear on
+completion. A worker may reset them for a new stage. These are work units, not
+an estimate of elapsed or remaining time; the producer owns reporting frequency.
+
+`memo_reporting_when_ready` accepts preparation returning `Option<I>`. `None`
+means a dependency is not ready: it cancels old work, clears any queued
+replacement and progress, and retains the last result as `Pending.previous`.
+It submits no waiting/no-op job. When preparation becomes `Some(input)`, the
+ordinary dependency graph starts the job. Waiting is not a failure or an absent;
+old completions remain subject to generation checks. The always-ready APIs wrap
+their prepared inputs in `Some`.
+
 Each node has at most one running job and one latest replacement. Changing the
 prepared snapshot cancels the old request and replaces any queued request. The
 executor bounds concurrent jobs and requeues replacements so other nodes can run.
@@ -171,11 +186,12 @@ The worker constructs the remaining-stock field, interprets future paths and
 the cutter as Fidget scene objects, then renders the scene progressively. Camera,
 image size, display scale, color and playback are explicit dependencies. Scrolling reuses
 the image; camera changes request a replacement without re-running the generator.
-The previous **whole image** is dimmed with an ellipsis while awaiting the first
-current image. Each current refinement replaces it at normal color; the ellipsis
-remains until the final depth refinement completes. Unlike the mesh preview,
+The previous **whole image** is dimmed while awaiting the first
+current image. Each current refinement replaces it at normal color. An unlabelled
+progress bar overlays the top edge of the viewport while work remains.
+The bar resets per refinement and disappears on completion. Unlike the mesh preview,
 the tool cannot move independently within those pixels. Before any image is available,
-the correctly sized viewport shows an ellipsis.
+the correctly sized viewport shows the empty progress track.
 
 The implicit renderer starts with a maximum edge of 128 physical pixels and
 approximately doubles both dimensions on each pass, finishing at the exact
@@ -193,9 +209,19 @@ runs directly on the general background executor, without a GPU-owning thread,
 GPU submission, or fallback attempt. The GPU VM cannot execute the stock field's
 spill instructions; see [the backend limitation](toolpaths.md#playback).
 Cancellation connects to Fidget's voxel cancellation token; the software renderer
-uses 32/16/8-pixel tiles, with checks between root tiles. Expression construction
+uses the JIT on Apple Silicon macOS with its recommended tiles, and the VM with
+32/16/8-pixel tiles elsewhere. The local raster patch checks cancellation during
+subtile work as well as between root tiles. Expression construction
 and compilation have before/after checks rather than immediate interruption.
 Obsolete results are discarded by the general scheduler.
+
+The local raster progress callback counts successfully completed root tiles.
+The scene sums tile counts across its objects for each refinement and reports
+at most every 50 ms, plus stage boundaries, through the ordinary native async job.
+The browser's inline executor reports only stage boundaries.
+Empty and complex tiles count equally, so this is not a time estimate. Compilation
+and image assembly are outside the tile count. The bar is a paint-only reusable
+Puri widget, composed as an overlay without changing layout or hover.
 
 ### Mesh fallback with implicit refinement
 
@@ -206,20 +232,21 @@ camera and image size for mesh generation; equal derived settings retain the
 mesh. There is no event classification, orbit flag, inactivity timer, or second
 cache.
 
-Both interpretations are demanded independently. A current implicit image wins,
-including intermediate refinements. While it is pending, the viewport draws the
-available mesh synchronously using the current camera. The old implicit image
-is not used as the fallback. A mesh arriving after a current implicit image
-cannot replace it. Current errors remain visible rather than being hidden behind
-old successful output.
+The current stock mesh is a prerequisite for implicit work. A readiness memo
+observes the mesh's pending status; image preparation returns `None` until that
+mesh is current. Both nodes are still read while waiting, so obsolete image work
+is cancelled rather than left running because the display stopped demanding it.
+A current implicit image then wins, including intermediate refinements. While
+it is pending, the viewport draws the available mesh synchronously using the
+current camera. The old implicit image is not used as the fallback. Current
+mesh or image errors remain visible rather than being hidden behind old output.
 
 On camera changes, the mesh remains current. On playback or geometry changes,
 the tool/path triangles update immediately and the old stock mesh is desaturated
 while its replacement is pending. Both jobs use the existing latest-replacement
-queue and cancellation checks. Meshing is requested first, but an image does not
-depend on its completion; each renderer can finish independently. This first
-composition keeps requesting a current mesh even while displaying an implicit
-image, preserving a useful fallback for subsequent camera motion.
+queue and cancellation checks. Implicit work cannot overtake replacement meshing,
+so orbiting after an implicit result cannot fall back to older stock. Camera-only
+changes retain the current mesh and start implicit work without another mesh job.
 
 The mesh is the immediate draft stage. This composition starts implicit images
 at no more than 512 physical pixels on the longest edge, skipping the standalone

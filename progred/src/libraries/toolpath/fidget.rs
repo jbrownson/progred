@@ -14,6 +14,35 @@ use std::sync::Arc;
 
 pub(super) mod computation;
 
+/// Overlay only: progress never changes the viewport's size or input handling.
+pub(super) fn progress_bar(
+    drawing: Layout<crate::Editor, crate::frame::Hovered>,
+    progress: Option<incremental::background::Progress>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    crate::display::widget::after(
+        drawing,
+        Rc::new(move |context| {
+            let height = 3.0 * context.inputs.styles.scale;
+            let bar = puri_widgets::progress::ProgressBar {
+                fraction: progress.map_or(0.0, |p| p.fraction()),
+                track: puri::Color::from_rgba8(196, 204, 214, 220),
+                fill: puri::Color::from_rgb8(48, 126, 210),
+            };
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    let rect = puri::Rect::new(
+                        placement.rect.x0,
+                        placement.rect.y0,
+                        placement.rect.x1,
+                        (placement.rect.y0 + height).min(placement.rect.y1),
+                    );
+                    output.render(move |canvas, _| bar.draw(canvas, rect));
+                }
+            })
+        }),
+    )
+}
+
 pub(super) struct Tubes {
     radius: f32,
     previous: Option<[f32; 3]>,
@@ -276,7 +305,7 @@ pub(super) fn display(
                     })),
                 };
                 let drawing = if image.pending {
-                    crate::display::overlay([drawing, crate::display::dim("…")])
+                    progress_bar(drawing, image.progress)
                 } else {
                     drawing
                 };

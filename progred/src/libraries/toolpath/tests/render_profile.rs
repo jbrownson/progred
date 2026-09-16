@@ -203,7 +203,7 @@ fn cam_render_profile() {
                 implicit::raster::Request::new(preview(vec![object.clone()]), None, 1.0).unwrap();
             let start = Instant::now();
             let image = request
-                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!())
+                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!(), None)
                 .unwrap()
                 .unwrap();
             let differences = reference
@@ -281,6 +281,7 @@ fn cam_render_profile() {
                     prior = Instant::now();
                     Ok(())
                 },
+                None,
             )
             .unwrap()
             .unwrap();
@@ -320,7 +321,7 @@ fn cam_render_profile() {
             let request = implicit::raster::Request::new(preview(objects), None, 1.0).unwrap();
             let start = Instant::now();
             let result = request
-                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!())
+                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!(), None)
                 .unwrap()
                 .unwrap();
             let bytes = result.data.data();

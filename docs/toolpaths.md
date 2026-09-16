@@ -313,9 +313,11 @@ Failed path generation discards the whole preview before meshing the model.
 
 `preview paths refined` takes the mesh preview's arguments and composes a mesh
 fallback with progressive software implicit images. It shares one observed path
-evaluation between the two interpretations. Both computations are requested,
-but neither needs the other's result. A current implicit image replaces the
-mesh; pending implicit work displays the available mesh at the current camera.
+evaluation between the two interpretations. Implicit work waits for the current
+stock mesh; a geometry change cancels obsolete image work while meshing runs.
+A current implicit image replaces the mesh; pending implicit work displays the
+available mesh at the current camera. Orbiting after an implicit result therefore
+returns to a current mesh, never an older stock result that it had overtaken.
 An outdated stock mesh is desaturated, while tool/path geometry updates immediately.
 Implicit refinement starts at no more than 512 physical pixels on the longest
 edge, skipping the standalone implicit renderer's two coarsest levels. It roughly
@@ -423,9 +425,9 @@ Orbiting retains mesh geometry; every new view still produces a fresh raster ima
 The implicit preview renders stock, tool and paths together in one progressive
 async request. Its tool moves with each current image, not independently of the
 stock. The old image is dimmed until the first current coarse image arrives;
-current refinements restore normal colors, with an ellipsis until the final
-depth pass completes.
-The first pending frame reserves the viewport and shows an ellipsis. Refinement
+current refinements restore normal colors. An unlabelled progress bar overlays
+the top edge, resetting per refinement and disappearing when the final pass completes.
+The first pending frame reserves the viewport and shows the empty progress track. Refinement
 starts at at most 128 physical pixels on the longest edge, then doubles toward
 native resolution with a fixed camera and render volume, then performs one
 native-size pass with four times the depth samples to reduce sharp-edge artifacts.

@@ -1,7 +1,7 @@
 use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
-use incremental::background::Availability;
+use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
 
 #[derive(Clone, PartialEq)]
@@ -22,6 +22,7 @@ pub(crate) struct ViewImage {
     pub image: Option<puri::ImageData>,
     pub pending: bool,
     pub stale: bool,
+    pub progress: Option<Progress>,
 }
 
 pub(super) struct Computation {
@@ -43,7 +44,7 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
-        let image = image(computations, recording, settings.clone(), 128);
+        let image = image(computations, recording, settings.clone(), 128, None);
         Self {
             program,
             fuel,
@@ -63,6 +64,7 @@ impl Computation {
             usize,
             &incremental::Cancellation,
             &mut dyn FnMut(Outcome<puri::ImageData>) -> Result<(), incremental::Error>,
+            &(dyn Fn(Progress) + Sync),
         ) -> Result<Outcome<puri::ImageData>, incremental::Error>
         + Send
         + Sync
@@ -73,7 +75,7 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
-        let image = image_with_render(computations, recording, settings.clone(), render);
+        let image = image_with_render(computations, recording, settings.clone(), None, render);
         Self {
             program,
             fuel,
@@ -85,24 +87,31 @@ impl Computation {
 
 /// Use the same observed program as other interpretations. The caller chooses
 /// the first image resolution independently of its fallback and scheduling.
+/// A readiness dependency gates background work; becoming unready cancels it.
 pub(crate) fn image(
     computations: &Computations,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     first_max_edge: u32,
+    ready: Option<Memo<bool>>,
 ) -> Memo<Outcome<ViewImage>> {
     image_with_render(
         computations,
         recording,
         settings,
-        move |request, fuel, cancel, publish| {
+        ready,
+        move |request, fuel, cancel, publish, progress| {
             let scene = scene(request, fuel);
             cancel.check()?;
             match scene {
                 Ok((scene, fuel)) => Ok(scene
-                    .render_software_progressive(first_max_edge, 4, cancel, &mut |image| {
-                        publish(Ok((image, fuel)))
-                    })?
+                    .render_software_progressive(
+                        first_max_edge,
+                        4,
+                        cancel,
+                        &mut |image| publish(Ok((image, fuel))),
+                        Some(progress),
+                    )?
                     .map(|image| (image, fuel))
                     .ok_or_else(|| (absent::with_reason(fidget::vocabulary::INVALID_FIELD), fuel))),
                 Err(failure) => Ok(Err(failure)),
@@ -115,11 +124,13 @@ fn image_with_render(
     computations: &Computations,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
+    ready: Option<Memo<bool>>,
     render: impl Fn(
         Request,
         usize,
         &incremental::Cancellation,
         &mut dyn FnMut(Outcome<puri::ImageData>) -> Result<(), incremental::Error>,
+        &(dyn Fn(Progress) + Sync),
     ) -> Result<Outcome<puri::ImageData>, incremental::Error>
     + Send
     + Sync
@@ -142,21 +153,33 @@ fn image_with_render(
             }))
         }
     });
-    let worker =
-        computations
-            .tasks
-            .memo_progressive(prepared.clone(), move |request, cancel, publish| {
-                cancel.check()?;
-                match request {
-                    Ok((request, fuel)) => render(request, fuel, cancel, publish),
-                    Err(failure) => Ok(Err(failure)),
-                }
-            });
+    let worker_input = runtime.memo({
+        let prepared = prepared.clone();
+        move |read| {
+            if let Some(ready) = &ready
+                && !*ready.read(read)?
+            {
+                return Ok(None);
+            }
+            Ok(Some((*prepared.read(read)?).clone()))
+        }
+    });
+    let worker = computations.tasks.memo_reporting_when_ready(
+        worker_input,
+        move |request, cancel, publish, progress| {
+            cancel.check()?;
+            match request {
+                Ok((request, fuel)) => render(request, fuel, cancel, publish, progress),
+                Err(failure) => Ok(Err(failure)),
+            }
+        },
+    );
     runtime.memo_by(
         move |read| {
             // Invalid current programs replace old images immediately, without a worker round-trip.
             let prepared = prepared.read(read)?;
             let availability = worker.read(read)?;
+            let progress = worker.progress(read)?;
             let fuel = match &*prepared {
                 Ok((_, fuel)) => *fuel,
                 Err(failure) => return Ok(Err(failure.clone())),
@@ -171,6 +194,7 @@ fn image_with_render(
                                 image: Some(image.clone()),
                                 pending: matches!(&*availability, Availability::Refining(_)),
                                 stale: false,
+                                progress,
                             },
                             *fuel,
                         )
@@ -184,6 +208,7 @@ fn image_with_render(
                             .map(|(image, _)| image.clone()),
                         pending: true,
                         stale: previous.is_some(),
+                        progress,
                     },
                     fuel,
                 )),
@@ -321,7 +346,7 @@ mod tests {
         let rendered = Arc::new(Mutex::new(Vec::new()));
         let graph = Computation::with_render(&computations, program, 10000, settings(0.0), {
             let rendered = rendered.clone();
-            move |request, fuel, cancel, _publish| {
+            move |request, fuel, cancel, _publish, _progress| {
                 cancel.check()?;
                 let mut rendered = rendered.lock().unwrap();
                 rendered.push(request);
@@ -417,7 +442,7 @@ mod tests {
             ::grap::lambda([], Value::record([])),
             10000,
             settings(0.0),
-            move |_, fuel, _, publish| {
+            move |_, fuel, _, publish, progress| {
                 let image = puri::ImageData {
                     data: vec![10, 20, 30, 255].into(),
                     format: peniko::ImageFormat::Rgba8,
@@ -426,6 +451,10 @@ mod tests {
                     height: 1,
                 };
                 publish(Ok((image.clone(), fuel)))?;
+                progress(Progress {
+                    completed: 3,
+                    total: 10,
+                });
                 published.send(()).unwrap();
                 resumed.lock().unwrap().recv().unwrap();
                 Ok(Ok((image, fuel)))
@@ -441,17 +470,26 @@ mod tests {
         let partial = read();
         let partial = &partial.as_ref().as_ref().unwrap().0;
         assert!(partial.pending && !partial.stale && partial.image.is_some());
+        assert_eq!(
+            partial.progress,
+            Some(Progress {
+                completed: 3,
+                total: 10
+            })
+        );
         resume.send(()).unwrap();
         worker.join().unwrap();
         assert!(computations.tasks.poll());
         let final_image = read();
         let final_image = &final_image.as_ref().as_ref().unwrap().0;
         assert!(!final_image.pending && !final_image.stale);
+        assert_eq!(final_image.progress, None);
 
         graph.settings.set(settings(30.0));
         let pending = read();
         let pending = &pending.as_ref().as_ref().unwrap().0;
         assert!(pending.pending && pending.stale && pending.image.is_some());
+        assert_eq!(pending.progress, None);
     }
 
     #[test]

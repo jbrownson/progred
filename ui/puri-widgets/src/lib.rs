@@ -4,6 +4,7 @@
 pub mod color_picker;
 pub mod completion;
 pub mod panel;
+pub mod progress;
 pub mod radio;
 pub mod slider;
 pub mod text_frame;

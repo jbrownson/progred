@@ -38,7 +38,7 @@ fn readme_svg_captures() {
             (f::ZOOM, crate::libraries::f32::value(1.7)),
         ])),
     );
-    // Queue the real jobs, then finish both before taking the screenshot. This
+    // Run mesh preparation, then every implicit pass before the screenshot. This
     // runs every implicit refinement (including final depth refinement), not
     // just the first published image or the mesh fallback.
     let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
@@ -51,7 +51,7 @@ fn readme_svg_captures() {
     );
     let mut runner = crate::EditorRunner::new(editor);
     runner.refresh_frame(1.0, size);
-    assert_eq!(queue.lock().unwrap().len(), 2);
+    assert_eq!(queue.lock().unwrap().len(), 1);
     loop {
         let job = queue.lock().unwrap().pop_front();
         let Some(job) = job else { break };
@@ -61,9 +61,9 @@ fn readme_svg_captures() {
             "README render: worker finished in {:.2}s",
             start.elapsed().as_secs_f64()
         );
+        assert!(runner.editor.computations.tasks.poll());
+        runner.refresh_frame(1.0, size);
     }
-    assert!(runner.editor.computations.tasks.poll());
-    runner.refresh_frame(1.0, size);
     let paint = runner.prepare_paint(1.0, size);
     let mut list = DrawList::new();
     puri::frame::render(paint.renders, &mut list);
@@ -273,7 +273,7 @@ fn editor_toolpath_refined_svg_captures() {
     };
 
     capture(&mut runner, "cam_refined_initial");
-    assert_eq!(queue.lock().unwrap().len(), 2);
+    assert_eq!(queue.lock().unwrap().len(), 1);
     finish_mesh(&mut runner, 0);
     capture(&mut runner, "cam_refined_mesh");
     finish_image(&mut runner, "cam_refined_image");
@@ -303,7 +303,7 @@ fn editor_toolpath_refined_svg_captures() {
             Some(Value::record([(t::PROGRESS, f64::value(0.7))])),
         );
     capture(&mut runner, "cam_refined_playback_pending");
-    assert_eq!(queue.lock().unwrap().len(), 2);
+    assert_eq!(queue.lock().unwrap().len(), 1);
     finish_mesh(&mut runner, 0);
     capture(&mut runner, "cam_refined_playback_mesh");
     finish_image(&mut runner, "cam_refined_playback_image");

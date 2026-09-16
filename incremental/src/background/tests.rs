@@ -30,6 +30,239 @@ fn observe(runtime: &Runtime, node: AsyncMemo<usize, usize>) -> Memo<(bool, Opti
 }
 
 #[test]
+fn waiting_preparation_submits_nothing_and_clears_queued_work() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(None::<usize>);
+    let prepared = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let calls = Arc::new(AtomicUsize::new(0));
+    let node = tasks.memo_reporting_when_ready(prepared, {
+        let calls = calls.clone();
+        move |value, _, _, _| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(value * 10)
+        }
+    });
+    let parent = observe(&runtime, node);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    assert_eq!(queue.len(), 0);
+    input.set(Some(1));
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    assert_eq!(queue.len(), 1);
+    input.set(None);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    queue.next()(); // The executor's queued slot now contains no work.
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(!tasks.poll());
+    input.set(Some(2));
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(20)));
+    input.set(None);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(20)));
+    assert_eq!(queue.len(), 0);
+    // Even resuming identical inputs must launch again after cancellation.
+    input.set(Some(2));
+    runtime.read(&parent).unwrap();
+    assert_eq!(queue.len(), 1);
+}
+
+#[test]
+fn waiting_preparation_cancels_running_work_and_rejects_late_reports() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(Some(1usize));
+    let prepared = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let (started, start) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node =
+        tasks.memo_reporting_when_ready(prepared, move |value, cancel, publish, progress| {
+            if value == 1 {
+                publish(11)?;
+                progress(Progress {
+                    completed: 1,
+                    total: 2,
+                });
+                started.send(cancel.clone()).unwrap();
+                resumed.lock().unwrap().recv().unwrap();
+                assert_eq!(publish(99), Err(Error::Cancelled));
+                progress(Progress {
+                    completed: 2,
+                    total: 2,
+                });
+            }
+            Ok(value * 10)
+        });
+    let parent = runtime.memo(move |read| {
+        let value = match &*node.read(read)? {
+            Availability::Pending { previous } => (true, previous.as_deref().copied()),
+            Availability::Ready(value) | Availability::Refining(value) => (false, Some(**value)),
+        };
+        Ok((value, node.progress(read)?))
+    });
+    runtime.read(&parent).unwrap();
+    let worker = std::thread::spawn(queue.next());
+    let cancel = start
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    assert!(tasks.poll());
+    assert_eq!(runtime.read(&parent).unwrap().0, (false, Some(11)));
+    input.set(None);
+    assert_eq!(*runtime.read(&parent).unwrap(), ((true, Some(11)), None));
+    assert_eq!(cancel.check(), Err(Error::Cancelled));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(
+        !tasks.poll(),
+        "cancelled completion cannot wake a dependent"
+    );
+    assert_eq!(queue.len(), 0);
+    input.set(Some(2));
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), ((false, Some(20)), None));
+}
+
+#[test]
+fn work_progress_keeps_values_and_obeys_revision_and_generation_boundaries() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(1usize);
+    let prepared = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let (stage, staged) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_reporting(prepared, move |value, _, publish, progress| {
+        if value == 1 {
+            progress(Progress {
+                completed: 2,
+                total: 10,
+            });
+            stage.send(()).unwrap();
+            resumed.lock().unwrap().recv().unwrap();
+            publish(7)?;
+            progress(Progress {
+                completed: 5,
+                total: 10,
+            });
+            stage.send(()).unwrap();
+            resumed.lock().unwrap().recv().unwrap();
+            // A new refinement resets the bar without replacing the current image.
+            progress(Progress {
+                completed: 0,
+                total: 20,
+            });
+            stage.send(()).unwrap();
+            resumed.lock().unwrap().recv().unwrap();
+            // This old request has now been cancelled. Neither report may escape.
+            progress(Progress {
+                completed: 20,
+                total: 20,
+            });
+            assert_eq!(publish(999), Err(Error::Cancelled));
+        } else {
+            progress(Progress {
+                completed: 1,
+                total: 1,
+            });
+        }
+        Ok(value * 10)
+    });
+    let parent = runtime.memo(move |read| {
+        let value = match &*node.read(read)? {
+            Availability::Pending { previous } => (false, previous.as_deref().copied()),
+            Availability::Refining(value) => (false, Some(**value)),
+            Availability::Ready(value) => (true, Some(**value)),
+        };
+        Ok((value, node.progress(read)?))
+    });
+    let read = || runtime.read(&parent).unwrap();
+    let wait = || {
+        staged
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap()
+    };
+    let first = read();
+    assert_eq!(*first, ((false, None), None));
+    let worker = std::thread::spawn(queue.next());
+    wait();
+    assert!(
+        Rc::ptr_eq(&first, &read()),
+        "counts don't mutate an observed revision"
+    );
+    assert!(tasks.poll());
+    assert_eq!(
+        *read(),
+        (
+            (false, None),
+            Some(Progress {
+                completed: 2,
+                total: 10
+            })
+        )
+    );
+    resume.send(()).unwrap();
+    wait();
+    tasks.poll();
+    assert_eq!(
+        *read(),
+        (
+            (false, Some(7)),
+            Some(Progress {
+                completed: 5,
+                total: 10
+            })
+        ),
+        "coalesced counts must not discard the preceding published value"
+    );
+    resume.send(()).unwrap();
+    wait();
+    tasks.poll();
+    assert_eq!(
+        *read(),
+        (
+            (false, Some(7)),
+            Some(Progress {
+                completed: 0,
+                total: 20
+            })
+        )
+    );
+    input.set(2);
+    assert_eq!(
+        *read(),
+        ((false, Some(7)), None),
+        "new jobs don't inherit old progress"
+    );
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    tasks.poll();
+    assert_eq!(*read(), ((false, Some(7)), None));
+    queue.next()();
+    tasks.poll();
+    assert_eq!(
+        *read(),
+        ((true, Some(20)), None),
+        "completion clears the bar"
+    );
+}
+
+#[test]
 fn progressive_values_are_current_and_publish_only_between_revisions() {
     let runtime = Runtime::default();
     let queue = Queue::default();

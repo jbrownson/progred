@@ -1,6 +1,7 @@
 //! Owned image requests for background implicit rendering; no editor state crosses threads.
 
 use super::*;
+use incremental::background::Progress;
 
 #[cfg(test)]
 pub(crate) mod diagnostics;
@@ -47,16 +48,20 @@ impl SoftwareScene {
         view: &VolumeView,
         cancellation: &incremental::Cancellation,
     ) -> Option<Vec<u8>> {
+        self.render_with_progress(view, cancellation, None)
+    }
+
+    fn render_with_progress(
+        &self,
+        view: &VolumeView,
+        cancellation: &incremental::Cancellation,
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
+    ) -> Option<Vec<u8>> {
         let cancel = fidget_engine::render::CancelToken::new();
         cancellation.on_cancel({
             let cancel = cancel.clone();
             move || cancel.cancel()
         });
-        let eval = fidget_engine::raster::voxel::EvalConfig {
-            cancel,
-            tile_sizes: software_tiles(),
-            ..Default::default()
-        };
         let config = VoxelRenderConfig {
             world_to_model: view.world_to_model,
             ..VoxelRenderConfig::from_size(view.size)
@@ -65,8 +70,43 @@ impl SoftwareScene {
             (GeometryPixel::default(), [255; 3]);
             view.size.width() as usize * view.size.height() as usize
         ];
-        for (shape, color) in &self.objects {
+        // UI updates are bounded, not one whole editor frame per tile. Always
+        // report stage boundaries; no timer or polling loop is needed.
+        #[cfg(not(target_arch = "wasm32"))]
+        let last_report = std::sync::Mutex::new(std::time::Instant::now());
+        for (object, (shape, color)) in self.objects.iter().enumerate() {
             cancellation.check().ok()?;
+            let report = |completed, total| {
+                if let Some(progress) = progress {
+                    let completed = object * total + completed;
+                    let total = self.objects.len() * total;
+                    let boundary = completed == 0 || completed == total;
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let report = {
+                        let mut last = last_report.lock().unwrap();
+                        let now = std::time::Instant::now();
+                        let report = boundary
+                            || now.duration_since(*last) >= std::time::Duration::from_millis(50);
+                        if report {
+                            *last = now;
+                        }
+                        report
+                    };
+                    // Browser work currently executes inline, so there is no UI
+                    // to update mid-pass (nor a native Instant clock).
+                    #[cfg(target_arch = "wasm32")]
+                    let report = boundary;
+                    if report {
+                        progress(Progress { completed, total });
+                    }
+                }
+            };
+            let eval = fidget_engine::raster::voxel::EvalConfig {
+                cancel: cancel.clone(),
+                tile_sizes: software_tiles(),
+                progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
+                ..Default::default()
+            };
             let geometry = fidget_engine::raster::voxel::render(
                 shape.clone().try_into().ok()?,
                 &config,
@@ -194,10 +234,16 @@ mod tests {
         let cancel = incremental::Cancellation::default();
         let mut stages = Vec::new();
         let final_image = request
-            .render_software_progressive(12, 1, &cancel, &mut |image| {
-                stages.push((image.width, image.height));
-                Ok(())
-            })
+            .render_software_progressive(
+                12,
+                1,
+                &cancel,
+                &mut |image| {
+                    stages.push((image.width, image.height));
+                    Ok(())
+                },
+                None,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(stages, [(11, 7), (21, 14)]);
@@ -212,13 +258,58 @@ mod tests {
             .unwrap()
         );
         let mut published = 0;
-        let cancelled = request.render_software_progressive(12, 4, &cancel, &mut |_| {
-            published += 1;
-            cancel.cancel();
-            Ok(())
-        });
+        let cancelled = request.render_software_progressive(
+            12,
+            4,
+            &cancel,
+            &mut |_| {
+                published += 1;
+                cancel.cancel();
+                Ok(())
+            },
+            None,
+        );
         assert!(matches!(cancelled, Err(incremental::Error::Cancelled)));
         assert_eq!(published, 1);
+    }
+
+    #[test]
+    fn progress_covers_all_scene_objects_and_resets_for_each_refinement() {
+        use std::sync::Mutex;
+        let mut request = request(41.0, 27.0);
+        request
+            .preview
+            .objects
+            .push(request.preview.objects[0].clone());
+        let cancel = incremental::Cancellation::default();
+        let reports = Mutex::new(Vec::new());
+        let progress = |p| reports.lock().unwrap().push(p);
+        let image = request
+            .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), Some(&progress))
+            .unwrap()
+            .unwrap();
+        let reports = reports.into_inner().unwrap();
+        let mut stages = 0;
+        let mut previous = None;
+        for p in reports {
+            if p.completed == 0 {
+                if let Some(previous) = previous {
+                    assert_eq!(previous, 1.0, "finish a pass before resetting");
+                }
+                stages += 1;
+            } else {
+                assert!(p.fraction() >= previous.unwrap());
+            }
+            assert_eq!(p.total % 2, 0, "both objects contribute to the pass total");
+            previous = Some(p.fraction());
+        }
+        assert_eq!(stages, request.refinements(12, 4).unwrap().len());
+        assert_eq!(previous, Some(1.0));
+        let expected = request
+            .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(image.data.data(), expected.data.data());
     }
 
     #[test]
@@ -227,10 +318,16 @@ mod tests {
         let cancel = incremental::Cancellation::default();
         let mut stages = Vec::new();
         let final_image = request
-            .render_software_progressive(12, 4, &cancel, &mut |image| {
-                stages.push((image.width, image.height));
-                Ok(())
-            })
+            .render_software_progressive(
+                12,
+                4,
+                &cancel,
+                &mut |image| {
+                    stages.push((image.width, image.height));
+                    Ok(())
+                },
+                None,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(stages, [(11, 7), (21, 14), (41, 27)]);
@@ -240,11 +337,17 @@ mod tests {
             cpu_volume(&request.preview.objects, &refined, &cancel).unwrap()
         );
 
-        let cancelled = request.render_software_progressive(128, 4, &cancel, &mut |image| {
-            assert_eq!((image.width, image.height), (41, 27));
-            cancel.cancel();
-            Ok(())
-        });
+        let cancelled = request.render_software_progressive(
+            128,
+            4,
+            &cancel,
+            &mut |image| {
+                assert_eq!((image.width, image.height), (41, 27));
+                cancel.cancel();
+                Ok(())
+            },
+            None,
+        );
         assert!(matches!(cancelled, Err(incremental::Error::Cancelled)));
     }
 
@@ -335,9 +438,13 @@ mod tests {
         std::thread::spawn(move || {
             let cancel = incremental::Cancellation::default();
             let render = |request: &Request| {
-                request.render_software_progressive(u32::MAX, 1, &cancel, &mut |_| {
-                    panic!("no intermediate resolution requested")
-                })
+                request.render_software_progressive(
+                    u32::MAX,
+                    1,
+                    &cancel,
+                    &mut |_| panic!("no intermediate resolution requested"),
+                    None,
+                )
             };
             let image = render(&request).unwrap().unwrap();
             assert_eq!((image.width, image.height), (48, 32));
@@ -433,6 +540,7 @@ impl Request {
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
         publish: &mut dyn FnMut(ImageData) -> Result<(), incremental::Error>,
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Result<Option<ImageData>, incremental::Error> {
         cancel.check()?;
         assert!(first_max_edge > 0);
@@ -445,7 +553,7 @@ impl Request {
         let mut views = views.into_iter().peekable();
         while let Some(view) = views.next() {
             cancel.check()?;
-            let rgba = scene.render(&view, cancel);
+            let rgba = scene.render_with_progress(&view, cancel, progress);
             cancel.check()?;
             let Some(rgba) = rgba else { return Ok(None) };
             let image = ImageData {

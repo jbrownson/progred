@@ -159,7 +159,7 @@ impl Fixture {
 
     fn mesh(&self) -> Rc<Outcome<mesh::computation::ViewGeometry>> {
         let view = self.read();
-        let View::Mesh(mesh) = &*view else {
+        let View::Mesh(mesh, _) = &*view else {
             panic!("expected immediate mesh fallback")
         };
         mesh.clone()
@@ -171,7 +171,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let f = Fixture::new();
     assert!(f.mesh().as_ref().as_ref().unwrap().0.awaiting_first_surface);
     assert_eq!(f.runs.get(), 1, "both interpretations share one evaluation");
-    assert_eq!(f.queue.lock().unwrap().len(), 2);
+    assert_eq!(f.queue.lock().unwrap().len(), 1, "only mesh work is ready");
     f.finish(0);
     let mesh = f.mesh();
     assert!(!mesh.as_ref().as_ref().unwrap().0.awaiting_first_surface);
@@ -211,7 +211,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
 }
 
 #[test]
-fn playback_moves_tool_while_both_renderers_run_and_either_can_finish_first() {
+fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     let f = Fixture::new();
     f.read();
     f.finish(0);
@@ -221,6 +221,7 @@ fn playback_moves_tool_while_both_renderers_run_and_either_can_finish_first() {
     f.graph.settings.set(settings(0.0, 0.75));
     let new = f.mesh();
     assert!(!new.as_ref().as_ref().unwrap().0.awaiting_first_surface);
+    assert!(new.as_ref().as_ref().unwrap().0.surface_pending);
     let tool_center = |view: &Outcome<mesh::computation::ViewGeometry>| {
         let vertices = &view.as_ref().unwrap().0.geometry.vertices;
         let xs: Vec<_> = vertices
@@ -234,20 +235,60 @@ fn playback_moves_tool_while_both_renderers_run_and_either_can_finish_first() {
     };
     assert!(tool_center(&new) > tool_center(&old));
     assert_eq!(f.runs.get(), 1);
-    assert_eq!(f.queue.lock().unwrap().len(), 2);
-    f.finish(1); // Deliberately finish the image before the new mesh.
+    assert_eq!(f.queue.lock().unwrap().len(), 1, "no implicit job yet");
+    f.graph.settings.set(settings(15.0, 0.75));
     assert!(
-        matches!(&*f.read(), View::Implicit(_)),
-        "mesh is not a prerequisite"
+        Rc::ptr_eq(&new, &f.mesh()),
+        "orbit retains the pending mesh"
+    );
+    f.graph.settings.set(settings(15.0, 0.9));
+    assert!(f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only the latest mesh is queued"
     );
     f.finish(0);
-    assert!(
-        matches!(&*f.read(), View::Implicit(_)),
-        "late mesh cannot displace refinement"
+    let current = f.mesh();
+    assert!(!current.as_ref().as_ref().unwrap().0.surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "now implicit work is ready"
     );
-    f.graph.settings.set(settings(30.0, 0.75));
-    assert!(!f.mesh().as_ref().as_ref().unwrap().0.awaiting_first_surface);
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_)));
+    f.graph.settings.set(settings(30.0, 0.9));
+    assert!(
+        Rc::ptr_eq(&current, &f.mesh()),
+        "orbit after implicit cannot regress the stock"
+    );
     assert_eq!(f.queue.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    f.mesh(); // Current mesh starts implicit work, but don't execute it yet.
+    f.graph.settings.set(settings(0.0, 0.75));
+    assert!(f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    let cancelled = f.queue.lock().unwrap().pop_front().unwrap();
+    std::thread::spawn(cancelled).join().unwrap();
+    assert!(
+        !f.computations.tasks.poll(),
+        "the old implicit slot was cleared"
+    );
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only replacement mesh remains"
+    );
+    f.finish(0);
+    assert!(!f.mesh().as_ref().as_ref().unwrap().0.surface_pending);
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_)));
 }
 
 #[test]
@@ -255,11 +296,12 @@ fn current_failure_is_not_hidden_by_a_previous_successful_render() {
     let f = Fixture::new();
     f.read();
     f.finish(0);
+    f.read();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_)));
     f.graph.fuel.set(0);
     let view = f.read();
-    let View::Implicit(result) = &*view else {
+    let View::Mesh(result, _) = &*view else {
         panic!("current error must be exposed")
     };
     assert!(result.as_ref().is_err());

@@ -1,4 +1,4 @@
-//! Independent mesh and implicit interpretations over one observed program.
+//! Mesh-first implicit refinement over one observed program.
 //! Current implicit results refine the mesh; camera changes don't remesh it.
 
 use super::{
@@ -41,7 +41,10 @@ struct Computation {
 }
 
 enum View {
-    Mesh(Rc<Outcome<mesh::computation::ViewGeometry>>),
+    Mesh(
+        Rc<Outcome<mesh::computation::ViewGeometry>>,
+        Option<incremental::background::Progress>,
+    ),
     Implicit(Rc<Outcome<implicit::computation::ViewImage>>),
 }
 
@@ -81,15 +84,36 @@ impl Computation {
         );
         // Skip the standalone renderer's two coarsest implicit levels: the mesh is
         // already a useful draft. Keep the remaining XY and depth refinements.
-        let image = implicit::computation::image(computations, recording, settings.clone(), 512);
+        let mesh_ready = runtime.memo({
+            let geometry = geometry.clone();
+            move |read| {
+                Ok(geometry
+                    .read(read)?
+                    .as_ref()
+                    .as_ref()
+                    .is_ok_and(|(geometry, _)| !geometry.surface_pending))
+            }
+        });
+        let image = implicit::computation::image(
+            computations,
+            recording,
+            settings.clone(),
+            512,
+            Some(mesh_ready),
+        );
         let view = runtime.memo_by(
             move |read| {
-                // Demand both independently. Mesh work is queued first, but an image
-                // can become usable without a mesh having completed (and vice versa).
+                // Read both even while meshing: waiting preparation cancels any
+                // old implicit job without scheduling a new one ahead of the mesh.
                 let geometry = geometry.read(read)?;
                 let image = image.read(read)?;
+                if geometry.is_err() {
+                    return Ok(View::Mesh(geometry, None));
+                }
                 Ok(match image.as_ref() {
-                    Ok((image, _)) if image.stale || image.image.is_none() => View::Mesh(geometry),
+                    Ok((image, _)) if image.stale || image.image.is_none() => {
+                        View::Mesh(geometry, image.progress)
+                    }
                     // A current error is a result too; don't hide it behind old geometry.
                     _ => View::Implicit(image),
                 })
@@ -162,7 +186,7 @@ pub(super) fn display(
             .as_ref()
             .map_err(|error| (::grap::memo::failure(*error), fuel))
             .and_then(|view| match view.as_ref() {
-                View::Mesh(geometry) => {
+                View::Mesh(geometry, progress) => {
                     let (geometry, fuel) = geometry.as_ref().as_ref().map_err(Clone::clone)?;
                     let image = fidget::mesh::image(
                         &geometry.geometry,
@@ -178,7 +202,7 @@ pub(super) fn display(
                         )
                     })?;
                     // Implicit refinement is pending, even when the fallback is current.
-                    Ok(crate::display::overlay([image, crate::display::dim("…")]))
+                    Ok(implicit::progress_bar(image, *progress))
                 }
                 View::Implicit(image) => {
                     let (image, _) = image.as_ref().as_ref().map_err(Clone::clone)?;
@@ -188,7 +212,7 @@ pub(super) fn display(
                         .expect("only current images refine the mesh");
                     let drawing = fidget::image_from_data(size, data.clone(), false);
                     Ok(if image.pending {
-                        crate::display::overlay([drawing, crate::display::dim("…")])
+                        implicit::progress_bar(drawing, image.progress)
                     } else {
                         drawing
                     })

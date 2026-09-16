@@ -98,6 +98,24 @@ pub enum Availability<T> {
     Ready(Arc<T>),
 }
 
+/// Completed work in the current stage, not an estimate of time remaining.
+/// A worker may reset the counts when starting a new stage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Progress {
+    pub completed: usize,
+    pub total: usize,
+}
+
+impl Progress {
+    pub fn fraction(self) -> f64 {
+        if self.total == 0 {
+            1.0
+        } else {
+            self.completed.min(self.total) as f64 / self.total as f64
+        }
+    }
+}
+
 trait BackgroundNode {
     fn collect(&self) -> bool;
     fn close(&self);
@@ -170,6 +188,49 @@ impl Tasks {
         + Sync
         + 'static,
     ) -> AsyncMemo<I, T> {
+        self.memo_reporting(prepare, move |input, cancel, publish, _progress| {
+            compute(input, cancel, publish)
+        })
+    }
+
+    /// Work counts are independent of usable intermediate values. Both use the
+    /// job's generation and enter the graph only at the next poll boundary.
+    pub fn memo_reporting<I: Clone + Send + 'static, T: Send + Sync + 'static>(
+        &self,
+        prepare: Memo<I>,
+        compute: impl Fn(
+            I,
+            &Cancellation,
+            &mut dyn FnMut(T) -> Result<(), Error>,
+            &(dyn Fn(Progress) + Sync),
+        ) -> Result<T, Error>
+        + Send
+        + Sync
+        + 'static,
+    ) -> AsyncMemo<I, T> {
+        let prepare = self.runtime.memo_by(
+            move |read| Ok(Some((*prepare.read(read)?).clone())),
+            |_, _| false,
+        );
+        self.memo_reporting_when_ready(prepare, compute)
+    }
+
+    /// `None` means preparation is waiting on a dependency: cancel obsolete
+    /// work, retain the previous result as pending, and submit no replacement.
+    /// A later `Some(input)` starts work through the usual dependency mechanism.
+    pub fn memo_reporting_when_ready<I: Clone + Send + 'static, T: Send + Sync + 'static>(
+        &self,
+        prepare: Memo<Option<I>>,
+        compute: impl Fn(
+            I,
+            &Cancellation,
+            &mut dyn FnMut(T) -> Result<(), Error>,
+            &(dyn Fn(Progress) + Sync),
+        ) -> Result<T, Error>
+        + Send
+        + Sync
+        + 'static,
+    ) -> AsyncMemo<I, T> {
         let (sender, receiver) = mpsc::channel();
         let node = Rc::new(AsyncNode {
             runtime: self.runtime.clone(),
@@ -191,6 +252,8 @@ impl Tasks {
                 cancel: Cancellation::default(),
                 value: Rc::new(Availability::Pending { previous: None }),
                 pending_report: None,
+                pending_progress: None,
+                progress: None,
                 failure: None,
                 changed: self.runtime.0.get(),
                 reusable: true,
@@ -215,21 +278,30 @@ impl Drop for Tasks {
 }
 
 enum Report<T> {
-    Progress(T),
+    Value(T),
+    WorkProgress(Progress),
     Finished(std::thread::Result<Result<T, Error>>),
 }
 
 type GenerationReport<T> = (u64, Report<T>);
-type Worker<I, T> = dyn Fn(I, &Cancellation, &mut dyn FnMut(T) -> Result<(), Error>) -> Result<T, Error>
+type Worker<I, T> = dyn Fn(
+        I,
+        &Cancellation,
+        &mut dyn FnMut(T) -> Result<(), Error>,
+        &(dyn Fn(Progress) + Sync),
+    ) -> Result<T, Error>
     + Send
     + Sync;
 
 struct State<I, T> {
-    input: Option<Rc<I>>,
+    // Outer None: never prepared. Some(None): observed waiting preparation.
+    input: Option<Rc<Option<I>>>,
     generation: u64,
     cancel: Cancellation,
     value: Rc<Availability<T>>,
     pending_report: Option<GenerationReport<T>>,
+    pending_progress: Option<Progress>,
+    progress: Option<Progress>,
     failure: Option<Error>,
     changed: u64,
     reusable: bool,
@@ -238,7 +310,7 @@ struct State<I, T> {
 
 struct AsyncNode<I, T> {
     runtime: Runtime,
-    prepare: Memo<I>,
+    prepare: Memo<Option<I>>,
     compute: Arc<Worker<I, T>>,
     wake: Arc<dyn Fn() + Send + Sync>,
     slot: Arc<Slot>,
@@ -256,6 +328,11 @@ impl<I, T> Clone for AsyncMemo<I, T> {
 }
 
 impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncMemo<I, T> {
+    pub fn progress(&self, read: &mut Read) -> Result<Option<Progress>, Error> {
+        self.read(read)?;
+        Ok(self.0.state.borrow().progress)
+    }
+
     pub fn read(&self, read: &mut Read) -> Result<Rc<Availability<T>>, Error> {
         if let Err(error) = self.0.refresh(read) {
             read.untracked();
@@ -306,6 +383,8 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                 .expect("request generation exhausted");
             state.input = Some(input.clone());
             state.pending_report = None;
+            state.pending_progress = None;
+            state.progress = None;
             state.failure = None;
             let previous = match &*state.value {
                 Availability::Pending { previous } => previous.clone(),
@@ -313,23 +392,36 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             };
             state.value = Rc::new(Availability::Pending { previous });
             state.changed = read.revision;
+            let Some(input) = input.as_ref().clone() else {
+                self.slot.clear();
+                return Ok(());
+            };
             let generation = state.generation;
             let cancel = state.cancel.clone();
             let compute = self.compute.clone();
             let sender = self.sender.clone();
             let wake = self.wake.clone();
-            let input = (*input).clone();
             self.slot.submit(Box::new(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     cancel.check()?;
-                    let value = compute(input, &cancel, &mut |value| {
+                    let mut publish = |value| {
                         cancel.check()?;
                         sender
-                            .send((generation, Report::Progress(value)))
+                            .send((generation, Report::Value(value)))
                             .map_err(|_| Error::Cancelled)?;
                         wake();
                         Ok(())
-                    })?;
+                    };
+                    let progress = |progress| {
+                        if cancel.check().is_ok()
+                            && sender
+                                .send((generation, Report::WorkProgress(progress)))
+                                .is_ok()
+                        {
+                            wake();
+                        }
+                    };
+                    let value = compute(input, &cancel, &mut publish, &progress)?;
                     cancel.check()?;
                     Ok(value)
                 }));
@@ -345,14 +437,20 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             self.collect();
         }
         let mut state = self.state.borrow_mut();
+        if let Some(progress) = state.pending_progress.take() {
+            state.progress = Some(progress);
+            state.changed = read.revision;
+        }
         if let Some((generation, report)) = state.pending_report.take() {
             if generation == state.generation {
                 state.changed = read.revision;
                 match report {
-                    Report::Progress(value) => {
+                    Report::WorkProgress(_) => unreachable!("collected separately from values"),
+                    Report::Value(value) => {
                         state.value = Rc::new(Availability::Refining(Arc::new(value)))
                     }
                     Report::Finished(completed) => {
+                        state.progress = None;
                         let completed = completed.unwrap_or_else(|panic| {
                             state.input = None;
                             std::panic::resume_unwind(panic)
@@ -380,7 +478,10 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
         let mut changed = false;
         for result in self.receiver.borrow_mut().try_iter() {
             if !state.closed && result.0 == state.generation {
-                state.pending_report = Some(result);
+                match result {
+                    (_, Report::WorkProgress(progress)) => state.pending_progress = Some(progress),
+                    report => state.pending_report = Some(report),
+                }
                 changed = true;
             }
         }
