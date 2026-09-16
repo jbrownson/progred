@@ -184,13 +184,14 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
     }
     let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
     let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
-    let minimum = pixels.width().min(pixels.height()) as f32;
+    // Match the implicit view's vertical framing, independent of pane width.
+    let vertical_scale = camera.zoom / radius;
     Some(View {
         model_to_view: (yaw * pitch).inverse().to_homogeneous()
             * Translation3::from(-center).to_homogeneous(),
         projection: [
-            camera.zoom / radius * minimum / pixels.width() as f32,
-            camera.zoom / radius * minimum / pixels.height() as f32,
+            vertical_scale * pixels.height() as f32 / pixels.width() as f32,
+            vertical_scale,
             -0.5 / radius,
             0.5,
         ],

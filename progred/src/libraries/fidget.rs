@@ -821,18 +821,22 @@ fn volume_view(
     let rotation = yaw * pitch;
     let radius = half.norm() * 1.05;
     let minimum = raster_size.width().min(raster_size.height());
-    let depth = (f64::from(minimum) * f64::from(camera.zoom.max(1.0)))
+    let height = raster_size.height();
+    let depth = (f64::from(height) * f64::from(camera.zoom.max(1.0)))
         .ceil()
         .min(f64::from(u32::MAX - 63)) as u32;
     let depth = depth.next_multiple_of(64);
     let depth_scale = depth as f32 / minimum as f32;
+    // Frame vertically so a pane divider changes the horizontal field of view,
+    // not the model's scale. Fidget normalizes by the shortest axis instead.
+    let image_scale = minimum as f32 / height as f32;
     VolumeView {
         size: VoxelRenderSize::new(raster_size.width(), raster_size.height(), depth),
         world_to_model: Translation3::from(center).to_homogeneous()
             * rotation.to_homogeneous()
             * Scale3::new(
-                radius / camera.zoom,
-                radius / camera.zoom,
+                radius / camera.zoom * image_scale,
+                radius / camera.zoom * image_scale,
                 radius / depth_scale,
             )
             .to_homogeneous(),

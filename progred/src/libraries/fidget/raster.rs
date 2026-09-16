@@ -382,11 +382,10 @@ impl Request {
         let mut view = volume_view(&self.preview, self.camera, pixels);
         // Pixel rounding must not change the camera's aspect ratio between passes.
         if pixels != self.pixels {
-            let ratio = pixels.width().min(pixels.height()) as f32
-                / self.pixels.width().min(self.pixels.height()) as f32;
+            let ratio = pixels.height() as f32 / self.pixels.height() as f32;
             view.world_to_model *= Scale3::new(
                 self.pixels.width() as f32 / pixels.width() as f32 * ratio,
-                self.pixels.height() as f32 / pixels.height() as f32 * ratio,
+                1.0,
                 1.0,
             )
             .to_homogeneous();

@@ -52,6 +52,9 @@ render failures report to stderr before switching to CPU. This is not
 Fidget's voxel renderer as a fallback. Both triangle backends share the camera
 transform and color/lighting policy. They reuse the ordinary Fidget viewport's
 orbit and zoom handlers, image sizing, clipping, and per-view camera state.
+Mesh and implicit views use the same height-based framing: changing pane width
+reveals or crops space at the sides without changing the model's apparent scale.
+Progressive implicit passes preserve that framing at every resolution.
 
 Viewing bounds are also meshing bounds: geometry outside them is not extracted.
 Zooming out cannot recover cropped geometry; expand the bounds instead. A mesh

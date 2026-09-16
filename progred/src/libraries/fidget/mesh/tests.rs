@@ -141,6 +141,46 @@ fn camera_preserves_aspect_and_changes_pixels_without_affecting_model_space() {
 }
 
 #[test]
+fn changing_pane_width_preserves_mesh_and_implicit_camera_scale() {
+    let preview = sphere_preview();
+    let height = 160;
+    for zoom in [0.5, 1.0, 4.0] {
+        let camera = Camera {
+            zoom,
+            ..Camera::default()
+        };
+        let square = PixelRenderSize::from(height);
+        let mesh = view(&preview, camera, square).unwrap();
+        let implicit = volume_view(&preview, camera, square);
+        let screen_to_model = implicit.world_to_model * implicit.size.screen_to_world();
+        // Cross the square aspect ratio: neither narrowing nor widening a pane
+        // should change pixel spacing or the depth volume, only its X extent.
+        for width in [80, 160, 320] {
+            let pixels = PixelRenderSize::new(width, height);
+            let resized_mesh = view(&preview, camera, pixels).unwrap();
+            assert!(
+                (resized_mesh.projection[0] * width as f32 - mesh.projection[0] * height as f32)
+                    .abs()
+                    < 0.001
+            );
+            assert_eq!(resized_mesh.projection[1], mesh.projection[1]);
+            let resized_implicit = volume_view(&preview, camera, pixels);
+            assert_eq!(resized_implicit.size.depth(), implicit.size.depth());
+            let resized_screen_to_model =
+                resized_implicit.world_to_model * resized_implicit.size.screen_to_world();
+            for axis in 0..3 {
+                assert!(
+                    (resized_screen_to_model.fixed_view::<3, 1>(0, axis)
+                        - screen_to_model.fixed_view::<3, 1>(0, axis))
+                    .norm()
+                        < 0.0001
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn depth_buffer_keeps_the_front_object_independent_of_order() {
     let plane = |z, color| Geometry {
         vertices: [[-0.8, -0.8, z], [0.8, -0.8, z], [0.0, 0.8, z]]
