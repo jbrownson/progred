@@ -23,13 +23,15 @@ members = [
     "vendor/fidget-jit",
     "vendor/fidget-core",
     "vendor/fidget-raster",
+    "vendor/fidget-wgpu",
 ]
 
-# Small, reviewed patches against the pinned upstream revision; see vendor/README.md.
+# Local patches against the pinned upstream revision; see vendor/README.md.
 [patch."https://github.com/mkeeter/fidget"]
 fidget-core = { path = "vendor/fidget-core" }
 fidget-jit = { path = "vendor/fidget-jit" }
 fidget-raster = { path = "vendor/fidget-raster" }
+fidget-wgpu = { path = "vendor/fidget-wgpu" }
 
 [workspace.dependencies]
 getrandom = "0.3"

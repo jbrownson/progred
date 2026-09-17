@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 layout-profile = []
 mesh-experiment = []
+gpu-experiment = ["dep:fidget-wgpu", "fidget-wgpu/experimental-spills"]
 
 [dependencies]
 grap = { path = "../grap" }
@@ -27,6 +28,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fidget-wgpu = { path = "../vendor/fidget-wgpu", optional = true }
 fidget-engine = { package = "fidget", git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6", default-features = false, features = ["wgpu"] }
 pollster.workspace = true
 puri-vello = { path = "../ui/puri-vello" }

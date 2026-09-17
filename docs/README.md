@@ -40,6 +40,9 @@ census, and persistent-expression measurements. CAM now tries mesh → final-qua
 implicit tiles; the standalone implicit preview retains independent refinement passes.
 [Graphics memory](graphics-memory-2026-09-16.md) records the idle-footprint
 investigation and isolated Vello resource-retention measurements.
+[GPU spills](fidget-gpu-experiment-2026-09-16.md) records the paused, opt-in GPU
+interpreter experiment, CPU comparisons, program-arena pressure, and batching
+tradeoffs. CAM remains on the CPU renderer.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.

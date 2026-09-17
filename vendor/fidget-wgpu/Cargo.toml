@@ -1,0 +1,36 @@
+[package]
+name = "fidget-wgpu"
+description = "WGPU backend for Fidget"
+readme = "README.md"
+version = "0.5.1"
+
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/mkeeter/fidget"
+authors = ["Matt Keeter <matt.j.keeter@gmail.com>"]
+rust-version = "1.92"
+
+[features]
+# Voxel spilling uses bounded scratch; pixel/color spilling still uses private
+# arrays. Keep this opt-in while experiments establish correctness and limits.
+experimental-spills = []
+
+[dependencies]
+fidget-core = { path = "../fidget-core" }
+fidget-raster = { path = "../fidget-raster" }
+fidget-bytecode = { git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6" }
+workspace-hack = { git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6" }
+
+flume = { version = "0.12", features = ["async"] }
+heck = "0.5"
+log = "0.4"
+naga = { version = "29.0.0", features = ["wgsl-in"] }
+nalgebra = { version = "0.35", features = ["serde-serialize"] }
+pollster = "0.4.0"
+static_assertions = "1"
+thiserror = "2"
+wgpu = "29.0.0"
+zerocopy = { version = "0.8", features = ["derive"] }
+
+[dev-dependencies]
+facet = { version = "0.46", features = ["reflect", "doc"] }

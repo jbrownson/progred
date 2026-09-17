@@ -1,10 +1,10 @@
 # Local Fidget patches
 
-`fidget-core`, `fidget-jit`, `fidget-raster`, and `models/hi.vm` are copied from Matt Keeter's
+`fidget-core`, `fidget-jit`, `fidget-raster`, `fidget-wgpu`, and `models/hi.vm` are copied from Matt Keeter's
 [Fidget](https://github.com/mkeeter/fidget), revision
 `0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6` (2026-09-12).
 They retain upstream's [MPL-2.0 license](fidget-LICENSE.txt).
-Cargo patches only these three packages; the remaining Fidget packages still use
+Cargo patches only these four packages; the remaining Fidget packages still use
 that exact Git revision. Their manifests spell out upstream's inherited package
 metadata and dependency versions, pinning core and workspace-hack to that revision.
 
@@ -37,9 +37,25 @@ Local source changes, each including regression tests:
   their per-object tile buffer, and an optional borrowed-tile callback exposes
   finished regions before whole-image assembly. Callbacks may run concurrently;
   consumers own publication/assembly policy. Applies after the scene tiling patch.
+- [GPU spill experiment](../docs/experiments/fidget-wgpu-spills.patch): the normal
+  backend rejects unsupported spilling geometry/color tapes. The non-default
+  `experimental-spills` feature enables spill-aware simplification and bounded
+  external scratch for voxel evaluation (pixel/color still use private arrays).
+  Explicit experimental choice-history sizing supports diagnosis. Full-stock
+  tests now match the CPU without exceeding Metal's private stack, but remain
+  substantially slower; general limits are not established. The headless
+  stage/tape profiler identifies program-arena exhaustion and can test a larger
+  arena without changing the renderer's default. Voxel work now excludes
+  offscreen X/Y padding. A diagnostic screen-region batching experiment bounds
+  program lifetimes without changing sampling density, but repeats enough
+  interval work to lose performance; it remains outside the app.
+  **Not ready for app use or an upstream proposal.** See the
+  [experiment report](../docs/fidget-gpu-experiment-2026-09-16.md). Its tests use
+  the core SSA access patch above.
 
 These patch files apply to upstream in the order listed, with no manifest adaptation, and are
-intended for upstream review. Nothing has been submitted or pushed upstream.
+intended for upstream review, except the explicitly experimental GPU patch.
+Nothing has been submitted or pushed upstream.
 Keep vendored source and patches in sync; do not accumulate unrelated changes.
 Remove each local package override when a reviewed upstream revision includes
 the corresponding fixes. See the [measurements](../docs/cam-render-profiling-2026-09-15.md).

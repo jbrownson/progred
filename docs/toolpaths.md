@@ -499,9 +499,15 @@ including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
 both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
 valid on this backend. A further native submission of this known-unsupported
 program was deliberately avoided. Command+9's implicit refinement uses the explicit
-software path; GPU implicit CAM needs an upstream implementation before use.
-No GPU timeout or spill emulation was added. Ordinary Fidget voxel previews
-retain their existing backend selection. The ignored
+software path; GPU implicit CAM was blocked by that missing implementation.
+No GPU timeout was added. The later [GPU spill experiment](fidget-gpu-experiment-2026-09-16.md)
+implements spill instructions behind an opt-in build feature, but is not used by
+the app. Bounded external scratch now lets the full stock match CPU geometry
+without exceeding Metal's private stack, but the measured GPU path remains much
+slower than the CPU. The GPU work is paused; CAM remains on the CPU renderer.
+Ordinary Fidget voxel previews retain their existing backend
+selection; unsupported spilling tapes are now rejected before GPU submission,
+allowing the existing CPU fallback. The ignored
 `editor_toolpath_implicit_async_svg_captures` test captures the checked-in
 example without opening a window; standalone-renderer captures substitute the
 preview function in the test fixture.
