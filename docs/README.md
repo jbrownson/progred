@@ -38,6 +38,8 @@ geometry; ordinary mesh previews still remesh each frame.
 records test-only whole-view, bounded-tile, exact-program-sharing, subtree
 census, and persistent-expression measurements. CAM now tries mesh → final-quality
 implicit tiles; the standalone implicit preview retains independent refinement passes.
+[Graphics memory](graphics-memory-2026-09-16.md) records the idle-footprint
+investigation and isolated Vello resource-retention measurements.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.

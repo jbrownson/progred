@@ -136,6 +136,29 @@ obsolete results must never become the current computation's result. Skipping
 intermediate meshes during rapid geometry edits is another possible policy,
 with the tradeoff of an older mesh when the user next orbits.
 
+## CAM preview navigation and execution grouping
+
+Explore an execution hierarchy distinct from the document's authoring outline.
+The proposed meaning of an operation is a boundary where a person or robot
+intervenes: flipping the part, re-probing, or similar work. Within it, indexed
+orientations, tool uses, and logical groups of cuts are possible levels; their
+ordering and names are not settled. Reusable tools and orientations need not
+be owned by that tree: execution occurrences can reference the same definitions
+in several places.
+
+One UI proposal is a stack of range-selectable, notched controls: operations at
+the bottom, then finer groups, with the existing continuous playback slider at
+the top operating on the selected work. Decide how parent ranges restrict child
+choices and how selection relates to execution order before implementing it.
+This is not a decision to impose these levels on every toolpath program.
+
+## Website as an interactive explanation
+
+The owner has registered `prog.red`. Consider developing its presentation
+alongside editor UX: a section for each of Progred's central ideas, with an
+embedded editor demonstrating that idea. This is a proposed direction, not a
+website implementation or hosting decision.
+
 ## CAM machine-axis alignment
 
 Revisit when generating G-code: prefer indexed orientations that let an
