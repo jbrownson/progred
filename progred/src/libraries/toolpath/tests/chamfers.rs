@@ -103,12 +103,15 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
         (
             call(
                 names["crosswise_chamfer"],
-                [(names["stepover"], f64::value(2.0))],
+                [
+                    (names["stepover"], f64::value(2.0)),
+                    (names["cutter_diameter"], f64::value(0.2)),
+                ],
             ),
             vec![
-                ([10.0, 20.0, 29.85], [10.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
-                ([8.0, 20.0, 29.85], [8.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
-                ([6.0, 20.0, 29.85], [6.0, 20.0, 30.15], [0.0, 1.0, 0.0]),
+                ([10.0, 20.0, 29.75], [10.0, 20.0, 30.25], [0.0, 1.0, 0.0]),
+                ([8.0, 20.0, 29.75], [8.0, 20.0, 30.25], [0.0, 1.0, 0.0]),
+                ([6.0, 20.0, 29.75], [6.0, 20.0, 30.25], [0.0, 1.0, 0.0]),
             ],
         ),
         (
@@ -146,6 +149,140 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
             .collect();
         assert_eq!(actual, expected);
     }
+}
+
+#[test]
+fn stroke_extension_composes_without_a_tool_or_output_scope() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    // The callback returns its endpoints as ordinary data rather than emitting a path.
+    let stroke = ::grap::lambda(
+        [names["start"], names["end"]],
+        call(
+            names["quote"],
+            [(
+                names["expression"],
+                Value::record(["start", "end"].map(|name| {
+                    (
+                        names[name],
+                        Value::record([(names["unquote"], names[name].into())]),
+                    )
+                })),
+            )],
+        ),
+    );
+    let extend = |stroke, before, after| {
+        let result = ::grap::evaluate(
+            &call(
+                names["extend_stroke"],
+                [
+                    (names["stroke"], stroke),
+                    (names["start_extension"], f64::value(before)),
+                    (names["end_extension"], f64::value(after)),
+                ],
+            ),
+            &sources,
+            1000,
+        );
+        assert!(result.completed && !absent::is_absent(&result.result));
+        result.result
+    };
+    for (before, after) in [(0.0, 0.0), (7.0, 0.0), (0.0, 14.0), (7.0, 14.0)] {
+        for nested in [false, true] {
+            let configured = if nested {
+                extend(
+                    extend(stroke.clone(), before / 2.0, after / 2.0),
+                    before / 2.0,
+                    after / 2.0,
+                )
+            } else {
+                extend(stroke.clone(), before, after)
+            };
+            for (start, end) in [
+                ([1.0, 2.0, 3.0], [3.0, 5.0, 9.0]),
+                ([3.0, 5.0, 9.0], [1.0, 2.0, 3.0]),
+            ] {
+                let result = ::grap::apply(
+                    &configured,
+                    [
+                        (names["start"], point_value(start)),
+                        (names["end"], point_value(end)),
+                    ],
+                    &sources,
+                    10_000,
+                );
+                assert!(
+                    result.completed && !absent::is_absent(&result.result),
+                    "{:?}",
+                    result.result
+                );
+                let fields = result.result.as_record().unwrap();
+                let direction = (Vector3::from(end) - Vector3::from(start)).normalize();
+                for (name, expected) in [
+                    ("start", Vector3::from(start) - before * direction),
+                    ("end", Vector3::from(end) + after * direction),
+                ] {
+                    let actual = read_point(fields.get(&names[name]).unwrap()).unwrap();
+                    assert!((Vector3::from(actual) - expected).norm() < 1e-12);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let configured = ::grap::evaluate(
+        &call(
+            names["extend_stroke"],
+            [
+                (names["start_extension"], f64::value(0.1)),
+                (names["end_extension"], f64::value(0.1)),
+                (
+                    names["stroke"],
+                    ::grap::lambda(
+                        [names["start"], names["end"]],
+                        call(
+                            names["line"],
+                            [
+                                (names["start"], names["start"].into()),
+                                (names["end"], names["end"].into()),
+                                (TOOL_AXIS, point_value([0.0, 0.0, 1.0])),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        &sources,
+        1000,
+    );
+    assert!(configured.completed && !absent::is_absent(&configured.result));
+    let mut path = Recording::default();
+    let result = run(&mut path, |scope| {
+        ::grap::apply_scoped(
+            &configured.result,
+            [
+                (names["start"], point_value([1.0, 2.0, 3.0])),
+                (names["end"], point_value([1.0, 2.0, 3.0])),
+            ],
+            &sources,
+            scope,
+            10_000,
+        )
+    });
+    assert!(result.completed && absent::is_absent(&result.result));
+    assert!(path.commands().is_empty());
 }
 
 #[test]
@@ -346,7 +483,7 @@ fn both_square_strategies_subtract_the_twelve_chamfer_planes_without_gouging() {
 }
 
 #[test]
-fn crosswise_passes_follow_chamfer_width_and_include_both_edge_ends() {
+fn crosswise_passes_clear_stock_at_both_ends_and_include_both_edge_ends() {
     let (original, names) =
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
@@ -368,16 +505,14 @@ fn crosswise_passes_follow_chamfer_width_and_include_both_edge_ends() {
         };
         let tool = square_tool(&sources, &names);
         let rows = (size / stepover).ceil() as usize + 1;
+        let stroke_length = chamfer * 2.0_f64.sqrt() + diameter;
         let mut normals = Vec::new();
         for (name, edges) in [("op1_chamfers", 8), ("op2_chamfers", 4)] {
             let path = program(&sources, &names, name);
             assert_eq!(path.commands().len(), 2 * rows * edges);
             let segments: Vec<_> = path.tool_segments().collect();
             assert_eq!(segments.len(), rows * edges);
-            assert!(
-                (path.length().unwrap() - (rows * edges) as f64 * chamfer * 2.0_f64.sqrt()).abs()
-                    < 1e-10
-            );
+            assert!((path.length().unwrap() - (rows * edges) as f64 * stroke_length).abs() < 1e-10);
             for edge in segments.chunks_exact(rows) {
                 let mid = |s: &(Point3, Point3, Axis, Option<&Tool>)| {
                     (Vector3::from(s.0) + Vector3::from(s.1)) / 2.0
@@ -399,13 +534,24 @@ fn crosswise_passes_follow_chamfer_width_and_include_both_edge_ends() {
                     let axis = Vector3::from(axis.vector());
                     let delta = Vector3::from(b) - Vector3::from(a);
                     let feed = delta.normalize();
-                    assert!((delta.norm() - chamfer * 2.0_f64.sqrt()).abs() < 1e-12);
+                    assert!((delta.norm() - stroke_length).abs() < 1e-12);
                     assert!(feed.dot(&axis).abs() < 1e-12);
                     assert!(
                         (feed.cross(&axis) - advance).norm() < 1e-12,
                         "consistent row direction, no alternating cuts"
                     );
                     let center = (Vector3::from(a) + Vector3::from(b)) / 2.0;
+                    // At either endpoint the entire flat cutting cylinder lies
+                    // outside one stock face (at most tangent to its boundary).
+                    // The spindle axis points outward, so the rest of its cutting
+                    // length moves farther from that face, not back into stock.
+                    for tip in [a, b] {
+                        assert!((0..3).any(|i| {
+                            let sign = signature[i] as f64;
+                            let radial_extent = diameter / 2.0 * (1.0 - axis[i] * axis[i]).sqrt();
+                            sign != 0.0 && sign * tip[i] - radial_extent >= size / 2.0 - 1e-12
+                        }));
+                    }
                     assert!(
                         (center - (first + (last - first) * index as f64 / (rows - 1) as f64))
                             .norm()
@@ -490,7 +636,7 @@ fn wide_stepover_leaves_real_uncut_strips_instead_of_clamping_it() {
 }
 
 #[test]
-fn changing_strategy_and_stepover_invalidates_the_observed_program() {
+fn changing_strategy_stepover_and_diameter_invalidates_the_observed_program() {
     use crate::computations::Computations;
     use std::rc::Rc;
     let (mut doc, names) =
@@ -511,14 +657,17 @@ fn changing_strategy_and_stepover_invalidates_the_observed_program() {
         &initial,
         &computations.runtime.read(&memo).unwrap()
     ));
-    for (strategy, step, segments) in [
-        ("crosswise_chamfer", 0.1, 8 * 11),
-        ("contour_chamfer", 0.1, 8),
-        ("crosswise_chamfer", 0.05, 8 * 21),
+    for (strategy, step, diameter, segments) in [
+        ("crosswise_chamfer", 0.1, 0.125, 8 * 11),
+        ("crosswise_chamfer", 0.1, 0.16, 8 * 11),
+        ("contour_chamfer", 0.1, 0.16, 8),
+        ("crosswise_chamfer", 0.05, 0.125, 8 * 21),
     ] {
         set_strategy(&mut doc, &names, strategy);
         doc.cells
             .set_value(names["chamfer_stepover"], f64::value(step));
+        doc.cells
+            .set_value(names["square_diameter"], f64::value(diameter));
         computations.begin(Rc::new(doc.clone()), libraries.clone());
         let cached = computations.runtime.read(&memo).unwrap();
         let path = cached.path().unwrap();

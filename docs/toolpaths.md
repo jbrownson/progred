@@ -162,6 +162,14 @@ The example keeps algorithms as ordinary Grap functions, not a strategy enum
 or a record containing the union of every strategy's settings:
 
 - `straight cut(start, end, tool axis)` emits one disconnected straight path.
+- `extend straight stroke(start extension, end extension, stroke)` returns another
+  `stroke(start, end)` callable. It moves the start backward and the end forward
+  along the original segment's unit direction before calling the supplied stroke.
+  Distances are independent; zero leaves that end unchanged. The wrapper neither
+  selects a tool nor emits moves itself, and can wrap another extended stroke.
+  It requires a nonzero segment: the unit-vector calculation returns absent when
+  there is no direction. `unit vector` is a separate Grap helper using the existing
+  scalar math and point functions.
 - `evenly spaced(length, stepover, action)` calls `action(t)` at normalized
   positions including both endpoints. Length and maximum stepover must be finite
   and positive; intervals are `max(1, ceil(length/stepover))`. It streams calls,
@@ -175,7 +183,7 @@ or a record containing the union of every strategy's settings:
   computes the contact-to-tip displacement for a cylindrical side contact.
   The unit normal and unit axis must be perpendicular. This is specific contact
   geometry, not a general compensation solver for arbitrary profiles.
-- `contour chamfer(diameter, contact height)` and `crosswise chamfer(stepover)`
+- `contour chamfer(diameter, contact height)` and `crosswise chamfer(stepover, diameter)`
   return ordinary closures accepting a `strip`. Configuration needs no output
   scope; calling the configured closure emits paths. Neither recipe knows the
   cube's angle, edge rotations, or global parameter cells.
@@ -190,7 +198,8 @@ The `cut strip` binding in `cube chamfers` selects one, before repetition.
 Change that binding's subject from the end-cut pass to the side-cut pass to
 switch recipes. The contour configuration shares diameter and cutting-length
 cells with the square profile and explicitly chooses half the cutting length
-as contact height. The end-cut configuration only reads stepover. Tool selection
+as contact height. The end-cut configuration reads stepover and the same square
+diameter, using half the diameter for each end's stroke extension. Tool selection
 remains the enclosing `with tool` group, separate from these contact functions;
 choosing a different tool shape still requires a matching contact recipe.
 The recipes do not infer tool compatibility from an arbitrary profile.
@@ -226,11 +235,17 @@ and updates from edited cube/tool dimensions.
 
 The example defaults to the alternative `crosswise chamfer` callable. The square
 mill's axis is the strip's outward normal `n`, with its flat tip directly on the
-plane. At each centerline sample, `parallel strokes` emits one straight cut from
-`center − (width/2)*a` to `center + (width/2)*a`, where
-`a = (0,−1,1)/√2` is the across-chamfer direction. Both endpoints and the axis
-receive the ring's rigid orientation. No ball-radius or side-radius compensation
-is appropriate here: the tip plane itself is the contact plane.
+plane. At each centerline sample, `parallel strokes` supplies endpoints
+`center − (width/2)*a` and `center + (width/2)*a`, where
+`a = (0,−1,1)/√2` is the across-chamfer direction. Its stroke is composed as
+`extend straight stroke(radius, radius, straight cut with axis n)`, so the emitted
+tip path starts one cutter radius before the strip and finishes one radius after
+it. For the cube this puts the cutting cylinder entirely outside the stock at
+both ends (at most tangent), rather than starting with half the cutter engaged
+or stopping before it has exited. This is cutting-stroke overtravel, not a lead,
+retract, or general fixture-clearance calculation. Both endpoints and the axis
+receive the ring's rigid orientation. The tip plane remains the contact plane;
+the extension does not offset the cut depth.
 
 `chamfer stepover` defaults to 0.05 inches. For a straight edge of length `s`,
 the program uses `max(1, ceil(s/stepover))` intervals and includes both endpoints.
@@ -248,8 +263,10 @@ the subtraction. Both recipes assume a straight planar strip with constant,
 orthonormal normal/across directions and a square cutting profile. The cube
 supplies a 45-degree strip, but that angle is not part of the recipes. They simulate the ideal revolved envelope,
 not tooth marks, runout, or surface-finish physics. Tests cover both swept solids,
-all edge orientations, width/spacing changes, invalid spacing, visible gaps from
-wide steps, and dependency invalidation when the callable or spacing changes.
+all edge orientations, clear start/end poses, width/spacing/diameter changes,
+invalid spacing, visible gaps from wide steps, and dependency invalidation when
+the callable, spacing, or diameter changes. Separate tests compose the extension
+with a data-returning callback, without a tool or path-output scope.
 Independent-strip tests also exercise both recipes away from the cube's 45-degree
 frame; the shape and direction are explicit inputs rather than hidden constants.
 

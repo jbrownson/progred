@@ -63,11 +63,13 @@
     "dot": 81b6551b0b5376142721b23ace40847f,
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
+    "end_extension": ca9bd94d95a6b53179cdfb599033aabb,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "evenly_spaced": 19307c3d1b09e230632c61a9f88170b5,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
+    "extend_stroke": b8a081cb2dadab78061e584f9636fa1c,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "face": dfc8f0866c65bc9aa4162913a1cc446f,
@@ -183,6 +185,7 @@
     "square_tool": 9aabe44cdff817c10ba34f605620dda2,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
+    "start_extension": daa047f5ef5b70cb086eaa2b11812506,
     "state": 3775735ae4c156144c110ba819cb1e39,
     "step": 569e33fee165d346791e05c0e9cfea8e,
     "stepover": 29501f4973889c57ee509e0f212c4f6d,
@@ -210,6 +213,7 @@
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
     "u1": b64d80018a2257079ca8b6b617d9a6d9,
+    "unit_vector": 975b663cebf464f1550ddd54df4f5596,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "v0": a5204d915920fe26c29525020c2eae4e,
@@ -951,6 +955,7 @@
       name: "crosswise chamfer",
       params: [
         stepover,
+        cutter_diameter,
       ],
       body: {
         params: [
@@ -984,15 +989,32 @@
                 },
                 curve: curve,
                 stroke: {
-                  params: [
-                    start,
-                    end,
-                  ],
-                  body: {
-                    end: end,
-                    start: start,
-                    function: line,
-                    tool_axis: normal,
+                  function: extend_stroke,
+                  end_extension: {
+                    right: {
+                      f64: 0x0000000000000040,
+                    },
+                    function: divide,
+                    left: cutter_diameter,
+                  },
+                  start_extension: {
+                    right: {
+                      f64: 0x0000000000000040,
+                    },
+                    function: divide,
+                    left: cutter_diameter,
+                  },
+                  stroke: {
+                    params: [
+                      start,
+                      end,
+                    ],
+                    body: {
+                      end: end,
+                      start: start,
+                      function: line,
+                      tool_axis: normal,
+                    },
                   },
                 },
               },
@@ -1278,10 +1300,14 @@
     edge_limit: {
       name: "edge limit",
     },
+    end_extension: {
+      name: "end extension",
+    },
     chamfer_pass: {
       name: "end-cut chamfer pass",
       stepover: chamfer_stepover,
       function: crosswise_chamfer,
+      cutter_diameter: square_diameter,
     },
     evenly_spaced: {
       name: "evenly spaced",
@@ -1416,6 +1442,69 @@
           },
         ],
         function: do,
+      },
+    },
+    extend_stroke: {
+      name: "extend straight stroke",
+      params: [
+        start_extension,
+        end_extension,
+        stroke,
+      ],
+      body: {
+        params: [
+          start,
+          end,
+        ],
+        body: {
+          function: where,
+          expression: {
+            end: {
+              right: {
+                function: scaled_point,
+                vector: direction,
+                factor: end_extension,
+              },
+              function: point_sum,
+              left: end,
+            },
+            start: {
+              right: {
+                function: scaled_point,
+                vector: direction,
+                factor: {
+                  right: start_extension,
+                  function: subtract,
+                  left: {
+                    f64: 0x0000000000000000,
+                  },
+                },
+              },
+              function: point_sum,
+              left: start,
+            },
+            function: stroke,
+          },
+          bindings: [
+            {
+              subject: {
+                function: unit_vector,
+                vector: {
+                  right: {
+                    function: scaled_point,
+                    vector: start,
+                    factor: {
+                      f64: 0x000000000000f0bf,
+                    },
+                  },
+                  function: point_sum,
+                  left: end,
+                },
+              },
+              bind: direction,
+            },
+          ],
+        },
       },
     },
     face_pair: {
@@ -2890,6 +2979,9 @@
       name: "square tool diameter",
       f64: 0x000000000000c03f,
     },
+    start_extension: {
+      name: "start extension",
+    },
     stepover: {
       name: "stepover",
     },
@@ -3133,6 +3225,50 @@
     u0: {
       name: "u start",
     },
+    unit_vector: {
+      name: "unit vector",
+      params: [
+        vector,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: scaled_point,
+          vector: vector,
+          factor: {
+            right: {
+              right: {
+                right: z,
+                function: hypot,
+                left: y,
+              },
+              function: hypot,
+              left: x,
+            },
+            function: divide,
+            left: {
+              f64: 0x000000000000f03f,
+            },
+          },
+        },
+        bindings: [
+          {
+            subject: vector,
+            pattern: {
+              y: {
+                bind: y,
+              },
+              x: {
+                bind: x,
+              },
+              z: {
+                bind: z,
+              },
+            },
+          },
+        ],
+      },
+    },
     v: {
       name: "v",
     },
@@ -3177,12 +3313,14 @@
     helpers_section: [
       evenly_spaced,
       parallel_strokes,
+      extend_stroke,
       line,
       square_side_offset,
       rotate_paths,
       translated_points,
       point_sum,
       scaled_point,
+      unit_vector,
     ],
     strategies_section: [
       diagonals,
