@@ -143,7 +143,9 @@ pub(crate) fn compare_tile_publication(preview: &VolumePreview) {
             let result = if streaming {
                 request
                     .render_software_tiles(
-                        512,
+                        Passes::Progressive {
+                            first_max_edge: 512,
+                        },
                         4,
                         &cancel,
                         &mut |frame| {

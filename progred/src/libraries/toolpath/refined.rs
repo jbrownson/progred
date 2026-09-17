@@ -95,13 +95,12 @@ impl Computation {
                     .is_ok_and(|geometry| !geometry.surface_pending))
             }
         });
-        // Skip the standalone renderer's two coarsest implicit levels: the mesh is
-        // already a useful draft. Keep the remaining XY and depth refinements.
+        // The mesh supplies the draft; completed final-quality tiles replace it.
         let image = implicit::computation::image(
             computations,
             recording,
             settings.clone(),
-            512,
+            fidget::raster::Passes::Final,
             Some(mesh_ready),
         );
         let view = runtime.memo_by(

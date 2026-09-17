@@ -1,7 +1,7 @@
 use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
-use fidget::raster::Frame;
+use fidget::raster::{Frame, Passes};
 use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
 
@@ -49,7 +49,9 @@ impl Computation {
             computations,
             recording,
             settings.clone(),
-            128,
+            Passes::Progressive {
+                first_max_edge: 128,
+            },
             None,
         );
         Self {
@@ -92,13 +94,13 @@ impl Computation {
 }
 
 /// Use the same observed program as other interpretations. The caller chooses
-/// the first image resolution independently of its fallback and scheduling.
+/// the quality passes independently of its fallback and scheduling.
 /// A readiness dependency gates background work; becoming unready cancels it.
 pub(crate) fn image(
     computations: &Computations,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
-    first_max_edge: u32,
+    passes: Passes,
     ready: Option<Memo<bool>>,
 ) -> Memo<Outcome<ViewImage>> {
     image_with_render(
@@ -112,7 +114,7 @@ pub(crate) fn image(
             match scene {
                 Ok(scene) => Ok(scene
                     .render_software_tiles(
-                        first_max_edge,
+                        passes,
                         4,
                         cancel,
                         &mut |image| publish(Ok(image)),

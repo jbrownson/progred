@@ -302,14 +302,20 @@ mod tests {
             .unwrap()
             .unwrap();
         let result = request
-            .render_software_tiles(12, 4, &cancel, &mut |_| Ok(()), None)
+            .render_software_tiles(
+                Passes::Progressive { first_max_edge: 12 },
+                4,
+                &cancel,
+                &mut |_| Ok(()),
+                None,
+            )
             .unwrap()
             .unwrap();
         assert!(!result.is_partial());
         assert_eq!(result.image.data.data(), reference.data.data());
         let mut count = 0;
         let result = request.render_software_tiles(
-            12,
+            Passes::Progressive { first_max_edge: 12 },
             4,
             &cancel,
             &mut |_| {
@@ -321,6 +327,81 @@ mod tests {
         );
         assert!(matches!(result, Err(incremental::Error::Cancelled)));
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn final_only_tiles_keep_final_quality_with_one_progress_interval() {
+        let mut request = super::super::tests::request(81.0, 53.0);
+        request.preview.objects = vec![
+            SceneObject {
+                tree: Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.6,
+                color: [200, 100, 50],
+            },
+            SceneObject {
+                tree: Tree::x() + Tree::z(),
+                color: [50, 100, 200],
+            },
+        ];
+        let cancel = incremental::Cancellation::default();
+        let reference = request
+            .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
+            .unwrap()
+            .unwrap();
+        let reports = Mutex::new(Vec::new());
+        let result = request
+            .render_software_tiles(
+                Passes::Final,
+                4,
+                &cancel,
+                &mut |frame| {
+                    assert!(frame.is_partial(), "no intermediate whole-image passes");
+                    assert_eq!((frame.image.width, frame.image.height), (81, 53));
+                    Ok(())
+                },
+                Some(&|progress| reports.lock().unwrap().push(progress)),
+            )
+            .unwrap()
+            .unwrap();
+        assert!(!result.is_partial());
+        assert_eq!((result.image.width, result.image.height), (81, 53));
+        assert_eq!(result.image.data.data(), reference.data.data());
+        let reports = reports.into_inner().unwrap();
+        assert_eq!(reports.iter().filter(|p| p.completed == 0).count(), 1);
+        assert_eq!(reports.iter().filter(|p| p.completed == p.total).count(), 1);
+        assert!(reports.iter().all(|p| p.total == 81 * 53));
+        assert!(reports.windows(2).all(|p| p[0].completed <= p[1].completed));
+    }
+
+    #[test]
+    fn final_only_tiles_validate_depth_and_propagate_cancellation() {
+        let request = super::super::tests::request(41.0, 27.0);
+        let cancel = incremental::Cancellation::default();
+        for depth in [0, u32::MAX] {
+            assert!(
+                request
+                    .render_software_tiles(
+                        Passes::Final,
+                        depth,
+                        &cancel,
+                        &mut |_| panic!("invalid depth must not publish"),
+                        None,
+                    )
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        let result = request.render_software_tiles(
+            Passes::Final,
+            4,
+            &cancel,
+            &mut |_| panic!("cancelled pass must not publish"),
+            Some(&|progress| {
+                if progress.completed == 0 {
+                    cancel.cancel();
+                }
+            }),
+        );
+        assert!(matches!(result, Err(incremental::Error::Cancelled)));
     }
 
     #[test]

@@ -338,7 +338,7 @@ renderer, camera, lighting, and depth buffer; no overlay or depth bias is used.
 Failed path generation discards the whole preview before meshing the model.
 
 `preview paths refined` takes the mesh preview's arguments and composes a mesh
-fallback with progressive software implicit images. It shares one observed path
+fallback with a streamed final-quality software implicit image. It shares one observed path
 evaluation between the two interpretations. Implicit work waits for the current
 stock mesh; a geometry change cancels obsolete image work while meshing runs.
 A current implicit image replaces the mesh tile by tile; unfinished regions of
@@ -347,11 +347,13 @@ explicit, so completed transparent pixels erase the mesh rather than revealing
 it. Orbiting after an implicit result therefore
 returns to a current mesh, never an older stock result that it had overtaken.
 An outdated stock mesh is desaturated, while tool/path geometry updates immediately.
-Implicit refinement starts at no more than 512 physical pixels on the longest
-edge, skipping the standalone implicit renderer's two coarsest levels. It roughly
-doubles XY resolution up to native size, then finishes with four-times depth
-sampling. Later passes retain the previous implicit image in unfinished regions.
-Standalone mesh and implicit functions remain available.
+The mesh supplies the draft image. Implicit tiles render directly at native XY
+resolution with four-times depth sampling, skipping intermediate resolutions and
+the native-depth pass. The progress bar covers this single pass. Unfinished regions
+remain mesh; each completed region is already at final quality.
+Standalone mesh and progressive implicit functions remain available. The raster
+API's explicit `Passes` choice retains the multi-resolution sequence for comparison
+without adding a render-mode control to the example.
 
 Command+9's example uses this refined preview with one playback slider: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel

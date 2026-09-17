@@ -30,6 +30,13 @@ pub(crate) struct Request {
     pixels: PixelRenderSize,
 }
 
+/// Image-quality progression, independent of tile publication and cancellation.
+#[derive(Clone, Copy)]
+pub(crate) enum Passes {
+    Final,
+    Progressive { first_max_edge: u32 },
+}
+
 /// A worker-local compiled scene, shared by that request's resolution passes.
 pub(super) struct SoftwareScene {
     scene: fidget_engine::raster::voxel::Scene<'static, SoftwareFunction>,
@@ -563,14 +570,21 @@ impl Request {
     /// unfinished regions. The first level reports coverage for a mesh fallback.
     pub fn render_software_tiles(
         &self,
-        first_max_edge: u32,
+        passes: Passes,
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
         publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Result<Option<Frame>, incremental::Error> {
         cancel.check()?;
-        let Some(views) = self.refinements(first_max_edge, final_depth_multiplier) else {
+        let views = match passes {
+            Passes::Final => refine_depth(self.view_at(self.pixels), final_depth_multiplier)
+                .map(|view| vec![view]),
+            Passes::Progressive { first_max_edge } => {
+                self.refinements(first_max_edge, final_depth_multiplier)
+            }
+        };
+        let Some(views) = views else {
             return Ok(None);
         };
         let scene = SoftwareScene::new(&self.preview.objects, cancel);

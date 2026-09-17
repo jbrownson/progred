@@ -251,13 +251,13 @@ queue and cancellation checks. Implicit work cannot overtake replacement meshing
 so orbiting after an implicit result cannot fall back to older stock. Camera-only
 changes retain the current mesh and start implicit work without another mesh job.
 
-The mesh is the immediate draft stage. This composition starts implicit images
-at no more than 512 physical pixels on the longest edge, skipping the standalone
-implicit function's two coarsest (128-pixel-start) levels. It roughly doubles XY
-resolution up to native size, followed by the four-times-depth pass. Native
-resolution is always retained, including for small views. The individual renderer
-functions remain available, and no scheduling policy or domain types were added
-to the generic async runtime.
+The mesh is the immediate draft stage. This composition requests a single implicit
+pass at native XY resolution with four-times depth sampling. Finished tile batches
+replace the mesh only in their explicitly covered regions, including transparent
+pixels; unfinished regions remain mesh. The progress bar advances across that
+single pass. The raster API also retains the progressive resolution sequence,
+still used by the standalone implicit preview. No scheduling policy or domain
+types were added to the generic async runtime.
 
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.
