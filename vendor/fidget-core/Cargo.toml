@@ -1,0 +1,35 @@
+[package]
+name = "fidget-core"
+description = "Core infrastructure for Fidget"
+readme = "README.md"
+version = "0.5.0"
+
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/mkeeter/fidget"
+authors = ["Matt Keeter <matt.j.keeter@gmail.com>"]
+rust-version = "1.92"
+
+[dependencies]
+facet = { version = "0.46", features = ["reflect", "doc"] }
+nalgebra = { version = "0.35", features = ["serde-serialize"] }
+ordered-float = "5"
+rand = "0.10"
+rayon = "1.10"
+serde = { version = "1.0", features = ["derive", "rc"] }
+strum = { version = "0.28", features = ["derive"] }
+thiserror = "2"
+
+workspace-hack = { git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Feature unification hacks to get webassembly working
+getrandom-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+getrandom-03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom-02 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[features]
+## Enable `eval-tests` if you're writing your own evaluators and want to
+## unit-test them.  When enabled, the crate exports a set of macros to test each
+## evaluator type, e.g. `float_slice_tests!(...)`.
+eval-tests = []

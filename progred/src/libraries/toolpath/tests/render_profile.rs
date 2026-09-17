@@ -126,14 +126,18 @@ fn cam_render_profile() {
     if std::env::var("CAM_SCENE_TILES").is_ok()
         || std::env::var("CAM_SCENE_PREPARE").is_ok()
         || std::env::var("CAM_TILE_PUBLICATION").is_ok()
+        || std::env::var("CAM_RETAINED_REGIONS").is_ok()
     {
-        let objects = paths
+        let objects: Vec<_> = paths
             .iter()
             .chain(tool.iter())
             .chain(std::iter::once(&stock))
             .cloned()
             .collect();
-        if std::env::var("CAM_TILE_PUBLICATION").is_ok() {
+        if std::env::var("CAM_RETAINED_REGIONS").is_ok() {
+            let stock_index = objects.len() - 1;
+            implicit::raster::diagnostics::compare_retained_regions(&preview(objects), stock_index);
+        } else if std::env::var("CAM_TILE_PUBLICATION").is_ok() {
             implicit::raster::diagnostics::compare_tile_publication(&preview(objects));
         } else if std::env::var("CAM_SCENE_PREPARE").is_ok() {
             implicit::raster::diagnostics::compare_scene_preparation(&preview(objects));

@@ -4,8 +4,10 @@ use crate::libraries::f64;
 use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
+mod progressive;
 mod reference;
 mod scene;
+pub(crate) use progressive::compare_retained_regions;
 pub(crate) use scene::compare_scene_preparation;
 pub(crate) use scene::compare_scene_tiles;
 pub(crate) use scene::compare_tile_publication;

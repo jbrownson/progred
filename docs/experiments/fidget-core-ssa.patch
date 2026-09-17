@@ -1,0 +1,62 @@
+--- a/fidget-core/src/vm/data.rs
++++ b/fidget-core/src/vm/data.rs
+@@ -74,6 +74,20 @@
+ }
+ 
+ impl<const N: usize> VmData<N> {
++    /// Borrows the SSA representation used for spatial specialization.
++    pub fn ssa(&self) -> &SsaTape {
++        &self.ssa
++    }
++
++    /// Lowers a valid SSA tape with its input-variable mapping.
++    ///
++    /// The tape must follow the same reverse-topological, dense-register
++    /// conventions as [`SsaTape::new`]. This does not validate arbitrary input.
++    pub fn from_ssa(ssa: SsaTape, vars: Arc<VarMap>) -> Self {
++        let asm = RegTape::new::<N>(&ssa);
++        Self { ssa, asm, vars }
++    }
++
+     /// Builds a new tape for the given node
+     pub fn new(context: &Context, nodes: &[Node]) -> Result<Self, BadNode> {
+         let (ssa, vars) = SsaTape::new(context, nodes)?;
+@@ -410,6 +424,24 @@
+ #[cfg(test)]
+ mod test {
+     use super::*;
++
++    #[test]
++    fn from_ssa_preserves_register_lowering() {
++        let mut ctx = Context::new();
++        let x = ctx.x();
++        let y = ctx.y();
++        let shape = ctx.min(x, y).unwrap();
++        let original = VmData::<3>::new(&ctx, &[shape]).unwrap();
++        let rebuilt = VmData::<3>::from_ssa(
++            original.ssa().clone(),
++            original.vars.clone(),
++        );
++        assert_eq!(
++            original.iter_asm().collect::<Vec<_>>(),
++            rebuilt.iter_asm().collect::<Vec<_>>()
++        );
++        assert_eq!(original.choice_count(), rebuilt.choice_count());
++    }
+ 
+     #[test]
+     fn simplify_reg_count_change() {
+--- a/fidget-core/src/shape/mod.rs
++++ b/fidget-core/src/shape/mod.rs
+@@ -176,6 +176,11 @@
+ }
+ 
+ impl<F> Shape<F> {
++    /// Wraps a function as a shape without rebuilding its expression.
++    pub fn from_function(f: F) -> Self {
++        Self { f }
++    }
++
+     /// Borrows the inner [`Function`] object
+     pub fn inner(&self) -> &F {
+         &self.f

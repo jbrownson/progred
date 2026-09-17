@@ -34,6 +34,10 @@ dated measurement report.
 and its quality limitations. The [mesh viewport](fidget-mesh.md) describes the
 subsequent in-app option. Its toolpath variant now retains dependency-tracked
 geometry; ordinary mesh previews still remesh each frame.
+[Retained progressive rendering](fidget-progressive-experiment-2026-09-15.md)
+records test-only whole-view, bounded-tile, exact-program-sharing, subtree
+census, and persistent-expression measurements. CAM now tries mesh → final-quality
+implicit tiles; the standalone implicit preview retains independent refinement passes.
 [Library resolution](library-resolution-2026-09-05.md) records the later
 definition-storage change and its performance checks.
 The [release checklist](release-checklist.md) covers distribution concerns.

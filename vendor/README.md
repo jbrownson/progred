@@ -1,15 +1,20 @@
 # Local Fidget patches
 
-`fidget-jit`, `fidget-raster`, and `models/hi.vm` are copied from Matt Keeter's
+`fidget-core`, `fidget-jit`, `fidget-raster`, and `models/hi.vm` are copied from Matt Keeter's
 [Fidget](https://github.com/mkeeter/fidget), revision
 `0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6` (2026-09-12).
 They retain upstream's [MPL-2.0 license](fidget-LICENSE.txt).
-Cargo patches only these two packages; the remaining Fidget packages still use
+Cargo patches only these three packages; the remaining Fidget packages still use
 that exact Git revision. Their manifests spell out upstream's inherited package
 metadata and dependency versions, pinning core and workspace-hack to that revision.
 
 Local source changes, each including regression tests:
 
+- [Core SSA access patch](../docs/experiments/fidget-core-ssa.patch): expose the
+  existing SSA tape, lower a caller-supplied valid tape with its variable map,
+  and wrap a function as a shape. These additive APIs support the test-only
+  persistent-expression experiment; they do not change existing evaluation or
+  rendering. This patch is independent of the others below.
 - [AArch64 JIT patch](../docs/experiments/fidget-jit-aarch64.patch): full-width
   spill addresses and stack adjustment, preservation of callee-saved registers,
   and long bulk-loop exits. Small tapes retain the short addressing form.
@@ -43,7 +48,7 @@ The packages are workspace members so their tests share our locked dependency
 graph and sandboxed build. On a supported desktop JIT platform:
 
 ```sh
-./tools/sandbox-cargo test --release -p fidget-jit -p fidget-raster --lib
+./tools/sandbox-cargo test --release -p fidget-core -p fidget-jit -p fidget-raster --lib
 ```
 
 For iOS/Web builds, select `-p progred` as the normal platform targets do: the
