@@ -198,16 +198,6 @@ impl Edit<'_> {
         edit_line(self.access.editor, root, path, line, operation)
     }
 
-    pub(crate) fn insert_after(&mut self, root: &Root, path: &[Step]) {
-        let app = &mut self.access.editor;
-        if let Some(mut pending) =
-            selection::pending_after(root, &self.scope.view(app.sources()), path)
-        {
-            pending.set_scope(self.scope.clone());
-            app.model.selection = Some(pending);
-        }
-    }
-
     pub(crate) fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
         crate::site::apply_scoped_event(
             self.access.editor,

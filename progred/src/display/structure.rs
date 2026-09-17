@@ -29,21 +29,23 @@ pub(crate) fn list_column_with(
         Layout<crate::Editor, crate::frame::Hovered>,
     ) -> Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let entries = list_entries(input, child)?;
-    Some(if entries.is_empty() {
+    let items = list_items(input, child)?;
+    Some(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
     } else {
         col(
-            0,
-            gap,
-            entries
-                .into_iter()
-                .map(|(position, entry)| item(position, entry)),
+            1,
+            0.0,
+            list_with(input, &items, item, |before, after| {
+                list_gap(gap, before, after)
+            }),
         )
     })
 }
 
-fn list_entries(
+/// Prepare element paths, including a pending insertion, and share their
+/// projection and measurement across any presentations the caller builds.
+pub fn list_items(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)>> {
@@ -74,37 +76,96 @@ fn list_entries(
     )
 }
 
+/// One interleaved presentation of `list_items` for this input. The caller
+/// supplies item decoration and separator paint; this function owns insertion
+/// eligibility and interaction. Arrange the returned sequence with row/col/etc.
+pub fn list_with<S>(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    items: &[(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)],
+    item: impl Fn(
+        gid::Position,
+        Layout<crate::Editor, crate::frame::Hovered>,
+    ) -> Layout<crate::Editor, crate::frame::Hovered>,
+    separator: impl Fn(Option<&gid::Position>, Option<&gid::Position>) -> Option<S>,
+) -> Vec<Layout<crate::Editor, crate::frame::Hovered>>
+where
+    S: FnOnce(Option<crate::frame::Hovered>) -> Layout<crate::Editor, crate::frame::Hovered>,
+{
+    let mut separated = Vec::with_capacity(items.len() * 2 + 1);
+    for index in 0..=items.len() {
+        let before = index
+            .checked_sub(1)
+            .and_then(|i| items.get(i))
+            .map(|(p, _)| p);
+        let after = items.get(index).map(|(p, _)| p);
+        if let Some(render) = separator(before, after) {
+            let beside_pending = matches!(
+                &input.pending,
+                Some(Pending::Child(Step::Element(position)))
+                    if before == Some(position) || after == Some(position)
+            );
+            let target = (input.writable && !beside_pending)
+                .then(|| gid::position::between(before, after))
+                .flatten()
+                .map(|position| input.targets.at([Step::Element(position)]));
+            let content = render(target.as_ref().map(|t| t.hover.clone()));
+            let content = match target {
+                Some(target) => activatable(content, target.hover, target.select),
+                None => content,
+            };
+            separated.push(widget::fill_width(content));
+        }
+        if let Some((position, layout)) = items.get(index) {
+            separated.push(item(position.clone(), layout.clone()));
+        }
+    }
+    separated
+}
+
+fn list_gap(
+    gap: f64,
+    before: Option<&gid::Position>,
+    after: Option<&gid::Position>,
+) -> Option<
+    impl FnOnce(Option<crate::frame::Hovered>) -> Layout<crate::Editor, crate::frame::Hovered> + use<>,
+> {
+    let height = if before.is_some() && after.is_some() {
+        gap
+    } else {
+        gap / 2.0
+    };
+    (before.is_some() || after.is_some())
+        .then_some(move |hover| widget::list::insertion_gap(height, hover))
+}
+
 pub fn list_layout(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let (positions, children): (Vec<_>, Vec<_>) = list_entries(input, child)?.into_iter().unzip();
-    let mut flat = Vec::new();
-    for (index, layout) in children.iter().enumerate() {
-        if let Some(previous) = index.checked_sub(1).and_then(|i| positions.get(i)) {
-            let separator = dim(", ");
-            let beside_pending = matches!(
-                &input.pending,
-                Some(Pending::Child(Step::Element(position)))
-                    if position == previous || position == &positions[index]
-            );
-            flat.push(
-                match (input.writable && !beside_pending)
-                    .then(|| input.targets.insert_after(previous.clone()))
-                    .flatten()
-                {
-                    Some((hover, action)) => {
-                        activatable(hover_highlight(separator, hover.clone()), hover, action)
-                    }
-                    None => separator,
-                },
-            );
-        }
-        flat.push(layout.clone());
-    }
+    let items = list_items(input, child)?;
+    let horizontal = list_with(
+        input,
+        &items,
+        |_, item| item,
+        |before, after| {
+            (before.is_some() && after.is_some()).then_some(|hover| {
+                let comma = dim(", ");
+                match hover {
+                    Some(hover) => hover_highlight(comma, hover),
+                    None => comma,
+                }
+            })
+        },
+    );
+    let vertical = list_with(
+        input,
+        &items,
+        |_, item| item,
+        |before, after| list_gap(4.0, before, after),
+    );
     Some(selectable_bracket(
         Delim::Bracket,
-        alternatives([row(0.0, flat), col(0, 4.0, children)]),
+        alternatives([row(0.0, horizontal), col(1, 0.0, vertical)]),
     ))
 }
 

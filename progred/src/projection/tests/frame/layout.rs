@@ -958,8 +958,132 @@ fn flat_separators_claim_the_insert_between() {
     let (bench, _) = place_with_pointer(&doc, None, width, Some(mid));
     assert!(matches!(
         &bench.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Insert(path)))) if *path == first.path
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+            if path.as_ref() == insertion_between(&first.path, &second.path)
     ));
+}
+
+fn insertion_between(left: &[Step], right: &[Step]) -> Path {
+    let (Step::Element(low), parent) = left.split_last().unwrap() else {
+        panic!("list item")
+    };
+    let (Step::Element(high), other) = right.split_last().unwrap() else {
+        panic!("list item")
+    };
+    assert_eq!(parent, other);
+    parent
+        .iter()
+        .cloned()
+        .chain([Step::Element(
+            gid::position::between(Some(low), Some(high)).unwrap(),
+        )])
+        .collect()
+}
+
+#[test]
+fn list_presentation_callbacks_need_no_insertion_wiring() {
+    use crate::display as d;
+    use std::cell::Cell;
+
+    for count in [0, 2] {
+        for boundary in 0_usize..=count {
+            let doc = Document {
+                root: Some(Value::list((0..count).map(|i| f64::value(i as f64)))),
+                cells: Cells::new(),
+            };
+            let positions: Vec<_> = doc
+                .root
+                .as_ref()
+                .unwrap()
+                .as_list()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            let position = gid::position::between(
+                boundary.checked_sub(1).and_then(|i| positions.get(i)),
+                positions.get(boundary),
+            )
+            .unwrap();
+            let path = vec![Step::Element(position.clone())];
+            let mut world = crate::test_editor(doc);
+            let visits = Rc::new(Cell::new(0));
+            let child = d::partial({
+                let visits = visits.clone();
+                move |input| {
+                    f64::read(input.value?)?;
+                    visits.set(visits.get() + 1);
+                    Some(d::text("value"))
+                }
+            });
+            let projection = world
+                .stack
+                .projection
+                .clone()
+                .with_entry(d::partial(move |input| {
+                    let items = d::structure::list_items(input, Some(child.clone()))?;
+                    let horizontal = d::structure::list_with(
+                        input,
+                        &items,
+                        |_, item| d::row(0.0, [d::dim("item: "), item]),
+                        |_, _| Some(|_| d::dim(" | ")),
+                    );
+                    let vertical = d::structure::list_with(
+                        input,
+                        &items,
+                        |_, item| item,
+                        |_, _| Some(|hover| d::widget::list::insertion_gap(4.0, hover)),
+                    );
+                    Some(d::alternatives([
+                        d::row(0.0, horizontal),
+                        d::col(0, 0.0, vertical),
+                    ]))
+                }));
+            let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+            assert_eq!(visits.get(), count, "alternatives share projected children");
+            let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+            let rect = frame
+                .descends
+                .iter()
+                .find(|d| d.path.is_empty())
+                .unwrap()
+                .rect;
+            let point = (0..rect.width().ceil() as usize)
+                .map(|x| Point::new(rect.x0 + x as f64 + 0.5, rect.center().y))
+                .find(|point| {
+                    matches!(frame.hover_geometry.probe(Some(*point), None, 0.0),
+                    Some((_, Claim::Direct(ref hover))) if *hover == target)
+                })
+                .expect("the plain separator gets its insertion target from the list combinator");
+            let before = world.model.doc.clone();
+            let mut input = placed::DispatchContext::new(Some(crate::test_root()), Some(target));
+            assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+                &mut world,
+                &PointerButtonEvent {
+                    button: Some(PointerButton::Primary),
+                    pointer: PointerInfo {
+                        pointer_id: Some(PointerId::PRIMARY),
+                        persistent_device_id: None,
+                        pointer_type: PointerType::Mouse
+                    },
+                    state: PointerState {
+                        position: (point.x, point.y).into(),
+                        ..Default::default()
+                    },
+                },
+                &mut input,
+            ));
+            assert!(Rc::ptr_eq(&before, &world.model.doc));
+            assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+            assert!(
+                editing_frame_with_projection(&mut world, false, Some(&projection))
+                    .completion
+                    .is_some()
+            );
+            assert!(world.commit_completion(f64::value(9.0), None, None));
+            assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
+        }
+    }
 }
 
 #[test]
@@ -1013,10 +1137,10 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let click = |world: &mut crate::Editor,
                  frame: placed::HoverOutput<crate::Editor>,
                  point: Point,
-                 after: &[Step]| {
+                 target: &[Step]| {
         let mut input = placed::DispatchContext::new(
             Some(crate::test_root()),
-            Some(Hovered::Tree(Hover::Insert(Rc::from(after)))),
+            Some(Hovered::Tree(Hover::Value(Rc::from(target)))),
         );
         frame.resolve_for_dispatch().dispatch_pointer_down_with(
             world,
@@ -1037,7 +1161,12 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     };
     let frame = project(&mut world);
     let point = between(&frame, &paths[1], &paths[2]);
-    assert!(click(&mut world, frame, point, &paths[1]));
+    assert!(click(
+        &mut world,
+        frame,
+        point,
+        &insertion_between(&paths[1], &paths[2])
+    ));
     let pending = world.model.selection.as_ref().unwrap().path().to_vec();
     world.model.selection = Some(crate::selection::pending_with_query(
         &crate::test_root(),
@@ -1047,13 +1176,14 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     for (left, right) in [(&paths[1], &pending), (&pending, &paths[2])] {
         let frame = project(&mut world);
         let point = between(&frame, left, right);
+        let target = insertion_between(left, right);
         assert!(!matches!(
             frame.hover_geometry.probe(Some(point), None, 0.0),
-            Some((_, Claim::Direct(Hovered::Tree(Hover::Insert(_)))))
+            Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == target
         ));
         let payload = world.model.selection.as_ref().unwrap().payload();
         // Neither comma installs an action, even if given its old target.
-        assert!(!click(&mut world, frame, point, left));
+        assert!(!click(&mut world, frame, point, &target));
         assert_eq!(world.model.selection.as_ref().unwrap().payload(), payload);
     }
 
@@ -1061,29 +1191,148 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let point = between(&frame, &paths[0], &paths[1]);
     assert!(matches!(
         frame.hover_geometry.probe(Some(point), None, 0.0),
-        Some((_, Claim::Direct(Hovered::Tree(Hover::Insert(ref path))))) if path.as_ref() == paths[0]
+        Some((_, Claim::Direct(Hovered::Tree(Hover::Value(ref path)))))
+            if path.as_ref() == insertion_between(&paths[0], &paths[1])
     ));
-    assert!(click(&mut world, frame, point, &paths[0]));
+    assert!(click(
+        &mut world,
+        frame,
+        point,
+        &insertion_between(&paths[0], &paths[1])
+    ));
     assert_ne!(world.model.selection.as_ref().unwrap().path(), pending);
 }
 
 #[test]
-fn block_gaps_are_unclaimed_air_and_brackets_widen() {
+fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
+    for boundary in 0_usize..=2 {
+        let doc = Document {
+            root: Some(Value::list([
+                crate::test_values::text("a long enough string that the flat literal cannot fit"),
+                crate::test_values::text("and another beside it overflowing any width we render"),
+            ])),
+            cells: Cells::new(),
+        };
+        let positions: Vec<_> = doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        let path = vec![Step::Element(
+            gid::position::between(
+                boundary.checked_sub(1).and_then(|i| positions.get(i)),
+                positions.get(boundary),
+            )
+            .unwrap(),
+        )];
+        let mut world = crate::test_editor(doc);
+        let frame = editing_frame(&mut world, false);
+        let rect = |path: &[Step]| {
+            frame
+                .descends
+                .iter()
+                .find(|d| d.path.as_ref() == path)
+                .unwrap()
+                .rect
+        };
+        let items: Vec<_> = positions
+            .iter()
+            .map(|p| rect(&[Step::Element(p.clone())]))
+            .collect();
+        assert!(
+            items[1].y0 > items[0].y1,
+            "the standard list chose its vertical alternative"
+        );
+        let list = rect(&[]);
+        let top = boundary.checked_sub(1).map_or(list.y0, |i| items[i].y1);
+        let bottom = items.get(boundary).map_or(list.y1, |r| r.y0);
+        let point = Point::new(items[0].center().x, (top + bottom) / 2.0);
+        let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+        assert!(matches!(frame.hover_geometry.probe(Some(point), None, 0.0),
+            Some((_, Claim::Direct(ref hover))) if *hover == target));
+        let before = world.model.doc.clone();
+        let mut input = placed::DispatchContext::new(Some(crate::test_root()), Some(target));
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &PointerButtonEvent {
+                button: Some(PointerButton::Primary),
+                pointer: PointerInfo {
+                    pointer_id: Some(PointerId::PRIMARY),
+                    persistent_device_id: None,
+                    pointer_type: PointerType::Mouse,
+                },
+                state: PointerState {
+                    position: (point.x, point.y).into(),
+                    ..Default::default()
+                },
+            },
+            &mut input,
+        ));
+        assert!(Rc::ptr_eq(&before, &world.model.doc));
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+        let pending_frame = editing_frame(&mut world, false);
+        assert!(pending_frame.completion.is_some());
+        let Step::Element(inserted) = &path[0] else {
+            unreachable!()
+        };
+        let pending = pending_frame
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == path)
+            .unwrap()
+            .rect;
+        for (neighbor, before) in [
+            (boundary.checked_sub(1).and_then(|i| positions.get(i)), true),
+            (positions.get(boundary), false),
+        ] {
+            if let Some(neighbor) = neighbor {
+                let neighbor_rect = pending_frame
+                    .descends
+                    .iter()
+                    .find(|d| d.path.as_ref() == [Step::Element(neighbor.clone())])
+                    .unwrap()
+                    .rect;
+                let (low, high, y) = if before {
+                    (neighbor, inserted, (neighbor_rect.y1 + pending.y0) / 2.0)
+                } else {
+                    (inserted, neighbor, (pending.y1 + neighbor_rect.y0) / 2.0)
+                };
+                let adjacent = vec![Step::Element(
+                    gid::position::between(Some(low), Some(high)).unwrap(),
+                )];
+                assert!(!matches!(
+                    pending_frame.hover_geometry.probe(Some(Point::new(pending.center().x, y)), None, 0.0),
+                    Some((_, Claim::Direct(Hovered::Tree(Hover::Value(ref p))))) if p.as_ref() == adjacent
+                ));
+            }
+        }
+        assert!(world.commit_completion(f64::value(9.0), None, None));
+        assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
+    }
+}
+
+#[test]
+fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     let doc = gap_document();
     let (bench, _) = place(&doc, None, 560.0);
     let (upper, lower) = elements_of(&bench, "body", true);
     let parent = vec![key("body")];
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
-    // Between the rows nothing claims: the gap is air, and air is
-    // the SHELL's backstop — hold-or-clear by reach, never the
-    // container outright.
-    let (air, _) = place_with_pointer(
+    let (gap, _) = place_with_pointer(
         &doc,
         None,
         560.0,
         Some(Point::new(upper.rect.center().x, gap_y)),
     );
-    assert!(air.hit.is_none());
+    assert!(matches!(
+        &gap.hit,
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+            if path.as_ref() == insertion_between(&upper.path, &lower.path)
+    ));
     // Just inside the bracket's absorbed gap, the bracket claims
     // the container outright — the widened handle.
     let list = bench

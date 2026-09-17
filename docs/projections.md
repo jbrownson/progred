@@ -143,8 +143,23 @@ record layouts also share `record_heads` geometry with ordered call arguments.
 Patterns establish an explicit binder-projection scope. Ordinary container
 recursion then finds nested binders while text and numeric facets keep their
 normal projections; no duplicate pattern-specific structural walk is needed.
-The scope does not leak to siblings outside the pattern. List separators retain
-host-provided insertion targets.
+The scope does not leak to siblings outside the pattern.
+
+Bracketed and column lists prepare shared children with `structure::list_items`,
+including the pending insertion, then use `structure::list_with` for each
+presentation. The item callback
+wraps each projected child; the separator callback chooses which boundaries
+to show and supplies their presentation, receiving an optional hover identity
+for feedback. The common combinator disables insertion beside a pending or in
+read-only data and activates a separator by selecting an ordinary missing
+element position. There is no separate host insertion capability or hover kind.
+Separators adopt their container's offered width before both interaction and
+painting: a column's width, or their intrinsic width in a row. Each call returns
+one interleaved sequence, with no alternatives or arrangement policy inside it.
+The bracketed list explicitly calls it twice, using commas for a row and
+clickable gaps for a column, then combines those layouts as alternatives.
+Children are projected and measured once across those calls. Commas and hover
+lines supply no editing handlers of their own.
 
 The structural fallback follows cells deeply into the selected definition.
 Grap expression projections request shallow named-cell display at direct use
@@ -233,7 +248,10 @@ the heading's cell boundary, so reference selection and library tint cover only
 the heading, not the separately projected source field. There is no separate
 toggle strip or selected-tab color. The same list-entry combinator
 supplies stable element paths and pending insertion for both ordinary bracketed
-lists and these columns. Empty columns retain an ordinary empty-list handle.
+lists and these columns. Column gaps, including half-gaps at either end, offer
+an insertion line on hover; clicking selects an ordinary missing element.
+Gaps beside an existing pending and all read-only gaps stay inactive. Empty
+columns retain an ordinary empty-list handle.
 
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,

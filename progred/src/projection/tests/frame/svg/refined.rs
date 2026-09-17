@@ -48,6 +48,14 @@ fn editor_cam_outline_svg_captures() {
                 Some(key != expanded),
             );
         }
+        if expanded == crate::libraries::workspace::vocabulary::PANES {
+            editor.set_collapsed(
+                &crate::test_root(),
+                &[Step::Key(expanded)],
+                false,
+                Some(false),
+            );
+        }
         // Project only the document here; its pane data remains present.
         let (bench, extent) = place_with_annotations(
             &editor.model.doc,

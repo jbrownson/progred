@@ -945,27 +945,6 @@ fn value_layout(
     };
     let state = cx.annotations.at(path);
     let target = |steps| projection_target(cx, path, steps);
-    let insert = |position| {
-        let target: SharedPath = Rc::from(
-            path.iter()
-                .cloned()
-                .chain([Step::Element(position)])
-                .collect::<Path>(),
-        );
-        let root = cx.view.clone();
-        let writable = cx.edits.writable(&cx.sources, path);
-        let destination = target.clone();
-        let edits = cx.edits.clone();
-        let action: crate::display::ActionHandler<crate::Editor> = Rc::new(move |world| {
-            if writable {
-                edits
-                    .open(crate::editing::Access::new(world))
-                    .insert_after(&root, &destination);
-            }
-            true
-        });
-        (Hovered::Tree(Hover::Insert(target)), action)
-    };
     let input = crate::display::ProjectionInput {
         env: &ProjectEnv { cx },
         default_projection: default_projection.clone(),
@@ -975,7 +954,7 @@ fn value_layout(
         selection: selection.as_ref(),
         pending,
         state,
-        targets: crate::display::ProjectionTargets::new(&target).with_insert_after(&insert),
+        targets: crate::display::ProjectionTargets::new(&target),
     };
     match current_projection {
         Some(current) => current(&input),

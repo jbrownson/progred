@@ -302,10 +302,9 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
         .next()
         .unwrap()
         .clone();
+    let position = gid::position::between(Some(&position), None).unwrap();
     let item = [occurrence.clone(), vec![Step::Element(position)]].concat();
-    scope
-        .open(Access::new(&mut editor))
-        .insert_after(&root, &item);
+    scope.open(Access::new(&mut editor)).select(&root, &item);
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(&selected.path()[..1], occurrence);
     assert!(selected.scope().same_location(&scope, selected.path()));

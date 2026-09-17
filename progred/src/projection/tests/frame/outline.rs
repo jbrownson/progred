@@ -117,6 +117,43 @@ fn click_frame(
 }
 
 #[test]
+fn cam_outline_leaves_panes_in_the_collapsed_extras() {
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let panes = crate::libraries::workspace::vocabulary::PANES;
+    assert!(entry_paths(doc.root.as_ref().unwrap(), &[], panes).is_empty());
+    assert!(!crate::workspace::declarations(doc.root.as_ref()).is_empty());
+    let mut world = crate::test_editor(doc);
+    let entries = world
+        .sources()
+        .resolve_path(&[Step::Key(OUTLINE)])
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .clone();
+    for (position, value) in entries {
+        world.set_collapsed(
+            &crate::test_root(),
+            &[
+                Step::Key(OUTLINE),
+                Step::Element(position),
+                Step::Key(value.as_cell().unwrap()),
+            ],
+            false,
+            Some(true),
+        );
+    }
+    let path = [Step::Key(panes)];
+    assert!(hidden(&world, &path));
+    let f = frame(&mut world);
+    stop(&f, &path);
+    assert!(
+        !f.descends
+            .iter()
+            .any(|d| d.path.starts_with(&path) && d.path.len() > path.len())
+    );
+}
+
+#[test]
 fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     let (mut doc, a, b, extra) = document();
     let Value::Record(fields) = doc.root.as_mut().unwrap() else {
@@ -338,6 +375,25 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     let mut world = crate::test_editor(doc);
     let before = world.model.doc.clone();
     let f = frame(&mut world);
+    let positions: Vec<_> = expected.as_list().unwrap().keys().cloned().collect();
+    let element = |position| {
+        result_body
+            .iter()
+            .cloned()
+            .chain([Step::Element(position)])
+            .collect::<Path>()
+    };
+    let first = stop(&f, &element(positions[0].clone())).rect;
+    let second = stop(&f, &element(positions[1].clone())).rect;
+    let missing =
+        element(gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap());
+    assert!(
+        !matches!(
+            f.hover_geometry.probe(Some(Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0)), None, 0.0),
+            Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == missing
+        ),
+        "computed lists have no insertion target"
+    );
     assert!((stop(&f, &result_body).select)(&mut world, None));
     assert!(
         world
@@ -366,6 +422,133 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     assert!(!f.descends.iter().any(|d| d.path.as_ref() == result_body));
     stop(&f, &source_body);
     assert!(Rc::ptr_eq(&before, &world.model.doc));
+}
+
+#[test]
+fn outline_column_gaps_open_pending_before_between_and_after_items() {
+    for index in 0_usize..=2 {
+        let (doc, a, b, _) = document();
+        let mut world = crate::test_editor(doc);
+        let entries = [entry(&world, &[], b), entry(&world, &[], a)];
+        for path in &entries {
+            click_heading(&mut world, path, Modifiers::empty());
+        }
+        world.model.selection = None;
+        let positions: Vec<_> = entries
+            .iter()
+            .map(|path| match path.last().unwrap() {
+                Step::Element(position) => position.clone(),
+                _ => unreachable!(),
+            })
+            .collect();
+        let inserted = gid::position::between(
+            index.checked_sub(1).map(|i| &positions[i]),
+            positions.get(index),
+        )
+        .unwrap();
+        let path = vec![Step::Key(OUTLINE), Step::Element(inserted.clone())];
+        let f = frame(&mut world);
+        let list = stop(&f, &[Step::Key(OUTLINE)]).rect;
+        let top = index
+            .checked_sub(1)
+            .map_or(list.y0, |i| stop(&f, &entries[i]).rect.y1);
+        let bottom = entries.get(index).map_or(list.y1, |p| stop(&f, p).rect.y0);
+        assert!(bottom > top);
+        let before = world.model.doc.clone();
+        click_frame(
+            &mut world,
+            f,
+            Point::new(list.x0 + 4.0, (top + bottom) / 2.0),
+            &path,
+            Modifiers::empty(),
+        );
+        assert!(
+            Rc::ptr_eq(&before, &world.model.doc),
+            "opening a pending doesn't edit the document"
+        );
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+        assert!(frame(&mut world).completion.is_some());
+        assert!(world.commit_completion(a.into(), None, None));
+        let list = world
+            .sources()
+            .resolve_path(&[Step::Key(OUTLINE)])
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .clone();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list.get(&inserted), Some(&Value::Cell(a)));
+    }
+}
+
+#[test]
+fn outline_body_column_gap_inserts_through_its_jump() {
+    let (doc, a, _, _) = document();
+    let mut world = crate::test_editor(doc);
+    let section = body(&entry(&world, &[], a), a);
+    let positions: Vec<_> = world
+        .sources()
+        .resolve_path(&[Step::Key(a)])
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
+    let element = |position| {
+        section
+            .iter()
+            .cloned()
+            .chain([Step::Element(position)])
+            .collect::<Path>()
+    };
+    let path = element(inserted.clone());
+    let f = frame(&mut world);
+    let first = stop(&f, &element(positions[0].clone())).rect;
+    let second = stop(&f, &element(positions[1].clone())).rect;
+    click_frame(
+        &mut world,
+        f,
+        Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0),
+        &path,
+        Modifiers::empty(),
+    );
+    assert_eq!(
+        world
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .source_path()
+            .as_deref(),
+        Some([Step::Key(a), Step::Element(inserted.clone())].as_slice())
+    );
+    let f = frame(&mut world);
+    assert!(f.completion.is_some());
+    let pending = stop(&f, &path).rect;
+    let first = stop(&f, &element(positions[0].clone())).rect;
+    let second = stop(&f, &element(positions[1].clone())).rect;
+    for (before, after, y) in [
+        (&positions[0], &inserted, (first.y1 + pending.y0) / 2.0),
+        (&inserted, &positions[1], (pending.y1 + second.y0) / 2.0),
+    ] {
+        let missing = element(gid::position::between(Some(before), Some(after)).unwrap());
+        assert!(
+            !matches!(
+                f.hover_geometry.probe(Some(Point::new(first.x0 + 4.0, y)), None, 0.0),
+                Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == missing
+            ),
+            "both gaps beside a pending stay inactive"
+        );
+    }
+    assert!(world.commit_completion(f64::value(7.0), None, None));
+    assert_eq!(
+        world
+            .sources()
+            .resolve_path(&[Step::Key(a), Step::Element(inserted)]),
+        Some(&f64::value(7.0))
+    );
 }
 
 #[test]

@@ -240,27 +240,11 @@ pub struct ProjectionTarget<World, Hover> {
 #[derive(Clone, Copy)]
 pub struct ProjectionTargets<'a, World, Hover> {
     at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
-    insert_after: Option<&'a dyn Fn(gid::Position) -> (Hover, ActionHandler<World>)>,
 }
 
 impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
     pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>) -> Self {
-        Self {
-            at,
-            insert_after: None,
-        }
-    }
-
-    pub fn with_insert_after(
-        mut self,
-        insert: &'a dyn Fn(gid::Position) -> (Hover, ActionHandler<World>),
-    ) -> Self {
-        self.insert_after = Some(insert);
-        self
-    }
-
-    pub fn insert_after(&self, position: gid::Position) -> Option<(Hover, ActionHandler<World>)> {
-        self.insert_after.map(|insert| insert(position))
+        Self { at }
     }
 
     pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<World, Hover> {

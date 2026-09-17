@@ -24,6 +24,7 @@ pub mod gesture;
 pub mod hover;
 pub mod interaction;
 pub mod line;
+pub mod list;
 pub mod navigation;
 pub mod offers;
 pub mod popover;
@@ -155,6 +156,29 @@ pub fn fill_height<World: 'static, Hover: 'static>(
     Rc::new(move |context| measured::fill_height(widget(context)))
 }
 
+/// Expand before invoking the entire child's placement, including decorations.
+pub fn fill_width<W: 'static, H: 'static>(child: Layout<W, H>) -> Layout<W, H> {
+    Layout::program(Rc::new(move |context, build| {
+        let child = child.measure(context, build);
+        measured::choices::ChoiceLayout::map(child, 0.0, |child| {
+            measured::around_into(child, |placement, inner, output| {
+                inner.place_at_into(
+                    Placement {
+                        rect: puri::Rect::new(
+                            placement.available_rect.x0,
+                            placement.rect.y0,
+                            placement.available_rect.x1,
+                            placement.rect.y1,
+                        ),
+                        ..placement
+                    },
+                    output,
+                );
+            })
+        })
+    }))
+}
+
 pub fn extent(metrics: TextMetrics) -> Extent {
     Extent {
         width: metrics.width,
@@ -247,6 +271,68 @@ mod tests {
     use crate::display::recording::{Recorded, record};
     use puri::draw::Shape;
     use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
+
+    #[test]
+    fn fill_width_expands_ink_and_interaction_together_without_changing_measurement() {
+        use crate::display::test_support::{NoProject, with_context};
+        use measured::choices::{ChoiceBuild, resolve_choices};
+        use puri::hover::Claim;
+
+        let layout = fill_width(crate::display::activatable(
+            Layout::widget(Rc::new(|_| {
+                paint(
+                    Extent {
+                        width: 0.0,
+                        ascent: 0.0,
+                        descent: 16.0,
+                    },
+                    |canvas, placement| {
+                        canvas.fill_shape(
+                            placement.rect.into(),
+                            Color::BLACK.into(),
+                            Affine::IDENTITY,
+                        )
+                    },
+                )
+            })),
+            7_u32,
+            Rc::new(|_: &mut ()| true),
+        ));
+        let mut build = ChoiceBuild::default();
+        let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
+        let measured = resolve_choices(build.finish(prepared), 100.0, false);
+        assert_eq!(measured.extent.width, 0.0);
+        assert_eq!(measured.extent.height(), 16.0);
+        let output = frame::place(
+            measured,
+            Placement::new(
+                Rect::new(10.0, 20.0, 10.0, 36.0),
+                Rect::new(30.0, 0.0, 80.0, 100.0),
+            )
+            .with_available_rect(Rect::new(10.0, 20.0, 100.0, 36.0)),
+            &HoverInput::default(),
+        );
+        for (point, expected) in [
+            (Point::new(50.0, 28.0), Some(Claim::Direct(7))),
+            (Point::new(20.0, 28.0), None),
+            (Point::new(90.0, 28.0), None),
+            (Point::new(50.0, 40.0), None),
+        ] {
+            assert_eq!(
+                output
+                    .hover_geometry
+                    .probe(Some(point), None, 0.0)
+                    .map(|(_, claim)| claim),
+                expected
+            );
+        }
+        let mut drawing = DrawList::new();
+        puri::frame::render(output.bind(Default::default()).renders, &mut drawing);
+        assert!(
+            matches!(&drawing.0[..], [DrawCmd::Fill { shape: Shape::Rect(rect), .. }]
+            if *rect == Rect::new(10.0, 20.0, 100.0, 36.0))
+        );
+    }
 
     #[test]
     fn paint_only_leaves_defer_ink_and_skip_clipped_or_discarded_paint() {

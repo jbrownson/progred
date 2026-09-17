@@ -19,9 +19,6 @@ pub enum Hover {
     Value(Rc<[Step]>),
     /// Activate here toggles this path's collapse.
     Toggle(Rc<[Step]>),
-    /// A click here opens a pending sibling after the element at
-    /// this path — the flat list separator's action.
-    Insert(Rc<[Step]>),
     /// A painted Grap operation linked back to the expression that
     /// emitted it.
     Drawing(SourceTrace),
@@ -68,7 +65,7 @@ pub(crate) fn hover_secondary<C>(
             .map(|value| Secondary::from_path(sources, path.clone(), value)),
         Hover::Drawing(source) => Some(Secondary::from_trace(source)),
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
-        Hover::Toggle(_) | Hover::Insert(_) | Hover::MoreCompletions => None,
+        Hover::Toggle(_) | Hover::MoreCompletions => None,
     }
 }
 
