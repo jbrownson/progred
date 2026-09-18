@@ -402,11 +402,18 @@ Standalone mesh and progressive implicit functions remain available. The raster
 API's explicit `Passes` choice retains the multi-resolution sequence for comparison
 without adding a render-mode control to the example.
 
-Command+9's example uses this refined preview with a playback slider and a stack
+Command+9's example uses this refined preview with a Model / Stock radio group,
+a playback slider and a stack
 of grouping-range sliders: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
+Stock (the default) shows material remaining at playback. Model shows the blue
+target part and the initial stock wireframe. The example's ordinary Grap controls
+select whether its playback record includes `stock`; camera, selected ranges,
+and cursor are preserved. Tool and remaining-path visibility are the same in both
+modes. Model's surface-mesh inputs exclude playback and path data, so moving the
+tool does not remesh the unchanged part; its implicit image still updates.
 Op 1 finishes its five indented faces and eight chamfers before Op 2 cuts the
 bottom indent and four remaining chamfers. Slider intervals follow cutting
 distance, including the chamfer passes. With the side-contour strategy selected,
@@ -417,8 +424,8 @@ including the camera. Mesh retains geometry across camera changes; its optional
 `mesh depth` defaults to 6 (the previous mesh-only fixture used 7).
 It uses GPU triangle
 drawing on native builds, with a CPU triangle renderer for web/headless fallback.
-The example's Grap view calls `preview paths refined`; it contains no render-mode
-state or radio buttons. Orbiting immediately returns to the retained mesh, then
+The example's Grap view calls `preview paths refined`; Model / Stock chooses
+the geometry, not the renderer. Orbiting immediately returns to the retained mesh, then
 matching implicit images take over when ready. Geometry changes request both a
 new stock mesh and new images. There is no special handling of drag events or
 inactivity delay. Both interpretations share camera framing and camera-space

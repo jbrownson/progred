@@ -105,9 +105,21 @@ impl Selection {
     }
 
     pub fn select(&self, level: usize, range: Range<usize>) -> Self {
+        self.select_with_current(level, range, None)
+    }
+
+    fn select_with_current(
+        &self,
+        level: usize,
+        range: Range<usize>,
+        current: Option<usize>,
+    ) -> Self {
         Self {
             tree: self.tree.clone(),
-            selected: Rc::new(self.selected.select(&self.tree, level, range)),
+            selected: Rc::new(
+                self.selected
+                    .select_with_current(&self.tree, level, range, current),
+            ),
         }
     }
 
@@ -182,6 +194,7 @@ pub(super) fn cursor(
             key,
             slider,
             width,
+            selection.ticks(),
             Rc::new(move |position| cursor_state(&selection, position)),
         ));
     }
@@ -202,6 +215,7 @@ struct RangeDrag {
     key: CellId,
     slider: RangeSlider,
     drag: range_slider::Drag,
+    current: Option<usize>,
     level: usize,
     selection: Selection,
     position: Option<f64>,
@@ -215,7 +229,12 @@ impl widget::gesture::Gesture<crate::Editor> for RangeDrag {
             let selected = self
                 .slider
                 .dragged(self.drag, self.rect, self.scale, *point);
-            self.selection = self.selection.select(self.level, selected);
+            self.selection = if let Some(current) = self.current {
+                self.selection
+                    .select_with_current(self.level, selected, Some(current))
+            } else {
+                self.selection.select(self.level, selected)
+            };
             self.position = self.position.map(|p| self.selection.position(p));
             let value = self.position.map_or_else(
                 || self.selection.state(),
@@ -271,6 +290,7 @@ fn range_widget(
                         let state = set_state(editor.annotation(&root, &path), key, value);
                         editor.annotate(&root, &path, state);
                     } else {
+                        let drag = slider.begin(placement.rect, scale, point);
                         crate::editing::start_gesture(
                             editor,
                             Box::new(RangeDrag {
@@ -278,7 +298,15 @@ fn range_widget(
                                 path: path.clone(),
                                 edits: edits.clone(),
                                 key,
-                                drag: slider.begin(placement.rect, scale, point),
+                                drag,
+                                current: match drag {
+                                    range_slider::Drag::Span { anchor }
+                                        if Some(anchor) == current =>
+                                    {
+                                        current
+                                    }
+                                    _ => None,
+                                },
                                 slider: slider.clone(),
                                 level,
                                 selection: selection.clone(),

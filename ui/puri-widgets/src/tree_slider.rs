@@ -1,6 +1,10 @@
 //! Fine-end-aligned range sliders. The caller supplies ordered occurrence keys
-//! and retains selection intent. Adjusting a row resets all finer rows.
-use crate::{range_slider::RangeSlider, slider::Slider};
+//! and retains selection intent. Choosing another group resets finer rows.
+use crate::{
+    range_slider::RangeSlider,
+    slider::{Slider, TickLevel},
+};
+use std::collections::BTreeSet;
 use std::ops::Range;
 
 pub struct Tree<Key> {
@@ -169,6 +173,19 @@ impl<Key: Clone + Ord> Selection<Key> {
     }
 
     pub fn select(&self, tree: &Tree<Key>, level: usize, range: Range<usize>) -> Self {
+        self.select_with_current(tree, level, range, None)
+    }
+
+    /// Narrowing to the current item preserves finer selections. A wider range
+    /// or another item starts fresh, as does selection without a current item.
+    pub fn select_with_current(
+        &self,
+        tree: &Tree<Key>,
+        level: usize,
+        range: Range<usize>,
+        current: Option<usize>,
+    ) -> Self {
+        let preserve_finer = range.len() == 1 && current == Some(range.start);
         let intent = self
             .rows
             .iter()
@@ -181,19 +198,27 @@ impl<Key: Clone + Ord> Selection<Key> {
                 })
             });
         match intent {
-            Some(intent) => self.with_intent(tree, level, intent),
+            Some(intent) => self.with_intent(tree, level, intent, preserve_finer),
             None => Self::new(tree, &self.intent),
         }
     }
 
     pub fn select_all(&self, tree: &Tree<Key>, level: usize) -> Self {
-        self.with_intent(tree, level, Intent::All)
+        self.with_intent(tree, level, Intent::All, false)
     }
 
-    fn with_intent(&self, tree: &Tree<Key>, level: usize, value: Intent<Key>) -> Self {
+    fn with_intent(
+        &self,
+        tree: &Tree<Key>,
+        level: usize,
+        value: Intent<Key>,
+        preserve_finer: bool,
+    ) -> Self {
         let mut intent = self.intent.clone();
         intent.resize_with(intent.len().max(level + 1), || Intent::All);
-        intent[..level].fill(Intent::All);
+        if !preserve_finer {
+            intent[..level].fill(Intent::All);
+        }
         intent[level] = value;
         Self::new(tree, &intent)
     }
@@ -228,6 +253,32 @@ impl<Key: Clone + Ord> Selection<Key> {
         )
     }
 
+    /// Boundary positions use the continuous slider's leaf units, not the
+    /// equal-width notches. Keep levels intact for density decisions at placement.
+    pub fn ticks(&self) -> Vec<TickLevel> {
+        let coarsest = self.rows.first().map_or(0, |row| row.level);
+        self.rows
+            .iter()
+            .rev()
+            .map(|row| {
+                let divisor = 1.5_f64.powf((coarsest - row.level) as f64);
+                TickLevel {
+                    values: row
+                        .items
+                        .iter()
+                        .flat_map(|item| [item.leaves.start, item.leaves.end])
+                        .filter(|boundary| (self.leaves.start..=self.leaves.end).contains(boundary))
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .map(|value| value as f64)
+                        .collect(),
+                    height: (24.0 / divisor).max(6.0),
+                    width: (3.0 / divisor).max(1.0),
+                }
+            })
+            .collect()
+    }
+
     /// The visible item containing playback, including the final selected leaf
     /// when playback is exactly at the range's end.
     pub fn current_item(&self, level: usize, position: f64) -> Option<usize> {
@@ -246,6 +297,46 @@ mod tests {
     use super::*;
     fn leaves(key: u8, keys: &[u8]) -> Tree<u8> {
         Tree::group(key, keys.iter().copied().map(Tree::leaf))
+    }
+
+    #[test]
+    fn ticks_keep_hierarchy_height_and_unequal_group_lengths() {
+        let tree = Tree::group(
+            0,
+            [
+                leaves(10, &[11, 12]),
+                Tree::group(20, [leaves(21, &[22, 23, 24]), leaves(25, &[26])]),
+            ],
+        );
+        let all = Selection::new(&tree, &[]);
+        let ticks = |selection: &Selection<u8>| {
+            selection
+                .ticks()
+                .into_iter()
+                .map(|level| (level.values, level.height, level.width))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            ticks(&all),
+            [
+                (
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                    24.0 / 2.25,
+                    3.0 / 2.25
+                ),
+                (vec![0.0, 2.0, 5.0, 6.0], 16.0, 2.0),
+                (vec![0.0, 2.0, 6.0], 24.0, 3.0),
+            ]
+        );
+        assert_eq!(
+            ticks(&all.select(&tree, 0, 2..5)),
+            [
+                (vec![2.0, 3.0, 4.0, 5.0], 24.0 / 2.25, 3.0 / 2.25),
+                (vec![2.0, 5.0], 16.0, 2.0),
+                (vec![2.0], 24.0, 3.0),
+            ]
+        );
+        assert!(Selection::new(&leaves(0, &[]), &[]).ticks().is_empty());
     }
 
     #[test]
@@ -271,6 +362,41 @@ mod tests {
         assert_eq!(second.intent[0], Intent::All);
         assert_eq!(second.select(&tree, 1, 0..1).leaves, 0..2);
         assert_eq!(second.select_all(&tree, 1).leaves, 0..4);
+    }
+
+    #[test]
+    fn selecting_the_current_item_preserves_finer_intent() {
+        let tree = Tree::group(0, [leaves(10, &[11, 12]), leaves(20, &[21, 22])]);
+        let chosen = Selection::new(&tree, &[]).select(&tree, 0, 1..3);
+        let current = chosen.current_item(1, 1.5);
+        assert_eq!(current, Some(0));
+        let focused = chosen.select_with_current(&tree, 1, 0..1, current);
+        assert_eq!(focused.leaves, 1..2);
+        assert_eq!(focused.intent[0], chosen.intent[0]);
+        assert_eq!(
+            focused.select_with_current(&tree, 1, 0..1, current).intent,
+            focused.intent
+        );
+        for reset in [
+            focused.select_with_current(&tree, 1, 1..2, current),
+            focused.select_with_current(&tree, 1, 0..2, current),
+            focused.select(&tree, 1, 0..1),
+            focused.select_all(&tree, 1),
+        ] {
+            assert_eq!(reset.intent[0], Intent::All);
+        }
+        let end = focused.current_item(1, 2.0);
+        assert_eq!(end, Some(0));
+        assert_eq!(
+            focused.select_with_current(&tree, 1, 0..1, end).leaves,
+            1..2
+        );
+        let dragged = focused.select_with_current(&tree, 1, 0..2, current);
+        assert_eq!(
+            dragged.select_with_current(&tree, 1, 0..1, current).intent[0],
+            Intent::All,
+            "returning within a drag does not resurrect the old finer filter"
+        );
     }
 
     #[test]

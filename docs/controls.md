@@ -39,8 +39,10 @@ emits labeled radio buttons and returns the selected value without evaluating
 it. `initial` defaults to the first option and must belong to the list. Stale or
 missing stored selection falls back to that initial value. It also requires the
 `with controls` scope. Radio groups can offer preview callables this way; the
-current CAM example instead uses automatic refinement, a playback slider, and
-the nested-list range selector below.
+current CAM example uses them for Model / Stock, independently of automatic
+mesh-to-implicit refinement, playback, and the nested-list range selector below.
+The choice is ordinary Grap data passed from controls to the example's view
+function. It defaults to Stock and does not reset the cursor, ranges, or camera.
 
 `tree range` takes a `key` and `items`, an ordinary nested list. Lists are groups;
 every non-list value is an uninterpreted leaf. It emits equal-width, unlabelled
@@ -61,6 +63,15 @@ In a tree cursor, an amber underline marks the section containing playback in
 each visible row. It is derived from the current tree and cursor, independently
 of range-selection intent. At the selected range's end it marks the last included
 leaf and its containing groups; very dense notches get a minimum-width marker.
+The continuous slider shows boundary ticks, taller for coarser groups. Their
+positions follow the actual leaf-unit playback scale, not the equal-width range
+notches. A complete tick level is omitted when any adjacent visible boundaries
+would be less than eight logical points apart; individual marks are never thinned.
+Levels return as the selected range narrows or the viewport widens. Ticks are
+24 points tall and 3 points thick at the coarsest level. Each finer level is
+two-thirds as tall and thick, down to 6 points tall and 1 point thick. Coarser
+levels paint last so shared boundaries retain their emphasis. These are only
+visual guides: dragging remains continuous, without snapping or extra hit targets.
 
 Each row selects contiguous children of the previous row's selected groups.
 Rows align by remaining subtree depth: shallower groups remain whole while
@@ -76,8 +87,12 @@ surviving items between them stay selected. Equal values at different list
 positions remain independent occurrences.
 
 Adjusting a row sets every finer row to `All`, including temporarily hidden rows;
-coarser selections stay unchanged. This applies to clicks, range drags, handle
-drags, and double-clicks, even when the adjusted range happens to stay the same.
+coarser selections stay unchanged. In a tree cursor, clicking the amber-marked
+current item is an exception: the clicked row narrows to that item while finer
+selections are preserved. Dragging out into a wider range resets them; returning
+to the current item during that drag does not restore the old filters. Handle
+drags and double-click-to-All still reset finer selections, even when the adjusted
+range happens to stay the same.
 Returning to an earlier group therefore does not resurrect its old finer filter.
 Moving playback does not reset ranges. Rebuilding after document edits preserves
 stored intent; an out-of-range intent temporarily displays all available items.

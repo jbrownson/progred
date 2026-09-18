@@ -42,8 +42,10 @@
     "contour_chamfer": e3bb9b579cb298a10aa72f7fda3bb0be,
     "contour_pass": 9889f13ee9513b7e2fd600595fe551a9,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
+    "control_initial": 133b05e33c166614831f01de2365f49c,
     "control_items": 685f4fc766c54035725efdd652943c7b,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
+    "control_options": a84188d71fa018de8ad68c74da7e18e2,
     "control_range": 870bd3c9e1c2d00a7884be4e9173ed68,
     "controls": b9d3424b750ee1fbba4df638d995e236,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
@@ -130,6 +132,7 @@
     "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
     "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
     "min_z": 392a615eb91c6d64df871ec95831f89a,
+    "model": dc172f7e5c9e1cd46205ab65ca867ef3,
     "model_divide": f9b35090433ceb932fb6da18d0dcc9bf,
     "model_max": 7082a82b3fd6dbc575aa5c85adfacc76,
     "model_multiply": d2b341855e79890fc79bb562b109fcaf,
@@ -169,6 +172,7 @@
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
     "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
     "position": 199e09fd8b4d41632a90d103d278d6ea,
+    "preview_mode": 49b9fdc633d846b9deb63e8ebecbb05c,
     "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "profile_radius": 0c43e0deeecda93da913261dc2786878,
@@ -179,6 +183,7 @@
     "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
     "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "radio": d3e46e8851004f6786bb6cf771ad1d87,
     "render": 37cda4bdea0091349e305951564fbdf1,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
@@ -254,6 +259,12 @@
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
   },
   "cells": {
+    preview_mode: {
+      name: "preview mode",
+    },
+    model: {
+      name: "Model",
+    },
     settings_section: {
       name: "Cutting parameters",
     },
@@ -3791,45 +3802,37 @@
                                 function: where,
                                 expression: {
                                   playback: {
-                                    function: quote,
-                                    expression: {
-                                      focus: {
-                                        unquote: focus,
-                                      },
-                                      position: {
-                                        unquote: progress,
-                                      },
-                                      profile_tolerance: {
-                                        f64: 0xfca9f1d24d62303f,
-                                      },
-                                      stock_max: {
-                                        y: {
-                                          f64: 0x000000000000e03f,
-                                        },
-                                        x: {
-                                          f64: 0x000000000000e03f,
-                                        },
-                                        z: {
-                                          f64: 0x000000000000e03f,
+                                    function: match,
+                                    subject: preview_mode,
+                                    cases: [
+                                      {
+                                        pattern: model,
+                                        expression: {
+                                          function: quote,
+                                          expression: {
+                                            focus: { unquote: focus },
+                                            position: { unquote: progress },
+                                            profile_tolerance: { unquote: profile_tolerance },
+                                            stock_min: { unquote: stock_min },
+                                            stock_max: { unquote: stock_max },
+                                          },
                                         },
                                       },
-                                      stock_min: {
-                                        y: {
-                                          f64: 0x000000000000e0bf,
-                                        },
-                                        x: {
-                                          f64: 0x000000000000e0bf,
-                                        },
-                                        z: {
-                                          f64: 0x000000000000e0bf,
-                                        },
-                                      },
-                                      stock: {
-                                        color: {
-                                          rgb: 0xb89b6d,
+                                      {
+                                        pattern: stock,
+                                        expression: {
+                                          function: quote,
+                                          expression: {
+                                            focus: { unquote: focus },
+                                            position: { unquote: progress },
+                                            profile_tolerance: { unquote: profile_tolerance },
+                                            stock_min: { unquote: stock_min },
+                                            stock_max: { unquote: stock_max },
+                                            stock: { color: { rgb: 0xb89b6d } },
+                                          },
                                         },
                                       },
-                                    },
+                                    ],
                                   },
                                   min_z: {
                                     f32: 0x9a9959bf,
@@ -3899,13 +3902,34 @@
                                   {
                                     subject: parameters,
                                     pattern: {
-                                      position: {
-                                        bind: progress,
+                                      preview_mode: {
+                                        bind: preview_mode,
                                       },
-                                      control_range: {
-                                        bind: focus,
+                                      playback: {
+                                        position: { bind: progress },
+                                        control_range: { bind: focus },
                                       },
                                     },
+                                  },
+                                  {
+                                    subject: { f64: 0xfca9f1d24d62303f },
+                                    pattern: { bind: profile_tolerance },
+                                  },
+                                  {
+                                    subject: {
+                                      x: { f64: 0x000000000000e0bf },
+                                      y: { f64: 0x000000000000e0bf },
+                                      z: { f64: 0x000000000000e0bf },
+                                    },
+                                    pattern: { bind: stock_min },
+                                  },
+                                  {
+                                    subject: {
+                                      x: { f64: 0x000000000000e03f },
+                                      y: { f64: 0x000000000000e03f },
+                                      z: { f64: 0x000000000000e03f },
+                                    },
+                                    pattern: { bind: stock_max },
                                   },
                                 ],
                               },
@@ -3915,12 +3939,45 @@
                             controls: {
                               params: [],
                               body: {
-                                control_key: {
+                                function: where,
+                                expression: {
                                   function: quote,
-                                  expression: focus,
+                                  expression: {
+                                    preview_mode: { unquote: preview_mode },
+                                    playback: { unquote: parameters },
+                                  },
                                 },
-                                control_items: value,
-                                function: tree_cursor,
+                                bindings: [
+                                  {
+                                    subject: {
+                                      function: radio,
+                                      control_key: {
+                                        function: quote,
+                                        expression: preview_mode,
+                                      },
+                                      control_options: [
+                                        { name: "Model", value: model },
+                                        { name: "Stock", value: stock },
+                                      ],
+                                      control_initial: {
+                                        function: quote,
+                                        expression: stock,
+                                      },
+                                    },
+                                    pattern: { bind: preview_mode },
+                                  },
+                                  {
+                                    subject: {
+                                      control_key: {
+                                        function: quote,
+                                        expression: focus,
+                                      },
+                                      control_items: value,
+                                      function: tree_cursor,
+                                    },
+                                    pattern: { bind: parameters },
+                                  },
+                                ],
                               },
                             },
                             height: height,

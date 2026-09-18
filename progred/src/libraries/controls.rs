@@ -119,21 +119,24 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
 }
 
 fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
-    slider_widget_with(key, slider, width, Rc::new(f64::value))
+    slider_widget_with(key, slider, width, Vec::new(), Rc::new(f64::value))
 }
 
 fn slider_widget_with(
     key: CellId,
     slider: Slider,
     width: f64,
+    ticks: Vec<puri_widgets::slider::TickLevel>,
     value: Rc<dyn Fn(f64) -> Value>,
 ) -> Widget {
+    let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         let root = context.inputs.view.clone();
         let path = context.path.to_vec();
         let edits = context.inputs.edits.clone();
         let value = value.clone();
+        let ticks = ticks.clone();
         let rail = widget::leaf(
             Extent {
                 width: width * scale,
@@ -142,7 +145,9 @@ fn slider_widget_with(
             },
             move |output, placement| {
                 output.claim(puri::hover::Probe::occludes(placement));
-                output.render(move |canvas, _| slider.draw(canvas, placement.rect, scale));
+                output.render(move |canvas, _| {
+                    slider.draw_with_ticks(canvas, placement.rect, scale, &ticks)
+                });
                 output.handler().on_pointer_down(move |editor, event| {
                     let point = Point::new(event.state.position.x, event.state.position.y);
                     if !puri::interact::is_primary_contact(event) || !placement.contains(point) {
@@ -441,7 +446,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         cells.set_value(key, name::record(label, []));
     }
     let functions = ForeignFunctions::default()
-        .register(WITH_CONTROLS, ForeignFunction::runtime(constructor).tracked())
+        .register(
+            WITH_CONTROLS,
+            ForeignFunction::runtime(constructor).tracked(),
+        )
         .register(
             SLIDER,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),

@@ -22,9 +22,8 @@ pub(crate) struct ViewGeometry {
 
 #[derive(Clone, PartialEq)]
 struct Surface {
-    path: Arc<Recording>,
     model: fidget::mesh::Shape,
-    playback: Option<playback::Settings>,
+    removal: Option<(Arc<Recording>, playback::Settings)>,
     depth: u8,
 }
 
@@ -107,9 +106,12 @@ impl Layers {
                 let settings = settings.read(read)?;
                 let depth = *depth.read(read);
                 Ok(record.path().map(|_| Surface {
-                    path: record.path.clone(),
                     model: settings.shape.clone(),
-                    playback: settings.playback.clone(),
+                    removal: settings
+                        .playback
+                        .as_ref()
+                        .filter(|playback| playback.stock_color().is_some())
+                        .map(|playback| (record.path.clone(), playback.clone())),
                     depth,
                 }))
             }
@@ -196,9 +198,9 @@ fn updating_color(color: [f32; 3]) -> [f32; 3] {
 
 fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     let mut shape = request.model.clone();
-    if let Some(playback) = &request.playback {
+    if let Some((path, playback)) = &request.removal {
         if let Some(stock) = playback
-            .remaining_stock(&request.path)
+            .remaining_stock(path)
             .map_err(|_| absent::with_reason(INVALID_INPUT))?
         {
             shape.objects = vec![stock];
@@ -506,7 +508,7 @@ mod tests {
         let moved = runtime.read(&surface_node).unwrap();
         assert!(!Rc::ptr_eq(&surface, &moved));
         props.playback = Some(playback(0.75, 0.01));
-        settings.set(props);
+        settings.set(props.clone());
         let accuracy_changed = runtime.read(&surface_node).unwrap();
         assert!(
             !Rc::ptr_eq(&moved, &accuracy_changed),
@@ -517,6 +519,36 @@ mod tests {
             &accuracy_changed,
             &runtime.read(&surface_node).unwrap()
         ));
+        let model_playback = |position| {
+            playback::Settings::read(&Value::record([
+                (PROGRESS, f64::value(position)),
+                (PROFILE_TOLERANCE, f64::value(0.001)),
+                (STOCK_MIN, super::super::super::point_value([-0.5; 3])),
+                (STOCK_MAX, super::super::super::point_value([0.5; 3])),
+            ]))
+            .unwrap()
+        };
+        props.playback = Some(model_playback(0.25));
+        settings.set(props.clone());
+        let model = runtime.read(&surface_node).unwrap();
+        assert!(!Rc::ptr_eq(&accuracy_changed, &model));
+        let paths = runtime.read(&layers.paths).unwrap();
+        props.playback = Some(model_playback(0.75));
+        settings.set(props.clone());
+        assert!(
+            Rc::ptr_eq(&model, &runtime.read(&surface_node).unwrap()),
+            "moving playback in Model mode must not remesh the unchanged part"
+        );
+        assert!(
+            !Rc::ptr_eq(&paths, &runtime.read(&layers.paths).unwrap()),
+            "tool and remaining paths still update"
+        );
+        props.playback = Some(playback(0.75, 0.001));
+        settings.set(props);
+        assert!(
+            !Rc::ptr_eq(&model, &runtime.read(&surface_node).unwrap()),
+            "switching back to Stock computes subtraction at the current position"
+        );
     }
 
     #[test]

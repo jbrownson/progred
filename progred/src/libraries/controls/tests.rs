@@ -773,6 +773,96 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
 }
 
 #[test]
+fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
+    let tree = Value::list([
+        Value::list([B.into(), B.into()]),
+        Value::list([B.into(), B.into()]),
+    ]);
+    for position in [1.5, 2.0] {
+        for (x, count, range) in [
+            (50.0, 1, 1..2),
+            (150.0, 1, 2..4),
+            (15.0, 1, 0..2),
+            (50.0, 2, 0..4),
+        ] {
+            let mut editor = crate::test_editor(gid::Document {
+                root: None,
+                cells: Cells::new(),
+            });
+            let root = editor.model.workspace.document_root().clone();
+            let selection = tree_range::Selection::new(&tree, None)
+                .select(1, 0..1)
+                .select(0, 1..2);
+            let old = tree_range::cursor_state(&selection, position);
+            let annotation = set_state(None, A, old.clone());
+            crate::editing::annotate(&mut editor, &root, &[], annotation.clone());
+            let (widgets, before) = tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0);
+            let control = widgets.last().unwrap();
+            let measured = with_context(&Output::default(), |context| control(context));
+            let height = measured.extent.height();
+            let dispatch = widget::frame::place(
+                measured,
+                Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
+                &Default::default(),
+            )
+            .resolve_for_dispatch();
+            let event = puri::handler::PointerButtonEvent {
+                button: Some(puri::handler::PointerButton::Primary),
+                pointer: puri::handler::PointerInfo {
+                    pointer_id: None,
+                    persistent_device_id: None,
+                    pointer_type: puri::handler::PointerType::Mouse,
+                },
+                state: puri::handler::PointerState {
+                    position: (x, height / 2.0).into(),
+                    count,
+                    ..Default::default()
+                },
+            };
+            assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
+            let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+            let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+            assert_eq!(
+                result.as_record().unwrap().get(&RANGE),
+                Some(&tree_range::encode(range))
+            );
+            if x == 50.0 && count == 1 {
+                assert_eq!(
+                    editor.model.workspace.document.annotations.at(&[]),
+                    Some(&annotation)
+                );
+                assert_eq!(
+                    result, before,
+                    "a current-item click leaves preview inputs unchanged"
+                );
+                editor.advance_gesture(&[Point::new(55.0, height / 2.0)]);
+                assert_eq!(
+                    editor.model.workspace.document.annotations.at(&[]),
+                    Some(&annotation)
+                );
+                editor.advance_gesture(&[Point::new(150.0, height / 2.0)]);
+                let state =
+                    read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+                assert_eq!(
+                    tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE))
+                        .leaves,
+                    0..4
+                );
+                editor.advance_gesture(&[Point::new(50.0, height / 2.0)]);
+                let state =
+                    read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+                assert_eq!(
+                    tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE))
+                        .leaves,
+                    0..2
+                );
+            }
+            editor.finish_gesture();
+        }
+    }
+}
+
+#[test]
 fn tree_cursor_updates_range_and_position_together() {
     fn click(editor: &mut crate::Editor, control: &Widget, x: f64, count: u8) {
         let measured = with_context(&Output::default(), |context| control(context));

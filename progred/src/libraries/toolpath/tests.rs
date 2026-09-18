@@ -33,9 +33,9 @@ fn top_face(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Bind
 }
 
 #[test]
-fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
+fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
     use crate::libraries::{controls::vocabulary as ui, layout::vocabulary as l, presentation};
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
     let sources = crate::sources::Sources {
         doc: &doc,
@@ -81,43 +81,112 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
         .unwrap()
         .as_record()
         .unwrap();
-    let preview = ::grap::apply(
-        fields.get(&ui::VIEW).unwrap(),
-        [
-            (
-                presentation::vocabulary::VALUE,
-                fields
-                    .get(&presentation::vocabulary::VALUE)
-                    .unwrap()
-                    .clone(),
-            ),
-            (l::WIDTH, f64::value(400.0)),
-            (l::HEIGHT, f64::value(400.0)),
-            (
-                ui::PARAMETERS,
-                Value::record([
-                    (ui::POSITION, f64::value(0.7)),
-                    (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
-                ]),
-            ),
-        ],
-        &sources,
-        10_000,
+    let cursor = Value::record([
+        (ui::POSITION, f64::value(0.7)),
+        (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
+    ]);
+    let previews = [None, Some(names["model"].into())].map(|mode| {
+        let emit =
+            |function, context: &mut ::grap::Context, call, environment: &::grap::Environment| {
+                let key = context.field(call, ui::KEY).unwrap();
+                let key = context.eval(key, environment)?;
+                if function == ui::RADIO {
+                    assert_eq!(key, names["preview_mode"].into());
+                    let options = context.field(call, ui::OPTIONS).unwrap();
+                    let options = context.eval(options, environment)?;
+                    assert_eq!(
+                        options
+                            .as_list()
+                            .unwrap()
+                            .values()
+                            .map(|option| {
+                                option
+                                    .as_record()
+                                    .unwrap()
+                                    .get(&presentation::vocabulary::VALUE)
+                                    .unwrap()
+                                    .clone()
+                            })
+                            .collect::<Vec<_>>(),
+                        [names["model"].into(), STOCK.into()]
+                    );
+                    let initial = context.field(call, ui::INITIAL).unwrap();
+                    let initial = context.eval(initial, environment)?;
+                    assert_eq!(
+                        initial,
+                        STOCK.into(),
+                        "existing Stock view remains the default"
+                    );
+                    Ok(mode.clone().unwrap_or(initial))
+                } else {
+                    assert_eq!(function, ui::TREE_CURSOR);
+                    assert_eq!(key, names["focus"].into());
+                    Ok(cursor.clone())
+                }
+            };
+        let parameters = ::grap::evaluate_scoped(
+            &::grap::call(fields.get(&ui::CONTROLS).unwrap().clone(), []),
+            &sources,
+            &::grap::ForeignOverlay::new(&[ui::RADIO, ui::TREE_CURSOR], &emit),
+            10_000,
+        );
+        assert!(
+            parameters.completed && !absent::is_absent(&parameters.result),
+            "{:?}",
+            parameters.result
+        );
+        let preview = ::grap::apply(
+            fields.get(&ui::VIEW).unwrap(),
+            [
+                (
+                    presentation::vocabulary::VALUE,
+                    fields
+                        .get(&presentation::vocabulary::VALUE)
+                        .unwrap()
+                        .clone(),
+                ),
+                (l::WIDTH, f64::value(400.0)),
+                (l::HEIGHT, f64::value(400.0)),
+                (ui::PARAMETERS, parameters.result),
+            ],
+            &sources,
+            10_000,
+        );
+        assert!(preview.completed, "{:?}", preview.result);
+        preview
+            .result
+            .as_record()
+            .unwrap()
+            .get(&PREVIEW_REFINED)
+            .expect("refined preview callable")
+            .as_record()
+            .unwrap()
+            .clone()
+    });
+    let [mut stock, model] = previews;
+    let mut stock_playback = stock.get(&PLAYBACK).unwrap().as_record().unwrap().clone();
+    let model_playback = model.get(&PLAYBACK).unwrap();
+    assert!(stock_playback.remove(&STOCK).is_some());
+    assert_eq!(Value::Record(stock_playback), *model_playback);
+    let settings = super::playback::Settings::read(model_playback).unwrap();
+    assert!(
+        settings
+            .remaining_stock(&Recording::default())
+            .unwrap()
+            .is_none()
     );
-    assert!(preview.completed, "{:?}", preview.result);
-    let fields = preview
-        .result
-        .as_record()
-        .unwrap()
-        .get(&PREVIEW_REFINED)
-        .expect("refined preview callable")
-        .as_record()
-        .unwrap();
-    let playback = fields.get(&PLAYBACK).unwrap();
-    assert!(super::playback::Settings::read(playback).is_some());
-    let playback = playback.as_record().unwrap();
+    stock.insert(PLAYBACK, model_playback.clone());
+    assert_eq!(
+        stock, model,
+        "mode changes only stock removal, not the model or program"
+    );
+    let playback = model_playback.as_record().unwrap();
     assert!(!playback.contains_key(&super::cutter::vocabulary::TOOL));
     assert_eq!(f64::read(playback.get(&ui::POSITION).unwrap()), Some(0.7));
+    assert_eq!(
+        playback.get(&FOCUS),
+        cursor.as_record().unwrap().get(&ui::RANGE)
+    );
 }
 
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {

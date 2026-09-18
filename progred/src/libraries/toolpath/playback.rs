@@ -234,6 +234,10 @@ mod tests {
 }
 
 impl Settings {
+    pub(super) fn stock_color(&self) -> Option<[u8; 3]> {
+        self.stock_color
+    }
+
     pub(super) fn read(value: &Value) -> Option<Self> {
         let r = value.as_record()?;
         let cursor = match r.get(&crate::libraries::controls::vocabulary::POSITION) {

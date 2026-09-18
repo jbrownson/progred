@@ -345,6 +345,27 @@ fn editor_toolpath_mesh_svg_capture() {
 }
 
 #[test]
+#[ignore = "captures Model and Stock with identical playback without opening the editor"]
+fn editor_toolpath_model_stock_svg_captures() {
+    use crate::libraries::controls::vocabulary::STATE;
+    let (_, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let cursor = cam_position(0.35);
+    for (mode, file) in [("model", "cam_model.svg"), ("stock", "cam_stock.svg")] {
+        let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
+        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
+            .path
+            .clone();
+        let mut state = cursor.as_record().unwrap().clone();
+        state.insert(names["preview_mode"], names[mode].into());
+        editor.model.workspace.left.panes[0]
+            .view
+            .annotations
+            .set_field(&cam_controls_path(&path), STATE, Some(Value::Record(state)));
+        render_editor(editor, kurbo::Size::new(1200.0, 850.0), file);
+    }
+}
+
+#[test]
 #[ignore = "captures focused CAM groups without opening the editor"]
 fn editor_toolpath_focus_svg_captures() {
     use crate::libraries::controls::{tree_range, vocabulary::STATE};
