@@ -42,39 +42,15 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         libraries: &libraries,
     };
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    let (value, viewport) =
-        presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
-    let controls = ::grap::apply(
-        viewport,
-        [
-            (presentation::vocabulary::VALUE, value.clone()),
-            (l::WIDTH, f64::value(400.0)),
-            (l::HEIGHT, f64::value(500.0)),
-        ],
+    let controls = presentation::viewport_output(
+        sources.resolve_path(&pane.path).unwrap(),
         &sources,
-        10_000,
-    );
-    assert!(controls.completed);
-    let expression = controls
-        .result
-        .as_record()
-        .unwrap()
-        .get(&presentation::vocabulary::RENDER)
-        .unwrap()
-        .as_record()
-        .unwrap();
-    let controls = ::grap::evaluate(
-        expression.get(&::grap::vocabulary::EXPRESSION).unwrap(),
-        &sources,
-        f64::read(expression.get(&l::FUEL).unwrap()).unwrap() as usize,
-    );
-    assert!(
-        controls.completed && !absent::is_absent(&controls.result),
-        "{:?}",
-        controls.result
-    );
+        400.0,
+        500.0,
+    )
+    .unwrap();
+    assert!(!absent::is_absent(&controls), "{controls:?}");
     let fields = controls
-        .result
         .as_record()
         .unwrap()
         .get(&ui::WITH_CONTROLS)

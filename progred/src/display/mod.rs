@@ -319,6 +319,13 @@ pub trait Env {
         self.evaluate_with_fuel(expression, fuel)
     }
 
+    /// Reuse an application with explicit data arguments, under the same
+    /// dependency/effect contract as `evaluate_memo`. Hosts without a runtime
+    /// or configurable fuel may keep their ordinary application behavior.
+    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], _fuel: usize) -> Value {
+        self.apply(function, arguments)
+    }
+
     /// The selected definition's conventional human name.
     fn name(&self, _cell: CellId) -> Option<&str> {
         None

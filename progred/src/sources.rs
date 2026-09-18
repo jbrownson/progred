@@ -51,6 +51,10 @@ impl crate::display::Env for Sources<'_> {
         grap::evaluate(expression, self, fuel).result
     }
 
+    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
+        grap::apply(function, arguments.iter().cloned(), self, fuel).result
+    }
+
     fn name(&self, cell: CellId) -> Option<&str> {
         Sources::name(self, cell)
     }

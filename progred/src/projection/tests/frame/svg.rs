@@ -19,9 +19,9 @@ fn result_path(path: &[Step]) -> Path {
         .collect()
 }
 
-// The CAM viewport returns a render declaration, which produces with-controls.
+// Preparation feeds the CAM viewport, which returns with-controls directly.
 fn cam_controls_path(path: &[Step]) -> Path {
-    result_path(&result_path(path))
+    result_path(path)
 }
 
 fn cam_position(progress: f64) -> Value {
@@ -738,29 +738,18 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     let libraries = core_libraries();
     let sources = src(&doc, &libraries);
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    let (value, viewport) =
-        presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
+    let declaration = sources.resolve_path(&pane.path).unwrap();
+    let (value, _) = presentation::viewport(declaration).unwrap();
     assert_eq!(value.as_cell(), Some(names["program_tree"]));
-    let preview = grap::apply(
-        viewport,
-        [
-            (presentation::vocabulary::VALUE, value.clone()),
-            (layout_data::vocabulary::WIDTH, f64::value(700.0)),
-            (layout_data::vocabulary::HEIGHT, f64::value(500.0)),
-        ],
-        &sources,
-        1024,
-    );
-    assert!(preview.completed);
+    let preview = presentation::viewport_output(declaration, &sources, 700.0, 500.0).unwrap();
     assert!(
         preview
-            .result
             .as_record()
             .unwrap()
-            .contains_key(&presentation::vocabulary::RENDER)
+            .contains_key(&crate::libraries::controls::vocabulary::WITH_CONTROLS)
     );
     let doc = Document {
-        root: Some(preview.result),
+        root: Some(preview),
         cells: doc.cells,
     };
     let (bench, _) = place(&doc, None, 760.0);
@@ -773,17 +762,13 @@ fn svg_bench_renders_toolpath_source_and_preview() {
             _ => None,
         })
         .expect("the combined toolpath viewport renders an image");
-    let mut stock = 0;
+    let mut model = 0;
     let mut paths = 0;
     for pixel in image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0) {
-        stock += usize::from(
-            pixel[0] > pixel[1]
-                && pixel[1] > pixel[2]
-                && u16::from(pixel[0]) < 2 * u16::from(pixel[2]),
-        );
+        model += usize::from(pixel[2] > pixel[1] && pixel[1] > pixel[0]);
         paths += usize::from(u16::from(pixel[0]) > 2 * u16::from(pixel[2]));
     }
-    assert!(stock > 100 && paths > 100, "stock {stock}, paths {paths}");
+    assert!(model > 100 && paths > 100, "model {model}, paths {paths}");
     write_svg(&bench.list, 760.0, 548.0, "#F6F6F8", "toolpaths.svg");
 }
 

@@ -281,7 +281,18 @@ workspace model. Raw still projects the underlying record normally.
 
 Assigned-size panes instead use `{value: source, viewport: function}`. The editor
 recognizes this contract at pane entry and passes the settled logical `width`
-and `height` along with `value`. The result goes through the same `at`
+and `height` along with the unevaluated `value` as data. An optional `prepare`
+function runs first, receiving only `value`; its result replaces that argument
+to the viewport function. Preparation uses the ordinary dependency-tracked
+application memo at the declaration's occurrence. Its inputs are the callable,
+source data, and optional `fuel` (defaulting to Grap's usual allowance), plus
+observed definitions. Dimensions are deliberately not inputs. Effects or
+untracked reads prevent reuse, just as for other observed Grap evaluations.
+This lets a pane construct a program independently of its size without
+changing the contract of existing declarations. A preparation absent exposes
+the stored source without calling the viewport function.
+
+The viewport result goes through the same `at`
 projection and handler machinery as other computed content. There is no
 pane-size lookup FFI and no size field on every ordinary projection input.
 The pane supplies the clip and no padding or document scroll handler. The

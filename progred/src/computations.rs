@@ -111,11 +111,126 @@ impl Computations {
             .map(|evaluation| evaluation.result.clone())
             .unwrap_or_else(grap::memo::failure)
     }
+
+    pub fn apply(
+        &self,
+        view: &Root,
+        path: &[Step],
+        function: &Value,
+        arguments: &[(gid::CellId, Value)],
+        fuel: usize,
+    ) -> Value {
+        struct Application {
+            input: Input<(Value, Vec<(gid::CellId, Value)>, usize)>,
+            result: incremental::Memo<grap::Evaluation>,
+        }
+        let input = (function.clone(), arguments.to_vec(), fuel);
+        let application = self.at(view, path, || {
+            let input = self.runtime.input(input.clone());
+            let result = self.runtime.memo({
+                let input = input.clone();
+                let definitions = self.definitions.clone();
+                move |read| {
+                    let input = input.read(read);
+                    let (function, arguments, fuel) = &*input;
+                    Ok(grap::memo::run(&definitions, read, |host| {
+                        grap::apply(function, arguments.iter().cloned(), host, *fuel)
+                    }))
+                }
+            });
+            Application { input, result }
+        });
+        application.input.set(input);
+        self.runtime
+            .read(&application.result)
+            .map(|evaluation| evaluation.result.clone())
+            .unwrap_or_else(grap::memo::failure)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects() {
+        use grap::{Definition, ForeignFunction};
+        use std::cell::Cell;
+
+        for mode in ["tracked", "effectful", "untracked"] {
+            let [function, argument, dependency, library, unrelated] =
+                std::array::from_fn(|_| gid::new_cell_id());
+            let runs = Rc::new(Cell::new(0));
+            let implementation = ForeignFunction::new({
+                let runs = runs.clone();
+                move |context, call, environment| {
+                    runs.set(runs.get() + 1);
+                    let value =
+                        context.eval(context.field(call, argument).unwrap(), environment)?;
+                    let observed =
+                        context.eval(context.field(call, dependency).unwrap(), environment)?;
+                    if mode == "effectful" {
+                        context.effect(|| ());
+                    }
+                    Ok(Value::list([value, observed]))
+                }
+            });
+            let implementation = if mode == "untracked" {
+                implementation
+            } else {
+                implementation.tracked()
+            };
+            let mut definitions = crate::libraries::Definitions::default();
+            definitions.insert(
+                function,
+                Definition::foreign(Value::record([]), implementation),
+            );
+            let mut libraries = Libraries::default();
+            libraries.insert(library, definitions);
+            let computations = Computations::default();
+            let root = Root::document();
+            let mut doc = Document {
+                root: None,
+                cells: gid::Cells::new(),
+            };
+            let callable = grap::lambda(
+                [argument],
+                grap::call(
+                    function.into(),
+                    [(argument, argument.into()), (dependency, dependency.into())],
+                ),
+            );
+            let data = grap::call(unrelated.into(), []);
+            let run = |doc: &Document, data: &Value| {
+                computations.begin(Rc::new(doc.clone()), libraries.clone());
+                computations.apply(&root, &[], &callable, &[(argument, data.clone())], 100)
+            };
+            let first = run(&doc, &data);
+            let values: Vec<_> = first.as_list().unwrap().values().collect();
+            assert_eq!(
+                values[0], &data,
+                "a code-shaped data argument must stay inert"
+            );
+            assert_eq!(
+                grap::absent::reason(values[1]),
+                Some(grap::absent::MISSING_CELL)
+            );
+            assert_eq!(first, run(&doc, &data));
+            doc.cells.set_value(unrelated, Value::record([]));
+            assert_eq!(first, run(&doc, &data));
+            assert_eq!(runs.get(), if mode == "tracked" { 1 } else { 3 });
+            let before = runs.get();
+            doc.cells.set_value(dependency, Value::from(vec![1]));
+            assert_ne!(first, run(&doc, &data));
+            assert_eq!(
+                runs.get(),
+                before + 1,
+                "a previously missing dependency was read"
+            );
+            assert_ne!(first, run(&doc, &Value::record([])));
+            assert_eq!(runs.get(), before + 2, "changed data arguments invalidate");
+        }
+    }
 
     #[test]
     fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() {

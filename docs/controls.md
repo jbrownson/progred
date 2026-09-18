@@ -141,10 +141,13 @@ slider and radio group are pointer/touch controls. `puri-widgets::radio` owns
 indicator painting; Progred composes text, layout, and selection handlers.
 
 The controls function, view function, and preview projection all run again on
-each projected frame; controls do not cache emitted widgets. A surrounding
-`render` declaration may reuse its pure evaluation through the general
-dependency-tracked computation system, as the CAM example does when constructing
-its program tree. The `with controls` constructor declares its reads tracked;
+each projected frame; controls do not cache emitted widgets. The CAM pane's
+`prepare` function constructs its program tree through the general
+dependency-tracked computation system, before its `viewport` function receives
+width and height. Resizing therefore rebuilds presentation without changing
+the generated cutting functions' captured environments or recording their paths
+again. A surrounding `render` declaration can also reuse pure evaluation.
+The `with controls` constructor declares its reads tracked;
 it only evaluates arguments and returns data. Effects or untracked reads in
 those arguments still prevent reuse. The view's expensive geometry also uses
 that system.

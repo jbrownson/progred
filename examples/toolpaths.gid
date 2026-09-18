@@ -172,6 +172,7 @@
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
     "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
     "position": 199e09fd8b4d41632a90d103d278d6ea,
+    "prepare": 8b782978097343efd90f6fb61f649419,
     "preview_mode": 49b9fdc633d846b9deb63e8ebecbb05c,
     "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
@@ -184,7 +185,6 @@
     "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radio": d3e46e8851004f6786bb6cf771ad1d87,
-    "render": 37cda4bdea0091349e305951564fbdf1,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -259,17 +259,14 @@
     "z": ece1c34e1fe1c2c45757d82d4ed6493d,
   },
   "cells": {
-    preview_mode: {
-      name: "preview mode",
-    },
-    model: {
-      name: "Model",
-    },
     settings_section: {
       name: "Cutting parameters",
     },
     geometry_section: {
       name: "Geometry",
+    },
+    model: {
+      name: "Model",
     },
     op1_chamfers: {
       name: "Op 1 · chamfers",
@@ -2795,6 +2792,9 @@
         ],
       },
     },
+    preview_mode: {
+      name: "preview mode",
+    },
     pull_direction: {
       name: "pull direction",
       params: [
@@ -3771,6 +3771,9 @@
     panes: {
       pane_left: [
         {
+          fuel: {
+            f64: 0x00000000804f1241,
+          },
           viewport: {
             params: [
               value,
@@ -3778,230 +3781,270 @@
               height,
             ],
             body: {
-              function: quote,
-              expression: {
-                render: {
-                  fuel: {
-                    f64: 0x00000000804f1241,
-                  },
+              view: {
+                params: [
+                  value,
+                  width,
+                  height,
+                  parameters,
+                ],
+                body: {
+                  function: where,
                   expression: {
-                    function: {
-                      unquote: {
-                        params: [],
-                        body: {
-                          function: where,
+                    playback: {
+                      subject: preview_mode,
+                      function: match,
+                      cases: [
+                        {
+                          pattern: model,
                           expression: {
-                            view: {
-                              params: [
-                                value,
-                                width,
-                                height,
-                                parameters,
-                              ],
-                              body: {
-                                function: where,
-                                expression: {
-                                  playback: {
-                                    function: match,
-                                    subject: preview_mode,
-                                    cases: [
-                                      {
-                                        pattern: model,
-                                        expression: {
-                                          function: quote,
-                                          expression: {
-                                            focus: { unquote: focus },
-                                            position: { unquote: progress },
-                                            profile_tolerance: { unquote: profile_tolerance },
-                                            stock_min: { unquote: stock_min },
-                                            stock_max: { unquote: stock_max },
-                                          },
-                                        },
-                                      },
-                                      {
-                                        pattern: stock,
-                                        expression: {
-                                          function: quote,
-                                          expression: {
-                                            focus: { unquote: focus },
-                                            position: { unquote: progress },
-                                            profile_tolerance: { unquote: profile_tolerance },
-                                            stock_min: { unquote: stock_min },
-                                            stock_max: { unquote: stock_max },
-                                            stock: { color: { rgb: 0xb89b6d } },
-                                          },
-                                        },
-                                      },
-                                    ],
-                                  },
-                                  min_z: {
-                                    f32: 0x9a9959bf,
-                                  },
-                                  fuel: {
-                                    f64: 0x0000000060e34641,
-                                  },
-                                  line_radius: {
-                                    f64: 0x7b14ae47e17a743f,
-                                  },
-                                  function: preview_paths_refined,
-                                  value: {
-                                    function: quote,
-                                    expression: {
-                                      scene: [
-                                        {
-                                          field: {
-                                            unquote: {
-                                              function: where,
-                                              expression: {
-                                                function: field,
-                                              },
-                                              bindings: [
-                                                {
-                                                  subject: {
-                                                    function: cube,
-                                                  },
-                                                  pattern: {
-                                                    field: {
-                                                      bind: field,
-                                                    },
-                                                  },
-                                                },
-                                              ],
-                                            },
-                                          },
-                                          color: {
-                                            rgb: 0x5f96b4,
-                                          },
-                                        },
-                                      ],
-                                    },
-                                  },
-                                  max_x: {
-                                    f32: 0x9a99593f,
-                                  },
-                                  max_y: {
-                                    f32: 0x9a99593f,
-                                  },
-                                  height: height,
-                                  color: {
-                                    rgb: 0xf0ae50,
-                                  },
-                                  max_z: {
-                                    f32: 0x9a99593f,
-                                  },
-                                  min_y: {
-                                    f32: 0x9a9959bf,
-                                  },
-                                  program: value,
-                                  width: width,
-                                  min_x: {
-                                    f32: 0x9a9959bf,
-                                  },
-                                },
-                                bindings: [
-                                  {
-                                    subject: parameters,
-                                    pattern: {
-                                      preview_mode: {
-                                        bind: preview_mode,
-                                      },
-                                      playback: {
-                                        position: { bind: progress },
-                                        control_range: { bind: focus },
-                                      },
-                                    },
-                                  },
-                                  {
-                                    subject: { f64: 0xfca9f1d24d62303f },
-                                    pattern: { bind: profile_tolerance },
-                                  },
-                                  {
-                                    subject: {
-                                      x: { f64: 0x000000000000e0bf },
-                                      y: { f64: 0x000000000000e0bf },
-                                      z: { f64: 0x000000000000e0bf },
-                                    },
-                                    pattern: { bind: stock_min },
-                                  },
-                                  {
-                                    subject: {
-                                      x: { f64: 0x000000000000e03f },
-                                      y: { f64: 0x000000000000e03f },
-                                      z: { f64: 0x000000000000e03f },
-                                    },
-                                    pattern: { bind: stock_max },
-                                  },
-                                ],
+                            function: quote,
+                            expression: {
+                              focus: {
+                                unquote: focus,
+                              },
+                              position: {
+                                unquote: progress,
+                              },
+                              profile_tolerance: {
+                                unquote: profile_tolerance,
+                              },
+                              stock_max: {
+                                unquote: stock_max,
+                              },
+                              stock_min: {
+                                unquote: stock_min,
                               },
                             },
-                            function: with_controls,
-                            value: value,
-                            controls: {
-                              params: [],
-                              body: {
-                                function: where,
-                                expression: {
-                                  function: quote,
-                                  expression: {
-                                    preview_mode: { unquote: preview_mode },
-                                    playback: { unquote: parameters },
-                                  },
-                                },
-                                bindings: [
-                                  {
-                                    subject: {
-                                      function: radio,
-                                      control_key: {
-                                        function: quote,
-                                        expression: preview_mode,
-                                      },
-                                      control_options: [
-                                        { name: "Model", value: model },
-                                        { name: "Stock", value: stock },
-                                      ],
-                                      control_initial: {
-                                        function: quote,
-                                        expression: model,
-                                      },
-                                    },
-                                    pattern: { bind: preview_mode },
-                                  },
-                                  {
-                                    subject: {
-                                      control_key: {
-                                        function: quote,
-                                        expression: focus,
-                                      },
-                                      control_items: value,
-                                      function: tree_cursor,
-                                    },
-                                    pattern: { bind: parameters },
-                                  },
-                                ],
-                              },
-                            },
-                            height: height,
-                            width: width,
                           },
-                          bindings: [
-                            {
-                              subject: {
-                                function: value,
+                        },
+                        {
+                          pattern: stock,
+                          expression: {
+                            function: quote,
+                            expression: {
+                              focus: {
+                                unquote: focus,
                               },
-                              pattern: {
-                                bind: value,
+                              position: {
+                                unquote: progress,
+                              },
+                              profile_tolerance: {
+                                unquote: profile_tolerance,
+                              },
+                              stock_max: {
+                                unquote: stock_max,
+                              },
+                              stock_min: {
+                                unquote: stock_min,
+                              },
+                              stock: {
+                                color: {
+                                  rgb: 0xb89b6d,
+                                },
                               },
                             },
-                          ],
+                          },
+                        },
+                      ],
+                    },
+                    min_z: {
+                      f32: 0x9a9959bf,
+                    },
+                    fuel: {
+                      f64: 0x0000000060e34641,
+                    },
+                    line_radius: {
+                      f64: 0x7b14ae47e17a743f,
+                    },
+                    function: preview_paths_refined,
+                    value: {
+                      function: quote,
+                      expression: {
+                        scene: [
+                          {
+                            field: {
+                              unquote: {
+                                function: where,
+                                expression: {
+                                  function: field,
+                                },
+                                bindings: [
+                                  {
+                                    subject: {
+                                      function: cube,
+                                    },
+                                    pattern: {
+                                      field: {
+                                        bind: field,
+                                      },
+                                    },
+                                  },
+                                ],
+                              },
+                            },
+                            color: {
+                              rgb: 0x5f96b4,
+                            },
+                          },
+                        ],
+                      },
+                    },
+                    max_x: {
+                      f32: 0x9a99593f,
+                    },
+                    max_y: {
+                      f32: 0x9a99593f,
+                    },
+                    height: height,
+                    color: {
+                      rgb: 0xf0ae50,
+                    },
+                    max_z: {
+                      f32: 0x9a99593f,
+                    },
+                    min_y: {
+                      f32: 0x9a9959bf,
+                    },
+                    program: value,
+                    width: width,
+                    min_x: {
+                      f32: 0x9a9959bf,
+                    },
+                  },
+                  bindings: [
+                    {
+                      subject: parameters,
+                      pattern: {
+                        playback: {
+                          position: {
+                            bind: progress,
+                          },
+                          control_range: {
+                            bind: focus,
+                          },
+                        },
+                        preview_mode: {
+                          bind: preview_mode,
                         },
                       },
                     },
-                  },
+                    {
+                      subject: {
+                        f64: 0xfca9f1d24d62303f,
+                      },
+                      pattern: {
+                        bind: profile_tolerance,
+                      },
+                    },
+                    {
+                      subject: {
+                        y: {
+                          f64: 0x000000000000e0bf,
+                        },
+                        x: {
+                          f64: 0x000000000000e0bf,
+                        },
+                        z: {
+                          f64: 0x000000000000e0bf,
+                        },
+                      },
+                      pattern: {
+                        bind: stock_min,
+                      },
+                    },
+                    {
+                      subject: {
+                        y: {
+                          f64: 0x000000000000e03f,
+                        },
+                        x: {
+                          f64: 0x000000000000e03f,
+                        },
+                        z: {
+                          f64: 0x000000000000e03f,
+                        },
+                      },
+                      pattern: {
+                        bind: stock_max,
+                      },
+                    },
+                  ],
                 },
               },
+              function: with_controls,
+              value: value,
+              controls: {
+                params: [],
+                body: {
+                  function: where,
+                  expression: {
+                    function: quote,
+                    expression: {
+                      playback: {
+                        unquote: parameters,
+                      },
+                      preview_mode: {
+                        unquote: preview_mode,
+                      },
+                    },
+                  },
+                  bindings: [
+                    {
+                      subject: {
+                        control_initial: {
+                          function: quote,
+                          expression: model,
+                        },
+                        control_key: {
+                          function: quote,
+                          expression: preview_mode,
+                        },
+                        function: radio,
+                        control_options: [
+                          {
+                            name: "Model",
+                            value: model,
+                          },
+                          {
+                            name: "Stock",
+                            value: stock,
+                          },
+                        ],
+                      },
+                      pattern: {
+                        bind: preview_mode,
+                      },
+                    },
+                    {
+                      subject: {
+                        control_key: {
+                          function: quote,
+                          expression: focus,
+                        },
+                        control_items: value,
+                        function: tree_cursor,
+                      },
+                      pattern: {
+                        bind: parameters,
+                      },
+                    },
+                  ],
+                },
+              },
+              height: height,
+              width: width,
             },
           },
           value: program_tree,
+          prepare: {
+            params: [
+              value,
+            ],
+            body: {
+              function: value,
+            },
+          },
         },
       ],
     },

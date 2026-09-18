@@ -11,6 +11,32 @@ for meshing and other platforms.
 The opt-in [Fidget meshing experiment](fidget-meshing-2026-09-13.md) measures
 CPU triangle generation from the cube document, independently of frame rendering.
 
+## CAM pane resizing — 2026-09-18
+
+The divider drag exposed a misplaced computation boundary: the viewport's
+size-dependent closure also built the program tree. Width and height entered
+the environments of generated cutting functions, invalidating path recording
+even though the resulting cuts were unchanged. A diagnostic at successive
+widths measured about 6 ms rebuilding the tree/control declaration and
+263–265 ms recording the same paths. Equal recording results could preserve
+downstream geometry, but only after that synchronous work had already run.
+
+The example now uses the viewport declaration's optional `prepare` function to
+build its tree without dimensions. Its tracked application has the same
+definition/effect observation rules as existing evaluation memos; the ordinary
+viewport function receives the prepared result plus width and height.
+
+The release regression below measures preparation, controls-declaration
+construction, and recording demand at four changed sizes: 18–72 µs after the
+initial build. It asserts that resizes retain the exact tree storage and
+recording result, then changes tilt and checks that both invalidate. This is
+not a whole-frame or input-to-display measurement: layout, mesh presentation,
+and camera-sized implicit images still have their normal resize costs.
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib cam_resize_retains -- --nocapture
+```
+
 ## Uncached CAM program construction — 2026-09-17
 
 The 504-leaf, five-level toolpath example exposed repeated expansion of shared

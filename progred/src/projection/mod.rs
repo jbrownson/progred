@@ -163,6 +163,15 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         }
     }
 
+    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
+        match self.cx.computations {
+            Some(computations) => {
+                computations.apply(self.cx.view, self.path, function, arguments, fuel)
+            }
+            None => grap::apply(function, arguments.iter().cloned(), &self.cx.sources, fuel).result,
+        }
+    }
+
     fn name(&self, cell: CellId) -> Option<&str> {
         self.cx.name(cell)
     }

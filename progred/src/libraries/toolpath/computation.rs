@@ -87,10 +87,128 @@ mod tests {
     use super::*;
     use crate::libraries::{control, f64};
 
+    struct ViewportEnv<'a> {
+        sources: crate::sources::Sources<'a>,
+        computations: &'a Computations,
+        root: &'a crate::workspace::Root,
+    }
+
+    impl crate::display::Env for ViewportEnv<'_> {
+        fn apply_scoped(
+            &self,
+            function: &Value,
+            arguments: &[(gid::CellId, Value)],
+            scope: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            self.sources.apply_scoped(function, arguments, scope)
+        }
+
+        fn evaluate(&self, expression: &Value) -> Value {
+            self.sources.evaluate(expression)
+        }
+
+        fn apply_memo(
+            &self,
+            function: &Value,
+            arguments: &[(gid::CellId, Value)],
+            fuel: usize,
+        ) -> Value {
+            self.computations
+                .apply(self.root, &[], function, arguments, fuel)
+        }
+    }
+
+    #[test]
+    fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
+        use crate::libraries::{controls::vocabulary as c, layout::vocabulary as l, presentation};
+        use std::{rc::Rc, time::Instant};
+
+        let (mut doc, names) =
+            crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+        let libraries = crate::stack::load().libraries;
+        let computations = Computations::default();
+        let root = crate::workspace::Root::document();
+        let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+        let program = computations.runtime.input(Value::record([]));
+        let paths = recording(
+            &computations,
+            program.clone(),
+            computations.runtime.input(10_000_000),
+        );
+        let prepare = |doc: &gid::Document, width, height| {
+            computations.begin(Rc::new(doc.clone()), libraries.clone());
+            let sources = crate::sources::Sources {
+                doc,
+                libraries: &libraries,
+            };
+            let env = ViewportEnv {
+                sources,
+                computations: &computations,
+                root: &root,
+            };
+            let output = presentation::viewport_output(
+                sources.resolve_path(&pane.path).unwrap(),
+                &env,
+                width,
+                height,
+            )
+            .unwrap();
+            let controls = output
+                .as_record()
+                .unwrap()
+                .get(&c::WITH_CONTROLS)
+                .unwrap()
+                .as_record()
+                .unwrap();
+            assert_eq!(controls.get(&l::WIDTH).and_then(f64::read), Some(width));
+            assert_eq!(controls.get(&l::HEIGHT).and_then(f64::read), Some(height));
+            controls
+                .get(&presentation::vocabulary::VALUE)
+                .unwrap()
+                .clone()
+        };
+        let tree = prepare(&doc, 400.0, 750.0);
+        program.set(tree.clone());
+        let recorded = computations.runtime.read(&paths).unwrap();
+        assert!(recorded.path().is_ok());
+        for (width, height) in [
+            (401.0, 750.0),
+            (402.0, 749.0),
+            (600.0, 900.0),
+            (400.0, 750.0),
+        ] {
+            let start = Instant::now();
+            let resized = prepare(&doc, width, height);
+            assert!(
+                std::ptr::eq(
+                    tree.as_list().unwrap().iter().as_slice(),
+                    resized.as_list().unwrap().iter().as_slice()
+                ),
+                "resize must keep the exact prepared tree"
+            );
+            program.set(resized);
+            assert!(Rc::ptr_eq(
+                &recorded,
+                &computations.runtime.read(&paths).unwrap()
+            ));
+            eprintln!(
+                "resize {width}x{height}: prepare, controls declaration, and recording demand {:?}",
+                start.elapsed()
+            );
+        }
+        doc.cells.set_value(names["tilt"], f64::value(30.0));
+        let edited = prepare(&doc, 400.0, 750.0);
+        assert_ne!(edited, tree);
+        program.set(edited);
+        let changed = computations.runtime.read(&paths).unwrap();
+        assert!(changed.path().is_ok());
+        assert!(!Rc::ptr_eq(&recorded, &changed));
+    }
+
     #[test]
     #[ignore = "manual uncached Grap construction benchmark"]
     fn profile_program_tree_construction() {
-        use crate::libraries::{layout::vocabulary as l, presentation};
+        use crate::libraries::presentation;
         use std::time::Instant;
 
         let (doc, names) =
@@ -101,29 +219,14 @@ mod tests {
             libraries: &libraries,
         };
         let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-        let (value, viewport) =
-            presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
-        let declaration = ::grap::apply(
-            viewport,
-            [
-                (presentation::vocabulary::VALUE, value.clone()),
-                (l::WIDTH, f64::value(400.0)),
-                (l::HEIGHT, f64::value(750.0)),
-            ],
-            &sources,
-            10_000,
-        )
-        .result;
-        let render = declaration
-            .as_record()
-            .unwrap()
-            .get(&presentation::vocabulary::RENDER)
-            .unwrap()
-            .as_record()
-            .unwrap();
-        let expression = render.get(&::grap::vocabulary::EXPRESSION).unwrap();
+        let declaration = sources.resolve_path(&pane.path).unwrap();
         let computations = crate::computations::Computations::from_sources(sources);
         let root = crate::workspace::Root::document();
+        let env = ViewportEnv {
+            sources,
+            computations: &computations,
+            root: &root,
+        };
         for trial in 0..5 {
             let start = Instant::now();
             let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000);
@@ -135,11 +238,11 @@ mod tests {
             let selection_time = start.elapsed();
             assert_eq!(selection.leaves, 0..504);
             let start = Instant::now();
-            let view = ::grap::evaluate(expression, &sources, 300_000);
+            let view = presentation::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
             let view_time = start.elapsed();
-            assert!(view.completed && !absent::is_absent(&view.result));
+            assert!(!absent::is_absent(&view));
             let start = Instant::now();
-            let memoized = computations.evaluate(&root, &[], expression, 300_000);
+            let memoized = presentation::viewport_output(declaration, &env, 400.0, 750.0).unwrap();
             let memo_time = start.elapsed();
             assert!(!absent::is_absent(&memoized));
             eprintln!(

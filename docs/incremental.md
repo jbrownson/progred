@@ -158,6 +158,13 @@ queue or the threaded executor without a windowing harness.
 
 ## CAM integration
 
+The pane declaration first applies its optional `prepare` function to its raw
+`value` data through a tracked application memo. The CAM example builds the
+program tree there. Only then does its `viewport` function receive the tree and
+dimensions to construct the controls and preview. Size is not captured by the
+cutting functions, so resize does not invalidate the recording upstream of
+geometry generation.
+
 The mesh toolpath viewport composes nested nodes:
 
 1. Run the Grap generator into a native recording and evaluation result.

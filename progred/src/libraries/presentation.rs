@@ -19,6 +19,8 @@ pub mod vocabulary {
     pub const RENDER: CellId = CellId::from_u128(0x37cda4bdea0091349e305951564fbdf1);
     pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
     pub const VIEWPORT: CellId = CellId::from_u128(0x709c987e4c2a110931d8597c4da68f69);
+    /// Optional size-independent preparation of a viewport's data input.
+    pub const PREPARE: CellId = CellId::from_u128(0x8b782978097343efd90f6fb61f649419);
     /// The single argument of a projection function.
     pub const VALUE: CellId = CellId::from_u128(0x84d3ba81fd2a52ea37478f4a868106f4);
     /// Ordered field references for an opt-in record outline.
@@ -42,23 +44,52 @@ pub fn viewport_display(
     width: f64,
     height: f64,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let (value, function) = viewport(input.value?)?;
+    viewport(input.value?)?;
     if width <= 0.0 || height <= 0.0 {
         return Some(crate::display::row(0.0, []));
     }
-    let result = input.env.apply(
-        function,
-        &[
-            (vocabulary::VALUE, value.clone()),
-            (layout::vocabulary::WIDTH, f64::value(width)),
-            (layout::vocabulary::HEIGHT, f64::value(height)),
-        ],
-    );
+    let result = viewport_output(input.value?, input.env, width, height)?;
     Some(if absent::is_absent(&result) {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
     })
+}
+
+pub(crate) fn viewport_output(
+    declaration: &gid::Value,
+    env: &dyn crate::display::Env,
+    width: f64,
+    height: f64,
+) -> Option<gid::Value> {
+    let (value, function) = viewport(declaration)?;
+    let fields = declaration.as_record()?;
+    let value = match fields.get(&vocabulary::PREPARE) {
+        Some(prepare) => {
+            let fuel = match fields.get(&layout::vocabulary::FUEL) {
+                Some(value) => {
+                    let fuel = f64::read(value)?;
+                    (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64)
+                        .then_some(fuel as usize)?
+                }
+                None => ::grap::DEFAULT_FUEL,
+            };
+            let prepared = env.apply_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
+            if absent::is_absent(&prepared) {
+                return Some(prepared);
+            }
+            prepared
+        }
+        None => value.clone(),
+    };
+    Some(env.apply(
+        function,
+        &[
+            (vocabulary::VALUE, value),
+            (layout::vocabulary::WIDTH, f64::value(width)),
+            (layout::vocabulary::HEIGHT, f64::value(height)),
+        ],
+    ))
 }
 
 pub fn display(
@@ -101,6 +132,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::RENDER, "render"),
         (vocabulary::PROJECTION, "projection"),
         (vocabulary::VIEWPORT, "viewport"),
+        (vocabulary::PREPARE, "prepare"),
         (vocabulary::VALUE, "value"),
         (vocabulary::OUTLINE, "outline"),
         (vocabulary::RESULT, "result"),
@@ -181,6 +213,110 @@ mod tests {
     }
 
     struct EvaluateTo(Value);
+
+    #[test]
+    fn viewport_preparation_failure_does_not_call_the_viewport() {
+        struct Failed(std::cell::Cell<usize>);
+        impl Env for Failed {
+            fn apply_memo(&self, _: &Value, _: &[(CellId, Value)], fuel: usize) -> Value {
+                assert_eq!(fuel, ::grap::DEFAULT_FUEL);
+                self.0.set(self.0.get() + 1);
+                absent::with_reason(::grap::absent::MISSING_CELL)
+            }
+            fn apply_scoped(
+                &self,
+                _: &Value,
+                _: &[(CellId, Value)],
+                _: Option<&::grap::ForeignOverlay<'_>>,
+            ) -> ::grap::Evaluation {
+                panic!("the viewport must not run after preparation failed")
+            }
+            fn evaluate(&self, _: &Value) -> Value {
+                unreachable!()
+            }
+        }
+        let mut fields = Value::record([
+            (vocabulary::VALUE, LEFT_VALUE.into()),
+            (vocabulary::PREPARE, vocabulary::PREPARE.into()),
+            (vocabulary::VIEWPORT, vocabulary::VIEWPORT.into()),
+        ])
+        .as_record()
+        .unwrap()
+        .clone();
+        let env = Failed(Default::default());
+        let declaration = Value::Record(fields.clone());
+        assert_eq!(
+            viewport_output(&declaration, &env, 400.0, 300.0),
+            Some(absent::with_reason(::grap::absent::MISSING_CELL))
+        );
+        assert_eq!(env.0.get(), 1);
+        for fuel in [f64::value(-1.0), f64::value(0.5), Value::record([])] {
+            fields.insert(layout::vocabulary::FUEL, fuel);
+            assert!(viewport_output(&Value::Record(fields.clone()), &env, 400.0, 300.0).is_none());
+        }
+        assert_eq!(env.0.get(), 1, "malformed fuel declines before preparation");
+    }
+
+    #[test]
+    fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
+        struct Prepared(std::cell::Cell<usize>);
+        impl Env for Prepared {
+            fn apply_memo(
+                &self,
+                function: &Value,
+                arguments: &[(CellId, Value)],
+                fuel: usize,
+            ) -> Value {
+                assert_eq!(function, &Value::from(vocabulary::PREPARE));
+                assert_eq!(arguments, &[(vocabulary::VALUE, LEFT_VALUE.into())]);
+                assert_eq!(fuel, 1234);
+                self.0.set(self.0.get() + 1);
+                Value::list([LEFT_VALUE.into()])
+            }
+            fn apply_scoped(
+                &self,
+                _: &Value,
+                arguments: &[(CellId, Value)],
+                _: Option<&::grap::ForeignOverlay<'_>>,
+            ) -> ::grap::Evaluation {
+                assert!(self.0.get() > 0);
+                assert_eq!(
+                    arguments[0],
+                    (vocabulary::VALUE, Value::list([LEFT_VALUE.into()]))
+                );
+                assert_eq!(arguments[1], (layout::vocabulary::WIDTH, f64::value(400.0)));
+                assert_eq!(
+                    arguments[2],
+                    (layout::vocabulary::HEIGHT, f64::value(300.0))
+                );
+                ::grap::Evaluation {
+                    result: Value::record([]),
+                    remaining_fuel: 0,
+                    completed: true,
+                }
+            }
+            fn evaluate(&self, _: &Value) -> Value {
+                unreachable!()
+            }
+        }
+        let declaration = Value::record([
+            (vocabulary::VALUE, LEFT_VALUE.into()),
+            (vocabulary::PREPARE, vocabulary::PREPARE.into()),
+            (layout::vocabulary::FUEL, f64::value(1234.0)),
+            (vocabulary::VIEWPORT, vocabulary::VIEWPORT.into()),
+        ]);
+        let env = Prepared(Default::default());
+        assert_eq!(
+            viewport_output(&declaration, &env, 400.0, 300.0),
+            Some(Value::record([]))
+        );
+        assert_eq!(env.0.get(), 1);
+        projected(&declaration, &env, |input| {
+            viewport_display(input, 0.0, 300.0)
+        })
+        .unwrap();
+        assert_eq!(env.0.get(), 1, "a zero-sized viewport doesn't prepare");
+    }
 
     impl Env for EvaluateTo {
         fn apply_scoped(
