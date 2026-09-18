@@ -4,6 +4,8 @@ use crate::libraries::f64;
 use crate::libraries::toolpath::{self, cutter::Tool, paths::Recording, stock::Stock};
 use std::time::{Duration, Instant};
 
+mod bend;
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "gpu-experiment"))]
 mod gpu;
 mod progressive;

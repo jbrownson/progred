@@ -1,0 +1,17 @@
+#!/bin/sh
+# Execute the isolated Bend experiment with the repository's build boundary.
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+build="$root/target/sandbox"
+mkdir -p "$build/home" "$build/tmp" "$build/bend-fidget"
+exec env -i HOME="$build/home" TMPDIR="$build/tmp" \
+  PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+  /usr/bin/sandbox-exec \
+  -D ALLOW_NETWORK=0 -D ALLOW_LOCK_WRITE=0 \
+  -D "PROJECT_ROOT=$root" -D "GIT_DIR=$root/.git" \
+  -D "CLAUDE_DIR=$root/.claude" -D "CODEX_DIR=$root/.codex" \
+  -D "DOTENV=$root/.env" -D "LOCKFILE=$root/Cargo.lock" \
+  -D "BUILD_ROOT=$build" -D "SANDBOX_HOME=$build/home" \
+  -D "SANDBOX_TMP=$build/tmp" -D TOOLCHAIN_ROOT=/opt/homebrew \
+  -D "ANCESTOR_CARGO_CONFIG=$root/.cargo/config.toml" \
+  -f "$root/tools/cargo-sandbox.sb" "$@"
