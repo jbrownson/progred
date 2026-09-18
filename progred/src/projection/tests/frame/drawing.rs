@@ -253,7 +253,7 @@ fn iop_tree_at_size(size: kurbo::Size) {
     assert!(
         matches!(
             &linked.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Drawing(
+            Some(Claim::Direct(Hovered::Tree(Hover::Source(
                 crate::hover::SourceTrace::InCell { .. }
             ))))
         ),
@@ -404,7 +404,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert_eq!(calls.get(), expected);
         assert!(selected.borrow().is_empty());
         let source = SourceTrace::Stored(Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]));
-        let target = Hovered::Tree(Hover::Drawing(source.clone()));
+        let target = Hovered::Tree(Hover::Source(source.clone()));
         assert_eq!(
             placed.claim.clone().map(|(_, claim)| claim),
             Some(Claim::Direct(target.clone()))
@@ -551,7 +551,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     let path: Rc<[Step]> = Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]);
     let mut input = placed::DispatchContext::new(
         Some(drawing_view.clone()),
-        Some(Hovered::Tree(Hover::Drawing(SourceTrace::Stored(
+        Some(Hovered::Tree(Hover::Source(SourceTrace::Stored(
             path.clone(),
         )))),
     );

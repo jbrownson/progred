@@ -51,6 +51,22 @@ half-open leaf-index range as `[start, end]` (f64 integers). It does not resolve
 cells or evaluate leaves. The caller supplies an already-expanded tree, and can
 use the result for any domain, not just toolpaths.
 
+The native range-stack adapter accepts an optional item-decoration function,
+indexed by each item's list-position path. Its returned widget continuation
+receives the notch's settled rectangle and may add hover, painting, and handlers.
+These continuations capture their inputs; they do not add fields to the item data
+or participate in retained range-selection state.
+
+When `items` is an inert list stored directly in a Grap function definition,
+the controls adapter can capture its source at that call boundary. Each notch
+then uses the same source-following handlers as IoP: Command-hover reveals its
+source, Command-click selects it, and source hover/selection highlights the notch.
+Plain clicks and drags still select ranges. Generated list results do not inherit
+the argument expression's source: their element paths would not name children of
+that expression. The CAM example currently passes such a generated result, so
+its source-capture hookup remains pending; no provenance is inferred from equal
+values, closures, or display names.
+
 Separators narrow to at most a quarter of each notch's width and disappear below
 two physical pixels per notch. Dense rows retain the same selection color,
 endpoint handles, and per-item interaction; only the separators change.

@@ -496,7 +496,7 @@ fn range_stack_uses_row_hit_height_without_extra_vertical_padding() {
             0,
             0.0,
             selection
-                .widgets(A, 180.0)
+                .widgets(A, 180.0, None)
                 .map(|row| row(context))
                 .collect(),
         )
@@ -527,12 +527,213 @@ fn range_stack_uses_row_hit_height_without_extra_vertical_padding() {
 }
 
 #[test]
+fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
+    use crate::hover::{Hover, SourceTrace};
+    use gid::Step;
+    use puri::handler::{Event, Modifiers};
+    use puri::hover::Claim;
+
+    let (owner, library, probe) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
+    let items = Value::list([A.into(), A.into()]);
+    let positions: Vec<_> = items.as_list().unwrap().keys().cloned().collect();
+    let mut definitions = crate::libraries::Definitions::default();
+    definitions.insert(
+        owner,
+        ::grap::Definition::Value(::grap::lambda(
+            [],
+            ::grap::call(probe.into(), [(ITEMS, items.clone())]),
+        )),
+    );
+    let mut libraries = crate::stack::load().libraries;
+    libraries.insert(library, definitions);
+    let captured = RefCell::new(None);
+    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+        let expression = context.field(call, ITEMS).unwrap();
+        captured.replace(stored_tree_items(context, expression));
+        context.eval(expression, environment)
+    };
+    let result = ::grap::apply_scoped(
+        &owner.into(),
+        [],
+        &libraries,
+        &ForeignOverlay::new(&[probe], &emit),
+        1000,
+    );
+    assert!(result.completed);
+    assert_eq!(result.result, items);
+    let decorate = captured.into_inner().expect("a stored list has a source");
+    let sources: Vec<_> = positions
+        .iter()
+        .map(|position| SourceTrace::InCell {
+            cell: owner,
+            source: gid::Resolution::Library(library),
+            path: Rc::from([
+                Step::Key(::grap::vocabulary::BODY),
+                Step::Key(ITEMS),
+                Step::Element(position.clone()),
+            ]),
+        })
+        .collect();
+    let selection = tree_range::Selection::new(&result.result, None);
+    let point = Point::new(50.0, 10.0);
+
+    let build = |selected: Option<SourceTrace>, hovered: Option<SourceTrace>| {
+        let measured = with_context(&Output::default(), |context| {
+            let inputs = crate::projection::Cx {
+                selected_trace: selected,
+                ..context.inputs.clone()
+            };
+            let mut context = widget::Context {
+                inputs: &inputs,
+                text: context.text,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+            };
+            selection
+                .widgets(A, 180.0, Some(decorate.clone()))
+                .next()
+                .unwrap()(&mut context)
+        });
+        let placed = widget::frame::place(
+            measured,
+            Placement::root(Rect::new(0.0, 0.0, 200.0, 20.0)),
+            &widget::HoverInput {
+                pointer: Some(point),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            placed.claim.as_ref().map(|(_, c)| c),
+            Some(&Claim::Direct(crate::frame::Hovered::Tree(Hover::Source(
+                sources[0].clone()
+            ))))
+        );
+        placed.bind(widget::ResolvedHover {
+            hovered_trace: hovered,
+            ..Default::default()
+        })
+    };
+    let draws = |selected, hovered| {
+        let frame = build(selected, hovered);
+        let mut drawing = DrawList::new();
+        puri::frame::render(frame.renders, &mut drawing);
+        drawing
+            .0
+            .iter()
+            .filter(|cmd| matches!(cmd, DrawCmd::Clip { .. }))
+            .count()
+    };
+    assert_eq!(draws(None, None), 0);
+    assert_eq!(draws(Some(sources[0].clone()), None), 1);
+    assert_eq!(draws(None, Some(sources[1].clone())), 1);
+    assert_eq!(draws(Some(sources[0].clone()), Some(sources[0].clone())), 1);
+
+    let frame = build(None, None);
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let root = editor.model.workspace.document_root().clone();
+    let mut input = crate::placed::DispatchContext::new(
+        None,
+        Some(crate::frame::Hovered::Tree(Hover::Source(
+            sources[0].clone(),
+        ))),
+    );
+    // No visible source: Cmd-click still belongs to the source link and must not move the range.
+    let mut event = puri::handler::PointerButtonEvent {
+        button: Some(puri::handler::PointerButton::Primary),
+        pointer: puri::handler::PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: puri::handler::PointerType::Mouse,
+        },
+        state: puri::handler::PointerState {
+            position: (point.x, point.y).into(),
+            modifiers: Modifiers::META | Modifiers::CONTROL,
+            ..Default::default()
+        },
+    };
+    let handler = frame.handler.unwrap();
+    assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
+    assert!(
+        read_state(
+            editor
+                .model
+                .workspace
+                .view(&root)
+                .unwrap()
+                .annotations
+                .at(&[]),
+            A
+        )
+        .is_none()
+    );
+    assert!(editor.model.selection.is_none());
+    editor.pointer = Some(point);
+    assert!(
+        !handler
+            .dispatch(&mut editor, Event::HoverChanged, &mut input)
+            .handled()
+    );
+    event.state.modifiers = Modifiers::default();
+    assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
+    assert!(
+        read_state(
+            editor
+                .model
+                .workspace
+                .view(&root)
+                .unwrap()
+                .annotations
+                .at(&[]),
+            A
+        )
+        .is_some()
+    );
+    editor.finish_gesture();
+}
+
+#[test]
+fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
+    let (owner, library, probe) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
+    let items = Value::list([A.into(), B.into()]);
+    let mut definitions = crate::libraries::Definitions::default();
+    definitions.insert(
+        owner,
+        ::grap::Definition::Value(::grap::lambda(
+            [],
+            ::grap::call(probe.into(), [(ITEMS, quote(items.clone()))]),
+        )),
+    );
+    let mut libraries = crate::stack::load().libraries;
+    libraries.insert(library, definitions);
+    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+        let expression = context.field(call, ITEMS).unwrap();
+        assert!(stored_tree_items(context, expression).is_none());
+        context.eval(expression, environment)
+    };
+    assert_eq!(
+        ::grap::apply_scoped(
+            &owner.into(),
+            [],
+            &libraries,
+            &ForeignOverlay::new(&[probe], &emit),
+            1000
+        )
+        .result,
+        items
+    );
+}
+
+#[test]
 fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
     let tree = Value::list([
         Value::list([A.into(), A.into()]),
         Value::list([A.into(), A.into()]),
     ]);
-    let (rows, _) = tree_range::cursor(&tree, None, 0.25, A, 180.0);
+    let (rows, _) = tree_range::cursor(&tree, None, 0.25, A, 180.0, None);
     let measured = with_context(&Output::default(), |context| {
         measured::col(0, 0.0, rows.iter().map(|row| row(context)).collect())
     });
@@ -633,7 +834,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
     ]);
     crate::editing::annotate(&mut editor, &root, &[], annotation);
     let selection = tree_range::Selection::new(&tree, Some(&old));
-    let control = selection.widgets(A, 180.0).last().unwrap();
+    let control = selection.widgets(A, 180.0, None).last().unwrap();
     let measured = with_context(&Output::default(), |context| control(context));
     let height = measured.extent.height();
     let placed = widget::frame::place(
@@ -720,9 +921,9 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             );
             let selection = tree_range::Selection::new(&tree, Some(&ranges));
             let widgets: Vec<_> = if cursor {
-                tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0).0
+                tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0, None).0
             } else {
-                selection.widgets(A, 180.0).collect()
+                selection.widgets(A, 180.0, None).collect()
             };
             let control = if finest {
                 &widgets[usize::from(cursor)]
@@ -796,7 +997,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             let old = tree_range::cursor_state(&selection, position);
             let annotation = set_state(None, A, old.clone());
             crate::editing::annotate(&mut editor, &root, &[], annotation.clone());
-            let (widgets, before) = tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0);
+            let (widgets, before) = tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0, None);
             let control = widgets.last().unwrap();
             let measured = with_context(&Output::default(), |context| control(context));
             let height = measured.extent.height();
@@ -821,7 +1022,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             };
             assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
             let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
-            let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+            let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
             assert_eq!(
                 result.as_record().unwrap().get(&RANGE),
                 Some(&tree_range::encode(range))
@@ -901,11 +1102,11 @@ fn tree_cursor_updates_range_and_position_together() {
         Value::list([B.into(), B.into()]),
         Value::list([B.into(), B.into()]),
     ]);
-    let (widgets, _) = tree_range::cursor(&tree, None, 2.75, A, 180.0);
+    let (widgets, _) = tree_range::cursor(&tree, None, 2.75, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 150.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(2.75));
-    let (widgets, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    let (widgets, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
     assert_eq!(
         result.as_record().unwrap().get(&RANGE),
         Some(&tree_range::encode(2..4))
@@ -913,26 +1114,26 @@ fn tree_cursor_updates_range_and_position_together() {
     click(&mut editor, &widgets[0], 100.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(3.0));
-    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(0.0));
     assert_eq!(
-        tree_range::cursor(&tree, Some(state), 0.0, A, 180.0)
+        tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None)
             .1
             .as_record()
             .unwrap()
             .get(&RANGE),
         Some(&tree_range::encode(0..2))
     );
-    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 2);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(
         state.as_record().unwrap().get(&RANGE),
         Some(&Value::list([ALL.into(), ALL.into()]))
     );
-    let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
     assert_eq!(
         result.as_record().unwrap().get(&RANGE),
         Some(&tree_range::encode(0..4))
@@ -941,7 +1142,7 @@ fn tree_cursor_updates_range_and_position_together() {
 }
 
 fn tree_cursor_position(tree: &Value, state: &Value) -> Option<f64> {
-    tree_range::cursor(tree, Some(state), 0.0, A, 180.0)
+    tree_range::cursor(tree, Some(state), 0.0, A, 180.0, None)
         .1
         .as_record()?
         .get(&POSITION)

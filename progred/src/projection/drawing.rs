@@ -12,7 +12,6 @@ use kurbo::{Affine, BezPath, Circle, Point, Rect, Shape as _};
 use measured::{Extent, Measured};
 use peniko::Brush;
 use puri::draw::{Canvas, DrawList};
-use puri::handler::{Event, EventOutcome, HasHandler};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
 
@@ -92,7 +91,7 @@ impl Recorded {
             .iter()
             .rev()
             .find(|hit| hit.contains(point))
-            .map(|hit| Hovered::Tree(Hover::Drawing(hit.source.clone())))
+            .map(|hit| Hovered::Tree(Hover::Source(hit.source.clone())))
     }
 
     fn highlight<C: Canvas + ?Sized>(
@@ -431,41 +430,7 @@ pub(crate) fn program_leaf(
         builder.claim_dynamic(placement, move |point| {
             probe_drawing.target_at(point, outer)
         });
-        builder.pick_dynamic(
-            placement,
-            move |world: &mut crate::Editor, target, input| {
-                if let Hovered::Tree(Hover::Drawing(source)) = target {
-                    if let Some(target) = source_descend(&world.sources(), &input.descends, source)
-                    {
-                        input.geometry(scale).arrive(world, target, None);
-                    }
-                    // The painted hit owns the pick even without a visible source occurrence.
-                    true
-                } else {
-                    false
-                }
-            },
-        );
-        builder.handler().on(move |world, event, input| {
-            let handled = matches!(event, Event::HoverChanged | Event::ModifiersChanged(_))
-                && !world.pressed
-                && crate::modifiers::link(&world.modifiers)
-                && world.pointer.is_some_and(|point| placement.contains(point))
-                && match input.hovered() {
-                    Some(Hovered::Tree(Hover::Drawing(source))) => {
-                        let target = source_descend(&world.sources(), &input.descends, source)
-                            .and_then(|descend| {
-                                descend.root.clone().map(|root| (root, descend.rect))
-                            });
-                        if let Some((root, rect)) = target {
-                            input.geometry(scale).reveal_rect(world, &root, rect);
-                        }
-                        true
-                    }
-                    _ => false,
-                };
-            EventOutcome::from_handled(event, handled)
-        });
+        super::source_link::handlers(builder, placement, scale);
         builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
@@ -481,19 +446,6 @@ pub(crate) fn program_leaf(
                 },
             );
         });
-    })
-}
-
-pub(crate) fn source_descend<'a, World>(
-    sources: &Sources<'_>,
-    descends: &'a [crate::navigate::Descend<World>],
-    source: &SourceTrace,
-) -> Option<&'a crate::navigate::Descend<World>> {
-    descends.iter().find(|descend| {
-        descend.root.is_some()
-            && descend.scope.source(&descend.path).is_some_and(|path| {
-                SourceTrace::from_path(sources, Rc::from(path.as_ref())) == *source
-            })
     })
 }
 
@@ -632,7 +584,7 @@ mod tests {
             );
             assert_eq!(
                 drawing.target_at(Point::new(5.0, 5.0), Affine::IDENTITY),
-                Some(Hovered::Tree(Hover::Drawing(selected)))
+                Some(Hovered::Tree(Hover::Source(selected)))
             );
             let other = SourceTrace::from_path(
                 &sources,
@@ -674,7 +626,7 @@ mod tests {
 
         assert_eq!(
             drawing.target_at(Point::new(25.0, 35.0), Affine::translate((20.0, 30.0)),),
-            Some(Hovered::Tree(Hover::Drawing(front))),
+            Some(Hovered::Tree(Hover::Source(front))),
         );
     }
 

@@ -53,7 +53,7 @@ Selection also names its owning workspace view. Two panes can show the same
 stored path while keeping separate focus, scroll, and folds. A workspace
 `Root` supplies this session identity; it is not a GID cell.
 
-[`SourceTrace`](../progred/src/hover.rs) serves source-linked drawing and
+[`SourceTrace`](../progred/src/hover.rs) serves source-linked widgets, drawing, and
 highlighting. It is either a stored path or a cell, definition source, and path
 relative to that definition. Normalizing to the nearest followed definition
 lets different occurrences highlight the same source without conflating two

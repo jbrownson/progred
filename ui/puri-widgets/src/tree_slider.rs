@@ -97,6 +97,12 @@ pub struct Row<Key> {
     items: Vec<Item<Key>>,
 }
 
+impl<Key> Row<Key> {
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.items.iter().map(|item| &item.key)
+    }
+}
+
 struct Item<Key> {
     key: Key,
     leaves: Range<usize>,

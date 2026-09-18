@@ -37,6 +37,26 @@ impl RangeSlider {
         ((point.x - rail.x0) / rail.width()).clamp(0.0, 1.0) * self.count as f64
     }
 
+    pub fn item_at(&self, rect: Rect, scale: f64, point: Point) -> Option<usize> {
+        let rail = Self::rail(rect, scale);
+        (self.count > 0 && rail.width() > 0.0 && rail.contains(point))
+            .then(|| (self.position(rect, scale, point).floor() as usize).min(self.count - 1))
+    }
+
+    pub fn item_rect(&self, rect: Rect, scale: f64, item: usize) -> Option<Rect> {
+        let rail = Self::rail(rect, scale);
+        (item < self.count && rail.width() > 0.0).then(|| {
+            let width = rail.width() / self.count as f64;
+            let half_height = (rect.height() / 2.0 - 2.0 * scale).max(0.0);
+            Rect::new(
+                rail.x0 + width * item as f64,
+                rect.center().y - half_height,
+                rail.x0 + width * (item + 1) as f64,
+                rect.center().y + half_height,
+            )
+        })
+    }
+
     pub fn begin(&self, rect: Rect, scale: f64, point: Point) -> Drag {
         let rail = Self::rail(rect, scale);
         let x = |i| rail.x0 + rail.width() * i as f64 / self.count as f64;
@@ -137,6 +157,30 @@ impl RangeSlider {
 mod tests {
     use super::*;
     use puri::draw::{DrawCmd, DrawList};
+
+    #[test]
+    fn item_hits_and_feedback_use_the_same_notches_at_every_density() {
+        for scale in [1.0, 2.0] {
+            for count in [1, 4, 500] {
+                let slider = RangeSlider::new(count, 0..count).unwrap();
+                let rect = Rect::new(10.0, 30.0, 410.0, 30.0 + HEIGHT * scale);
+                for item in 0..count {
+                    let bounds = slider.item_rect(rect, scale, item).unwrap();
+                    assert_eq!(slider.item_at(rect, scale, bounds.center()), Some(item));
+                    assert!(rect.contains(bounds.center()));
+                }
+                assert_eq!(slider.item_rect(rect, scale, count), None);
+                assert_eq!(slider.item_at(rect, scale, Point::new(rect.x0, 35.0)), None);
+                assert_eq!(
+                    slider.item_at(rect, scale, Point::new(200.0, rect.y1 + 1.0)),
+                    None
+                );
+                let empty = Rect::new(0.0, 0.0, 0.0, HEIGHT * scale);
+                assert_eq!(slider.item_at(empty, scale, Point::ZERO), None);
+                assert_eq!(slider.item_rect(empty, scale, 0), None);
+            }
+        }
+    }
 
     #[test]
     fn separators_fit_the_notches_and_use_physical_pixel_visibility() {

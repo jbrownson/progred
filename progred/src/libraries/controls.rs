@@ -269,6 +269,7 @@ fn display(
             let Some(expression) = context.field(call, ITEMS) else {
                 return Ok(context.missing_argument(ITEMS));
             };
+            let decorate = stored_tree_items(context, expression);
             let items = context.eval(expression, environment)?;
             if absent::is_absent(&items) {
                 return Ok(items);
@@ -287,6 +288,7 @@ fn display(
                     initial,
                     key,
                     width - 2.0 * PADDING_X,
+                    decorate,
                 );
                 return Ok(context.effect(|| {
                     widgets.borrow_mut().extend(controls);
@@ -295,9 +297,11 @@ fn display(
             }
             let selection = tree_range::Selection::new(&items, read_state(input.state, key));
             return Ok(context.effect(|| {
-                widgets
-                    .borrow_mut()
-                    .extend(selection.widgets(key, width - 2.0 * PADDING_X));
+                widgets.borrow_mut().extend(selection.widgets(
+                    key,
+                    width - 2.0 * PADDING_X,
+                    decorate,
+                ));
                 tree_range::encode(selection.leaves.clone())
             }));
         }
@@ -417,6 +421,24 @@ fn display(
             })
         })
     })))
+}
+
+fn stored_tree_items(
+    context: &Context,
+    expression: Expression,
+) -> Option<tree_range::ItemDecoration> {
+    context.value(expression).as_list()?;
+    let source = crate::hover::from_grap(context.source_origin(expression)?, None)?;
+    Some(Rc::new(move |key| {
+        crate::projection::source_link::decoration(
+            source.descendant(
+                &key.iter()
+                    .cloned()
+                    .map(gid::Step::Element)
+                    .collect::<Vec<_>>(),
+            ),
+        )
+    }))
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {

@@ -130,27 +130,6 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
         }
     }
 
-    pub fn pick_dynamic(
-        &mut self,
-        placement: Placement,
-        action: impl Fn(&mut C, &Hovered, &DispatchContext<C>) -> bool + 'static,
-    ) {
-        if self.visible {
-            self.handler()
-                .on_pointer_down_with(move |ctx, event, pointer| {
-                    puri::interact::is_primary_contact(event)
-                        && crate::modifiers::pick(&event.state.modifiers)
-                        && !pointer.outside_view
-                        && placement
-                            .contains(Point::new(event.state.position.x, event.state.position.y))
-                        && pointer
-                            .hovered
-                            .as_ref()
-                            .is_some_and(|target| action(ctx, target, pointer))
-                });
-        }
-    }
-
     /// Defer painting until this frame's hover has settled.
     pub fn render(
         &mut self,
@@ -1168,14 +1147,19 @@ mod tests {
         assert_eq!(count, 1);
     }
     #[test]
-    fn dynamic_picks_share_pointer_order_and_respect_occlusion() {
-        let target = Hovered::Tree(crate::hover::Hover::Drawing(
+    fn source_picks_share_pointer_order_and_respect_occlusion() {
+        let target = Hovered::Tree(crate::hover::Hover::Source(
             crate::hover::SourceTrace::Stored(std::rc::Rc::from([])),
         ));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         for covered in [false, true] {
+            let mut editor = crate::test_editor(gid::Document {
+                root: None,
+                cells: gid::Cells::new(),
+            });
+            let count = std::rc::Rc::new(std::cell::Cell::new(0));
             let mut frame = HoverOutput::default();
-            let mut placed: HoverContext<'_, usize, Hovered> = HoverContext::new(
+            let mut placed: HoverContext<'_, crate::Editor, Hovered> = HoverContext::new(
                 HoverInput {
                     pointer: Some(Point::new(5.0, 5.0)),
                     ..Default::default()
@@ -1188,14 +1172,7 @@ mod tests {
             p.occlude(placement);
             let claimed = target.clone();
             p.claim_dynamic(placement, move |_| Some(claimed.clone()));
-            p.pick_dynamic(placement, |count, target, _| {
-                if matches!(target, Hovered::Tree(crate::hover::Hover::Drawing(_))) {
-                    *count += 1;
-                    true
-                } else {
-                    false
-                }
-            });
+            crate::projection::source_link::handlers(&mut p, placement, 1.0);
             if covered {
                 p.occlude(placement);
             }
@@ -1206,16 +1183,28 @@ mod tests {
                 _ => panic!("hit"),
             };
             let mut pointer = DispatchContext::new(None, Some(hovered));
+            pointer.descends = std::rc::Rc::from([crate::navigate::Descend {
+                root: Some(editor.model.workspace.document_root().clone()),
+                scope: Default::default(),
+                path: std::rc::Rc::from([]),
+                rect: placement.rect,
+                select: std::rc::Rc::new({
+                    let count = count.clone();
+                    move |_, _| {
+                        count.set(count.get() + 1);
+                        true
+                    }
+                }),
+            }]);
             let mut event = down_at(5.0, 5.0);
             event.state.modifiers =
                 ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
-            let mut count = 0;
             assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
-                &mut count,
+                &mut editor,
                 &event,
                 &mut pointer
             ));
-            assert_eq!(count, usize::from(!covered));
+            assert_eq!(count.get(), usize::from(!covered));
         }
     }
 }

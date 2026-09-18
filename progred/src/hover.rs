@@ -19,9 +19,8 @@ pub enum Hover {
     Value(Rc<[Step]>),
     /// Activate here toggles this path's collapse.
     Toggle(Rc<[Step]>),
-    /// A painted Grap operation linked back to the expression that
-    /// emitted it.
-    Drawing(SourceTrace),
+    /// A generated widget or drawing linked to its source expression.
+    Source(SourceTrace),
     /// A click here commits the completion entry at this index. An
     /// index, not the entry: a hover stores ADDRESSES, never values,
     /// so what it means re-derives from the LIVE entries each frame —
@@ -63,7 +62,7 @@ pub(crate) fn hover_secondary<C>(
         Hover::Value(path) => sources
             .resolve_path(path)
             .map(|value| Secondary::from_path(sources, path.clone(), value)),
-        Hover::Drawing(source) => Some(Secondary::from_trace(source)),
+        Hover::Source(source) => Some(Secondary::from_trace(source)),
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
         Hover::Toggle(_) | Hover::MoreCompletions => None,
     }

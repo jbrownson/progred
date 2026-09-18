@@ -7,6 +7,8 @@ use puri_widgets::tree_slider::{self, Cursor, Intent};
 use std::ops::Range;
 
 type Key = Vec<gid::Position>;
+pub(crate) type ItemDecoration =
+    Rc<dyn Fn(&[gid::Position]) -> widget::Decoration<crate::Editor, crate::frame::Hovered>>;
 
 pub(crate) fn encode(range: Range<usize>) -> Value {
     Value::list([f64::value(range.start as f64), f64::value(range.end as f64)])
@@ -134,8 +136,13 @@ impl Selection {
         Value::list(self.intent.iter().map(intent_value))
     }
 
-    pub fn widgets(&self, key: CellId, width: f64) -> impl Iterator<Item = Widget> + '_ {
-        self.range_widgets(key, width, None)
+    pub fn widgets(
+        &self,
+        key: CellId,
+        width: f64,
+        decorate: Option<ItemDecoration>,
+    ) -> impl Iterator<Item = Widget> + '_ {
+        self.range_widgets(key, width, None, decorate)
     }
 
     fn range_widgets(
@@ -143,6 +150,7 @@ impl Selection {
         key: CellId,
         width: f64,
         position: Option<f64>,
+        decorate: Option<ItemDecoration>,
     ) -> impl Iterator<Item = Widget> + '_ {
         self.rows.iter().rev().map(move |row| {
             range_widget(
@@ -152,6 +160,9 @@ impl Selection {
                 self.clone(),
                 position,
                 width,
+                decorate
+                    .as_ref()
+                    .map(|decorate| row.keys().map(|key| decorate(key)).collect()),
             )
         })
     }
@@ -177,6 +188,7 @@ pub(super) fn cursor(
     initial: f64,
     key: CellId,
     width: f64,
+    decorate: Option<ItemDecoration>,
 ) -> (Vec<Widget>, Value) {
     let state = state.and_then(Value::as_record);
     let selection = Selection::new(items, state.and_then(|state| state.get(&vocabulary::RANGE)));
@@ -198,7 +210,7 @@ pub(super) fn cursor(
             Rc::new(move |position| cursor_state(&selection, position)),
         ));
     }
-    widgets.extend(selection.range_widgets(key, width, Some(position)));
+    widgets.extend(selection.range_widgets(key, width, Some(position), decorate));
     (
         widgets,
         Value::record([
@@ -255,6 +267,7 @@ fn range_widget(
     selection: Selection,
     position: Option<f64>,
     width: f64,
+    decorations: Option<Vec<widget::Decoration<crate::Editor, crate::frame::Hovered>>>,
 ) -> Widget {
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
@@ -264,6 +277,11 @@ fn range_widget(
         let edits = context.inputs.edits.clone();
         let slider = slider.clone();
         let selection = selection.clone();
+        let decorations: Vec<_> = decorations
+            .iter()
+            .flatten()
+            .map(|decorate| decorate(context))
+            .collect();
         let leaf = widget::leaf(
             Extent {
                 width: width.max(0.0) * scale,
@@ -273,6 +291,7 @@ fn range_widget(
             move |output, placement| {
                 output.claim(puri::hover::Probe::occludes(placement));
                 let painted = slider.clone();
+                let painted_slider = slider.clone();
                 output
                     .render(move |canvas, _| painted.draw(canvas, placement.rect, scale, current));
                 output.handler().on_pointer_down(move |editor, event| {
@@ -319,6 +338,11 @@ fn range_widget(
                     }
                     true
                 });
+                for (item, decorate) in decorations.into_iter().enumerate() {
+                    if let Some(rect) = painted_slider.item_rect(placement.rect, scale, item) {
+                        decorate(output, puri::Placement::new(rect, placement.clip_rect));
+                    }
+                }
             },
         );
         measured::pad((PADDING_X * scale, 0.0).into(), leaf)
@@ -379,6 +403,7 @@ mod tests {
             0.0,
             TREE_CURSOR,
             200.0,
+            None,
         );
         assert_eq!(widgets.len(), 3);
         assert_eq!(narrowed.intent[0], Intent::All);
@@ -418,7 +443,14 @@ mod tests {
             0..7
         );
         let stored_cursor = cursor_state(&all, 2.25);
-        let (_, result) = cursor(&edited_value, Some(&stored_cursor), 0.0, TREE_CURSOR, 200.0);
+        let (_, result) = cursor(
+            &edited_value,
+            Some(&stored_cursor),
+            0.0,
+            TREE_CURSOR,
+            200.0,
+            None,
+        );
         assert_eq!(
             result
                 .as_record()
@@ -466,12 +498,13 @@ mod tests {
             0.0,
             TREE_CURSOR,
             200.0,
+            None,
         );
         assert_eq!(widgets.len(), 3);
         let value = value.as_record().unwrap();
         assert_eq!(value.get(&RANGE), Some(&encode(2..4)));
         assert_eq!(value.get(&POSITION).and_then(f64::read), Some(2.75));
-        let (widgets, _) = cursor(&Value::list([]), None, 0.0, TREE_CURSOR, 200.0);
+        let (widgets, _) = cursor(&Value::list([]), None, 0.0, TREE_CURSOR, 200.0, None);
         assert!(widgets.is_empty());
     }
 }

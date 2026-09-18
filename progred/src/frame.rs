@@ -133,7 +133,7 @@ fn attribute_hover(
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
             source_path.map(|path| hover::SourceTrace::from_path(sources, path))
         }
-        Some(Hovered::Tree(hover::Hover::Drawing(source))) if visible => Some(source.clone()),
+        Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
     placed::ResolvedHover {
@@ -210,7 +210,7 @@ fn hover_target(
 }
 
 fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
-    !matches!(hover, Some(Hovered::Tree(hover::Hover::Drawing(_)))) || linking
+    !matches!(hover, Some(Hovered::Tree(hover::Hover::Source(_)))) || linking
 }
 
 pub(crate) struct FrameDescription<'a> {
@@ -1566,7 +1566,7 @@ mod frame_tests {
     #[test]
     fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
         let code = Hovered::Tree(hover::Hover::Value(Rc::from([])));
-        let drawing = Hovered::Tree(hover::Hover::Drawing(hover::SourceTrace::Stored(Rc::from(
+        let drawing = Hovered::Tree(hover::Hover::Source(hover::SourceTrace::Stored(Rc::from(
             [],
         ))));
 
@@ -1629,7 +1629,8 @@ mod frame_tests {
                 source,
                 path: Rc::from([Step::Key(call)]),
             };
-            let descend = projection::drawing::source_descend(&sources, &descends, &trace).unwrap();
+            let descend =
+                projection::source_link::source_descend(&sources, &descends, &trace).unwrap();
             assert_eq!(descend.root, Some(root.clone()));
             assert_eq!(descend.rect, rect);
             let mut selected = None;
