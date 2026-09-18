@@ -85,7 +85,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         (ui::POSITION, f64::value(0.7)),
         (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
     ]);
-    let previews = [None, Some(names["model"].into())].map(|mode| {
+    let previews = [None, Some(STOCK.into())].map(|mode| {
         let emit =
             |function, context: &mut ::grap::Context, call, environment: &::grap::Environment| {
                 let key = context.field(call, ui::KEY).unwrap();
@@ -114,8 +114,8 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                     let initial = context.eval(initial, environment)?;
                     assert_eq!(
                         initial,
-                        STOCK.into(),
-                        "existing Stock view remains the default"
+                        names["model"].into(),
+                        "Model is the default preview"
                     );
                     Ok(mode.clone().unwrap_or(initial))
                 } else {
@@ -163,7 +163,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             .unwrap()
             .clone()
     });
-    let [mut stock, model] = previews;
+    let [model, mut stock] = previews;
     let mut stock_playback = stock.get(&PLAYBACK).unwrap().as_record().unwrap().clone();
     let model_playback = model.get(&PLAYBACK).unwrap();
     assert!(stock_playback.remove(&STOCK).is_some());

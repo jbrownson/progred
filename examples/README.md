@@ -108,8 +108,8 @@ cuts subtract continuous swept ball-end solids through Fidget. Both operations
 together finish the six indents, but leave the chamfers untouched and do not
 plan roughing, links, or collision clearance. The Model / Stock control above the
 timeline switches between the blue target model with a stock wireframe and the
-tan remaining material, retaining camera, ranges, and playback position. Stock
-is the default; its bounds and color remain editable in the preview function. Both preview
+tan remaining material, retaining camera, ranges, and playback position. Model
+is the default; stock bounds and color remain editable in the preview function. Both preview
 functions support playback and stock removal. Controls use per-view state
 without making the document unsaved. The general dependency graph retains the
 path recording and latest result. The combined preview shows its mesh while a

@@ -408,8 +408,8 @@ of grouping-range sliders: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
-Stock (the default) shows material remaining at playback. Model shows the blue
-target part and the initial stock wireframe. The example's ordinary Grap controls
+Model (the default) shows the blue target part and the initial stock wireframe.
+Stock shows material remaining at playback. The example's ordinary Grap controls
 select whether its playback record includes `stock`; camera, selected ranges,
 and cursor are preserved. Tool and remaining-path visibility are the same in both
 modes. Model's surface-mesh inputs exclude playback and path data, so moving the

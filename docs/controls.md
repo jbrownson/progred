@@ -42,7 +42,7 @@ missing stored selection falls back to that initial value. It also requires the
 current CAM example uses them for Model / Stock, independently of automatic
 mesh-to-implicit refinement, playback, and the nested-list range selector below.
 The choice is ordinary Grap data passed from controls to the example's view
-function. It defaults to Stock and does not reset the cursor, ranges, or camera.
+function. It defaults to Model and does not reset the cursor, ranges, or camera.
 
 `tree range` takes a `key` and `items`, an ordinary nested list. Lists are groups;
 every non-list value is an uninterpreted leaf. It emits equal-width, unlabelled

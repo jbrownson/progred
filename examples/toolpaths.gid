@@ -3961,7 +3961,7 @@
                                       ],
                                       control_initial: {
                                         function: quote,
-                                        expression: stock,
+                                        expression: model,
                                       },
                                     },
                                     pattern: { bind: preview_mode },
