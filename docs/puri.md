@@ -309,6 +309,24 @@ records the same operations for inspection and replay. Rectangles remain
 rectangles in recordings rather than becoming paths merely for transport.
 Parley owns text shaping. Puri does not depend on a platform clipboard library.
 
+The native canvas now groups contiguous vector operations into Vello scenes,
+interleaved with independent image textures in painting order. This policy
+belongs to the [compositor](../ui/puri-vello/src/compositor.rs), not panes,
+widgets, or layout. Vector-only frames keep a single Vello call. Mixed clipping
+scopes preserve group coverage: integer rectangles use scissoring, while other
+clips use an intermediate group and a Vello-rendered mask. Draw-image operations
+do not enter Vello's image atlas; image brushes still do.
+
+Each window owns its uploaded-image resources, keyed by immutable image blob
+identity, dimensions, and format. Unchanged uploads are reused; absent images
+are released on the next paint. Scratch textures are resized and reused, with
+masks and clip-group textures retained only when used by the current frame.
+These are graphics resources, not cached projections or computations. The
+device's compositor is shared across windows, without sharing their resource
+lifetimes. CPU image drawing, browser drawing, and export APIs are unchanged.
+The mesh renderer still returns CPU pixels; direct mesh drawing is a separate
+next step. See [measurements](vello-compositor-experiment-2026-09-18.md).
+
 Text leaves may request subscript typography: Puri shapes a smaller font and
 reports ascent/descent relative to the surrounding baseline. Ordinary rows
 then align it correctly without a new layout operation. The number projections

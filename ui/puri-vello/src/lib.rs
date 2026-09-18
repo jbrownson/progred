@@ -1,4 +1,6 @@
-//! The vello backend: a `Canvas` streaming into a `vello::Scene`.
+//! Vello drawing and ordered composition with independently owned images.
+
+pub mod compositor;
 
 use puri::draw::{GlyphRun, Shape};
 use vello::Scene;

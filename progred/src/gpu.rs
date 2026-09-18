@@ -25,7 +25,7 @@ pub(crate) struct RenderSurface<'a> {
     pub(crate) dev_id: usize,
     pub(crate) target_view: TextureView,
     pub(crate) blitter: TextureBlitter,
-    target_texture: Texture,
+    pub(crate) target_texture: Texture,
 }
 
 impl RenderContext {

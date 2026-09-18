@@ -62,6 +62,8 @@ use gpu::{RenderContext, RenderSurface};
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
+#[cfg(not(target_arch = "wasm32"))]
+use puri_vello::compositor::{Compositor, Resources};
 #[cfg(test)]
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
@@ -74,8 +76,6 @@ use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::util::{RenderContext, RenderSurface};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::wgpu::{self, CurrentSurfaceTexture};
-#[cfg(not(target_arch = "wasm32"))]
-use vello::{AaConfig, Renderer, RendererOptions, Scene};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
@@ -263,7 +263,7 @@ pub(crate) struct App {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) context: RenderContext,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) renderers: Vec<Option<Renderer>>,
+    pub(crate) renderers: Vec<Option<Compositor>>,
     /// Editor configuration shared by every document loaded into the
     /// app: library cells, Rust functions, and composed projection.
     /// Each editor holds its own (cheap) clone, so a window can later
@@ -312,7 +312,7 @@ pub(crate) struct Editor {
     pub(crate) drawn_menu: bool,
     pub(crate) state: RenderState,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) scene: Scene,
+    pub(crate) paint_resources: Resources,
     pub(crate) font_cx: FontContext,
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: SystemTextClipboard,
@@ -486,7 +486,7 @@ fn new_editor(
         drawn_menu,
         state: RenderState::Suspended(None),
         #[cfg(not(target_arch = "wasm32"))]
-        scene: Scene::new(),
+        paint_resources: Resources::default(),
         font_cx,
         layout_cx: LayoutContext::new(),
         text_cache: puri::text::TextCache::default(),
@@ -663,6 +663,10 @@ impl ApplicationHandler<UserEvent> for App {
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         for runner in &mut self.editors {
             runner.flush_pending_continuous();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                runner.editor.paint_resources = Resources::default();
+            }
             if let RenderState::Active { window, .. } = &runner.editor.state {
                 runner.editor.state = RenderState::Suspended(Some(window.clone()));
             }
@@ -859,9 +863,9 @@ impl App {
 
             renderers.resize_with(context.devices.len(), || None);
             renderers[surface.dev_id].get_or_insert_with(|| {
-                Renderer::new(
+                Compositor::new(
                     &context.devices[surface.dev_id].device,
-                    RendererOptions::default(),
+                    &context.devices[surface.dev_id].queue,
                 )
                 .expect("Couldn't create renderer")
             });
@@ -1443,7 +1447,7 @@ impl Editor {
             drawn_menu: _,
             state: _,
             #[cfg(not(target_arch = "wasm32"))]
-            scene,
+            paint_resources,
             font_cx: _,
             layout_cx: _,
             text_clipboard: _,
@@ -1472,7 +1476,9 @@ impl Editor {
         *doc_path = path;
         model.replace_document(doc);
         #[cfg(not(target_arch = "wasm32"))]
-        scene.reset();
+        {
+            *paint_resources = Resources::default();
+        }
         self.refresh_title();
         #[cfg(target_os = "macos")]
         if changed_path && let Some(window) = self.window() {
@@ -1745,34 +1751,27 @@ impl App {
         let height = surface.config.height;
 
         let viewport = Size::new(width as f64, height as f64);
-        runner.editor.scene.reset();
         let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
         runner.sync_cursor(&window);
-        let mut paint = Paint {
-            scene: std::mem::replace(&mut runner.editor.scene, Scene::new()),
-        };
+        let mut paint = Paint::default();
         puri::frame::render(renders, &mut paint);
-        runner.editor.scene = paint.scene;
+        let layers = paint.finish();
 
         let RenderState::Active { surface, .. } = &mut runner.editor.state else {
             return;
         };
         let device_handle = &context.devices[surface.dev_id];
 
-        renderers[surface.dev_id]
+        let output = renderers[surface.dev_id]
             .as_mut()
             .unwrap()
-            .render_to_texture(
+            .render(
                 &device_handle.device,
                 &device_handle.queue,
-                &runner.editor.scene,
-                &surface.target_view,
-                &vello::RenderParams {
-                    base_color: Color::new([0.965, 0.965, 0.972, 1.0]),
-                    width,
-                    height,
-                    antialiasing_method: AaConfig::Msaa16,
-                },
+                &layers,
+                &mut runner.editor.paint_resources,
+                &surface.target_texture,
+                Color::new([0.965, 0.965, 0.972, 1.0]),
             )
             .expect("failed to render to texture");
 
@@ -1802,7 +1801,7 @@ impl App {
         surface.blitter.copy(
             &device_handle.device,
             &mut encoder,
-            &surface.target_view,
+            &output.texture.create_view(&Default::default()),
             &surface_texture
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default()),

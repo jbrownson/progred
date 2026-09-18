@@ -14,20 +14,20 @@ use crate::workspace::{self, Root};
 use crate::{Editor, EditorRunner, PendingPaint, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
-use peniko::{Brush, Color, ImageData};
-use puri::draw::{Canvas, GlyphRun, Shape};
+#[cfg(target_arch = "wasm32")]
+use peniko::ImageData;
+use peniko::{Brush, Color};
+use puri::draw::Canvas;
+#[cfg(target_arch = "wasm32")]
+use puri::draw::{GlyphRun, Shape};
 use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-#[cfg(not(target_arch = "wasm32"))]
-use puri_vello::VelloCanvas;
 #[cfg(target_arch = "wasm32")]
 use puri_web::WebCanvas;
 use std::rc::Rc;
-#[cfg(not(target_arch = "wasm32"))]
-use vello::Scene;
 
 pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 
@@ -143,42 +143,8 @@ fn attribute_hover(
     }
 }
 
-/// The concrete native canvas frame ink renders into: the Vello scene,
-/// owned so deferred ink closures need no lifetime.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) struct Paint {
-    pub(crate) scene: Scene,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl puri::draw::CanvasSink for Paint {
-    fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        VelloCanvas(&mut self.scene).image(image, transform);
-    }
-
-    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
-        VelloCanvas(&mut self.scene).fill(shape, brush, transform);
-    }
-
-    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
-        VelloCanvas(&mut self.scene).stroke(shape, style, brush, transform);
-    }
-
-    fn draw_glyphs(&mut self, run: GlyphRun) {
-        VelloCanvas(&mut self.scene).glyph_run(run);
-    }
-
-    fn with_clip(
-        &mut self,
-        shape: Shape,
-        transform: Affine,
-        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
-    ) {
-        VelloCanvas(&mut self.scene).push_clip(&shape, transform);
-        content(self);
-        VelloCanvas(&mut self.scene).pop_clip();
-    }
-}
+pub(crate) type Paint = puri_vello::compositor::SplitCanvas;
 
 /// The same deferred Puri ink, interpreted immediately by Canvas2D.
 #[cfg(target_arch = "wasm32")]

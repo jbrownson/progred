@@ -361,6 +361,8 @@ fn key(s: &str) -> Step {
 }
 
 mod completion;
+#[cfg(not(target_arch = "wasm32"))]
+mod compositor;
 mod conject;
 mod declarations;
 mod drawing;

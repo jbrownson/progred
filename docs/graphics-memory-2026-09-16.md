@@ -100,3 +100,28 @@ Releasing mesh targets while idle trades memory for allocation work on the next
 orbit; it is a separate, smaller policy decision. Exact attribution in the live
 app still needs per-renderer/texture instrumentation if further precision is
 needed.
+
+## Wide-preview flashing follow-up, 2026-09-18
+
+A temporary headless Vello 0.9.0 readback test reproduced missing images without
+Fidget. Ten successive solid-color `ImageData` replacements at 4000 × 2800
+physical pixels all rendered. At 4200 × 2800, replacements 3, 6, and 9 rendered
+only the background. An 8192-square atlas fits four of the narrower images but
+only two of the wider ones; the protected recent generations prevent eviction
+for the next replacement. `vello_encoding::resolve` silently zeros the image's
+draw dimensions when atlas allocation fails.
+
+A second headless test used the supported `register_texture`,
+`mark_override_image_dirty`, and `unregister_texture` APIs. Repeated uploads to
+one 4200 × 2800 texture displayed all ten changing colors correctly. Resizing it
+by ten pixels each frame, unregistering the previous texture before registering
+its replacement, again omitted frames 3, 6, and 9. Unregistering removes the
+texture override, not its atlas residency. Reusable textures alone therefore
+address fixed-size updates, not allocation pressure during resizing.
+
+Both tests were built through the sandbox wrapper and run headlessly with GPU
+access, without launching the app. Temporary diagnostic sources were removed;
+no rendering or dependency changes were adopted. A possible upstream fix is to
+permit eviction of images not used by the current scene under pressure while
+protecting every current-scene image, rather than protecting obsolete versions
+for a fixed number of generations. This remains a proposal, not a tested patch.

@@ -150,6 +150,26 @@ obsolete results must never become the current computation's result. Skipping
 intermediate meshes during rapid geometry edits is another possible policy,
 with the tradeoff of an older mesh when the user next orbits.
 
+## Report Vello image-atlas flashing
+
+Prepare an upstream bug report for the reproducible Vello 0.9.0 image omissions
+documented in the [wide-preview investigation](graphics-memory-2026-09-16.md#wide-preview-flashing-follow-up-2026-09-18).
+Repeated 4200 × 2800 image replacements drop every third image while 4000 × 2800
+replacements work. The atlas protects obsolete recent images and silently omits
+the current image when allocation fails. Reusing a registered texture works at
+fixed size, but unregistering/replacing it during resizing reproduces the failure.
+
+Before filing, check for an existing upstream issue and reproduce against the
+then-current release with a minimal standalone example, including version,
+backend, physical image dimensions, and expected/actual pixel readbacks. No
+report has been filed. The owner prefers avoiding local Vello patches. The
+[separate compositor](vello-compositor-experiment-2026-09-18.md) now bypasses the
+atlas for native draw-image operations, with per-window upload ownership and
+headless fidelity, resize, lifetime, and performance checks. Image brushes still
+use Vello's atlas. Direct mesh drawing, including replacing partial implicit-image
+coverage over a GPU mesh fallback, remains a separate step; the mesh pipeline
+still performs readback.
+
 ## CAM preview navigation and execution grouping
 
 Explore an execution hierarchy distinct from the document's authoring outline.
