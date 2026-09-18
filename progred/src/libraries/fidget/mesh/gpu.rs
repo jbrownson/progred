@@ -4,6 +4,24 @@ use fidget_engine::wgpu::{Gpu, wgpu};
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const SAMPLES: u32 = 4;
 
+fn vertex_bytes(vertices: &[super::Vertex]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(vertices.len() * 24);
+    for vertex in vertices {
+        for component in vertex.position.iter().chain(&vertex.color) {
+            bytes.extend_from_slice(&component.to_ne_bytes());
+        }
+    }
+    bytes
+}
+
+fn packed_rows(mapped: &[u8], stride: usize, row_bytes: usize) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(mapped.len() / stride * row_bytes);
+    for row in mapped.chunks_exact(stride) {
+        bytes.extend_from_slice(&row[..row_bytes]);
+    }
+    bytes
+}
+
 #[derive(Default)]
 pub(super) enum Backend {
     #[default]
@@ -234,17 +252,7 @@ impl Renderer {
         {
             return None;
         }
-        let vertices: Vec<u8> = geometry
-            .vertices
-            .iter()
-            .flat_map(|v| {
-                v.position
-                    .iter()
-                    .copied()
-                    .chain(v.color)
-                    .flat_map(f32::to_ne_bytes)
-            })
-            .collect();
+        let vertices = vertex_bytes(&geometry.vertices);
         let indices: Vec<u8> = geometry
             .indices
             .iter()
@@ -327,10 +335,7 @@ impl Renderer {
             .ok()?;
         receive.recv().ok()?.ok()?;
         let mapped = target.read.slice(..).get_mapped_range();
-        let mut rgba: Vec<u8> = mapped
-            .chunks_exact(target.stride as usize)
-            .flat_map(|row| row[..view.width as usize * 4].iter().copied())
-            .collect();
+        let mut rgba = packed_rows(&mapped, target.stride as usize, view.width as usize * 4);
         drop(mapped);
         target.read.unmap();
         // Resolving multisampled transparent edges produces premultiplied RGBA;
@@ -344,5 +349,97 @@ impl Renderer {
             }
         }
         Some(rgba)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::Vector3;
+
+    fn iterator_vertices(vertices: &[super::super::Vertex]) -> Vec<u8> {
+        vertices
+            .iter()
+            .flat_map(|v| {
+                v.position
+                    .iter()
+                    .copied()
+                    .chain(v.color)
+                    .flat_map(f32::to_ne_bytes)
+            })
+            .collect()
+    }
+
+    fn iterator_rows(mapped: &[u8], stride: usize, row_bytes: usize) -> Vec<u8> {
+        mapped
+            .chunks_exact(stride)
+            .flat_map(|row| row[..row_bytes].iter().copied())
+            .collect()
+    }
+
+    #[test]
+    fn packed_mesh_data_preserves_shader_layout_and_all_bits() {
+        let vertices = [
+            super::super::Vertex {
+                position: Vector3::new(1.0, -2.0, 3.0),
+                color: [0.25, 0.5, 1.0],
+            },
+            super::super::Vertex {
+                position: Vector3::new(-0.0, f32::INFINITY, f32::from_bits(0x7fc01234)),
+                color: [1.0, 0.0, 0.0],
+            },
+        ];
+        let bytes = vertex_bytes(&vertices);
+        assert_eq!(bytes.len(), vertices.len() * 24);
+        assert_eq!(bytes, iterator_vertices(&vertices));
+        assert_eq!(&bytes[..4], &1.0_f32.to_ne_bytes());
+        assert_eq!(&bytes[12..16], &0.25_f32.to_ne_bytes());
+        assert!(vertex_bytes(&[]).is_empty());
+    }
+
+    #[test]
+    fn readback_rows_remove_padding_without_modifying_pixels() {
+        let mapped: Vec<_> = (0..32).collect();
+        for row_bytes in [4, 12, 16] {
+            assert_eq!(
+                packed_rows(&mapped, 16, row_bytes),
+                iterator_rows(&mapped, 16, row_bytes)
+            );
+            assert_eq!(packed_rows(&mapped, 16, row_bytes).len(), 2 * row_bytes);
+        }
+        assert!(packed_rows(&[], 256, 4).is_empty());
+    }
+
+    #[test]
+    #[ignore = "CPU packing benchmark; no GPU or application launch"]
+    fn mesh_gpu_packing_profile() {
+        use std::{hint::black_box, time::Instant};
+        let vertices: Vec<_> = (0..500_000)
+            .map(|i| super::super::Vertex {
+                position: Vector3::new(i as f32 * 0.001, 1.0, -1.0),
+                color: [0.2, 0.5, 0.8],
+            })
+            .collect();
+        let mapped = vec![127; 5120 * 1600];
+        for trial in 0..6 {
+            for bulk in [trial % 2 == 0, trial % 2 != 0] {
+                let start = Instant::now();
+                let v = if bulk {
+                    vertex_bytes(black_box(&vertices))
+                } else {
+                    iterator_vertices(black_box(&vertices))
+                };
+                let v_time = start.elapsed();
+                let start = Instant::now();
+                let r = if bulk {
+                    packed_rows(black_box(&mapped), 5120, 5000)
+                } else {
+                    iterator_rows(black_box(&mapped), 5120, 5000)
+                };
+                let r_time = start.elapsed();
+                black_box((&v, &r));
+                eprintln!("trial {trial}, bulk={bulk}: vertices {v_time:?}, readback {r_time:?}");
+            }
+        }
     }
 }
