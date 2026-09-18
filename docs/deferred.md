@@ -114,18 +114,17 @@ from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
 
-The public evaluation/application APIs still return GID `Value`. Keeping native
-constructor arguments lowered and preserving sharing during materialization
-does not implement the discussed owned-runtime-result API. Runtime closures
-refer to code and cell indices owned by their evaluation context; returning
-them for later invocation needs explicit ownership of that backing storage.
-The proposed direction is a retained runtime result with explicit conversion to
-GID where needed, not opaque native values added to Grap.
+Public evaluation/application APIs return GID `Value`. Lowered values remain
+internal to an evaluation, and materialization preserves shared subgraphs.
+The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
+and its supporting evaluator changes were removed after both tested consumers
+favored the GID boundary. Revisit only with a demonstrated consumer benefit;
+retained code needs explicit ownership and fresh host/capability resolution,
+and can retain more storage than the result itself needs.
 
-`with controls` also still returns a declaration interpreted by its partial.
-Direct widget emission or carrying runtime values across that boundary remains
-separate work. Profile uncached construction as well as memo hits before taking
-on the broader representation change.
+`with controls` still returns a declaration interpreted by its partial. Direct
+widget emission remains separate, deferred work. Profile uncached construction
+as well as memo hits before changing that boundary.
 
 ### Fidget refinement and sharp edges
 

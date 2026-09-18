@@ -56,6 +56,37 @@ The same canary also times deriving path-based hierarchy selectors from the
 504-leaf tree. After the selection-intent change, five samples took 33–83 µs.
 This includes building keyed hierarchy/row descriptions, not placement or paint.
 
+### Owned-result experiment — 2026-09-17
+
+An experimental `evaluate_owned`/`apply_owned` API retained runtime results and
+their shared code storage beyond one evaluation, with explicit GID conversion.
+The API, supporting evaluator changes, benchmarks, and trial app migration were
+removed: neither tested consumer justified the extra ownership, storage-lifetime,
+and cross-evaluation capability machinery. Existing within-evaluation lowered
+values and sharing-preserving GID conversion remain.
+
+Five local release trials built the 504-leaf program tree in 4.2–4.9 ms, then
+materialized it in 1.8–2.7 ms. Recording all leaves was slower through retained
+results: 351–400 ms versus 314–335 ms through GID, with matching segments and
+fuel use. Adding the API did not establish a meaningful regression in the
+existing GID construction canary, which remained around 6–9 ms.
+
+A controls/presentation migration initially raised the controls-only frame
+median from 0.128 ms to 2.23 ms by materializing a captured program tree just to
+inspect nested lists. Direct runtime-list inspection removed that cost, but
+three paired release runs still measured retained callbacks at 0.147, 0.151,
+and 0.157 ms versus GID callbacks at 0.130, 0.137, and 0.138 ms. Each sample used
+five warm-up frames and 60 measured frames including disposal, with 3D work
+replaced by a placeholder. First-frame timings were not compared; the cases
+ran in fixed order and shared initialization. These are headless canaries,
+not native orbit latencies or a statistical study.
+
+The existing memoized GID result already shares large data and avoids repeating
+conversion on unchanged frames. Reconsider retained runtime results only with
+a demonstrated consumer benefit, measuring the receiving computation rather
+than conversion savings alone. Avoid materializing whole closure environments
+merely to inspect container structure.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:
