@@ -3,7 +3,7 @@
 use puri::{Affine, Canvas, Color, Line, Point, Rect, Stroke};
 use std::ops::Range;
 
-pub const HEIGHT: f64 = 24.0;
+pub const HEIGHT: f64 = 20.0;
 const HANDLE: f64 = 5.0;
 
 #[derive(Clone, Debug)]
@@ -69,43 +69,64 @@ impl RangeSlider {
         }
     }
 
-    pub fn draw(&self, canvas: &mut dyn puri::draw::CanvasSink, rect: Rect, scale: f64) {
+    /// The rectangle is in physical pixels; scale converts logical styling units.
+    /// `current` marks one item without changing the selected range or hit areas.
+    pub fn draw(
+        &self,
+        canvas: &mut dyn puri::draw::CanvasSink,
+        rect: Rect,
+        scale: f64,
+        current: Option<usize>,
+    ) {
         let rail = Self::rail(rect, scale);
         let x = |i| rail.x0 + rail.width() * i as f64 / self.count as f64;
         let y = rect.center().y;
+        let half_height = (rect.height() / 2.0 - 2.0 * scale).max(0.0);
         let accent = Color::from_rgb8(48, 126, 210);
         canvas.fill(
-            Rect::new(rail.x0, y - 4.0 * scale, rail.x1, y + 4.0 * scale),
-            Color::from_rgba8(196, 204, 214, 220),
+            Rect::new(rail.x0, y - half_height, rail.x1, y + half_height),
+            Color::from_rgb8(216, 225, 236),
             Affine::IDENTITY,
         );
         canvas.fill(
             Rect::new(
                 x(self.selected.start),
-                y - 4.0 * scale,
+                y - half_height,
                 x(self.selected.end),
-                y + 4.0 * scale,
+                y + half_height,
             ),
             accent,
             Affine::IDENTITY,
         );
-        for i in 0..=self.count {
-            canvas.stroke(
-                Line::new((x(i), y - 4.0 * scale), (x(i), y + 4.0 * scale)),
-                Stroke::new(scale),
-                Color::from_rgba8(255, 255, 255, 200),
-                Affine::IDENTITY,
-            );
+        let notch_width_px = rail.width() / self.count as f64;
+        if notch_width_px >= 2.0 {
+            for i in 0..=self.count {
+                canvas.stroke(
+                    Line::new((x(i), y - half_height), (x(i), y + half_height)),
+                    Stroke::new(scale.min(notch_width_px * 0.25)),
+                    Color::from_rgba8(255, 255, 255, 160),
+                    Affine::IDENTITY,
+                );
+            }
         }
         for i in [self.selected.start, self.selected.end] {
             canvas.fill(
+                Rect::new(x(i) - scale, y - half_height, x(i) + scale, y + half_height),
+                Color::from_rgb8(28, 85, 150),
+                Affine::IDENTITY,
+            );
+        }
+        if let Some(i) = current.filter(|i| *i < self.count && rail.width() > 0.0) {
+            let width = notch_width_px.max(3.0 * scale).min(rail.width());
+            let left = ((x(i) + x(i + 1) - width) / 2.0).clamp(rail.x0, rail.x1 - width);
+            canvas.fill(
                 Rect::new(
-                    x(i) - 2.0 * scale,
-                    y - 8.0 * scale,
-                    x(i) + 2.0 * scale,
-                    y + 8.0 * scale,
+                    left,
+                    y + half_height - (2.0 * scale).min(2.0 * half_height),
+                    left + width,
+                    y + half_height,
                 ),
-                accent,
+                Color::from_rgb8(240, 178, 67),
                 Affine::IDENTITY,
             );
         }
@@ -115,6 +136,95 @@ impl RangeSlider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use puri::draw::{DrawCmd, DrawList};
+
+    #[test]
+    fn separators_fit_the_notches_and_use_physical_pixel_visibility() {
+        let slider = RangeSlider::new(10, 2..8).unwrap();
+        for scale in [1.0, 2.0, 3.0] {
+            for spacing_px in [0.0, 1.5, 1.99, 2.0, 3.0, 8.0, 40.0] {
+                let rect = Rect::new(
+                    0.25,
+                    0.0,
+                    0.25 + 2.0 * HANDLE * scale + 10.0 * spacing_px,
+                    HEIGHT * scale,
+                );
+                let mut list = DrawList::new();
+                slider.draw(&mut list, rect, scale, None);
+                let strokes: Vec<_> = list
+                    .0
+                    .iter()
+                    .filter_map(|cmd| match cmd {
+                        DrawCmd::Stroke { style, .. } => Some(style.width),
+                        _ => None,
+                    })
+                    .collect();
+                if spacing_px < 2.0 {
+                    assert!(strokes.is_empty());
+                } else {
+                    assert_eq!(strokes.len(), slider.count + 1);
+                    for width in strokes {
+                        assert!((width - scale.min(spacing_px * 0.25)).abs() < 1e-12);
+                    }
+                }
+                assert_eq!(
+                    list.0
+                        .iter()
+                        .filter(|cmd| matches!(cmd, DrawCmd::Fill { .. }))
+                        .count(),
+                    4
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn current_marker_uses_item_geometry_and_stays_visible_in_dense_rows() {
+        for scale in [1.0, 2.0] {
+            for count in [4, 500] {
+                let slider = RangeSlider::new(count, 0..count).unwrap();
+                let rect = Rect::new(10.0, 0.0, 110.0 * scale, HEIGHT * scale);
+                let rail = RangeSlider::rail(rect, scale);
+                let notch = rail.width() / count as f64;
+                for current in [0, count / 2, count - 1] {
+                    let mut drawing = DrawList::new();
+                    slider.draw(&mut drawing, rect, scale, Some(current));
+                    let Some(DrawCmd::Fill {
+                        shape: puri::Shape::Rect(marker),
+                        ..
+                    }) = drawing.0.last()
+                    else {
+                        panic!("current item marker");
+                    };
+                    let center = rail.x0 + (current as f64 + 0.5) * notch;
+                    assert!(marker.x0 <= center && marker.x1 >= center);
+                    assert!(marker.x0 >= rail.x0 && marker.x1 <= rail.x1);
+                    assert_eq!(marker.width(), notch.max(3.0 * scale));
+                    assert_eq!(marker.height(), 2.0 * scale);
+                    assert!(marker.y1 <= rect.y1);
+                }
+                let mut plain = DrawList::new();
+                let mut invalid = DrawList::new();
+                slider.draw(&mut plain, rect, scale, None);
+                slider.draw(&mut invalid, rect, scale, Some(count));
+                assert_eq!(plain.0.len(), invalid.0.len());
+            }
+        }
+    }
+
+    #[test]
+    fn hidden_separators_keep_individual_items_selectable() {
+        let slider = RangeSlider::new(10, 0..10).unwrap();
+        let rect = Rect::new(0.0, 0.0, 35.0, 48.0);
+        let point = Point::new(15.25, 24.0);
+        let drag = slider.begin(rect, 2.0, point);
+        assert_eq!(slider.dragged(drag, rect, 2.0, point), 3..4);
+        assert_eq!(
+            slider.dragged(drag, rect, 2.0, Point::new(21.25, 24.0)),
+            3..8
+        );
+    }
+
     #[test]
     fn click_drag_and_handles_share_painted_geometry() {
         let slider = RangeSlider::new(4, 0..4).unwrap();

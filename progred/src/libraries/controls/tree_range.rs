@@ -237,6 +237,7 @@ fn range_widget(
     position: Option<f64>,
     width: f64,
 ) -> Widget {
+    let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         let root = context.inputs.view.clone();
@@ -253,7 +254,8 @@ fn range_widget(
             move |output, placement| {
                 output.claim(puri::hover::Probe::occludes(placement));
                 let painted = slider.clone();
-                output.render(move |canvas, _| painted.draw(canvas, placement.rect, scale));
+                output
+                    .render(move |canvas, _| painted.draw(canvas, placement.rect, scale, current));
                 output.handler().on_pointer_down(move |editor, event| {
                     let point = Point::new(event.state.position.x, event.state.position.y);
                     if !puri::interact::is_primary_contact(event) || !placement.contains(point) {
@@ -291,7 +293,7 @@ fn range_widget(
                 });
             },
         );
-        measured::pad((PADDING_X * scale, PADDING_Y * scale).into(), leaf)
+        measured::pad((PADDING_X * scale, 0.0).into(), leaf)
     })
 }
 
@@ -325,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn state_keeps_all_and_clipped_child_intent_separate() {
+    fn coarser_changes_store_all_for_finer_rows() {
         let tree = Value::list([Value::list([leaf(), leaf()]), Value::list([leaf(), leaf()])]);
         let all = Selection::new(&tree, None);
         assert_eq!(all.state(), Value::list([ALL.into(), ALL.into()]));
@@ -334,24 +336,24 @@ mod tests {
         assert_eq!(restored.leaves, 0..4);
         assert_eq!(restored.state(), all.state());
         let chosen = all.select(0, 1..3);
-        let clipped = chosen.select(1, 0..1);
-        assert_eq!(clipped.leaves, 1..2);
-        assert_eq!(clipped.intent[0], chosen.intent[0]);
+        let narrowed = chosen.select(1, 0..1);
+        assert_eq!(narrowed.leaves, 0..2);
+        assert_eq!(narrowed.intent[0], Intent::All);
         assert_eq!(
-            Selection::new(&tree, Some(&clipped.state()))
+            Selection::new(&tree, Some(&narrowed.state()))
                 .select_all(1)
-                .leaves,
-            1..3
+                .state(),
+            all.state()
         );
         let (widgets, _) = cursor(
             &tree,
-            Some(&cursor_state(&clipped, 1.5)),
+            Some(&cursor_state(&narrowed, 1.5)),
             0.0,
             TREE_CURSOR,
             200.0,
         );
         assert_eq!(widgets.len(), 3);
-        assert_eq!(clipped.intent[0], chosen.intent[0]);
+        assert_eq!(narrowed.intent[0], Intent::All);
     }
 
     #[test]

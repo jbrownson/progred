@@ -163,10 +163,10 @@ in several places.
 A first version of the notched range controls now follows ordinary nested
 program lists, with coarse groups at the bottom and continuous playback at the
 top. It uses equal-width notches without permanent names; Cmd-hover source
-attribution remains a useful next step. Parent ranges restrict the child rows
-without overwriting their path-based selection intent. `All` includes future
-items; explicit bounds include insertions between their endpoints. Uneven
-branches align from the fine-grained end. Playback retains its leaf-path cursor
+attribution remains a useful next step. Adjusting a coarser row resets every
+finer row to `All`; playback markers identify the current section in each row.
+`All` includes future items; explicit bounds include insertions between their
+endpoints. Uneven branches align from the fine-grained end. Playback retains its leaf-path cursor
 when it remains in the selected range. Producers that reconstruct lists can
 still change their positions; preserving correspondence through Grap list
 construction is separate work, not solved by inventing identities in the widget.

@@ -485,7 +485,132 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
 }
 
 #[test]
-fn tree_range_dispatch_preserves_finer_ranges_and_other_view_state() {
+fn range_stack_uses_row_hit_height_without_extra_vertical_padding() {
+    let tree = Value::list([
+        Value::list([A.into(), A.into()]),
+        Value::list([A.into(), A.into()]),
+    ]);
+    let selection = tree_range::Selection::new(&tree, None);
+    let measured = with_context(&Output::default(), |context| {
+        measured::col(
+            0,
+            0.0,
+            selection
+                .widgets(A, 180.0)
+                .map(|row| row(context))
+                .collect(),
+        )
+    });
+    assert_eq!(measured.extent.height(), 40.0);
+    let frame = widget::frame::place(
+        measured,
+        Placement::root(Rect::new(0.0, 0.0, 200.0, 40.0)),
+        &Default::default(),
+    )
+    .bind(Default::default());
+    let mut drawing = DrawList::new();
+    puri::frame::render(frame.renders, &mut drawing);
+    let handles: Vec<_> = drawing
+        .0
+        .iter()
+        .filter_map(|cmd| match cmd {
+            DrawCmd::Fill {
+                shape: Shape::Rect(rect),
+                ..
+            } if rect.width() == 2.0 => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(handles.len(), 4);
+    assert_eq!(handles[0].height(), 16.0);
+    assert_eq!(handles[2].y0 - handles[0].y1, 4.0);
+}
+
+#[test]
+fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
+    let tree = Value::list([
+        Value::list([A.into(), A.into()]),
+        Value::list([A.into(), A.into()]),
+    ]);
+    let (rows, _) = tree_range::cursor(&tree, None, 0.25, A, 180.0);
+    let measured = with_context(&Output::default(), |context| {
+        measured::col(0, 0.0, rows.iter().map(|row| row(context)).collect())
+    });
+    assert_eq!(measured.extent.width, 200.0);
+    assert_eq!(measured.extent.height(), 76.0);
+    let placed = widget::frame::place(
+        measured,
+        Placement::root(Rect::new(0.0, 0.0, 200.0, 76.0)),
+        &Default::default(),
+    );
+    let frame = placed.bind(Default::default());
+    let mut drawing = DrawList::new();
+    puri::frame::render(frame.renders, &mut drawing);
+    assert!(drawing.0.iter().all(|cmd| !matches!(
+        cmd,
+        DrawCmd::Fill {
+            shape: Shape::RoundedRect(_),
+            ..
+        }
+    )));
+    let markers: Vec<_> = drawing
+        .0
+        .iter()
+        .filter_map(|cmd| match cmd {
+            DrawCmd::Fill {
+                shape: Shape::Rect(rect),
+                ..
+            } if rect.height() == 2.0 => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        markers,
+        [
+            Rect::new(15.0, 52.0, 57.5, 54.0),
+            Rect::new(15.0, 72.0, 100.0, 74.0)
+        ]
+    );
+
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let event = puri::handler::PointerButtonEvent {
+        button: Some(puri::handler::PointerButton::Primary),
+        pointer: puri::handler::PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: puri::handler::PointerType::Mouse,
+        },
+        state: puri::handler::PointerState {
+            position: (100.0, 66.0).into(),
+            ..Default::default()
+        },
+    };
+    assert!(
+        frame
+            .handler
+            .unwrap()
+            .dispatch_pointer_down(&mut editor, &event)
+    );
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let selection = tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE));
+    assert_eq!(selection.leaves, 2..4);
+    assert_eq!(selection.intent[0], puri_widgets::tree_slider::Intent::All);
+    editor.advance_gesture(&[Point::new(20.0, 15.0)]);
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let selection = tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE));
+    assert_eq!(selection.leaves, 0..4);
+    assert_eq!(
+        selection.intent[0],
+        puri_widgets::tree_slider::Intent::All,
+        "crossing a row keeps dragging the original range, not playback or a finer range"
+    );
+}
+
+#[test]
+fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
     let mut editor = crate::test_editor(gid::Document {
         root: None,
         cells: Cells::new(),
@@ -537,6 +662,10 @@ fn tree_range_dispatch_preserves_finer_ranges_and_other_view_state() {
     let chosen = read_state(state, A).unwrap();
     assert_eq!(chosen, &original_selection.select(1, 1..2).state());
     assert_eq!(tree_range::Selection::new(&tree, Some(chosen)).leaves, 2..4);
+    assert_eq!(
+        tree_range::Selection::new(&tree, Some(chosen)).intent[0],
+        puri_widgets::tree_slider::Intent::All
+    );
     assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
     assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
     editor.advance_gesture(&[Point::new(150.0, 0.0), Point::new(-100.0, -100.0)]);
@@ -544,6 +673,10 @@ fn tree_range_dispatch_preserves_finer_ranges_and_other_view_state() {
     assert_eq!(
         read_state(state, A),
         Some(&original_selection.select(1, 0..2).state())
+    );
+    assert_eq!(
+        tree_range::Selection::new(&tree, read_state(state, A)).leaves,
+        0..4
     );
     assert!(Rc::ptr_eq(&original, &editor.model.doc));
     editor.finish_gesture();

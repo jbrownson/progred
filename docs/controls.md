@@ -49,6 +49,19 @@ half-open leaf-index range as `[start, end]` (f64 integers). It does not resolve
 cells or evaluate leaves. The caller supplies an already-expanded tree, and can
 use the result for any domain, not just toolpaths.
 
+Separators narrow to at most a quarter of each notch's width and disappear below
+two physical pixels per notch. Dense rows retain the same selection color,
+endpoint handles, and per-item interaction; only the separators change.
+Tree controls show closely packed selection bands, with playback at the top and
+no enclosing frame or additional group padding. Each range row has a 20-point
+hit height; its 16-point band and small endpoint marks stay inside that row.
+Rows still have independent coordinates and gestures, not a shared horizontal
+timeline or cross-row dragging.
+In a tree cursor, an amber underline marks the section containing playback in
+each visible row. It is derived from the current tree and cursor, independently
+of range-selection intent. At the selected range's end it marks the last included
+leaf and its containing groups; very dense notches get a minimum-width marker.
+
 Each row selects contiguous children of the previous row's selected groups.
 Rows align by remaining subtree depth: shallower groups remain whole while
 deeper groups expand, so leaves meet on the finest row rather than appearing
@@ -62,12 +75,14 @@ insertions outside them are not. Deleted endpoints remain ordered bounds, so
 surviving items between them stay selected. Equal values at different list
 positions remain independent occurrences.
 
-Each row retains its own intent. Restricting a parent only intersects the visible
-range; widening it restores the finer selection, and moving the continuous
-slider does not bake in the restriction. If an intent has no overlap with the
-visible items, that row temporarily shows all of them without erasing the
-stored intent. Hidden rows retain their intent too. Rows are indexed by remaining
-depth (finest is zero), not by their current display offset.
+Adjusting a row sets every finer row to `All`, including temporarily hidden rows;
+coarser selections stay unchanged. This applies to clicks, range drags, handle
+drags, and double-clicks, even when the adjusted range happens to stay the same.
+Returning to an earlier group therefore does not resurrect its old finer filter.
+Moving playback does not reset ranges. Rebuilding after document edits preserves
+stored intent; an out-of-range intent temporarily displays all available items.
+Rows are indexed by remaining depth (finest is zero), not by their current
+display offset.
 
 Stored range state is a finest-first list of `all` cells or pairs of encoded
 list-position paths, under the supplied key. It uses the existing path encoding,
