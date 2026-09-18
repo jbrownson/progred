@@ -232,7 +232,13 @@ panes and computed results. Entry intentionally follows cells to the first
 non-cell; this entry policy is separate from explicit projection scopes.
 The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
-Explicit `{render: expression}` values retain their ordinary display behavior.
+Explicit `{render: expression}` values evaluate and project their result. They
+request an observed evaluation memo at their current view/path; hosts without a
+computation runtime evaluate directly. The existing Grap observer tracks cell
+definitions (including missing ones) and native observations. Untracked foreign
+reads, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
+are explicit inputs. This memo retains only the computed Value, never widgets,
+handlers, or rendered output.
 
 The presentation library also offers an opt-in record outline:
 `{outline: [field-a, field-b], field-a: ..., field-b: ...}`. The list orders
@@ -622,6 +628,15 @@ the f64 library. They accelerate an ordinary convention without adding numeric
 syntax or new GID primitives. An enriched source number retains its original
 value so a pass-through preserves unrelated fields. Generic boundaries
 materialize ordinary GID values.
+
+Materialization preserves existing sharing of runtime records, lists, and
+captured environments within one returned value. Its address table lives only
+for that conversion; it neither interns equal values nor caches across
+evaluations. Environments materialize their effective bindings, newest first,
+without converting shadowed bindings. Closures still capture the shared lexical
+environment, not a statically computed subset of free variables. Native
+constructors that just assemble evaluated arguments should use `eval_runtime`
+and `RuntimeValue` containers, leaving conversion to a real GID boundary.
 
 Environment lookups and structural matching operate on these equivalent host
 representations. Lowering must be transparent to Grap behavior, including

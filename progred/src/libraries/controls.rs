@@ -4,6 +4,7 @@ use crate::display::widget::view::Root;
 use crate::display::{self, Layout, ProjectionInput, widget};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
+    RuntimeValue,
 };
 use gid::{CellId, Cells, Value};
 use measured::{Extent, choices::ChoiceLayout};
@@ -14,6 +15,7 @@ use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
 mod tests;
+pub(crate) mod tree_range;
 
 pub const ID: CellId = CellId::from_u128(0x666ba40b81028e32c78bdc1665d6c3a9);
 pub mod vocabulary {
@@ -24,6 +26,12 @@ pub mod vocabulary {
     pub const PARAMETERS: CellId = CellId::from_u128(0x6f0875ea2329b14673435cc13e2836d0);
     pub const SLIDER: CellId = CellId::from_u128(0xe3c52729da1f3b54e99ef208ad9d9201);
     pub const RADIO: CellId = CellId::from_u128(0xd3e46e8851004f6786bb6cf771ad1d87);
+    pub const TREE_RANGE: CellId = CellId::from_u128(0xe6031ee7046216b43b9fa9c08bdcd656);
+    pub const TREE_CURSOR: CellId = CellId::from_u128(0x21781a5dfb25048f053375147e251b80);
+    pub const RANGE: CellId = CellId::from_u128(0x870bd3c9e1c2d00a7884be4e9173ed68);
+    pub const POSITION: CellId = CellId::from_u128(0x199e09fd8b4d41632a90d103d278d6ea);
+    pub const ITEMS: CellId = CellId::from_u128(0x685f4fc766c54035725efdd652943c7b);
+    pub const ALL: CellId = CellId::from_u128(0x9f39d6c33f96ca6bbc09b1561170abb6);
     pub const OPTIONS: CellId = CellId::from_u128(0xa84188d71fa018de8ad68c74da7e18e2);
     pub const KEY: CellId = CellId::from_u128(0x600ed992016bae93f3c9ab48a9d7d7b5);
     pub const MINIMUM: CellId = CellId::from_u128(0x27d7b8d3c3a6a902ed495684e7bcd4d5);
@@ -46,19 +54,22 @@ fn constructor(
     context: &mut Context,
     call: Expression,
     environment: &Environment,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     let mut fields = Vec::new();
     for key in [CONTROLS, VIEW, VALUE, WIDTH, HEIGHT] {
         let Some(expression) = context.field(call, key) else {
-            return Ok(context.missing_argument(key));
+            return Ok(context.missing_runtime_argument(key));
         };
-        let value = context.eval(expression, environment)?;
-        if absent::is_absent(&value) {
+        let value = context.eval_runtime(expression, environment)?;
+        if value.is_absent() {
             return Ok(value);
         }
         fields.push((key, value));
     }
-    Ok(Value::record([(WITH_CONTROLS, Value::record(fields))]))
+    Ok(RuntimeValue::record([(
+        WITH_CONTROLS,
+        RuntimeValue::record(fields),
+    )]))
 }
 
 fn read_state(state: Option<&Value>, key: CellId) -> Option<&Value> {
@@ -86,6 +97,7 @@ struct Drag {
     edits: crate::editing::Scope,
     key: CellId,
     slider: Slider,
+    value: Rc<dyn Fn(f64) -> Value>,
     rect: Rect,
     scale: f64,
 }
@@ -98,7 +110,7 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
             let value = set_state(
                 state,
                 self.key,
-                f64::value(self.slider.value_at(self.rect, self.scale, *point)),
+                (self.value)(self.slider.value_at(self.rect, self.scale, *point)),
             );
             editor.annotate(&self.root, &self.path, value);
         }
@@ -107,11 +119,21 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
 }
 
 fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
+    slider_widget_with(key, slider, width, Rc::new(f64::value))
+}
+
+fn slider_widget_with(
+    key: CellId,
+    slider: Slider,
+    width: f64,
+    value: Rc<dyn Fn(f64) -> Value>,
+) -> Widget {
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         let root = context.inputs.view.clone();
         let path = context.path.to_vec();
         let edits = context.inputs.edits.clone();
+        let value = value.clone();
         let rail = widget::leaf(
             Extent {
                 width: width * scale,
@@ -134,6 +156,7 @@ fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
                             edits: edits.clone(),
                             key,
                             slider,
+                            value: value.clone(),
                             rect: placement.rect,
                             scale,
                         }),
@@ -237,6 +260,42 @@ fn display(
         let Some(key) = key.as_cell() else {
             return Ok(absent::with_reason(INVALID_INPUT));
         };
+        if function == TREE_RANGE || function == TREE_CURSOR {
+            let Some(expression) = context.field(call, ITEMS) else {
+                return Ok(context.missing_argument(ITEMS));
+            };
+            let items = context.eval(expression, environment)?;
+            if absent::is_absent(&items) {
+                return Ok(items);
+            }
+            if function == TREE_CURSOR {
+                let initial = match context.field(call, INITIAL) {
+                    Some(expression) => match context.eval_f64(expression, environment)? {
+                        Some(n) if n.is_finite() => n,
+                        _ => return Ok(absent::with_reason(INVALID_INPUT)),
+                    },
+                    None => 0.0,
+                };
+                let (controls, result) = tree_range::cursor(
+                    &items,
+                    read_state(input.state, key),
+                    initial,
+                    key,
+                    width - 2.0 * PADDING_X,
+                );
+                return Ok(context.effect(|| {
+                    widgets.borrow_mut().extend(controls);
+                    result
+                }));
+            }
+            let selection = tree_range::Selection::new(&items, read_state(input.state, key));
+            return Ok(context.effect(|| {
+                widgets
+                    .borrow_mut()
+                    .extend(selection.widgets(key, width - 2.0 * PADDING_X));
+                tree_range::encode(selection.leaves.clone())
+            }));
+        }
         if function == RADIO {
             let Some(expression) = context.field(call, OPTIONS) else {
                 return Ok(context.missing_argument(OPTIONS));
@@ -296,7 +355,10 @@ fn display(
     let evaluation = input.env.apply_scoped(
         controls,
         &[],
-        Some(&ForeignOverlay::new(&[SLIDER, RADIO], &emit)),
+        Some(&ForeignOverlay::new(
+            &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR],
+            &emit,
+        )),
     );
     if !evaluation.completed || absent::is_absent(&evaluation.result) {
         return Some(display::at(
@@ -361,6 +423,12 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (PARAMETERS, "parameters"),
         (SLIDER, "slider"),
         (RADIO, "radio"),
+        (TREE_RANGE, "tree range"),
+        (TREE_CURSOR, "tree cursor"),
+        (RANGE, "range"),
+        (POSITION, "position"),
+        (ITEMS, "items"),
+        (ALL, "all"),
         (OPTIONS, "options"),
         (KEY, "key"),
         (MINIMUM, "minimum"),
@@ -373,13 +441,21 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         cells.set_value(key, name::record(label, []));
     }
     let functions = ForeignFunctions::default()
-        .register(WITH_CONTROLS, ForeignFunction::new(constructor))
+        .register(WITH_CONTROLS, ForeignFunction::runtime(constructor).tracked())
         .register(
             SLIDER,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             RADIO,
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+        )
+        .register(
+            TREE_RANGE,
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+        )
+        .register(
+            TREE_CURSOR,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         );
     Library::named(

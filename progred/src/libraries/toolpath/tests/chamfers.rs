@@ -10,7 +10,7 @@ use nalgebra::Vector3;
 fn program(sources: &Sources<'_>, names: &Binders, name: &str) -> Recording {
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_scoped(&names[name].into(), [], sources, scope, 100_000)
+        apply_groups(&names[name].into(), [], sources, scope, 300_000)
     });
     assert!(
         result.completed && !absent::is_absent(&result.result),
@@ -130,7 +130,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
         assert!(configured.completed && !absent::is_absent(&configured.result));
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_scoped(
+            apply_groups(
                 &configured.result,
                 [(names["strip"], strip.clone())],
                 &sources,
@@ -316,7 +316,12 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_scoped(&expression, &sources, scope, 10_000)
+        ::grap::evaluate_scoped(
+            &call(SEQUENCE, [(PROGRAM, expression.clone())]),
+            &sources,
+            scope,
+            10_000,
+        )
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     assert_eq!(
@@ -343,7 +348,12 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_scoped(&expression, &sources, scope, 10_000)
+        ::grap::evaluate_scoped(
+            &call(SEQUENCE, [(PROGRAM, expression.clone())]),
+            &sources,
+            scope,
+            10_000,
+        )
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     let actual: Vec<_> = path
@@ -590,7 +600,7 @@ fn invalid_stepover_fails_before_emitting_but_contours_do_not_consume_it() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_scoped(&names["op1_chamfers"].into(), [], &sources, scope, 100_000)
+            apply_groups(&names["op1_chamfers"].into(), [], &sources, scope, 300_000)
         });
         assert!(result.completed && absent::is_absent(&result.result));
         assert!(path.commands().is_empty());
@@ -648,7 +658,10 @@ fn changing_strategy_stepover_and_diameter_invalidates_the_observed_program() {
     });
     let memo = computation::recording(
         &computations,
-        computations.runtime.input(names["op1_chamfers"].into()),
+        computations.runtime.input(::grap::lambda(
+            [],
+            call(SEQUENCE, [(PROGRAM, call(names["op1_chamfers"], []))]),
+        )),
         computations.runtime.input(100_000),
     );
     let initial = computations.runtime.read(&memo).unwrap();

@@ -11,6 +11,133 @@ for meshing and other platforms.
 The opt-in [Fidget meshing experiment](fidget-meshing-2026-09-13.md) measures
 CPU triangle generation from the cube document, independently of frame rendering.
 
+## Uncached CAM program construction — 2026-09-17
+
+The 504-leaf, five-level toolpath example exposed repeated expansion of shared
+runtime containers and closure environments when converting results to GID.
+The runtime already shared those values; the conversion did not. Separately,
+`with controls` converted each argument before constructing its result.
+
+It now retains runtime arguments until a GID boundary, and that conversion
+preserves existing shared subgraphs. A conversion-local address table remembers
+every traversed runtime container and environment; it is not a cross-evaluation
+cache or content interner. Reference counts cannot identify every repeated visit:
+different closure environments can share an outer frame that owns a container
+only once. Shadowed environment bindings are not materialized. Closure capture
+remains unchanged.
+
+Run the explicitly uncached canary with:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  profile_program_tree_construction -- --ignored --nocapture
+```
+
+Five local release runs before/after measured:
+
+| Computation | Before | After |
+| --- | --- | --- |
+| Program tree alone | 62–94 ms | 5.3–7.0 ms |
+| Tree plus controls/view declaration | 226–255 ms | 5.1–6.7 ms |
+
+The second measurement includes tree construction; these times are not
+additive. They measure direct `grap::apply`/`evaluate`, with no computation memo,
+Fidget geometry, rendering, or editor frame. They are not whole-frame latency
+claims. The declaration-to-projection controls boundary remains in place.
+
+The follow-up shared-outer-environment regression exposed a missed case in the
+reference-count shortcut. Removing that shortcut preserves those containers too.
+Local uncached warm samples moved from roughly 5–7 ms to 6–8 ms for construction;
+remembering all traversed allocations adds bookkeeping. Memo-hit demands still
+take a few microseconds and do not materialize the result again. This is a
+sharing-correctness tradeoff, not another measured orbit speedup.
+
+The same canary also times deriving path-based hierarchy selectors from the
+504-leaf tree. After the selection-intent change, five samples took 33–83 µs.
+This includes building keyed hierarchy/row descriptions, not placement or paint.
+
+### Repeated-frame regression
+
+The uncached construction improvement alone missed a frame-level regression:
+the `with controls` constructor lacked its tracked-read declaration. This made
+the surrounding evaluation memo rerun each frame, then compare freshly rebuilt
+closure environments with the previous result. A CPU sample attributed about
+22% of the headless viewport test to that result comparison, versus about 5%
+to the evaluation itself (most remaining time was the CPU mesh rasterizer).
+
+The constructor now declares its reads tracked. This uses the existing memo;
+controls and view callbacks still run each frame, and effectful or untracked
+arguments still prevent reuse. A regression test covers reuse, unrelated edits,
+changed inputs, and both kinds of non-reusable argument.
+
+The same 400×600 @2 headless viewport test fell from a 108.9 ms median to
+79.7 ms. This test uses the CPU triangle fallback, not the app's GPU mesh path,
+so these are not native input-latency figures. A separate
+`cam_controls_profile_loop` retains the viewport, declaration memo, controls,
+and view-call evaluation but replaces the final 3D projection with a placeholder.
+After the fix, that pipeline measured 0.127 ms median / 0.155 ms p95 over 60
+warm frames. The construction canary now also measures repeated demands of one
+stable memo root; these took 2.6–8.3 µs after the first evaluation.
+
+### Native orbit: GPU mesh buffer packing
+
+A 20-second sample of the running editor during orbiting found a separate
+main-thread hotspot in the GPU mesh adapter: nested byte iterators packing
+vertices, and flattening padded image-readback rows. This path is not exercised
+by the headless CPU raster benchmark above. The app was using GPU triangle
+rendering; the expensive work was CPU-side copying around that render.
+
+The adapter now reserves the exact output capacity and appends component bytes
+and complete rows with slice copies. No geometry cache, unsafe casts, scheduling,
+or rendering-policy change is involved. Tests compare output bytes, including
+signed zero and NaN payloads, and verify readback padding removal.
+
+The isolated `mesh_gpu_packing_profile` benchmark uses 500,000 vertices and
+1,600 readback rows (5,000 pixel bytes plus 120 padding bytes each). Initial
+release measurements were about 22 ms → 3.5 ms for vertices and
+4.2 ms → 0.4 ms for readback copying. These are synthetic packing costs, not
+app frame times. An index-packing loop was also tried but was slower than the
+existing iterator, so that code is unchanged. Run the benchmark without a GPU:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  mesh_gpu_packing_profile -- --ignored --nocapture
+```
+
+### Remaining orbit comparison
+
+After the packing fix, compare equivalent workloads before attributing a small
+subjective difference to the evaluator or controls. The pre-hierarchy example
+at `29b83063` starts playback at 35%; the hierarchy starts at zero, so more
+upcoming paths are visible. With the current code and both fixtures set to zero,
+the headless mesh-orbit canary measured 75.9 ms versus 77.0 ms median over 20
+frames. The old fixture at its original 35% measured 58.2 ms. These are CPU
+fallback numbers, not native GPU/input-latency measurements; background implicit
+work and native presentation pacing are excluded.
+
+Separately, with ordinary initial folds, `cam_source_profile_loop` measured
+6.9 ms for the old example versus 7.9 ms for the current example at 600×900 @2.
+The controls-only canary measured 0.077 ms versus 0.121 ms. Both comparisons run
+the same current executable against the two fixtures, isolating example growth
+rather than claiming a complete old-binary/new-binary comparison.
+
+The orbit canary now discovers the preview's actual occurrence through a
+test-composed partial and asserts that camera updates change the image. Its
+previous one-result-step assumption missed the CAM controls/render wrappers,
+so older CAM measurements above rendered a fixed camera despite their orbit
+label. They still measured repeated-frame work, not actual changing-camera cost.
+
+`CAM_PROFILE_SOURCE` optionally chooses a fixture for the CAM source, controls,
+and orbit canaries. Supply benchmark variables through Cargo configuration:
+the sandbox wrapper intentionally clears inherited environment variables.
+Keep comparison fixtures under `target/sandbox` where the test can read them.
+
+```sh
+./tools/sandbox-cargo --config 'env.FRAME_PROFILE_ITERATIONS="20"' \
+  --config 'env.CAM_PROFILE_SOURCE="/absolute/path/to/target/sandbox/before.gid"' \
+  test --release -p progred --lib fidget_toolpaths_profile_loop -- --ignored --nocapture
+```
+
 ## Headless editor captures
 
 The SVG exporter can capture a whole editor frame, including document views,

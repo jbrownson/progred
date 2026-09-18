@@ -90,13 +90,10 @@ fn readme_svg_captures() {
         .path
         .clone();
     let view = &mut editor.model.workspace.left.panes[0].view;
+    view.annotations
+        .set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.3)));
     view.annotations.set_field(
-        &result_path(&path),
-        STATE,
-        Some(Value::record([(t::PROGRESS, f64::value(0.3))])),
-    );
-    view.annotations.set_field(
-        &result_path(&result_path(&path)),
+        &result_path(&cam_controls_path(&path)),
         f::CAMERA,
         Some(Value::record([
             (f::YAW, crate::libraries::f32::value(30.0)),
@@ -203,15 +200,15 @@ fn editor_toolpath_operations_svg_captures() {
             .view
             .annotations
             .set_field(
-                &result_path(&path),
+                &cam_controls_path(&path),
                 STATE,
-                Some(Value::record([(t::PROGRESS, f64::value(progress))])),
+                Some(cam_position(progress)),
             );
         editor.model.workspace.left.panes[0]
             .view
             .annotations
             .set_field(
-                &result_path(&result_path(&path)),
+                &result_path(&cam_controls_path(&path)),
                 f::CAMERA,
                 Some(Value::record([
                     (f::YAW, crate::libraries::f32::value(30.0)),
@@ -248,7 +245,7 @@ fn editor_toolpath_controls_overlay_svg_captures() {
             .view
             .annotations
             .set_field(
-                &result_path(&result_path(&path)),
+                &result_path(&cam_controls_path(&path)),
                 f::CAMERA,
                 Some(Value::record([(
                     f::ZOOM,
@@ -349,7 +346,7 @@ fn editor_toolpath_refined_svg_captures() {
         .view
         .annotations
         .set_field(
-            &result_path(&result_path(&path)),
+            &result_path(&cam_controls_path(&path)),
             f::CAMERA,
             Some(Value::record([
                 (f::YAW, crate::libraries::f32::value(55.0)),
@@ -363,11 +360,7 @@ fn editor_toolpath_refined_svg_captures() {
     runner.editor.model.workspace.left.panes[0]
         .view
         .annotations
-        .set_field(
-            &result_path(&path),
-            STATE,
-            Some(Value::record([(t::PROGRESS, f64::value(0.7))])),
-        );
+        .set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_refined_playback_pending");
     assert_eq!(queue.lock().unwrap().len(), 1);
     finish_mesh(&mut runner, 0);

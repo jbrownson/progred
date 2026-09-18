@@ -55,6 +55,24 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
         10_000,
     );
     assert!(controls.completed);
+    let expression = controls
+        .result
+        .as_record()
+        .unwrap()
+        .get(&presentation::vocabulary::RENDER)
+        .unwrap()
+        .as_record()
+        .unwrap();
+    let controls = ::grap::evaluate(
+        expression.get(&::grap::vocabulary::EXPRESSION).unwrap(),
+        &sources,
+        f64::read(expression.get(&l::FUEL).unwrap()).unwrap() as usize,
+    );
+    assert!(
+        controls.completed && !absent::is_absent(&controls.result),
+        "{:?}",
+        controls.result
+    );
     let fields = controls
         .result
         .as_record()
@@ -75,7 +93,13 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
             ),
             (l::WIDTH, f64::value(400.0)),
             (l::HEIGHT, f64::value(400.0)),
-            (ui::PARAMETERS, Value::record([(PROGRESS, f64::value(0.7))])),
+            (
+                ui::PARAMETERS,
+                Value::record([
+                    (ui::POSITION, f64::value(0.7)),
+                    (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
+                ]),
+            ),
         ],
         &sources,
         10_000,
@@ -93,7 +117,7 @@ fn example_view_uses_refinement_with_the_playback_and_tool_diameter() {
     assert!(super::playback::Settings::read(playback).is_some());
     let playback = playback.as_record().unwrap();
     assert!(!playback.contains_key(&super::cutter::vocabulary::TOOL));
-    assert_eq!(f64::read(playback.get(&PROGRESS).unwrap()), Some(0.7));
+    assert_eq!(f64::read(playback.get(&ui::POSITION).unwrap()), Some(0.7));
 }
 
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
@@ -138,6 +162,26 @@ fn evaluate(expression: &Value, fuel: usize) -> (Evaluation, Recording) {
         ::grap::evaluate_scoped(expression, &stack.libraries, scope, fuel)
     });
     (evaluation, recording)
+}
+
+fn apply_groups(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (CellId, Value)>,
+    host: &dyn ::grap::Host,
+    scope: &::grap::ForeignOverlay<'_>,
+    fuel: usize,
+) -> Evaluation {
+    let generated = ::grap::apply_scoped(function, arguments, host, scope, fuel);
+    if !generated.completed || absent::is_absent(&generated.result) {
+        return generated;
+    }
+    ::grap::apply_scoped(
+        &SEQUENCE.into(),
+        [(PROGRAM, generated.result)],
+        host,
+        scope,
+        generated.remaining_fuel,
+    )
 }
 
 fn diagonals(
@@ -483,7 +527,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     };
     let mut contact = Recording::default();
     let a = run(&mut contact, |scope| {
-        ::grap::apply_scoped(
+        apply_groups(
             &names["crosshatch"].into(),
             [
                 (names["face"], top_face(&sources, &names)),
@@ -562,7 +606,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
     };
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
-        ::grap::apply_scoped(
+        apply_groups(
             &names["crosshatch"].into(),
             [
                 (names["face"], top_face(&sources, &names)),
@@ -749,7 +793,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
     };
     let mut tubes = super::fidget::Tubes::new(0.005).unwrap();
     let evaluation = run(&mut tubes, |scope| {
-        ::grap::apply_scoped(
+        apply_groups(
             &names["crosshatch"].into(),
             [
                 (names["face"], top_face(&sources, &names)),

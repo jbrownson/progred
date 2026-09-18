@@ -312,6 +312,13 @@ pub trait Env {
         self.evaluate(expression)
     }
 
+    /// Reuse a completed evaluation when its observed inputs are unchanged.
+    /// Hosts without a computation runtime may simply evaluate. Untracked reads,
+    /// effects, and halts prevent reuse in hosts that provide memoization.
+    fn evaluate_memo(&self, expression: &Value, fuel: usize) -> Value {
+        self.evaluate_with_fuel(expression, fuel)
+    }
+
     /// The selected definition's conventional human name.
     fn name(&self, _cell: CellId) -> Option<&str> {
         None

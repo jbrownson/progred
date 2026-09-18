@@ -99,6 +99,90 @@ fn slider(key: CellId, initial: f64, max: f64) -> Value {
 }
 
 #[test]
+fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arguments() {
+    use crate::{computations::Computations, libraries::Definitions};
+    use std::cell::Cell;
+
+    // Constructing the declaration only evaluates its arguments. Running the
+    // widgets is a separate interpretation, and must still happen each frame.
+    for mode in ["pure", "effectful", "untracked"] {
+        let (function, input, unrelated, library) = (
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+        );
+        let runs = Rc::new(Cell::new(0));
+        let implementation = ForeignFunction::runtime({
+            let runs = runs.clone();
+            move |context, call, environment| {
+                runs.set(runs.get() + 1);
+                let argument = context.field(call, VALUE).unwrap();
+                let value = context.eval_runtime(argument, environment)?;
+                if mode == "effectful" {
+                    context.effect(|| ());
+                }
+                Ok(value)
+            }
+        });
+        let implementation = if mode == "untracked" {
+            implementation
+        } else {
+            implementation.tracked()
+        };
+        let mut definitions = Definitions::default();
+        definitions.insert(
+            function,
+            ::grap::Definition::foreign(Value::record([]), implementation),
+        );
+        let mut libraries = crate::stack::load().libraries;
+        libraries.insert(library, definitions);
+        let mut doc = gid::Document {
+            root: None,
+            cells: Cells::new(),
+        };
+        doc.cells.set_value(input, f64::value(1.0));
+        let expression = ::grap::call(
+            WITH_CONTROLS.into(),
+            [
+                (CONTROLS, ::grap::lambda([], Value::record([]))),
+                (VIEW, ::grap::lambda([VALUE], VALUE.into())),
+                (
+                    VALUE,
+                    ::grap::call(function.into(), [(VALUE, input.into())]),
+                ),
+                (WIDTH, f64::value(200.0)),
+                (HEIGHT, f64::value(300.0)),
+            ],
+        );
+        let computations = Computations::default();
+        let root = Root::document();
+        let evaluate = |doc: &gid::Document| {
+            computations.begin(Rc::new(doc.clone()), libraries.clone());
+            let result = computations.evaluate(&root, &[], &expression, 1000);
+            result
+                .as_record()
+                .unwrap()
+                .get(&WITH_CONTROLS)
+                .unwrap()
+                .as_record()
+                .unwrap()
+                .get(&VALUE)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(evaluate(&doc), f64::value(1.0));
+        assert_eq!(evaluate(&doc), f64::value(1.0));
+        doc.cells.set_value(unrelated, Value::record([]));
+        assert_eq!(evaluate(&doc), f64::value(1.0));
+        assert_eq!(runs.get(), if mode == "pure" { 1 } else { 3 }, "{mode}");
+        doc.cells.set_value(input, f64::value(2.0));
+        assert_eq!(evaluate(&doc), f64::value(2.0));
+        assert_eq!(runs.get(), if mode == "pure" { 2 } else { 4 }, "{mode}");
+    }
+}
+
+#[test]
 fn controls_overlay_the_full_height_view_and_supply_their_values() {
     let host = Host(crate::stack::load().libraries);
     let controls = ::grap::lambda(
@@ -398,4 +482,245 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
     );
     assert!(Rc::ptr_eq(&editor.model.doc, &original));
     editor.finish_gesture();
+}
+
+#[test]
+fn tree_range_dispatch_preserves_finer_ranges_and_other_view_state() {
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let original = editor.model.doc.clone();
+    let root = editor.model.workspace.document_root().clone();
+    let camera = crate::libraries::fidget::vocabulary::CAMERA;
+    let tree = Value::list([
+        Value::list([A.into(), A.into()]),
+        Value::list([A.into(), A.into()]),
+    ]);
+    let original_selection = tree_range::Selection::new(&tree, None).select(0, 0..1);
+    let old = original_selection.state();
+    let annotation = Value::record([
+        (camera, Value::record([])),
+        (
+            STATE,
+            Value::record([(A, old.clone()), (B, f64::value(0.35))]),
+        ),
+    ]);
+    crate::editing::annotate(&mut editor, &root, &[], annotation);
+    let selection = tree_range::Selection::new(&tree, Some(&old));
+    let control = selection.widgets(A, 180.0).last().unwrap();
+    let measured = with_context(&Output::default(), |context| control(context));
+    let height = measured.extent.height();
+    let placed = widget::frame::place(
+        measured,
+        Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
+        &Default::default(),
+    );
+    let event = puri::handler::PointerButtonEvent {
+        button: Some(puri::handler::PointerButton::Primary),
+        pointer: puri::handler::PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: puri::handler::PointerType::Mouse,
+        },
+        state: puri::handler::PointerState {
+            position: (150.0, height / 2.0).into(),
+            ..Default::default()
+        },
+    };
+    assert!(
+        placed
+            .resolve_for_dispatch()
+            .dispatch_pointer_down(&mut editor, &event)
+    );
+    let state = editor.model.workspace.document.annotations.at(&[]);
+    let chosen = read_state(state, A).unwrap();
+    assert_eq!(chosen, &original_selection.select(1, 1..2).state());
+    assert_eq!(tree_range::Selection::new(&tree, Some(chosen)).leaves, 2..4);
+    assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
+    assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
+    editor.advance_gesture(&[Point::new(150.0, 0.0), Point::new(-100.0, -100.0)]);
+    let state = editor.model.workspace.document.annotations.at(&[]);
+    assert_eq!(
+        read_state(state, A),
+        Some(&original_selection.select(1, 0..2).state())
+    );
+    assert!(Rc::ptr_eq(&original, &editor.model.doc));
+    editor.finish_gesture();
+}
+
+#[test]
+fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() {
+    for cursor in [false, true] {
+        for finest in [false, true] {
+            let mut editor = crate::test_editor(gid::Document {
+                root: None,
+                cells: Cells::new(),
+            });
+            let original = editor.model.doc.clone();
+            let root = editor.model.workspace.document_root().clone();
+            let tree = Value::list([
+                Value::list([B.into(), B.into()]),
+                Value::list([B.into(), B.into()]),
+            ]);
+            let selection = tree_range::Selection::new(&tree, None)
+                .select(1, 0..1)
+                .select(0, 1..2);
+            let ranges = selection.state();
+            let old = if cursor {
+                tree_range::cursor_state(&selection, 1.5)
+            } else {
+                ranges.clone()
+            };
+            let camera = crate::libraries::fidget::vocabulary::CAMERA;
+            crate::editing::annotate(
+                &mut editor,
+                &root,
+                &[],
+                Value::record([
+                    (camera, Value::record([])),
+                    (
+                        STATE,
+                        Value::record([(A, old.clone()), (B, f64::value(0.35))]),
+                    ),
+                ]),
+            );
+            let selection = tree_range::Selection::new(&tree, Some(&ranges));
+            let widgets: Vec<_> = if cursor {
+                tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0).0
+            } else {
+                selection.widgets(A, 180.0).collect()
+            };
+            let control = if finest {
+                &widgets[usize::from(cursor)]
+            } else {
+                widgets.last().unwrap()
+            };
+            let measured = with_context(&Output::default(), |context| control(context));
+            let height = measured.extent.height();
+            let dispatch = widget::frame::place(
+                measured,
+                Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
+                &Default::default(),
+            )
+            .resolve_for_dispatch();
+            let mut event = puri::handler::PointerButtonEvent {
+                button: Some(puri::handler::PointerButton::Primary),
+                pointer: puri::handler::PointerInfo {
+                    pointer_id: None,
+                    persistent_device_id: None,
+                    pointer_type: puri::handler::PointerType::Mouse,
+                },
+                state: puri::handler::PointerState {
+                    position: (201.0, height / 2.0).into(),
+                    count: 2,
+                    ..Default::default()
+                },
+            };
+            assert!(!dispatch.dispatch_pointer_down(&mut editor, &event));
+            event.state.position = (100.0, height / 2.0).into();
+            event.button = Some(puri::handler::PointerButton::Secondary);
+            assert!(!dispatch.dispatch_pointer_down(&mut editor, &event));
+            event.button = Some(puri::handler::PointerButton::Primary);
+            assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
+            assert!(!editor.advance_gesture(&[Point::new(-100.0, -100.0)]));
+            let expected = selection.select_all(if finest { 0 } else { 1 });
+            let expected = if cursor {
+                tree_range::cursor_state(&expected, 1.5)
+            } else {
+                expected.state()
+            };
+            let state = editor.model.workspace.document.annotations.at(&[]);
+            assert_eq!(read_state(state, A), Some(&expected));
+            assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
+            assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
+            assert!(Rc::ptr_eq(&original, &editor.model.doc));
+        }
+    }
+}
+
+#[test]
+fn tree_cursor_updates_range_and_position_together() {
+    fn click(editor: &mut crate::Editor, control: &Widget, x: f64, count: u8) {
+        let measured = with_context(&Output::default(), |context| control(context));
+        let height = measured.extent.height();
+        let placed = widget::frame::place(
+            measured,
+            Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
+            &Default::default(),
+        );
+        let event = puri::handler::PointerButtonEvent {
+            button: Some(puri::handler::PointerButton::Primary),
+            pointer: puri::handler::PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: puri::handler::PointerType::Mouse,
+            },
+            state: puri::handler::PointerState {
+                position: (x, height / 2.0).into(),
+                count,
+                ..Default::default()
+            },
+        };
+        assert!(
+            placed
+                .resolve_for_dispatch()
+                .dispatch_pointer_down(editor, &event)
+        );
+        editor.finish_gesture();
+    }
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let original = editor.model.doc.clone();
+    let tree = Value::list([
+        Value::list([B.into(), B.into()]),
+        Value::list([B.into(), B.into()]),
+    ]);
+    let (widgets, _) = tree_range::cursor(&tree, None, 2.75, A, 180.0);
+    click(&mut editor, widgets.last().unwrap(), 150.0, 1);
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    assert_eq!(tree_cursor_position(&tree, state), Some(2.75));
+    let (widgets, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    assert_eq!(
+        result.as_record().unwrap().get(&RANGE),
+        Some(&tree_range::encode(2..4))
+    );
+    click(&mut editor, &widgets[0], 100.0, 1);
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    assert_eq!(tree_cursor_position(&tree, state), Some(3.0));
+    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    click(&mut editor, widgets.last().unwrap(), 50.0, 1);
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    assert_eq!(tree_cursor_position(&tree, state), Some(0.0));
+    assert_eq!(
+        tree_range::cursor(&tree, Some(state), 0.0, A, 180.0)
+            .1
+            .as_record()
+            .unwrap()
+            .get(&RANGE),
+        Some(&tree_range::encode(0..2))
+    );
+    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    click(&mut editor, widgets.last().unwrap(), 50.0, 2);
+    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    assert_eq!(
+        state.as_record().unwrap().get(&RANGE),
+        Some(&Value::list([ALL.into(), ALL.into()]))
+    );
+    let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0);
+    assert_eq!(
+        result.as_record().unwrap().get(&RANGE),
+        Some(&tree_range::encode(0..4))
+    );
+    assert!(Rc::ptr_eq(&editor.model.doc, &original));
+}
+
+fn tree_cursor_position(tree: &Value, state: &Value) -> Option<f64> {
+    tree_range::cursor(tree, Some(state), 0.0, A, 180.0)
+        .1
+        .as_record()?
+        .get(&POSITION)
+        .and_then(f64::read)
 }

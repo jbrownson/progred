@@ -135,6 +135,7 @@ struct Ancestry {
 
 struct ProjectEnv<'a, 's> {
     cx: &'a Cx<'s>,
+    path: &'a [Step],
 }
 
 impl crate::display::Env for ProjectEnv<'_, '_> {
@@ -153,6 +154,13 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
 
     fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> Value {
         self.cx.sources.evaluate_with_fuel(expression, fuel)
+    }
+
+    fn evaluate_memo(&self, expression: &Value, fuel: usize) -> Value {
+        match self.cx.computations {
+            Some(computations) => computations.evaluate(self.cx.view, self.path, expression, fuel),
+            None => self.evaluate_with_fuel(expression, fuel),
+        }
     }
 
     fn name(&self, cell: CellId) -> Option<&str> {
@@ -946,7 +954,7 @@ fn value_layout(
     let state = cx.annotations.at(path);
     let target = |steps| projection_target(cx, path, steps);
     let input = crate::display::ProjectionInput {
-        env: &ProjectEnv { cx },
+        env: &ProjectEnv { cx, path },
         default_projection: default_projection.clone(),
         value,
         scale_factor: cx.styles.scale,

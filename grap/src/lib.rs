@@ -12,6 +12,7 @@ use std::rc::Rc;
 mod effect_tests;
 
 pub mod memo;
+mod reify;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -475,7 +476,7 @@ impl RuntimeValue {
     }
 
     pub fn to_value(&self) -> Value {
-        self.clone().into_value()
+        reify::value(self)
     }
 
     pub fn into_value(self) -> Value {
@@ -484,23 +485,7 @@ impl RuntimeValue {
             RuntimeValueKind::F64(value) => value
                 .original
                 .unwrap_or_else(|| crate::f64::value(value.number)),
-            RuntimeValueKind::Record(fields) => Value::record(
-                fields
-                    .iter()
-                    .map(|(field, value)| (*field, value.to_value())),
-            ),
-            RuntimeValueKind::List(elements) => {
-                Value::list(elements.iter().map(RuntimeValue::to_value))
-            }
-            RuntimeValueKind::Foreign(foreign) => ffi(foreign.cell()),
-            RuntimeValueKind::Closure(closure) => Value::record([(
-                vocabulary::CLOSURE,
-                Value::Record(
-                    closure
-                        .fields
-                        .update(vocabulary::ENVIRONMENT, Value::from(closure.environment)),
-                ),
-            )]),
+            _ => self.to_value(),
         }
     }
 }
@@ -746,19 +731,7 @@ impl From<Environment> for Value {
 
 impl From<&Environment> for Value {
     fn from(environment: &Environment) -> Self {
-        let indices = environment.indices.borrow();
-        let mut frames = Vec::new();
-        let mut frame = environment.frame.as_deref();
-        while let Some(current) = frame {
-            frames.push(current);
-            frame = current.parent.as_deref();
-        }
-        Value::record(frames.into_iter().rev().flat_map(|frame| {
-            frame
-                .bindings
-                .iter()
-                .map(|(index, value)| (indices.cell(*index), value.to_value()))
-        }))
+        reify::environment(environment)
     }
 }
 

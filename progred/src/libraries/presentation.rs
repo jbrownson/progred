@@ -70,9 +70,10 @@ pub fn display(
         let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
         let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
         (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64)
-            .then(|| input.env.evaluate_with_fuel(expression, fuel as usize))
+            .then(|| input.env.evaluate_memo(expression, fuel as usize))
     });
-    let result = evaluated.unwrap_or_else(|| input.env.evaluate(expression));
+    let result =
+        evaluated.unwrap_or_else(|| input.env.evaluate_memo(expression, ::grap::DEFAULT_FUEL));
     Some(at([Step::Key(vocabulary::RESULT)], &result))
 }
 

@@ -43,6 +43,8 @@ pub mod vocabulary {
     pub const PREVIEW_REFINED: CellId = CellId::from_u128(0x76f66199a77dd4a6f7af65f29f1cacf7);
     pub const LINE_RADIUS: CellId = CellId::from_u128(0x4de64314b3008dcdf01ac387dc68e63f);
     pub const PROGRAM: CellId = CellId::from_u128(0xf23c804bf137581b76605a51366d43b7);
+    pub const SEQUENCE: CellId = CellId::from_u128(0x1ecd44ed838a86892635ca2785826f2a);
+    pub const FOCUS: CellId = CellId::from_u128(0x0548bc872965d8922fb8f93785b1f0d1);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0xa7763f9186b2c417fe1258246bb327db);
     pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0x1c905a1c1b3b904f8999fa61b3927897);
     pub const PLAYBACK: CellId = CellId::from_u128(0x0955045e00d5d5f2139fb3ab19591c3e);
@@ -58,7 +60,7 @@ pub mod vocabulary {
 use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 
-const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL];
+const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL, SEQUENCE];
 
 fn point_value(point: Point3) -> Value {
     Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
@@ -219,6 +221,35 @@ fn operation(
     output: &Output,
 ) -> Result<Value, Error> {
     match function {
+        SEQUENCE => {
+            fn sequence(
+                context: &mut Context,
+                program: &Value,
+                output: &Output,
+            ) -> Result<Value, Halt> {
+                context.burn()?;
+                if let Some(list) = program.as_list() {
+                    for child in list.values() {
+                        let value = sequence(context, child, output)?;
+                        if absent::is_absent(&value) {
+                            return Ok(value);
+                        }
+                    }
+                    Ok(Value::record([]))
+                } else {
+                    context.effect(|| output.sink.borrow_mut().end_path());
+                    let result = context.apply(program, []);
+                    context.effect(|| output.sink.borrow_mut().end_path());
+                    result
+                }
+            }
+            let program = argument(context, call, PROGRAM)?;
+            let program = context.eval(program, environment)?;
+            if absent::is_absent(&program) {
+                return Ok(program);
+            }
+            return Ok(sequence(context, &program, output)?);
+        }
         START_AT | LINE_TO => {
             let point = point(context, call, environment)?;
             let mut emission = Emission { output, context };
@@ -357,6 +388,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (PREVIEW_REFINED, "preview paths refined"),
         (LINE_RADIUS, "line radius"),
         (PROGRAM, "program"),
+        (SEQUENCE, "sequence paths"),
+        (FOCUS, "focus"),
         (PLAYBACK, "playback"),
         (PROGRESS, "progress"),
         (TOOL_DIAMETER, "tool diameter"),

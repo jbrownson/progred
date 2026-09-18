@@ -112,6 +112,21 @@ or event-specific relevance checks alongside this mechanism.
 The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
+### Lowered results across evaluator boundaries
+
+The public evaluation/application APIs still return GID `Value`. Keeping native
+constructor arguments lowered and preserving sharing during materialization
+does not implement the discussed owned-runtime-result API. Runtime closures
+refer to code and cell indices owned by their evaluation context; returning
+them for later invocation needs explicit ownership of that backing storage.
+The proposed direction is a retained runtime result with explicit conversion to
+GID where needed, not opaque native values added to Grap.
+
+`with controls` also still returns a declaration interpreted by its partial.
+Direct widget emission or carrying runtime values across that boundary remains
+separate work. Profile uncached construction as well as memo hits before taking
+on the broader representation change.
+
 ### Fidget refinement and sharp edges
 
 When we next examine Fidget internals for Progred's needs, revisit the
@@ -146,11 +161,27 @@ ordering and names are not settled. Reusable tools and orientations need not
 be owned by that tree: execution occurrences can reference the same definitions
 in several places.
 
-One UI proposal is a stack of range-selectable, notched controls: operations at
-the bottom, then finer groups, with the existing continuous playback slider at
-the top operating on the selected work. Decide how parent ranges restrict child
-choices and how selection relates to execution order before implementing it.
-This is not a decision to impose these levels on every toolpath program.
+A first version of the notched range controls now follows ordinary nested
+program lists, with coarse groups at the bottom and continuous playback at the
+top. It uses equal-width notches without permanent names; Cmd-hover source
+attribution remains a useful next step. Parent ranges restrict the child rows
+without overwriting their path-based selection intent. `All` includes future
+items; explicit bounds include insertions between their endpoints. Uneven
+branches align from the fine-grained end. Playback retains its leaf-path cursor
+when it remains in the selected range. Producers that reconstruct lists can
+still change their positions; preserving correspondence through Grap list
+construction is separate work, not solved by inventing identities in the widget.
+Prior cuts remain in stock history.
+See [controls](controls.md) and [toolpaths](toolpaths.md). This does not impose
+an operation/orientation/tool taxonomy on programs.
+
+## Keyboard navigation and list reordering
+
+The requested keyboard-navigation pass remains pending, including moving a list
+item with a modifier-plus-arrow shortcut. The projection should determine the
+meaningful direction rather than assuming every list is horizontal or vertical.
+Cmd+Up/Down currently fold/unfold, so the exact shortcut policy still needs a
+decision. The new range controls also remain pointer/touch-only.
 
 ## Website as an interactive explanation
 

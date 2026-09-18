@@ -4,6 +4,51 @@ The toolpath library is an experimental path-geometry layer, not a machine
 program or a collision/clearance check. Its geometry remains library-owned;
 the mesh preview uses the general dependency-tracked computation runtime.
 
+## Focusing the preview
+
+The 3D preview's `program` accepts either one zero-argument callable or an
+ordinary nested list of such callables. Lists group execution occurrences;
+there is no imposed operation/orientation/tool hierarchy. `sequence paths`
+runs the same structure directly into the current output sink, for callers
+that do not need a recording. Each leaf is an independent program and starts
+its own paths. An absent stops the sequence and fuel is shared across leaves.
+
+The example supplies two top-level groups (Op 1 and Op 2), tool-use groups,
+faces, crossing directions, and individual knurl lines. The chamfer branches
+contain rings, individual edges, and individual crosswise strokes (or one contour
+cut). Grouped mapping, rotation, and tool-scoping helpers are ordinary Grap
+functions over lists of deferred programs; `sequence paths` interprets them.
+The generated leaves explicitly capture only their required inputs, rather than
+retaining recursive list-mapping accumulators in their closure environments.
+Its viewport evaluates that tree and gives the same value to both the generic
+`tree cursor` control and the preview. The controls don't discover structure in
+already-generated geometry or impose names on it.
+The surrounding `render` declaration uses observed Grap evaluation, so orbiting
+or moving the sliders does not reconstruct the program tree. Definition edits
+invalidate it normally; widget emission and handlers are not memoized.
+
+Playback's optional `focus` is a half-open leaf-index range `[start, end]`.
+The existing `progress` fraction traverses cutting distance within that range.
+Alternatively `position` uses an absolute leaf index plus a distance fraction
+within that leaf. The example uses the latter, matching the equal-width grouping
+controls and preserving the actual tool position across focus changes when it
+remains in range. An out-of-range position resets to the first selected cut.
+These numeric ranges/positions are derived for this recording. The controls
+retain list-position paths and explicit `All` intent, not those numeric offsets;
+see [controls](controls.md) for clipping and generated-list lifetime limits.
+All earlier parts have already cut the stock; only unfinished paths within the
+focus are displayed, and later parts are omitted entirely. At zero progress,
+the tool is at the first selected cut, not the end of the preceding operation.
+Changing focus retains the camera. It changes view
+state, not document history. Op 2 consequently retains the work of Op 1.
+
+The recording retains small segment-boundary ranges for its program leaves.
+Focus is a playback input, separate from path generation, so selector changes
+reuse the observed recording. Stock meshing and implicit rendering use the
+existing dependency-tracked async pipeline. Focusing an early group can avoid
+much rendering work; focusing a late group still needs the earlier stock cuts.
+No source-hover linkage or keyboard interaction for these controls is added yet.
+
 ## Generation and interpretation
 
 Rust generators call `paths::Sink::start_at(point, axis)` and `line_to(point)`
@@ -90,8 +135,9 @@ The example's Grap `diagonal passes` and `sample pass` functions follow
 interior diagonals across the unit square and samples each including both
 endpoints. Its maximum sample spacing is in **UV coordinates**, before mapping;
 it is not a world-space tolerance, stepover, or scallop-height guarantee.
-The row loop and point loop use the ordinary `iterate` function, emitting
-`start at` and `line to` calls without collecting intermediate lists. Sampling
+The row loop uses ordinary list `unfold` to construct one deferred program per
+line. Each line's point loop uses `iterate`, emitting `start at` and `line to`
+without collecting a list of points. Sampling
 policy is document code, not a toolpath FFI. General `min`, `max`, `ceil`,
 `hypot`, and `is finite` operations belong to the f64 library. The example
 rejects nonfinite or fractional row counts and nonpositive/nonfinite spacing;
@@ -145,7 +191,8 @@ ball-tool constructor share that cell. `Op 1 · top and four sides` calls that s
 the same generator for −Z, rotating the top-face coordinates 180° about X.
 The six signed-axis rotations and all machining policy are ordinary Grap
 functions in the document. `ball-tip passes` remains the top-only generator.
-`Preview · Op 1 + Op 2` sequences the two programs for the playback slider,
+`Preview · Op 1 + Op 2` sequences the two programs for direct execution;
+the viewport consumes the equivalent `Preview groups` tree,
 retaining Op 1's removed stock into Op 2. It is a preview composition, not a
 single machine program: eventual export should target Op 1 and Op 2 separately.
 Both currently use part coordinates; there is no simulated stock flip,
@@ -355,7 +402,8 @@ Standalone mesh and progressive implicit functions remain available. The raster
 API's explicit `Passes` choice retains the multi-resolution sequence for comparison
 without adding a render-mode control to the example.
 
-Command+9's example uses this refined preview with one playback slider: 504 paths (6,588
+Command+9's example uses this refined preview with a playback slider and a stack
+of grouping-range sliders: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
 budget including Grap ball-radius compensation. Its [memo graph](incremental.md)
 retains the shared path recording and both renderers' expensive results.
@@ -415,9 +463,11 @@ geometry through the general dependency graph.
 ## Playback
 
 All three volume previews accept an optional `playback` record with `progress` (f64,
-0–1), `profile tolerance`, and `stock minimum` / `stock maximum` (f64
-`x`, `y`, `z` records). These are ordinary data, not control state. The example
-supplies progress from the reusable [controls](controls.md) library.
+0–1) or `position` (absolute leaf index plus fractional distance within that leaf),
+optional `focus`, `profile tolerance`, and `stock minimum` / `stock maximum` (f64
+`x`, `y`, `z` records). `position` takes precedence if both cursor fields are present.
+These are ordinary data, not control state. The example supplies its position and
+focus from the reusable [controls](controls.md) library.
 
 The recording computes total cutting-segment length, then visits segments again,
 splitting the current segment at the requested distance. Completed segments are

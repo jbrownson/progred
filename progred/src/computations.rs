@@ -1,7 +1,7 @@
 //! The editor owns memo roots; libraries compose typed computations in them.
 
 use crate::{libraries::Libraries, sources::Sources, workspace::Root};
-use gid::{Document, Step};
+use gid::{Document, Step, Value};
 use grap::Host;
 use incremental::background::{Executor, Tasks};
 use incremental::{Input, Roots, Runtime, Source};
@@ -82,11 +82,115 @@ impl Computations {
     pub fn at<T: 'static>(&self, view: &Root, path: &[Step], create: impl FnOnce() -> T) -> Rc<T> {
         self.roots.get((view.clone(), path.to_vec()), create)
     }
+
+    pub fn evaluate(&self, view: &Root, path: &[Step], expression: &Value, fuel: usize) -> Value {
+        struct Evaluation {
+            expression: Input<Value>,
+            fuel: Input<usize>,
+            result: incremental::Memo<grap::Evaluation>,
+        }
+        let evaluation = self.at(view, path, || {
+            let expression = self.runtime.input(expression.clone());
+            let fuel = self.runtime.input(fuel);
+            let result = grap::memo::evaluate(
+                &self.runtime,
+                self.definitions.clone(),
+                expression.clone(),
+                fuel.clone(),
+            );
+            Evaluation {
+                expression,
+                fuel,
+                result,
+            }
+        });
+        evaluation.expression.set(expression.clone());
+        evaluation.fuel.set(fuel);
+        self.runtime
+            .read(&evaluation.result)
+            .map(|evaluation| evaluation.result.clone())
+            .unwrap_or_else(grap::memo::failure)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() {
+        use grap::{Definition, ForeignFunction};
+        use std::cell::Cell;
+        let (function, input, unrelated, library) = (
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+            gid::new_cell_id(),
+        );
+        let runs = Rc::new(Cell::new(0));
+        let mut definitions = crate::libraries::Definitions::default();
+        definitions.insert(
+            function,
+            Definition::foreign(
+                Value::record([]),
+                ForeignFunction::new({
+                    let runs = runs.clone();
+                    move |context, call, environment| {
+                        runs.set(runs.get() + 1);
+                        let argument = context.field(call, input).unwrap();
+                        context.eval(argument, environment)
+                    }
+                })
+                .tracked(),
+            ),
+        );
+        let mut libraries = Libraries::default();
+        libraries.insert(library, definitions);
+        let mut doc = Document {
+            root: None,
+            cells: gid::Cells::new(),
+        };
+        let computations = Computations::default();
+        let view = Root::document();
+        let expression = grap::call(function.into(), [(input, input.into())]);
+        let run = |doc: &Document| {
+            computations.begin(Rc::new(doc.clone()), libraries.clone());
+            computations.evaluate(&view, &[], &expression, 100)
+        };
+        let missing = run(&doc);
+        assert_eq!(
+            grap::absent::reason(&missing),
+            Some(grap::absent::MISSING_CELL)
+        );
+        assert_eq!(run(&doc), missing);
+        doc.cells.set_value(unrelated, Value::record([]));
+        assert_eq!(run(&doc), missing);
+        assert_eq!(
+            runs.get(),
+            1,
+            "cache ordinary absents and ignore unrelated changes"
+        );
+        let value = Value::from(vec![42]);
+        doc.cells.set_value(input, value.clone());
+        assert_eq!(run(&doc), value);
+        assert_eq!(run(&doc), value);
+        assert_eq!(runs.get(), 2);
+        let other_expression = grap::call(function.into(), [(input, Value::record([]))]);
+        assert_eq!(
+            computations.evaluate(&view, &[], &other_expression, 100),
+            Value::record([])
+        );
+        assert_eq!(runs.get(), 3);
+        assert_eq!(
+            grap::absent::reason(&computations.evaluate(&view, &[], &other_expression, 0)),
+            Some(grap::absent::FUEL_EXHAUSTED)
+        );
+        assert_eq!(
+            computations.evaluate(&view, &[], &other_expression, 100),
+            Value::record([])
+        );
+        assert_eq!(runs.get(), 4);
+    }
 
     #[test]
     fn locations_in_different_views_have_independent_root_lifetimes() {

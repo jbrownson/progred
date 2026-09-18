@@ -2,6 +2,7 @@
   "binders": {
     "abs": 9f71b219018a191fab7b726732645ab1,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
     "action": d61047fd27a4906d8cd0034d36ad55ad,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
@@ -32,15 +33,18 @@
     "chamfer_ring": 34487212300c3d464978ba26599fb47f,
     "chamfer_stepover": fb027d8b1e4955251d78caa3695efdd8,
     "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
+    "closure": db39600f3ed07398c77ac120deb108a8,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
+    "concat": 6f2613d22b4690ed5bac39776e51b775,
     "condition": 91c786935eb5794b005582b8e7941bc2,
     "contact_height": 7f0ab3541e671a55a1b4593a2e54484c,
     "contour_chamfer": e3bb9b579cb298a10aa72f7fda3bb0be,
     "contour_pass": 9889f13ee9513b7e2fd600595fe551a9,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
-    "control_initial": 133b05e33c166614831f01de2365f49c,
+    "control_items": 685f4fc766c54035725efdd652943c7b,
     "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
+    "control_range": 870bd3c9e1c2d00a7884be4e9173ed68,
     "controls": b9d3424b750ee1fbba4df638d995e236,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
     "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
@@ -55,6 +59,7 @@
     "cutter_diameter": 900b8ac5725af07ea981455d015541bf,
     "cutting": d22a92c1020be6f690b5cb738b728fd3,
     "cutting_length": 00ede4dd6db731555d83f644401b09ec,
+    "diagonal_groups": c799105d26d64bf6bd4e6186364960c3,
     "diagonals": 73ae7ca51317bcddf4ff4b33e10fc2e0,
     "direction": 18bab55f244a06a0f0d30cfeb87c4c4f,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
@@ -64,6 +69,7 @@
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
     "end_extension": ca9bd94d95a6b53179cdfb599033aabb,
+    "environment": e910025c710c25c43d0a5b296378f374,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "evenly_spaced": 19307c3d1b09e230632c61a9f88170b5,
@@ -80,6 +86,7 @@
     "feed_direction": 4f961bef2d597db99a7f3e7c2e211181,
     "field": 66bad5269b830181b840cf23a391b10e,
     "floor": d007814c5f6a6c38b025605b399473d4,
+    "focus": 0548bc872965d8922fb8f93785b1f0d1,
     "front_face": c5586f3699073c5958c278b3f9e4cd1c,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -94,6 +101,7 @@
     "initial": 24d55aeab9383d53899091958de88d21,
     "intercept": 94d5e250a796f2d654ca4e81b56850d9,
     "is_finite": 1ff1fcec05b669eba2314ad52fe8e8f1,
+    "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_face": 26c724208a09da7103cdd90bb5b4ae48,
@@ -104,8 +112,14 @@
     "line": 01cfce0acb730dfb2dcf3e57dc12889e,
     "line_radius": 4de64314b3008dcdf01ac387dc68e63f,
     "line_to": e88873219d230571430941334a51600f,
+    "list": 216008ae157998d3838112b96e584d11,
+    "list_fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
+    "list_length": 6882dc6ab06d393217abe6f888585499,
+    "list_unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "map_axes": 5d5bf7f3beb0c1cba07226bab9683852,
+    "map_leaves": 29c998364a725cb9eea3dc18f0a5b2d2,
     "map_points": 923fb213d0e56383539b43b1fc807458,
+    "mapped_groups": 5767e045b4e37661336fdc7db5c3fe02,
     "mapping": a33c6e235d5d94885fcb1afff59e94e5,
     "match": b3f6a62e4926889bcfcd338025f4a6f9,
     "max": 9dfc13c9c7e059da42ea74ef63897ce6,
@@ -129,14 +143,17 @@
     "non_cutting": 32ec688b8b412514e5a4ee4789b0e5d8,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "normal_length": 421de040629c87a3f37d794d999ff3ed,
+    "not_list": eceebe863edf24d51083bc40fa452635,
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
     "offset": 879a809cb198076af71cc1164d761a00,
     "op1": b8cdf2aa2f55d823bcc0c67123fa2b56,
     "op1_chamfers": 68680a50ef0b37d3c27fcae16349db6b,
+    "op1_groups": 6c1afa8c32db0c56c3b11ed190eb8a0f,
     "op2": d0116cda22f0461688928cf2ba47184e,
     "op2_chamfers": 8144d571cd69d3e4c48107b3b4e017c4,
+    "op2_groups": 7c1308ed06862bcc6e2dbc1130d2fecc,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "operations_section": 983f8e752bd5d3b34f2c81ce317c03b4,
     "orientation": ddb447a86cf765e6a19f3c448882659e,
@@ -151,32 +168,36 @@
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
     "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
+    "position": 199e09fd8b4d41632a90d103d278d6ea,
     "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "profile_radius": 0c43e0deeecda93da913261dc2786878,
     "profile_tolerance": 4c3b5d5884e040ad1c226f37935ea68b,
     "program": f23c804bf137581b76605a51366d43b7,
+    "program_tree": 6d28b59f6d375a10d0df7f67fbb99e88,
     "progress": 13feb828ce93822d8d72a3ef3765e2f0,
     "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
     "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "render": 37cda4bdea0091349e305951564fbdf1,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_face": 5999e385d066a0034fda21e9e280f265,
     "rotate_paths": acbb966cac9d34d8a150c48c5b4094a1,
+    "rotated_groups": dcbc9580925fd17ba6e1d9cd5b9e5744,
     "row_direction": 6e582a6a57d4006a0820b079cb351685,
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
     "scaled_point": dfb16dc785610b93fa62389983e57594,
     "scene": d6757ca4cb992116fe31ede39530709d,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
+    "sequence_paths": 1ecd44ed838a86892635ca2785826f2a,
     "settings_section": 0e23e86816dc8eb7d788c4e24d637514,
     "setup_up": 775e067bc167e68a3145d0a5f4bbc6e9,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
     "sin": 9f62e0f56d92be74f6ae36378d889262,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
-    "slider": e3c52729da1f3b54e99ef208ad9d9201,
     "slope": add49f506cecac65e0da65e073ed9e80,
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
     "square": 6164efe43a126d79bcd252a17a9453c1,
@@ -206,9 +227,11 @@
     "tool_axis": c674bd24061031aff48153e907df4d59,
     "tool_diameter": d2f5197841dcac20dee27cf4cf3d7b1a,
     "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
+    "tooled_groups": f96d66d11f9bb078f8223787c0335f0b,
     "tools_section": 22b7a0fb24854c18c78c2d6dcfced495,
     "top": f64ba93e56b40a2df81a65508057dbf5,
     "translated_points": 63ef0b4b59f4168765663a45938abf3e,
+    "tree_cursor": 21781a5dfb25048f053375147e251b80,
     "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
@@ -241,33 +264,37 @@
       name: "Op 1 · chamfers",
       params: [],
       body: {
-        function: with_tool,
-        expression: {
-          expressions: [
+        function: tooled_groups,
+        program: {
+          function: quote,
+          expression: [
             {
-              function: cube_chamfers,
-              orientation: top,
+              unquote: {
+                function: cube_chamfers,
+                orientation: top,
+              },
             },
             {
-              function: cube_chamfers,
-              orientation: right_face,
+              unquote: {
+                function: cube_chamfers,
+                orientation: right_face,
+              },
             },
           ],
-          function: do,
         },
         tool: square_tool,
       },
     },
-    op1: {
-      name: "Op 1 · top and four sides",
-      params: [],
-      body: {
-        expressions: [
-          {
-            function: with_tool,
-            expression: {
-              expressions: [
-                {
+    op1_groups: {
+      name: "Op 1 · paths",
+      grap_value: {
+        function: quote,
+        expression: [
+          [
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -283,7 +310,13 @@
                   },
                   orientation: top,
                 },
-                {
+                tool: ball_tool,
+              },
+            },
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -299,7 +332,13 @@
                   },
                   orientation: right_face,
                 },
-                {
+                tool: ball_tool,
+              },
+            },
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -315,7 +354,13 @@
                   },
                   orientation: back_face,
                 },
-                {
+                tool: ball_tool,
+              },
+            },
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -331,7 +376,13 @@
                   },
                   orientation: left_face,
                 },
-                {
+                tool: ball_tool,
+              },
+            },
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -347,60 +398,81 @@
                   },
                   orientation: front_face,
                 },
-              ],
-              function: do,
+                tool: ball_tool,
+              },
             },
-            tool: ball_tool,
-          },
+          ],
           {
-            function: op1_chamfers,
+            unquote: {
+              function: op1_chamfers,
+            },
           },
         ],
-        function: do,
+      },
+    },
+    op1: {
+      name: "Op 1 · top and four sides",
+      params: [],
+      body: {
+        function: sequence_paths,
+        program: op1_groups,
       },
     },
     op2: {
       name: "Op 2 · bottom",
       params: [],
       body: {
-        expressions: [
-          {
-            function: with_tool,
-            expression: {
-              function: face_paths,
-              setup_up: {
-                function: point,
-                y: {
-                  f64: 0x0000000000000000,
-                },
-                x: {
-                  f64: 0x0000000000000000,
-                },
-                z: {
-                  f64: 0x000000000000f0bf,
-                },
-              },
-              orientation: bottom_face,
-            },
-            tool: ball_tool,
-          },
-          {
-            function: op2_chamfers,
-          },
-        ],
-        function: do,
+        function: sequence_paths,
+        program: op2_groups,
       },
     },
     op2_chamfers: {
       name: "Op 2 · chamfers",
       params: [],
       body: {
-        function: with_tool,
-        expression: {
+        function: tooled_groups,
+        program: {
           function: cube_chamfers,
           orientation: bottom_face,
         },
         tool: square_tool,
+      },
+    },
+    op2_groups: {
+      name: "Op 2 · paths",
+      grap_value: {
+        function: quote,
+        expression: [
+          [
+            {
+              unquote: {
+                function: tooled_groups,
+                program: {
+                  function: face_paths,
+                  setup_up: {
+                    function: point,
+                    y: {
+                      f64: 0x0000000000000000,
+                    },
+                    x: {
+                      f64: 0x0000000000000000,
+                    },
+                    z: {
+                      f64: 0x000000000000f0bf,
+                    },
+                  },
+                  orientation: bottom_face,
+                },
+                tool: ball_tool,
+              },
+            },
+          ],
+          {
+            unquote: {
+              function: op2_chamfers,
+            },
+          },
+        ],
       },
     },
     operations_section: {
@@ -411,6 +483,21 @@
     },
     progress: {
       name: "Playback",
+    },
+    program_tree: {
+      name: "Preview groups",
+      params: [],
+      body: {
+        function: quote,
+        expression: [
+          {
+            unquote: op1_groups,
+          },
+          {
+            unquote: op2_groups,
+          },
+        ],
+      },
     },
     preview_operations: {
       name: "Preview · Op 1 + Op 2",
@@ -691,20 +778,23 @@
       name: "ball-tip passes",
       params: [],
       body: {
-        function: face_paths,
-        setup_up: {
-          function: point,
-          y: {
-            f64: 0x0000000000000000,
+        function: sequence_paths,
+        program: {
+          function: face_paths,
+          setup_up: {
+            function: point,
+            y: {
+              f64: 0x0000000000000000,
+            },
+            x: {
+              f64: 0x0000000000000000,
+            },
+            z: {
+              f64: 0x000000000000f03f,
+            },
           },
-          x: {
-            f64: 0x0000000000000000,
-          },
-          z: {
-            f64: 0x000000000000f03f,
-          },
+          orientation: top,
         },
-        orientation: top,
       },
     },
     bottom_face: {
@@ -766,52 +856,71 @@
           strip,
         ],
         body: {
-          function: where,
+          function: quote,
           expression: {
-            function: map_points,
-            mapping: {
-              function: translated_points,
-              offset: {
-                normal: normal,
-                function: square_side_offset,
-                contact_height: contact_height,
-                cutter_diameter: cutter_diameter,
-                tool_axis: tool_axis,
+            closure: {
+              params: [],
+              body: {
+                function: where,
+                expression: {
+                  function: map_points,
+                  mapping: {
+                    function: translated_points,
+                    offset: {
+                      normal: normal,
+                      function: square_side_offset,
+                      contact_height: contact_height,
+                      cutter_diameter: cutter_diameter,
+                      tool_axis: tool_axis,
+                    },
+                  },
+                  expression: {
+                    end: {
+                      function: curve,
+                      t: {
+                        f64: 0x000000000000f03f,
+                      },
+                    },
+                    start: {
+                      function: curve,
+                      t: {
+                        f64: 0x0000000000000000,
+                      },
+                    },
+                    function: line,
+                    tool_axis: tool_axis,
+                  },
+                },
+                bindings: [
+                  {
+                    subject: strip,
+                    pattern: {
+                      normal: {
+                        bind: normal,
+                      },
+                      curve: {
+                        bind: curve,
+                      },
+                      across: {
+                        bind: tool_axis,
+                      },
+                    },
+                  },
+                ],
               },
-            },
-            expression: {
-              end: {
-                function: curve,
-                t: {
-                  f64: 0x000000000000f03f,
+              environment: {
+                contact_height: {
+                  unquote: contact_height,
+                },
+                cutter_diameter: {
+                  unquote: cutter_diameter,
+                },
+                strip: {
+                  unquote: strip,
                 },
               },
-              start: {
-                function: curve,
-                t: {
-                  f64: 0x0000000000000000,
-                },
-              },
-              function: line,
-              tool_axis: tool_axis,
             },
           },
-          bindings: [
-            {
-              subject: strip,
-              pattern: {
-                normal: {
-                  bind: normal,
-                },
-                curve: {
-                  bind: curve,
-                },
-                across: {
-                  bind: tool_axis,
-                },
-              },
-            },
-          ],
         },
       },
     },
@@ -830,29 +939,33 @@
         compensation,
       ],
       body: {
-        expressions: [
+        function: quote,
+        expression: [
           {
-            compensation: compensation,
-            function: crossing_passes,
-            setup_up: setup_up,
-            slope: {
-              f64: 0x000000000000f03f,
+            unquote: {
+              compensation: compensation,
+              function: crossing_passes,
+              setup_up: setup_up,
+              slope: {
+                f64: 0x000000000000f03f,
+              },
+              orientation: orientation,
+              face: face,
             },
-            orientation: orientation,
-            face: face,
           },
           {
-            compensation: compensation,
-            function: crossing_passes,
-            setup_up: setup_up,
-            slope: {
-              f64: 0x000000000000f0bf,
+            unquote: {
+              compensation: compensation,
+              function: crossing_passes,
+              setup_up: setup_up,
+              slope: {
+                f64: 0x000000000000f0bf,
+              },
+              orientation: orientation,
+              face: face,
             },
-            orientation: orientation,
-            face: face,
           },
         ],
-        function: do,
       },
     },
     crossing_passes: {
@@ -867,16 +980,16 @@
       body: {
         function: where,
         expression: {
-          function: map_points,
+          function: mapped_groups,
           mapping: {
             function: compensation,
             tool_axis: tool_axis,
           },
-          expression: {
-            function: map_points,
+          program: {
+            function: mapped_groups,
             mapping: face,
-            expression: {
-              function: map_points,
+            program: {
+              function: mapped_groups,
               mapping: {
                 params: [
                   x,
@@ -910,14 +1023,14 @@
                   z: z,
                 },
               },
-              expression: {
+              program: {
                 feed_direction: direction,
                 row_direction: {
                   right: direction,
                   function: multiply,
                   left: slope,
                 },
-                function: diagonals,
+                function: diagonal_groups,
                 spacing: {
                   f64: 0xb81e85eb51b89e3f,
                 },
@@ -1056,17 +1169,11 @@
         expression: {
           function: chamfer_ring,
           program: {
-            params: [],
-            body: {
-              function: rotate_paths,
-              orientation: orientation,
-              program: {
-                params: [],
-                body: {
-                  function: cut_strip,
-                  strip: strip,
-                },
-              },
+            function: rotated_groups,
+            orientation: orientation,
+            program: {
+              function: cut_strip,
+              strip: strip,
             },
           },
         },
@@ -1097,8 +1204,8 @@
     slope: {
       name: "diagonal direction",
     },
-    diagonals: {
-      name: "diagonal passes",
+    diagonal_groups: {
+      name: "diagonal line groups",
       params: [
         rows,
         spacing,
@@ -1154,86 +1261,152 @@
             },
           },
           {
-            initial: {
-              f64: 0x000000000000f03f,
-            },
-            step: {
-              params: [
-                state,
-              ],
-              body: {
+            function: where,
+            expression: list,
+            bindings: [
+              {
                 subject: {
-                  right: state,
-                  function: less,
-                  left: rows,
-                },
-                function: match,
-                cases: [
-                  {
-                    pattern: {
-                      bool: true,
-                    },
-                    expression: {
-                      absent: done,
-                    },
+                  initial: {
+                    f64: 0x000000000000f03f,
                   },
-                  {
-                    pattern: {
-                      bool: false,
-                    },
-                    expression: {
-                      expressions: [
+                  step: {
+                    params: [
+                      state,
+                    ],
+                    body: {
+                      subject: {
+                        right: state,
+                        function: less,
+                        left: rows,
+                      },
+                      function: match,
+                      cases: [
                         {
-                          feed_direction: feed_direction,
-                          function: sample_pass,
-                          spacing: spacing,
-                          intercept: {
-                            right: {
-                              right: {
-                                f64: 0x000000000000f03f,
-                              },
-                              function: subtract,
-                              left: {
-                                right: {
+                          pattern: {
+                            bool: true,
+                          },
+                          expression: {
+                            absent: done,
+                          },
+                        },
+                        {
+                          pattern: {
+                            bool: false,
+                          },
+                          expression: {
+                            function: quote,
+                            expression: {
+                              state: {
+                                unquote: {
                                   right: {
                                     f64: 0x000000000000f03f,
                                   },
                                   function: sum,
-                                  left: rows,
+                                  left: state,
                                 },
-                                function: divide,
-                                left: {
-                                  right: state,
-                                  function: multiply,
-                                  left: {
-                                    f64: 0x0000000000000040,
+                              },
+                              item: {
+                                unquote: {
+                                  function: quote,
+                                  expression: {
+                                    closure: {
+                                      params: [],
+                                      body: {
+                                        feed_direction: feed_direction,
+                                        function: sample_pass,
+                                        spacing: spacing,
+                                        intercept: {
+                                          right: {
+                                            right: {
+                                              f64: 0x000000000000f03f,
+                                            },
+                                            function: subtract,
+                                            left: {
+                                              right: {
+                                                right: {
+                                                  f64: 0x000000000000f03f,
+                                                },
+                                                function: sum,
+                                                left: rows,
+                                              },
+                                              function: divide,
+                                              left: {
+                                                right: state,
+                                                function: multiply,
+                                                left: {
+                                                  f64: 0x0000000000000040,
+                                                },
+                                              },
+                                            },
+                                          },
+                                          function: multiply,
+                                          left: row_direction,
+                                        },
+                                        tool_axis: tool_axis,
+                                      },
+                                      environment: {
+                                        state: {
+                                          unquote: state,
+                                        },
+                                        feed_direction: {
+                                          unquote: feed_direction,
+                                        },
+                                        row_direction: {
+                                          unquote: row_direction,
+                                        },
+                                        spacing: {
+                                          unquote: spacing,
+                                        },
+                                        rows: {
+                                          unquote: rows,
+                                        },
+                                        tool_axis: {
+                                          unquote: tool_axis,
+                                        },
+                                      },
+                                    },
                                   },
                                 },
                               },
                             },
-                            function: multiply,
-                            left: row_direction,
                           },
-                          tool_axis: tool_axis,
-                        },
-                        {
-                          right: {
-                            f64: 0x000000000000f03f,
-                          },
-                          function: sum,
-                          left: state,
                         },
                       ],
-                      function: do,
                     },
                   },
-                ],
+                  function: list_unfold,
+                },
+                pattern: {
+                  list: {
+                    bind: list,
+                  },
+                },
               },
-            },
-            function: iterate,
+            ],
           },
         ],
         function: do,
+      },
+    },
+    diagonals: {
+      name: "diagonal passes",
+      params: [
+        rows,
+        spacing,
+        tool_axis,
+        feed_direction,
+        row_direction,
+      ],
+      body: {
+        function: sequence_paths,
+        program: {
+          feed_direction: feed_direction,
+          row_direction: row_direction,
+          function: diagonal_groups,
+          spacing: spacing,
+          rows: rows,
+          tool_axis: tool_axis,
+        },
       },
     },
     dot: {
@@ -1364,58 +1537,94 @@
                   },
                 },
                 {
-                  initial: {
-                    f64: 0x0000000000000000,
-                  },
-                  step: {
-                    params: [
-                      state,
-                    ],
-                    body: {
+                  function: where,
+                  expression: list,
+                  bindings: [
+                    {
                       subject: {
-                        right: state,
-                        function: less,
-                        left: segments,
-                      },
-                      function: match,
-                      cases: [
-                        {
-                          pattern: {
-                            bool: true,
-                          },
-                          expression: {
-                            absent: done,
-                          },
+                        initial: {
+                          f64: 0x0000000000000000,
                         },
-                        {
-                          pattern: {
-                            bool: false,
-                          },
-                          expression: {
-                            expressions: [
+                        step: {
+                          params: [
+                            state,
+                          ],
+                          body: {
+                            subject: {
+                              right: state,
+                              function: less,
+                              left: segments,
+                            },
+                            function: match,
+                            cases: [
                               {
-                                function: action,
-                                t: {
-                                  right: segments,
-                                  function: divide,
-                                  left: state,
+                                pattern: {
+                                  bool: true,
+                                },
+                                expression: {
+                                  absent: done,
                                 },
                               },
                               {
-                                right: {
-                                  f64: 0x000000000000f03f,
+                                pattern: {
+                                  bool: false,
                                 },
-                                function: sum,
-                                left: state,
+                                expression: {
+                                  function: quote,
+                                  expression: {
+                                    state: {
+                                      unquote: {
+                                        right: {
+                                          f64: 0x000000000000f03f,
+                                        },
+                                        function: sum,
+                                        left: state,
+                                      },
+                                    },
+                                    item: {
+                                      unquote: {
+                                        function: quote,
+                                        expression: {
+                                          closure: {
+                                            params: [],
+                                            body: {
+                                              function: action,
+                                              t: {
+                                                right: segments,
+                                                function: divide,
+                                                left: state,
+                                              },
+                                            },
+                                            environment: {
+                                              segments: {
+                                                unquote: segments,
+                                              },
+                                              state: {
+                                                unquote: state,
+                                              },
+                                              action: {
+                                                unquote: action,
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
                               },
                             ],
-                            function: do,
                           },
                         },
-                      ],
+                        function: list_unfold,
+                      },
+                      pattern: {
+                        list: {
+                          bind: list,
+                        },
+                      },
                     },
-                  },
-                  function: iterate,
+                  ],
                 },
               ],
               function: do,
@@ -2220,29 +2429,37 @@
         program,
       ],
       body: {
-        expressions: [
+        function: quote,
+        expression: [
           {
-            function: rotate_paths,
-            orientation: top,
-            program: program,
+            unquote: {
+              function: rotated_groups,
+              orientation: top,
+              program: program,
+            },
           },
           {
-            function: rotate_paths,
-            orientation: quarter_turn,
-            program: program,
+            unquote: {
+              function: rotated_groups,
+              orientation: quarter_turn,
+              program: program,
+            },
           },
           {
-            function: rotate_paths,
-            orientation: half_turn,
-            program: program,
+            unquote: {
+              function: rotated_groups,
+              orientation: half_turn,
+              program: program,
+            },
           },
           {
-            function: rotate_paths,
-            orientation: three_quarter_turn,
-            program: program,
+            unquote: {
+              function: rotated_groups,
+              orientation: three_quarter_turn,
+              program: program,
+            },
           },
         ],
-        function: do,
       },
     },
     t: {
@@ -2325,6 +2542,117 @@
     },
     length: {
       name: "length",
+    },
+    map_leaves: {
+      name: "map leaves",
+      params: [
+        value,
+        action,
+      ],
+      body: {
+        subject: {
+          list: value,
+          function: list_length,
+        },
+        function: match,
+        cases: [
+          {
+            pattern: {
+              absent: not_list,
+            },
+            expression: {
+              item: value,
+              function: action,
+            },
+          },
+          {
+            pattern: {
+              bind: length,
+            },
+            expression: {
+              list: value,
+              initial: [],
+              step: {
+                params: [
+                  accumulator,
+                  item,
+                ],
+                body: {
+                  function: where,
+                  expression: {
+                    expressions: [
+                      coordinate,
+                      {
+                        right: {
+                          function: quote,
+                          expression: [
+                            {
+                              unquote: coordinate,
+                            },
+                          ],
+                        },
+                        function: concat,
+                        left: accumulator,
+                      },
+                    ],
+                    function: do,
+                  },
+                  bindings: [
+                    {
+                      subject: {
+                        function: map_leaves,
+                        value: item,
+                        action: action,
+                      },
+                      bind: coordinate,
+                    },
+                  ],
+                },
+              },
+              function: list_fold,
+            },
+          },
+        ],
+      },
+    },
+    mapped_groups: {
+      name: "map path groups",
+      params: [
+        mapping,
+        program,
+      ],
+      body: {
+        function: map_leaves,
+        value: program,
+        action: {
+          params: [
+            item,
+          ],
+          body: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {
+                  function: map_points,
+                  mapping: mapping,
+                  expression: {
+                    function: item,
+                  },
+                },
+                environment: {
+                  item: {
+                    unquote: item,
+                  },
+                  mapping: {
+                    unquote: mapping,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
     normal: {
       name: "normal",
@@ -2544,6 +2872,43 @@
           function: subtract,
           left: {
             f64: 0x0000000000000000,
+          },
+        },
+      },
+    },
+    rotated_groups: {
+      name: "rotate path groups",
+      params: [
+        orientation,
+        program,
+      ],
+      body: {
+        function: map_leaves,
+        value: program,
+        action: {
+          params: [
+            item,
+          ],
+          body: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {
+                  function: rotate_paths,
+                  orientation: orientation,
+                  program: item,
+                },
+                environment: {
+                  item: {
+                    unquote: item,
+                  },
+                  orientation: {
+                    unquote: orientation,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -3176,6 +3541,45 @@
       name: "tool diameter",
       f64: 0x000000000000c03f,
     },
+    tooled_groups: {
+      name: "tool for path groups",
+      params: [
+        tool,
+        program,
+      ],
+      body: {
+        function: map_leaves,
+        value: program,
+        action: {
+          params: [
+            item,
+          ],
+          body: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {
+                  function: with_tool,
+                  expression: {
+                    function: item,
+                  },
+                  tool: tool,
+                },
+                environment: {
+                  item: {
+                    unquote: item,
+                  },
+                  tool: {
+                    unquote: tool,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     top: {
       name: "top",
       params: [
@@ -3304,6 +3708,9 @@
       cube,
     ],
     operations_section: [
+      program_tree,
+      op1_groups,
+      op2_groups,
       preview_operations,
       op1,
       op2,
@@ -3321,8 +3728,13 @@
       point_sum,
       scaled_point,
       unit_vector,
+      map_leaves,
+      mapped_groups,
+      rotated_groups,
+      tooled_groups,
     ],
     strategies_section: [
+      diagonal_groups,
       diagonals,
       sample_pass,
       crosshatch,
@@ -3355,157 +3767,184 @@
               height,
             ],
             body: {
-              view: {
-                params: [
-                  value,
-                  width,
-                  height,
-                  parameters,
-                ],
-                body: {
-                  function: where,
+              function: quote,
+              expression: {
+                render: {
+                  fuel: {
+                    f64: 0x00000000804f1241,
+                  },
                   expression: {
-                    playback: {
-                      function: quote,
-                      expression: {
-                        progress: {
-                          unquote: progress,
-                        },
-                        profile_tolerance: {
-                          f64: 0xfca9f1d24d62303f,
-                        },
-                        stock_max: {
-                          y: {
-                            f64: 0x000000000000e03f,
-                          },
-                          x: {
-                            f64: 0x000000000000e03f,
-                          },
-                          z: {
-                            f64: 0x000000000000e03f,
-                          },
-                        },
-                        stock_min: {
-                          y: {
-                            f64: 0x000000000000e0bf,
-                          },
-                          x: {
-                            f64: 0x000000000000e0bf,
-                          },
-                          z: {
-                            f64: 0x000000000000e0bf,
-                          },
-                        },
-                        stock: {
-                          color: {
-                            rgb: 0xb89b6d,
-                          },
-                        },
-                      },
-                    },
-                    min_z: {
-                      f32: 0x9a9959bf,
-                    },
-                    fuel: {
-                      f64: 0x0000000060e34641,
-                    },
-                    line_radius: {
-                      f64: 0x7b14ae47e17a743f,
-                    },
-                    function: preview_paths_refined,
-                    value: {
-                      function: quote,
-                      expression: {
-                        scene: [
-                          {
-                            field: {
-                              unquote: {
+                    function: {
+                      unquote: {
+                        params: [],
+                        body: {
+                          function: where,
+                          expression: {
+                            view: {
+                              params: [
+                                value,
+                                width,
+                                height,
+                                parameters,
+                              ],
+                              body: {
                                 function: where,
                                 expression: {
-                                  function: field,
+                                  playback: {
+                                    function: quote,
+                                    expression: {
+                                      focus: {
+                                        unquote: focus,
+                                      },
+                                      position: {
+                                        unquote: progress,
+                                      },
+                                      profile_tolerance: {
+                                        f64: 0xfca9f1d24d62303f,
+                                      },
+                                      stock_max: {
+                                        y: {
+                                          f64: 0x000000000000e03f,
+                                        },
+                                        x: {
+                                          f64: 0x000000000000e03f,
+                                        },
+                                        z: {
+                                          f64: 0x000000000000e03f,
+                                        },
+                                      },
+                                      stock_min: {
+                                        y: {
+                                          f64: 0x000000000000e0bf,
+                                        },
+                                        x: {
+                                          f64: 0x000000000000e0bf,
+                                        },
+                                        z: {
+                                          f64: 0x000000000000e0bf,
+                                        },
+                                      },
+                                      stock: {
+                                        color: {
+                                          rgb: 0xb89b6d,
+                                        },
+                                      },
+                                    },
+                                  },
+                                  min_z: {
+                                    f32: 0x9a9959bf,
+                                  },
+                                  fuel: {
+                                    f64: 0x0000000060e34641,
+                                  },
+                                  line_radius: {
+                                    f64: 0x7b14ae47e17a743f,
+                                  },
+                                  function: preview_paths_refined,
+                                  value: {
+                                    function: quote,
+                                    expression: {
+                                      scene: [
+                                        {
+                                          field: {
+                                            unquote: {
+                                              function: where,
+                                              expression: {
+                                                function: field,
+                                              },
+                                              bindings: [
+                                                {
+                                                  subject: {
+                                                    function: cube,
+                                                  },
+                                                  pattern: {
+                                                    field: {
+                                                      bind: field,
+                                                    },
+                                                  },
+                                                },
+                                              ],
+                                            },
+                                          },
+                                          color: {
+                                            rgb: 0x5f96b4,
+                                          },
+                                        },
+                                      ],
+                                    },
+                                  },
+                                  max_x: {
+                                    f32: 0x9a99593f,
+                                  },
+                                  max_y: {
+                                    f32: 0x9a99593f,
+                                  },
+                                  height: height,
+                                  color: {
+                                    rgb: 0xf0ae50,
+                                  },
+                                  max_z: {
+                                    f32: 0x9a99593f,
+                                  },
+                                  min_y: {
+                                    f32: 0x9a9959bf,
+                                  },
+                                  program: value,
+                                  width: width,
+                                  min_x: {
+                                    f32: 0x9a9959bf,
+                                  },
                                 },
                                 bindings: [
                                   {
-                                    subject: {
-                                      function: cube,
-                                    },
+                                    subject: parameters,
                                     pattern: {
-                                      field: {
-                                        bind: field,
+                                      position: {
+                                        bind: progress,
+                                      },
+                                      control_range: {
+                                        bind: focus,
                                       },
                                     },
                                   },
                                 ],
                               },
                             },
-                            color: {
-                              rgb: 0x5f96b4,
+                            function: with_controls,
+                            value: value,
+                            controls: {
+                              params: [],
+                              body: {
+                                control_key: {
+                                  function: quote,
+                                  expression: focus,
+                                },
+                                control_items: value,
+                                function: tree_cursor,
+                              },
                             },
+                            height: height,
+                            width: width,
                           },
-                        ],
-                      },
-                    },
-                    max_x: {
-                      f32: 0x9a99593f,
-                    },
-                    max_y: {
-                      f32: 0x9a99593f,
-                    },
-                    height: height,
-                    color: {
-                      rgb: 0xf0ae50,
-                    },
-                    max_z: {
-                      f32: 0x9a99593f,
-                    },
-                    min_y: {
-                      f32: 0x9a9959bf,
-                    },
-                    program: value,
-                    width: width,
-                    min_x: {
-                      f32: 0x9a9959bf,
-                    },
-                  },
-                  bindings: [
-                    {
-                      subject: parameters,
-                      pattern: {
-                        progress: {
-                          bind: progress,
+                          bindings: [
+                            {
+                              subject: {
+                                function: value,
+                              },
+                              pattern: {
+                                bind: value,
+                              },
+                            },
+                          ],
                         },
-                      },
-                    },
-                  ],
-                },
-              },
-              function: with_controls,
-              value: value,
-              controls: {
-                params: [],
-                body: {
-                  function: quote,
-                  expression: {
-                    progress: {
-                      unquote: {
-                        control_initial: {
-                          f64: 0x666666666666d63f,
-                        },
-                        control_key: {
-                          function: quote,
-                          expression: progress,
-                        },
-                        function: slider,
                       },
                     },
                   },
                 },
               },
-              height: height,
-              width: width,
             },
           },
-          value: preview_operations,
+          value: program_tree,
         },
       ],
     },

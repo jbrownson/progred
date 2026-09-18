@@ -15,7 +15,8 @@ pub(super) trait Draw: Sink<Error = InvalidPath> {
 
 #[derive(Clone, PartialEq)]
 pub(super) struct Settings {
-    progress: f64,
+    cursor: Cursor,
+    focus: Option<std::ops::Range<usize>>,
     profile_tolerance: f64,
     stock_min: Point3,
     stock_max: Point3,
@@ -90,7 +91,8 @@ mod tests {
         path.leave_tool();
         for progress in [0.0, 0.25, 1.0] {
             let settings = Settings {
-                progress,
+                cursor: Cursor::Progress(progress),
+                focus: None,
                 profile_tolerance: 0.001,
                 stock_min: [-3.0; 3],
                 stock_max: [3.0; 3],
@@ -112,7 +114,8 @@ mod tests {
 
     fn settings(progress: f64) -> Settings {
         Settings {
-            progress,
+            cursor: Cursor::Progress(progress),
+            focus: None,
             profile_tolerance: 0.001,
             stock_min: [-1.0, -1.0, -0.5],
             stock_max: [1.0, 1.0, 0.5],
@@ -184,12 +187,67 @@ mod tests {
             ));
         }
     }
+
+    #[test]
+    fn focused_stock_contains_earlier_cuts_but_not_later_ones() {
+        use fidget_engine::{shape::EzShape, vm::VmShape};
+        let mut program = Recording::default();
+        for x in [-0.6, 0.0, 0.6] {
+            let mut part = Recording::default();
+            with_tool(&mut part, &Tool::square(0.2, 0.4).unwrap(), |part| {
+                part.start_at([x, -0.3, 0.0], Axis::Z).unwrap();
+                part.line_to([x, 0.3, 0.0]).unwrap();
+            });
+            program.append_part(part);
+        }
+        for (progress, expected) in [(0.0, [true, false, false]), (1.0, [true, true, false])] {
+            let mut playback = settings(progress);
+            playback.focus = Some(1..2);
+            let object = playback.remaining_stock(&program).unwrap().unwrap();
+            let shape = VmShape::from(object.tree);
+            let mut evaluator = VmShape::new_float_slice_eval();
+            let samples = evaluator
+                .eval(
+                    &shape.ez_float_slice_tape(),
+                    &[-0.6, 0.0, 0.6],
+                    &[0.0; 3],
+                    &[0.2; 3],
+                )
+                .unwrap();
+            assert_eq!(
+                samples.iter().map(|v| *v > 0.0).collect::<Vec<_>>(),
+                expected
+            );
+            let mut drawing = Drawing::default();
+            playback
+                .draw(&program, &mut drawing, 0.01, [200; 3])
+                .unwrap();
+            assert_eq!(drawing.tool.unwrap().1.tip[0], 0.0);
+            assert!(
+                drawing
+                    .path
+                    .segments()
+                    .all(|(a, b, _)| a[0] == 0.0 && b[0] == 0.0)
+            );
+        }
+    }
 }
 
 impl Settings {
     pub(super) fn read(value: &Value) -> Option<Self> {
         let r = value.as_record()?;
-        let progress = f64::read(r.get(&PROGRESS)?)?;
+        let cursor = match r.get(&crate::libraries::controls::vocabulary::POSITION) {
+            Some(value) => {
+                Cursor::Position(f64::read(value).filter(|p| p.is_finite() && *p >= 0.0)?)
+            }
+            None => {
+                Cursor::Progress(f64::read(r.get(&PROGRESS)?).filter(|p| (0.0..=1.0).contains(p))?)
+            }
+        };
+        let focus = match r.get(&FOCUS) {
+            Some(value) => Some(crate::libraries::list::index_range(value)?),
+            None => None,
+        };
         let profile_tolerance = f64::read(r.get(&PROFILE_TOLERANCE)?)?;
         let stock_min = super::read_point(r.get(&STOCK_MIN)?)?;
         let stock_max = super::read_point(r.get(&STOCK_MAX)?)?;
@@ -202,10 +260,8 @@ impl Settings {
             }
             None => None,
         };
-        if !progress.is_finite()
-            || !profile_tolerance.is_finite()
+        if !profile_tolerance.is_finite()
             || profile_tolerance <= 0.0
-            || !(0.0..=1.0).contains(&progress)
             || !(0..3).all(|i| stock_min[i] < stock_max[i])
         {
             return None;
@@ -213,7 +269,8 @@ impl Settings {
         coordinate(stock_min).ok()?;
         coordinate(stock_max).ok()?;
         Some(Self {
-            progress,
+            cursor,
+            focus,
             profile_tolerance,
             stock_min,
             stock_max,
@@ -230,13 +287,17 @@ impl Settings {
         };
         let mut stock =
             Stock::block(self.stock_min, self.stock_max).ok_or(InvalidPath::CoordinateRange)?;
-        path.playback(self.progress, |a, b, axis, tool, completed| {
-            let tool = tool.ok_or(InvalidPath::MissingTool)?;
-            if completed {
-                stock.cut(tool, a, b, axis, self.profile_tolerance)?;
-            }
-            Ok(())
-        })?;
+        path.playback_cursor(
+            self.cursor,
+            self.focus.clone(),
+            |a, b, axis, tool, completed| {
+                let tool = tool.ok_or(InvalidPath::MissingTool)?;
+                if completed {
+                    stock.cut(tool, a, b, axis, self.profile_tolerance)?;
+                }
+                Ok(())
+            },
+        )?;
         Ok(Some(fidget::SceneObject {
             tree: stock.into_field(),
             color,
@@ -251,8 +312,9 @@ impl Settings {
         path_color: [u8; 3],
     ) -> Result<(), InvalidPath> {
         let mut end = None;
-        let cursor = path.playback(
-            self.progress,
+        let cursor = path.playback_cursor(
+            self.cursor,
+            self.focus.clone(),
             |a, b, axis, _, completed| -> Result<(), InvalidPath> {
                 if !completed {
                     tubes.style(line_radius, path_color)?;

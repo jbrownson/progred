@@ -254,8 +254,36 @@ fn fidget_example() -> Document {
     )))
 }
 
+fn cam_profile_source() -> String {
+    match std::env::var_os("CAM_PROFILE_SOURCE") {
+        Some(path) => std::fs::read_to_string(path).expect("read CAM profile fixture"),
+        None => Example::Toolpaths.source().to_owned(),
+    }
+}
+
+#[test]
+#[ignore = "CAM source pane, excluding the 3D viewport"]
+fn cam_source_profile_loop() {
+    let editor = crate::test_editor(fixture(&cam_profile_source()));
+    let doc = &editor.model.doc;
+    let (view, mut context) = ProfileView {
+        size: kurbo::Size::new(600.0, 900.0),
+        scale: 2.0,
+        root: None,
+    }
+    .prepare(doc);
+    profile(
+        "CAM source, 600x900 @2",
+        |_| {
+            context
+                .frame(view.frame(doc, &editor.model.workspace.document.annotations))
+                .0
+        },
+        |bench| assert!(!bench.list.0.is_empty()),
+    );
+}
+
 fn orbit(path: &[Step], frame: usize) -> Annotations {
-    use crate::libraries::{f32, fidget::vocabulary as f};
     // The camera belongs to the viewport's computed result, not its declaration.
     let path: Vec<_> = path
         .iter()
@@ -264,9 +292,14 @@ fn orbit(path: &[Step], frame: usize) -> Annotations {
             crate::libraries::presentation::vocabulary::RESULT,
         )])
         .collect();
+    camera_at(&path, frame)
+}
+
+fn camera_at(path: &[Step], frame: usize) -> Annotations {
+    use crate::libraries::{f32, fidget::vocabulary as f};
     let mut annotations = Annotations::default();
     annotations.set_field(
-        &path,
+        path,
         f::CAMERA,
         Some(Value::record([
             (f::YAW, f32::value(30.0 + (frame % 180) as f32 * 2.0)),
@@ -300,7 +333,7 @@ fn fidget_orbit_profile(example: Example) {
     // refinement sequence now requested by the interactive CAM example.
     let source = if example == Example::Toolpaths {
         use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
-        example.source().replace(
+        cam_profile_source().replace(
             &PREVIEW_REFINED.simple().to_string(),
             &PREVIEW_MESH.simple().to_string(),
         )
@@ -315,19 +348,53 @@ fn fidget_orbit_profile(example: Example) {
         root: Some(path.clone()),
     };
     let (view, mut context) = view.prepare(&doc);
+    let camera_path = Rc::new(std::cell::RefCell::new(None));
+    let observed = camera_path.clone();
+    context.stack.projection.partial = crate::display::compose_partials([
+        crate::display::partial(move |input| {
+            use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
+            let fields = input.value?.as_record()?;
+            if observed.borrow().is_none()
+                && [f::PREVIEW_3D, f::PREVIEW_MESH, t::PREVIEW_MESH]
+                    .iter()
+                    .any(|key| fields.contains_key(key))
+            {
+                let Hovered::Tree(crate::hover::Hover::Value(path)) = input.targets.current().hover
+                else {
+                    panic!("preview must have an occurrence");
+                };
+                *observed.borrow_mut() = Some(path);
+            }
+            None
+        }),
+        context.stack.projection.partial.clone(),
+    ]);
+    let first_image = std::cell::RefCell::new(None::<ImageData>);
+    let changed = std::cell::Cell::new(false);
     profile(
         &format!("{example:?} orbit, 400x600 @2 viewport including controls, automatic backend"),
         |index| {
-            context
-                .frame(view.frame(&doc, &orbit(view.root.as_deref().unwrap(), index)))
-                .0
+            let annotations = camera_path
+                .borrow()
+                .as_ref()
+                .map(|path| camera_at(path, index))
+                .unwrap_or_default();
+            context.frame(view.frame(&doc, &annotations)).0
         },
         |bench| {
             let image = image(bench);
             assert_eq!(image.width, 800);
             assert!(image.height > 0 && image.height <= (view.size.height * view.scale) as u32);
+            let mut first = first_image.borrow_mut();
+            if let Some(first) = first.as_ref() {
+                changed.set(changed.get() || first.data.as_ref() != image.data.as_ref());
+            } else {
+                *first = Some(image.clone());
+            }
         },
     );
+    assert!(camera_path.borrow().is_some());
+    assert!(changed.get(), "orbit must change the rendered image");
 }
 
 #[test]
@@ -364,6 +431,39 @@ fn fidget_cube_profile_loop() {
 #[ignore]
 fn fidget_toolpaths_profile_loop() {
     fidget_orbit_profile(Example::Toolpaths);
+}
+
+#[test]
+#[ignore = "CAM declaration and control pipeline, excluding geometry and rasterization"]
+fn cam_controls_profile_loop() {
+    let doc = fixture(&cam_profile_source());
+    let view = ProfileView {
+        size: kurbo::Size::new(400.0, 600.0),
+        scale: 2.0,
+        root: Some(first_viewport(&doc)),
+    };
+    let (view, mut context) = view.prepare(&doc);
+    // Keep viewport, memo, controls, and view-call evaluation intact. Only the
+    // final 3D projection is replaced, avoiding the headless CPU raster fallback.
+    let previews = Rc::new(std::cell::Cell::new(0));
+    let rendered = previews.clone();
+    context.stack.projection.partial = crate::display::compose_partials([
+        crate::display::partial(move |input| {
+            input
+                .value?
+                .as_record()?
+                .get(&crate::libraries::toolpath::vocabulary::PREVIEW_REFINED)?;
+            rendered.set(rendered.get() + 1);
+            Some(crate::display::dim("preview omitted"))
+        }),
+        context.stack.projection.partial.clone(),
+    ]);
+    profile(
+        "CAM viewport/control pipeline, 400x600 @2, no 3D work",
+        |_| context.frame(view.frame(&doc, &Annotations::default())).0,
+        |bench| assert!(!bench.list.0.is_empty()),
+    );
+    assert_eq!(previews.get(), iterations() + 5);
 }
 
 #[test]

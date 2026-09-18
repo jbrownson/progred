@@ -9,8 +9,23 @@ pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b1
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
-#[cfg(test)]
 use gid::Value;
+
+/// Half-open index ranges are ordinary two-element lists of f64 integers.
+pub(crate) fn index_range(value: &Value) -> Option<std::ops::Range<usize>> {
+    let list = value.as_list()?;
+    if list.len() != 2 {
+        return None;
+    }
+    let mut values = list.values();
+    let mut next = || {
+        let n = f64::read(values.next()?)?;
+        (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n < usize::MAX as f64)
+            .then_some(n as usize)
+    };
+    let range = next()?..next()?;
+    (range.start <= range.end).then_some(range)
+}
 
 pub mod vocabulary {
     use gid::CellId;

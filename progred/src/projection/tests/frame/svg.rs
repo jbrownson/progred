@@ -19,6 +19,28 @@ fn result_path(path: &[Step]) -> Path {
         .collect()
 }
 
+// The CAM viewport returns a render declaration, which produces with-controls.
+fn cam_controls_path(path: &[Step]) -> Path {
+    result_path(&result_path(path))
+}
+
+fn cam_position(progress: f64) -> Value {
+    use crate::libraries::controls::tree_range;
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000);
+    assert!(tree.completed && !crate::libraries::absent::is_absent(&tree.result));
+    let selection = tree_range::Selection::new(&tree.result, None);
+    Value::record([(
+        names["focus"],
+        tree_range::cursor_state(&selection, progress * selection.leaves.end as f64),
+    )])
+}
+
 fn image_png(image: &ImageData) -> Vec<u8> {
     let mut rgba = image.data.as_ref().to_vec();
     assert_eq!(
@@ -323,6 +345,48 @@ fn editor_toolpath_mesh_svg_capture() {
 }
 
 #[test]
+#[ignore = "captures focused CAM groups without opening the editor"]
+fn editor_toolpath_focus_svg_captures() {
+    use crate::libraries::controls::{tree_range, vocabulary::STATE};
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000).result;
+    for (ranges, file) in [
+        (vec![(4, 0..1), (3, 0..1), (2, 0..1)], "cam_focus_top.svg"),
+        (vec![(4, 1..2)], "cam_focus_op2.svg"),
+        (
+            vec![(4, 0..1), (3, 0..1), (2, 0..1), (1, 0..1), (0, 10..11)],
+            "cam_focus_line.svg",
+        ),
+    ] {
+        let selection = ranges.into_iter().fold(
+            tree_range::Selection::new(&tree, None),
+            |selection, (level, range)| selection.select(level, range),
+        );
+        let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
+        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
+            .path
+            .clone();
+        editor.model.workspace.left.panes[0]
+            .view
+            .annotations
+            .set_field(
+                &cam_controls_path(&path),
+                STATE,
+                Some(Value::record([(
+                    names["focus"],
+                    tree_range::cursor_state(&selection, selection.leaves.start as f64),
+                )])),
+            );
+        render_editor(editor, kurbo::Size::new(1200.0, 850.0), file);
+    }
+}
+
+#[test]
 #[ignore = "captures mesh CAM's first pending frame and retained stock during an async update"]
 fn editor_toolpath_async_svg_captures() {
     capture_cam_async(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
@@ -482,18 +546,7 @@ fn capture_cam_async(mode: CellId) {
         .path
         .clone();
     let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
-    let mut controls = annotations
-        .at(&result_path(&path))
-        .and_then(Value::as_record)
-        .and_then(|fields| fields.get(&STATE))
-        .and_then(Value::as_record)
-        .cloned()
-        .unwrap_or_default();
-    controls.insert(
-        crate::libraries::toolpath::vocabulary::PROGRESS,
-        f64::value(0.7),
-    );
-    annotations.set_field(&result_path(&path), STATE, Some(Value::Record(controls)));
+    annotations.set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_async_updating.svg");
     assert_eq!(queue.lock().unwrap().len(), 1);
     complete(&mut runner);
@@ -505,7 +558,7 @@ fn capture_cam_async(mode: CellId) {
 #[ignore = "writes remote-review captures at three playback positions"]
 fn editor_toolpath_playback_svg_captures() {
     use crate::libraries::controls::vocabulary::STATE;
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     for (progress, file) in [
         (0.0, "playback_start.svg"),
         (0.35, "playback_middle.svg"),
@@ -521,9 +574,9 @@ fn editor_toolpath_playback_svg_captures() {
             .path
             .clone();
         pane.view.annotations.set_field(
-            &result_path(&path),
+            &cam_controls_path(&path),
             STATE,
-            Some(Value::record([(names["progress"], f64::value(progress))])),
+            Some(cam_position(progress)),
         );
         render_editor(editor, kurbo::Size::new(1500.0, 1050.0), file);
     }
@@ -658,7 +711,7 @@ fn svg_bench_renders_numeric_operation_labels() {
 
 #[test]
 fn svg_bench_renders_toolpath_source_and_preview() {
-    use crate::libraries::{controls, presentation};
+    use crate::libraries::presentation;
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     render(&doc, None, 760.0, "toolpaths_source.svg");
     let libraries = core_libraries();
@@ -666,7 +719,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let (value, viewport) =
         presentation::viewport(sources.resolve_path(&pane.path).unwrap()).unwrap();
-    assert_eq!(value.as_cell(), Some(names["preview_operations"]));
+    assert_eq!(value.as_cell(), Some(names["program_tree"]));
     let preview = grap::apply(
         viewport,
         [
@@ -683,7 +736,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
             .result
             .as_record()
             .unwrap()
-            .contains_key(&controls::vocabulary::WITH_CONTROLS)
+            .contains_key(&presentation::vocabulary::RENDER)
     );
     let doc = Document {
         root: Some(preview.result),

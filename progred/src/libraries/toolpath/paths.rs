@@ -46,6 +46,13 @@ pub struct Pose {
     pub axis: Axis,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cursor {
+    Progress(f64),
+    /// Leaf occurrence plus distance fraction within that leaf.
+    Position(f64),
+}
+
 pub trait Sink {
     type Error;
 
@@ -137,6 +144,7 @@ pub enum InvalidPath {
     MissingStart,
     CoordinateRange,
     MissingTool,
+    InvalidRange,
 }
 
 #[derive(Debug, PartialEq)]
@@ -148,11 +156,38 @@ pub enum Entry {
 #[derive(Default, Debug, PartialEq)]
 pub struct Recording {
     pub entries: Vec<Entry>,
+    /// Segment boundaries of the program leaves, when recording a grouped program.
+    /// Kept by the playback consumer; ordinary streaming sinks need no hierarchy.
+    parts: Vec<std::ops::Range<usize>>,
     scopes: Vec<(Tool, Vec<Entry>)>,
     started: bool,
 }
 
 impl Recording {
+    pub(crate) fn append_part(&mut self, part: Recording) {
+        let start = self.parts.last().map_or(0, |range| range.end);
+        self.parts.push(start..start + part.segments().count());
+        self.entries.extend(part.entries);
+        self.end_path();
+    }
+
+    fn segment_range(
+        &self,
+        parts: Option<std::ops::Range<usize>>,
+    ) -> Result<std::ops::Range<usize>, InvalidPath> {
+        match parts {
+            None => Ok(0..self.segments().count()),
+            Some(range) if self.parts.is_empty() && range.start <= range.end && range.end <= 1 => {
+                let count = self.segments().count();
+                Ok(range.start * count..range.end * count)
+            }
+            Some(range) if range.start <= range.end && range.end <= self.parts.len() => {
+                let boundary = |i: usize| if i == 0 { 0 } else { self.parts[i - 1].end };
+                Ok(boundary(range.start)..boundary(range.end))
+            }
+            _ => Err(InvalidPath::InvalidRange),
+        }
+    }
     /// Visit moves with their enclosing tool, without allocating a flat copy.
     pub fn moves(&self) -> impl Iterator<Item = (Command, Option<&Tool>)> + '_ {
         let mut stack = vec![(self.entries.iter(), None)];
@@ -207,14 +242,75 @@ impl Recording {
     pub fn playback<E: From<InvalidPath>>(
         &self,
         progress: f64,
+        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
+    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
+        self.playback_parts(progress, None, emit)
+    }
+
+    /// Earlier parts are complete, selected parts follow the cursor, and later
+    /// parts aren't visited. Thus focusing doesn't reset the workpiece history.
+    pub fn playback_parts<E: From<InvalidPath>>(
+        &self,
+        progress: f64,
+        parts: Option<std::ops::Range<usize>>,
+        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
+    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
+        self.playback_cursor(Cursor::Progress(progress), parts, emit)
+    }
+
+    pub fn playback_cursor<E: From<InvalidPath>>(
+        &self,
+        cursor: Cursor,
+        parts: Option<std::ops::Range<usize>>,
         mut emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
     ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
+        let visible = self.segment_range(parts.clone())?;
+        let (progress, range) = match cursor {
+            Cursor::Progress(progress) => (progress, visible.clone()),
+            Cursor::Position(position) => {
+                let parts = parts.unwrap_or(0..self.parts.len().max(1));
+                if !position.is_finite() {
+                    return Err(InvalidPath::NonFinitePoint.into());
+                }
+                if parts.is_empty() {
+                    (0.0, visible.clone())
+                } else {
+                    let position = if (parts.start as f64..=parts.end as f64).contains(&position) {
+                        position
+                    } else {
+                        parts.start as f64
+                    };
+                    let index = (position.floor() as usize).min(parts.end - 1);
+                    (
+                        position - index as f64,
+                        self.segment_range(Some(index..index + 1))?,
+                    )
+                }
+            }
+        };
         if !progress.is_finite() {
             return Err(InvalidPath::NonFinitePoint.into());
         }
-        let mut remaining = progress.clamp(0.0, 1.0) * self.length()?;
+        let length: f64 = self
+            .segments()
+            .skip(range.start)
+            .take(range.len())
+            .map(|(a, b, _)| distance(a, b))
+            .sum();
+        if !length.is_finite() {
+            return Err(InvalidPath::CoordinateRange.into());
+        }
+        let mut remaining = progress.clamp(0.0, 1.0) * length;
         let mut position = None;
-        for (a, b, axis, tool) in self.tool_segments() {
+        for (i, (a, b, axis, tool)) in self.tool_segments().take(visible.end).enumerate() {
+            if i < range.start {
+                emit(a, b, axis, tool, true)?;
+                continue;
+            }
+            if i >= range.end {
+                emit(a, b, axis, tool, false)?;
+                continue;
+            }
             position.get_or_insert((Pose { tip: a, axis }, tool));
             let length = distance(a, b);
             if progress >= 1.0 || (remaining >= length && remaining > 0.0) {
@@ -259,6 +355,85 @@ fn distance(a: Point3, b: Point3) -> f64 {
 #[cfg(test)]
 mod playback_tests {
     use super::*;
+
+    #[test]
+    fn absolute_leaf_position_survives_refocusing_and_handles_disconnected_boundaries() {
+        let mut program = Recording::default();
+        for (x, length) in [(0.0, 2.0), (10.0, 4.0), (20.0, 8.0)] {
+            let mut part = Recording::default();
+            part.start_at([x, 0.0, 0.0], Axis::Z).unwrap();
+            part.line_to([x + length, 0.0, 0.0]).unwrap();
+            program.append_part(part);
+        }
+        for (position, focus, expected, completed, upcoming) in [
+            (1.25, 0..3, 11.0, 3.0, 11.0),
+            (1.25, 1..2, 11.0, 3.0, 3.0),
+            (1.25, 1..3, 11.0, 3.0, 11.0),
+            (1.25, 2..3, 20.0, 6.0, 8.0),
+            (1.0, 0..3, 10.0, 2.0, 12.0),
+            (2.0, 0..3, 20.0, 6.0, 8.0),
+            (2.0, 1..2, 14.0, 6.0, 0.0),
+            (3.0, 0..3, 28.0, 14.0, 0.0),
+        ] {
+            let mut lengths = [0.0; 2];
+            let pose = program
+                .playback_cursor::<InvalidPath>(
+                    Cursor::Position(position),
+                    Some(focus),
+                    |a, b, _, _, done| {
+                        lengths[usize::from(!done)] += distance(a, b);
+                        Ok(())
+                    },
+                )
+                .unwrap()
+                .unwrap()
+                .0;
+            assert_eq!(pose.tip[0], expected);
+            assert_eq!(lengths, [completed, upcoming]);
+        }
+    }
+
+    #[test]
+    fn focusing_uses_selected_distance_and_keeps_the_completed_prefix() {
+        let mut program = Recording::default();
+        for (x, length) in [(0.0, 2.0), (10.0, 4.0), (20.0, 8.0)] {
+            let mut part = Recording::default();
+            part.start_at([x, 0.0, 0.0], Axis::Z).unwrap();
+            part.line_to([x + length, 0.0, 0.0]).unwrap();
+            program.append_part(part);
+        }
+        for (progress, x) in [(0.0, 10.0), (0.5, 12.0), (1.0, 14.0)] {
+            let mut complete = 0.0;
+            let mut upcoming = 0.0;
+            let pose = program
+                .playback_parts::<InvalidPath>(progress, Some(1..2), |a, b, _, _, done| {
+                    assert!(b[0] <= 14.0, "later groups are not visited");
+                    if done {
+                        complete += distance(a, b);
+                    } else {
+                        upcoming += distance(a, b);
+                    }
+                    Ok(())
+                })
+                .unwrap()
+                .unwrap()
+                .0;
+            assert_eq!(pose.tip[0], x);
+            assert_eq!(complete, 2.0 + progress * 4.0);
+            assert_eq!(upcoming, (1.0 - progress) * 4.0);
+        }
+        assert!(
+            program
+                .playback_parts::<InvalidPath>(0.0, Some(3..4), |_, _, _, _, _| Ok(()))
+                .is_err()
+        );
+        assert_eq!(
+            program
+                .playback_parts::<InvalidPath>(0.0, Some(1..1), |_, _, _, _, _| Ok(()))
+                .unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn seeking_is_by_distance_and_never_draws_across_path_breaks() {
