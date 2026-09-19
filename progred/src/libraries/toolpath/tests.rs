@@ -60,6 +60,12 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
     let cursor = Value::record([
         (ui::POSITION, f64::value(0.7)),
         (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
+        (
+            ui::ITEMS,
+            crate::libraries::tree::build(&names["program_tree"].into(), &sources, 300_000)
+                .unwrap()
+                .items,
+        ),
     ]);
     let previews = [None, Some(STOCK.into())].map(|mode| {
         let emit =
@@ -95,7 +101,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                     );
                     Ok(mode.clone().unwrap_or(initial))
                 } else {
-                    assert_eq!(function, ui::TREE_CURSOR);
+                    assert_eq!(function, ui::TREE_PROGRAM_CURSOR);
                     assert_eq!(key, names["focus"].into());
                     Ok(cursor.clone())
                 }
@@ -103,8 +109,8 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         let parameters = ::grap::evaluate_scoped(
             &::grap::call(fields.get(&ui::CONTROLS).unwrap().clone(), []),
             &sources,
-            &::grap::ForeignOverlay::new(&[ui::RADIO, ui::TREE_CURSOR], &emit),
-            10_000,
+            &::grap::ForeignOverlay::new(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
+            300_000,
         );
         assert!(
             parameters.completed && !absent::is_absent(&parameters.result),
@@ -209,6 +215,16 @@ fn evaluate(expression: &Value, fuel: usize) -> (Evaluation, Recording) {
     (evaluation, recording)
 }
 
+fn collect_groups(expression: Value) -> Value {
+    call(
+        crate::libraries::tree::vocabulary::COLLECT,
+        [(
+            crate::libraries::tree::vocabulary::PROGRAM,
+            ::grap::lambda([], expression),
+        )],
+    )
+}
+
 fn apply_groups(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
@@ -216,7 +232,12 @@ fn apply_groups(
     scope: &::grap::ForeignOverlay<'_>,
     fuel: usize,
 ) -> Evaluation {
-    let generated = ::grap::apply_scoped(function, arguments, host, scope, fuel);
+    let generated = ::grap::evaluate_scoped(
+        &collect_groups(::grap::call(function.clone(), arguments)),
+        host,
+        scope,
+        fuel,
+    );
     if !generated.completed || absent::is_absent(&generated.result) {
         return generated;
     }

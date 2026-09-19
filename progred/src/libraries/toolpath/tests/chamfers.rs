@@ -317,7 +317,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
         ::grap::evaluate_scoped(
-            &call(SEQUENCE, [(PROGRAM, expression.clone())]),
+            &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
             &sources,
             scope,
             10_000,
@@ -336,12 +336,21 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
             ::grap::lambda(
                 [],
                 call(
-                    names["line"],
-                    [
-                        (names["start"], point_value([1.0, 0.0, 0.0])),
-                        (names["end"], point_value([2.0, 0.0, 0.0])),
-                        (TOOL_AXIS, point_value([0.0, 1.0, 0.0])),
-                    ],
+                    crate::libraries::tree::vocabulary::LEAF,
+                    [(
+                        crate::libraries::presentation::vocabulary::VALUE,
+                        ::grap::lambda(
+                            [],
+                            call(
+                                names["line"],
+                                [
+                                    (names["start"], point_value([1.0, 0.0, 0.0])),
+                                    (names["end"], point_value([2.0, 0.0, 0.0])),
+                                    (TOOL_AXIS, point_value([0.0, 1.0, 0.0])),
+                                ],
+                            ),
+                        ),
+                    )],
                 ),
             ),
         )],
@@ -349,7 +358,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
         ::grap::evaluate_scoped(
-            &call(SEQUENCE, [(PROGRAM, expression.clone())]),
+            &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
             &sources,
             scope,
             10_000,
@@ -660,7 +669,10 @@ fn changing_strategy_stepover_and_diameter_invalidates_the_observed_program() {
         &computations,
         computations.runtime.input(::grap::lambda(
             [],
-            call(SEQUENCE, [(PROGRAM, call(names["op1_chamfers"], []))]),
+            call(
+                SEQUENCE,
+                [(PROGRAM, collect_groups(call(names["op1_chamfers"], [])))],
+            ),
         )),
         computations.runtime.input(100_000),
     );

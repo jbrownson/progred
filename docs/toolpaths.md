@@ -16,16 +16,17 @@ its own paths. An absent stops the sequence and fuel is shared across leaves.
 The example supplies two top-level groups (Op 1 and Op 2), tool-use groups,
 faces, crossing directions, and individual knurl lines. The chamfer branches
 contain rings, individual edges, and individual crosswise strokes (or one contour
-cut). Grouped mapping, rotation, and tool-scoping helpers are ordinary Grap
-functions over lists of deferred programs; `sequence paths` interprets them.
-The generated leaves explicitly capture only their required inputs, rather than
-retaining recursive list-mapping accumulators in their closure environments.
-Its viewport evaluates that tree and gives the same value to both the generic
-`tree cursor` control and the preview. The controls don't discover structure in
-already-generated geometry or impose names on it.
-The surrounding `render` declaration uses observed Grap evaluation, so orbiting
-or moving the sliders does not reconstruct the program tree. Definition edits
-invalidate it normally; widget emission and handlers are not memoized.
+cut). These are [final-encoded tree builders](trees.md): authored group lists run
+their child builders, and loops emit deferred leaf programs. Grouped mapping,
+rotation, and tool-scoping helpers wrap leaf emission instead of recursively
+rebuilding lists. The leaves retain their existing explicit small captures.
+The `tree program cursor` control retains the emitted hierarchy once, builds the
+cursor from it, and returns ordinary items for the preview. Each native node's
+source connects group notches to grouping code and fine notches to leaf producers.
+The controls don't discover structure in already-generated geometry or impose
+names on it. Dependency-tracked collection excludes viewport dimensions, so
+orbiting, resizing, or moving the sliders does not reconstruct the program tree.
+Definition edits invalidate it normally; widgets and handlers are not memoized.
 
 Playback's optional `focus` is a half-open leaf-index range `[start, end]`.
 The existing `progress` fraction traverses cutting distance within that range.

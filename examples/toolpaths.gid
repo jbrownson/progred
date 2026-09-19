@@ -2,7 +2,6 @@
   "binders": {
     "abs": 9f71b219018a191fab7b726732645ab1,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
-    "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
     "action": d61047fd27a4906d8cd0034d36ad55ad,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
@@ -33,10 +32,11 @@
     "chamfer_ring": 34487212300c3d464978ba26599fb47f,
     "chamfer_stepover": fb027d8b1e4955251d78caa3695efdd8,
     "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
+    "children": e10b73d5482f96ca7d3852c0f16b49ea,
     "closure": db39600f3ed07398c77ac120deb108a8,
+    "collect_tree": f070b08cda17ca0f5ec97de2ab5b2fab,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
-    "concat": 6f2613d22b4690ed5bac39776e51b775,
     "condition": 91c786935eb5794b005582b8e7941bc2,
     "contact_height": 7f0ab3541e671a55a1b4593a2e54484c,
     "contour_chamfer": e3bb9b579cb298a10aa72f7fda3bb0be,
@@ -114,13 +114,9 @@
     "line": 01cfce0acb730dfb2dcf3e57dc12889e,
     "line_radius": 4de64314b3008dcdf01ac387dc68e63f,
     "line_to": e88873219d230571430941334a51600f,
-    "list": 216008ae157998d3838112b96e584d11,
-    "list_fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
-    "list_length": 6882dc6ab06d393217abe6f888585499,
-    "list_unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "map_axes": 5d5bf7f3beb0c1cba07226bab9683852,
-    "map_leaves": 29c998364a725cb9eea3dc18f0a5b2d2,
     "map_points": 923fb213d0e56383539b43b1fc807458,
+    "map_tree": 7dc1fd86e63e18ce835a5b1768f17abc,
     "mapped_groups": 5767e045b4e37661336fdc7db5c3fe02,
     "mapping": a33c6e235d5d94885fcb1afff59e94e5,
     "match": b3f6a62e4926889bcfcd338025f4a6f9,
@@ -146,7 +142,6 @@
     "non_cutting": 32ec688b8b412514e5a4ee4789b0e5d8,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "normal_length": 421de040629c87a3f37d794d999ff3ed,
-    "not_list": eceebe863edf24d51083bc40fa452635,
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
@@ -172,13 +167,13 @@
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
     "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
     "position": 199e09fd8b4d41632a90d103d278d6ea,
-    "prepare": 8b782978097343efd90f6fb61f649419,
     "preview_mode": 49b9fdc633d846b9deb63e8ebecbb05c,
     "preview_operations": 8a7bf0057b3b982d2d16b6e4a1ec34ee,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "profile_radius": 0c43e0deeecda93da913261dc2786878,
     "profile_tolerance": 4c3b5d5884e040ad1c226f37935ea68b,
     "program": f23c804bf137581b76605a51366d43b7,
+    "program_items": d7fd034d03b39774532f54295eaa37ad,
     "program_tree": 6d28b59f6d375a10d0df7f67fbb99e88,
     "progress": 13feb828ce93822d8d72a3ef3765e2f0,
     "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
@@ -236,7 +231,11 @@
     "tools_section": 22b7a0fb24854c18c78c2d6dcfced495,
     "top": f64ba93e56b40a2df81a65508057dbf5,
     "translated_points": 63ef0b4b59f4168765663a45938abf3e,
-    "tree_cursor": 21781a5dfb25048f053375147e251b80,
+    "tree_group": c2a9d12a23c6bbb553682d85869481b0,
+    "tree_leaf": a2ee2a23ede9372c4bc71c21b6b83838,
+    "tree_mapping": 4ad3bf56ebbd64849bf8d218f46d7591,
+    "tree_program": e4ee09094ff44e8dd415a05645f99e97,
+    "tree_program_cursor": 0b8e1e3410cfd16c0b36e18be2fcb8a3,
     "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
@@ -274,35 +273,36 @@
       body: {
         function: tooled_groups,
         program: {
-          function: quote,
-          expression: [
-            {
-              unquote: {
+          params: [],
+          body: {
+            function: tree_group,
+            children: [
+              {
                 function: cube_chamfers,
                 orientation: top,
               },
-            },
-            {
-              unquote: {
+              {
                 function: cube_chamfers,
                 orientation: right_face,
               },
-            },
-          ],
+            ],
+          },
         },
         tool: square_tool,
       },
     },
     op1_groups: {
       name: "Op 1 · paths",
-      grap_value: {
-        function: quote,
-        expression: [
+      params: [],
+      body: {
+        function: tree_group,
+        children: [
           [
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -318,13 +318,14 @@
                   },
                   orientation: top,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -340,13 +341,14 @@
                   },
                   orientation: right_face,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -362,13 +364,14 @@
                   },
                   orientation: back_face,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -384,13 +387,14 @@
                   },
                   orientation: left_face,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -406,14 +410,12 @@
                   },
                   orientation: front_face,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
           ],
           {
-            unquote: {
-              function: op1_chamfers,
-            },
+            function: op1_chamfers,
           },
         ],
       },
@@ -423,7 +425,10 @@
       params: [],
       body: {
         function: sequence_paths,
-        program: op1_groups,
+        program: {
+          function: collect_tree,
+          tree_program: op1_groups,
+        },
       },
     },
     op2: {
@@ -431,7 +436,10 @@
       params: [],
       body: {
         function: sequence_paths,
-        program: op2_groups,
+        program: {
+          function: collect_tree,
+          tree_program: op2_groups,
+        },
       },
     },
     op2_chamfers: {
@@ -440,22 +448,27 @@
       body: {
         function: tooled_groups,
         program: {
-          function: cube_chamfers,
-          orientation: bottom_face,
+          params: [],
+          body: {
+            function: cube_chamfers,
+            orientation: bottom_face,
+          },
         },
         tool: square_tool,
       },
     },
     op2_groups: {
       name: "Op 2 · paths",
-      grap_value: {
-        function: quote,
-        expression: [
+      params: [],
+      body: {
+        function: tree_group,
+        children: [
           [
             {
-              unquote: {
-                function: tooled_groups,
-                program: {
+              function: tooled_groups,
+              program: {
+                params: [],
+                body: {
                   function: face_paths,
                   setup_up: {
                     function: point,
@@ -471,14 +484,12 @@
                   },
                   orientation: bottom_face,
                 },
-                tool: ball_tool,
               },
+              tool: ball_tool,
             },
           ],
           {
-            unquote: {
-              function: op2_chamfers,
-            },
+            function: op2_chamfers,
           },
         ],
       },
@@ -496,13 +507,13 @@
       name: "Preview groups",
       params: [],
       body: {
-        function: quote,
-        expression: [
+        function: tree_group,
+        children: [
           {
-            unquote: op1_groups,
+            function: op1_groups,
           },
           {
-            unquote: op2_groups,
+            function: op2_groups,
           },
         ],
       },
@@ -788,20 +799,26 @@
       body: {
         function: sequence_paths,
         program: {
-          function: face_paths,
-          setup_up: {
-            function: point,
-            y: {
-              f64: 0x0000000000000000,
-            },
-            x: {
-              f64: 0x0000000000000000,
-            },
-            z: {
-              f64: 0x000000000000f03f,
+          function: collect_tree,
+          tree_program: {
+            params: [],
+            body: {
+              function: face_paths,
+              setup_up: {
+                function: point,
+                y: {
+                  f64: 0x0000000000000000,
+                },
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                z: {
+                  f64: 0x000000000000f03f,
+                },
+              },
+              orientation: top,
             },
           },
-          orientation: top,
         },
       },
     },
@@ -864,67 +881,70 @@
           strip,
         ],
         body: {
-          function: quote,
-          expression: {
-            closure: {
-              params: [],
-              body: {
-                function: where,
-                expression: {
-                  function: map_points,
-                  mapping: {
-                    function: translated_points,
-                    offset: {
-                      normal: normal,
-                      function: square_side_offset,
-                      contact_height: contact_height,
-                      cutter_diameter: cutter_diameter,
+          function: tree_leaf,
+          value: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {
+                  function: where,
+                  expression: {
+                    function: map_points,
+                    mapping: {
+                      function: translated_points,
+                      offset: {
+                        normal: normal,
+                        function: square_side_offset,
+                        contact_height: contact_height,
+                        cutter_diameter: cutter_diameter,
+                        tool_axis: tool_axis,
+                      },
+                    },
+                    expression: {
+                      end: {
+                        function: curve,
+                        t: {
+                          f64: 0x000000000000f03f,
+                        },
+                      },
+                      start: {
+                        function: curve,
+                        t: {
+                          f64: 0x0000000000000000,
+                        },
+                      },
+                      function: line,
                       tool_axis: tool_axis,
                     },
                   },
-                  expression: {
-                    end: {
-                      function: curve,
-                      t: {
-                        f64: 0x000000000000f03f,
+                  bindings: [
+                    {
+                      subject: strip,
+                      pattern: {
+                        normal: {
+                          bind: normal,
+                        },
+                        curve: {
+                          bind: curve,
+                        },
+                        across: {
+                          bind: tool_axis,
+                        },
                       },
                     },
-                    start: {
-                      function: curve,
-                      t: {
-                        f64: 0x0000000000000000,
-                      },
-                    },
-                    function: line,
-                    tool_axis: tool_axis,
+                  ],
+                },
+                environment: {
+                  contact_height: {
+                    unquote: contact_height,
                   },
-                },
-                bindings: [
-                  {
-                    subject: strip,
-                    pattern: {
-                      normal: {
-                        bind: normal,
-                      },
-                      curve: {
-                        bind: curve,
-                      },
-                      across: {
-                        bind: tool_axis,
-                      },
-                    },
+                  cutter_diameter: {
+                    unquote: cutter_diameter,
                   },
-                ],
-              },
-              environment: {
-                contact_height: {
-                  unquote: contact_height,
-                },
-                cutter_diameter: {
-                  unquote: cutter_diameter,
-                },
-                strip: {
-                  unquote: strip,
+                  strip: {
+                    unquote: strip,
+                  },
                 },
               },
             },
@@ -947,31 +967,27 @@
         compensation,
       ],
       body: {
-        function: quote,
-        expression: [
+        function: tree_group,
+        children: [
           {
-            unquote: {
-              compensation: compensation,
-              function: crossing_passes,
-              setup_up: setup_up,
-              slope: {
-                f64: 0x000000000000f03f,
-              },
-              orientation: orientation,
-              face: face,
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {
+              f64: 0x000000000000f03f,
             },
+            orientation: orientation,
+            face: face,
           },
           {
-            unquote: {
-              compensation: compensation,
-              function: crossing_passes,
-              setup_up: setup_up,
-              slope: {
-                f64: 0x000000000000f0bf,
-              },
-              orientation: orientation,
-              face: face,
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {
+              f64: 0x000000000000f0bf,
             },
+            orientation: orientation,
+            face: face,
           },
         ],
       },
@@ -994,58 +1010,67 @@
             tool_axis: tool_axis,
           },
           program: {
-            function: mapped_groups,
-            mapping: face,
-            program: {
+            params: [],
+            body: {
               function: mapped_groups,
-              mapping: {
-                params: [
-                  x,
-                  y,
-                  z,
-                ],
+              mapping: face,
+              program: {
+                params: [],
                 body: {
-                  function: point,
-                  y: {
-                    right: {
-                      right: y,
-                      function: multiply,
-                      left: slope,
-                    },
-                    function: sum,
-                    left: {
-                      right: {
-                        f64: 0x0000000000000040,
-                      },
-                      function: divide,
-                      left: {
-                        right: slope,
-                        function: subtract,
+                  function: mapped_groups,
+                  mapping: {
+                    params: [
+                      x,
+                      y,
+                      z,
+                    ],
+                    body: {
+                      function: point,
+                      y: {
+                        right: {
+                          right: y,
+                          function: multiply,
+                          left: slope,
+                        },
+                        function: sum,
                         left: {
-                          f64: 0x000000000000f03f,
+                          right: {
+                            f64: 0x0000000000000040,
+                          },
+                          function: divide,
+                          left: {
+                            right: slope,
+                            function: subtract,
+                            left: {
+                              f64: 0x000000000000f03f,
+                            },
+                          },
                         },
                       },
+                      x: x,
+                      z: z,
                     },
                   },
-                  x: x,
-                  z: z,
+                  program: {
+                    params: [],
+                    body: {
+                      feed_direction: direction,
+                      row_direction: {
+                        right: direction,
+                        function: multiply,
+                        left: slope,
+                      },
+                      function: diagonal_groups,
+                      spacing: {
+                        f64: 0xb81e85eb51b89e3f,
+                      },
+                      rows: {
+                        f64: 0x0000000000003540,
+                      },
+                      tool_axis: tool_axis,
+                    },
+                  },
                 },
-              },
-              program: {
-                feed_direction: direction,
-                row_direction: {
-                  right: direction,
-                  function: multiply,
-                  left: slope,
-                },
-                function: diagonal_groups,
-                spacing: {
-                  f64: 0xb81e85eb51b89e3f,
-                },
-                rows: {
-                  f64: 0x0000000000003540,
-                },
-                tool_axis: tool_axis,
               },
             },
           },
@@ -1177,11 +1202,17 @@
         expression: {
           function: chamfer_ring,
           program: {
-            function: rotated_groups,
-            orientation: orientation,
-            program: {
-              function: cut_strip,
-              strip: strip,
+            params: [],
+            body: {
+              function: rotated_groups,
+              orientation: orientation,
+              program: {
+                params: [],
+                body: {
+                  function: cut_strip,
+                  strip: strip,
+                },
+              },
             },
           },
         },
@@ -1269,128 +1300,117 @@
             },
           },
           {
-            function: where,
-            expression: list,
-            bindings: [
-              {
-                subject: {
-                  initial: {
-                    f64: 0x000000000000f03f,
+            function: tree_group,
+            children: {
+              initial: {
+                f64: 0x000000000000f03f,
+              },
+              step: {
+                params: [
+                  state,
+                ],
+                body: {
+                  subject: {
+                    right: state,
+                    function: less,
+                    left: rows,
                   },
-                  step: {
-                    params: [
-                      state,
-                    ],
-                    body: {
-                      subject: {
-                        right: state,
-                        function: less,
-                        left: rows,
+                  function: match,
+                  cases: [
+                    {
+                      pattern: {
+                        bool: true,
                       },
-                      function: match,
-                      cases: [
-                        {
-                          pattern: {
-                            bool: true,
-                          },
-                          expression: {
-                            absent: done,
-                          },
-                        },
-                        {
-                          pattern: {
-                            bool: false,
-                          },
-                          expression: {
-                            function: quote,
-                            expression: {
-                              state: {
-                                unquote: {
-                                  right: {
-                                    f64: 0x000000000000f03f,
-                                  },
-                                  function: sum,
-                                  left: state,
-                                },
-                              },
-                              item: {
-                                unquote: {
-                                  function: quote,
-                                  expression: {
-                                    closure: {
-                                      params: [],
-                                      body: {
-                                        feed_direction: feed_direction,
-                                        function: sample_pass,
-                                        spacing: spacing,
-                                        intercept: {
+                      expression: {
+                        absent: done,
+                      },
+                    },
+                    {
+                      pattern: {
+                        bool: false,
+                      },
+                      expression: {
+                        expressions: [
+                          {
+                            function: tree_leaf,
+                            value: {
+                              function: quote,
+                              expression: {
+                                closure: {
+                                  params: [],
+                                  body: {
+                                    feed_direction: feed_direction,
+                                    function: sample_pass,
+                                    spacing: spacing,
+                                    intercept: {
+                                      right: {
+                                        right: {
+                                          f64: 0x000000000000f03f,
+                                        },
+                                        function: subtract,
+                                        left: {
                                           right: {
                                             right: {
                                               f64: 0x000000000000f03f,
                                             },
-                                            function: subtract,
+                                            function: sum,
+                                            left: rows,
+                                          },
+                                          function: divide,
+                                          left: {
+                                            right: state,
+                                            function: multiply,
                                             left: {
-                                              right: {
-                                                right: {
-                                                  f64: 0x000000000000f03f,
-                                                },
-                                                function: sum,
-                                                left: rows,
-                                              },
-                                              function: divide,
-                                              left: {
-                                                right: state,
-                                                function: multiply,
-                                                left: {
-                                                  f64: 0x0000000000000040,
-                                                },
-                                              },
+                                              f64: 0x0000000000000040,
                                             },
                                           },
-                                          function: multiply,
-                                          left: row_direction,
-                                        },
-                                        tool_axis: tool_axis,
-                                      },
-                                      environment: {
-                                        state: {
-                                          unquote: state,
-                                        },
-                                        feed_direction: {
-                                          unquote: feed_direction,
-                                        },
-                                        row_direction: {
-                                          unquote: row_direction,
-                                        },
-                                        spacing: {
-                                          unquote: spacing,
-                                        },
-                                        rows: {
-                                          unquote: rows,
-                                        },
-                                        tool_axis: {
-                                          unquote: tool_axis,
                                         },
                                       },
+                                      function: multiply,
+                                      left: row_direction,
+                                    },
+                                    tool_axis: tool_axis,
+                                  },
+                                  environment: {
+                                    state: {
+                                      unquote: state,
+                                    },
+                                    feed_direction: {
+                                      unquote: feed_direction,
+                                    },
+                                    row_direction: {
+                                      unquote: row_direction,
+                                    },
+                                    spacing: {
+                                      unquote: spacing,
+                                    },
+                                    rows: {
+                                      unquote: rows,
+                                    },
+                                    tool_axis: {
+                                      unquote: tool_axis,
                                     },
                                   },
                                 },
                               },
                             },
                           },
-                        },
-                      ],
+                          {
+                            right: {
+                              f64: 0x000000000000f03f,
+                            },
+                            function: sum,
+                            left: state,
+                          },
+                        ],
+                        function: do,
+                      },
                     },
-                  },
-                  function: list_unfold,
-                },
-                pattern: {
-                  list: {
-                    bind: list,
-                  },
+                  ],
                 },
               },
-            ],
+              function: iterate,
+            },
           },
         ],
         function: do,
@@ -1408,12 +1428,18 @@
       body: {
         function: sequence_paths,
         program: {
-          feed_direction: feed_direction,
-          row_direction: row_direction,
-          function: diagonal_groups,
-          spacing: spacing,
-          rows: rows,
-          tool_axis: tool_axis,
+          function: collect_tree,
+          tree_program: {
+            params: [],
+            body: {
+              feed_direction: feed_direction,
+              row_direction: row_direction,
+              function: diagonal_groups,
+              spacing: spacing,
+              rows: rows,
+              tool_axis: tool_axis,
+            },
+          },
         },
       },
     },
@@ -1545,94 +1571,83 @@
                   },
                 },
                 {
-                  function: where,
-                  expression: list,
-                  bindings: [
-                    {
-                      subject: {
-                        initial: {
-                          f64: 0x0000000000000000,
+                  function: tree_group,
+                  children: {
+                    initial: {
+                      f64: 0x0000000000000000,
+                    },
+                    step: {
+                      params: [
+                        state,
+                      ],
+                      body: {
+                        subject: {
+                          right: state,
+                          function: less,
+                          left: segments,
                         },
-                        step: {
-                          params: [
-                            state,
-                          ],
-                          body: {
-                            subject: {
-                              right: state,
-                              function: less,
-                              left: segments,
+                        function: match,
+                        cases: [
+                          {
+                            pattern: {
+                              bool: true,
                             },
-                            function: match,
-                            cases: [
-                              {
-                                pattern: {
-                                  bool: true,
-                                },
-                                expression: {
-                                  absent: done,
-                                },
-                              },
-                              {
-                                pattern: {
-                                  bool: false,
-                                },
-                                expression: {
-                                  function: quote,
-                                  expression: {
-                                    state: {
-                                      unquote: {
-                                        right: {
-                                          f64: 0x000000000000f03f,
+                            expression: {
+                              absent: done,
+                            },
+                          },
+                          {
+                            pattern: {
+                              bool: false,
+                            },
+                            expression: {
+                              expressions: [
+                                {
+                                  function: tree_leaf,
+                                  value: {
+                                    function: quote,
+                                    expression: {
+                                      closure: {
+                                        params: [],
+                                        body: {
+                                          function: action,
+                                          t: {
+                                            right: segments,
+                                            function: divide,
+                                            left: state,
+                                          },
                                         },
-                                        function: sum,
-                                        left: state,
-                                      },
-                                    },
-                                    item: {
-                                      unquote: {
-                                        function: quote,
-                                        expression: {
-                                          closure: {
-                                            params: [],
-                                            body: {
-                                              function: action,
-                                              t: {
-                                                right: segments,
-                                                function: divide,
-                                                left: state,
-                                              },
-                                            },
-                                            environment: {
-                                              segments: {
-                                                unquote: segments,
-                                              },
-                                              state: {
-                                                unquote: state,
-                                              },
-                                              action: {
-                                                unquote: action,
-                                              },
-                                            },
+                                        environment: {
+                                          segments: {
+                                            unquote: segments,
+                                          },
+                                          state: {
+                                            unquote: state,
+                                          },
+                                          action: {
+                                            unquote: action,
                                           },
                                         },
                                       },
                                     },
                                   },
                                 },
-                              },
-                            ],
+                                {
+                                  right: {
+                                    f64: 0x000000000000f03f,
+                                  },
+                                  function: sum,
+                                  left: state,
+                                },
+                              ],
+                              function: do,
+                            },
                           },
-                        },
-                        function: list_unfold,
-                      },
-                      pattern: {
-                        list: {
-                          bind: list,
-                        },
+                        ],
                       },
                     },
-                  ],
+                    function: iterate,
+                  },
                 },
               ],
               function: do,
@@ -2437,35 +2452,27 @@
         program,
       ],
       body: {
-        function: quote,
-        expression: [
+        function: tree_group,
+        children: [
           {
-            unquote: {
-              function: rotated_groups,
-              orientation: top,
-              program: program,
-            },
+            function: rotated_groups,
+            orientation: top,
+            program: program,
           },
           {
-            unquote: {
-              function: rotated_groups,
-              orientation: quarter_turn,
-              program: program,
-            },
+            function: rotated_groups,
+            orientation: quarter_turn,
+            program: program,
           },
           {
-            unquote: {
-              function: rotated_groups,
-              orientation: half_turn,
-              program: program,
-            },
+            function: rotated_groups,
+            orientation: half_turn,
+            program: program,
           },
           {
-            unquote: {
-              function: rotated_groups,
-              orientation: three_quarter_turn,
-              program: program,
-            },
+            function: rotated_groups,
+            orientation: three_quarter_turn,
+            program: program,
           },
         ],
       },
@@ -2551,78 +2558,6 @@
     length: {
       name: "length",
     },
-    map_leaves: {
-      name: "map leaves",
-      params: [
-        value,
-        action,
-      ],
-      body: {
-        subject: {
-          list: value,
-          function: list_length,
-        },
-        function: match,
-        cases: [
-          {
-            pattern: {
-              absent: not_list,
-            },
-            expression: {
-              item: value,
-              function: action,
-            },
-          },
-          {
-            pattern: {
-              bind: length,
-            },
-            expression: {
-              list: value,
-              initial: [],
-              step: {
-                params: [
-                  accumulator,
-                  item,
-                ],
-                body: {
-                  function: where,
-                  expression: {
-                    expressions: [
-                      coordinate,
-                      {
-                        right: {
-                          function: quote,
-                          expression: [
-                            {
-                              unquote: coordinate,
-                            },
-                          ],
-                        },
-                        function: concat,
-                        left: accumulator,
-                      },
-                    ],
-                    function: do,
-                  },
-                  bindings: [
-                    {
-                      subject: {
-                        function: map_leaves,
-                        value: item,
-                        action: action,
-                      },
-                      bind: coordinate,
-                    },
-                  ],
-                },
-              },
-              function: list_fold,
-            },
-          },
-        ],
-      },
-    },
     mapped_groups: {
       name: "map path groups",
       params: [
@@ -2630,11 +2565,9 @@
         program,
       ],
       body: {
-        function: map_leaves,
-        value: program,
-        action: {
+        tree_mapping: {
           params: [
-            item,
+            value,
           ],
           body: {
             function: quote,
@@ -2650,7 +2583,7 @@
                 },
                 environment: {
                   item: {
-                    unquote: item,
+                    unquote: value,
                   },
                   mapping: {
                     unquote: mapping,
@@ -2659,6 +2592,10 @@
               },
             },
           },
+        },
+        function: map_tree,
+        children: {
+          function: program,
         },
       },
     },
@@ -2795,6 +2732,9 @@
     preview_mode: {
       name: "preview mode",
     },
+    program_items: {
+      name: "program items",
+    },
     pull_direction: {
       name: "pull direction",
       params: [
@@ -2894,11 +2834,9 @@
         program,
       ],
       body: {
-        function: map_leaves,
-        value: program,
-        action: {
+        tree_mapping: {
           params: [
-            item,
+            value,
           ],
           body: {
             function: quote,
@@ -2912,7 +2850,7 @@
                 },
                 environment: {
                   item: {
-                    unquote: item,
+                    unquote: value,
                   },
                   orientation: {
                     unquote: orientation,
@@ -2921,6 +2859,10 @@
               },
             },
           },
+        },
+        function: map_tree,
+        children: {
+          function: program,
         },
       },
     },
@@ -3559,11 +3501,9 @@
         program,
       ],
       body: {
-        function: map_leaves,
-        value: program,
-        action: {
+        tree_mapping: {
           params: [
-            item,
+            value,
           ],
           body: {
             function: quote,
@@ -3579,7 +3519,7 @@
                 },
                 environment: {
                   item: {
-                    unquote: item,
+                    unquote: value,
                   },
                   tool: {
                     unquote: tool,
@@ -3588,6 +3528,10 @@
               },
             },
           },
+        },
+        function: map_tree,
+        children: {
+          function: program,
         },
       },
     },
@@ -3739,7 +3683,6 @@
       point_sum,
       scaled_point,
       unit_vector,
-      map_leaves,
       mapped_groups,
       rotated_groups,
       tooled_groups,
@@ -3771,9 +3714,6 @@
     panes: {
       pane_left: [
         {
-          fuel: {
-            f64: 0x00000000804f1241,
-          },
           viewport: {
             params: [
               value,
@@ -3906,7 +3846,7 @@
                     min_y: {
                       f32: 0x9a9959bf,
                     },
-                    program: value,
+                    program: program_items,
                     width: width,
                     min_x: {
                       f32: 0x9a9959bf,
@@ -3919,6 +3859,9 @@
                         playback: {
                           position: {
                             bind: progress,
+                          },
+                          control_items: {
+                            bind: program_items,
                           },
                           control_range: {
                             bind: focus,
@@ -4018,12 +3961,15 @@
                     },
                     {
                       subject: {
+                        fuel: {
+                          f64: 0x00000000804f1241,
+                        },
                         control_key: {
                           function: quote,
                           expression: focus,
                         },
-                        control_items: value,
-                        function: tree_cursor,
+                        function: tree_program_cursor,
+                        tree_program: value,
                       },
                       pattern: {
                         bind: parameters,
@@ -4037,14 +3983,6 @@
             },
           },
           value: program_tree,
-          prepare: {
-            params: [
-              value,
-            ],
-            body: {
-              function: value,
-            },
-          },
         },
       ],
     },

@@ -7,8 +7,9 @@ use puri_widgets::tree_slider::{self, Cursor, Intent};
 use std::ops::Range;
 
 type Key = Vec<gid::Position>;
-pub(crate) type ItemDecoration =
-    Rc<dyn Fn(&[gid::Position]) -> widget::Decoration<crate::Editor, crate::frame::Hovered>>;
+pub(crate) type ItemDecoration = Rc<
+    dyn Fn(&[gid::Position]) -> Option<widget::Decoration<crate::Editor, crate::frame::Hovered>>,
+>;
 
 pub(crate) fn encode(range: Range<usize>) -> Value {
     Value::list([f64::value(range.start as f64), f64::value(range.end as f64)])
@@ -27,6 +28,21 @@ fn tree(value: &Value, key: Key) -> tree_slider::Tree<Key> {
             }),
         ),
         None => Tree::leaf(key),
+    }
+}
+
+pub(super) fn emitted_tree(node: &tree::Node, key: Key) -> tree_slider::Tree<Key> {
+    match &node.children {
+        Some(children) => tree_slider::Tree::group(
+            key.clone(),
+            children.iter().map(|(position, child)| {
+                emitted_tree(
+                    child,
+                    key.iter().cloned().chain([position.clone()]).collect(),
+                )
+            }),
+        ),
+        None => tree_slider::Tree::leaf(key),
     }
 }
 
@@ -93,7 +109,11 @@ impl std::ops::Deref for Selection {
 
 impl Selection {
     pub fn new(items: &Value, state: Option<&Value>) -> Self {
-        let tree = Rc::new(tree(items, Vec::new()));
+        Self::from_tree(tree(items, Vec::new()), state)
+    }
+
+    fn from_tree(tree: tree_slider::Tree<Key>, state: Option<&Value>) -> Self {
+        let tree = Rc::new(tree);
         let stored: Vec<_> = state
             .and_then(Value::as_list)
             .map(|list| {
@@ -190,8 +210,27 @@ pub(super) fn cursor(
     width: f64,
     decorate: Option<ItemDecoration>,
 ) -> (Vec<Widget>, Value) {
+    cursor_from_tree(
+        tree(items, Vec::new()),
+        state,
+        initial,
+        key,
+        width,
+        decorate,
+    )
+}
+
+pub(super) fn cursor_from_tree(
+    tree: tree_slider::Tree<Key>,
+    state: Option<&Value>,
+    initial: f64,
+    key: CellId,
+    width: f64,
+    decorate: Option<ItemDecoration>,
+) -> (Vec<Widget>, Value) {
     let state = state.and_then(Value::as_record);
-    let selection = Selection::new(items, state.and_then(|state| state.get(&vocabulary::RANGE)));
+    let selection =
+        Selection::from_tree(tree, state.and_then(|state| state.get(&vocabulary::RANGE)));
     let position = selection.position(
         state
             .and_then(|state| state.get(&vocabulary::POSITION))
@@ -267,7 +306,7 @@ fn range_widget(
     selection: Selection,
     position: Option<f64>,
     width: f64,
-    decorations: Option<Vec<widget::Decoration<crate::Editor, crate::frame::Hovered>>>,
+    decorations: Option<Vec<Option<widget::Decoration<crate::Editor, crate::frame::Hovered>>>>,
 ) -> Widget {
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
@@ -280,7 +319,7 @@ fn range_widget(
         let decorations: Vec<_> = decorations
             .iter()
             .flatten()
-            .map(|decorate| decorate(context))
+            .map(|decorate| decorate.as_ref().map(|decorate| decorate(context)))
             .collect();
         let leaf = widget::leaf(
             Extent {
@@ -339,7 +378,9 @@ fn range_widget(
                     true
                 });
                 for (item, decorate) in decorations.into_iter().enumerate() {
-                    if let Some(rect) = painted_slider.item_rect(placement.rect, scale, item) {
+                    if let Some(decorate) = decorate
+                        && let Some(rect) = painted_slider.item_rect(placement.rect, scale, item)
+                    {
                         decorate(output, puri::Placement::new(rect, placement.clip_rect));
                     }
                 }

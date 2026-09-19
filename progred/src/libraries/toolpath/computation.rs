@@ -162,9 +162,15 @@ mod tests {
                 .unwrap();
             assert_eq!(controls.get(&l::WIDTH).and_then(f64::read), Some(width));
             assert_eq!(controls.get(&l::HEIGHT).and_then(f64::read), Some(height));
-            controls
+            let program = controls
                 .get(&presentation::vocabulary::VALUE)
                 .unwrap()
+                .clone();
+            crate::libraries::tree::prepared(&computations, &root, &pane.path, program, 300_000)
+                .as_ref()
+                .as_ref()
+                .unwrap()
+                .items
                 .clone()
         };
         let tree = prepare(&doc, 400.0, 750.0);
@@ -222,19 +228,15 @@ mod tests {
         let declaration = sources.resolve_path(&pane.path).unwrap();
         let computations = crate::computations::Computations::from_sources(sources);
         let root = crate::workspace::Root::document();
-        let env = ViewportEnv {
-            sources,
-            computations: &computations,
-            root: &root,
-        };
         for trial in 0..5 {
             let start = Instant::now();
-            let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000);
+            let tree =
+                crate::libraries::tree::build(&names["program_tree"].into(), &sources, 300_000)
+                    .unwrap();
             let tree_time = start.elapsed();
-            assert!(tree.completed && !absent::is_absent(&tree.result));
             let start = Instant::now();
             let selection =
-                crate::libraries::controls::tree_range::Selection::new(&tree.result, None);
+                crate::libraries::controls::tree_range::Selection::new(&tree.items, None);
             let selection_time = start.elapsed();
             assert_eq!(selection.leaves, 0..504);
             let start = Instant::now();
@@ -242,11 +244,17 @@ mod tests {
             let view_time = start.elapsed();
             assert!(!absent::is_absent(&view));
             let start = Instant::now();
-            let memoized = presentation::viewport_output(declaration, &env, 400.0, 750.0).unwrap();
+            let memoized = crate::libraries::tree::prepared(
+                &computations,
+                &root,
+                &pane.path,
+                names["program_tree"].into(),
+                300_000,
+            );
             let memo_time = start.elapsed();
-            assert!(!absent::is_absent(&memoized));
+            assert!(memoized.is_ok());
             eprintln!(
-                "trial {trial}: tree {tree_time:?}; selectors {selection_time:?}; tree + controls declaration {view_time:?}; memo demand {memo_time:?}"
+                "trial {trial}: tree {tree_time:?}; selectors {selection_time:?}; controls declaration {view_time:?}; memo demand {memo_time:?}"
             );
         }
     }
@@ -324,12 +332,8 @@ mod tests {
             doc: &doc,
             libraries: &libraries,
         };
-        let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000);
-        assert!(
-            tree.completed && !absent::is_absent(&tree.result),
-            "{:?}",
-            tree.result
-        );
+        let tree = crate::libraries::tree::build(&names["program_tree"].into(), &sources, 300_000)
+            .unwrap();
         fn shape(value: &Value) -> (usize, usize) {
             value.as_list().map_or((1, 0), |list| {
                 list.values()
@@ -339,9 +343,31 @@ mod tests {
                     })
             })
         }
-        assert_eq!(shape(&tree.result), (504, 5));
+        assert_eq!(shape(&tree.items), (504, 5));
+        let ops = tree.items.as_list().unwrap();
+        assert_eq!(ops.len(), 2);
+        for op in ops.values() {
+            assert_eq!(
+                op.as_list().unwrap().len(),
+                2,
+                "knurling and chamfers remain separate subgroups"
+            );
+        }
+        fn links(node: &crate::libraries::tree::Node) -> usize {
+            usize::from(node.source.is_some())
+                + node
+                    .children
+                    .iter()
+                    .flat_map(|children| children.values())
+                    .map(links)
+                    .sum::<usize>()
+        }
+        assert!(
+            links(&tree.root) > 504,
+            "groups and leaves both carry source links"
+        );
         let mut recording = Recording::default();
-        let evaluation = record_program(&tree.result, &sources, 3_000_000, &mut recording);
+        let evaluation = record_program(&tree.items, &sources, 3_000_000, &mut recording);
         assert!(
             evaluation.completed && !absent::is_absent(&evaluation.result),
             "{:?}",

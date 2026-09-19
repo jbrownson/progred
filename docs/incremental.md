@@ -158,12 +158,14 @@ queue or the threaded executor without a windowing harness.
 
 ## CAM integration
 
-The pane declaration first applies its optional `prepare` function to its raw
-`value` data through a tracked application memo. The CAM example builds the
-program tree there. Only then does its `viewport` function receive the tree and
-dimensions to construct the controls and preview. Size is not captured by the
-cutting functions, so resize does not invalidate the recording upstream of
-geometry generation.
+A pane declaration can apply an optional `prepare` function to its raw `value`
+data through a tracked application memo before `viewport` receives the result
+and dimensions. The CAM example instead uses the controls' `tree program cursor`:
+it memoizes a final-encoded builder's items and explicit source-linked hierarchy,
+consumes the hierarchy directly, and returns the items to the preview. Its explicit inputs are the
+builder callable and fuel; observed definitions supply the dependencies. Size is
+not captured by the cutting functions, so resize does not invalidate the
+recording upstream of geometry generation. See [trees](trees.md).
 
 The mesh toolpath viewport composes nested nodes:
 

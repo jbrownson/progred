@@ -34,9 +34,12 @@ pub(crate) fn decoration(
                 };
                 if let Some(brush) = brush {
                     use puri::draw::Canvas;
-                    canvas.clip(placement.clip_rect, puri::Affine::IDENTITY, |canvas| {
-                        canvas.fill(placement.rect, brush, puri::Affine::IDENTITY);
-                    });
+                    // Avoid a pane-sized clip layer for every highlighted notch.
+                    canvas.fill(
+                        placement.rect.intersect(placement.clip_rect),
+                        brush,
+                        puri::Affine::IDENTITY,
+                    );
                 }
             });
         })

@@ -1,5 +1,5 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
-use super::{Definitions, Library, absent, f64, layout, name, presentation};
+use super::{Definitions, Library, absent, f64, layout, name, presentation, tree};
 use crate::display::widget::view::Root;
 use crate::display::{self, Layout, ProjectionInput, widget};
 use ::grap::{
@@ -28,6 +28,7 @@ pub mod vocabulary {
     pub const RADIO: CellId = CellId::from_u128(0xd3e46e8851004f6786bb6cf771ad1d87);
     pub const TREE_RANGE: CellId = CellId::from_u128(0xe6031ee7046216b43b9fa9c08bdcd656);
     pub const TREE_CURSOR: CellId = CellId::from_u128(0x21781a5dfb25048f053375147e251b80);
+    pub const TREE_PROGRAM_CURSOR: CellId = CellId::from_u128(0x0b8e1e3410cfd16c0b36e18be2fcb8a3);
     pub const RANGE: CellId = CellId::from_u128(0x870bd3c9e1c2d00a7884be4e9173ed68);
     pub const POSITION: CellId = CellId::from_u128(0x199e09fd8b4d41632a90d103d278d6ea);
     pub const ITEMS: CellId = CellId::from_u128(0x685f4fc766c54035725efdd652943c7b);
@@ -248,7 +249,7 @@ fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?.get(&WITH_CONTROLS)?.as_record()?;
-    let controls = fields.get(&CONTROLS)?;
+    let controls = fields.get(&CONTROLS)?.clone();
     let view = fields.get(&VIEW)?.clone();
     let source = fields.get(&VALUE)?.clone();
     let width = f64::read(fields.get(&WIDTH)?)?;
@@ -256,135 +257,22 @@ fn display(
     if !width.is_finite() || !height.is_finite() || width <= 2.0 * PADDING_X || height <= 0.0 {
         return None;
     }
-    let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
-    let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
-        let Some(key) = context.field(call, KEY) else {
-            return Ok(context.missing_argument(KEY));
-        };
-        let key = context.eval(key, environment)?;
-        let Some(key) = key.as_cell() else {
-            return Ok(absent::with_reason(INVALID_INPUT));
-        };
-        if function == TREE_RANGE || function == TREE_CURSOR {
-            let Some(expression) = context.field(call, ITEMS) else {
-                return Ok(context.missing_argument(ITEMS));
-            };
-            let decorate = stored_tree_items(context, expression);
-            let items = context.eval(expression, environment)?;
-            if absent::is_absent(&items) {
-                return Ok(items);
-            }
-            if function == TREE_CURSOR {
-                let initial = match context.field(call, INITIAL) {
-                    Some(expression) => match context.eval_f64(expression, environment)? {
-                        Some(n) if n.is_finite() => n,
-                        _ => return Ok(absent::with_reason(INVALID_INPUT)),
-                    },
-                    None => 0.0,
-                };
-                let (controls, result) = tree_range::cursor(
-                    &items,
-                    read_state(input.state, key),
-                    initial,
-                    key,
-                    width - 2.0 * PADDING_X,
-                    decorate,
-                );
-                return Ok(context.effect(|| {
-                    widgets.borrow_mut().extend(controls);
-                    result
-                }));
-            }
-            let selection = tree_range::Selection::new(&items, read_state(input.state, key));
-            return Ok(context.effect(|| {
-                widgets.borrow_mut().extend(selection.widgets(
-                    key,
-                    width - 2.0 * PADDING_X,
-                    decorate,
-                ));
-                tree_range::encode(selection.leaves.clone())
-            }));
-        }
-        if function == RADIO {
-            let Some(expression) = context.field(call, OPTIONS) else {
-                return Ok(context.missing_argument(OPTIONS));
-            };
-            let options = context.eval(expression, environment)?;
-            let Some(options) = radio_options(&options) else {
-                return Ok(absent::with_reason(INVALID_INPUT));
-            };
-            let initial = match context.field(call, INITIAL) {
-                Some(expression) => context.eval(expression, environment)?,
-                None => options[0].value.clone(),
-            };
-            if !options.iter().any(|option| option.value == initial) {
-                return Ok(absent::with_reason(INVALID_INPUT));
-            }
-            let selected = read_state(input.state, key)
-                .filter(|value| options.iter().any(|option| option.value == **value))
-                .cloned()
-                .unwrap_or(initial);
-            return Ok(context.effect(|| {
-                widgets.borrow_mut().push(radio_widget(
-                    key,
-                    options,
-                    selected.clone(),
-                    width - 2.0 * PADDING_X,
-                ));
-                selected
-            }));
-        }
-        let mut number = |field, default| -> Result<Option<f64>, Halt> {
-            match context.field(call, field) {
-                Some(expression) => context.eval_f64(expression, environment),
-                None => Ok(Some(default)),
-            }
-        };
-        let (Some(min), Some(max), Some(initial)) = (
-            number(MINIMUM, 0.0)?,
-            number(MAXIMUM, 1.0)?,
-            number(INITIAL, 0.0)?,
-        ) else {
-            return Ok(absent::with_reason(INVALID_INPUT));
-        };
-        let value = read_state(input.state, key)
-            .and_then(f64::read)
-            .filter(|value| value.is_finite())
-            .unwrap_or(initial);
-        let Some(slider) = Slider::new(min, max, value) else {
-            return Ok(absent::with_reason(INVALID_INPUT));
-        };
-        Ok(context.effect(|| {
-            widgets
-                .borrow_mut()
-                .push(slider_widget(key, slider, width - 2.0 * PADDING_X));
-            f64::value(slider.value)
-        }))
-    };
-    let evaluation = input.env.apply_scoped(
-        controls,
-        &[],
-        Some(&ForeignOverlay::new(
-            &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR],
-            &emit,
-        )),
-    );
-    if !evaluation.completed || absent::is_absent(&evaluation.result) {
-        return Some(display::at(
-            [gid::Step::Key(
-                crate::libraries::presentation::vocabulary::RESULT,
-            )],
-            &evaluation.result,
-        ));
-    }
-    let widgets = widgets.into_inner();
+    let state = input.state.cloned();
     Some(Layout::program(Rc::new(move |context, build| {
+        let (widgets, parameters) = match controls_output(&controls, state.as_ref(), width, context)
+        {
+            Ok(output) => output,
+            Err(error) => {
+                return display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &error)
+                    .measure(context, build);
+            }
+        };
         let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
         let result = ::grap::apply(
             &view,
             [
                 (VALUE, source.clone()),
-                (PARAMETERS, evaluation.result.clone()),
+                (PARAMETERS, parameters),
                 (WIDTH, f64::value(width)),
                 (HEIGHT, f64::value(height)),
             ],
@@ -423,6 +311,201 @@ fn display(
     })))
 }
 
+fn controls_output(
+    controls: &Value,
+    state: Option<&Value>,
+    width: f64,
+    frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
+) -> Result<(Vec<Widget>, Value), Value> {
+    let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
+    let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
+        let Some(key) = context.field(call, KEY) else {
+            return Ok(context.missing_argument(KEY));
+        };
+        let key = context.eval(key, environment)?;
+        let Some(key) = key.as_cell() else {
+            return Ok(absent::with_reason(INVALID_INPUT));
+        };
+        if function == TREE_PROGRAM_CURSOR {
+            let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
+                return Ok(context.missing_argument(tree::vocabulary::PROGRAM));
+            };
+            let program = context.eval(program, environment)?;
+            if absent::is_absent(&program) {
+                return Ok(program);
+            }
+            let fuel = match context.field(call, layout::vocabulary::FUEL) {
+                Some(expression) => match context.eval_f64(expression, environment)? {
+                    Some(n) if n >= 0.0 && n <= usize::MAX as f64 && n.fract() == 0.0 => n as usize,
+                    _ => return Ok(absent::with_reason(INVALID_INPUT)),
+                },
+                None => ::grap::DEFAULT_FUEL,
+            };
+            let initial = match context.field(call, INITIAL) {
+                Some(expression) => match context.eval_f64(expression, environment)? {
+                    Some(n) if n.is_finite() => n,
+                    _ => return Ok(absent::with_reason(INVALID_INPUT)),
+                },
+                None => 0.0,
+            };
+            let result = match frame.inputs.computations {
+                Some(computations) => tree::prepared(
+                    computations,
+                    &frame.inputs.view,
+                    &frame
+                        .path
+                        .iter()
+                        .cloned()
+                        .chain([gid::Step::Key(key)])
+                        .collect::<Vec<_>>(),
+                    program,
+                    fuel,
+                ),
+                None => Rc::new(tree::build(&program, &frame.inputs.sources, fuel)),
+            };
+            let built = match result.as_ref() {
+                Ok(tree) => tree,
+                Err(error) => return Ok(error.clone()),
+            };
+            let root = built.root.clone();
+            let decorate: tree_range::ItemDecoration = Rc::new(move |key| {
+                let source = crate::hover::from_grap(root.at(key)?.source.clone()?, None)?;
+                Some(crate::projection::source_link::decoration(source))
+            });
+            let (controls, cursor) = tree_range::cursor_from_tree(
+                tree_range::emitted_tree(&built.root, Vec::new()),
+                read_state(state, key),
+                initial,
+                key,
+                width - 2.0 * PADDING_X,
+                Some(decorate),
+            );
+            let value = Value::record(
+                cursor
+                    .as_record()
+                    .unwrap()
+                    .iter()
+                    .map(|(key, value)| (*key, value.clone()))
+                    .chain([(ITEMS, built.items.clone())]),
+            );
+            return Ok(context.effect(|| {
+                widgets.borrow_mut().extend(controls);
+                value
+            }));
+        }
+        if function == TREE_RANGE || function == TREE_CURSOR {
+            let Some(expression) = context.field(call, ITEMS) else {
+                return Ok(context.missing_argument(ITEMS));
+            };
+            let decorate = stored_tree_items(context, expression);
+            let items = context.eval(expression, environment)?;
+            if absent::is_absent(&items) {
+                return Ok(items);
+            }
+            if function == TREE_CURSOR {
+                let initial = match context.field(call, INITIAL) {
+                    Some(expression) => match context.eval_f64(expression, environment)? {
+                        Some(n) if n.is_finite() => n,
+                        _ => return Ok(absent::with_reason(INVALID_INPUT)),
+                    },
+                    None => 0.0,
+                };
+                let (controls, result) = tree_range::cursor(
+                    &items,
+                    read_state(state, key),
+                    initial,
+                    key,
+                    width - 2.0 * PADDING_X,
+                    decorate,
+                );
+                return Ok(context.effect(|| {
+                    widgets.borrow_mut().extend(controls);
+                    result
+                }));
+            }
+            let selection = tree_range::Selection::new(&items, read_state(state, key));
+            return Ok(context.effect(|| {
+                widgets.borrow_mut().extend(selection.widgets(
+                    key,
+                    width - 2.0 * PADDING_X,
+                    decorate,
+                ));
+                tree_range::encode(selection.leaves.clone())
+            }));
+        }
+        if function == RADIO {
+            let Some(expression) = context.field(call, OPTIONS) else {
+                return Ok(context.missing_argument(OPTIONS));
+            };
+            let options = context.eval(expression, environment)?;
+            let Some(options) = radio_options(&options) else {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            };
+            let initial = match context.field(call, INITIAL) {
+                Some(expression) => context.eval(expression, environment)?,
+                None => options[0].value.clone(),
+            };
+            if !options.iter().any(|option| option.value == initial) {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            }
+            let selected = read_state(state, key)
+                .filter(|value| options.iter().any(|option| option.value == **value))
+                .cloned()
+                .unwrap_or(initial);
+            return Ok(context.effect(|| {
+                widgets.borrow_mut().push(radio_widget(
+                    key,
+                    options,
+                    selected.clone(),
+                    width - 2.0 * PADDING_X,
+                ));
+                selected
+            }));
+        }
+        let mut number = |field, default| -> Result<Option<f64>, Halt> {
+            match context.field(call, field) {
+                Some(expression) => context.eval_f64(expression, environment),
+                None => Ok(Some(default)),
+            }
+        };
+        let (Some(min), Some(max), Some(initial)) = (
+            number(MINIMUM, 0.0)?,
+            number(MAXIMUM, 1.0)?,
+            number(INITIAL, 0.0)?,
+        ) else {
+            return Ok(absent::with_reason(INVALID_INPUT));
+        };
+        let value = read_state(state, key)
+            .and_then(f64::read)
+            .filter(|value| value.is_finite())
+            .unwrap_or(initial);
+        let Some(slider) = Slider::new(min, max, value) else {
+            return Ok(absent::with_reason(INVALID_INPUT));
+        };
+        Ok(context.effect(|| {
+            widgets
+                .borrow_mut()
+                .push(slider_widget(key, slider, width - 2.0 * PADDING_X));
+            f64::value(slider.value)
+        }))
+    };
+    let evaluation = ::grap::apply_scoped(
+        controls,
+        [],
+        &frame.inputs.sources,
+        &ForeignOverlay::new(
+            &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
+            &emit,
+        ),
+        ::grap::DEFAULT_FUEL,
+    );
+    if !evaluation.completed || absent::is_absent(&evaluation.result) {
+        Err(evaluation.result)
+    } else {
+        Ok((widgets.into_inner(), evaluation.result))
+    }
+}
+
 fn stored_tree_items(
     context: &Context,
     expression: Expression,
@@ -430,14 +513,14 @@ fn stored_tree_items(
     context.value(expression).as_list()?;
     let source = crate::hover::from_grap(context.source_origin(expression)?, None)?;
     Some(Rc::new(move |key| {
-        crate::projection::source_link::decoration(
+        Some(crate::projection::source_link::decoration(
             source.descendant(
                 &key.iter()
                     .cloned()
                     .map(gid::Step::Element)
                     .collect::<Vec<_>>(),
             ),
-        )
+        ))
     }))
 }
 
@@ -452,6 +535,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (RADIO, "radio"),
         (TREE_RANGE, "tree range"),
         (TREE_CURSOR, "tree cursor"),
+        (TREE_PROGRAM_CURSOR, "tree program cursor"),
         (RANGE, "range"),
         (POSITION, "position"),
         (ITEMS, "items"),
@@ -486,6 +570,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         )
         .register(
             TREE_CURSOR,
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+        )
+        .register(
+            TREE_PROGRAM_CURSOR,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         );
     Library::named(

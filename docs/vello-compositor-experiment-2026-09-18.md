@@ -183,3 +183,21 @@ pass in three repetitions. No application was launched. Run the real-frame
 check by building the library tests and running their executable with
 `editor_compositor_profile --ignored --nocapture --test-threads=1` under explicit
 GPU access.
+
+### Source-link hover follow-up
+
+Command-hover over a generated chamfer leaf reproduced disappearing controls at
+3028 × 1836 physical pixels, scale 2, with the preview occupying 70% of the
+window. The control tree and hit targets remained present. Each matching notch
+painted a tiny translucent rectangle inside a separate pane-sized clip; hundreds
+of these clips caused the vector pass to leave its target unchanged. Direct
+Vello rendering also failed, so this was not specific to the image compositor.
+
+Vello 0.9 has fixed working-buffer capacities and skips painting after an
+overflow; this is consistent with the observed failure, though allocator counts
+were not read back. No backend patch or buffer-policy workaround was needed:
+rectangular source feedback now fills the intersection of its rectangle and its
+placement clip, without creating a clip layer. The full-size headless
+`cam_hover_compositor_pixels` regression verifies that hover changes only a
+small portion of the preview and that leaving restores it. An ordinary CPU test
+also checks the clipped rectangle and absence of extra clip layers.

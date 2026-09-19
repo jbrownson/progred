@@ -4,7 +4,7 @@ The `controls` library supplies `with controls`, a viewport composition function
 It takes `controls` (a zero-argument Grap callable), `view` (a callable), `value`,
 `width`, and `height`, and returns an ordinary GID declaration. Its partial:
 
-1. Runs `controls` with evaluation-local control capabilities.
+1. During layout preparation, runs `controls` with evaluation-local control capabilities.
 2. Measures the emitted native widgets.
 3. Calls `view` with the original `value`, full `width` and `height`, and the
    controls function's ordinary return value under `parameters`.
@@ -63,9 +63,31 @@ then uses the same source-following handlers as IoP: Command-hover reveals its
 source, Command-click selects it, and source hover/selection highlights the notch.
 Plain clicks and drags still select ranges. Generated list results do not inherit
 the argument expression's source: their element paths would not name children of
-that expression. The CAM example currently passes such a generated result, so
-its source-capture hookup remains pending; no provenance is inferred from equal
-values, closures, or display names.
+that expression.
+
+For generated trees, `tree program cursor` takes a `key`, `tree program` callable,
+optional `fuel`, and optional `initial` position. It collects the program through
+the editor's dependency-tracked memo system at that key, then emits the same
+playback/range widgets. It returns `{items, range, position}`: ordinary nested
+list data plus the same cursor outputs as `tree cursor`. The control consumes the
+explicit native hierarchy, not a reconstruction from those items, so a list-valued
+leaf remains one leaf and an empty group remains empty. Each notch's decoration
+captures its source; the shared source-following handler reads the winning source
+from settled hover. No allocation identity, name, or closure
+inspection connects data back to provenance, and no opaque Rust handle or source
+fields enter Grap data. Passing the returned items to the view shares the collected
+result rather than running the program again. The CAM example uses this interface;
+see [trees](trees.md).
+
+Plain `collect tree` remains an ordinary library function inside controls as well
+as outside them: it has no control key or implicit association with later widgets.
+Use the list-based controls when lists themselves are the intended hierarchy;
+use the program-based cursor when explicit emissions and their source links matter.
+
+Links target stored expressions, not runtime invocation identities. Repeated
+execution of one producer highlights all notches linked to that expression.
+Command-following uses visible navigation landmarks; it does not open hidden
+sections or invent a target if the source is not currently projected.
 
 Separators narrow to at most a quarter of each notch's width and disappear below
 two physical pixels per notch. Dense rows retain the same selection color,
@@ -158,11 +180,12 @@ indicator painting; Progred composes text, layout, and selection handlers.
 
 The controls function, view function, and preview projection all run again on
 each projected frame; controls do not cache emitted widgets. The CAM pane's
-`prepare` function constructs its program tree through the general
-dependency-tracked computation system, before its `viewport` function receives
-width and height. Resizing therefore rebuilds presentation without changing
-the generated cutting functions' captured environments or recording their paths
-again. A surrounding `render` declaration can also reuse pure evaluation.
+`tree program cursor` call constructs its program tree through the general
+dependency-tracked computation system. Its explicit inputs are the builder
+callable and fuel, not viewport dimensions or control state. Resizing therefore
+rebuilds presentation without changing the generated cutting functions' captured
+environments or recording their paths again. A surrounding `render` declaration
+can also reuse pure evaluation.
 The `with controls` constructor declares its reads tracked;
 it only evaluates arguments and returns data. Effects or untracked reads in
 those arguments still prevent reuse. The view's expensive geometry also uses

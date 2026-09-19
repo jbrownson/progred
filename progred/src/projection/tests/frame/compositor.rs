@@ -15,6 +15,144 @@ use vello::{AaConfig, RenderParams, Renderer, RendererOptions, Scene};
 mod gpu;
 
 #[test]
+#[ignore = "headless CAM hover GPU regression"]
+fn cam_hover_compositor_pixels() {
+    let gpu = gpu::Gpu::new();
+    // At this size, hundreds of pane-sized highlight clips left the controls'
+    // vector pass unpainted. Small-window tests did not reproduce the failure.
+    let size = kurbo::Size::new(3028.0, 1836.0);
+    let scale = 2.0;
+    let source = crate::command::Example::Toolpaths.source().replace(
+        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED
+            .simple()
+            .to_string(),
+        &crate::libraries::toolpath::vocabulary::PREVIEW_MESH
+            .simple()
+            .to_string(),
+    );
+    let (doc, names) = crate::gid_text::parse(&source).unwrap();
+    let mut editor = crate::test_editor(doc);
+    editor.model.workspace.left_width = 0.70;
+    let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
+    editor.computations = crate::computations::Computations::new(
+        incremental::background::Executor::new({
+            let jobs = jobs.clone();
+            move |job| jobs.lock().unwrap().push_back(job)
+        }),
+        || {},
+    );
+    let mut runner = crate::EditorRunner::new(editor);
+    runner.refresh_frame(scale, size);
+    loop {
+        let job = jobs.lock().unwrap().pop_front();
+        let Some(job) = job else { break };
+        std::thread::spawn(job).join().unwrap();
+        assert!(runner.editor.computations.tasks.poll());
+        runner.refresh_frame(scale, size);
+    }
+    let pane = runner
+        .frame
+        .dispatch
+        .view_regions
+        .iter()
+        .find(|region| matches!(region.root.target(), crate::workspace::Target::Pane { .. }))
+        .unwrap()
+        .rect;
+    let point = (1..(160.0 * scale) as usize)
+        .flat_map(|dy| {
+            (30..pane.width() as usize - 30)
+                .step_by(8)
+                .map(move |dx| (dx, dy))
+        })
+        .find_map(|(dx, dy)| {
+            let point = Point::new(pane.x0 + dx as f64, pane.y1 - dy as f64);
+            match runner
+                .frame
+                .dispatch
+                .hover_geometry
+                .probe(Some(point), None, 0.0)
+            {
+                Some((
+                    _,
+                    Claim::Direct(Hovered::Tree(Hover::Source(SourceTrace::InCell {
+                        cell,
+                        path,
+                        ..
+                    }))),
+                )) if cell == names["evenly_spaced"] => {
+                    let value = path.iter().try_fold(
+                        runner.editor.model.doc.cells.value(cell)?,
+                        |value, step| match step {
+                            Step::Key(key) => value.as_record()?.get(key),
+                            Step::Element(position) => value.as_list()?.get(position),
+                            _ => None,
+                        },
+                    )?;
+                    (value
+                        .as_record()?
+                        .get(&grap::vocabulary::FUNCTION)?
+                        .as_cell()?
+                        == crate::libraries::tree::vocabulary::LEAF)
+                        .then_some(point)
+                }
+                _ => None,
+            }
+        })
+        .expect("a generated chamfer leaf has a source-linked notch");
+    let target = gpu.texture(size.width as u32, size.height as u32);
+    let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
+    let mut resources = Resources::default();
+    let mut baseline: Option<Vec<u8>> = None;
+    for hovered in [false, true, false] {
+        runner.editor.pointer = hovered.then_some(point);
+        runner.editor.modifiers = if hovered {
+            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL
+        } else {
+            Default::default()
+        };
+        runner.refresh_frame(scale, size);
+        let mut list = DrawList::new();
+        puri::frame::render(runner.prepare_paint(scale, size).renders, &mut list);
+        runner.frame_presented();
+        let mut canvas = SplitCanvas::default();
+        puri::draw::replay(&list, &mut canvas);
+        let output = compositor
+            .render(
+                &gpu.device,
+                &gpu.queue,
+                &canvas.finish(),
+                &mut resources,
+                &target,
+                Color::WHITE,
+            )
+            .unwrap();
+        let pixels = gpu.read(&output.texture);
+        if let Some(baseline) = &baseline {
+            let changed = pixels
+                .chunks_exact(4)
+                .zip(baseline.chunks_exact(4))
+                .enumerate()
+                .filter(|(i, (a, b))| {
+                    i % (size.width as usize) < pane.x1 as usize
+                        && a.iter().zip(b.iter()).any(|(a, b)| a.abs_diff(*b) > 2)
+                })
+                .count();
+            if hovered {
+                assert!(changed > 0, "the source-linked notches should highlight");
+                assert!(
+                    changed < (pane.area() / 20.0) as usize,
+                    "hover should tint only notches, not erase controls or fill the pane: {changed} changed pixels"
+                );
+            } else {
+                assert_eq!(changed, 0, "leaving the source restores the preview");
+            }
+        } else {
+            baseline = Some(pixels);
+        }
+    }
+}
+
+#[test]
 #[ignore = "headless full-editor GPU compositor comparison"]
 fn editor_compositor_profile() {
     let gpu = gpu::Gpu::new();

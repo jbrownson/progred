@@ -87,6 +87,304 @@ fn quote(value: Value) -> Value {
 fn splice(value: Value) -> Value {
     Value::record([(c::UNQUOTE, value)])
 }
+
+#[test]
+fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
+    use crate::hover::SourceTrace;
+    let source = SourceTrace::Stored(Rc::from([]));
+    let rect = Rect::new(30.0, 40.0, 34.0, 56.0);
+    for clip in [
+        Rect::new(0.0, 0.0, 3000.0, 1800.0),
+        Rect::new(32.0, 45.0, 33.0, 50.0),
+    ] {
+        with_context(&Output::default(), |context| {
+            let decorate = crate::projection::source_link::decoration(source.clone())(context);
+            let mut output = widget::HoverOutput::default();
+            decorate(
+                &mut widget::HoverContext::new(Default::default(), &mut output),
+                Placement::new(rect, clip),
+            );
+            let frame = output.bind(widget::ResolvedHover {
+                hovered_trace: Some(source.clone()),
+                ..Default::default()
+            });
+            let mut drawing = DrawList::new();
+            puri::frame::render(frame.renders, &mut drawing);
+            assert!(matches!(drawing.0.as_slice(), [DrawCmd::Fill {
+                shape: Shape::Rect(painted), transform, ..
+            }] if *painted == rect.intersect(clip) && *transform == Affine::IDENTITY));
+        });
+    }
+}
+
+#[test]
+fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let computations = crate::computations::Computations::from_sources(sources);
+    let root = crate::workspace::Root::document();
+    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let mut previous: Option<Value> = None;
+    for width in [400.0, 600.0, 401.0] {
+        let declaration = presentation::viewport_output(
+            sources.resolve_path(&pane.path).unwrap(),
+            &sources,
+            width,
+            600.0,
+        )
+        .unwrap();
+        let controls = declaration
+            .as_record()
+            .unwrap()
+            .get(&WITH_CONTROLS)
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&CONTROLS)
+            .unwrap();
+        with_context(&Output::default(), |context| {
+            let inputs = crate::projection::Cx {
+                sources,
+                computations: Some(&computations),
+                view: &root,
+                ..context.inputs.clone()
+            };
+            let mut context = widget::Context {
+                inputs: &inputs,
+                text: context.text,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+            };
+            let start = std::time::Instant::now();
+            let (widgets, parameters) = controls_output(controls, None, width, &context).unwrap();
+            eprintln!("CAM controls width {width}: {:?}", start.elapsed());
+            let tree = parameters
+                .as_record()
+                .unwrap()
+                .get(&names["playback"])
+                .unwrap()
+                .as_record()
+                .unwrap()
+                .get(&ITEMS)
+                .unwrap();
+            if let Some(previous) = &previous {
+                assert!(std::ptr::eq(
+                    previous.as_list().unwrap().iter().as_slice(),
+                    tree.as_list().unwrap().iter().as_slice()
+                ));
+            }
+            previous = Some(tree.clone());
+            assert_eq!(widgets.len(), 7, "radio, playback, and five grouping rows");
+            // A genuinely generated leaf links to its producer after all mapping,
+            // control declaration, collection, memo, and widget boundaries.
+            let measured = widgets[2](&mut context);
+            let point = puri_widgets::range_slider::RangeSlider::new(504, 0..504)
+                .unwrap()
+                .item_rect(Rect::new(PADDING_X, 0.0, width - PADDING_X, 20.0), 1.0, 0)
+                .unwrap()
+                .center();
+            let placed = widget::frame::place(
+                measured,
+                Placement::root(Rect::new(0.0, 0.0, width, 20.0)),
+                &widget::HoverInput {
+                    pointer: Some(point),
+                    ..Default::default()
+                },
+            );
+            assert!(
+                matches!(&placed.claim, Some((_,puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(crate::hover::SourceTrace::InCell {cell,..}))))) if *cell==names["diagonal_groups"]),
+                "{:?}",
+                placed.claim
+            );
+        });
+    }
+}
+
+#[test]
+fn program_cursor_preserves_list_leaves_and_captures_sources_directly() {
+    use tree::vocabulary as t;
+    let leaf = |value| ::grap::call(t::LEAF.into(), [(VALUE, value)]);
+    let group = |children| {
+        ::grap::call(
+            t::GROUP.into(),
+            [(layout::vocabulary::CHILDREN, Value::list(children))],
+        )
+    };
+    let payload = Value::list([f64::value(1.0), f64::value(2.0)]);
+    let mut doc = gid::Document {
+        root: Some(A.into()),
+        cells: Cells::new(),
+    };
+    doc.cells.set_value(
+        A,
+        ::grap::lambda(
+            [],
+            group([
+                leaf(payload.clone()),
+                group([leaf(f64::value(1.0)), leaf(f64::value(2.0))]),
+            ]),
+        ),
+    );
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let controls = ::grap::lambda(
+        [],
+        ::grap::call(
+            TREE_PROGRAM_CURSOR.into(),
+            [(KEY, quote(B.into())), (t::PROGRAM, quote(A.into()))],
+        ),
+    );
+    with_context(&Output::default(), |context| {
+        let inputs = crate::projection::Cx {
+            sources,
+            ..context.inputs.clone()
+        };
+        let mut context = widget::Context {
+            inputs: &inputs,
+            text: context.text,
+            project: context.project,
+            path: context.path,
+            value: context.value,
+        };
+        let (widgets, result) = controls_output(&controls, None, 200.0, &context).unwrap();
+        let fields = result.as_record().unwrap();
+        assert_eq!(
+            fields.get(&ITEMS),
+            Some(&Value::list([payload.clone(), payload]))
+        );
+        assert_eq!(fields.get(&RANGE), Some(&tree_range::encode(0..3)));
+        assert_eq!(fields.get(&POSITION), Some(&f64::value(0.0)));
+        assert_eq!(widgets.len(), 3, "playback and two grouping rows");
+        drop(result);
+        let placed = widget::frame::place(
+            widgets[1](&mut context),
+            Placement::root(Rect::new(0.0, 0.0, 200.0, 20.0)),
+            &widget::HoverInput {
+                pointer: Some(Point::new(30.0, 10.0)),
+                ..Default::default()
+            },
+        );
+        let Some((
+            _,
+            puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(
+                crate::hover::SourceTrace::InCell { cell, path, .. },
+            ))),
+        )) = &placed.claim
+        else {
+            panic!("{:?}", placed.claim)
+        };
+        assert_eq!(*cell, A);
+        let target = path
+            .iter()
+            .try_fold(doc.cells.value(A).unwrap(), |value, step| match step {
+                gid::Step::Key(key) => value.as_record()?.get(key),
+                gid::Step::Element(position) => value.as_list()?.get(position),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            target
+                .as_record()
+                .unwrap()
+                .get(&::grap::vocabulary::FUNCTION),
+            Some(&t::LEAF.into())
+        );
+    });
+}
+
+#[test]
+fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
+    use tree::vocabulary as t;
+    let collect = ::grap::call(
+        t::COLLECT.into(),
+        [(
+            t::PROGRAM,
+            ::grap::lambda(
+                [],
+                ::grap::call(t::LEAF.into(), [(VALUE, Value::list([f64::value(7.0)]))]),
+            ),
+        )],
+    );
+    let libraries = crate::stack::load().libraries;
+    let expected = ::grap::evaluate(&collect, &libraries, 1000).result;
+    with_context(&Output::default(), |context| {
+        let inputs = crate::projection::Cx {
+            sources: crate::sources::Sources {
+                libraries: &libraries,
+                ..context.inputs.sources
+            },
+            ..context.inputs.clone()
+        };
+        let context = widget::Context {
+            inputs: &inputs,
+            text: context.text,
+            project: context.project,
+            path: context.path,
+            value: context.value,
+        };
+        let (widgets, result) =
+            controls_output(&::grap::lambda([], collect), None, 200.0, &context).unwrap();
+        assert!(widgets.is_empty());
+        assert_eq!(result, expected);
+        assert_eq!(result, Value::list([f64::value(7.0)]));
+    });
+}
+
+#[test]
+fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
+    use tree::vocabulary as t;
+    let libraries = crate::stack::load().libraries;
+    for (function, field, leaves, widget_count) in [
+        (t::GROUP, layout::vocabulary::CHILDREN, 0, 0),
+        (t::LEAF, VALUE, 1, 2),
+    ] {
+        let controls = ::grap::lambda(
+            [],
+            ::grap::call(
+                TREE_PROGRAM_CURSOR.into(),
+                [
+                    (KEY, quote(A.into())),
+                    (
+                        t::PROGRAM,
+                        ::grap::lambda(
+                            [],
+                            ::grap::call(function.into(), [(field, Value::list([]))]),
+                        ),
+                    ),
+                ],
+            ),
+        );
+        with_context(&Output::default(), |context| {
+            let inputs = crate::projection::Cx {
+                sources: crate::sources::Sources {
+                    libraries: &libraries,
+                    ..context.inputs.sources
+                },
+                ..context.inputs.clone()
+            };
+            let context = widget::Context {
+                inputs: &inputs,
+                text: context.text,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+            };
+            let (widgets, result) = controls_output(&controls, None, 200.0, &context).unwrap();
+            assert_eq!(widgets.len(), widget_count);
+            let fields = result.as_record().unwrap();
+            assert_eq!(fields.get(&ITEMS), Some(&Value::list([])));
+            assert_eq!(fields.get(&RANGE), Some(&tree_range::encode(0..leaves)));
+        });
+    }
+}
 fn slider(key: CellId, initial: f64, max: f64) -> Value {
     ::grap::call(
         SLIDER.into(),
@@ -618,10 +916,14 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         let frame = build(selected, hovered);
         let mut drawing = DrawList::new();
         puri::frame::render(frame.renders, &mut drawing);
+        let styles = widget::style::editor(1.0);
         drawing
             .0
             .iter()
-            .filter(|cmd| matches!(cmd, DrawCmd::Clip { .. }))
+            .filter(|cmd| {
+                matches!(cmd, DrawCmd::Fill { brush, .. }
+                if *brush == styles.selection_wash || *brush == styles.accent_wash.brush)
+            })
             .count()
     };
     assert_eq!(draws(None, None), 0);

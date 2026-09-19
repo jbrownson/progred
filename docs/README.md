@@ -61,3 +61,5 @@ remaining tool-change/chamfer work.
 bull-mill candidate and why it has not replaced the working approximation.
 [Controls](controls.md) describes reusable sliders and Grap control composition
 used by toolpath playback.
+[Final-encoded trees](trees.md) describes scoped hierarchy construction and
+source-linked collection shared by the CAM controls and preview.
