@@ -99,8 +99,8 @@ pub enum Hover {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct State {
     open: Option<usize>,
-    /// Keyboard cursor: position among the open menu's command
-    /// entries.
+    /// Highlighted command, shared by pointer and keyboard navigation.
+    /// Separators do not count toward this position.
     cursor: Option<usize>,
 }
 
@@ -136,7 +136,8 @@ pub enum Navigation {
 
 /// Keyboard navigation inside an open drawn menu: vertical arrows walk
 /// the enabled items, horizontal arrows switch menus, Enter or Space
-/// activates the cursored item. Escape remains the caller's close.
+/// activates the cursored item. F10 enters/leaves the bar; Escape and
+/// Tab dismiss it without sending the key to the document underneath.
 pub fn navigate(
     state: &mut State,
     menus: &[Menu],
@@ -144,12 +145,36 @@ pub fn navigate(
     event: &KeyboardEvent,
 ) -> Navigation {
     use ui_events::keyboard::NamedKey;
-    let Some(open) = state.open else {
-        return Navigation::Pass;
-    };
     if !event.state.is_down() {
         return Navigation::Pass;
     }
+    if state.open.is_some()
+        && !event.modifiers.ctrl()
+        && !event.modifiers.meta()
+        && !event.modifiers.alt()
+        && matches!(event.key, Key::Named(NamedKey::Escape | NamedKey::Tab))
+    {
+        state.close();
+        return Navigation::Handled;
+    }
+    if !crate::modifiers::plain(&event.modifiers) {
+        return Navigation::Pass;
+    }
+    let first_enabled = |menu: usize| {
+        menus.get(menu).and_then(|menu| {
+            commands(std::slice::from_ref(menu)).position(|command| availability.enabled(command))
+        })
+    };
+    if event.key == Key::Named(NamedKey::F10) && !menus.is_empty() {
+        if !state.close() {
+            state.open = Some(0);
+            state.cursor = first_enabled(0);
+        }
+        return Navigation::Handled;
+    }
+    let Some(open) = state.open else {
+        return Navigation::Pass;
+    };
     let items = menus
         .get(open)
         .map(|menu| {
@@ -189,14 +214,24 @@ pub fn navigate(
             state.cursor = step(state.cursor, -1);
             Navigation::Handled
         }
+        Key::Named(NamedKey::Home) => {
+            state.cursor = step(None, 1);
+            Navigation::Handled
+        }
+        Key::Named(NamedKey::End) => {
+            state.cursor = step(None, -1);
+            Navigation::Handled
+        }
         Key::Named(NamedKey::ArrowLeft) if !menus.is_empty() => {
-            state.open = Some((open + menus.len() - 1) % menus.len());
-            state.cursor = None;
+            let next = (open + menus.len() - 1) % menus.len();
+            state.open = Some(next);
+            state.cursor = first_enabled(next);
             Navigation::Handled
         }
         Key::Named(NamedKey::ArrowRight) if !menus.is_empty() => {
-            state.open = Some((open + 1) % menus.len());
-            state.cursor = None;
+            let next = (open + 1) % menus.len();
+            state.open = Some(next);
+            state.cursor = first_enabled(next);
             Navigation::Handled
         }
         Key::Named(NamedKey::Enter) => match state.cursor.and_then(|at| items.get(at)) {
@@ -230,15 +265,16 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
 mod view {
     use super::{Entry, Hover, State, definition, drawn_label};
     use crate::Editor;
-    use crate::command::{Availability, Command, Spec, Toggles, spec};
+    use crate::command::{Availability, Command, Toggles, spec};
     use crate::frame::Hovered;
     use crate::placed::{self, HoverPass};
-    use kurbo::{Affine, Insets, Rect, Stroke};
+    use kurbo::{Affine, BezPath, Insets, Rect, Stroke};
     use measured::{self, Extent, Measured};
     use peniko::{Brush, Color};
     use puri::draw::Canvas;
-    use puri::handler::HasHandler;
+    use puri::handler::{Event, EventOutcome, HasHandler};
     use puri::text::{TextCtx, TextStyle};
+    use ui_events::pointer::PointerType;
 
     const BAR_HEIGHT: f64 = 30.0;
     const MENU_WIDTH: f64 = 230.0;
@@ -281,21 +317,34 @@ mod view {
         BAR_HEIGHT * scale
     }
 
-    fn activatable<C: 'static>(
+    fn interactive(
         hover: Hover,
-        content: Measured<HoverPass<C>>,
-        action: impl Fn(&mut C, &placed::DispatchContext<C>) -> bool + 'static,
-    ) -> Measured<HoverPass<C>> {
+        content: Measured<HoverPass<Editor>>,
+        point: impl Fn(&mut State) + 'static,
+        press: impl Fn(&mut Editor, &placed::DispatchContext<Editor>) -> bool + 'static,
+    ) -> Measured<HoverPass<Editor>> {
         placed::before(content, move |p, placement| {
             let target = Hovered::Menu(hover);
-            p.claim(placement, target.clone());
-            p.handler()
-                .on_pointer_down_with(move |world, event, input| {
-                    !placement.clipped_out()
-                        && puri::interact::is_primary_contact(event)
-                        && input.matches(&target)
-                        && action(world, input)
-                });
+            p.claim_exact(placement, target.clone());
+            p.handler().on(move |app: &mut Editor, event, input| {
+                let handled = !placement.clipped_out()
+                    && input.matches(&target)
+                    && match &event {
+                        Event::PointerDown(event) => {
+                            puri::interact::is_primary_contact(event) && press(app, input)
+                        }
+                        Event::PointerMove(event)
+                            if event.pointer.pointer_type == PointerType::Mouse
+                                && event.current.buttons.is_empty()
+                                && app.menu.open().is_some() =>
+                        {
+                            point(&mut app.menu);
+                            true
+                        }
+                        _ => false,
+                    };
+                EventOutcome::from_handled(event, handled)
+            });
         })
     }
 
@@ -307,9 +356,11 @@ mod view {
         active: bool,
         scale: f64,
     ) -> Measured<HoverPass<Editor>> {
+        let text = crate::render::text(tcx, label, style);
+        let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
         let content = measured::pad(
-            Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
-            crate::render::text(tcx, label, style),
+            Insets::new(10.0 * scale, vertical, 10.0 * scale, vertical),
+            text,
         );
         let content = placed::decorate(content, move |p, rect| {
             p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
@@ -320,10 +371,18 @@ mod view {
                 }
             });
         });
-        activatable(Hover::Heading(index), content, move |app, _| {
-            app.menu.toggle(index);
-            true
-        })
+        interactive(
+            Hover::Heading(index),
+            content,
+            move |state| {
+                state.open = Some(index);
+                state.cursor = None;
+            },
+            move |app, _| {
+                app.menu.toggle(index);
+                true
+            },
+        )
     }
 
     fn separator<C: 'static>(scale: f64, width: f64) -> Measured<HoverPass<C>> {
@@ -349,17 +408,25 @@ mod view {
         )
     }
 
-    fn item(
-        tcx: &mut TextCtx,
-        styles: &Styles,
+    struct Item {
         command: Command,
-        spec: Spec,
+        label: Measured<HoverPass<Editor>>,
+        shortcut: Measured<HoverPass<Editor>>,
         checked: bool,
         enabled: bool,
         cursored: bool,
-        scale: f64,
-        width: f64,
-    ) -> Measured<HoverPass<Editor>> {
+        index: usize,
+    }
+
+    fn measure_item(
+        tcx: &mut TextCtx,
+        styles: &Styles,
+        description: &Description,
+        command: Command,
+        index: usize,
+    ) -> Item {
+        let spec = spec(command);
+        let enabled = description.availability.enabled(command);
         let style = if enabled {
             &styles.text
         } else {
@@ -370,41 +437,71 @@ mod view {
         } else {
             &styles.disabled
         };
-        let label = crate::render::text(
-            tcx,
-            &format!("{}  {}", if checked { "✓" } else { " " }, spec.label),
-            style,
-        );
+        let label = crate::render::text(tcx, spec.label, style);
         let shortcut = crate::render::text(
             tcx,
             &spec.shortcut.map(drawn_label).unwrap_or_default(),
             shortcut_style,
         );
-        let gap =
-            (width - 24.0 * scale - label.extent.width - shortcut.extent.width).max(12.0 * scale);
+        Item {
+            command,
+            label,
+            shortcut,
+            checked: spec.toggle && description.toggles.checked(command),
+            enabled,
+            cursored: description.state.cursor() == Some(index),
+            index,
+        }
+    }
+
+    fn item(item: Item, scale: f64, width: f64) -> Measured<HoverPass<Editor>> {
+        let Item {
+            command,
+            label,
+            shortcut,
+            checked,
+            enabled,
+            cursored,
+            index,
+        } = item;
+        // Every row shares the same label origin and right-aligned shortcut
+        // column. The checkmark has its own gutter, independent of text shaping.
+        let gap = width - 40.0 * scale - label.extent.width - shortcut.extent.width;
         let content = measured::pad(
-            Insets::new(12.0 * scale, 5.0 * scale, 12.0 * scale, 5.0 * scale),
+            Insets::new(28.0 * scale, 5.0 * scale, 12.0 * scale, 5.0 * scale),
             measured::row(gap, vec![label, shortcut]),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
-                let hovered = matches!(
-                    hover.hovered.as_ref(),
-                    Some(Hovered::Menu(Hover::Item(c))) if *c == command
+            if enabled && cursored {
+                p.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
+            }
+            if checked {
+                let x = rect.x0;
+                let y = rect.center().y;
+                let mut check = BezPath::new();
+                check.move_to((x + 10.0 * scale, y));
+                check.line_to((x + 13.0 * scale, y + 3.0 * scale));
+                check.line_to((x + 20.0 * scale, y - 4.0 * scale));
+                p.stroke(
+                    check,
+                    Stroke::new(1.5 * scale),
+                    Color::new([0.13, 0.14, 0.16, 1.0]),
+                    Affine::IDENTITY,
                 );
-                if enabled && (hovered || cursored) {
-                    cv.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
-                }
-            });
+            }
         });
-        if enabled {
-            activatable(Hover::Item(command), content, move |app, input| {
-                app.choose_menu(command, input.geometry(scale));
+        interactive(
+            Hover::Item(command),
+            content,
+            move |state| state.cursor = enabled.then_some(index),
+            move |app, input| {
+                if enabled {
+                    app.choose_menu(command, input.geometry(scale));
+                }
+                // Disabled rows still consume the press.
                 true
-            })
-        } else {
-            content
-        }
+            },
+        )
     }
 
     fn popup(
@@ -413,41 +510,51 @@ mod view {
         description: &Description,
         menu_entries: &[Entry],
     ) -> Measured<HoverPass<Editor>> {
-        let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let mut command_index = 0;
-        let entries = menu_entries
+        let items = menu_entries
             .iter()
             .copied()
             .map(|entry| match entry {
-                Entry::Separator => separator(description.scale, width),
+                Entry::Separator => None,
                 Entry::Command(command) => {
-                    let spec = spec(command);
-                    let cursored = description.state.cursor() == Some(command_index);
+                    let item = measure_item(tcx, styles, description, command, command_index);
                     command_index += 1;
-                    item(
-                        tcx,
-                        styles,
-                        command,
-                        spec,
-                        spec.toggle && description.toggles.checked(command),
-                        description.availability.enabled(command),
-                        cursored,
-                        description.scale,
-                        width,
-                    )
+                    Some(item)
                 }
             })
+            .collect::<Vec<_>>();
+        let label_width = items
+            .iter()
+            .flatten()
+            .map(|item| item.label.extent.width)
+            .fold(0.0, f64::max);
+        let shortcut_width = items
+            .iter()
+            .flatten()
+            .map(|item| item.shortcut.extent.width)
+            .fold(0.0, f64::max);
+        let width = (MENU_WIDTH * scale).max(label_width + shortcut_width + 64.0 * scale);
+        let entries = items
+            .into_iter()
+            .map(|entry| match entry {
+                Some(prepared) => item(prepared, scale, width),
+                None => separator(scale, width),
+            })
             .collect();
+        let content = measured::pad(
+            Insets::new(0.0, 4.0 * scale, 0.0, 4.0 * scale),
+            measured::col(0, 0.0, entries),
+        );
         placed::before(
-            placed::decorate(measured::col(0, 0.0, entries), move |p, rect| {
+            placed::decorate(content, move |p, rect| {
                 p.fill(
                     rect,
                     Color::new([0.975, 0.975, 0.982, 1.0]),
                     Affine::IDENTITY,
                 );
                 p.stroke(
-                    rect,
+                    rect.inflate(-scale.max(1.0) / 2.0, -scale.max(1.0) / 2.0),
                     Stroke::new(scale.max(1.0)),
                     Color::new([0.70, 0.71, 0.74, 1.0]),
                     Affine::IDENTITY,
@@ -455,6 +562,22 @@ mod view {
             }),
             |p, placement| {
                 p.occlude(placement);
+                p.handler().on_pointer_move(move |app: &mut Editor, event| {
+                    if event.pointer.pointer_type == PointerType::Mouse
+                        && event.current.buttons.is_empty()
+                        && placement.contains(kurbo::Point::new(
+                            event.current.position.x,
+                            event.current.position.y,
+                        ))
+                    {
+                        app.menu.cursor = None;
+                        true
+                    } else {
+                        false
+                    }
+                });
+                p.handler()
+                    .on_pointer_cancel(|app: &mut Editor, _| app.menu.close());
             },
         )
     }
@@ -489,27 +612,8 @@ mod view {
                 .get(index)
                 .map(|menu| popup(tcx, &styles, &description, &menu.entries))
         });
-        let height = bar_height(description.scale);
         let bar = placed::decorate(
-            measured::min_width(
-                description.width,
-                measured::row(
-                    0.0,
-                    // A zero-width baseline strut gives the bar its fixed height
-                    // without shifting the headings; the box algebra has no
-                    // minimum-ascent-and-descent wrapper yet.
-                    std::iter::once(placed::leaf(
-                        Extent {
-                            width: 0.0,
-                            ascent: height * 0.7,
-                            descent: height * 0.3,
-                        },
-                        |_, _| {},
-                    ))
-                    .chain(headings)
-                    .collect(),
-                ),
-            ),
+            measured::min_width(description.width, measured::centered_row(0.0, headings)),
             |p, rect| {
                 p.fill(rect, Color::new([0.93, 0.93, 0.945, 1.0]), Affine::IDENTITY);
                 p.fill(
@@ -528,6 +632,9 @@ mod view {
 }
 
 pub use view::{Description, bar_height, view};
+
+#[cfg(test)]
+mod interaction_tests;
 
 #[cfg(test)]
 mod tests {
@@ -648,7 +755,7 @@ mod tests {
     }
 
     #[test]
-    fn horizontal_arrows_switch_menus_and_reset_the_cursor() {
+    fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
         let menus = definition();
         let mut state = State::default();
         state.toggle(0);
@@ -672,7 +779,7 @@ mod tests {
             Navigation::Handled
         ));
         assert_eq!(state.open(), Some(1));
-        assert_eq!(state.cursor(), None);
+        assert_eq!(state.cursor(), Some(0));
         assert!(matches!(
             navigate(
                 &mut state,
@@ -683,6 +790,26 @@ mod tests {
             Navigation::Handled
         ));
         assert_eq!(state.open(), Some(0));
+        assert_eq!(state.cursor(), Some(0));
+    }
+
+    #[test]
+    fn keyboard_entry_endpoints_and_dismissal() {
+        let menus = definition();
+        let mut state = State::default();
+        navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
+        assert_eq!(state.open(), Some(0));
+        assert_eq!(state.cursor(), Some(0));
+        navigate(&mut state, &menus, all_enabled(), &named(NamedKey::End));
+        assert_eq!(state.cursor(), Some(commands(&menus[..1]).count() - 1));
+        navigate(&mut state, &menus, all_enabled(), &named(NamedKey::Home));
+        assert_eq!(state.cursor(), Some(0));
+        for key in [NamedKey::Escape, NamedKey::Tab, NamedKey::F10] {
+            navigate(&mut state, &menus, all_enabled(), &named(key));
+            assert_eq!(state.open(), None);
+            assert_eq!(state.cursor(), None);
+            navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
+        }
     }
 
     #[test]

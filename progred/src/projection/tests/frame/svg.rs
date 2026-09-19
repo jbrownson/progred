@@ -320,6 +320,25 @@ fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
 }
 
 #[test]
+#[ignore = "writes drawn-menu layout captures without launching the app"]
+fn drawn_menu_svg_captures() {
+    for (menu, file, width) in [
+        (0, "menu_file.svg", 640.0),
+        (1, "menu_examples.svg", 640.0),
+        (3, "menu_view.svg", 350.0),
+    ] {
+        let mut editor = crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        });
+        editor.drawn_menu = true;
+        editor.model.workspace.toggle_projection(None);
+        editor.menu.toggle(menu);
+        render_editor(editor, kurbo::Size::new(width, 420.0), file);
+    }
+}
+
+#[test]
 #[ignore = "writes full-editor captures, including Fidget rasterization"]
 fn editor_svg_captures() {
     use crate::command::Example;

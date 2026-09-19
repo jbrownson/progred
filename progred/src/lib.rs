@@ -79,7 +79,7 @@ use puri::handler::ImeEvent;
 use puri_vello::compositor::{Compositor, Resources};
 #[cfg(test)]
 use ui_events::ScrollDelta;
-use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::keyboard::{KeyboardEvent, Modifiers};
 use ui_events::pointer::{
     PointerEvent, PointerGestureEvent, PointerId, PointerInfo, PointerScrollEvent, PointerType,
     PointerUpdate,
@@ -1391,29 +1391,21 @@ impl Editor {
         if !self.drawn_menu {
             return false;
         }
-        if self.menu.open().is_some() {
-            if event.state.is_down()
-                && modifiers::plain(&event.modifiers)
-                && matches!(event.key, Key::Named(NamedKey::Escape))
-            {
-                return self.menu.close();
-            }
-            let availability = self.menu_availability();
-            return match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
-                menu::Navigation::Activate(command) => {
-                    self.choose_menu(command, geometry);
-                    true
-                }
-                menu::Navigation::Handled => true,
-                menu::Navigation::Pass => self.menu.captures_key(event),
-            };
+        let availability = self.menu_availability();
+        if let Some(command) =
+            menu::shortcut(event).filter(|command| availability.enabled(*command))
+        {
+            self.choose_menu(command, geometry);
+            return true;
         }
-        menu::shortcut(event)
-            .filter(|command| self.menu_availability().enabled(*command))
-            .is_some_and(|command| {
+        match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
+            menu::Navigation::Activate(command) => {
                 self.choose_menu(command, geometry);
                 true
-            })
+            }
+            menu::Navigation::Handled => true,
+            menu::Navigation::Pass => self.menu.captures_key(event),
+        }
     }
 
     /// Undo or redo one step, restoring the snapshot's document and

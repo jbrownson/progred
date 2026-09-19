@@ -9,6 +9,13 @@ make serve-web
 Open `http://127.0.0.1:8080/editor/` on this machine.
 The built-in documents are under the **Examples** menu.
 
+Click a menu heading to open it; while a menu is open, moving over another
+heading switches to it. Mouse and keyboard share one highlighted item.
+F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last
+enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
+losing focus dismisses the menu. The displayed Ctrl shortcuts work with menus
+open or closed. The native macOS menu remains separate.
+
 The browser build uses a shared-memory coordinator for the existing CAM background
 jobs. It requires a secure context (localhost or HTTPS) and cross-origin
 isolation, and WebAssembly SIMD support. The local server supplies

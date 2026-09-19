@@ -792,9 +792,9 @@ fn project_frame(
     if let Some((x, popup)) = menu_popup {
         let heading_width = menu_heading_width;
         // Outside presses close the popup. Its own Occludes claim
-        // becomes Hovered::Blocked over separators and disabled
-        // entries; enabled items resolve their semantic target above
-        // it, so no raw inside-swallow may preempt them.
+        // becomes Hovered::Blocked over separators; command items resolve
+        // their semantic target above it, so no raw inside-swallow may
+        // preempt them.
         let popup = placed::before(popup, move |p, placement| {
             let rect = placement.rect;
             let headings = Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
@@ -814,6 +814,9 @@ fn project_frame(
             });
         });
         stage = placed::floating(stage, popup, move |placement, extent| {
+            let x = x
+                .min(placement.clip_rect.x1 - extent.width)
+                .max(placement.clip_rect.x0);
             Some(Placement::new(
                 extent.rect_at(Point::new(x, content_viewport.y0)),
                 placement.clip_rect,
