@@ -6,7 +6,7 @@ use crate::libraries::{absent, f64, fidget, layout, presentation};
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
 use gid::Value;
 use nalgebra::Vector3;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 pub(super) mod computation;
 #[cfg(test)]
@@ -29,7 +29,6 @@ pub(super) fn preview(
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    renderer: &Rc<RefCell<fidget::mesh::Renderer>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?.get(&PREVIEW_MESH)?.as_record()?;
     let (model, depth) = fidget::mesh::read(fields.get(&presentation::vocabulary::VALUE)?)?;
@@ -44,7 +43,6 @@ pub(super) fn display(
     };
     let state = input.state.cloned();
     let scale = input.scale_factor;
-    let renderer = renderer.clone();
     let settings = computation::Settings {
         shape: (&model).into(),
         radius,
@@ -79,21 +77,15 @@ pub(super) fn display(
             .map_err(|error| ::grap::memo::failure(*error))
             .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
         let drawing = result.and_then(|geometry| {
-            fidget::mesh::image(
-                &geometry.geometry,
-                &model,
-                state.as_ref(),
-                scale,
-                &mut renderer.borrow_mut(),
-            )
-            .map(|drawing| {
-                if geometry.awaiting_first_surface {
-                    crate::display::overlay([drawing, crate::display::dim("…")])
-                } else {
-                    drawing
-                }
-            })
-            .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))
+            fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
+                .map(|drawing| {
+                    if geometry.awaiting_first_surface {
+                        crate::display::overlay([drawing, crate::display::dim("…")])
+                    } else {
+                        drawing
+                    }
+                })
+                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))
         });
         match drawing {
             Ok(drawing) => drawing.measure(context, build),

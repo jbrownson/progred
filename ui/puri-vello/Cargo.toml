@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 puri.workspace = true
 vello.workspace = true
+
+[dev-dependencies]
+nalgebra = "0.35"

@@ -53,6 +53,10 @@ impl<Paint> Drawing<Paint> {
 
 #[derive(Debug, Clone)]
 pub enum Command<Paint> {
+    Mesh {
+        scene: crate::mesh::Scene,
+        transform: Affine,
+    },
     Image {
         image: ImageData,
         transform: Affine,
@@ -78,6 +82,7 @@ pub enum Command<Paint> {
 impl<Paint> Command<Paint> {
     fn map_paint<Mapped>(self, map: &impl Fn(Paint) -> Mapped) -> Command<Mapped> {
         match self {
+            Self::Mesh { scene, transform } => Command::Mesh { scene, transform },
             Self::Image { image, transform } => Command::Image { image, transform },
             Self::Fill {
                 shape,
@@ -134,6 +139,7 @@ fn draw_commands<Paint, C: CanvasSink + ?Sized>(
 ) {
     for command in commands {
         match command {
+            Command::Mesh { scene, transform } => canvas.draw_mesh(scene, outer * transform),
             Command::Image { image, transform } => canvas.draw_image(image, outer * transform),
             Command::Fill {
                 shape,
@@ -223,6 +229,9 @@ pub struct GlyphRun {
 /// stream (puri-vello), recorders capture (`DrawList`), tests interpret
 /// however the assertion wants.
 pub trait Canvas: CanvasSink {
+    fn mesh(&mut self, scene: crate::mesh::Scene, transform: Affine) {
+        self.draw_mesh(scene, transform);
+    }
     fn image(&mut self, image: ImageData, transform: Affine) {
         self.draw_image(image, transform);
     }
@@ -254,6 +263,13 @@ impl<C: CanvasSink + ?Sized> Canvas for C {}
 
 /// Object-safe canvas primitives implemented by drawing backends and recorders.
 pub trait CanvasSink {
+    /// Draw an orthographic mesh viewport at its natural pixel size. Backends
+    /// may render directly on the GPU; this default is the CPU interpretation.
+    fn draw_mesh(&mut self, scene: crate::mesh::Scene, transform: Affine) {
+        if let Some(image) = scene.rasterize() {
+            self.draw_image(image, transform);
+        }
+    }
     /// Draw at natural pixel size before applying the transform.
     fn draw_image(&mut self, image: ImageData, transform: Affine);
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine);
@@ -270,6 +286,10 @@ pub trait CanvasSink {
 
 #[derive(Debug, Clone)]
 pub enum DrawCmd {
+    Mesh {
+        scene: crate::mesh::Scene,
+        transform: Affine,
+    },
     Image {
         image: ImageData,
         transform: Affine,
@@ -304,6 +324,9 @@ impl DrawList {
 }
 
 impl CanvasSink for DrawList {
+    fn draw_mesh(&mut self, scene: crate::mesh::Scene, transform: Affine) {
+        self.0.push(DrawCmd::Mesh { scene, transform });
+    }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.0.push(DrawCmd::Image { image, transform });
     }
@@ -359,6 +382,7 @@ pub fn replay_at(list: &DrawList, canvas: &mut (impl Canvas + ?Sized), outer: Af
 fn replay_cmds<C: Canvas + ?Sized>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
     for cmd in cmds {
         match cmd {
+            DrawCmd::Mesh { scene, transform } => canvas.mesh(scene.clone(), outer * *transform),
             DrawCmd::Image { image, transform } => canvas.image(image.clone(), outer * *transform),
             DrawCmd::Fill {
                 shape,

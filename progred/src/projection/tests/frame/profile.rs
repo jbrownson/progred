@@ -310,13 +310,14 @@ fn camera_at(path: &[Step], frame: usize) -> Annotations {
     annotations
 }
 
-fn image(bench: &Bench) -> &ImageData {
+fn image(bench: &Bench) -> ImageData {
     let images: Vec<_> = bench
         .list
         .0
         .iter()
         .filter_map(|cmd| match cmd {
-            DrawCmd::Image { image, .. } => Some(image),
+            DrawCmd::Image { image, .. } => Some(image.clone()),
+            DrawCmd::Mesh { scene, .. } => scene.rasterize(),
             _ => None,
         })
         .collect();
@@ -325,12 +326,12 @@ fn image(bench: &Bench) -> &ImageData {
         1,
         "the preview must render, not fall back to source text"
     );
-    images[0]
+    images.into_iter().next().unwrap()
 }
 
 fn fidget_orbit_profile(example: Example) {
-    // This synchronous canary measures mesh orbit cost, not the background
-    // refinement sequence now requested by the interactive CAM example.
+    // This canary records deferred mesh draws; GPU composition is measured by
+    // compositor::mesh::cam_mesh_roundtrip_profile. CPU validation is untimed.
     let source = if example == Example::Toolpaths {
         use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
         cam_profile_source().replace(
@@ -372,7 +373,9 @@ fn fidget_orbit_profile(example: Example) {
     let first_image = std::cell::RefCell::new(None::<ImageData>);
     let changed = std::cell::Cell::new(false);
     profile(
-        &format!("{example:?} orbit, 400x600 @2 viewport including controls, automatic backend"),
+        &format!(
+            "{example:?} orbit frame construction, 400x600 @2 viewport including controls; mesh rasterization excluded"
+        ),
         |index| {
             let annotations = camera_path
                 .borrow()

@@ -2690,6 +2690,7 @@ name = "puri"
 version = "0.1.0"
 dependencies = [
  "kurbo",
+ "nalgebra",
  "parley",
  "peniko",
  "skrifa",
@@ -2701,6 +2702,7 @@ dependencies = [
 name = "puri-vello"
 version = "0.1.0"
 dependencies = [
+ "nalgebra",
  "puri",
  "vello",
 ]

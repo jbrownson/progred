@@ -16,6 +16,7 @@ pub mod gesture;
 pub mod handler;
 pub mod hover;
 pub mod interact;
+pub mod mesh;
 pub mod scroll;
 pub mod text;
 

@@ -182,7 +182,7 @@ fn editor_tool_profiles_svg_captures() {
 fn editor_toolpath_operations_svg_captures() {
     fn has_image(commands: &[DrawCmd]) -> bool {
         commands.iter().any(|command| match command {
-            DrawCmd::Image { .. } => true,
+            DrawCmd::Image { .. } | DrawCmd::Mesh { .. } => true,
             DrawCmd::Clip { children, .. } => has_image(children),
             _ => false,
         })

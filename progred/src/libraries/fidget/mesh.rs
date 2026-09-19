@@ -3,11 +3,14 @@
 use super::*;
 use fidget_engine::mesh::{Octree, Settings};
 
+#[cfg(test)]
 mod cpu;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod gpu;
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) use gpu::{Renderer, raster, raster_surface};
 
 const DEFAULT_DEPTH: u64 = 6;
 
@@ -47,60 +50,7 @@ pub(crate) fn preview(
     )
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct Vertex {
-    pub(crate) position: Vector3<f32>,
-    pub(crate) color: [f32; 3],
-    pub(crate) normal: Normal,
-}
-
-/// GPU-native signed normalized bytes; zero requests the triangle's normal.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Normal([i8; 4]);
-
-impl Normal {
-    pub(crate) fn new(normal: Vector3<f32>) -> Self {
-        Self([
-            (normal.x.clamp(-1.0, 1.0) * 127.0).round() as i8,
-            (normal.y.clamp(-1.0, 1.0) * 127.0).round() as i8,
-            (normal.z.clamp(-1.0, 1.0) * 127.0).round() as i8,
-            0,
-        ])
-    }
-
-    pub(crate) fn vector(self) -> Vector3<f32> {
-        Vector3::new(self.0[0] as f32, self.0[1] as f32, self.0[2] as f32) / 127.0
-    }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct Geometry {
-    pub(crate) vertices: Vec<Vertex>,
-    pub(crate) indices: Vec<u32>,
-}
-
-/// Shared render input. Edits through `Arc::make_mut` detach any retained upload identity.
-pub(crate) type Mesh = std::sync::Arc<Geometry>;
-
-impl Geometry {
-    pub(crate) fn append_colored(
-        &mut self,
-        other: &Self,
-        color: impl Fn([f32; 3]) -> [f32; 3],
-    ) -> Option<()> {
-        let offset = u32::try_from(self.vertices.len()).ok()?;
-        u32::try_from(self.vertices.len().checked_add(other.vertices.len())?).ok()?;
-        self.vertices
-            .extend(other.vertices.iter().map(|vertex| Vertex {
-                position: vertex.position,
-                color: color(vertex.color),
-                normal: vertex.normal,
-            }));
-        self.indices
-            .extend(other.indices.iter().map(|index| offset + index));
-        Some(())
-    }
-}
+pub(crate) use puri::mesh::{Geometry, Mesh, Normal, Surface, Vertex, View};
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {
     let mut geometry = Geometry::default();
@@ -194,13 +144,6 @@ impl Shape {
     }
 }
 
-struct View {
-    model_to_view: Matrix4<f32>,
-    projection: [f32; 4],
-    width: u32,
-    height: u32,
-}
-
 fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Option<View> {
     let center = (preview.min + preview.max) / 2.0;
     let radius = ((preview.max - preview.min) / 2.0).norm() * 1.05;
@@ -225,56 +168,13 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
     })
 }
 
-#[derive(Default)]
-pub(crate) struct Renderer {
-    #[cfg(not(target_arch = "wasm32"))]
-    gpu: gpu::Backend,
-}
-
-/// Indices before `mesh_start` remain mesh geometry. The rest are the draft
-/// surface, replaced wherever the raster has completed color and depth.
-#[derive(Clone, Copy)]
-pub(crate) struct Surface<'a> {
-    pub frame: &'a raster::Frame,
-    pub mesh_start: usize,
-}
-
-fn visible_indices<'a>(geometry: &'a Geometry, surface: Option<Surface<'_>>) -> &'a [u32] {
-    match surface {
-        Some(surface) if !surface.frame.is_partial() => &geometry.indices[..surface.mesh_start],
-        _ => &geometry.indices,
-    }
-}
-
-impl Renderer {
-    fn render_surface(
-        &mut self,
-        geometry: &Mesh,
-        view: &View,
-        surface: Option<Surface<'_>>,
-    ) -> Option<Vec<u8>> {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(geometry, view, surface) {
-            return Some(image);
-        }
-        cpu::render_surface(geometry, view, surface)
-    }
-}
-
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    renderer: &mut Renderer,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let (preview, depth) = read(input.value?)?;
     let geometry = generate(&preview, depth)?;
     Some(interactive_volume(
-        image(
-            &geometry,
-            &preview,
-            input.state,
-            input.scale_factor,
-            renderer,
-        )?,
+        drawing(&geometry, &preview, input.state, input.scale_factor)?,
         input,
     ))
 }
@@ -290,46 +190,47 @@ pub(crate) fn read(value: &Value) -> Option<(VolumePreview, u8)> {
     ))
 }
 
-pub(crate) fn image(
+pub(crate) fn drawing(
     geometry: &Mesh,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-    renderer: &mut Renderer,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    Some(image_from_data(
-        preview.size,
-        raster(geometry, preview, state, scale_factor, renderer)?,
-        false,
-    ))
+    drawing_surface(geometry, None, preview, state, scale_factor)
 }
 
-/// Render the current camera to pixels, independently of the display wrapper.
-pub(crate) fn raster(
+pub(crate) fn drawing_surface(
     geometry: &Mesh,
+    surface: Option<Surface>,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-    renderer: &mut Renderer,
-) -> Option<ImageData> {
-    raster_surface(geometry, None, preview, state, scale_factor, renderer)
-}
-
-pub(crate) fn raster_surface(
-    geometry: &Mesh,
-    surface: Option<Surface<'_>>,
-    preview: &VolumePreview,
-    state: Option<&Value>,
-    scale_factor: f64,
-    renderer: &mut Renderer,
-) -> Option<ImageData> {
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let pixels = raster_size(preview.size, scale_factor)?;
-    let view = view(preview, camera(state), pixels)?;
-    Some(ImageData {
-        data: renderer.render_surface(geometry, &view, surface)?.into(),
-        format: ImageFormat::Rgba8,
-        alpha_type: ImageAlphaType::Alpha,
-        width: pixels.width(),
-        height: pixels.height(),
-    })
+    let scene = puri::mesh::Scene {
+        geometry: geometry.clone(),
+        view: view(preview, camera(state), pixels)?,
+        surface,
+    };
+    let size = preview.size;
+    let image_transform = Affine::scale_non_uniform(
+        size.width / f64::from(pixels.width()),
+        size.height / f64::from(pixels.height()),
+    );
+    Some(Layout::widget(Rc::new(move |context| {
+        let scale = context.inputs.styles.scale;
+        let scene = scene.clone();
+        widget::paint(
+            widget::Extent {
+                width: size.width * scale,
+                ascent: size.height / 2.0 * scale,
+                descent: size.height / 2.0 * scale,
+            },
+            move |canvas, placement| {
+                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                    * Affine::scale(scale);
+                canvas.draw_mesh(scene, transform * image_transform);
+            },
+        )
+    })))
 }

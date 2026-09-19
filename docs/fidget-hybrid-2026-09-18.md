@@ -123,3 +123,56 @@ geometry, empty versus unfinished pixels, resolution changes, and CPU/GPU parity
 of those cases. Async regression tests cover current-mesh readiness, cancellation,
 immediate tool movement, and model-image reuse. Rendering remains a visual
 approximation, not a manufacturing/collision guarantee.
+
+### Direct mesh composition
+
+The follow-up removes the preview GPU → CPU → GPU image round trip. Puri's
+`draw_mesh` carries shared geometry, a camera, and optional surface color/depth.
+`SplitCanvas` preserves it as a mesh layer; the compositor renders and composites
+it on its own device before reusing its scratch target for another preview.
+No separate mesh device, blocking map, row copy, unpremultiplication, or final
+RGBA upload remains in the production mesh path. CPU implicit results still
+upload their color/depth when published. Program/mesh invalidation is unchanged.
+CPU rendering remains an explicit interpretation for SVG/browser consumers.
+
+Apple M3 Pro / Metal, release, 2400×1800 physical editor output at scale 2,
+equal panes, completed stock mesh, camera changing on each frame. Twenty
+measured pairs after four warmups alternate route order. Both routes retain
+mesh uploads and raster targets. The round-trip baseline also retains its
+readback buffer and uses bulk row copies. Both include full-editor vector/image
+composition and GPU completion; neither includes window presentation.
+
+| Playback | Round trip median | Direct median | Frame construction/recording (separate) |
+| --- | ---: | ---: | ---: |
+| 2% | 6.56 ms | 3.98 ms | 10.16 ms |
+| 50% | 6.51 ms | 3.87 ms | 10.32 ms |
+
+The baseline uses the same device and keeps pixels premultiplied, avoiding the
+old extra alpha-conversion loop: this isolates the transfer rather than exactly
+reconstructing every historical cost. Final full-editor pixels are byte-identical.
+The direct route makes zero compositor image uploads. The test does not measure
+background Fidget contention. The slowest 2% direct draw was 11.54 ms;
+the slowest 50% direct draw was 5.30 ms. Desktop timing is noisy, so this supports a typical
+~2.6 ms saving, not an across-the-board latency or on-screen frame-rate guarantee.
+
+Reproduce with the ignored
+`projection::tests::frame::compositor::mesh::cam_mesh_roundtrip_profile` test.
+The GPU tests separately check same-sized target reuse across multiple previews,
+rectangular/rounded clips, vector controls above meshes, geometry edits,
+depth-only publications, and premultiplied alpha. The CPU interpretation remains
+covered by camera, depth, shading, and full-editor SVG tests.
+
+The large-scene hover regression exposed a separate repeated-render shading quirk:
+rendering the same 2118×1836 mesh repeatedly changed about 1,700 color channels
+between its first and second draws (maximum difference 13/255), then became
+byte-stable in that standalone probe. A single warmup did not consistently remove
+the smaller variations when interleaving full-editor draws. The standalone probe
+reproduced this on both the compositor's device
+and the prior Fidget `Gpu::init_basic` device configuration, without any hover or
+Vello composition. The cause is not established. Fine-derivative hints do not
+change the generated Metal shader, so no shader workaround was retained. The
+hover test now verifies unchanged mesh inputs separately from exact restoration
+of the bottom controls' pixels. Its hovered-image check still rejects large
+pane changes such as disappearing controls. The small deterministic mesh tests
+retain their whole-image comparisons. Production does not issue a warm-up draw.
+The shading variation is deferred, not silently repaired or attributed to hover.

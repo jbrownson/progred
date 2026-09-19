@@ -25,7 +25,8 @@ struct FragmentOutput {
     let z = textureLoad(depth, pixel, 0).r;
     if z < 0.0 { discard; }
     var output: FragmentOutput;
-    output.color = textureLoad(color, pixel, 0);
+    let rgba = textureLoad(color, pixel, 0);
+    output.color = vec4(rgba.rgb * rgba.a, rgba.a);
     output.depth = z;
     return output;
 }

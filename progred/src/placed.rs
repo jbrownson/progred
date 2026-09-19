@@ -142,6 +142,11 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
 }
 
 impl<C: 'static> puri::draw::CanvasSink for Builder<'_, '_, C> {
+    fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
+        if self.visible {
+            self.placed.render(move |cv, _| cv.mesh(scene, transform));
+        }
+    }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if self.visible {
             self.placed.render(move |cv, _| cv.image(image, transform));

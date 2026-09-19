@@ -144,6 +144,7 @@ impl std::error::Error for Error {}
 
 pub struct Compositor {
     renderer: Renderer,
+    mesh: Option<crate::mesh::Renderer>,
     pipeline: wgpu::RenderPipeline,
     white: wgpu::Texture,
     pub counts: Counts,
@@ -249,6 +250,7 @@ impl Compositor {
         gpu.clear(&white, wgpu::Color::WHITE);
         Ok(Self {
             renderer: Renderer::new(gpu.device, RendererOptions::default())?,
+            mesh: None,
             pipeline,
             white,
             counts: Counts::default(),
@@ -462,6 +464,17 @@ impl Compositor {
     ) -> Result<(), Error> {
         for layer in layers {
             match layer {
+                Layer::Mesh(scene, transform) => {
+                    let renderer = self
+                        .mesh
+                        .get_or_insert_with(|| crate::mesh::Renderer::new(gpu.device, gpu.queue));
+                    let texture = renderer
+                        .render(&scene.geometry, &scene.view, scene.surface.as_ref())
+                        .ok_or(Error::Image("mesh viewport exceeds GPU limits"))?;
+                    // Render and composite in order: the renderer may reuse this
+                    // target for the next viewport, including another same-size pane.
+                    self.image(gpu, resources, &texture, *transform, true, target, scissor)?;
+                }
                 Layer::Vector(scene) => {
                     self.vello(gpu, scene, vector, Color::TRANSPARENT)?;
                     self.counts.vector_passes += 1;

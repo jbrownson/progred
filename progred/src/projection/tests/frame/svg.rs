@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 mod refined;
 
 /// Computed content owns annotations below the declaration that produced it.
-fn result_path(path: &[Step]) -> Path {
+pub(super) fn result_path(path: &[Step]) -> Path {
     path.iter()
         .cloned()
         .chain([Step::Key(
@@ -20,11 +20,11 @@ fn result_path(path: &[Step]) -> Path {
 }
 
 // Preparation feeds the CAM viewport, which returns with-controls directly.
-fn cam_controls_path(path: &[Step]) -> Path {
+pub(super) fn cam_controls_path(path: &[Step]) -> Path {
     result_path(path)
 }
 
-fn cam_position(progress: f64) -> Value {
+pub(super) fn cam_position(progress: f64) -> Value {
     use crate::libraries::controls::tree_range;
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
@@ -186,6 +186,17 @@ pub(super) fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
 fn write_clipped_cmds(out: &mut String, cmds: &[DrawCmd], next_id: &mut usize) {
     for cmd in cmds {
         match cmd {
+            DrawCmd::Mesh { scene, transform } => {
+                let image = scene.rasterize().expect("valid mesh viewport");
+                write_clipped_cmds(
+                    out,
+                    &[DrawCmd::Image {
+                        image,
+                        transform: *transform,
+                    }],
+                    next_id,
+                );
+            }
             DrawCmd::Image { image, transform } => writeln!(
                 out,
                 r#"<image width="{}" height="{}" transform="{}" href="data:image/png;base64,{}"/>"#,
@@ -435,6 +446,7 @@ fn editor_toolpath_progressive_svg_captures() {
         for command in commands {
             match command {
                 DrawCmd::Image { image, .. } => sizes.push((image.width, image.height)),
+                DrawCmd::Mesh { scene, .. } => sizes.push((scene.view.width, scene.view.height)),
                 DrawCmd::Clip { children, .. } => image_sizes(children, sizes),
                 _ => {}
             }
@@ -506,7 +518,7 @@ fn editor_toolpath_progressive_svg_captures() {
     );
 }
 
-fn cam_editor(mode: CellId) -> crate::Editor {
+pub(super) fn cam_editor(mode: CellId) -> crate::Editor {
     // Exercise each public preview using the same document, without adding a
     // renderer-selection control to the production example.
     let source = crate::command::Example::Toolpaths.source().replace(
@@ -761,7 +773,8 @@ fn svg_bench_renders_toolpath_source_and_preview() {
         .0
         .iter()
         .find_map(|command| match command {
-            DrawCmd::Image { image, .. } => Some(image),
+            DrawCmd::Image { image, .. } => Some(image.clone()),
+            DrawCmd::Mesh { scene, .. } => scene.rasterize(),
             _ => None,
         })
         .expect("the combined toolpath viewport renders an image");
@@ -836,7 +849,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
                     .list
                     .0
                     .iter()
-                    .any(|cmd| matches!(cmd, DrawCmd::Image { .. })),
+                    .any(|cmd| matches!(cmd, DrawCmd::Image { .. } | DrawCmd::Mesh { .. })),
                 should_draw
             );
         }

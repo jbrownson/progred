@@ -122,14 +122,14 @@ fn composition_fixture() -> (Geometry, View, raster::Frame, usize) {
     (geometry, view, frame, surface_start)
 }
 
-fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface<'_>) -> Vec<u8>) {
+fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface) -> Vec<u8>) {
     let (geometry, view, mut frame, mesh_start) = composition_fixture();
     let geometry = Mesh::new(geometry);
     let plain = render(
         &Mesh::default(),
         &view,
         Surface {
-            frame: &frame,
+            frame: frame.clone(),
             mesh_start: 0,
         },
     );
@@ -140,7 +140,7 @@ fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface<'_>) -> Vec<u8
         &geometry,
         &view,
         Surface {
-            frame: &frame,
+            frame: frame.clone(),
             mesh_start,
         },
     );
@@ -166,7 +166,7 @@ fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface<'_>) -> Vec<u8
         &geometry,
         &view,
         Surface {
-            frame: &frame,
+            frame: frame.clone(),
             mesh_start,
         },
     );
@@ -193,7 +193,7 @@ fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface<'_>) -> Vec<u8
         &geometry,
         &view,
         Surface {
-            frame: &small,
+            frame: small,
             mesh_start,
         },
     );

@@ -3,34 +3,6 @@ use super::*;
 use fidget_engine::raster::voxel::SceneTile;
 use std::sync::Mutex;
 
-/// A raster and, only during its first pass, the regions actually computed.
-/// Transparent pixels in those regions are final pixels, not missing data.
-#[derive(Clone)]
-pub(crate) struct Frame {
-    pub image: ImageData,
-    /// Orthographic viewport depth: 0 near, 1 empty/far, -1 not computed yet.
-    /// Color and depth are published together, including transparent tiles.
-    pub depth: std::sync::Arc<[f32]>,
-    pub(crate) partial: bool,
-}
-
-#[cfg(test)]
-impl From<ImageData> for Frame {
-    fn from(image: ImageData) -> Self {
-        Self {
-            depth: vec![1.0; image.width as usize * image.height as usize].into(),
-            image,
-            partial: false,
-        }
-    }
-}
-
-impl Frame {
-    pub fn is_partial(&self) -> bool {
-        self.partial
-    }
-}
-
 fn image(width: u32, height: u32, pixels: Vec<u8>) -> ImageData {
     ImageData {
         data: pixels.into(),
@@ -230,7 +202,11 @@ mod tests {
 
     #[test]
     fn finer_pass_preserves_previous_pixels_until_replaced_including_empty_pixels() {
-        let previous = image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]).into();
+        let previous = Frame {
+            image: image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]),
+            depth: vec![1.0; 2].into(),
+            partial: false,
+        };
         let mut assembly = Assembly::new(4, 2, 64, Some(&previous));
         assert!(!assembly.snapshot().is_partial());
         assembly.put(

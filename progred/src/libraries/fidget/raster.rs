@@ -7,7 +7,7 @@ use incremental::background::Progress;
 pub(crate) mod diagnostics;
 
 mod partial;
-pub(crate) use partial::Frame;
+pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -515,10 +515,6 @@ impl Request {
             preview,
             camera: camera(state),
         })
-    }
-
-    pub fn size(&self) -> Size {
-        self.preview.size
     }
 
     fn resolutions(&self, first_max_edge: u32) -> Vec<PixelRenderSize> {

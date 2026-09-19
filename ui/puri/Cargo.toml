@@ -9,6 +9,7 @@ parley.workspace = true
 peniko.workspace = true
 ui-events.workspace = true
 uig.workspace = true
+nalgebra = "0.35"
 
 [dev-dependencies]
 skrifa.workspace = true

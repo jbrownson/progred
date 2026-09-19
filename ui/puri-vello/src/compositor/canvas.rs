@@ -7,6 +7,7 @@ use vello::{
 };
 
 pub enum Layer {
+    Mesh(puri::mesh::Scene, Affine),
     Vector(Scene),
     Image(ImageData, Affine),
     Texture(vello::wgpu::Texture, Affine),
@@ -36,6 +37,12 @@ impl SplitCanvas {
 }
 
 impl CanvasSink for SplitCanvas {
+    fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
+        if scene.view.width > 0 && scene.view.height > 0 && transform.determinant() != 0.0 {
+            self.flush();
+            self.layers.push(Layer::Mesh(scene, transform));
+        }
+    }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if image.width > 0 && image.height > 0 && transform.determinant() != 0.0 {
             self.flush();

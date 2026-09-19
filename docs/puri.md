@@ -303,14 +303,14 @@ nor layout owns the computation graph or decides which library results to retain
 
 ## Drawing and testing
 
-`Canvas` is a drawing interface over shapes, brushes, glyph runs, images, and
+`Canvas` is a drawing interface over shapes, brushes, glyph runs, images, meshes, and
 scoped clips. Production code can draw into Vello or Canvas2D; `DrawList`
 records the same operations for inspection and replay. Rectangles remain
 rectangles in recordings rather than becoming paths merely for transport.
 Parley owns text shaping. Puri does not depend on a platform clipboard library.
 
 The native canvas now groups contiguous vector operations into Vello scenes,
-interleaved with independent image textures in painting order. This policy
+interleaved with independent image textures and mesh viewports in painting order. This policy
 belongs to the [compositor](../ui/puri-vello/src/compositor.rs), not panes,
 widgets, or layout. Vector-only frames keep a single Vello call. Mixed clipping
 scopes preserve group coverage: integer rectangles use scissoring, while other
@@ -323,9 +323,15 @@ are released on the next paint. Scratch textures are resized and reused, with
 masks and clip-group textures retained only when used by the current frame.
 These are graphics resources, not cached projections or computations. The
 device's compositor is shared across windows, without sharing their resource
-lifetimes. CPU image drawing, browser drawing, and export APIs are unchanged.
-The mesh renderer still returns CPU pixels; direct mesh drawing is a separate
-next step. See [measurements](vello-compositor-experiment-2026-09-18.md).
+lifetimes. `draw_mesh` carries shared triangle geometry, an orthographic view,
+and optionally depth-image replacement of a draft surface. The native compositor
+draws it on the same device and consumes the resulting premultiplied texture
+without a CPU round trip. Its renderer retains one mesh upload and surface
+color/depth upload, not evaluated widgets or raster results. `DrawList` and the
+initial `Drawing` representation retain the mesh operation; the default canvas
+interpretation rasterizes it on the CPU for browser/export consumers.
+See [image composition measurements](vello-compositor-experiment-2026-09-18.md)
+and [direct mesh measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition).
 
 Text leaves may request subscript typography: Puri shapes a smaller font and
 reports ascent/descent relative to the surrounding baseline. Ordinary rows
@@ -353,9 +359,11 @@ Color controls likewise paint directly through `CanvasSink`: their gradients,
 checkerboard, swatch, and markers are not intermediate command lists. Progred
 supplies the fixed metrics, scale, and point handlers. The paint-only
 `widget::paint` combinator attaches one deferred painter to an extent, without
-hover or document access; delimiters and Fidget image leaves use it too. Fidget
-still renders during projection, then its leaf submits that image at paint time.
-This changes neither Fidget's evaluation timing nor its camera behavior.
+hover or document access; delimiters and Fidget viewport leaves use it too.
+Synchronous implicit previews render during projection, then submit an image at
+paint time. Mesh views prepare shared geometry and defer rasterization to the
+canvas backend. CAM computation graphs still own model/stock meshing and async
+implicit work; camera and interaction policy remain in Progred.
 
 The `Drawing` description remains for explicitly stored drawing data decoded
 by the layout library. Its interpreter is not used by these native widgets.

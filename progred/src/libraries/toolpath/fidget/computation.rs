@@ -379,14 +379,17 @@ mod tests {
                 cancel.check()?;
                 let mut rendered = rendered.lock().unwrap();
                 rendered.push(request);
-                Ok(Ok(puri::ImageData {
-                    data: vec![rendered.len() as u8, 0, 0, 255].into(),
-                    format: peniko::ImageFormat::Rgba8,
-                    alpha_type: peniko::ImageAlphaType::Alpha,
-                    width: 1,
-                    height: 1,
-                }
-                .into()))
+                Ok(Ok(fidget::raster::Frame {
+                    image: puri::ImageData {
+                        data: vec![rendered.len() as u8, 0, 0, 255].into(),
+                        format: peniko::ImageFormat::Rgba8,
+                        alpha_type: peniko::ImageAlphaType::Alpha,
+                        width: 1,
+                        height: 1,
+                    },
+                    depth: vec![1.0].into(),
+                    partial: false,
+                }))
             }
         });
         let read = || computations.runtime.read(&graph.image).unwrap();
@@ -483,14 +486,19 @@ mod tests {
                     width: 1,
                     height: 1,
                 };
-                publish(Ok(image.clone().into()))?;
+                let image = fidget::raster::Frame {
+                    image,
+                    depth: vec![1.0].into(),
+                    partial: false,
+                };
+                publish(Ok(image.clone()))?;
                 progress(Progress {
                     completed: 3,
                     total: 10,
                 });
                 published.send(()).unwrap();
                 resumed.lock().unwrap().recv().unwrap();
-                Ok(Ok(image.into()))
+                Ok(Ok(image))
             },
         );
         let read = || computations.runtime.read(&graph.image).unwrap();

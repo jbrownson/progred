@@ -122,6 +122,9 @@ fn settle_with_sources(
 }
 
 impl puri::draw::CanvasSink for Bench {
+    fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
+        self.list.mesh(scene, transform);
+    }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         self.list.image(image, transform);
     }

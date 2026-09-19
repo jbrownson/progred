@@ -13,7 +13,7 @@ use crate::{
 };
 use gid::Value;
 use incremental::{Input, Memo};
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 #[cfg(test)]
 mod tests;
@@ -134,7 +134,6 @@ impl Computation {
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    renderer: &Rc<RefCell<fidget::mesh::Renderer>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input
         .value?
@@ -157,10 +156,8 @@ pub(super) fn display(
         color,
         playback,
     };
-    let size = image_settings.request.size();
     let state = input.state.cloned();
     let scale = input.scale_factor;
-    let renderer = renderer.clone();
     let drawing = Layout::program(Rc::new(move |context, build| {
         let local;
         let computations = match context.inputs.computations {
@@ -190,14 +187,11 @@ pub(super) fn display(
             .and_then(|view| match view.as_ref() {
                 View::Mesh(geometry, progress) => {
                     let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
-                    let image = fidget::mesh::image(
-                        &geometry.geometry,
-                        &model,
-                        state.as_ref(),
-                        scale,
-                        &mut renderer.borrow_mut(),
-                    )
-                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
+                    let image =
+                        fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
+                            .ok_or_else(|| {
+                                absent::with_reason(fidget::vocabulary::INVALID_FIELD)
+                            })?;
                     // Implicit refinement is pending, even when the fallback is current.
                     Ok(implicit::progress_bar(image, *progress))
                 }
@@ -208,19 +202,17 @@ pub(super) fn display(
                         .as_ref()
                         .expect("only current images refine the mesh");
                     let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
-                    let pixels = fidget::mesh::raster_surface(
+                    let drawing = fidget::mesh::drawing_surface(
                         &geometry.geometry,
                         Some(fidget::mesh::Surface {
-                            frame: data,
+                            frame: data.clone(),
                             mesh_start: geometry.surface_start,
                         }),
                         &model,
                         state.as_ref(),
                         scale,
-                        &mut renderer.borrow_mut(),
                     )
                     .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
-                    let drawing = fidget::image_from_data(size, pixels, false);
                     Ok(if image.pending {
                         implicit::progress_bar(drawing, image.progress)
                     } else {

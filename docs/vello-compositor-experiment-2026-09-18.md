@@ -201,3 +201,12 @@ placement clip, without creating a clip layer. The full-size headless
 `cam_hover_compositor_pixels` regression verifies that hover changes only a
 small portion of the preview and that leaving restores it. An ordinary CPU test
 also checks the clipped rectangle and absence of extra clip layers.
+
+## Direct mesh follow-up
+
+Mesh viewports now emit a backend-neutral Puri draw operation rather than a CPU
+image. The compositor renders these in order on its existing device and blends
+their textures directly. The earlier experiment's separate-device/readback
+limitation no longer applies to the production mesh path. CPU implicit surface
+publications still upload when they change. See the
+[implementation and paired measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition).

@@ -406,9 +406,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     for (id, spelling) in cutter::names() {
         cells.set_value(id, name::record(spelling, []));
     }
-    let mesh_renderer = Rc::new(RefCell::new(
-        crate::libraries::fidget::mesh::Renderer::default(),
-    ));
     Library::named(
         ID,
         "toolpaths",
@@ -416,15 +413,9 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::display::compose_partials([
             crate::display::partial(cutter::display),
             crate::display::partial(preview::display),
-            crate::display::partial({
-                let renderer = mesh_renderer.clone();
-                move |input| fidget::display(input, &renderer)
-            }),
-            crate::display::partial({
-                let renderer = mesh_renderer.clone();
-                move |input| mesh::display(input, &renderer)
-            }),
-            crate::display::partial(move |input| refined::display(input, &mesh_renderer)),
+            crate::display::partial(fidget::display),
+            crate::display::partial(mesh::display),
+            crate::display::partial(refined::display),
         ]),
     )
 }

@@ -1200,7 +1200,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ),
     );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
-    let mesh_renderer = Rc::new(RefCell::new(mesh::Renderer::default()));
     Library::named(
         ID,
         "fidget",
@@ -1208,9 +1207,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::display::compose_partials([
             crate::display::partial(projection::field),
             crate::display::partial(move |input| display(input, &renderer)),
-            crate::display::partial(move |input| {
-                mesh::display(input, &mut mesh_renderer.borrow_mut())
-            }),
+            crate::display::partial(mesh::display),
         ]),
     )
     .with_completions(completion::offers)

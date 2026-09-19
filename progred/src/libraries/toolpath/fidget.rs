@@ -256,7 +256,6 @@ pub(super) fn preview_with(
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    renderer: &Rc<std::cell::RefCell<fidget::mesh::Renderer>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?.get(&PREVIEW_3D)?.as_record()?;
     let model = fidget::volume_preview(fields.get(&presentation::vocabulary::VALUE)?)?;
@@ -267,7 +266,6 @@ pub(super) fn display(
     let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
     let fuel = super::read_fuel(fuel)?;
     let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
-    let size = request.size();
     let settings = computation::Settings {
         request,
         radius,
@@ -277,7 +275,6 @@ pub(super) fn display(
             None => None,
         },
     };
-    let renderer = renderer.clone();
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
@@ -310,24 +307,17 @@ pub(super) fn display(
                     .map_err(Clone::clone)?;
                 let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
                     fidget::mesh::Surface {
-                        frame,
+                        frame: frame.clone(),
                         mesh_start: paths.indices.len(),
                     }
                 });
-                let pixels = fidget::mesh::raster_surface(
-                    paths,
-                    surface,
-                    &model,
-                    state.as_ref(),
-                    scale,
-                    &mut renderer.borrow_mut(),
-                )
-                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
-                Ok((image, pixels))
+                let drawing =
+                    fidget::mesh::drawing_surface(paths, surface, &model, state.as_ref(), scale)
+                        .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
+                Ok((image, drawing))
             });
         match result {
-            Ok((image, pixels)) => {
-                let drawing = fidget::image_from_data(size, pixels, false);
+            Ok((image, drawing)) => {
                 let drawing = if image.pending {
                     progress_bar(drawing, image.progress)
                 } else {

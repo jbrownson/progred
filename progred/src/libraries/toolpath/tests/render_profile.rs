@@ -238,7 +238,7 @@ fn cam_render_profile() {
                     implicit::mesh::raster_surface(
                         &geometry,
                         Some(implicit::mesh::Surface {
-                            frame: &frame,
+                            frame: frame.clone(),
                             mesh_start: geometry.indices.len(),
                         }),
                         &model,

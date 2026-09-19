@@ -1,6 +1,7 @@
 //! Vello drawing and ordered composition with independently owned images.
 
 pub mod compositor;
+pub mod mesh;
 
 use puri::draw::{GlyphRun, Shape};
 use vello::Scene;

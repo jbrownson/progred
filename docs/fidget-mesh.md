@@ -37,11 +37,14 @@ runs asynchronously; ordinary Fidget previews remain synchronous on a miss.
 While CAM updates, the viewport retains desaturated old stock beside the current
 tool/path. Web remains synchronous until a browser-worker executor is added.
 
-Native builds rasterize the resulting indexed triangles through a small WGPU
-pipeline with a depth buffer, opaque object colors, two-sided lighting,
-and four-sample antialiasing. The image is read back synchronously and submitted
-through the existing canvas image operation. GPU device, pipeline, allocation
-capacity, and render targets are reusable resources. Completed geometry is a
+The viewport emits Puri's backend-neutral `CanvasSink::draw_mesh`: shared
+geometry, an orthographic camera, and optionally a raster surface with depth.
+Native builds rasterize this on the compositor's existing GPU device through a
+small WGPU pipeline with a depth buffer, opaque object colors, two-sided lighting,
+and four-sample antialiasing. Its premultiplied texture is composed directly in
+paint order, without a synchronous readback or re-upload. The compositor, not a
+projection or pane, divides vector/mesh/image passes and preserves enclosing clips.
+GPU pipelines, allocation capacity, and render targets are reusable resources. Completed geometry is a
 shared `Arc<Geometry>` mesh; the renderer retains its uploaded vertex/index
 buffers across camera changes. Upload reuse requires the same mesh allocation
 and an already uploaded index prefix. A weak reference preserves that identity
@@ -50,15 +53,17 @@ detach the identity. A different mesh replaces the retained upload. Ordinary
 Fidget previews still construct a fresh mesh each frame; CAM retains geometry
 through its computation graph. Camera inputs, depth, and pixels are overwritten
 on every draw; this is not a rendered-image cache. Hybrid rendering also retains one uploaded surface
-color/depth pair, keyed by its immutable image identity, replacing it on publication.
+color/depth pair, keyed by image identity/dimensions and shared depth identity,
+replacing it on publication. A depth-only edit also refreshes this upload.
 Computation retention is outside it in the general computation
-graph. Rendering belongs to the Fidget library; there are no Fidget-specific
-cases in Grap, Puri, or the layout algebra.
+graph. Meshing and camera policy belong to the Fidget library; Puri's mesh
+vocabulary and the native triangle interpreter know nothing about Fidget or CAM.
 
-Web and GPU-unavailable native/headless environments use a depth-buffered CPU
-triangle rasterizer, without multisample antialiasing. GPU initialization and
-render failures report to stderr before switching to CPU. This is not
-Fidget's voxel renderer as a fallback. Both triangle backends share the camera
+The default canvas interpretation, including web and SVG export, uses a
+depth-buffered CPU triangle rasterizer without multisample antialiasing. This
+requires no GPU initialization. The native compositor uses its required graphics
+device and reports rendering errors through its ordinary error boundary. This is
+not Fidget's voxel renderer as a fallback. Both triangle backends share the camera
 transform and color/lighting policy. They reuse the ordinary Fidget viewport's
 orbit and zoom handlers, image sizing, clipping, and per-view camera state.
 Mesh and implicit views use the same height-based framing: changing pane width
@@ -95,12 +100,15 @@ does not fall back to CPU. It checks the shader, transparent background, empty
 draws, non-aligned readback row widths, and resource resizing/reuse.
 
 The existing `fidget_cube_profile_loop` exercises the mesh fixture and remeshes;
-`fidget_toolpaths_profile_loop` follows the Command+9 fixture, initially mesh
-rendering. The updated default depth and cutter size differ from prior baselines.
+`fidget_toolpaths_profile_loop` follows the Command+9 fixture, recording deferred
+mesh drawing. Its timing no longer includes GPU rendering; the paired
+`cam_mesh_roundtrip_profile` covers drawing plus full-editor composition.
+The updated default depth and cutter size differ from prior baselines.
 The ignored
 `editor_mesh_svg_capture` test captures the full editor with this example without
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+9. These
-use the real partial and normal backend selection.
+use the real partial and the CPU interpretation of its mesh drawing operation.
 
-Direct GPU-texture mesh composition remains future work. This version still pays upload/readback costs
-even though it uses GPU triangle drawing.
+See the [direct-composition measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition)
+and the ignored GPU regressions for multiple same-sized previews, clipping,
+vector overlays, depth-only changes, and transparent surface pixels.
