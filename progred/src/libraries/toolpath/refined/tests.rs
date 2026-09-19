@@ -164,6 +164,77 @@ impl Fixture {
         };
         mesh.clone()
     }
+
+    fn finish_preparation(&self) {
+        self.finish(0);
+        self.mesh(); // Compilation alone cannot produce an implicit image.
+        assert_eq!(
+            self.queue.lock().unwrap().len(),
+            1,
+            "pixels are now ready to render"
+        );
+    }
+}
+
+#[test]
+fn mouse_release_starts_only_the_latest_view_without_repreparing_the_scene() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    let mesh = f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+
+    f.computations.pointer_pressed.set(true);
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "an unrelated press preserves the current image"
+    );
+    for yaw in [30.0, 60.0, 90.0] {
+        f.graph.settings.set(settings(yaw, 0.25));
+        assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+        assert!(f.queue.lock().unwrap().is_empty());
+    }
+    f.computations.pointer_pressed.set(false);
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only pixels, not preparation"
+    );
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
+}
+
+#[test]
+fn held_playback_still_updates_mesh_and_prepares_the_new_scene() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    f.read();
+
+    f.computations.pointer_pressed.set(true);
+    f.graph.settings.set(settings(0.0, 0.75));
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(f.queue.lock().unwrap().len(), 1);
+    f.finish(0);
+    let mesh = f.mesh();
+    assert!(!mesh.as_ref().as_ref().unwrap().surface_pending);
+    f.finish(0); // Scene preparation may finish while refinement is deferred.
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    assert!(f.queue.lock().unwrap().is_empty());
+    f.computations.pointer_pressed.set(false);
+    f.mesh();
+    assert_eq!(f.queue.lock().unwrap().len(), 1);
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
 }
 
 #[test]
@@ -175,6 +246,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     f.finish(0);
     let mesh = f.mesh();
     assert!(!mesh.as_ref().as_ref().unwrap().awaiting_first_surface);
+    f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
 
@@ -216,6 +288,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     f.read();
     f.finish(0);
     let old = f.mesh();
+    f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.settings.set(settings(0.0, 0.75));
@@ -256,6 +329,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
         1,
         "now implicit work is ready"
     );
+    f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.settings.set(settings(30.0, 0.9));
@@ -287,6 +361,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
     );
     f.finish(0);
     assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
 }
@@ -297,6 +372,7 @@ fn current_failure_is_not_hidden_by_a_previous_successful_render() {
     f.read();
     f.finish(0);
     f.read();
+    f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.fuel.set(0);
@@ -333,6 +409,7 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
     f.read();
     f.finish(0);
     f.read();
+    f.finish_preparation();
     f.finish(0);
     let initial = f.read();
     let View::Implicit(image, geometry) = &*initial else {

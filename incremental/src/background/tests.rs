@@ -30,6 +30,143 @@ fn observe(runtime: &Runtime, node: AsyncMemo<usize, usize>) -> Memo<(bool, Opti
 }
 
 #[test]
+fn start_condition_defers_latest_request_but_preserves_current_results() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(Some(1usize));
+    let allowed = runtime.input(false);
+    let prepare = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let permitted = runtime.memo({
+        let allowed = allowed.clone();
+        move |read| Ok(*allowed.read(read))
+    });
+    let node =
+        tasks.memo_reporting_with_start_condition(prepare, Some(permitted), |input, _, _, _| {
+            Ok(input * 10)
+        });
+    let parent = observe(&runtime, node);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    input.set(Some(2));
+    runtime.read(&parent).unwrap();
+    assert_eq!(queue.len(), 0, "waiting does not occupy an executor slot");
+    allowed.set(true);
+    runtime.read(&parent).unwrap();
+    assert_eq!(queue.len(), 1);
+    queue.next()();
+    assert!(tasks.poll());
+    let ready = runtime.read(&parent).unwrap();
+    assert_eq!(*ready, (false, Some(20)));
+    allowed.set(false);
+    assert!(Rc::ptr_eq(&ready, &runtime.read(&parent).unwrap()));
+    allowed.set(true);
+    assert!(Rc::ptr_eq(&ready, &runtime.read(&parent).unwrap()));
+    assert_eq!(
+        queue.len(),
+        0,
+        "permission alone never repeats completed work"
+    );
+
+    input.set(Some(3));
+    runtime.read(&parent).unwrap();
+    allowed.set(false);
+    input.set(Some(4));
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(20)));
+    queue.next()(); // Retire the admitted slot; its obsolete work was removed.
+    assert!(!tasks.poll());
+    assert_eq!(queue.len(), 0);
+    input.set(None);
+    runtime.read(&parent).unwrap();
+    allowed.set(true);
+    runtime.read(&parent).unwrap();
+    assert_eq!(queue.len(), 0, "permission cannot bypass unready inputs");
+    input.set(Some(5));
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(50)));
+}
+
+#[test]
+fn changed_inputs_cancel_running_work_while_replacement_is_deferred() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(Some(1usize));
+    let allowed = runtime.input(true);
+    let prepare = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let permitted = runtime.memo({
+        let allowed = allowed.clone();
+        move |read| Ok(*allowed.read(read))
+    });
+    let (started, receive) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_reporting_with_start_condition(
+        prepare,
+        Some(permitted),
+        move |input, cancel, publish, _| {
+            if input == 1 {
+                started.send(cancel.clone()).unwrap();
+                resumed.lock().unwrap().recv().unwrap();
+                assert_eq!(publish(99), Err(Error::Cancelled));
+            }
+            Ok(input * 10)
+        },
+    );
+    let parent = observe(&runtime, node);
+    runtime.read(&parent).unwrap();
+    let worker = std::thread::spawn(queue.next());
+    let cancel = receive
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    allowed.set(false);
+    runtime.read(&parent).unwrap();
+    assert!(
+        cancel.check().is_ok(),
+        "current admitted work remains valid"
+    );
+    input.set(Some(2));
+    runtime.read(&parent).unwrap();
+    assert_eq!(cancel.check(), Err(Error::Cancelled));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(!tasks.poll(), "obsolete publications are rejected");
+    assert_eq!(queue.len(), 0);
+    allowed.set(true);
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(20)));
+}
+
+#[test]
+fn releasing_start_condition_collects_inline_completion() {
+    let runtime = Runtime::default();
+    let tasks = Tasks::new(&runtime, Executor::inline(), || {});
+    let allowed = runtime.input(false);
+    let permitted = runtime.memo({
+        let allowed = allowed.clone();
+        move |read| Ok(*allowed.read(read))
+    });
+    let node = tasks.memo_reporting_with_start_condition(
+        runtime.memo(|_| Ok(Some(7usize))),
+        Some(permitted),
+        |input, _, _, _| Ok(input),
+    );
+    let parent = observe(&runtime, node);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    allowed.set(true);
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(7)));
+}
+
+#[test]
 fn waiting_preparation_submits_nothing_and_clears_queued_work() {
     let runtime = Runtime::default();
     let queue = Queue::default();

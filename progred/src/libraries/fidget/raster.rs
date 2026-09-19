@@ -32,6 +32,15 @@ pub(crate) struct Request {
     pixels: PixelRenderSize,
 }
 
+/// Framing and resolution only; changing these does not require recompilation.
+#[derive(Clone, PartialEq)]
+pub(crate) struct ViewRequest {
+    min: Vector3<f32>,
+    max: Vector3<f32>,
+    camera: Camera,
+    pixels: PixelRenderSize,
+}
+
 /// Image-quality progression, independent of tile publication and cancellation.
 #[derive(Clone, Copy)]
 pub(crate) enum Passes {
@@ -39,8 +48,9 @@ pub(crate) enum Passes {
     Progressive { first_max_edge: u32 },
 }
 
-/// A worker-local compiled scene, shared by that request's resolution passes.
-pub(super) struct SoftwareScene {
+/// Immutable compiled objects and root tapes, reusable across camera requests.
+/// Spatial specialization and render scratch remain local to each render job.
+pub(crate) struct SoftwareScene {
     scene: fidget_engine::raster::voxel::Scene<'static, SoftwareFunction>,
     colors: Vec<[u8; 3]>,
 }
@@ -59,7 +69,7 @@ impl SoftwareScene {
         })
     }
 
-    pub fn render(
+    pub(super) fn render(
         &self,
         view: &VolumeView,
         cancellation: &incremental::Cancellation,
@@ -220,10 +230,42 @@ mod tests {
     }
 
     #[test]
+    fn prepared_scene_matches_fresh_compilation_across_views_and_cancellation() {
+        let mut request = request(41.0, 27.0);
+        let preparation = incremental::Cancellation::default();
+        let scene = SoftwareScene::new(&request.preview.objects, &preparation).unwrap();
+        // The prepared result must not retain the preparation job's cancel flag.
+        preparation.cancel();
+        for yaw in [0.0, 30.0, 90.0] {
+            request.camera.yaw = yaw;
+            let cancel = incremental::Cancellation::default();
+            let reused = request
+                .view()
+                .render(&scene, Passes::Final, 4, &cancel, &mut |_| Ok(()), None)
+                .unwrap()
+                .unwrap();
+            let fresh = request
+                .render_software_tiles(Passes::Final, 4, &cancel, &mut |_| Ok(()), None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(reused.image.data.data(), fresh.image.data.data());
+            assert_eq!(reused.depth, fresh.depth);
+
+            cancel.cancel();
+            assert!(matches!(
+                request
+                    .view()
+                    .render(&scene, Passes::Final, 4, &cancel, &mut |_| Ok(()), None),
+                Err(incremental::Error::Cancelled)
+            ));
+        }
+    }
+
+    #[test]
     fn refinement_reaches_native_pixels_and_keeps_the_same_model_space_view() {
         for (width, height) in [(333.0, 751.0), (1024.0, 1.0), (1.0, 1.0)] {
             let request = request(width, height);
-            let sizes = request.resolutions(128);
+            let sizes = request.view().resolutions(128);
             assert_eq!(sizes.last(), Some(&request.pixels));
             assert!(sizes[0].width().max(sizes[0].height()) <= 128);
             for pair in sizes.windows(2) {
@@ -231,8 +273,8 @@ mod tests {
                 assert!(pair[1].height() >= pair[0].height());
                 assert_ne!(pair[0], pair[1]);
             }
-            let full = request.view_at(request.pixels);
-            for coarse in request.refinements(128, 4).unwrap() {
+            let full = request.view().view_at(request.pixels);
+            for coarse in request.view().refinements(128, 4).unwrap() {
                 for [u, v, z] in [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0]] {
                     let model = |view: &VolumeView| {
                         let screen = nalgebra::Point3::new(
@@ -245,10 +287,10 @@ mod tests {
                     assert!((model(&full) - model(&coarse)).norm() < 0.001);
                 }
             }
-            let views = request.refinements(128, 4).unwrap();
+            let views = request.view().refinements(128, 4).unwrap();
             assert_eq!(views.last().unwrap().size.depth(), full.size.depth() * 4);
-            assert!(request.refinements(128, 0).is_none());
-            assert!(request.refinements(128, u32::MAX).is_none());
+            assert!(request.view().refinements(128, 0).is_none());
+            assert!(request.view().refinements(128, u32::MAX).is_none());
         }
     }
 
@@ -257,9 +299,12 @@ mod tests {
         for (width, height) in [(333.0, 751.0), (257.0, 129.0), (128.0, 64.0), (1.0, 1.0)] {
             let request = request(width, height);
             for first_max_edge in [128, 256] {
-                let sizes = request.resolutions(first_max_edge);
+                let sizes = request.view().resolutions(first_max_edge);
                 let skip = usize::from(sizes.len() > 1);
-                assert_eq!(request.resolutions(first_max_edge * 2), sizes[skip..]);
+                assert_eq!(
+                    request.view().resolutions(first_max_edge * 2),
+                    sizes[skip..]
+                );
             }
         }
     }
@@ -288,7 +333,7 @@ mod tests {
             final_image.data.data(),
             cpu_volume(
                 &request.preview.objects,
-                &request.view_at(request.pixels),
+                &request.view().view_at(request.pixels),
                 &cancel
             )
             .unwrap()
@@ -325,7 +370,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let reports = reports.into_inner().unwrap();
-        let views = request.refinements(12, 4).unwrap();
+        let views = request.view().refinements(12, 4).unwrap();
         let mut stages = 0;
         let mut previous = None;
         for p in reports {
@@ -372,7 +417,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(stages, [(11, 7), (21, 14), (41, 27)]);
-        let refined = refine_depth(request.view_at(request.pixels), 4).unwrap();
+        let refined = refine_depth(request.view().view_at(request.pixels), 4).unwrap();
         assert_eq!(
             final_image.data.data(),
             cpu_volume(&request.preview.objects, &refined, &cancel).unwrap()
@@ -415,7 +460,7 @@ mod tests {
             let normal = rotation.inverse() * Vector3::new(0.3, 0.2, 1.0).normalize();
             let light = Vector3::new(0.35, -0.45, 1.0).normalize();
             let expected = (200.0 * (0.22 + 0.78 * normal.dot(&light).max(0.0))) as u8;
-            for view in request.refinements(128, 4).unwrap() {
+            for view in request.view().refinements(128, 4).unwrap() {
                 let config = VoxelRenderConfig {
                     image_size: view.size,
                     world_to_model: view.world_to_model,
@@ -439,7 +484,7 @@ mod tests {
         let mut request = request(96.0, 72.0);
         request.preview.objects[0].tree =
             (Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.25).max(Tree::z());
-        let view = request.view_at(request.pixels);
+        let view = request.view().view_at(request.pixels);
         let config = VoxelRenderConfig {
             image_size: view.size,
             world_to_model: view.world_to_model,
@@ -522,6 +567,41 @@ impl Request {
         })
     }
 
+    pub fn view(&self) -> ViewRequest {
+        ViewRequest {
+            min: self.preview.min,
+            max: self.preview.max,
+            camera: self.camera,
+            pixels: self.pixels,
+        }
+    }
+
+    /// One-shot rendering for diagnostics without a dependency-tracked scene.
+    #[cfg(any(test, feature = "cam-profile"))]
+    pub fn render_software_tiles(
+        &self,
+        passes: Passes,
+        final_depth_multiplier: u32,
+        cancel: &incremental::Cancellation,
+        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
+    ) -> Result<Option<Frame>, incremental::Error> {
+        cancel.check()?;
+        let scene = SoftwareScene::new(&self.preview.objects, cancel);
+        cancel.check()?;
+        let Some(scene) = scene else { return Ok(None) };
+        self.view().render(
+            &scene,
+            passes,
+            final_depth_multiplier,
+            cancel,
+            publish,
+            progress,
+        )
+    }
+}
+
+impl ViewRequest {
     fn resolutions(&self, first_max_edge: u32) -> Vec<PixelRenderSize> {
         assert!(first_max_edge > 0);
         let mut sizes = vec![self.pixels];
@@ -535,7 +615,7 @@ impl Request {
     }
 
     fn view_at(&self, pixels: PixelRenderSize) -> VolumeView {
-        let mut view = volume_view(&self.preview, self.camera, pixels);
+        let mut view = volume_view_bounds(self.min, self.max, self.camera, pixels);
         // Pixel rounding must not change the camera's aspect ratio between passes.
         if pixels != self.pixels {
             let ratio = pixels.height() as f32 / self.pixels.height() as f32;
@@ -573,8 +653,9 @@ impl Request {
     }
     /// Publish completed tile batches, retaining the previous level in
     /// unfinished regions. The first level reports coverage for a mesh fallback.
-    pub fn render_software_tiles(
+    pub fn render(
         &self,
+        scene: &SoftwareScene,
         passes: Passes,
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
@@ -592,15 +673,12 @@ impl Request {
         let Some(views) = views else {
             return Ok(None);
         };
-        let scene = SoftwareScene::new(&self.preview.objects, cancel);
-        cancel.check()?;
-        let Some(scene) = scene else { return Ok(None) };
         let mut previous = None;
         let mut views = views.into_iter().peekable();
         while let Some(view) = views.next() {
             cancel.check()?;
             let frame =
-                partial::render(&scene, &view, previous.as_ref(), cancel, publish, progress)?;
+                partial::render(scene, &view, previous.as_ref(), cancel, publish, progress)?;
             let Some(frame) = frame else { return Ok(None) };
             if views.peek().is_none() {
                 return Ok(Some(frame));

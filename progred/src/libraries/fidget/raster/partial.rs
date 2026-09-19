@@ -342,7 +342,7 @@ mod tests {
         let request = super::super::tests::request(41.0, 27.0);
         let cancel = incremental::Cancellation::default();
         let scene = SoftwareScene::new(&request.preview.objects, &cancel).unwrap();
-        let view = request.view_at(request.pixels);
+        let view = request.view().view_at(request.pixels);
         let assembly = Mutex::new(Assembly::new(41, 27, view.size.depth(), None));
         let shade = shading(&VoxelRenderConfig {
             world_to_model: view.world_to_model,

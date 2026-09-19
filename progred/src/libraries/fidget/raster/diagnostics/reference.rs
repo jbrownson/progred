@@ -15,7 +15,7 @@ impl Request {
     ) -> Result<Option<ImageData>, incremental::Error> {
         cancel.check()?;
         assert!(first_max_edge > 0);
-        let Some(views) = self.refinements(first_max_edge, final_depth_multiplier) else {
+        let Some(views) = self.view().refinements(first_max_edge, final_depth_multiplier) else {
             return Ok(None);
         };
         let scene = SoftwareScene::new(&self.preview.objects, cancel);

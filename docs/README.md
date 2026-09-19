@@ -27,6 +27,11 @@ browser executor/Rayon integration. [Browser setup](../web/README.md) covers the
 [Browser/native profiling](browser-native-profile-2026-09-19.md) compares the
 actual CAM document's computation and retained mesh drawing on both backends,
 including the browser worker-pool and WebGPU improvements.
+[Browser orbit profiling](browser-orbit-profile-2026-09-19.md) follows the actual
+frame/gesture path and separates source-pane construction from background
+worker contention.
+[Allocator experiments](browser-allocator-experiment-2026-09-19.md) compare two
+alternative WASM allocator configurations against that same orbit replay.
 
 [Deferred work](deferred.md) records the unresolved items set aside during the
 review. [Historical notes](history/README.md) preserve earlier models and

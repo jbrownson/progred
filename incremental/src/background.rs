@@ -43,7 +43,8 @@ impl Executor {
         }))
     }
 
-    fn submit(&self, job: Job) {
+    /// Submit one job, allowing callers to compose or instrument executors.
+    pub fn submit(&self, job: Job) {
         (self.0)(job);
     }
 }
@@ -237,9 +238,33 @@ impl Tasks {
         + Sync
         + 'static,
     ) -> AsyncMemo<I, T> {
+        self.memo_reporting_with_start_condition(prepare, None, compute)
+    }
+
+    /// Gate submission, not validity: unchanged results and admitted work remain
+    /// usable. Changed inputs still cancel obsolete work immediately; the latest
+    /// replacement waits without occupying a worker until permission is true.
+    pub fn memo_reporting_with_start_condition<
+        I: Clone + Send + 'static,
+        T: Send + Sync + 'static,
+    >(
+        &self,
+        prepare: Memo<Option<I>>,
+        permitted: Option<Memo<bool>>,
+        compute: impl Fn(
+            I,
+            &Cancellation,
+            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
+            &(dyn Fn(Progress) + Sync),
+        ) -> Result<T, Error>
+        + Send
+        + Sync
+        + 'static,
+    ) -> AsyncMemo<I, T> {
         let node = Rc::new(AsyncNode {
             runtime: self.runtime.clone(),
             prepare,
+            permitted,
             compute: Arc::new(compute),
             wake: self.wake.clone(),
             slot: Arc::new(Slot {
@@ -250,6 +275,7 @@ impl Tasks {
             reports: Arc::new(ConcurrentQueue::unbounded()),
             state: RefCell::new(State {
                 input: None,
+                awaiting_start: false,
                 generation: 0,
                 cancel: Cancellation::default(),
                 value: Rc::new(Availability::Pending { previous: None }),
@@ -298,6 +324,7 @@ type Worker<I, T> = dyn Fn(
 struct State<I, T> {
     // Outer None: never prepared. Some(None): observed waiting preparation.
     input: Option<Rc<Option<I>>>,
+    awaiting_start: bool,
     generation: u64,
     cancel: Cancellation,
     value: Rc<Availability<T>>,
@@ -313,6 +340,7 @@ struct State<I, T> {
 struct AsyncNode<I, T> {
     runtime: Runtime,
     prepare: Memo<Option<I>>,
+    permitted: Option<Memo<bool>>,
     compute: Arc<Worker<I, T>>,
     wake: Arc<dyn Fn() + Send + Sync>,
     slot: Arc<Slot>,
@@ -351,26 +379,44 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
         read.check()?;
         if !Rc::ptr_eq(&self.runtime.0, &read.runtime.0)
             || !Rc::ptr_eq(&self.prepare.0.runtime.0, &read.runtime.0)
+            || self
+                .permitted
+                .as_ref()
+                .is_some_and(|permit| !Rc::ptr_eq(&permit.0.runtime.0, &read.runtime.0))
         {
             return Err(Error::DifferentRuntime);
         }
         if self.state.borrow().closed {
             return Err(Error::Cancelled);
         }
-        if let Err(error) = self.prepare.0.refresh(read) {
-            let mut state = self.state.borrow_mut();
-            state.cancel.cancel();
-            state.input = None;
-            self.slot.clear();
-            return Err(error);
-        }
+        let prepared = self.prepare.0.refresh(read).and_then(|_| {
+            if let Some(permitted) = &self.permitted {
+                permitted.0.refresh(read)?;
+                let permitted = permitted.0.state.borrow();
+                let permitted = permitted.as_ref().unwrap();
+                Ok((*permitted.value, permitted.reusable))
+            } else {
+                Ok((true, true))
+            }
+        });
+        let (permitted, permission_reusable) = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                let mut state = self.state.borrow_mut();
+                state.cancel.cancel();
+                state.input = None;
+                state.awaiting_start = false;
+                self.slot.clear();
+                return Err(error);
+            }
+        };
         let (input, reusable) = {
             let prepared = self.prepare.0.state.borrow();
             let prepared = prepared.as_ref().unwrap();
             (prepared.value.clone(), prepared.reusable)
         };
         let mut state = self.state.borrow_mut();
-        state.reusable = reusable;
+        state.reusable = reusable && permission_reusable;
         let new_request = state
             .input
             .as_ref()
@@ -383,6 +429,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                 .checked_add(1)
                 .expect("request generation exhausted");
             state.input = Some(input.clone());
+            state.awaiting_start = input.is_some();
             state.pending_report = None;
             state.pending_progress = None;
             state.progress = None;
@@ -393,10 +440,14 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             };
             state.value = Rc::new(Availability::Pending { previous });
             state.changed = read.revision;
-            let Some(input) = input.as_ref().clone() else {
+            if !permitted || input.is_none() {
                 self.slot.clear();
-                return Ok(());
-            };
+            }
+        }
+        let submit = state.awaiting_start && permitted;
+        if submit {
+            let input = input.as_ref().clone().expect("prepared work is waiting");
+            state.awaiting_start = false;
             let generation = state.generation;
             let cancel = state.cancel.clone();
             let compute = self.compute.clone();
@@ -434,7 +485,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
         drop(state);
         // A newly submitted job may publish inline before its first read.
         // Later reports enter only through poll, at a new graph revision.
-        if new_request {
+        if new_request || submit {
             self.collect();
         }
         let mut state = self.state.borrow_mut();

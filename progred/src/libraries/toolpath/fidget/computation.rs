@@ -1,7 +1,7 @@
 use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
-use fidget::raster::{Frame, Passes};
+use fidget::raster::{Frame, Passes, SoftwareScene, ViewRequest};
 use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
 
@@ -14,20 +14,20 @@ pub(crate) struct Settings {
 }
 
 #[derive(Clone, PartialEq)]
-struct Request {
-    raster: fidget::raster::Request,
-    removal: Option<(Arc<Recording>, playback::Settings)>,
+enum SceneRequest {
+    Model(Vec<fidget::SceneObject>),
+    Stock(Arc<Recording>, playback::Settings),
 }
 
-impl Request {
+impl SceneRequest {
     fn new(path: Arc<Recording>, settings: &Settings) -> Self {
-        Self {
-            raster: settings.request.clone(),
-            removal: settings
-                .playback
-                .as_ref()
-                .filter(|p| p.stock_color().is_some())
-                .map(|p| (path, p.clone())),
+        match settings
+            .playback
+            .as_ref()
+            .filter(|p| p.stock_color().is_some())
+        {
+            Some(playback) => Self::Stock(path, playback.clone()),
+            None => Self::Model(settings.request.preview.objects.clone()),
         }
     }
 }
@@ -85,7 +85,8 @@ impl Computation {
         fuel: usize,
         settings: Settings,
         render: impl Fn(
-            Request,
+            Arc<SceneRequest>,
+            ViewRequest,
             &incremental::Cancellation,
             &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
             &(dyn Fn(Progress) + Sync),
@@ -100,7 +101,16 @@ impl Computation {
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
         let paths = paths(computations, recording.clone(), settings.clone());
-        let image = image_with_render(computations, recording, settings.clone(), None, render);
+        let image = image_with(
+            computations,
+            recording,
+            settings.clone(),
+            None,
+            |request, _| Ok(Ok(Arc::new(request))),
+            move |scene, view, cancel, publish, progress| {
+                render(scene.clone(), view, cancel, publish, progress)
+            },
+        );
         Self {
             program,
             fuel,
@@ -145,37 +155,50 @@ pub(crate) fn image(
     passes: Passes,
     ready: Option<Memo<bool>>,
 ) -> Memo<Outcome<ViewImage>> {
-    image_with_render(
+    image_with(
         computations,
         recording,
         settings,
         ready,
-        move |request, cancel, publish, progress| {
-            let scene = scene(request);
+        |request, cancel| {
+            let objects = match scene(request) {
+                Ok(objects) => objects,
+                Err(failure) => return Ok(Err(failure)),
+            };
             cancel.check()?;
-            match scene {
-                Ok(scene) => Ok(scene
-                    .render_software_tiles(
-                        passes,
-                        4,
-                        cancel,
-                        &mut |image| publish(Ok(image)),
-                        Some(progress),
-                    )?
-                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))),
-                Err(failure) => Ok(Err(failure)),
-            }
+            let compiled = SoftwareScene::new(&objects, cancel);
+            cancel.check()?;
+            Ok(compiled.ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+        },
+        move |scene, view, cancel, publish, progress| {
+            Ok(view
+                .render(
+                    scene,
+                    passes,
+                    4,
+                    cancel,
+                    &mut |image| publish(Ok(image)),
+                    Some(progress),
+                )?
+                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
         },
     )
 }
 
-fn image_with_render(
+/// The two workers have independent generations: a new camera cancels pixels,
+/// while scene preparation survives until its geometry inputs actually change.
+fn image_with<S: Send + Sync + 'static>(
     computations: &Computations,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     ready: Option<Memo<bool>>,
+    prepare: impl Fn(SceneRequest, &incremental::Cancellation) -> Result<Outcome<S>, incremental::Error>
+    + Send
+    + Sync
+    + 'static,
     render: impl Fn(
-        Request,
+        &S,
+        ViewRequest,
         &incremental::Cancellation,
         &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
         &(dyn Fn(Progress) + Sync),
@@ -185,44 +208,88 @@ fn image_with_render(
     + 'static,
 ) -> Memo<Outcome<ViewImage>> {
     let runtime = &computations.runtime;
-    let prepared = runtime.memo({
+    let requested_scene = runtime.memo({
         let settings = settings.clone();
         move |read| {
             let record = recording.read(read)?;
             let settings = settings.read(read);
             Ok(record
                 .path()
-                .map(|_| Request::new(record.path.clone(), &settings)))
+                .map(|_| SceneRequest::new(record.path.clone(), &settings)))
         }
     });
-    let worker_input = runtime.memo({
-        let prepared = prepared.clone();
+    let view = runtime.memo(move |read| Ok(settings.read(read).request.view()));
+    let scene_input = runtime.memo({
+        let requested_scene = requested_scene.clone();
         move |read| {
             if let Some(ready) = &ready
                 && !*ready.read(read)?
             {
                 return Ok(None);
             }
-            Ok(Some((*prepared.read(read)?).clone()))
+            Ok(Some((*requested_scene.read(read)?).clone()))
         }
     });
-    let worker = computations.tasks.memo_reporting_when_ready(
+    let compiled =
+        computations
+            .tasks
+            .memo_reporting_when_ready(scene_input, move |request, cancel, _, _| {
+                cancel.check()?;
+                match request {
+                    Ok(request) => prepare(request, cancel),
+                    Err(failure) => Ok(Err(failure)),
+                }
+            });
+    let worker_input = runtime.memo_by(
+        {
+            let compiled = compiled.clone();
+            move |read| {
+                Ok(match &*compiled.read(read)? {
+                    Availability::Ready(scene) | Availability::Refining(scene) => {
+                        Some((scene.clone(), (*view.read(read)?).clone()))
+                    }
+                    // Never render a new camera using a previous geometry generation.
+                    Availability::Pending { .. } => None,
+                })
+            }
+        },
+        |a, b| match (a, b) {
+            (Some((a_scene, a_view)), Some((b_scene, b_view))) => {
+                // The shared async result names one completed scene generation;
+                // compiled programs have no structural equality operation.
+                Arc::ptr_eq(a_scene, b_scene) && a_view == b_view
+            }
+            (None, None) => true,
+            _ => false,
+        },
+    );
+    let permitted = runtime.memo({
+        let pressed = computations.pointer_pressed.clone();
+        move |read| Ok(!*pressed.read(read))
+    });
+    let worker = computations.tasks.memo_reporting_with_start_condition(
         worker_input,
-        move |request, cancel, publish, progress| {
+        Some(permitted),
+        move |(scene, view), cancel, publish, progress| {
             cancel.check()?;
-            match request {
-                Ok(request) => render(request, cancel, publish, progress),
-                Err(failure) => Ok(Err(failure)),
+            match scene.as_ref() {
+                Ok(scene) => render(scene, view, cancel, publish, progress),
+                Err(failure) => Ok(Err(failure.clone())),
             }
         },
     );
     runtime.memo_by(
         move |read| {
             // Invalid current programs replace old images immediately, without a worker round-trip.
-            let prepared = prepared.read(read)?;
+            let requested_scene = requested_scene.read(read)?;
             let availability = worker.read(read)?;
             let progress = worker.progress(read)?;
-            if let Err(failure) = &*prepared {
+            if let Err(failure) = &*requested_scene {
+                return Ok(Err(failure.clone()));
+            }
+            if let Availability::Ready(scene) = &*compiled.read(read)?
+                && let Err(failure) = scene.as_ref()
+            {
                 return Ok(Err(failure.clone()));
             }
             Ok(match &*availability {
@@ -251,21 +318,21 @@ fn image_with_render(
     )
 }
 
-fn scene(request: Request) -> Outcome<fidget::raster::Request> {
-    let Request {
-        raster: mut request,
-        removal,
-    } = request;
+fn scene(request: SceneRequest) -> Outcome<Vec<fidget::SceneObject>> {
     let invalid = || absent::with_reason(INVALID_INPUT);
-    if let Some((path, playback)) = removal {
-        if let Some(stock) = playback.remaining_stock(&path).map_err(|_| invalid())? {
-            request.preview.objects = vec![stock];
-        }
-    }
-    if request.preview.objects.len() > usize::from(u16::MAX) + 1 {
+    let objects = match request {
+        SceneRequest::Model(objects) => objects,
+        SceneRequest::Stock(path, playback) => vec![
+            playback
+                .remaining_stock(&path)
+                .map_err(|_| invalid())?
+                .ok_or_else(invalid)?,
+        ],
+    };
+    if objects.len() > usize::from(u16::MAX) + 1 {
         Err(absent::with_reason(fidget::vocabulary::INVALID_SCENE))
     } else {
-        Ok(request)
+        Ok(objects)
     }
 }
 
@@ -375,10 +442,10 @@ mod tests {
         let rendered = Arc::new(Mutex::new(Vec::new()));
         let graph = Computation::with_render(&computations, program, 10000, settings(0.0), {
             let rendered = rendered.clone();
-            move |request, cancel, _publish, _progress| {
+            move |scene, view, cancel, _publish, _progress| {
                 cancel.check()?;
                 let mut rendered = rendered.lock().unwrap();
-                rendered.push(request);
+                rendered.push((scene, view));
                 Ok(Ok(fidget::raster::Frame {
                     image: puri::ImageData {
                         data: vec![rendered.len() as u8, 0, 0, 255].into(),
@@ -401,6 +468,8 @@ mod tests {
         let first = read();
         let first = &first.as_ref().as_ref().unwrap();
         assert!(first.pending && first.image.is_none());
+        finish();
+        assert!(read().as_ref().as_ref().unwrap().pending);
         finish();
         let ready = read();
         assert!(!ready.as_ref().as_ref().unwrap().pending);
@@ -429,11 +498,8 @@ mod tests {
                 2,
                 "superseded camera request wasn't rendered"
             );
-            assert!(Arc::ptr_eq(
-                &rendered[0].removal.as_ref().unwrap().0,
-                &rendered[1].removal.as_ref().unwrap().0
-            ));
-            assert!(rendered[1].raster == settings(60.0).request);
+            assert!(Arc::ptr_eq(&rendered[0].0, &rendered[1].0));
+            assert!(rendered[1].1 == settings(60.0).request.view());
         }
 
         doc.cells.set_value(endpoint, f64::value(0.75));
@@ -441,12 +507,11 @@ mod tests {
         assert!(read().as_ref().as_ref().unwrap().pending);
         finish();
         read();
+        finish();
+        read();
         {
             let rendered = rendered.lock().unwrap();
-            assert!(!Arc::ptr_eq(
-                &rendered[1].removal.as_ref().unwrap().0,
-                &rendered[2].removal.as_ref().unwrap().0
-            ));
+            assert!(!Arc::ptr_eq(&rendered[1].0, &rendered[2].0));
         }
         // A current failure must not leave the previously successful image on screen.
         doc.cells.set_value(endpoint, Value::record([]));
@@ -455,6 +520,92 @@ mod tests {
         finish();
         assert!(read().as_ref().is_err());
         assert_eq!(rendered.lock().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
+        let computations = Computations::new(
+            Executor::new({
+                let queue = queue.clone();
+                move |job| queue.lock().unwrap().push_back(job)
+            }),
+            || {},
+        );
+        let runtime = &computations.runtime;
+        let program = runtime.input(::grap::lambda([], Value::record([])));
+        let fuel = runtime.input(10000);
+        let settings_input = runtime.input(settings(0.0));
+        let (started, receive) = mpsc::channel();
+        let (resume, resumed) = mpsc::channel();
+        let resumed = Mutex::new(resumed);
+        let rendered = Arc::new(Mutex::new(Vec::new()));
+        let image = image_with(
+            &computations,
+            recording(&computations, program, fuel),
+            settings_input.clone(),
+            None,
+            move |request, cancel| {
+                started.send(cancel.clone()).unwrap();
+                resumed.lock().unwrap().recv().unwrap();
+                cancel.check()?;
+                Ok(Ok(request))
+            },
+            {
+                let rendered = rendered.clone();
+                move |_, view, _, _, _| {
+                    rendered.lock().unwrap().push(view);
+                    Ok(Err(absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+                }
+            },
+        );
+        let read = || runtime.read(&image).unwrap();
+        read();
+        let job = queue.lock().unwrap().pop_front().unwrap();
+        let worker = std::thread::spawn(job);
+        let cancel = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut next = settings(60.0);
+        settings_input.set(next.clone());
+        read();
+        assert!(
+            cancel.check().is_ok(),
+            "camera changes retain running preparation"
+        );
+        assert!(queue.lock().unwrap().is_empty());
+        resume.send(()).unwrap();
+        worker.join().unwrap();
+        assert!(computations.tasks.poll());
+        read();
+        let job = queue.lock().unwrap().pop_front().unwrap();
+        std::thread::spawn(job).join().unwrap();
+        assert!(computations.tasks.poll());
+        assert!(
+            rendered.lock().unwrap()[0] == next.request.view(),
+            "render uses the latest camera"
+        );
+
+        next.request.preview.objects[0].color = [1, 2, 3];
+        settings_input.set(next.clone());
+        read();
+        let job = queue.lock().unwrap().pop_front().unwrap();
+        let worker = std::thread::spawn(job);
+        let cancel = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        next.request.preview.objects[0].color = [4, 5, 6];
+        settings_input.set(next);
+        read();
+        assert!(
+            cancel.check().is_err(),
+            "scene-input changes cancel preparation"
+        );
+        resume.send(()).unwrap();
+        worker.join().unwrap();
+        assert!(
+            !computations.tasks.poll(),
+            "cancelled preparation cannot publish"
+        );
     }
 
     #[test]
@@ -478,7 +629,7 @@ mod tests {
             ::grap::lambda([], Value::record([])),
             10000,
             settings(0.0),
-            move |_, _, publish, progress| {
+            move |_, _, _, publish, progress| {
                 let image = puri::ImageData {
                     data: vec![10, 20, 30, 255].into(),
                     format: peniko::ImageFormat::Rgba8,
@@ -504,6 +655,10 @@ mod tests {
         let read = || computations.runtime.read(&graph.image).unwrap();
         let initial = read();
         assert!(initial.as_ref().as_ref().unwrap().image.is_none());
+        let prepare = queue.lock().unwrap().pop_front().unwrap();
+        std::thread::spawn(prepare).join().unwrap();
+        assert!(computations.tasks.poll());
+        read();
         let job = queue.lock().unwrap().pop_front().unwrap();
         let worker = std::thread::spawn(job);
         receive.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -551,13 +706,13 @@ mod tests {
         let playback = playback(0.5);
         let expected = playback.remaining_stock(&path).unwrap().unwrap();
         settings.playback = Some(playback);
-        let rendered = scene(Request::new(path, &settings)).unwrap();
+        let rendered = scene(SceneRequest::new(path, &settings)).unwrap();
         assert_eq!(
-            rendered.preview.objects.len(),
+            rendered.len(),
             1,
             "only stock; displayed paths and cutter are meshes"
         );
-        let stock = &rendered.preview.objects[0];
+        let stock = &rendered[0];
         assert_eq!(stock.color, expected.color);
         assert!(stock.tree == expected.tree);
     }

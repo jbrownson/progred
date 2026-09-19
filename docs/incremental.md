@@ -132,6 +132,13 @@ ordinary dependency graph starts the job. Waiting is not a failure or an absent;
 old completions remain subject to generation checks. The always-ready APIs wrap
 their prepared inputs in `Some`.
 
+`memo_reporting_with_start_condition` additionally accepts an optional boolean
+memo controlling submission. Unlike readiness, permission does not invalidate an
+unchanged result or cancel already-admitted current work. Changed inputs still
+cancel obsolete work immediately and retain the previous result as pending; only
+the latest replacement waits until permission becomes true. Waiting occupies no
+worker and needs no timer. Permission alone never reruns a completed result.
+
 Each node has at most one running job and one latest replacement. Changing the
 prepared snapshot cancels the old request and replaces any queued request. The
 executor bounds concurrent jobs and requeues replacements so other nodes can run.
@@ -205,16 +212,20 @@ extraction have only before/after checks; cancellation is cooperative, not a
 promise of immediate interruption. Partial meshes are never published.
 
 The implicit CAM `preview paths 3d` uses the same tracked recording and playback
-logic, but prepares a camera-dependent image request instead of a mesh request.
-The worker constructs the remaining-stock field, interprets future paths and
-the cutter as Fidget scene objects, then renders the scene progressively. Camera,
-image size, display scale, color and playback are explicit dependencies. Scrolling reuses
-the image; camera changes request a replacement without re-running the generator.
+logic. Its background graph separates scene preparation from pixel rendering.
+A camera-independent request selects the model objects or remaining-stock recipe;
+one worker constructs the stock field and compiles an immutable `SoftwareScene`,
+including its root interval tapes. A second worker reads that current scene plus
+a `ViewRequest` containing bounds, camera, and pixel dimensions. It renders only
+model/stock; future paths and the visible cutter are meshes composed against its
+depth image. Camera, image size, display scale, color and playback are explicit
+dependencies. Scrolling reuses the image; camera changes request new pixels
+without rebuilding the field, recompiling, or re-running the generator.
 The previous **whole image** is dimmed while awaiting the first
 current image. Each current refinement replaces it at normal color. An unlabelled
 progress bar overlays the top edge of the viewport while work remains.
-The bar resets per refinement and disappears on completion. Unlike the mesh preview,
-the tool cannot move independently within those pixels. Before any image is available,
+The bar resets per refinement and disappears on completion. The mesh tool/path
+can move independently of those pixels. Before any image is available,
 the correctly sized viewport shows the empty progress track.
 
 The implicit renderer starts with a maximum edge of 128 physical pixels and
@@ -222,11 +233,14 @@ approximately doubles both dimensions on each pass, finishing at the exact
 native size, then adds one native-size pass with four times the depth samples.
 Every level uses the same camera and model-space render volume; image and depth
 sampling become finer together until the final depth-only pass. Pixel rounding
-does not change the aspect ratio. Scene compilation is shared within that worker job, but each
-voxel raster is independent: coarse pixels are not reused to compute finer ones.
-New input cancels the whole sequence and starts a new coarse request, retaining
-only the latest replacement in the ordinary async slot. The layout and controls
-do not change size as results refine.
+does not change the aspect ratio. Scene compilation is retained across camera
+requests as well as refinement levels, but each voxel raster is independent:
+coarse pixels are not reused to compute finer ones. New view inputs cancel the
+pixel sequence and start a new coarse request, retaining only the latest
+replacement in the ordinary async slot. They do not cancel scene preparation
+already in flight. Geometry changes invalidate preparation too; a previous
+compiled scene is never used to render a new geometry generation. The layout
+and controls do not change size as results refine.
 
 The implicit CAM request explicitly uses Fidget's software voxel renderer. It
 runs directly on the general background executor, without a GPU-owning thread,
@@ -239,12 +253,12 @@ subtile work as well as between root tiles. Expression construction
 and compilation have before/after checks rather than immediate interruption.
 Obsolete results are discarded by the general scheduler.
 
-The local raster progress callback counts successfully completed root tiles.
-The scene sums tile counts across its objects for each refinement and reports
+The local raster progress callback counts completed image pixels in finished
+tiles, excluding padding and counting each pixel once across all objects. It reports
 at most every 50 ms, plus stage boundaries, through the ordinary async job.
 Both native and browser workers use this policy, with `web-time` supplying the
 browser clock. Finished image snapshots are published at most every 100 ms.
-Empty and complex tiles count equally, so this is not a time estimate. Compilation
+Empty and complex pixels count equally, so this is not a time estimate. Compilation
 and image assembly are outside the tile count. The bar is a paint-only reusable
 Puri widget, composed as an overlay without changing layout or hover.
 
@@ -254,13 +268,22 @@ Puri widget, composed as an overlay without changing layout or hover.
 over **one** recorded Grap evaluation. One settings input describes the current
 scene, playback, appearance, camera, and image size. A derived memo removes the
 camera and image size for mesh generation; equal derived settings retain the
-mesh. There is no event classification, orbit flag, inactivity timer, or second
-cache.
+mesh. There is no orbit-specific invalidation or second cache.
 
 The current stock mesh is a prerequisite for implicit work. A readiness memo
-observes the mesh's pending status; image preparation returns `None` until that
-mesh is current. Both nodes are still read while waiting, so obsolete image work
-is cancelled rather than left running because the display stopped demanding it.
+observes the mesh's pending status; scene preparation returns `None` until that
+mesh is current. Pixel rendering waits for the current compiled scene. All stages
+are still read while waiting, so obsolete work is cancelled rather than left
+running because the display stopped demanding it. Completed scenes are shared
+through the ordinary async result handle, not a renderer-owned cache.
+Pixel-job submission is separately permitted only while no pointer button is
+held, using a tracked frame input. An orbit drag cancels obsolete pixels on its
+first camera change; further motion keeps only the latest request, and release
+admits it immediately. Cancellation of the gesture also releases this gate.
+There is no debounce or inactivity timer. Mesh generation, scene preparation,
+and immediate tool/path updates continue during a drag. Merely pressing without
+changing render inputs does not discard the current image or cancel valid work.
+Non-button input, including wheel and pinch, is not deferred by this gate.
 A current implicit image then wins, including intermediate refinements. While
 it is pending, the viewport draws the available mesh synchronously using the
 current camera. The old implicit image is not used as the fallback. Current
@@ -268,18 +291,19 @@ mesh or image errors remain visible rather than being hidden behind old output.
 
 On camera changes, the mesh remains current. On playback or geometry changes,
 the tool/path triangles update immediately and the old stock mesh is desaturated
-while its replacement is pending. Both jobs use the existing latest-replacement
+while its replacement is pending. All jobs use the existing latest-replacement
 queue and cancellation checks. Implicit work cannot overtake replacement meshing,
 so orbiting after an implicit result cannot fall back to older stock. Camera-only
-changes retain the current mesh and start implicit work without another mesh job.
+changes retain the current mesh; release starts implicit work without another
+mesh job or another scene preparation.
 
 The mesh is the immediate draft stage. This composition requests a single implicit
 pass at native XY resolution with four-times depth sampling. Finished tile batches
 replace the mesh only in their explicitly covered regions, including transparent
 pixels; unfinished regions remain mesh. The progress bar advances across that
 single pass. The raster API also retains the progressive resolution sequence,
-still used by the standalone implicit preview. No scheduling policy or domain
-types were added to the generic async runtime.
+still used by the standalone implicit preview. The async runtime supplies only
+the general submission condition; the CAM adapter chooses the pointer policy.
 
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.

@@ -993,6 +993,34 @@ mod tests {
     }
 
     #[test]
+    fn pointer_release_and_cancellation_update_the_computation_input() {
+        let mut runner = instrumented_runner(&Log::default());
+        runner.refresh_frame(1.0, VIEWPORT);
+        let pressed = runner.editor.computations.runtime.memo({
+            let pressed = runner.editor.computations.pointer_pressed.clone();
+            move |read| Ok(*pressed.read(read))
+        });
+        let button = PointerButtonEvent {
+            button: Some(puri::handler::PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState::default(),
+        };
+        for release in [
+            PointerEvent::Up(button.clone()),
+            PointerEvent::Cancel(button.pointer.clone()),
+        ] {
+            runner.pointer_event(&PointerEvent::Down(button.clone()), 1.0, VIEWPORT);
+            assert!(*runner.editor.computations.runtime.read(&pressed).unwrap());
+            runner.pointer_event(&release, 1.0, VIEWPORT);
+            assert!(!*runner.editor.computations.runtime.read(&pressed).unwrap());
+        }
+    }
+
+    #[test]
     fn touch_without_prior_motion_selects_the_contact_and_text_input_uses_its_handler() {
         let mut runner = EditorRunner::new(crate::test_editor(Document {
             root: Some(text::value("hello")),

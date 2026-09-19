@@ -52,7 +52,7 @@ pub(crate) fn profile(
     let drawing = mesh::performance::draw(&preview, combined.into());
     let mut control_results = Vec::new();
     if controls {
-        let view = refine_depth(request.view_at(request.pixels), 4).unwrap();
+        let view = refine_depth(request.view().view_at(request.pixels), 4).unwrap();
         control_results.push(backend::<fidget_engine::vm::VmFunction>(
             &preview, &view, false, "vm",
         ));

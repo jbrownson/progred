@@ -201,6 +201,10 @@ fn prepare_frame(
     resources: FrameResources<'_>,
     pointer: PointerInput<'_>,
 ) -> Frame {
+    description
+        .computations
+        .pointer_pressed
+        .set(pointer.pressed);
     compute_hover(
         project_frame(&description, resources),
         &description,

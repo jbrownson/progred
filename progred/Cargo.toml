@@ -13,6 +13,10 @@ gpu-experiment = ["dep:fidget-wgpu", "fidget-wgpu/experimental-spills"]
 name = "cam_profile"
 required-features = ["cam-profile"]
 
+[[example]]
+name = "orbit_profile"
+required-features = ["cam-profile"]
+
 [dependencies]
 grap = { path = "../grap" }
 gid.workspace = true

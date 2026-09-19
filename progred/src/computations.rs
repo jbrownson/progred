@@ -16,6 +16,7 @@ pub(crate) struct Snapshot {
 pub(crate) struct Computations {
     pub runtime: Runtime,
     pub tasks: Tasks,
+    pub pointer_pressed: Input<bool>,
     snapshot: Input<Snapshot>,
     pub definitions: grap::memo::Definitions<Snapshot>,
     roots: Roots<(Root, Vec<Step>)>,
@@ -52,6 +53,7 @@ impl Computations {
             ))
         });
         Self {
+            pointer_pressed: runtime.input(false),
             runtime,
             tasks,
             snapshot,

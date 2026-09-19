@@ -5,6 +5,10 @@
 /web/probe-pkg
 /web/profile-pkg
 /web/gpu-probe-pkg
+/web/orbit-pkg
+/web/orbit-talc-pkg
+/web/orbit-lock-pkg
+/web/orbit-prepared-pkg
 
 # Xcode
 xcuserdata/

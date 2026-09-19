@@ -814,8 +814,17 @@ fn volume_view(
     camera: Camera,
     raster_size: PixelRenderSize,
 ) -> VolumeView {
-    let center = (preview.min + preview.max) / 2.0;
-    let half = (preview.max - preview.min) / 2.0;
+    volume_view_bounds(preview.min, preview.max, camera, raster_size)
+}
+
+fn volume_view_bounds(
+    min: Vector3<f32>,
+    max: Vector3<f32>,
+    camera: Camera,
+    raster_size: PixelRenderSize,
+) -> VolumeView {
+    let center = (min + max) / 2.0;
+    let half = (max - min) / 2.0;
     let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
     let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
     let rotation = yaw * pitch;
