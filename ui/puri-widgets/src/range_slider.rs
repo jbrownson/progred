@@ -102,7 +102,7 @@ impl RangeSlider {
         let x = |i| rail.x0 + rail.width() * i as f64 / self.count as f64;
         let y = rect.center().y;
         let half_height = (rect.height() / 2.0 - 2.0 * scale).max(0.0);
-        let accent = Color::from_rgb8(48, 126, 210);
+        let accent = Color::from_rgb8(140, 183, 224);
         canvas.fill(
             Rect::new(rail.x0, y - half_height, rail.x1, y + half_height),
             Color::from_rgb8(216, 225, 236),
