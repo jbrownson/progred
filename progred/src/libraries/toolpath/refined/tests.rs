@@ -176,7 +176,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let mesh = f.mesh();
     assert!(!mesh.as_ref().as_ref().unwrap().awaiting_first_surface);
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_, None)));
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
 
     f.graph.settings.set(settings(30.0, 0.25));
     assert!(
@@ -200,7 +200,7 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     assert_eq!(f.runs.get(), 1);
     f.finish(0);
     let view = f.read();
-    let View::Implicit(image, None) = &*view else {
+    let View::Implicit(image, _) = &*view else {
         panic!("replacement image")
     };
     let image = &image.as_ref().as_ref().unwrap();
@@ -217,7 +217,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     f.finish(0);
     let old = f.mesh();
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_, None)));
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.settings.set(settings(0.0, 0.75));
     let new = f.mesh();
     assert!(!new.as_ref().as_ref().unwrap().awaiting_first_surface);
@@ -257,7 +257,7 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
         "now implicit work is ready"
     );
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_, None)));
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.settings.set(settings(30.0, 0.9));
     assert!(
         Rc::ptr_eq(&current, &f.mesh()),
@@ -288,7 +288,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
     f.finish(0);
     assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_, None)));
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
 }
 
 #[test]
@@ -298,11 +298,66 @@ fn current_failure_is_not_hidden_by_a_previous_successful_render() {
     f.finish(0);
     f.read();
     f.finish(0);
-    assert!(matches!(&*f.read(), View::Implicit(_, None)));
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
     f.graph.fuel.set(0);
     let view = f.read();
     let View::Mesh(result, _) = &*view else {
         panic!("current error must be exposed")
     };
     assert!(result.as_ref().is_err());
+}
+
+#[test]
+fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
+    let f = Fixture::new();
+    let model_settings = |progress| {
+        let mut settings = settings(0.0, progress);
+        settings.playback = Some(
+            playback::Settings::read(&Value::record([
+                (PROGRESS, f64::value(progress)),
+                (PROFILE_TOLERANCE, f64::value(0.001)),
+                (
+                    STOCK_MIN,
+                    Value::record([X, Y, Z].map(|k| (k, f64::value(-0.5)))),
+                ),
+                (
+                    STOCK_MAX,
+                    Value::record([X, Y, Z].map(|k| (k, f64::value(0.5)))),
+                ),
+            ]))
+            .unwrap(),
+        );
+        settings
+    };
+    f.graph.settings.set(model_settings(0.25));
+    f.read();
+    f.finish(0);
+    f.read();
+    f.finish(0);
+    let initial = f.read();
+    let View::Implicit(image, geometry) = &*initial else {
+        panic!("finished model")
+    };
+    f.graph.settings.set(model_settings(0.75));
+    let moved = f.read();
+    let View::Implicit(next_image, next_geometry) = &*moved else {
+        panic!("model should stay ready")
+    };
+    assert!(Rc::ptr_eq(image, next_image));
+    assert!(!Rc::ptr_eq(geometry, next_geometry));
+    assert!(
+        f.queue.lock().unwrap().is_empty(),
+        "tool motion schedules neither meshing nor implicit rendering"
+    );
+    let mut restyled = model_settings(0.75);
+    restyled.color = [100, 50, 200];
+    restyled.radius *= 2.0;
+    f.graph.settings.set(restyled);
+    let styled = f.read();
+    let View::Implicit(styled_image, _) = &*styled else {
+        panic!("model should stay ready")
+    };
+    assert!(Rc::ptr_eq(image, styled_image));
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
 }

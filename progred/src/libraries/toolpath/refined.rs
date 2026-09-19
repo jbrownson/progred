@@ -47,7 +47,7 @@ enum View {
     ),
     Implicit(
         Rc<Outcome<implicit::computation::ViewImage>>,
-        Option<Rc<Outcome<mesh::computation::ViewGeometry>>>,
+        Rc<Outcome<mesh::computation::ViewGeometry>>,
     ),
 }
 
@@ -117,12 +117,7 @@ impl Computation {
                         View::Mesh(geometry, image.progress)
                     }
                     // A current error is a result too; don't hide it behind old geometry.
-                    _ => {
-                        let partial = image.as_ref().as_ref().is_ok_and(|image| {
-                            image.image.as_ref().is_some_and(|frame| frame.is_partial())
-                        });
-                        View::Implicit(image, partial.then_some(geometry))
-                    }
+                    _ => View::Implicit(image, geometry),
                 })
             },
             |_, _| false,
@@ -206,26 +201,25 @@ pub(super) fn display(
                     // Implicit refinement is pending, even when the fallback is current.
                     Ok(implicit::progress_bar(image, *progress))
                 }
-                View::Implicit(image, fallback) => {
+                View::Implicit(image, geometry) => {
                     let image = image.as_ref().as_ref().map_err(Clone::clone)?;
                     let data = image
                         .image
                         .as_ref()
                         .expect("only current images refine the mesh");
-                    let pixels = if let Some(fallback) = fallback {
-                        let geometry = fallback.as_ref().as_ref().map_err(Clone::clone)?;
-                        let fallback = fidget::mesh::raster(
-                            &geometry.geometry,
-                            &model,
-                            state.as_ref(),
-                            scale,
-                            &mut renderer.borrow_mut(),
-                        )
-                        .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
-                        data.over(&fallback)
-                    } else {
-                        data.image.clone()
-                    };
+                    let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
+                    let pixels = fidget::mesh::raster_surface(
+                        &geometry.geometry,
+                        Some(fidget::mesh::Surface {
+                            frame: data,
+                            mesh_start: geometry.surface_start,
+                        }),
+                        &model,
+                        state.as_ref(),
+                        scale,
+                        &mut renderer.borrow_mut(),
+                    )
+                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
                     let drawing = fidget::image_from_data(size, pixels, false);
                     Ok(if image.pending {
                         implicit::progress_bar(drawing, image.progress)

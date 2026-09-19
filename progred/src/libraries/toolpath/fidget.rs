@@ -1,7 +1,9 @@
-//! A path sink that builds Fidget geometry, sharing the ordinary 3D viewport.
+//! Async implicit surfaces combined with mesh paths and cutters.
 
+#[cfg(test)]
 use super::cutter::{SectionKind, Tool};
 use super::playback;
+#[cfg(test)]
 use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, result, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
@@ -43,6 +45,8 @@ pub(super) fn progress_bar(
     )
 }
 
+// Retained only as the all-implicit benchmark reference.
+#[cfg(test)]
 pub(super) struct Tubes {
     radius: f32,
     previous: Option<[f32; 3]>,
@@ -52,6 +56,7 @@ pub(super) struct Tubes {
     objects: Vec<fidget::SceneObject>,
 }
 
+#[cfg(test)]
 impl Tubes {
     pub(super) fn new(radius: f64) -> Option<Self> {
         Some(Self {
@@ -79,6 +84,7 @@ impl Tubes {
     }
 }
 
+#[cfg(test)]
 impl Draw for Tubes {
     fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
         let radius = read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
@@ -147,6 +153,7 @@ pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, Inv
     Ok(q[0].square() + q[1].square() + q[2].square() - radius * radius)
 }
 
+#[cfg(test)]
 impl Sink for Tubes {
     type Error = InvalidPath;
 
@@ -249,6 +256,7 @@ pub(super) fn preview_with(
 
 pub(super) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    renderer: &Rc<std::cell::RefCell<fidget::mesh::Renderer>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?.get(&PREVIEW_3D)?.as_record()?;
     let model = fidget::volume_preview(fields.get(&presentation::vocabulary::VALUE)?)?;
@@ -258,7 +266,7 @@ pub(super) fn display(
     let color = read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
     let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
     let fuel = super::read_fuel(fuel)?;
-    let request = fidget::raster::Request::new(model, input.state, input.scale_factor)?;
+    let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
     let size = request.size();
     let settings = computation::Settings {
         request,
@@ -269,6 +277,9 @@ pub(super) fn display(
             None => None,
         },
     };
+    let renderer = renderer.clone();
+    let state = input.state.cloned();
+    let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
         let local;
         let computations = match context.inputs.computations {
@@ -285,25 +296,38 @@ pub(super) fn display(
         computation.fuel.set(fuel);
         computation.settings.set(settings.clone());
         let image = computations.runtime.read(&computation.image);
+        let paths = computations.runtime.read(&computation.paths);
         let result = image
             .as_ref()
             .map_err(|error| ::grap::memo::failure(*error))
-            .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone));
+            .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
+            .and_then(|image| {
+                let paths = paths
+                    .as_ref()
+                    .map_err(|e| ::grap::memo::failure(*e))?
+                    .as_ref()
+                    .as_ref()
+                    .map_err(Clone::clone)?;
+                let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
+                    fidget::mesh::Surface {
+                        frame,
+                        mesh_start: paths.indices.len(),
+                    }
+                });
+                let pixels = fidget::mesh::raster_surface(
+                    paths,
+                    surface,
+                    &model,
+                    state.as_ref(),
+                    scale,
+                    &mut renderer.borrow_mut(),
+                )
+                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
+                Ok((image, pixels))
+            });
         match result {
-            Ok(image) => {
-                let drawing = match &image.image {
-                    Some(data) => fidget::image_from_data(size, data.image.clone(), image.stale),
-                    None => Layout::widget(Rc::new(move |context| {
-                        crate::display::widget::leaf(
-                            crate::display::widget::Extent {
-                                width: size.width * context.inputs.styles.scale,
-                                ascent: size.height * context.inputs.styles.scale / 2.0,
-                                descent: size.height * context.inputs.styles.scale / 2.0,
-                            },
-                            |_, _| {},
-                        )
-                    })),
-                };
+            Ok((image, pixels)) => {
+                let drawing = fidget::image_from_data(size, pixels, false);
                 let drawing = if image.pending {
                     progress_bar(drawing, image.progress)
                 } else {

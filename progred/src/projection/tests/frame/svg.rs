@@ -32,13 +32,16 @@ fn cam_position(progress: f64) -> Value {
         doc: &doc,
         libraries: &libraries,
     };
-    let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000);
-    assert!(tree.completed && !crate::libraries::absent::is_absent(&tree.result));
-    let selection = tree_range::Selection::new(&tree.result, None);
-    Value::record([(
-        names["focus"],
-        tree_range::cursor_state(&selection, progress * selection.leaves.end as f64),
-    )])
+    let tree =
+        crate::libraries::tree::build(&names["program_tree"].into(), &sources, 3_000_000).unwrap();
+    let selection = tree_range::Selection::new(&tree.items, None);
+    Value::record([
+        (
+            names["focus"],
+            tree_range::cursor_state(&selection, progress * selection.leaves.end as f64),
+        ),
+        (names["preview_mode"], names["stock"].into()),
+    ])
 }
 
 fn image_png(image: &ImageData) -> Vec<u8> {

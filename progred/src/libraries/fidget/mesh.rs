@@ -51,6 +51,26 @@ pub(crate) fn preview(
 pub(crate) struct Vertex {
     pub(crate) position: Vector3<f32>,
     pub(crate) color: [f32; 3],
+    pub(crate) normal: Normal,
+}
+
+/// GPU-native signed normalized bytes; zero requests the triangle's normal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Normal([i8; 4]);
+
+impl Normal {
+    pub(crate) fn new(normal: Vector3<f32>) -> Self {
+        Self([
+            (normal.x.clamp(-1.0, 1.0) * 127.0).round() as i8,
+            (normal.y.clamp(-1.0, 1.0) * 127.0).round() as i8,
+            (normal.z.clamp(-1.0, 1.0) * 127.0).round() as i8,
+            0,
+        ])
+    }
+
+    pub(crate) fn vector(self) -> Vector3<f32> {
+        Vector3::new(self.0[0] as f32, self.0[1] as f32, self.0[2] as f32) / 127.0
+    }
 }
 
 #[derive(Clone, Default)]
@@ -58,6 +78,9 @@ pub(crate) struct Geometry {
     pub(crate) vertices: Vec<Vertex>,
     pub(crate) indices: Vec<u32>,
 }
+
+/// Shared render input. Edits through `Arc::make_mut` detach any retained upload identity.
+pub(crate) type Mesh = std::sync::Arc<Geometry>;
 
 impl Geometry {
     pub(crate) fn append_colored(
@@ -71,6 +94,7 @@ impl Geometry {
             .extend(other.vertices.iter().map(|vertex| Vertex {
                 position: vertex.position,
                 color: color(vertex.color),
+                normal: vertex.normal,
             }));
         self.indices
             .extend(other.indices.iter().map(|index| offset + index));
@@ -78,10 +102,10 @@ impl Geometry {
     }
 }
 
-fn generate(preview: &VolumePreview, depth: u8) -> Option<Geometry> {
+fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {
     let mut geometry = Geometry::default();
     append(&mut geometry, preview, depth)?;
-    Some(geometry)
+    Some(geometry.into())
 }
 
 pub(crate) fn append(out: &mut Geometry, preview: &VolumePreview, depth: u8) -> Option<()> {
@@ -156,6 +180,7 @@ impl Shape {
                 .extend(mesh.vertices.into_iter().map(|position| Vertex {
                     position,
                     color: object.color.map(|n| f32::from(n) / 255.0),
+                    normal: Normal::default(),
                 }));
             out.indices.extend(
                 mesh.triangles
@@ -206,13 +231,33 @@ pub(crate) struct Renderer {
     gpu: gpu::Backend,
 }
 
+/// Indices before `mesh_start` remain mesh geometry. The rest are the draft
+/// surface, replaced wherever the raster has completed color and depth.
+#[derive(Clone, Copy)]
+pub(crate) struct Surface<'a> {
+    pub frame: &'a raster::Frame,
+    pub mesh_start: usize,
+}
+
+fn visible_indices<'a>(geometry: &'a Geometry, surface: Option<Surface<'_>>) -> &'a [u32] {
+    match surface {
+        Some(surface) if !surface.frame.is_partial() => &geometry.indices[..surface.mesh_start],
+        _ => &geometry.indices,
+    }
+}
+
 impl Renderer {
-    fn render(&mut self, geometry: &Geometry, view: &View) -> Option<Vec<u8>> {
+    fn render_surface(
+        &mut self,
+        geometry: &Mesh,
+        view: &View,
+        surface: Option<Surface<'_>>,
+    ) -> Option<Vec<u8>> {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(geometry, view) {
+        if let Some(image) = self.gpu.render(geometry, view, surface) {
             return Some(image);
         }
-        cpu::render(geometry, view)
+        cpu::render_surface(geometry, view, surface)
     }
 }
 
@@ -246,7 +291,7 @@ pub(crate) fn read(value: &Value) -> Option<(VolumePreview, u8)> {
 }
 
 pub(crate) fn image(
-    geometry: &Geometry,
+    geometry: &Mesh,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
@@ -261,7 +306,18 @@ pub(crate) fn image(
 
 /// Render the current camera to pixels, independently of the display wrapper.
 pub(crate) fn raster(
-    geometry: &Geometry,
+    geometry: &Mesh,
+    preview: &VolumePreview,
+    state: Option<&Value>,
+    scale_factor: f64,
+    renderer: &mut Renderer,
+) -> Option<ImageData> {
+    raster_surface(geometry, None, preview, state, scale_factor, renderer)
+}
+
+pub(crate) fn raster_surface(
+    geometry: &Mesh,
+    surface: Option<Surface<'_>>,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
@@ -270,7 +326,7 @@ pub(crate) fn raster(
     let pixels = raster_size(preview.size, scale_factor)?;
     let view = view(preview, camera(state), pixels)?;
     Some(ImageData {
-        data: renderer.render(geometry, &view)?.into(),
+        data: renderer.render_surface(geometry, &view, surface)?.into(),
         format: ImageFormat::Rgba8,
         alpha_type: ImageAlphaType::Alpha,
         width: pixels.width(),

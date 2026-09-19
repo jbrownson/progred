@@ -231,8 +231,8 @@ mod tests {
                 for [u, v, z] in [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0]] {
                     let model = |view: &VolumeView| {
                         let screen = nalgebra::Point3::new(
-                            u * view.size.width() as f32,
-                            v * view.size.height() as f32 - 1.0,
+                            u * view.size.width() as f32 - 0.5,
+                            v * view.size.height() as f32 - 0.5,
                             z * view.size.depth() as f32,
                         );
                         (view.world_to_model * view.size.screen_to_world()).transform_point(&screen)
@@ -538,12 +538,16 @@ impl Request {
         // Pixel rounding must not change the camera's aspect ratio between passes.
         if pixels != self.pixels {
             let ratio = pixels.height() as f32 / self.pixels.height() as f32;
-            view.world_to_model *= Scale3::new(
-                self.pixels.width() as f32 / pixels.width() as f32 * ratio,
-                1.0,
-                1.0,
-            )
-            .to_homogeneous();
+            let half_pixel = 1.0 / pixels.width().min(pixels.height()) as f32;
+            // Adjust the frustum before the pixel-center translation.
+            view.world_to_model *= Translation3::new(-half_pixel, 0.0, 0.0).to_homogeneous()
+                * Scale3::new(
+                    self.pixels.width() as f32 / pixels.width() as f32 * ratio,
+                    1.0,
+                    1.0,
+                )
+                .to_homogeneous()
+                * Translation3::new(half_pixel, 0.0, 0.0).to_homogeneous();
         }
         view
     }
@@ -601,7 +605,7 @@ impl Request {
                 return Ok(Some(frame));
             }
             publish(frame.clone())?;
-            previous = Some(frame.image);
+            previous = Some(frame);
         }
         unreachable!("the native resolution is always present")
     }

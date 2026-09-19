@@ -129,6 +129,12 @@ struct Sampled {
     shoulders: Vec<usize>,
 }
 
+pub struct SurfacePoint {
+    pub point: Point,
+    /// Outward unit normal in the radius/axial plane.
+    pub normal: [f64; 2],
+}
+
 impl Section {
     pub fn taper(start: Point, end: Point, kind: SectionKind) -> Self {
         Self {
@@ -196,7 +202,42 @@ impl Section {
         Some(self.sample(tolerance)?.points)
     }
 
+    /// Duplicate segment junctions so caps and corners need not share normals.
+    pub fn shaded_outline(&self, tolerance: f64) -> Option<Vec<SurfacePoint>> {
+        let mut surface = Vec::new();
+        self.sample_with(tolerance, |points, arc| {
+            let start = points[0];
+            let end = points[points.len() - 1];
+            let dr = end.radius - start.radius;
+            let dz = end.axial - start.axial;
+            let length = dr.hypot(dz);
+            surface.extend(points.iter().map(|&point| SurfacePoint {
+                point,
+                normal: match arc {
+                    Some(arc) => {
+                        let sign = arc.delta.signum();
+                        [
+                            sign * (point.radius - arc.center.radius) / arc.radius,
+                            sign * (point.axial - arc.center.axial) / arc.radius,
+                        ]
+                    }
+                    None if length > 0.0 => [dz / length, -dr / length],
+                    None => [0.0, 0.0],
+                },
+            }));
+        })?;
+        Some(surface)
+    }
+
     fn sample(&self, tolerance: f64) -> Option<Sampled> {
+        self.sample_with(tolerance, |_, _| {})
+    }
+
+    fn sample_with(
+        &self,
+        tolerance: f64,
+        mut segment_points: impl FnMut(&[Point], Option<&ArcGeometry>),
+    ) -> Option<Sampled> {
         if !tolerance.is_finite() || tolerance <= 0.0 {
             return None;
         }
@@ -206,6 +247,12 @@ impl Section {
         for segment in &self.profile {
             let start = *points.last()?;
             let previous = points.len() - 1;
+            let arc = match *segment {
+                Segment::Arc { end, radius, bend } => {
+                    Some(ArcGeometry::new(start, end, radius, bend)?)
+                }
+                _ => None,
+            };
             match *segment {
                 Segment::Line(end) => {
                     points.push(end);
@@ -214,13 +261,13 @@ impl Section {
                     shoulders.push(previous);
                     points.push(Point::new(radius, start.axial));
                 }
-                Segment::Arc { end, radius, bend } => {
+                Segment::Arc { end, .. } => {
                     let ArcGeometry {
                         radius: r,
                         center,
                         angle,
                         delta,
-                    } = ArcGeometry::new(start, end, radius, bend)?;
+                    } = *arc.as_ref()?;
                     let step = 2.0 * (1.0 - (tolerance / r).min(1.0)).acos();
                     let count = (delta.abs() / step).ceil();
                     if !count.is_finite() || count > 4096.0 {
@@ -236,6 +283,7 @@ impl Section {
             if points.len() > 8192 {
                 return None;
             }
+            segment_points(&points[previous..], arc.as_ref());
             if !matches!(segment, Segment::Shoulder(_))
                 && !points[previous..]
                     .windows(2)

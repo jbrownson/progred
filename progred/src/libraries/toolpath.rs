@@ -416,7 +416,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::display::compose_partials([
             crate::display::partial(cutter::display),
             crate::display::partial(preview::display),
-            crate::display::partial(fidget::display),
+            crate::display::partial({
+                let renderer = mesh_renderer.clone();
+                move |input| fidget::display(input, &renderer)
+            }),
             crate::display::partial({
                 let renderer = mesh_renderer.clone();
                 move |input| mesh::display(input, &renderer)

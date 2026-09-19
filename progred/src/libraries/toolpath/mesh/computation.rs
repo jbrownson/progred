@@ -14,7 +14,8 @@ pub(crate) struct Settings {
 }
 
 pub(crate) struct ViewGeometry {
-    pub geometry: Geometry,
+    pub geometry: Mesh,
+    pub surface_start: usize,
     pub awaiting_first_surface: bool,
     /// True even when `geometry` includes a retained, outdated stock surface.
     pub surface_pending: bool,
@@ -86,8 +87,8 @@ pub(crate) fn geometry(
 }
 
 struct Layers {
-    paths: Memo<Outcome<Geometry>>,
-    surface: AsyncMemo<Outcome<Surface>, Outcome<Geometry>>,
+    paths: Memo<Outcome<Mesh>>,
+    surface: AsyncMemo<Outcome<Surface>, Outcome<Mesh>>,
 }
 
 impl Layers {
@@ -131,7 +132,7 @@ impl Layers {
             let mut geometry = Geometry::default();
             Ok(shape
                 .append_cancellable(&mut geometry, request.depth, cancel)?
-                .map(|()| geometry)
+                .map(|()| geometry.into())
                 .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
         });
         let paths = runtime.memo_by(
@@ -157,12 +158,9 @@ impl Layers {
     }
 }
 
-fn combine(
-    paths: &Outcome<Geometry>,
-    surface: &Availability<Outcome<Geometry>>,
-) -> Outcome<ViewGeometry> {
+fn combine(paths: &Outcome<Mesh>, surface: &Availability<Outcome<Mesh>>) -> Outcome<ViewGeometry> {
     let paths = paths.as_ref().map_err(Clone::clone)?;
-    let mut geometry = paths.clone();
+    let mut geometry = paths.as_ref().clone();
     let (surface, pending) = match surface {
         Availability::Ready(value) | Availability::Refining(value) => (Some(value.as_ref()), false),
         Availability::Pending { previous } => (previous.as_deref(), true),
@@ -185,7 +183,8 @@ fn combine(
             .ok_or_else(|| absent::with_reason(INVALID_INPUT))?;
     }
     Ok(ViewGeometry {
-        geometry,
+        surface_start: paths.indices.len(),
+        geometry: geometry.into(),
         awaiting_first_surface: pending && surface.is_none(),
         surface_pending: pending,
     })
@@ -209,18 +208,32 @@ fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     Ok(shape)
 }
 
-fn path_geometry(record: &Recorded, settings: &Settings) -> Outcome<Geometry> {
+fn path_geometry(record: &Recorded, settings: &Settings) -> Outcome<Mesh> {
+    paths(
+        record,
+        settings.radius,
+        settings.color,
+        settings.playback.as_ref(),
+    )
+}
+
+pub(crate) fn paths(
+    record: &Recorded,
+    radius: f64,
+    color: [u8; 3],
+    playback: Option<&playback::Settings>,
+) -> Outcome<Mesh> {
     let path = record.path()?;
     let invalid = || absent::with_reason(INVALID_INPUT);
-    let mut tubes = tubes::Tubes::new(settings.radius, settings.color).ok_or_else(invalid)?;
-    if let Some(playback) = &settings.playback {
+    let mut tubes = tubes::Tubes::new(radius, color).ok_or_else(invalid)?;
+    if let Some(playback) = playback {
         playback
-            .draw(path, &mut tubes, settings.radius, settings.color)
+            .draw(path, &mut tubes, radius, color)
             .map_err(|_| invalid())?;
     } else {
         path.replay(&mut tubes).map_err(|_| invalid())?;
     }
-    Ok(tubes.geometry)
+    Ok(tubes.geometry.into())
 }
 
 #[cfg(test)]
@@ -410,7 +423,7 @@ mod tests {
 
     #[test]
     fn a_pending_replacement_does_not_retain_a_previous_absent_as_an_error() {
-        let paths = Ok(Geometry::default());
+        let paths = Ok(Mesh::default());
         let failure = Err(absent::with_reason(INVALID_INPUT));
         let pending = Availability::Pending {
             previous: Some(Arc::new(failure.clone())),

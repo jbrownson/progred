@@ -38,6 +38,8 @@ geometry; ordinary mesh previews still remesh each frame.
 records test-only whole-view, bounded-tile, exact-program-sharing, subtree
 census, and persistent-expression measurements. CAM now tries mesh → final-quality
 implicit tiles; the standalone implicit preview retains independent refinement passes.
+[Hybrid CAM rendering](fidget-hybrid-2026-09-18.md) records the subsequent split:
+implicit model/stock color and depth combined with mesh paths and cutters.
 [Graphics memory](graphics-memory-2026-09-16.md) records the idle-footprint
 investigation and isolated Vello resource-retention measurements.
 [Separate image composition](vello-compositor-experiment-2026-09-18.md) records the

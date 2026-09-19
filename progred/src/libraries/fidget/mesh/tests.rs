@@ -1,5 +1,8 @@
 use super::*;
 
+mod hybrid;
+mod normals;
+
 fn sphere_preview() -> VolumePreview {
     VolumePreview {
         objects: vec![SceneObject {
@@ -187,6 +190,7 @@ fn depth_buffer_keeps_the_front_object_independent_of_order() {
             .map(|p| Vertex {
                 position: Vector3::from(p),
                 color,
+                normal: Normal::default(),
             })
             .into(),
         indices: vec![0, 1, 2],
@@ -245,11 +249,8 @@ fn mesh_and_implicit_views_agree_on_framing_and_flat_surface_lighting() {
                 let view = mesh_view.model_to_view.transform_point(&model);
                 let screen_x = (view.x * mesh_view.projection[0] + 1.0) * width as f32 / 2.0;
                 let screen_y = (1.0 - view.y * mesh_view.projection[1]) * height as f32 / 2.0;
-                assert!((screen_x - x).abs() < 0.001);
-                // Fidget samples integer grid positions and flips Y about h-1.
-                // Triangle rasterization samples pixel centers; framing is the
-                // same despite this subpixel sampling convention.
-                assert!((screen_y - (y + 1.0)).abs() < 0.001);
+                assert!((screen_x - (x + 0.5)).abs() < 0.001);
+                assert!((screen_y - (y + 0.5)).abs() < 0.001);
             }
             let mesh = cpu::render(&geometry, &mesh_view).unwrap();
             let implicit = cpu_volume(
@@ -287,11 +288,11 @@ fn mesh_gpu_renders_and_reuses_buffers() {
             PixelRenderSize::new(width, height),
         )
         .unwrap();
-        let image = renderer.render(&geometry, &view).unwrap();
+        let image = renderer.render(&geometry, &view, None).unwrap();
         assert_eq!(image.len(), (width * height * 4) as usize);
         assert!(image.chunks_exact(4).any(|p| p[3] == 255 && p[2] > p[0]));
         assert!(image.chunks_exact(4).any(|p| p[3] == 0));
-        let empty = renderer.render(&Geometry::default(), &view).unwrap();
+        let empty = renderer.render(&Mesh::default(), &view, None).unwrap();
         assert!(empty.iter().all(|v| *v == 0));
     }
 }

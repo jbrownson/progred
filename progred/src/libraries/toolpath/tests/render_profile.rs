@@ -123,6 +123,142 @@ fn cam_render_profile() {
         preview
     };
     let cancel = incremental::Cancellation::default();
+    if std::env::var("CAM_HYBRID").is_ok() {
+        let model = preview(vec![stock.clone()]);
+        let start = Instant::now();
+        let geometry = super::super::mesh::computation::paths(
+            &super::super::computation::Recorded {
+                path: std::sync::Arc::new(recording),
+                evaluation: eval,
+            },
+            0.005,
+            [240, 174, 80],
+            Some(&settings),
+        )
+        .unwrap();
+        eprintln!(
+            "mesh paths/tool {:?}, {} triangles",
+            start.elapsed(),
+            geometry.indices.len() / 3
+        );
+        let legacy = paths
+            .iter()
+            .chain(tool.iter())
+            .chain(std::iter::once(&stock))
+            .cloned()
+            .collect();
+        let mut renderer = implicit::mesh::Renderer::default();
+        // Warm the triangle backend separately from steady-state comparison.
+        implicit::mesh::raster(&geometry, &model, None, 1.0, &mut renderer).unwrap();
+        if std::env::var("CAM_MESH_UPLOADS").is_ok() {
+            let mut geometry = geometry;
+            let mut timings = [Vec::new(), Vec::new()];
+            let mut expected = None;
+            for trial in 0..12 {
+                for index in [trial % 2, 1 - trial % 2] {
+                    if index == 0 {
+                        // Keep identical geometry but detach the previous upload's weak identity.
+                        std::sync::Arc::make_mut(&mut geometry);
+                    }
+                    let start = Instant::now();
+                    let image = implicit::mesh::raster(&geometry, &model, None, 1.0, &mut renderer)
+                        .unwrap();
+                    timings[index].push(start.elapsed());
+                    if let Some(expected) = &expected {
+                        assert_eq!(image.data.data(), expected);
+                    } else {
+                        expected = Some(image.data.data().to_vec());
+                    }
+                }
+            }
+            for (label, mut times) in ["reupload", "retained"].into_iter().zip(timings) {
+                times.sort();
+                eprintln!(
+                    "{label} mesh upload/render/readback: median {:?}, min {:?}, max {:?}",
+                    (times[5] + times[6]) / 2,
+                    times[0],
+                    times[11]
+                );
+            }
+            return;
+        }
+        if std::env::var("CAM_MESH_SHADING").is_ok() {
+            let mut flat = geometry.clone();
+            for vertex in &mut std::sync::Arc::make_mut(&mut flat).vertices {
+                vertex.normal = implicit::mesh::Normal::default();
+            }
+            eprintln!(
+                "{} vertices, {} extra normal bytes",
+                geometry.vertices.len(),
+                geometry.vertices.len() * 4
+            );
+            let mut timings = [Vec::new(), Vec::new()];
+            for trial in 0..12 {
+                for index in [trial % 2, 1 - trial % 2] {
+                    let start = Instant::now();
+                    implicit::mesh::raster(
+                        if index == 0 { &flat } else { &geometry },
+                        &model,
+                        None,
+                        1.0,
+                        &mut renderer,
+                    )
+                    .unwrap();
+                    timings[index].push(start.elapsed());
+                }
+            }
+            for (label, mut times) in ["flat", "smooth"].into_iter().zip(timings) {
+                times.sort();
+                eprintln!(
+                    "{label} mesh upload/render/readback: median {:?}, min {:?}, max {:?}",
+                    (times[5] + times[6]) / 2,
+                    times[0],
+                    times[11]
+                );
+            }
+            return;
+        }
+        for (label, objects) in [("all implicit", legacy), ("hybrid", vec![stock])] {
+            let request = implicit::raster::Request::new(preview(objects), None, 1.0).unwrap();
+            for trial in 0..3 {
+                let start = Instant::now();
+                let frame = request
+                    .render_software_tiles(
+                        implicit::raster::Passes::Final,
+                        4,
+                        &cancel,
+                        &mut |_| Ok(()),
+                        None,
+                    )
+                    .unwrap()
+                    .unwrap();
+                let implicit_time = start.elapsed();
+                let composition = Instant::now();
+                if label == "hybrid" {
+                    implicit::mesh::raster_surface(
+                        &geometry,
+                        Some(implicit::mesh::Surface {
+                            frame: &frame,
+                            mesh_start: geometry.indices.len(),
+                        }),
+                        &model,
+                        None,
+                        1.0,
+                        &mut renderer,
+                    )
+                    .unwrap();
+                }
+                eprintln!(
+                    "{label} trial {trial}, progress {progress}, {}x{}: implicit {implicit_time:?}, compose {:?}, total {:?}",
+                    frame.image.width,
+                    frame.image.height,
+                    composition.elapsed(),
+                    start.elapsed()
+                );
+            }
+        }
+        return;
+    }
     #[cfg(all(not(target_arch = "wasm32"), feature = "gpu-experiment"))]
     if std::env::var("CAM_GPU").is_ok() {
         let objects = if std::env::var("CAM_GPU_STOCK").is_ok() {

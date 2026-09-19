@@ -30,6 +30,7 @@ fn direct_and_recorded_emissions_build_identical_meshes() {
     {
         assert_eq!(a.position, b.position);
         assert_eq!(a.color, b.color);
+        assert_eq!(a.normal, b.normal);
     }
 }
 
@@ -46,10 +47,14 @@ fn capsules_have_the_requested_radius_for_arbitrary_axes() {
             .start_at([0.0; 3], super::super::paths::Axis::Z)
             .unwrap();
         tubes.line_to(end).unwrap();
+        assert_eq!(tubes.geometry.vertices.len(), 74);
+        assert_eq!(tubes.geometry.indices.len() / 3, 144);
         let end = Vector3::from(end.map(|v| v as f32));
         for vertex in &tubes.geometry.vertices {
             let t = (vertex.position.dot(&end) / end.norm_squared()).clamp(0.0, 1.0);
             assert!(((vertex.position - t * end).norm() - 0.1).abs() < 1e-6);
+            let expected = (vertex.position - t * end).normalize();
+            assert!((vertex.normal.vector().normalize() - expected).norm() < 0.01);
             assert_eq!(vertex.color, [1.0, 100.0 / 255.0, 20.0 / 255.0]);
         }
         for t in tubes.geometry.indices.chunks_exact(3) {
@@ -83,6 +88,13 @@ fn path_breaks_do_not_emit_links_and_duplicate_points_are_spheres() {
             .vertices
             .iter()
             .all(|v| (v.position.norm() - 0.1).abs() < 1e-6)
+    );
+    assert!(
+        tubes
+            .geometry
+            .vertices
+            .iter()
+            .all(|v| { (v.normal.vector().normalize() - v.position.normalize()).norm() < 0.01 })
     );
     tubes
         .start_at([10.0; 3], super::super::paths::Axis::Z)
@@ -278,7 +290,135 @@ fn explicit_shoulders_make_annular_faces_with_outward_winding() {
                 assert!((b - a).cross(&(c - a)).z * (lower - upper) as f32 > 0.0);
             }
         }
-        assert_eq!(shoulder_triangles, 24);
+        assert_eq!(shoulder_triangles, 128);
+        for t in tubes.geometry.indices.chunks_exact(3) {
+            let [a, b, c] = [t[0], t[1], t[2]].map(|i| tubes.geometry.vertices[i as usize]);
+            if [a, b, c].iter().all(|v| v.position.z == 0.5) {
+                let expected = Vector3::z() * (lower - upper).signum() as f32;
+                assert!([a, b, c].iter().all(|v| v.normal.vector() == expected));
+            }
+        }
+    }
+}
+
+#[test]
+fn tool_normals_follow_curves_but_do_not_round_caps() {
+    use super::super::cutter::Tool;
+    let pose = Pose {
+        tip: [0.1, -0.2, 0.4],
+        axis: Axis::new([1.0, -1.0, 2.0]).unwrap(),
+    };
+    let origin = Vector3::from(pose.tip).cast::<f32>();
+    let [x, y, z] = pose.axis.basis();
+    for tool in [
+        Tool::ball(0.5, 1.0).unwrap(),
+        Tool::square(0.5, 1.0).unwrap(),
+    ] {
+        let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
+        tubes.tool(&tool, pose, [255; 3], 0.001).unwrap();
+        let outline = tool.sections[0].outline(0.001).unwrap();
+        let zero_ends = usize::from(outline.first().unwrap().radius == 0.0)
+            + usize::from(outline.last().unwrap().radius == 0.0);
+        // Only the displayed cutter uses the finer, 64-sided circumference.
+        assert_eq!(
+            tubes.geometry.indices.len() / 3,
+            128 * (outline.len() - zero_ends)
+        );
+        let ball = outline.first().unwrap().radius == 0.0;
+        let mut cap = 0;
+        let mut wall = 0;
+        for t in tubes.geometry.indices.chunks_exact(3) {
+            let vertices = [t[0], t[1], t[2]].map(|i| tubes.geometry.vertices[i as usize]);
+            let local = vertices.map(|v| {
+                let p = v.position - origin;
+                Vector3::new(p.dot(&x), p.dot(&y), p.dot(&z))
+            });
+            for (v, p) in vertices.into_iter().zip(local) {
+                let expected = if local.iter().all(|p| (p.z - 1.0).abs() < 1e-6) {
+                    cap += 1;
+                    z
+                } else if !ball && local.iter().all(|p| p.z.abs() < 1e-6) {
+                    cap += 1;
+                    -z
+                } else {
+                    wall += 1;
+                    if ball && p.z < 0.25 {
+                        (v.position - origin - z * 0.25).normalize()
+                    } else {
+                        (x * p.x + y * p.y).normalize()
+                    }
+                };
+                assert!((v.normal.vector().normalize() - expected).norm() < 0.01);
+            }
+        }
+        assert!(cap > 0 && wall > 0);
+    }
+}
+
+#[test]
+#[ignore = "headless before/after tool lighting capture; does not launch the editor"]
+fn tool_normals_capture() {
+    use super::super::cutter::Tool;
+    let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
+    for (i, tool) in [
+        Tool::ball(0.5, 1.0).unwrap(),
+        Tool::square(0.5, 1.0).unwrap(),
+        Tool::bull(0.5, 0.08, 1.0).unwrap(),
+    ]
+    .iter()
+    .enumerate()
+    {
+        tubes
+            .tool(
+                tool,
+                Pose {
+                    tip: [(i as f64 - 1.0) * 0.8, 0.0, 0.0],
+                    axis: Axis::Z,
+                },
+                [210, 94, 58],
+                0.001,
+            )
+            .unwrap();
+    }
+    let preview = {
+        use fidget::vocabulary::*;
+        fidget::volume_preview(&Value::record([(
+            PREVIEW_3D,
+            Value::record([
+                (FIELD, crate::libraries::f32::value(1.0)),
+                (layout::vocabulary::WIDTH, f64::value(800.0)),
+                (layout::vocabulary::HEIGHT, f64::value(600.0)),
+                (MIN_X, crate::libraries::f32::value(-1.2)),
+                (MAX_X, crate::libraries::f32::value(1.2)),
+                (MIN_Y, crate::libraries::f32::value(-0.4)),
+                (MAX_Y, crate::libraries::f32::value(0.4)),
+                (MIN_Z, crate::libraries::f32::value(0.0)),
+                (MAX_Z, crate::libraries::f32::value(1.0)),
+            ]),
+        )]))
+        .unwrap()
+    };
+    let mut renderer = fidget::mesh::Renderer::default();
+    let mut geometry = Mesh::new(tubes.geometry);
+    for name in ["smooth", "flat"] {
+        let image = fidget::mesh::raster(&geometry, &preview, None, 1.0, &mut renderer).unwrap();
+        let path = format!("/private/tmp/progred-tool-{name}.png");
+        let mut encoder = png::Encoder::new(
+            std::fs::File::create(&path).unwrap(),
+            image.width,
+            image.height,
+        );
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(image.data.data())
+            .unwrap();
+        eprintln!("{path}");
+        for vertex in &mut std::sync::Arc::make_mut(&mut geometry).vertices {
+            vertex.normal = Normal::default();
+        }
     }
 }
 

@@ -389,12 +389,18 @@ Failed path generation discards the whole preview before meshing the model.
 fallback with a streamed final-quality software implicit image. It shares one observed path
 evaluation between the two interpretations. Implicit work waits for the current
 stock mesh; a geometry change cancels obsolete image work while meshing runs.
-A current implicit image replaces the mesh tile by tile; unfinished regions of
+A current implicit surface replaces the stock/model mesh tile by tile; unfinished regions of
 the first pass retain the available mesh at the current camera. Coverage is
 explicit, so completed transparent pixels erase the mesh rather than revealing
 it. Orbiting after an implicit result therefore
 returns to a current mesh, never an older stock result that it had overtaken.
 An outdated stock mesh is desaturated, while tool/path geometry updates immediately.
+Paths and the visible cutter stay triangle meshes throughout. Each finished
+Fidget tile supplies both color and normalized depth. The triangle renderer first
+draws the draft surface in unfinished regions, replaces completed pixels (including
+empty pixels) with the implicit color/depth, then depth-tests the paths and tool
+against that surface. This requires no Fidget patch. Cutter sweeps used to subtract
+stock remain implicit geometry; only the displayed cutter moves to triangles.
 The mesh supplies the draft image. Implicit tiles render directly at native XY
 resolution with four-times depth sampling, skipping intermediate resolutions and
 the native-depth pass. The progress bar covers this single pass. Unfinished regions
@@ -414,7 +420,8 @@ Stock shows material remaining at playback. The example's ordinary Grap controls
 select whether its playback record includes `stock`; camera, selected ranges,
 and cursor are preserved. Tool and remaining-path visibility are the same in both
 modes. Model's surface-mesh inputs exclude playback and path data, so moving the
-tool does not remesh the unchanged part; its implicit image still updates.
+tool neither remeshes nor rerenders the unchanged part. Path color and width also
+affect only the mesh layer. Stock-mode playback changes still invalidate the surface.
 Op 1 finishes its five indented faces and eight chamfers before Op 2 cuts the
 bottom indent and four remaining chamfers. Slider intervals follow cutting
 distance, including the chamfer passes. With the side-contour strategy selected,
@@ -510,12 +517,13 @@ Slider changes retain the unchanged path recording. In the mesh preview,
 path color and line thickness affect only the path/tool geometry layer; the stock
 expression and mesh are reused.
 Orbiting retains mesh geometry; every new view still produces a fresh raster image.
-The implicit preview renders stock, tool and paths together in one progressive
-async request. Its tool moves with each current image, not independently of the
-stock. The old image is dimmed until the first current coarse image arrives;
-current refinements restore normal colors. An unlabelled progress bar overlays
+The implicit preview renders only stock/model in a progressive async request;
+paths and the cutter are meshes drawn against its depth. The tool moves immediately.
+The standalone implicit preview omits an outdated surface until a current image
+arrives, rather than combining old-camera depth with current-camera meshes.
+An unlabelled progress bar overlays
 the top edge, resetting per refinement and disappearing when the final pass completes.
-The first pending frame reserves the viewport and shows the empty progress track. Refinement
+The first pending frame shows the available paths/tool and empty progress track. Refinement
 starts at at most 128 physical pixels on the longest edge, then doubles toward
 native resolution with a fixed camera and render volume, then performs one
 native-size pass with four times the depth samples to reduce sharp-edge artifacts.

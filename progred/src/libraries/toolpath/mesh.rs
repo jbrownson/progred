@@ -3,7 +3,7 @@
 use super::{fidget::coordinate, paths::*, playback, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
-use fidget::mesh::{Geometry, Vertex};
+use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
 use gid::Value;
 use nalgebra::Vector3;
 use std::{cell::RefCell, rc::Rc};

@@ -15,8 +15,21 @@ pub(crate) struct Settings {
 
 #[derive(Clone, PartialEq)]
 struct Request {
-    path: Arc<Recording>,
-    settings: Settings,
+    raster: fidget::raster::Request,
+    removal: Option<(Arc<Recording>, playback::Settings)>,
+}
+
+impl Request {
+    fn new(path: Arc<Recording>, settings: &Settings) -> Self {
+        Self {
+            raster: settings.request.clone(),
+            removal: settings
+                .playback
+                .as_ref()
+                .filter(|p| p.stock_color().is_some())
+                .map(|p| (path, p.clone())),
+        }
+    }
 }
 
 pub(crate) struct ViewImage {
@@ -31,6 +44,7 @@ pub(super) struct Computation {
     pub fuel: Input<usize>,
     pub settings: Input<Settings>,
     pub image: Memo<Outcome<ViewImage>>,
+    pub paths: Memo<Outcome<fidget::mesh::Mesh>>,
 }
 
 impl Computation {
@@ -45,6 +59,7 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
+        let paths = paths(computations, recording.clone(), settings.clone());
         let image = image(
             computations,
             recording,
@@ -59,6 +74,7 @@ impl Computation {
             fuel,
             settings,
             image,
+            paths,
         }
     }
 
@@ -83,14 +99,40 @@ impl Computation {
         let fuel = runtime.input(fuel);
         let settings = runtime.input(settings);
         let recording = recording(computations, program.clone(), fuel.clone());
+        let paths = paths(computations, recording.clone(), settings.clone());
         let image = image_with_render(computations, recording, settings.clone(), None, render);
         Self {
             program,
             fuel,
             settings,
             image,
+            paths,
         }
     }
+}
+
+fn paths(
+    computations: &Computations,
+    recording: Memo<Recorded>,
+    settings: Input<Settings>,
+) -> Memo<Outcome<fidget::mesh::Mesh>> {
+    let geometry_settings = computations.runtime.memo(move |read| {
+        let settings = settings.read(read);
+        Ok((settings.radius, settings.color, settings.playback.clone()))
+    });
+    computations.runtime.memo_by(
+        move |read| {
+            let record = recording.read(read)?;
+            let settings = geometry_settings.read(read)?;
+            Ok(super::super::mesh::computation::paths(
+                &record,
+                settings.0,
+                settings.1,
+                settings.2.as_ref(),
+            ))
+        },
+        |_, _| false,
+    )
 }
 
 /// Use the same observed program as other interpretations. The caller chooses
@@ -148,10 +190,9 @@ fn image_with_render(
         move |read| {
             let record = recording.read(read)?;
             let settings = settings.read(read);
-            Ok(record.path().map(|_| Request {
-                path: record.path.clone(),
-                settings: (*settings).clone(),
-            }))
+            Ok(record
+                .path()
+                .map(|_| Request::new(record.path.clone(), &settings)))
         }
     });
     let worker_input = runtime.memo({
@@ -211,24 +252,16 @@ fn image_with_render(
 }
 
 fn scene(request: Request) -> Outcome<fidget::raster::Request> {
-    let Request { path, settings } = request;
-    let mut request = settings.request;
+    let Request {
+        raster: mut request,
+        removal,
+    } = request;
     let invalid = || absent::with_reason(INVALID_INPUT);
-    let mut tubes = Tubes::new(settings.radius).ok_or_else(invalid)?;
-    tubes
-        .style(settings.radius, settings.color)
-        .map_err(|_| invalid())?;
-    if let Some(playback) = settings.playback {
-        playback
-            .draw(&path, &mut tubes, settings.radius, settings.color)
-            .map_err(|_| invalid())?;
+    if let Some((path, playback)) = removal {
         if let Some(stock) = playback.remaining_stock(&path).map_err(|_| invalid())? {
             request.preview.objects = vec![stock];
         }
-    } else {
-        path.replay(&mut tubes).map_err(|_| invalid())?;
     }
-    request.preview.objects.splice(0..0, tubes.scene());
     if request.preview.objects.len() > usize::from(u16::MAX) + 1 {
         Err(absent::with_reason(fidget::vocabulary::INVALID_SCENE))
     } else {
@@ -298,6 +331,10 @@ mod tests {
 
     #[test]
     fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures() {
+        let settings = |yaw| Settings {
+            playback: Some(playback(0.5)),
+            ..settings(yaw)
+        };
         let stack = crate::stack::load();
         let endpoint = new_cell_id();
         let mut doc = Document {
@@ -389,8 +426,11 @@ mod tests {
                 2,
                 "superseded camera request wasn't rendered"
             );
-            assert!(Arc::ptr_eq(&rendered[0].path, &rendered[1].path));
-            assert!(rendered[1].settings == settings(60.0));
+            assert!(Arc::ptr_eq(
+                &rendered[0].removal.as_ref().unwrap().0,
+                &rendered[1].removal.as_ref().unwrap().0
+            ));
+            assert!(rendered[1].raster == settings(60.0).request);
         }
 
         doc.cells.set_value(endpoint, f64::value(0.75));
@@ -400,7 +440,10 @@ mod tests {
         read();
         {
             let rendered = rendered.lock().unwrap();
-            assert!(!Arc::ptr_eq(&rendered[1].path, &rendered[2].path));
+            assert!(!Arc::ptr_eq(
+                &rendered[1].removal.as_ref().unwrap().0,
+                &rendered[2].removal.as_ref().unwrap().0
+            ));
         }
         // A current failure must not leave the previously successful image on screen.
         doc.cells.set_value(endpoint, Value::record([]));
@@ -483,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn implicit_playback_uses_shared_stock_sweeps_and_groups_connected_segments() {
+    fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
         let mut path = Recording::default();
         path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
         path.start_at(
@@ -500,15 +543,13 @@ mod tests {
         let playback = playback(0.5);
         let expected = playback.remaining_stock(&path).unwrap().unwrap();
         settings.playback = Some(playback);
-        let rendered = scene(Request { path, settings }).unwrap();
+        let rendered = scene(Request::new(path, &settings)).unwrap();
         assert_eq!(
             rendered.preview.objects.len(),
-            3,
-            "one connected path, cutter, stock"
+            1,
+            "only stock; displayed paths and cutter are meshes"
         );
-        assert_eq!(rendered.preview.objects[0].color, [20, 150, 230]);
-        assert_eq!(rendered.preview.objects[1].color, [225, 94, 58]);
-        let stock = &rendered.preview.objects[2];
+        let stock = &rendered.preview.objects[0];
         assert_eq!(stock.color, expected.color);
         assert!(stock.tree == expected.tree);
     }

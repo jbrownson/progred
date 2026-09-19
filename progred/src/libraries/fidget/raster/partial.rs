@@ -3,64 +3,31 @@ use super::*;
 use fidget_engine::raster::voxel::SceneTile;
 use std::sync::Mutex;
 
-#[derive(Clone, Copy, Debug)]
-struct Area {
-    origin: [usize; 2],
-    size: [usize; 2],
-}
-
 /// A raster and, only during its first pass, the regions actually computed.
 /// Transparent pixels in those regions are final pixels, not missing data.
 #[derive(Clone)]
 pub(crate) struct Frame {
     pub image: ImageData,
-    coverage: Option<Vec<Area>>,
+    /// Orthographic viewport depth: 0 near, 1 empty/far, -1 not computed yet.
+    /// Color and depth are published together, including transparent tiles.
+    pub depth: std::sync::Arc<[f32]>,
+    pub(crate) partial: bool,
 }
 
+#[cfg(test)]
 impl From<ImageData> for Frame {
     fn from(image: ImageData) -> Self {
         Self {
+            depth: vec![1.0; image.width as usize * image.height as usize].into(),
             image,
-            coverage: None,
+            partial: false,
         }
     }
 }
 
 impl Frame {
     pub fn is_partial(&self) -> bool {
-        self.coverage.is_some()
-    }
-
-    /// Replace covered regions of a fallback, including transparent pixels.
-    /// The fallback may have a different resolution, but the same camera view.
-    pub fn over(&self, fallback: &ImageData) -> ImageData {
-        let Some(coverage) = &self.coverage else {
-            return self.image.clone();
-        };
-        let mut pixels = fallback.data.data().to_vec();
-        let width = fallback.width as usize;
-        let height = fallback.height as usize;
-        let source_width = self.image.width as usize;
-        let source_height = self.image.height as usize;
-        for area in coverage {
-            let [x0, y0] = area.origin;
-            let [w, h] = area.size;
-            // Destination samples use floor(x * source_width / width).
-            for y in
-                (y0 * height).div_ceil(source_height)..((y0 + h) * height).div_ceil(source_height)
-            {
-                for x in
-                    (x0 * width).div_ceil(source_width)..((x0 + w) * width).div_ceil(source_width)
-                {
-                    let src = ((y * source_height / height) * source_width
-                        + x * source_width / width)
-                        * 4;
-                    let dst = (y * width + x) * 4;
-                    pixels[dst..dst + 4].copy_from_slice(&self.image.data.data()[src..src + 4]);
-                }
-            }
-        }
-        image(width as u32, height as u32, pixels)
+        self.partial
     }
 }
 
@@ -78,7 +45,9 @@ struct Assembly {
     width: usize,
     height: usize,
     pixels: Vec<u8>,
-    coverage: Option<Vec<Area>>,
+    depth: Vec<f32>,
+    depth_count: u32,
+    partial: bool,
     completed: usize,
 }
 
@@ -107,16 +76,19 @@ impl Publication<'_> {
 }
 
 impl Assembly {
-    fn new(width: usize, height: usize, previous: Option<&ImageData>) -> Self {
+    fn new(width: usize, height: usize, depth_count: u32, previous: Option<&Frame>) -> Self {
         let mut pixels = vec![0; width * height * 4];
+        let mut depth = vec![-1.0; width * height];
         if let Some(previous) = previous {
+            let image = &previous.image;
             for y in 0..height {
                 for x in 0..width {
-                    let src = ((y * previous.height as usize / height) * previous.width as usize
-                        + x * previous.width as usize / width)
+                    let src = ((y * image.height as usize / height) * image.width as usize
+                        + x * image.width as usize / width)
                         * 4;
                     let dst = (y * width + x) * 4;
-                    pixels[dst..dst + 4].copy_from_slice(&previous.data.data()[src..src + 4]);
+                    pixels[dst..dst + 4].copy_from_slice(&image.data.data()[src..src + 4]);
+                    depth[dst / 4] = previous.depth[src / 4];
                 }
             }
         }
@@ -124,7 +96,9 @@ impl Assembly {
             width,
             height,
             pixels,
-            coverage: previous.is_none().then(Vec::new),
+            depth,
+            depth_count,
+            partial: previous.is_none(),
             completed: 0,
         }
     }
@@ -141,21 +115,19 @@ impl Assembly {
                 let color = pixel.object.map_or([255; 3], |i| colors[i]);
                 let dst = ((tile.origin[1] + y) * self.width + tile.origin[0] + x) * 4;
                 self.pixels[dst..dst + 4].copy_from_slice(&shade(pixel.geometry, color));
+                // Fidget stores the front boundary of the occupied voxel, with
+                // larger Z nearer the camera; zero denotes an empty ray.
+                self.depth[dst / 4] = 1.0 - pixel.geometry.depth as f32 / self.depth_count as f32;
             }
         }
         self.completed += tile.size[0] * tile.size[1];
-        if let Some(coverage) = &mut self.coverage {
-            coverage.push(Area {
-                origin: tile.origin,
-                size: tile.size,
-            });
-        }
     }
 
     fn snapshot(&self) -> Frame {
         Frame {
             image: image(self.width as u32, self.height as u32, self.pixels.clone()),
-            coverage: self.coverage.clone(),
+            depth: self.depth.clone().into(),
+            partial: self.partial,
         }
     }
 }
@@ -163,7 +135,7 @@ impl Assembly {
 pub(super) fn render(
     scene: &SoftwareScene,
     view: &VolumeView,
-    previous: Option<&ImageData>,
+    previous: Option<&Frame>,
     cancel: &incremental::Cancellation,
     publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
     progress: Option<&(dyn Fn(Progress) + Sync)>,
@@ -171,6 +143,7 @@ pub(super) fn render(
     let assembly = Assembly::new(
         view.size.width() as usize,
         view.size.height() as usize,
+        view.size.depth(),
         previous,
     );
     let shade = shading(&VoxelRenderConfig {
@@ -203,7 +176,11 @@ pub(super) fn render(
         return Err(error);
     }
     cancel.check()?;
-    Ok(output.map(|()| image(view.size.width(), view.size.height(), state.assembly.pixels).into()))
+    Ok(output.map(|()| Frame {
+        image: image(view.size.width(), view.size.height(), state.assembly.pixels),
+        depth: state.assembly.depth.into(),
+        partial: false,
+    }))
 }
 
 #[cfg(test)]
@@ -220,7 +197,7 @@ mod tests {
             Err(incremental::Error::Cancelled)
         };
         let mut state = Publication {
-            assembly: Assembly::new(2, 1, None),
+            assembly: Assembly::new(2, 1, 64, None),
             publish: &mut publish,
             error: None,
             last: std::time::Instant::now() - std::time::Duration::from_secs(1),
@@ -233,9 +210,8 @@ mod tests {
     }
 
     #[test]
-    fn finished_transparent_tiles_erase_fallback_but_unfinished_tiles_do_not() {
-        let fallback = image(7, 3, [200, 40, 20, 255].repeat(21));
-        let mut assembly = Assembly::new(3, 2, None);
+    fn finished_empty_pixels_are_distinct_from_unfinished_pixels() {
+        let mut assembly = Assembly::new(3, 2, 64, None);
         assembly.put(
             SceneTile {
                 origin: [1, 0],
@@ -248,24 +224,14 @@ mod tests {
         );
         let frame = assembly.snapshot();
         assert!(frame.is_partial());
-        let combined = frame.over(&fallback);
-        for y in 0..3 {
-            for x in 0..7 {
-                let offset = (y * 7 + x) * 4;
-                let expected = if x * 3 / 7 == 1 {
-                    [0; 4]
-                } else {
-                    [200, 40, 20, 255]
-                };
-                assert_eq!(&combined.data.data()[offset..offset + 4], &expected);
-            }
-        }
+        assert_eq!(&*frame.depth, &[-1.0, 1.0, -1.0, -1.0, 1.0, -1.0]);
+        assert!(frame.image.data.data().iter().all(|v| *v == 0));
     }
 
     #[test]
     fn finer_pass_preserves_previous_pixels_until_replaced_including_empty_pixels() {
-        let previous = image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]);
-        let mut assembly = Assembly::new(4, 2, Some(&previous));
+        let previous = image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]).into();
+        let mut assembly = Assembly::new(4, 2, 64, Some(&previous));
         assert!(!assembly.snapshot().is_partial());
         assembly.put(
             SceneTile {
@@ -410,7 +376,7 @@ mod tests {
         let cancel = incremental::Cancellation::default();
         let scene = SoftwareScene::new(&request.preview.objects, &cancel).unwrap();
         let view = request.view_at(request.pixels);
-        let assembly = Mutex::new(Assembly::new(41, 27, None));
+        let assembly = Mutex::new(Assembly::new(41, 27, view.size.depth(), None));
         let shade = shading(&VoxelRenderConfig {
             world_to_model: view.world_to_model,
             ..VoxelRenderConfig::from_size(view.size)

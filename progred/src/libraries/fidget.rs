@@ -839,7 +839,11 @@ fn volume_view(
                 radius / camera.zoom * image_scale,
                 radius / depth_scale,
             )
-            .to_homogeneous(),
+            .to_homogeneous()
+            // Fidget samples integer XY coordinates; match rasterizer pixel
+            // centers (its screen transform also flips Y around height - 1).
+            * Translation3::new(1.0 / minimum as f32, 1.0 / minimum as f32, 0.0)
+                .to_homogeneous(),
     }
 }
 
