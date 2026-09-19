@@ -10,6 +10,12 @@ metadata and dependency versions, pinning core and workspace-hack to that revisi
 
 Local source changes, each including regression tests:
 
+- [Shared cancellation flag patch](../docs/experiments/fidget-core-cancellation.patch):
+  add `CancelToken::from_shared_flag(Arc<AtomicBool>)` so callers can share one
+  cancellation signal across libraries without callback bridges. Existing token
+  behavior is unchanged; the constructor preserves an already-cancelled flag.
+  Progred uses this for both meshing and implicit rendering. This patch is
+  independent of the others below.
 - [Core SSA access patch](../docs/experiments/fidget-core-ssa.patch): expose the
   existing SSA tape, lower a caller-supplied valid tape with its variable map,
   and wrap a function as a shape. These additive APIs support the test-only

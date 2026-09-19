@@ -10,8 +10,9 @@ The native host is a retained feasibility prototype. Further iPad work is
 deferred while the macOS and Linux editor matures. Its build explicitly requests
 a static library; desktop and browser builds use ordinary Rust library output.
 
-The browser build remains the shortest iPad loop: serve it from the development
-Mac and open the Mac's LAN address in Safari. The native host builds Progred as
+The browser build requires HTTPS and cross-origin isolation for shared-memory
+workers; plain LAN HTTP is no longer sufficient. See [the browser host](../web/README.md).
+The native host builds Progred as
 an `aarch64-apple-ios` static library; a minimal Xcode application calls its
 exported entry point, after which Winit owns the UIKit lifecycle and WGPU/Vello
 renders through Metal.

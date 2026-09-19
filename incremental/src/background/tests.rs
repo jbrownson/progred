@@ -500,6 +500,32 @@ fn running_work_is_cancelled_and_only_the_latest_replacement_runs() {
 }
 
 #[test]
+fn concurrent_slot_handoffs_neither_overlap_jobs_nor_lose_the_last_job() {
+    let slot = Arc::new(Slot {
+        executor: Executor::threaded(std::num::NonZeroUsize::new(2).unwrap()).unwrap(),
+        scheduled: AtomicBool::new(false),
+        pending: ConcurrentQueue::bounded(1),
+    });
+    let active = Arc::new(AtomicUsize::new(0));
+    for _ in 0..20_000 {
+        let active = active.clone();
+        slot.submit(Box::new(move || {
+            assert_eq!(active.fetch_add(1, Ordering::SeqCst), 0);
+            std::thread::yield_now();
+            assert_eq!(active.fetch_sub(1, Ordering::SeqCst), 1);
+        }));
+    }
+    let (finished, received) = mpsc::channel();
+    slot.submit(Box::new(move || {
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        finished.send(()).unwrap();
+    }));
+    received
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+}
+
+#[test]
 fn dropping_the_owner_cancels_work_even_if_a_reader_survives() {
     let runtime = Runtime::default();
     let queue = Queue::default();
@@ -551,23 +577,6 @@ fn a_recovered_worker_error_does_not_cache_the_fallback() {
     assert_eq!(*runtime.read(&observed).unwrap(), None);
     input.set(3);
     assert_eq!(*runtime.read(&observed).unwrap(), Some(3));
-}
-
-#[test]
-fn cancellation_callbacks_run_once_including_late_registration() {
-    let cancel = Cancellation::default();
-    let count = Arc::new(AtomicUsize::new(0));
-    for before in [true, false] {
-        if !before {
-            cancel.cancel();
-        }
-        let count = count.clone();
-        cancel.on_cancel(move || {
-            count.fetch_add(1, Ordering::Relaxed);
-        });
-    }
-    cancel.cancel();
-    assert_eq!(count.load(Ordering::Relaxed), 2);
 }
 
 #[test]

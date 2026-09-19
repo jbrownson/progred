@@ -46,10 +46,21 @@ mod styles;
 #[cfg(test)]
 mod test_values;
 mod text_store;
+#[cfg(target_arch = "wasm32")]
+pub mod web_render;
+#[cfg(target_arch = "wasm32")]
+pub mod web_worker;
 mod workspace;
 
+#[cfg(all(feature = "cam-profile", target_arch = "wasm32"))]
+pub use libraries::fidget::mesh::performance::take_profile_mesh;
+#[cfg(feature = "cam-profile")]
+pub use libraries::toolpath::performance::profile_cam;
+
 use crate::command::{AppCommand, Command, DocCommand};
-use crate::frame::{FrameState, Hovered, Paint};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::frame::Paint;
+use crate::frame::{FrameState, Hovered};
 use crate::model::Model;
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
@@ -79,7 +90,7 @@ use vello::wgpu::{self, CurrentSurfaceTexture};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
 use winit::application::ApplicationHandler;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::dpi::LogicalSize;
@@ -93,7 +104,6 @@ use winit::window::{CursorIcon, Window, WindowId};
 
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
-    #[cfg(not(target_arch = "wasm32"))]
     ComputationFinished,
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
@@ -133,7 +143,6 @@ pub(crate) enum RenderState {
 pub(crate) enum RenderState {
     Active {
         canvas: HtmlCanvasElement,
-        context: CanvasRenderingContext2d,
         window: Arc<Window>,
     },
     Suspended(Option<Arc<Window>>),
@@ -260,6 +269,8 @@ impl<T> PendingBatch<T> {
 
 /// Process-wide state: the GPU, the shared caches, and the editors.
 pub(crate) struct App {
+    #[cfg(target_arch = "wasm32")]
+    web_renderer: web_render::Renderer,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) context: RenderContext,
     #[cfg(not(target_arch = "wasm32"))]
@@ -469,7 +480,10 @@ fn new_editor(
     proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
 ) -> Editor {
     #[cfg(target_arch = "wasm32")]
-    let computations = computations::Computations::default();
+    let computations = proxy
+        .as_ref()
+        .map(|_| computations::Computations::new(web_worker::executor(), web_worker::wake))
+        .unwrap_or_default();
     #[cfg(not(target_arch = "wasm32"))]
     let computations = proxy
         .clone()
@@ -594,7 +608,6 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
         match event {
-            #[cfg(not(target_arch = "wasm32"))]
             UserEvent::ComputationFinished => {
                 for runner in &mut self.editors {
                     if runner.editor.computations.tasks.poll()
@@ -880,17 +893,7 @@ impl App {
         #[cfg(target_arch = "wasm32")]
         {
             let canvas = window.canvas().expect("Winit web canvas");
-            let context = canvas
-                .get_context("2d")
-                .expect("Canvas2D lookup")
-                .expect("Canvas2D context")
-                .dyn_into::<CanvasRenderingContext2d>()
-                .expect("CanvasRenderingContext2D");
-            runner.editor.state = RenderState::Active {
-                canvas,
-                context,
-                window,
-            };
+            runner.editor.state = RenderState::Active { canvas, window };
         }
 
         if let RenderState::Active { window, .. } = &runner.editor.state {
@@ -1020,6 +1023,24 @@ impl App {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static WEB_PROXY: std::cell::RefCell<Option<winit::event_loop::EventLoopProxy<UserEvent>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Called by the JS host on the page thread, never on the computation worker.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn computation_finished() {
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(UserEvent::ComputationFinished);
+        }
+    });
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen(js_name = start_editor))]
 pub fn run() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
@@ -1056,6 +1077,8 @@ pub fn run() {
     }
     let event_loop = builder.build().expect("Couldn't create event loop");
     let proxy = event_loop.create_proxy();
+    #[cfg(target_arch = "wasm32")]
+    WEB_PROXY.with(|slot| *slot.borrow_mut() = Some(proxy.clone()));
     #[cfg(target_os = "macos")]
     let native_menu = native_menu::Menu::new(proxy.clone());
 
@@ -1067,6 +1090,8 @@ pub fn run() {
     let drawn_menu = platform::DRAWN_MENU;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
+        #[cfg(target_arch = "wasm32")]
+        web_renderer: web_render::take(),
         #[cfg(not(target_arch = "wasm32"))]
         context: RenderContext::new(),
         #[cfg(not(target_arch = "wasm32"))]
@@ -1815,25 +1840,18 @@ impl App {
         }
     }
 
-    /// The browser runs the same deferred frame ink directly into
-    /// Canvas2D. Layout and event dispatch are shared with desktop;
-    /// only this final interpreter differs.
+    /// Browser presentation uses the same GPU compositor as native when
+    /// available. Only setup/presentation differs; widgets remain unchanged.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn redraw(&mut self, index: usize) {
         if self.focused_index() == Some(index) {
             self.sync_menus(index);
         }
         let runner = &mut self.editors[index];
-        let RenderState::Active {
-            canvas,
-            context,
-            window,
-        } = &runner.editor.state
-        else {
+        let RenderState::Active { canvas, window } = &runner.editor.state else {
             return;
         };
         let canvas = canvas.clone();
-        let context = context.clone();
         let window = window.clone();
         let scale = window.scale_factor();
         let size = window.inner_size();
@@ -1852,16 +1870,16 @@ impl App {
         let viewport = Size::new(width as f64, height as f64);
         let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
         runner.sync_cursor(&window);
-        let mut paint = Paint {
-            canvas: puri_web::WebCanvas(context),
-        };
-        paint.canvas.clear(
-            width.into(),
-            height.into(),
-            Color::new([0.965, 0.965, 0.972, 1.0]),
-        );
-        puri::frame::render(renders, &mut paint);
-        if runner.frame_presented() {
+        let presented = self
+            .web_renderer
+            .render(
+                width,
+                height,
+                Color::new([0.965, 0.965, 0.972, 1.0]),
+                |canvas| puri::frame::render(renders, canvas),
+            )
+            .expect("browser render failed");
+        if !presented || runner.frame_presented() {
             window.request_redraw();
         }
     }

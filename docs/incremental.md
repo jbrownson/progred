@@ -135,11 +135,20 @@ their prepared inputs in `Some`.
 Each node has at most one running job and one latest replacement. Changing the
 prepared snapshot cancels the old request and replaces any queued request. The
 executor bounds concurrent jobs and requeues replacements so other nodes can run.
+The latest-job slot uses a single-element `concurrent-queue` and an atomic
+scheduled flag; reports use an unbounded concurrent queue, closed and drained
+when its owner goes away. Neither boundary takes a worker-held blocking mutex
+on the owner thread. Native executor threads still block normally while idle.
 Each report carries a generation; the owner validates current prepared inputs
 before publishing it. Obsolete reports cannot overwrite newer state. Worker
-panics are transported and resumed on the owner thread, not converted into an
-eternal pending state. Cooperative cancellation calls registered callbacks once,
-allowing a native library's cancellation token to be connected directly.
+unwinding panics are transported and resumed on the owner thread, not converted
+into an eternal pending state. WASM traps/abort panics are fatal host errors and
+require reloading the page. Cooperative cancellation is a shared `Arc<AtomicBool>`.
+`Cancellation::shared_flag` lets an adapter share that same flag with another
+library; there is no callback registry or lock. Cancellation is one-way: a new
+request gets a new flag, never a reset of the old one. The flag is a cancellation
+signal, not a publication barrier for other data. Fidget's token shares it through
+the vendored `CancelToken::from_shared_flag` API.
 
 Workers notify a caller-supplied wake function. Between graph reads, `Tasks::poll`
 imports notifications and advances the graph revision; reads then publish current
@@ -152,8 +161,11 @@ There is no timer polling loop. Dropping a node or its task owner cancels work;
 replacing a document starts a fresh graph with the same executor/wake capability.
 
 Native editor windows use a single background worker each. An application event
-imports completions and rebuilds the normal frame. Web and default headless
-contexts explicitly use the inline executor for now. Tests can supply a controlled
+imports completions and rebuilds the normal frame. The browser uses one
+shared-memory Web Worker, with JS job-pointer transport and page-thread wake
+delivery; the editor starts only after worker initialization succeeds. Wake
+messages are coalesced to animation frames. Default headless contexts still use
+the inline executor. Tests can supply a controlled
 queue or the threaded executor without a windowing harness.
 
 ## CAM integration
@@ -229,8 +241,9 @@ Obsolete results are discarded by the general scheduler.
 
 The local raster progress callback counts successfully completed root tiles.
 The scene sums tile counts across its objects for each refinement and reports
-at most every 50 ms, plus stage boundaries, through the ordinary native async job.
-The browser's inline executor reports only stage boundaries.
+at most every 50 ms, plus stage boundaries, through the ordinary async job.
+Both native and browser workers use this policy, with `web-time` supplying the
+browser clock. Finished image snapshots are published at most every 100 ms.
 Empty and complex tiles count equally, so this is not a time estimate. Compilation
 and image assembly are outside the tile count. The bar is a paint-only reusable
 Puri widget, composed as an overlay without changing layout or hover.
@@ -275,6 +288,6 @@ projections are not converted.
 
 Grap path generation and mesh-preview rasterization/readback remain synchronous.
 The implicit CAM image job includes software rasterization. There is no
-browser-worker executor, user-facing quality controls, durability tier,
-or Grap-language memo/async syntax yet. Incremental lambda calculus and
+user-facing quality controls, durability tier, or Grap-language memo/async
+syntax yet. Incremental lambda calculus and
 incremental Fidget algorithms remain separate research.

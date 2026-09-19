@@ -11,7 +11,7 @@ use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::borrow::Cow;
-use wasm_bindgen::{Clamped, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasGradient, CanvasRenderingContext2d, HtmlCanvasElement, Path2d};
 
 /// An immediate Canvas2D interpreter for Puri's drawing language.
@@ -229,12 +229,14 @@ fn image_canvas(image: &ImageData) -> Option<HtmlCanvasElement> {
         }
         Cow::Owned(rgba)
     };
-    let pixels = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
-        Clamped(rgba.as_ref()),
-        image.width,
-        image.height,
-    )
-    .ok()?;
+    // ImageData does not accept SharedArrayBuffer-backed typed arrays. Copy
+    // into a JS-owned array at this platform boundary; WASM memory is shared
+    // in threaded builds even when this image was produced on the UI thread.
+    let bytes = js_sys::Uint8ClampedArray::new_with_length(u32::try_from(rgba.len()).ok()?);
+    bytes.copy_from(rgba.as_ref());
+    let pixels =
+        web_sys::ImageData::new_with_js_u8_clamped_array_and_sh(&bytes, image.width, image.height)
+            .ok()?;
     let canvas: HtmlCanvasElement = web_sys::window()?
         .document()?
         .create_element("canvas")

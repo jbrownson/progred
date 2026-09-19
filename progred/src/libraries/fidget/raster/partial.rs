@@ -27,22 +27,15 @@ struct Publication<'a> {
     assembly: Assembly,
     publish: &'a mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
     error: Option<incremental::Error>,
-    #[cfg(not(target_arch = "wasm32"))]
-    last: std::time::Instant,
+    last: web_time::Instant,
 }
 
 impl Publication<'_> {
     fn maybe_publish(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
         let due = self.last.elapsed() >= std::time::Duration::from_millis(100);
-        #[cfg(target_arch = "wasm32")]
-        let due = false; // Browser rendering is inline; no mid-pass presentation.
         if due && self.assembly.completed < self.assembly.width * self.assembly.height {
             self.error = (self.publish)(self.assembly.snapshot()).err();
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                self.last = std::time::Instant::now();
-            }
+            self.last = web_time::Instant::now();
         }
     }
 }
@@ -128,8 +121,7 @@ pub(super) fn render(
         assembly,
         publish,
         error: None,
-        #[cfg(not(target_arch = "wasm32"))]
-        last: std::time::Instant::now(),
+        last: web_time::Instant::now(),
     });
     let tile_ready = |tile: SceneTile<'_>| {
         let mut state = state.lock().unwrap();
@@ -161,7 +153,6 @@ mod tests {
     use fidget_engine::raster::voxel::ScenePixel;
 
     #[test]
-    #[cfg(not(target_arch = "wasm32"))]
     fn publication_preserves_callback_failure() {
         let mut count = 0;
         let mut publish = |_: Frame| {
@@ -172,7 +163,7 @@ mod tests {
             assembly: Assembly::new(2, 1, 64, None),
             publish: &mut publish,
             error: None,
-            last: std::time::Instant::now() - std::time::Duration::from_secs(1),
+            last: web_time::Instant::now() - std::time::Duration::from_secs(1),
         };
         state.assembly.completed = 1;
         state.maybe_publish();

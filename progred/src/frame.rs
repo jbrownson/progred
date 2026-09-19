@@ -14,19 +14,13 @@ use crate::workspace::{self, Root};
 use crate::{Editor, EditorRunner, PendingPaint, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
-#[cfg(target_arch = "wasm32")]
-use peniko::ImageData;
 use peniko::{Brush, Color};
 use puri::draw::Canvas;
-#[cfg(target_arch = "wasm32")]
-use puri::draw::{GlyphRun, Shape};
 use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-#[cfg(target_arch = "wasm32")]
-use puri_web::WebCanvas;
 use std::rc::Rc;
 
 pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
@@ -145,42 +139,6 @@ fn attribute_hover(
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) type Paint = puri_vello::compositor::SplitCanvas;
-
-/// The same deferred Puri ink, interpreted immediately by Canvas2D.
-#[cfg(target_arch = "wasm32")]
-pub(crate) struct Paint {
-    pub(crate) canvas: WebCanvas,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl puri::draw::CanvasSink for Paint {
-    fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        self.canvas.image(image, transform);
-    }
-
-    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
-        self.canvas.fill(shape, brush, transform);
-    }
-
-    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
-        self.canvas.stroke(shape, style, brush, transform);
-    }
-
-    fn draw_glyphs(&mut self, run: GlyphRun) {
-        self.canvas.glyph_run(run);
-    }
-
-    fn with_clip(
-        &mut self,
-        shape: Shape,
-        transform: Affine,
-        content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
-    ) {
-        self.canvas.push_clip(&shape, transform);
-        content(self);
-        self.canvas.pop_clip();
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FrameDisposition {

@@ -67,7 +67,22 @@ minimum-publish-age resolver, excludes registry releases less than seven days
 old, and enables network access and write access to `Cargo.lock` only for the
 update. Install that toolchain with `rustup toolchain install
 nightly-2026-08-27 --profile minimal` if needed. Subsequent compilation remains
-on stable Cargo, offline, and source-read-only.
+on stable Cargo for native targets, offline, and source-read-only.
+The browser build is an explicit exception: `web-threaded` uses the same pinned nightly to
+rebuild the standard library with atomics, under the same Seatbelt restrictions,
+in a separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
+that toolchain's locked sysroot dependencies; it does not update the workspace
+lockfile. `make build-web` uses this path; native builds remain on stable. The
+pinned nightly needs `rust-src` and `llvm-tools`. The standalone
+[worker diagnostic](web-worker-experiment-2026-09-19.md) uses the same build and
+transport without starting the editor.
+The browser Rayon pool uses `wasm-bindgen-rayon` 1.3.0 with `no-bundler`.
+Its three added registry packages (`wasm-bindgen-rayon`, `wasm_sync`, and
+`crossbeam-channel`) resolved under the same seven-day publication-age policy;
+unrelated locked versions were retained. Browser WebGPU uses the existing
+Vello/wgpu dependency graph and shaders, not new native build tooling.
+The advisory scan after these additions found no new advisories, retaining
+the six existing warnings described below.
 Use `./tools/sandbox-cargo resolve` after declaring a new dependency when the
 existing locked versions should be preserved; it uses the same publication-age
 policy and network/lockfile boundary without compiling dependency code.

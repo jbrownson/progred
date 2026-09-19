@@ -7,6 +7,8 @@ use incremental::background::Progress;
 pub(crate) mod diagnostics;
 
 mod partial;
+#[cfg(feature = "cam-profile")]
+pub(crate) mod performance;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
@@ -115,15 +117,13 @@ impl SoftwareScene {
         };
         // UI updates are bounded, not one whole editor frame per tile. Always
         // report stage boundaries; no timer or polling loop is needed.
-        #[cfg(not(target_arch = "wasm32"))]
-        let last_report = std::sync::Mutex::new(std::time::Instant::now());
+        let last_report = std::sync::Mutex::new(web_time::Instant::now());
         let report = |completed, total| {
             if let Some(progress) = progress {
                 let boundary = completed == 0 || completed == total;
-                #[cfg(not(target_arch = "wasm32"))]
                 let report = {
                     let mut last = last_report.lock().unwrap();
-                    let now = std::time::Instant::now();
+                    let now = web_time::Instant::now();
                     let report = boundary
                         || now.duration_since(*last) >= std::time::Duration::from_millis(50);
                     if report {
@@ -131,10 +131,6 @@ impl SoftwareScene {
                     }
                     report
                 };
-                // Browser work currently executes inline, so there is no UI
-                // to update mid-pass (nor a native Instant clock).
-                #[cfg(target_arch = "wasm32")]
-                let report = boundary;
                 if report {
                     progress(Progress { completed, total });
                 }
@@ -151,12 +147,7 @@ impl SoftwareScene {
 }
 
 fn render_cancel(cancellation: &incremental::Cancellation) -> fidget_engine::render::CancelToken {
-    let cancel = fidget_engine::render::CancelToken::new();
-    cancellation.on_cancel({
-        let cancel = cancel.clone();
-        move || cancel.cancel()
-    });
-    cancel
+    fidget_engine::render::CancelToken::from_shared_flag(cancellation.shared_flag().clone())
 }
 
 fn shading(config: &VoxelRenderConfig) -> impl Fn(GeometryPixel, [u8; 3]) -> [u8; 4] + use<> {
@@ -196,6 +187,20 @@ fn refine_depth(mut view: VolumeView, multiplier: u32) -> Option<VolumeView> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn render_cancellation_shares_the_callers_flag() {
+        let cancel = incremental::Cancellation::default();
+        let before = render_cancel(&cancel);
+        assert!(!before.is_cancelled());
+        cancel.cancel();
+        assert!(before.is_cancelled());
+        assert!(render_cancel(&cancel).is_cancelled());
+
+        let cancel = incremental::Cancellation::default();
+        render_cancel(&cancel).cancel();
+        assert_eq!(cancel.check(), Err(incremental::Error::Cancelled));
+    }
 
     pub(super) fn request(width: f64, height: f64) -> Request {
         Request::new(

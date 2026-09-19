@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Headless CAM computation benchmark</title>
+<pre id="result">Starting worker (does not start the editor)</pre>
+<script type="module">
+import { startWorker } from "./worker-host.js";
+const wasm = await import("./profile-pkg/profile.js");
+const fail = (error) => { window.profileError = String(error.stack ?? error); };
+try {
+  await wasm.default();
+  const threads = Number(new URLSearchParams(location.search).get("threads") ?? 8);
+  await startWorker(wasm, new URL("./profile-pkg/profile.js", location.href).href, () => {}, fail, threads);
+  window.runProfile = async (progress, size, controls) => {
+    let last = performance.now(), maxGap = 0, ticks = 0;
+    const timer = setInterval(() => {
+      const now = performance.now();
+      maxGap = Math.max(maxGap, now - last);
+      last = now;
+      ticks++;
+    }, 10);
+    const start = performance.now();
+    try {
+      wasm.start_profile(progress, size, controls);
+      let result;
+      while (!(result = wasm.poll_profile())) {
+        if (window.profileError) throw new Error(window.profileError);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      const gpu = wasm.draw_profile_gpu ? JSON.parse(await wasm.draw_profile_gpu()) : null;
+      return { result: JSON.parse(result), elapsed_ms: performance.now() - start,
+        timer_ticks: ticks, max_timer_gap_ms: maxGap,
+        wasm_memory_bytes: wasm.worker_memory().buffer.byteLength,
+        threads: wasm.worker_threads(), gpu };
+    } finally { clearInterval(timer); }
+  };
+} catch (error) { fail(error); }
+</script>

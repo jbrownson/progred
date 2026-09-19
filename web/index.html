@@ -49,10 +49,28 @@
     <canvas id="progred"></canvas>
     <div id="loading">Loading Progred…</div>
     <script type="module">
-      import init from "./pkg/progred.js";
+      import init, * as wasm from "./pkg/progred.js";
+      import { startWorker } from "./worker-host.js";
 
-      await init();
-      document.querySelector("#loading")?.remove();
+      const loading = document.querySelector("#loading");
+      const fail = (error) => {
+        console.error(error);
+        loading.hidden = false;
+        loading.style.display = "grid";
+        loading.textContent = `Progred could not continue: ${error.message}. Reload to retry.`;
+      };
+      try {
+        if (!crossOriginIsolated) throw new Error("Open using Preview.command; this build requires cross-origin isolation");
+        await init();
+        await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
+          wasm.computation_finished, fail);
+        const renderer = await wasm.prepare_renderer(document.querySelector("#progred"));
+        console.info(`Progred presentation: ${renderer}; ${wasm.worker_threads()} render workers`);
+        wasm.start_editor();
+        loading.style.display = "none";
+      } catch (error) {
+        fail(error);
+      }
     </script>
   </body>
 </html>

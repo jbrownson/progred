@@ -2,6 +2,9 @@
 /.claude
 /target
 /web/pkg
+/web/probe-pkg
+/web/profile-pkg
+/web/gpu-probe-pkg
 
 # Xcode
 xcuserdata/

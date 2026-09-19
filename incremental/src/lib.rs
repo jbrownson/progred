@@ -4,6 +4,10 @@
 use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 pub mod background;
 
@@ -21,38 +25,23 @@ pub enum Error {
     Cancelled,
 }
 
-#[derive(Default)]
-struct CancelState {
-    cancelled: std::sync::atomic::AtomicBool,
-    callbacks: std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>,
-}
-
 #[derive(Clone, Default)]
-pub struct Cancellation(std::sync::Arc<CancelState>);
+pub struct Cancellation(Arc<AtomicBool>);
 
 impl Cancellation {
     pub fn cancel(&self) {
-        self.0
-            .cancelled
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-        let callbacks = std::mem::take(&mut *self.0.callbacks.lock().unwrap());
-        for callback in callbacks {
-            callback();
-        }
+        self.0.store(true, Ordering::Relaxed);
     }
 
-    pub fn on_cancel(&self, callback: impl FnOnce() + Send + 'static) {
-        let mut callbacks = self.0.callbacks.lock().unwrap();
-        if self.0.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-            drop(callbacks);
-            callback();
-        } else {
-            callbacks.push(Box::new(callback));
-        }
+    /// Share cancellation with another library. The flag is one-way: once
+    /// cancelled, never reset it; create a new token for a new request.
+    /// This flag does not synchronize publication of any other data.
+    pub fn shared_flag(&self) -> &Arc<AtomicBool> {
+        &self.0
     }
 
     pub fn check(&self) -> Result<(), Error> {
-        if self.0.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        if self.0.load(Ordering::Relaxed) {
             Err(Error::Cancelled)
         } else {
             Ok(())

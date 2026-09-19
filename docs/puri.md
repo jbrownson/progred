@@ -39,7 +39,7 @@ The package boundaries are:
 | [measured](../ui/measured/src/lib.rs) | Box composition and ordered alternatives with opaque placement outputs |
 | [uig](../ui/uig/src/lib.rs) | Shared geometry vocabulary (`Placement`), re-exported by Puri |
 | [puri-vello](../ui/puri-vello/src/lib.rs) | Native Vello canvas backend |
-| [puri-web](../ui/puri-web/src/lib.rs) | Browser Canvas2D backend |
+| [puri-web](../ui/puri-web/src/lib.rs) | Browser Canvas2D fallback (WebGPU uses puri-vello) |
 | [Progred placement](../progred/src/placed.rs) | Editor hover, navigation, popup policy, deferred paint, and dispatch inputs |
 
 Reusable widgets do not interpret document values or choose domain completion

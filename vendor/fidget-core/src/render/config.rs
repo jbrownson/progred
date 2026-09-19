@@ -43,6 +43,15 @@ impl CancelToken {
         Self::default()
     }
 
+    /// Shares an existing cancellation flag without resetting it.
+    ///
+    /// Both this token and the flag's owner may cancel the operation. Once
+    /// cancelled, the flag should not be reset; use a new flag for new work.
+    /// The flag is only a cancellation signal, not a memory-publication barrier.
+    pub fn from_shared_flag(flag: Arc<AtomicBool>) -> Self {
+        Self(flag)
+    }
+
     /// Mark this token as cancelled
     pub fn cancel(&self) {
         self.0.store(true, Ordering::Relaxed);
@@ -76,5 +85,32 @@ impl CancelToken {
     pub unsafe fn from_raw(ptr: *const AtomicBool) -> Self {
         let a = unsafe { Arc::from_raw(ptr) };
         Self(a)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_cancellation_observes_existing_and_later_signals() {
+        for already_cancelled in [false, true] {
+            let flag = Arc::new(AtomicBool::new(already_cancelled));
+            let token = CancelToken::from_shared_flag(flag.clone());
+            assert!(Arc::ptr_eq(&flag, &token.0));
+            assert_eq!(token.is_cancelled(), already_cancelled);
+            flag.store(true, Ordering::Relaxed);
+            assert!(token.is_cancelled());
+        }
+    }
+
+    #[test]
+    fn shared_cancellation_updates_the_supplied_flag() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let token = CancelToken::from_shared_flag(flag.clone());
+        token.clone().cancel();
+        assert!(flag.load(Ordering::Relaxed));
+        assert!(token.is_cancelled());
+        assert!(!CancelToken::new().is_cancelled());
     }
 }

@@ -47,8 +47,8 @@ dev-native:
 build-web: sandbox-web
 
 run-web: build-web
-	@echo "Open Progred: http://localhost:8080"
-	@python3 -m http.server 8080 --bind 0.0.0.0 --directory web
+	@echo "Open Progred: http://127.0.0.1:8080/editor/"
+	@python3 website/preview.py --no-open --port 8080
 
 # Compatibility aliases.
 web: build-web
@@ -77,5 +77,5 @@ sandbox-app:
 	@./tools/build-macos-app
 
 sandbox-web:
-	./tools/sandbox-cargo build --release -p progred --target wasm32-unknown-unknown
-	wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred target/sandbox/build/wasm32-unknown-unknown/release/progred.wasm
+	./tools/sandbox-cargo web-threaded build --release -p progred
+	wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm

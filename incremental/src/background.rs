@@ -1,6 +1,8 @@
 //! Tracked main-thread preparation, owned worker inputs, and explicit readiness.
 
 use super::*;
+use concurrent_queue::ConcurrentQueue;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex, mpsc};
 
 #[cfg(test)]
@@ -46,23 +48,24 @@ impl Executor {
     }
 }
 
-struct Work {
-    scheduled: bool,
-    pending: Option<Job>,
-}
-
 struct Slot {
     executor: Executor,
-    work: Mutex<Work>,
+    scheduled: AtomicBool,
+    pending: ConcurrentQueue<Job>,
 }
 
 impl Slot {
     fn submit(self: &Arc<Self>, job: Job) {
-        let mut work = self.work.lock().unwrap();
-        work.pending = Some(job);
-        if !work.scheduled {
-            work.scheduled = true;
-            drop(work);
+        // Replace queued work without waiting on a worker-held OS mutex. The
+        // browser's event-loop thread cannot block (even briefly) on a futex.
+        self.pending
+            .force_push(job)
+            .unwrap_or_else(|_| unreachable!());
+        self.schedule();
+    }
+
+    fn schedule(self: &Arc<Self>) {
+        if !self.scheduled.swap(true, Ordering::SeqCst) {
             self.enqueue();
         }
     }
@@ -70,22 +73,21 @@ impl Slot {
     fn enqueue(self: &Arc<Self>) {
         let slot = self.clone();
         self.executor.submit(Box::new(move || {
-            let job = slot.work.lock().unwrap().pending.take();
-            if let Some(job) = job {
+            if let Ok(job) = slot.pending.pop() {
                 job();
             }
-            let mut work = slot.work.lock().unwrap();
-            if work.pending.is_some() {
-                drop(work);
-                slot.enqueue();
-            } else {
-                work.scheduled = false;
+            // Release ownership before checking the queue. A concurrent submit
+            // either sees us scheduled, or schedules the replacement itself;
+            // the swap in schedule ensures exactly one wins that handoff.
+            slot.scheduled.store(false, Ordering::SeqCst);
+            if !slot.pending.is_empty() {
+                slot.schedule();
             }
         }));
     }
 
     fn clear(&self) {
-        self.work.lock().unwrap().pending = None;
+        let _ = self.pending.pop();
     }
 }
 
@@ -235,7 +237,6 @@ impl Tasks {
         + Sync
         + 'static,
     ) -> AsyncMemo<I, T> {
-        let (sender, receiver) = mpsc::channel();
         let node = Rc::new(AsyncNode {
             runtime: self.runtime.clone(),
             prepare,
@@ -243,13 +244,10 @@ impl Tasks {
             wake: self.wake.clone(),
             slot: Arc::new(Slot {
                 executor: self.executor.clone(),
-                work: Mutex::new(Work {
-                    scheduled: false,
-                    pending: None,
-                }),
+                scheduled: AtomicBool::new(false),
+                pending: ConcurrentQueue::bounded(1),
             }),
-            sender,
-            receiver: RefCell::new(receiver),
+            reports: Arc::new(ConcurrentQueue::unbounded()),
             state: RefCell::new(State {
                 input: None,
                 generation: 0,
@@ -318,8 +316,7 @@ struct AsyncNode<I, T> {
     compute: Arc<Worker<I, T>>,
     wake: Arc<dyn Fn() + Send + Sync>,
     slot: Arc<Slot>,
-    sender: mpsc::Sender<GenerationReport<T>>,
-    receiver: RefCell<mpsc::Receiver<GenerationReport<T>>>,
+    reports: Arc<ConcurrentQueue<GenerationReport<T>>>,
     state: RefCell<State<I, T>>,
 }
 
@@ -403,23 +400,23 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             let generation = state.generation;
             let cancel = state.cancel.clone();
             let compute = self.compute.clone();
-            let sender = self.sender.clone();
+            let reports = self.reports.clone();
             let wake = self.wake.clone();
             self.slot.submit(Box::new(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     cancel.check()?;
                     let mut publish = |value| {
                         cancel.check()?;
-                        sender
-                            .send((generation, Report::Value(value)))
+                        reports
+                            .push((generation, Report::Value(value)))
                             .map_err(|_| Error::Cancelled)?;
                         wake();
                         Ok(())
                     };
                     let progress = |progress| {
                         if cancel.check().is_ok()
-                            && sender
-                                .send((generation, Report::WorkProgress(progress)))
+                            && reports
+                                .push((generation, Report::WorkProgress(progress)))
                                 .is_ok()
                         {
                             wake();
@@ -429,7 +426,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                     cancel.check()?;
                     Ok(value)
                 }));
-                if sender.send((generation, Report::Finished(result))).is_ok() {
+                if reports.push((generation, Report::Finished(result))).is_ok() {
                     wake();
                 }
             }));
@@ -480,7 +477,7 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
     fn collect(&self) -> bool {
         let mut state = self.state.borrow_mut();
         let mut changed = false;
-        for result in self.receiver.borrow_mut().try_iter() {
+        while let Ok(result) = self.reports.pop() {
             if !state.closed && result.0 == state.generation {
                 match result {
                     (_, Report::WorkProgress(progress)) => state.pending_progress = Some(progress),
@@ -497,6 +494,8 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
         state.closed = true;
         state.cancel.cancel();
         self.slot.clear();
+        self.reports.close();
+        while self.reports.pop().is_ok() {}
     }
 }
 
@@ -504,6 +503,8 @@ impl<I, T> Drop for AsyncNode<I, T> {
     fn drop(&mut self) {
         self.state.get_mut().cancel.cancel();
         self.slot.clear();
+        self.reports.close();
+        while self.reports.pop().is_ok() {}
     }
 }
 

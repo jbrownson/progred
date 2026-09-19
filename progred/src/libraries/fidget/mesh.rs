@@ -5,6 +5,8 @@ use fidget_engine::mesh::{Octree, Settings};
 
 #[cfg(test)]
 mod cpu;
+#[cfg(feature = "cam-profile")]
+pub(crate) mod performance;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod gpu;
 #[cfg(test)]
@@ -92,14 +94,11 @@ impl Shape {
         cancellation: &incremental::Cancellation,
     ) -> Result<Option<()>, incremental::Error> {
         cancellation.check()?;
-        let cancel = fidget_engine::render::CancelToken::new();
-        cancellation.on_cancel({
-            let cancel = cancel.clone();
-            move || cancel.cancel()
-        });
         let settings = Settings {
             depth,
-            cancel,
+            cancel: fidget_engine::render::CancelToken::from_shared_flag(
+                cancellation.shared_flag().clone(),
+            ),
             world_to_model: Translation3::from((self.min + self.max) / 2.0).to_homogeneous()
                 * Scale3::from((self.max - self.min) / 2.0).to_homogeneous(),
             ..Default::default()

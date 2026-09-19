@@ -15,6 +15,8 @@ mod fidget;
 mod mesh;
 pub mod paths;
 mod playback;
+#[cfg(feature = "cam-profile")]
+pub(crate) mod performance;
 mod preview;
 mod refined;
 pub mod stock;

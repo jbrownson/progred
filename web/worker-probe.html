@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Shared-memory worker probe</title>
+<pre id="result">Starting</pre>
+<script type="module">
+import { startWorker } from "./worker-host.js";
+const result = document.querySelector("#result");
+const fail = (error) => { result.textContent = `FAIL: ${error.stack ?? error}`; };
+try {
+  if (!crossOriginIsolated) throw new Error("Cross-origin isolation is required");
+  const params = new URL(location.href).searchParams;
+  const moduleUrl = new URL(params.has("startup") ? "./pkg/progred.js" : "./probe-pkg/probe.js", location.href).href;
+  const wasm = await import(moduleUrl);
+  await wasm.default();
+  let ticks = 0;
+  let maxGap = 0;
+  let lastTick = performance.now();
+  const timer = setInterval(() => {
+    const now = performance.now();
+    maxGap = Math.max(maxGap, now - lastTick);
+    lastTick = now;
+    ticks++;
+  }, 10);
+  let cancellationScheduled = false;
+  await startWorker(wasm, moduleUrl, () => {
+    if (params.has("fidget")) {
+      if (params.has("cancel") && wasm.probe_started() && !cancellationScheduled) {
+        cancellationScheduled = true;
+        wasm.replace_probe(12);
+      }
+      if (wasm.poll_probe()) {
+        clearInterval(timer);
+        const summary = wasm.probe_summary();
+        if (params.has("cancel") && !summary.startsWith("12 cuts")) {
+          fail(new Error(`Stale Fidget result: ${summary}`));
+        } else if (!params.has("cancel") && !wasm.probe_progress_seen()) {
+          fail(new Error("No progress reached the UI before completion"));
+        } else if (ticks < 3 || maxGap > 250) {
+          fail(new Error(`UI timer blocked: ${ticks} ticks, ${maxGap.toFixed(1)}ms maximum gap`));
+        } else {
+          result.textContent = `PASS: ${summary}; ${ticks} UI ticks, maximum gap ${maxGap.toFixed(1)}ms`;
+        }
+      }
+    } else if (wasm.poll_probe()) {
+      clearInterval(timer);
+      result.textContent = "PASS: shared closure, UI timer, Fidget cancellation, completion";
+    } else if (wasm.probe_started() && !cancellationScheduled) {
+      cancellationScheduled = true;
+      result.textContent = "Worker running; UI timer will cancel it";
+      setTimeout(() => {
+        try { wasm.cancel_probe(); } catch (error) { fail(error); }
+      }, 100);
+    }
+  }, fail);
+  if (params.has("startup")) {
+    clearInterval(timer);
+    if (typeof wasm.start_editor !== "function" || typeof wasm.computation_finished !== "function") {
+      throw new Error("Editor entrypoints were not retained in the production build");
+    }
+    // Intentionally never call start_editor: this is module/worker setup only.
+    result.textContent = "PASS: production module and worker initialized without starting the editor";
+  } else if (params.has("fidget")) {
+    wasm.start_fidget_probe();
+  } else if (params.has("replacement")) {
+    wasm.start_replacement_probe();
+    for (let end = 100; end <= 50000; end += 100) {
+      for (let value = end - 99; value <= end; value++) wasm.replace_probe(value);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    while (!wasm.poll_probe()) await new Promise((resolve) => setTimeout(resolve, 10));
+    clearInterval(timer);
+    result.textContent = "PASS: 50000 replacements; current result received";
+  } else wasm.start_probe();
+} catch (error) {
+  fail(error);
+}
+</script>

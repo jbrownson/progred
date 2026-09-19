@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn cancellation_shares_one_flag_across_clones_and_late_observers() {
+    let cancel = Cancellation::default();
+    let clone = cancel.clone();
+    let flag = cancel.shared_flag().clone();
+    assert!(Arc::ptr_eq(&flag, clone.shared_flag()));
+    assert_eq!(clone.check(), Ok(()));
+    cancel.cancel();
+    cancel.cancel();
+    assert!(flag.load(Ordering::Relaxed));
+    assert!(cancel.shared_flag().load(Ordering::Relaxed));
+    assert_eq!(clone.check(), Err(Error::Cancelled));
+    assert_eq!(Cancellation::default().check(), Ok(()));
+}
+
+#[test]
+fn cancellation_observes_external_cancellation_on_another_thread() {
+    let cancel = Cancellation::default();
+    let flag = cancel.shared_flag().clone();
+    std::thread::spawn(move || flag.store(true, Ordering::Relaxed))
+        .join()
+        .unwrap();
+    assert_eq!(cancel.check(), Err(Error::Cancelled));
+}
+
+#[test]
 fn validation_stops_before_obsolete_branch_dependencies() {
     let runtime = Runtime::default();
     let condition = runtime.input(true);

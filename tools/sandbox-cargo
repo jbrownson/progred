@@ -57,6 +57,7 @@ run_sandboxed() {
         RUSTC="$rustc_path" \
         RUSTC_WRAPPER= \
         RUSTDOC="$rustdoc_path" \
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="${web_rustflags-}" \
         TMPDIR="$sandbox_tmp" \
         USER="$user_name" \
         /usr/bin/sandbox-exec \
@@ -83,6 +84,24 @@ use_minimum_age_toolchain() {
     rustdoc_path=$("$rustup_path" which rustdoc --toolchain nightly-2026-08-27)
     toolchain_root=$(dirname "$(dirname "$cargo_path")")
 }
+
+# Browser workers rebuild std with atomics; native builds stay stable.
+if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
+    web_command=$1
+    shift
+    use_minimum_age_toolchain
+    target_dir="$build_root/build-web"
+    web_rustflags='-C target-feature=+atomics,+bulk-memory -C link-arg=--shared-memory -C link-arg=--max-memory=2147483648 -C link-arg=--import-memory -C link-arg=--export=__heap_base -C link-arg=--export=__wasm_init_tls -C link-arg=--export=__tls_size -C link-arg=--export=__tls_align -C link-arg=--export=__tls_base'
+    if [ "$web_command" = web-threaded-fetch ]; then
+        run_sandboxed 1 false 0 "$cargo_path" fetch --locked \
+            --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
+            --target wasm32-unknown-unknown
+    else
+        run_sandboxed 0 true 0 "$cargo_path" --frozen "$@" \
+            -Z build-std=std,panic_abort --target wasm32-unknown-unknown
+    fi
+    exit
+fi
 
 if [ "${1-}" = fetch ]; then
     shift
@@ -119,7 +138,7 @@ if [ "${1-}" = audit ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/sandbox-cargo audit | fetch | update | resolve | <cargo command> [arguments...]" >&2
+    echo "usage: tools/sandbox-cargo audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | <cargo command> [arguments...]" >&2
     exit 2
 fi
 
