@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Progred is an experimental programming environment for working with structured data, code, and interactive views."
+    />
+    <title>Progred</title>
+    <link rel="icon" href="./editor/icon.svg" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="./" aria-label="Progred home">
+        <img src="./editor/icon.svg" alt="" width="40" height="40" />
+        <span>prog.red</span>
+      </a>
+      <a href="https://github.com/jbrownson/progred">Source on GitHub</a>
+    </header>
+
+    <main>
+      <section class="introduction" aria-labelledby="introduction-title">
+        <p class="eyebrow">An experimental programming environment</p>
+        <h1 id="introduction-title">Programs, data, and the things they make.</h1>
+        <p>
+          Work with structured values through code, editable numbers, drawings,
+          and other interactive views—all in the same document.
+        </p>
+      </section>
+
+      <section class="playground" aria-labelledby="editor-title">
+        <div class="editor-heading">
+          <h2 id="editor-title">Try the editor</h2>
+          <a href="./editor/" target="_blank" rel="noopener">Open in a new tab</a>
+        </div>
+        <iframe src="./editor/" title="Progred editor"></iframe>
+        <p class="session-note">
+          Changes currently live only in this editor session. Reloading the page
+          starts over. Opening a new tab starts a separate session.
+        </p>
+      </section>
+
+      <section class="first-steps" aria-labelledby="first-steps-title">
+        <h2 id="first-steps-title">A starting point</h2>
+        <p>
+          In the editor’s <strong>Examples</strong> menu, choose
+          <strong>Inventing on Principle Tree</strong>. Try editing a number
+          and watch the drawing change. Choose <strong>File → New Document</strong>
+          when you want to start something of your own.
+        </p>
+        <p>
+          The tree example recreates Bret Victor’s
+          <a href="https://worrydream.com/InventingOnPrinciple/">Inventing on Principle</a>
+          demo. The original demonstration and inspiration are his.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      A working prototype. We’re developing smaller examples here to explore
+      the ideas—and the editing experience.
+    </footer>
+  </body>
+</html>
