@@ -4,12 +4,14 @@
 <pre id="result">Starting worker (does not start the editor)</pre>
 <script type="module">
 import { startWorker } from "./worker-host.js";
-const wasm = await import("./profile-pkg/profile.js");
+const params = new URLSearchParams(location.search);
+const moduleUrl = new URL(`./${params.get("pkg") ?? "profile-pkg"}/profile.js`, location.href).href;
 const fail = (error) => { window.profileError = String(error.stack ?? error); };
 try {
+  const wasm = await import(moduleUrl);
   await wasm.default();
-  const threads = Number(new URLSearchParams(location.search).get("threads") ?? 8);
-  await startWorker(wasm, new URL("./profile-pkg/profile.js", location.href).href, () => {}, fail, threads);
+  const threads = Number(params.get("threads") ?? 8);
+  await startWorker(wasm, moduleUrl, () => {}, fail, threads);
   window.runProfile = async (progress, size, controls) => {
     let last = performance.now(), maxGap = 0, ticks = 0;
     const timer = setInterval(() => {

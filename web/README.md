@@ -11,8 +11,9 @@ The built-in documents are under the **Examples** menu.
 
 The browser build uses a shared-memory coordinator for the existing CAM background
 jobs. It requires a secure context (localhost or HTTPS) and cross-origin
-isolation. The local server supplies `Cross-Origin-Opener-Policy: same-origin`
-and `Cross-Origin-Embedder-Policy: require-corp` for the site, editor, and worker.
+isolation, and WebAssembly SIMD support. The local server supplies
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp` for the site, editor, and worker.
 A plain file URL, ordinary `python -m http.server`, or LAN HTTP is not sufficient.
 Unsupported hosts show an error instead of silently doing heavy work inline.
 
@@ -25,7 +26,8 @@ rustup component add rust-src llvm-tools --toolchain nightly-2026-08-27
 ```
 
 Also install `wasm-bindgen-cli` matching the lockfile. `make build-web` rebuilds
-the standard library with atomics under Seatbelt and generates `web/pkg`.
+the standard library with atomics and enables SIMD under Seatbelt, then generates
+`web/pkg`.
 Native builds continue using stable Rust. The worker instantiates exactly the
 same module with shared memory; ordinary Rust `Send` closures and results stay
 in Rust, while JS transfers job pointers and wake notifications. The page alone
@@ -49,3 +51,4 @@ fallback. Startup logs the selected presentation backend and worker count.
 [the website README](../website/README.md) and
 [worker diagnostics](../docs/web-worker-experiment-2026-09-19.md).
 See also the [performance comparison](../docs/browser-native-profile-2026-09-19.md).
+The [SIMD comparison](../docs/browser-simd-profile-2026-09-19.md) covers the browser-only build flag.

@@ -69,8 +69,9 @@ update. Install that toolchain with `rustup toolchain install
 nightly-2026-08-27 --profile minimal` if needed. Subsequent compilation remains
 on stable Cargo for native targets, offline, and source-read-only.
 The browser build is an explicit exception: `web-threaded` uses the same pinned nightly to
-rebuild the standard library with atomics, under the same Seatbelt restrictions,
-in a separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
+rebuild the standard library with atomics and enable WASM SIMD, under the same
+Seatbelt restrictions, in a separate `target/sandbox/build-web` directory.
+`web-threaded-fetch` only fetches
 that toolchain's locked sysroot dependencies; it does not update the workspace
 lockfile. `make build-web` uses this path; native builds remain on stable. The
 pinned nightly needs `rust-src` and `llvm-tools`. The standalone

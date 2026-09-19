@@ -161,7 +161,7 @@ node tools/profile-web-cam.cjs 512 4 0.02,0.5
 ```
 
 Native arguments are `progress size trials [controls]`; browser arguments are
-`size trials comma-separated-progress [controls|none] [worker-count]`. The optional `controls`
+`size trials comma-separated-progress [controls|none] [worker-count] [package-directory]`. The optional `controls`
 argument adds the backend comparison and substantially increases runtime.
 The browser runner requires Playwright resolvable by Node and installed Google
 Chrome. It serves only the diagnostic page, never calls `start_editor`, and

@@ -9,6 +9,7 @@ const { chromium } = require("playwright");
   const positions = (process.argv[4] ?? "0.02,0.5,1").split(",").map(Number);
   const controls = process.argv[5] === "controls";
   const threads = Number(process.argv[6] ?? 8);
+  const pkg = process.argv[7] ?? "profile-pkg";
   const server = spawn("python3", ["-B", "website/preview.py", "--no-open"], {
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -27,11 +28,11 @@ const { chromium } = require("playwright");
     browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
     const page = await browser.newPage();
     page.on("pageerror", (error) => console.error(error));
-    await page.goto(`${url}editor/cam-profile.html?threads=${threads}`);
+    await page.goto(`${url}editor/cam-profile.html?${new URLSearchParams({ threads, pkg })}`);
     await page.waitForFunction(() => window.runProfile || window.profileError, null, { timeout: 60000 });
     const error = await page.evaluate(() => window.profileError);
     if (error) throw new Error(error);
-    console.log(JSON.stringify({ browser: browser.version(), size, trials, positions, controls }));
+    console.log(JSON.stringify({ browser: browser.version(), size, trials, positions, controls, threads, pkg }));
     for (const progress of positions) {
       for (let trial = 0; trial < trials; trial++) {
         const result = await page.evaluate(async ({ progress, size, controls }) =>

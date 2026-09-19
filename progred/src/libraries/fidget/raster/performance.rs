@@ -47,6 +47,8 @@ pub(crate) fn profile(
     // Matching coverage/depth checks guard against comparing different work.
     let depth_sum: f64 = frame.depth.iter().map(|&x| f64::from(x)).sum();
     let rgba_sum: u64 = rgba.iter().map(|&x| u64::from(x)).sum();
+    let rgba_hash = fingerprint(rgba.iter().copied());
+    let depth_hash = fingerprint(frame.depth.iter().flat_map(|x| x.to_le_bytes()));
     let mut combined = (*paths).clone();
     combined.append_colored(&geometry, |color| color).unwrap();
     let drawing = mesh::performance::draw(&preview, combined.into());
@@ -70,7 +72,17 @@ pub(crate) fn profile(
     json!({"mesh_ms":mesh_ms, "stock_vertices":geometry.vertices.len(),
         "stock_triangles":geometry.indices.len()/3, "implicit_ms":implicit_ms,
         "partial_publications":publications, "occupied_pixels":occupied,
-        "depth_sum":depth_sum, "rgba_sum":rgba_sum, "controls":control_results, "drawing":drawing})
+        "depth_sum":depth_sum, "rgba_sum":rgba_sum, "rgba_hash":rgba_hash,
+        "depth_hash":depth_hash, "controls":control_results, "drawing":drawing})
+}
+
+fn fingerprint(bytes: impl Iterator<Item = u8>) -> String {
+    format!(
+        "{:016x}",
+        bytes.fold(0xcbf29ce484222325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
+        })
+    )
 }
 
 fn backend<F: Function + RenderHints>(

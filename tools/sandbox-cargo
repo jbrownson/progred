@@ -91,7 +91,7 @@ if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
     shift
     use_minimum_age_toolchain
     target_dir="$build_root/build-web"
-    web_rustflags='-C target-feature=+atomics,+bulk-memory -C link-arg=--shared-memory -C link-arg=--max-memory=2147483648 -C link-arg=--import-memory -C link-arg=--export=__heap_base -C link-arg=--export=__wasm_init_tls -C link-arg=--export=__tls_size -C link-arg=--export=__tls_align -C link-arg=--export=__tls_base'
+    web_rustflags='-C target-feature=+atomics,+bulk-memory,+simd128 -C link-arg=--shared-memory -C link-arg=--max-memory=2147483648 -C link-arg=--import-memory -C link-arg=--export=__heap_base -C link-arg=--export=__wasm_init_tls -C link-arg=--export=__tls_size -C link-arg=--export=__tls_align -C link-arg=--export=__tls_base'
     if [ "$web_command" = web-threaded-fetch ]; then
         run_sandboxed 1 false 0 "$cargo_path" fetch --locked \
             --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \

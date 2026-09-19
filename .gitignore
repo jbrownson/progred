@@ -4,6 +4,7 @@
 /web/pkg
 /web/probe-pkg
 /web/profile-pkg
+/web/profile-simd-pkg
 /web/gpu-probe-pkg
 /web/orbit-pkg
 /web/orbit-talc-pkg

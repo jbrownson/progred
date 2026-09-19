@@ -12,7 +12,8 @@ window running; Control+C stops the server. The first build can take a while.
 
 The browser build uses `nightly-2026-08-27` with `rust-src` and `llvm-tools`,
 and `wasm-bindgen-cli` matching the locked `wasm-bindgen` version. It rebuilds
-`std` with atomics for shared-memory workers, inside the normal Cargo sandbox.
+`std` with atomics and enables SIMD for the shared-memory browser build, inside
+the normal Cargo sandbox. The browser must support WebAssembly SIMD.
 One-time setup is described in [the browser host notes](../web/README.md).
 No Node or package installation is needed for the site.
 
