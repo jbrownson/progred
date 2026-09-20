@@ -39,12 +39,19 @@ system chooses an available port, so an existing editor preview can stay open.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page begins with four guided exercises: editing a text/number record,
-inserting into a list, creating and sharing cells, then live Grap calculations.
+The page begins with five guided exercises: editing a text/number record,
+inserting into a list, creating and sharing cells, live Grap calculations,
+then editing a function and its calls.
 All use the real editor without its application menu.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
 for the values and cells exercises, and just name/text/blob for the list exercise.
-The Grap exercise adds the Grap and absent libraries to the numeric set.
+The Grap and functions exercises add Grap and absent to the numeric set.
+Their `tutorial-slots` embed option lists three record-field identities in display
+order. An entry-only projection stacks those fields without labels or insertion
+gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
+refilling it writes the same field. Nested values use the ordinary projection
+and editing behavior. This is tutorial host configuration, not document syntax
+or a library construct. Without the option, the record displays normally.
 The unused libraries are not constructed or offered by the completion picker;
 list editing itself does not require Grap's list-operation library.
 Document shortcuts, including Ctrl+Z / Ctrl+Shift+Z, remain available (also on
@@ -83,6 +90,16 @@ identity, and numeric contents; the website does not evaluate Grap. The editor
 performs the actual evaluations and projects their read-only results. Native
 interaction tests cover both kinds of edits. Named numbers and bindings are
 not introduced here.
+
+The functions lesson starts with a named `scale` function, one parameter `x`,
+and two evaluated calls. Its three checks cover changing one argument, changing
+the function's multiplier, and renaming the parameter to `amount`. Parameter
+uses and argument labels share the same cell identity; names don't implement
+binding. This uses ordinary Grap lambdas and calls, not a lesson-specific FFI.
+The checklist checks the stored recipe, argument values, and parameter name;
+native interaction tests exercise the actual editing and evaluation, including
+unchanged results after renaming. Constructing a function from scratch is left
+for a later exercise.
 
 An embed is an ordinary editor URL:
 

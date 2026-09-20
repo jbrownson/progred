@@ -15,11 +15,15 @@ The document URL is relative to the editor page. Without those parameters the
 editor still starts blank with its full menu and the default worker pool.
 Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
 application shortcuts or F10 menu navigation. The website owns the exercise
-documents and reset buttons; there are no tutorial-specific projections.
+documents and reset buttons. An optional `tutorial-slots` parameter lists distinct
+record-field CellIds in display order. The tutorial entry projection shows just
+those contents in a fixed column, without labels or insertion gaps. Missing
+fields remain ordinary editable empty slots; nested values retain normal editing.
+Omitting this option keeps the standard document projection.
 Canvas and window focus/blur events control the editor's active presentation.
 Leaving an embed clears its selection, caret, completion query, and related
 highlights. Document edits remain. Loading another lesson does not steal focus.
-The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?)`; malformed supplied
+The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?, tutorial_slots?)`; malformed supplied
 documents fail explicitly before starting the editor. See the
 [website notes](../website/README.md) for independent embedded sessions.
 

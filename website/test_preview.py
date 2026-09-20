@@ -108,7 +108,7 @@ class AssetTests(unittest.TestCase):
 
         assets = Assets()
         assets.feed((REPOSITORY / "website/public/index.html").read_text())
-        self.assertEqual(len(assets.frames), 4)
+        self.assertEqual(len(assets.frames), 5)
         documents = []
         for frame in assets.frames:
             self.assertTrue(frame["title"])
@@ -124,18 +124,24 @@ class AssetTests(unittest.TestCase):
                 "eaaf309c36a65d2811083944da29aec9",  # text
                 "4ab5da466a7c5f1202f5ef862f5ff915",  # blob
             ]
-            evaluation = ["873c68ac371dbbb98a4f198546d60241"] if params["document"] == ["../lessons/grap.gid"] else []
+            evaluation = ["873c68ac371dbbb98a4f198546d60241"] if params["document"][0] in ("../lessons/grap.gid", "../lessons/functions.gid") else []
             numeric = [
                 "c46d010325d3a1ec0f2a84dd3a9570ae",  # number
                 "1fdb573a2c56a7063546c195318214bc",  # f64
             ] if params["document"] != ["../lessons/lists.gid"] else []
             grap = ["f7735b90f6826b25c350a8fd83af8c47"] if evaluation else []
             self.assertEqual(libraries, basic + evaluation + numeric + grap)
+            if evaluation:
+                self.assertEqual(params["tutorial-slots"], [
+                    "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d"
+                ])
+            else:
+                self.assertNotIn("tutorial-slots", params)
             document = urlsplit(urljoin(url.geturl(), params["document"][0])).path
             self.assertTrue((REPOSITORY / "website/public" / document.lstrip("/")).is_file())
             documents.append(document)
         self.assertEqual(len(set(documents)), len(documents))
-        self.assertEqual(set(documents), {"/lessons/values.gid", "/lessons/lists.gid", "/lessons/cells.gid", "/lessons/grap.gid"})
+        self.assertEqual(set(documents), {"/lessons/values.gid", "/lessons/lists.gid", "/lessons/cells.gid", "/lessons/grap.gid", "/lessons/functions.gid"})
         for path in assets.paths:
             with self.subTest(path=path):
                 self.assertFalse(urlsplit(path).scheme)

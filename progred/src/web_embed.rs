@@ -1,7 +1,7 @@
-//! Optional browser-host observation; exercise policy belongs to the website.
+//! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
 use crate::{Editor, libraries::path, selection::Stage, workspace};
-use gid::{Document, Path};
+use gid::{Document, Path, Step, Value};
 use std::rc::Rc;
 
 pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>, String> {
@@ -20,6 +20,45 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>
                     .collect::<Result<Vec<_>, _>>()
             }?;
             crate::stack::load_selected(&ids)
+        }
+    }
+}
+
+pub(crate) fn tutorial_slots(
+    ids: Option<&str>,
+    projection: crate::projection::Projection<Editor>,
+) -> Result<crate::projection::Projection<Editor>, String> {
+    match ids {
+        None => Ok(projection),
+        Some(ids) => {
+            let slots = ids
+                .split(',')
+                .map(|id| {
+                    id.trim()
+                        .parse::<gid::CellId>()
+                        .map_err(|error| format!("Invalid tutorial slot {id:?}: {error}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if slots
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                != slots.len()
+            {
+                return Err("Tutorial slots must be distinct".into());
+            }
+            Ok(projection.with_entry(crate::display::partial(move |input| {
+                matches!(input.value, Some(Value::Record(_))).then(|| {
+                    crate::display::col(
+                        0,
+                        16.0,
+                        slots
+                            .iter()
+                            .map(|key| crate::display::descend(Step::Key(*key), None, None)),
+                    )
+                })
+            })))
         }
     }
 }
@@ -105,6 +144,22 @@ mod tests {
     use super::*;
     use crate::selection;
     use gid::{Step, Value};
+
+    #[test]
+    fn tutorial_slots_require_distinct_valid_ids() {
+        for ids in [
+            "",
+            "first",
+            "9940ece27410c72a5308a544890ccc71,",
+            "9940ece27410c72a5308a544890ccc71,9940ece27410c72a5308a544890ccc71",
+        ] {
+            assert!(tutorial_slots(Some(ids), Default::default()).is_err());
+        }
+        assert!(tutorial_slots(None, Default::default()).is_ok());
+        assert!(
+            tutorial_slots(Some("9940ece27410c72a5308a544890ccc71"), Default::default()).is_ok()
+        );
+    }
 
     #[test]
     fn library_option_distinguishes_default_empty_subset_and_invalid_input() {

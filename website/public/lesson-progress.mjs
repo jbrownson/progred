@@ -8,7 +8,15 @@ const fields = {
   function: "751fca43-73de-bdd0-b7e6-eb73e08d684b",
   left: "764f6afe-17ba-14e8-1f5a-b61204be0bec",
   right: "4f53ff25-390f-5847-2d31-a6142644dec2",
+  name: "02e56265-4d6d-0828-d3a7-559e6f75fffe",
+  params: "195b378d-0d31-d90a-b0d7-366c15346b70",
+  body: "98614386-6eda-2e2f-bf9a-b8484357a0c9",
 };
+const slots = [
+  "9940ece2-7410-c72a-5308-a544890ccc71",
+  "f717b766-d250-a7b8-6c5e-b842885c4417",
+  "5e716c07-4908-49f0-72b4-e9017dd6230d",
+];
 const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
 const sum = "201af445-eb7e-2c27-0bb5-ead10b781fc1";
 const multiply = "d6f384c4-39d9-d699-96d5-45df422efd79";
@@ -113,10 +121,11 @@ export function completedSteps(lesson, state, previous) {
       }) ? ["linked-edit"] : []),
     ];
   }
-  if (lesson === "grap" && Array.isArray(root?.list)) {
-    const contents = state.document.cells;
+  if (lesson === "grap") {
+    const contents = state?.document?.cells;
     const input = (call) => field(call, fields.left)?.cell;
-    const calls = root.list.map((item) => field(item, fields.evaluate));
+    const items = slots.map((key) => field(root, key));
+    const calls = items.map((item) => field(item, fields.evaluate));
     const call = (fn) => calls.find((value) => field(value, fields.function)?.cell === fn
       && typeof input(value) === "string"
       && Number.isFinite(number(contents?.[input(value)]))
@@ -126,8 +135,30 @@ export function completedSteps(lesson, state, previous) {
     return [
       ...(number(field(addition, fields.right)) === 4 ? ["argument"] : []),
       ...(addition && multiplication && input(addition) === input(multiplication)
-        && root.list.some((value) => value?.cell === input(addition))
+        && items.some((value) => value?.cell === input(addition))
         && number(contents[input(addition)]) === 5 ? ["shared-edit"] : []),
+    ];
+  }
+  if (lesson === "functions") {
+    const contents = state?.document?.cells;
+    const items = slots.map((key) => field(root, key));
+    const fn = items.find((value) => typeof value?.cell === "string"
+      && Array.isArray(field(contents?.[value.cell], fields.params)?.list))?.cell;
+    const definition = contents?.[fn];
+    const parameters = field(definition, fields.params)?.list;
+    const parameter = parameters?.length === 1 && parameters[0]?.cell;
+    const body = field(definition, fields.body);
+    const factor = number(field(body, fields.right));
+    if (typeof parameter !== "string" || field(body, fields.function)?.cell !== multiply
+        || field(body, fields.left)?.cell !== parameter || !Number.isFinite(factor)) return [];
+    const calls = items.map((item) => field(item, fields.evaluate))
+      .filter((call) => field(call, fields.function)?.cell === fn);
+    const inputs = calls.map((call) => number(field(call, parameter)));
+    if (inputs.length !== 2 || !inputs.every(Number.isFinite)) return [];
+    return [
+      ...(inputs.includes(4) && inputs.includes(5) ? ["argument"] : []),
+      ...(factor === 3 ? ["body"] : []),
+      ...(text(field(contents?.[parameter], fields.name)) === "amount" ? ["rename"] : []),
     ];
   }
   return [];

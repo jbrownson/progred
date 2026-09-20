@@ -1,0 +1,31 @@
+{
+  "binders": {
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "scale": 27b02645cf74e4db930f7ace768a0aaf,
+    "x": a6ea8f498dc19d41294f9610ac9e8eed,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "third": 5e716c07490849f072b4e9017dd6230d,
+  },
+  "cells": {
+    x: {name: "x"},
+    scale: {
+      name: "scale",
+      params: [x],
+      body: {function: multiply, left: x, right: {f64: 0x0000000000000040}},
+    },
+  },
+  "root": {
+    first: scale,
+    second: {evaluate: {function: scale, x: {f64: 0x0000000000000840}}},
+    third: {evaluate: {function: scale, x: {f64: 0x0000000000001440}}},
+  },
+}

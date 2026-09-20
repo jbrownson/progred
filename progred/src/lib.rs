@@ -1173,11 +1173,14 @@ pub fn start_editor(
     show_menu: Option<bool>,
     on_change: Option<web_sys::js_sys::Function>,
     libraries: Option<String>,
+    tutorial_slots: Option<String>,
 ) -> Result<(), wasm_bindgen::JsValue> {
     console_error_panic_hook::set_once();
     let (doc, binders) = gid_text::parse(source.as_deref().unwrap_or("{}"))
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
-    let stack = web_embed::libraries(libraries.as_deref())
+    let mut stack = web_embed::libraries(libraries.as_deref())
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    stack.projection = web_embed::tutorial_slots(tutorial_slots.as_deref(), stack.projection)
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     run_document(
         doc,

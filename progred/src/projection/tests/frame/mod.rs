@@ -380,3 +380,4 @@ mod numbers;
 mod outline;
 mod profile;
 mod svg;
+mod tutorial;

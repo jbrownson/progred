@@ -781,10 +781,11 @@ mod checked_in_files {
         let input = doc.cells.value(binders["input"]).unwrap();
         assert_eq!(crate::libraries::f64::read(input), Some(3.0));
         assert_eq!(crate::libraries::name::read(input), None);
-        let expressions = doc.root.as_ref().unwrap().as_list().unwrap();
-        assert_eq!(expressions.len(), 3);
-        assert_eq!(expressions.values().next(), Some(&binders["input"].into()));
-        for item in expressions.values().skip(1) {
+        let root = doc.root.as_ref().unwrap().as_record().unwrap();
+        assert_eq!(root.len(), 3);
+        assert_eq!(root.get(&binders["first"]), Some(&binders["input"].into()));
+        for key in ["second", "third"] {
+            let item = root.get(&binders[key]).unwrap();
             let call = item
                 .as_record()
                 .unwrap()
@@ -799,6 +800,46 @@ mod checked_in_files {
             let argument = call.get(&crate::libraries::f64::vocabulary::RIGHT).unwrap();
             assert_eq!(crate::libraries::f64::read(argument), Some(2.0));
             assert_eq!(crate::libraries::name::read(argument), None);
+        }
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+    }
+
+    #[test]
+    fn website_functions_lesson_has_a_parameter_not_a_shared_numeric_input() {
+        use crate::libraries::{f64, name};
+        use grap::vocabulary::{BODY, EVALUATE, FUNCTION, PARAMS};
+
+        let (doc, names) =
+            parse(include_str!("../../website/public/lessons/functions.gid")).unwrap();
+        assert_eq!(doc.cells.cells().count(), 2);
+        assert_eq!(doc.cells.value(names["x"]), Some(&name::record("x", [])));
+        let definition = doc
+            .cells
+            .value(names["scale"])
+            .unwrap()
+            .as_record()
+            .unwrap();
+        assert_eq!(
+            definition.get(&PARAMS),
+            Some(&Value::list([names["x"].into()]))
+        );
+        let body = definition.get(&BODY).unwrap().as_record().unwrap();
+        assert_eq!(body.get(&f64::vocabulary::LEFT), Some(&names["x"].into()));
+        let root = doc.root.as_ref().unwrap().as_record().unwrap();
+        assert_eq!(root.len(), 3);
+        assert_eq!(root.get(&names["first"]), Some(&names["scale"].into()));
+        for (key, argument) in [("second", 3.0), ("third", 5.0)] {
+            let item = root.get(&names[key]).unwrap();
+            let call = item
+                .as_record()
+                .unwrap()
+                .get(&EVALUATE)
+                .unwrap()
+                .as_record()
+                .unwrap();
+            assert_eq!(call.get(&FUNCTION), Some(&names["scale"].into()));
+            assert_eq!(call.get(&names["x"]).and_then(f64::read), Some(argument));
         }
         let reached = root_reachable_cells(&doc);
         assert!(doc.cells.cells().all(|cell| reached.contains(cell)));

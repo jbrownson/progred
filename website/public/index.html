@@ -131,16 +131,44 @@
             <span>Edit an expression, see its result</span>
             <button type="button" class="reset" aria-label="Reset the Grap example">Reset <span aria-hidden="true">↺</span></button>
           </div>
-          <iframe src="./editor/?document=../lessons/grap.gid&amp;menu=hidden&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/grap.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
           <p class="editor-note">Select a number’s digits to replace them. <kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo. <span class="reset-status" role="status"></span></p>
+        </div>
+      </section>
+
+      <section class="exercise" id="functions" aria-labelledby="functions-title">
+        <div class="lesson-copy">
+          <p class="eyebrow">05 / Functions</p>
+          <h2 id="functions-title">One recipe, different inputs.</h2>
+          <p>
+            The first line defines <strong>scale</strong>: it takes a parameter
+            called <strong>x</strong> and multiplies it by 2. The next two lines
+            call that function with different numbers and show their results.
+          </p>
+          <p>Unlike the shared number in the previous example, <strong>x</strong> gets its value separately for each call.</p>
+          <ol class="quests">
+            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the first call’s <strong>3</strong> to <strong>4</strong>. Its result becomes 8; the other stays at 10.</span></li>
+            <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the function definition, change the multiplier <strong>2</strong> to <strong>3</strong>. After the first step, both results update to 12 and 15.</span></li>
+            <li data-task="rename"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click <strong>x</strong> inside the definition’s parameter list and rename it to <strong>amount</strong>. Its uses and the call labels change too; the results stay the same.</span></li>
+          </ol>
+          <p class="lesson-progress" role="status">0 of 3 steps complete</p>
+          <p class="aside">Names make references readable. Renaming a parameter doesn’t break its connections: they use the cell’s identity, not its spelling.</p>
+        </div>
+        <div class="editor-example">
+          <div class="editor-heading">
+            <span>A function and two calls</span>
+            <button type="button" class="reset" aria-label="Reset the functions example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <iframe src="./editor/?document=../lessons/functions.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;threads=1&amp;observe=functions-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Editable function definition and two evaluated calls" loading="lazy"></iframe>
+          <p class="editor-note">Select the digits or name to replace them. <kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo. <span class="reset-status" role="status"></span></p>
         </div>
       </section>
 
       <section class="next" aria-labelledby="next-title">
         <p class="eyebrow">A small beginning</p>
-        <h2 id="next-title">From calculations to programs.</h2>
+        <h2 id="next-title">From programs to pictures.</h2>
         <p>
-          Functions and interactive views build on these same structures.
+          Drawings and interactive views build on these same structures.
           Those are the next steps in this introduction. For now,
           try the editing—and see what feels natural, or what gets in your way.
         </p>

@@ -79,7 +79,8 @@
         const onChange = channel === null ? undefined : (state) => {
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
         };
-        wasm.start_editor(source, params.get("menu") !== "hidden", onChange, params.get("libraries") ?? undefined);
+        wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
+          params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined);
         window.addEventListener("focus", wasm.browser_focus_changed);
         window.addEventListener("blur", wasm.browser_focus_changed);
         wasm.browser_focus_changed();

@@ -337,78 +337,70 @@ fn website_cells_share_values_and_support_constructing_and_picking_a_new_cell() 
     );
 }
 
+fn results(world: &crate::Editor, slots: &[CellId]) -> Vec<f64> {
+    use grap::vocabulary::EVALUATE;
+    slots
+        .iter()
+        .filter_map(|key| {
+            world
+                .sources()
+                .resolve_path(&[Step::Key(*key)])
+                .and_then(|item| item.as_record()?.get(&EVALUATE))
+        })
+        .map(|expression| {
+            let evaluation = grap::evaluate(expression, &world.sources(), grap::DEFAULT_FUEL);
+            assert!(evaluation.completed);
+            f64::read(&evaluation.result).expect("numeric lesson result")
+        })
+        .collect()
+}
+
+fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
+    let frame = editing_frame(world, false);
+    let target = frame
+        .descends
+        .iter()
+        .find(|target| target.path.as_ref() == path)
+        .unwrap();
+    assert!((target.select)(world, None));
+    for (key, modifiers) in [
+        (
+            Key::Character("a".into()),
+            if cfg!(target_os = "macos") {
+                Modifiers::META
+            } else {
+                Modifiers::CONTROL
+            },
+        ),
+        (Key::Character(value.into()), Modifiers::empty()),
+    ] {
+        assert!(
+            editing_frame(world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    world,
+                    &KeyboardEvent {
+                        key,
+                        modifiers,
+                        state: KeyState::Down,
+                        ..Default::default()
+                    }
+                )
+        );
+    }
+}
+
 #[test]
 fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
     use crate::libraries::{absent, blob, f64, grap as grap_library, name, number};
     use grap::vocabulary::EVALUATE;
 
-    fn results(world: &crate::Editor) -> Vec<f64> {
-        world
-            .model
-            .doc
-            .root
-            .as_ref()
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .values()
-            .filter_map(|item| item.as_record()?.get(&EVALUATE))
-            .map(|expression| {
-                let evaluation = grap::evaluate(expression, &world.sources(), grap::DEFAULT_FUEL);
-                assert!(evaluation.completed);
-                f64::read(&evaluation.result).expect("numeric lesson result")
-            })
-            .collect()
-    }
-
-    fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
-        let frame = editing_frame(world, false);
-        let target = frame
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
-        assert!((target.select)(world, None));
-        for (key, modifiers) in [
-            (
-                Key::Character("a".into()),
-                if cfg!(target_os = "macos") {
-                    Modifiers::META
-                } else {
-                    Modifiers::CONTROL
-                },
-            ),
-            (Key::Character(value.into()), Modifiers::empty()),
-        ] {
-            assert!(
-                editing_frame(world, false)
-                    .resolve_for_dispatch()
-                    .dispatch_key(
-                        world,
-                        &KeyboardEvent {
-                            key,
-                            modifiers,
-                            state: KeyState::Down,
-                            ..Default::default()
-                        }
-                    )
-            );
-        }
-    }
-
-    let (doc, _) = crate::gid_text::parse(include_str!(
+    let (doc, names) = crate::gid_text::parse(include_str!(
         "../../../../../website/public/lessons/grap.gid"
     ))
     .unwrap();
-    let positions: Vec<_> = doc
-        .root
-        .as_ref()
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .iter()
-        .map(|(position, _)| position.clone())
-        .collect();
+    let slots = [names["first"], names["second"], names["third"]];
+    let input_path = [Step::Key(slots[0])];
     let mut world = crate::test_editor_with_stack(
         doc,
         crate::stack::load_selected(&[
@@ -422,47 +414,59 @@ fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
         ])
         .unwrap(),
     );
-    assert_eq!(results(&world), [5.0, 6.0]);
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &slots
+                .iter()
+                .map(|id| id.simple().to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    assert_eq!(results(&world, &slots), [5.0, 6.0]);
 
     replace_text(
         &mut world,
         &[
-            Step::Element(positions[1].clone()),
+            Step::Key(slots[1]),
             Step::Key(EVALUATE),
             Step::Key(f64::vocabulary::RIGHT),
         ],
         "4",
     );
-    assert_eq!(results(&world), [7.0, 6.0]);
+    assert_eq!(results(&world, &slots), [7.0, 6.0]);
     let root = world.model.doc.root.clone();
 
     replace_text(
         &mut world,
         &[
-            Step::Element(positions[0].clone()),
-            Step::Follow(gid::Resolution::Document),
-        ],
+            input_path.as_slice(),
+            &[Step::Follow(gid::Resolution::Document)],
+        ]
+        .concat(),
         "5",
     );
-    assert_eq!(results(&world), [9.0, 10.0]);
+    assert_eq!(results(&world, &slots), [9.0, 10.0]);
     replace_text(
         &mut world,
         &[
-            Step::Element(positions[2].clone()),
+            Step::Key(slots[2]),
             Step::Key(EVALUATE),
             Step::Key(f64::vocabulary::LEFT),
             Step::Follow(gid::Resolution::Document),
         ],
         "6",
     );
-    assert_eq!(results(&world), [10.0, 12.0]);
+    assert_eq!(results(&world, &slots), [10.0, 12.0]);
     assert_eq!(
         world.model.doc.root, root,
         "edits follow the shared references"
     );
 
     let result = [
-        Step::Element(positions[1].clone()),
+        Step::Key(slots[1]),
         Step::Key(crate::libraries::presentation::vocabulary::RESULT),
     ];
     let frame = editing_frame(&mut world, false);
@@ -495,6 +499,138 @@ fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
             )
     );
     assert!(Rc::ptr_eq(&world.model.doc, &before));
+}
+
+#[test]
+fn website_functions_edit_arguments_body_and_parameter_name() {
+    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use grap::vocabulary::{BODY, EVALUATE, PARAMS};
+
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/functions.gid"
+    ))
+    .unwrap();
+    let slots = [names["first"], names["second"], names["third"]];
+    let definition_path = [Step::Key(slots[0])];
+    let parameter_position = doc
+        .cells
+        .value(names["scale"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&PARAMS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ])
+        .unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &slots
+                .iter()
+                .map(|id| id.simple().to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    assert_eq!(results(&world, &slots), [6.0, 10.0]);
+    replace_text(
+        &mut world,
+        &[
+            Step::Key(slots[1]),
+            Step::Key(EVALUATE),
+            Step::Key(names["x"]),
+        ],
+        "4",
+    );
+    assert_eq!(results(&world, &slots), [8.0, 10.0]);
+    replace_text(
+        &mut world,
+        &[
+            definition_path.as_slice(),
+            &[
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(BODY),
+                Step::Key(f64::vocabulary::RIGHT),
+            ],
+        ]
+        .concat(),
+        "3",
+    );
+    assert_eq!(results(&world, &slots), [12.0, 15.0]);
+
+    let root = world.model.doc.root.clone();
+    let definition = world.model.doc.cells.value(names["scale"]).cloned();
+    replace_text(
+        &mut world,
+        &[
+            definition_path.as_slice(),
+            &[
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(PARAMS),
+                Step::Element(parameter_position),
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(name::vocabulary::NAME),
+            ],
+        ]
+        .concat(),
+        "amount",
+    );
+    assert_eq!(
+        world.model.doc.cells.value(names["x"]).and_then(name::read),
+        Some("amount")
+    );
+    assert_eq!(
+        world.model.doc.root, root,
+        "call argument labels keep their identities"
+    );
+    assert_eq!(
+        world.model.doc.cells.value(names["scale"]),
+        definition.as_ref(),
+        "the parameter declaration and body references keep their identities"
+    );
+    assert_eq!(results(&world, &slots), [12.0, 15.0]);
+    let frame = editing_frame(&mut world, false);
+    let body_reference = [
+        definition_path.as_slice(),
+        &[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(BODY),
+            Step::Key(f64::vocabulary::LEFT),
+        ],
+    ]
+    .concat();
+    assert!(
+        frame
+            .descends
+            .iter()
+            .any(|target| target.path.as_ref() == body_reference)
+    );
+    assert!(
+        !frame
+            .descends
+            .iter()
+            .any(|target| target.path.starts_with(&body_reference)
+                && target.path.len() > body_reference.len()),
+        "the renamed parameter use remains shallow"
+    );
 }
 
 #[test]

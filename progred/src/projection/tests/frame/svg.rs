@@ -352,13 +352,37 @@ fn website_lesson_svg_captures() {
                 grap::ID,
             ][..],
         ),
+        (
+            "functions",
+            include_str!("../../../../../website/public/lessons/functions.gid"),
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                number::ID,
+                f64::ID,
+                grap::ID,
+            ][..],
+        ),
     ] {
-        let (doc, _) = crate::gid_text::parse(source).unwrap();
+        let (doc, fields) = crate::gid_text::parse(source).unwrap();
         for width in [320.0, 620.0] {
             let mut editor = crate::test_editor_with_stack(
                 doc.clone(),
                 crate::stack::load_selected(libraries).unwrap(),
             );
+            if matches!(name, "grap" | "functions") {
+                editor.stack.projection = crate::web_embed::tutorial_slots(
+                    Some(
+                        &["first", "second", "third"]
+                            .map(|key| fields[key].simple().to_string())
+                            .join(","),
+                    ),
+                    editor.stack.projection,
+                )
+                .unwrap();
+            }
             editor.font_cx = crate::bundled_font_context();
             editor.drawn_menu = false;
             render_editor(
