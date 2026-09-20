@@ -3,64 +3,100 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Progred is an experimental programming environment for working with structured data, code, and interactive views."
-    />
-    <title>Progred</title>
+    <meta name="description" content="Try Progred, an experimental programming environment. Start with small, editable values and build up from there." />
+    <title>Progred — start with a value</title>
     <link rel="icon" href="./editor/icon.svg" />
     <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./lessons.js"></script>
   </head>
   <body>
     <header class="site-header">
       <a class="wordmark" href="./" aria-label="Progred home">
-        <img src="./editor/icon.svg" alt="" width="40" height="40" />
+        <img src="./editor/icon.svg" alt="" width="36" height="36" />
         <span>prog.red</span>
       </a>
-      <a href="https://github.com/jbrownson/progred">Source on GitHub</a>
+      <a href="https://github.com/jbrownson/progred">Source on GitHub <span aria-hidden="true">↗</span></a>
     </header>
 
     <main>
       <section class="introduction" aria-labelledby="introduction-title">
         <p class="eyebrow">An experimental programming environment</p>
-        <h1 id="introduction-title">Programs, data, and the things they make.</h1>
+        <h1 id="introduction-title">Start with a value.</h1>
+        <p class="lead">Before programs and pictures, a few things you can change.</p>
         <p>
-          Work with structured values through code, editable numbers, drawings,
-          and other interactive views—all in the same document.
+          In Progred, you edit the structure of a document directly. These small
+          examples are live editors, not screenshots. Try a change, undo it,
+          or start over—there’s nothing here to break.
         </p>
+        <a class="start-link" href="#values">Try the first example <span aria-hidden="true">↓</span></a>
       </section>
 
-      <section class="playground" aria-labelledby="editor-title">
-        <div class="editor-heading">
-          <h2 id="editor-title">Try the editor</h2>
-          <a href="./editor/" target="_blank" rel="noopener">Open in a new tab</a>
+      <section class="exercise" id="values" aria-labelledby="values-title">
+        <div class="lesson-copy">
+          <p class="eyebrow">01 / Values</p>
+          <h2 id="values-title">Change what’s there.</h2>
+          <p>
+            A record holds a few labeled values. This one has a greeting and a
+            count. Each value has its own little editor.
+          </p>
+          <ol class="quests">
+            <li data-task="greeting"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click inside <strong>Hello, world!</strong> and change the greeting.</span></li>
+            <li data-task="count"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the count from <strong>3</strong> to another number.</span></li>
+          </ol>
+          <p class="lesson-progress" role="status">0 of 2 steps complete</p>
+          <p class="aside">The braces and labels stay in place. You’re editing a value, not a line of source text.</p>
         </div>
-        <iframe src="./editor/" title="Progred editor"></iframe>
-        <p class="session-note">
-          Changes currently live only in this editor session. Reloading the page
-          starts over. Opening a new tab starts a separate session.
-        </p>
+        <div class="editor-example">
+          <div class="editor-heading">
+            <span>Try it here</span>
+            <button type="button" class="reset" aria-label="Reset the values example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <iframe src="./editor/?document=../lessons/values.gid&amp;menu=hidden&amp;threads=1&amp;observe=values-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Editable greeting and count" loading="lazy"></iframe>
+          <p class="editor-note"><kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo. <span class="reset-status" role="status"></span></p>
+        </div>
       </section>
 
-      <section class="first-steps" aria-labelledby="first-steps-title">
-        <h2 id="first-steps-title">A starting point</h2>
+      <section class="exercise" id="lists" aria-labelledby="lists-title">
+        <div class="lesson-copy">
+          <p class="eyebrow">02 / Lists</p>
+          <h2 id="lists-title">Make room for something new.</h2>
+          <p>A list keeps values in order. You can edit its items, or change the list itself.</p>
+          <ol class="quests">
+            <li data-task="gap"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a comma to open a space between two items.</span></li>
+            <li data-task="insert"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Type <code>"peaches"</code>, including the quotes, then press <kbd>Enter</kbd> to insert it.</span></li>
+            <li data-task="select-list"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a square bracket to select the whole list.</span></li>
+            <li data-task="remove"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click inside an item and erase its text with Backspace. One more Backspace removes the empty item from the list.</span></li>
+            <li data-task="restore"><span class="task-marker" aria-hidden="true">5</span><span><span class="task-status visually-hidden">Not yet completed: </span>Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo the removal and bring the item back.</span></li>
+          </ol>
+          <p class="lesson-progress" role="status">0 of 5 steps complete</p>
+          <p class="aside">You don’t have to balance brackets or repair commas. The list is already a list.</p>
+        </div>
+        <div class="editor-example">
+          <div class="editor-heading">
+            <span>A separate playground</span>
+            <button type="button" class="reset" aria-label="Reset the list example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <iframe src="./editor/?document=../lessons/lists.gid&amp;menu=hidden&amp;threads=1&amp;observe=lists-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915" title="Editable list of fruit" loading="lazy"></iframe>
+          <p class="editor-note">Reset affects only this example. <span class="reset-status" role="status"></span></p>
+        </div>
+      </section>
+
+      <section class="next" aria-labelledby="next-title">
+        <p class="eyebrow">A small beginning</p>
+        <h2 id="next-title">Then we can connect things.</h2>
         <p>
-          In the editor’s <strong>Examples</strong> menu, choose
-          <strong>Inventing on Principle Tree</strong>. Try editing a number
-          and watch the drawing change. Choose <strong>File → New Document</strong>
-          when you want to start something of your own.
+          Shared values, computations, and interactive views build on these same
+          structures. Those are the next steps in this introduction. For now,
+          try the editing—and see what feels natural, or what gets in your way.
         </p>
-        <p>
-          The tree example recreates Bret Victor’s
-          <a href="https://worrydream.com/InventingOnPrinciple/">Inventing on Principle</a>
-          demo. The original demonstration and inspiration are his.
-        </p>
+        <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a>
+        <p class="session-note">Steps check off as you complete them, and stay checked while you experiment or undo. Reset starts that example over, including its checklist. Edits and progress are lost on reload. The browser editor currently uses Ctrl shortcuts, including on a Mac.</p>
       </section>
     </main>
 
     <footer>
-      A working prototype. We’re developing smaller examples here to explore
-      the ideas—and the editing experience.
+      <span>Progred is a working prototype.</span>
+      <a href="https://github.com/jbrownson/progred">Follow its development</a>
     </footer>
   </body>
 </html>

@@ -60,16 +60,29 @@
         loading.textContent = `Progred could not continue: ${error.message}. Reload to retry.`;
       };
       try {
+        const params = new URLSearchParams(location.search);
+        const documentUrl = params.get("document");
+        let source;
+        if (documentUrl !== null) {
+          const response = await fetch(new URL(documentUrl, location.href));
+          if (!response.ok) throw new Error(`Could not load the example (${response.status})`);
+          source = await response.text();
+        }
         if (!crossOriginIsolated) throw new Error("Open using Preview.command; this build requires cross-origin isolation");
         await init();
         await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
-          wasm.computation_finished, fail);
+          wasm.computation_finished, fail,
+          params.has("threads") ? Number(params.get("threads")) : undefined);
         const renderer = await wasm.prepare_renderer(document.querySelector("#progred"));
         console.info(`Progred presentation: ${renderer}; ${wasm.worker_threads()} render workers`);
-        wasm.start_editor();
+        const channel = params.get("observe");
+        const onChange = channel === null ? undefined : (state) => {
+          window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
+        };
+        wasm.start_editor(source, params.get("menu") !== "hidden", onChange, params.get("libraries") ?? undefined);
         loading.style.display = "none";
       } catch (error) {
-        fail(error);
+        fail(error instanceof Error ? error : new Error(String(error)));
       }
     </script>
   </body>

@@ -27,19 +27,69 @@ system chooses an available port, so an existing editor preview can stay open.
 
 ## Work on it
 
-- `public/index.html` and `public/style.css` are the website. Edit and refresh.
+- `public/index.html`, `public/style.css`, and `public/lessons.js` are the website. Edit and refresh.
+- `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
+  They are fetched at startup, not compiled into the editor.
 - `/editor/` serves the existing `web/` host and generated `web/pkg/` build.
 - Editor changes require `make build-web` and a refresh.
 - The server exposes only these two directories, not the repository or its Git data.
-- The iframe owns an independent editor session. Full-page editor links open a
+- Each iframe owns an independent editor session. Its Reset button reloads only
+  that iframe, discarding that exercise's edits and history. Full-page editor links open a
   new session; they do not transfer the embedded document.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The initial page leaves the editor blank, with its existing Examples menu
-available. We can build small examples and their explanations from here without
-settling the whole site structure first. Nothing is deployed, and `prog.red`'s
-DNS is unchanged.
+The page begins with two guided exercises: editing a text/number record, then
+inserting into a list. Both use the real editor without its application menu.
+Each iframe explicitly selects its libraries: name/text/blob plus number/f64
+for the values exercise, and just name/text/blob for the list exercise. The
+unused libraries are not constructed or offered by the completion picker;
+list editing itself does not require Grap's list-operation library.
+Document shortcuts, including Ctrl+Z / Ctrl+Shift+Z, remain available (also on
+Mac, matching the browser host). The full-page editor remains blank on startup
+and retains its menus. Nothing is deployed, and `prog.red`'s DNS is unchanged.
+
+The instructions check off when the actual document or selection satisfies
+the step. Achievements stay checked through later edits and undo; Reset clears
+only that exercise's checklist. There is no persistence or analytics. The
+predicates live in `public/lesson-progress.mjs`, not in the editor.
+The fourth list step, removing an item, checks for a decrease from the previous observed
+list length, including four items back to three after the insertion exercise.
+Erasing an item's text alone does not count. It checks the outcome, so undoing
+an insertion counts as removal too. Like the other steps, it counts toward
+completion and stays checked through Undo until Reset.
+Restoring the removed item is a separate fifth step. It checks that the list
+grows back to a previously observed state after a removal, including undoing
+the whole text-erasing run. Merely inserting a different item does not count.
+These checks observe results rather than keystrokes: manually recreating that
+same list also counts. The small list snapshots are discarded on restoration
+or Reset.
+
+An embed is an ordinary editor URL:
+
+```html
+<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&threads=1&observe=values-0"
+        title="Editable greeting and count" loading="lazy"></iframe>
+```
+
+The actual lesson URLs also include `libraries`, a comma-separated list of
+existing library CellIds in their intended order. Omission retains the full
+editor's default set; `libraries=` explicitly selects none. These are host
+startup inputs, not hidden configuration in a lesson document. The shared
+browser binary still contains the full editor's code.
+
+`document` resolves relative to the editor URL. A failed fetch or parse displays
+an error, not an empty substitute. `menu=hidden` removes the menu and its layout
+space, plus application shortcuts; it does not restrict what data can be edited.
+`threads=1` gives each small exercise one rendering worker rather than a full
+CAM pool. The independent iframe isolates its WASM instance, event loop, focus,
+history, and worker lifetime. Lazy loading delays startup for distant examples.
+
+`observe` opts into the browser host's document/selection notifications and
+supplies a channel echoed in each message. The page checks the same-origin
+sender, iframe, and channel; reset advances the channel so queued notifications
+from the old editor cannot complete the new checklist. The full editor does
+not subscribe, serialize state, or send these messages.
 
 CAM stock meshing and implicit rendering use a shared-memory coordinator and
 Rayon worker pool (up to eight rendering workers). The editor starts only after
@@ -55,8 +105,10 @@ For deployment, use HTTPS and configure those same headers. GitHub Pages alone
 does not provide the header configuration this threaded build requires; no
 service-worker workaround or deployment is configured here.
 
-Run the preview server checks without opening an editor:
+Run the preview server and embed-host checks without opening an editor
+(the latter uses Node's built-in test runner, with no dependencies):
 
 ```sh
 python3 -B -m unittest discover -s website -p 'test_*.py'
+node --test website/test_embed.cjs
 ```

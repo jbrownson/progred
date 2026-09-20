@@ -2,6 +2,130 @@ use super::*;
 use crate::libraries::f64 as f64_convention;
 
 #[test]
+fn website_values_use_ordinary_text_and_number_editing() {
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/values.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc.clone(),
+        crate::stack::load_selected(&[
+            crate::libraries::name::ID,
+            text::ID,
+            crate::libraries::blob::ID,
+            crate::libraries::number::ID,
+            f64_convention::ID,
+        ])
+        .unwrap(),
+    );
+    for (field, typed) in [("greeting", " Welcome!"), ("count", "5")] {
+        let frame = editing_frame(&mut world, false);
+        let target = frame
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == [Step::Key(names[field])])
+            .unwrap();
+        assert!((target.select)(&mut world, None));
+        assert!(
+            editing_frame(&mut world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    &mut world,
+                    &KeyboardEvent {
+                        key: Key::Character(typed.into()),
+                        state: KeyState::Down,
+                        ..Default::default()
+                    },
+                )
+        );
+    }
+    let fields = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
+    assert_eq!(
+        text::read(fields.get(&names["greeting"]).unwrap()),
+        Some("Hello, world! Welcome!")
+    );
+    assert_eq!(
+        f64_convention::read(fields.get(&names["count"]).unwrap()),
+        Some(35.0)
+    );
+    assert_ne!(world.model.doc.root, doc.root);
+}
+
+#[test]
+fn website_list_instructions_insert_through_a_comma_and_select_the_whole_list() {
+    let (doc, _) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/lists.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            crate::libraries::name::ID,
+            text::ID,
+            crate::libraries::blob::ID,
+        ])
+        .unwrap(),
+    );
+    let frame = editing_frame(&mut world, false);
+    let elements: Vec<_> = frame
+        .descends
+        .iter()
+        .filter(|d| matches!(d.path.as_ref(), [Step::Element(_)]))
+        .collect();
+    let point = Point::new(
+        (elements[0].rect.x1 + elements[1].rect.x0) / 2.0,
+        elements[0].rect.center().y,
+    );
+    let frame = editing_frame_at(&mut world, false, None, Some(point));
+    let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+        panic!("comma hover")
+    };
+    let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+    let mut event = press(point.x, false);
+    event.state.position.y = point.y;
+    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        &mut world,
+        &event,
+        &mut dispatch
+    ));
+    for key in [
+        Key::Character("\"peaches\"".into()),
+        Key::Named(NamedKey::Enter),
+    ] {
+        assert!(
+            editing_frame(&mut world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    &mut world,
+                    &KeyboardEvent {
+                        key,
+                        state: KeyState::Down,
+                        ..Default::default()
+                    }
+                )
+        );
+    }
+    assert_eq!(
+        world
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .values()
+            .filter_map(text::read)
+            .collect::<Vec<_>>(),
+        ["apples", "peaches", "pears", "plums"]
+    );
+    let frame = editing_frame(&mut world, false);
+    let root = frame.descends.iter().find(|d| d.path.is_empty()).unwrap();
+    assert!((root.select)(&mut world, None));
+    assert!(world.model.selection.as_ref().unwrap().path().is_empty());
+}
+
+#[test]
 fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
     let tool = crate::libraries::toolpath::cutter::Tool::ball(0.125, 0.22)
         .unwrap()

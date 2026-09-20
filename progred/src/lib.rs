@@ -48,6 +48,8 @@ mod styles;
 #[cfg(test)]
 mod test_values;
 mod text_store;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod web_embed;
 #[cfg(target_arch = "wasm32")]
 pub mod web_render;
 #[cfg(target_arch = "wasm32")]
@@ -271,6 +273,8 @@ impl<T> PendingBatch<T> {
 
 /// Process-wide state: the GPU, the shared caches, and the editors.
 pub(crate) struct App {
+    #[cfg(target_arch = "wasm32")]
+    web_observer: Option<web_embed::Observer>,
     #[cfg(target_arch = "wasm32")]
     web_renderer: web_render::Renderer,
     #[cfg(not(target_arch = "wasm32"))]
@@ -1042,7 +1046,30 @@ pub fn computation_finished() {
     });
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen(js_name = start_editor))]
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn start_editor(
+    source: Option<String>,
+    show_menu: Option<bool>,
+    on_change: Option<web_sys::js_sys::Function>,
+    libraries: Option<String>,
+) -> Result<(), wasm_bindgen::JsValue> {
+    console_error_panic_hook::set_once();
+    let (doc, binders) = gid_text::parse(source.as_deref().unwrap_or("{}"))
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    let stack = web_embed::libraries(libraries.as_deref())
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    run_document(
+        doc,
+        binders,
+        None,
+        show_menu.unwrap_or(true),
+        stack,
+        on_change,
+    );
+    Ok(())
+}
+
 pub fn run() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
@@ -1071,6 +1098,29 @@ pub fn run() {
         ),
     };
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
+    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    let drawn_menu = platform::DRAWN_MENU;
+    run_document(
+        doc,
+        binders,
+        doc_path,
+        drawn_menu,
+        stack::load(),
+        #[cfg(target_arch = "wasm32")]
+        None,
+    );
+}
+
+fn run_document(
+    doc: gid::Document,
+    binders: gid_text::Binders,
+    doc_path: Option<PathBuf>,
+    drawn_menu: bool,
+    stack: stack::Stack<Editor>,
+    #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,
+) {
     let mut builder = EventLoop::<UserEvent>::with_user_event();
     #[cfg(target_os = "macos")]
     {
@@ -1084,14 +1134,11 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     let native_menu = native_menu::Menu::new(proxy.clone());
 
-    let stack = stack::load();
     let fonts = font_context();
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-    let drawn_menu = platform::DRAWN_MENU;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
+        #[cfg(target_arch = "wasm32")]
+        web_observer: on_change.map(web_embed::Observer::new),
         #[cfg(target_arch = "wasm32")]
         web_renderer: web_render::take(),
         #[cfg(not(target_arch = "wasm32"))]
@@ -1386,17 +1433,16 @@ impl Editor {
         event: &KeyboardEvent,
         geometry: navigate::Geometry<'_>,
     ) -> bool {
-        // The native menu owns its own shortcuts; only the drawn
-        // menu routes keys here.
-        if !self.drawn_menu {
-            return false;
-        }
         let availability = self.menu_availability();
-        if let Some(command) =
-            menu::shortcut(event).filter(|command| availability.enabled(*command))
+        if let Some(command) = menu::shortcut(event)
+            .filter(|command| self.drawn_menu || matches!(command, Command::Doc(_)))
+            .filter(|command| availability.enabled(*command))
         {
             self.choose_menu(command, geometry);
             return true;
+        }
+        if !self.drawn_menu {
+            return false;
         }
         match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
             menu::Navigation::Activate(command) => {
@@ -1873,6 +1919,9 @@ impl App {
                 |canvas| puri::frame::render(renders, canvas),
             )
             .expect("browser render failed");
+        if let Some(observer) = &mut self.web_observer {
+            observer.notify(&runner.editor);
+        }
         if !presented || runner.frame_presented() {
             window.request_redraw();
         }
@@ -2185,9 +2234,14 @@ mod shell_tests {
 
 #[cfg(test)]
 pub(crate) fn test_editor(doc: gid::Document) -> Editor {
+    test_editor_with_stack(doc, stack::load())
+}
+
+#[cfg(test)]
+pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Editor>) -> Editor {
     let mut editor = new_editor(
         false,
-        stack::load(),
+        stack,
         FontContext::new(),
         doc,
         None,

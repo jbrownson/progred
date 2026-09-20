@@ -1428,6 +1428,50 @@ mod frame_tests {
     }
 
     #[test]
+    fn hidden_application_menu_keeps_document_shortcuts_without_opening_menus() {
+        use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+        let doc = crate::gid_text::parse(include_str!("../../website/public/lessons/values.gid"))
+            .unwrap()
+            .0;
+        let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
+        let viewport = Size::new(620.0, 304.0);
+        runner
+            .editor
+            .model
+            .history
+            .record(runner.editor.model.snapshot());
+        Rc::make_mut(&mut runner.editor.model.doc).root = Some(gid::Value::list([]));
+        runner.refresh_frame(1.0, viewport);
+        let input = |key, modifiers| KeyboardEvent {
+            key,
+            modifiers,
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        let dispatch = &runner.frame.dispatch;
+        assert!(runner.editor.menu_key(
+            &input(Key::Character("z".into()), Modifiers::CONTROL),
+            dispatch.geometry(1.0)
+        ));
+        assert_eq!(runner.editor.model.doc.root, doc.root);
+        for event in [
+            input(Key::Character("n".into()), Modifiers::CONTROL),
+            input(Key::Character("1".into()), Modifiers::CONTROL),
+            input(Key::Named(NamedKey::F10), Modifiers::empty()),
+        ] {
+            assert!(!runner.editor.menu_key(&event, dispatch.geometry(1.0)));
+        }
+        assert!(runner.editor.menu_key(
+            &input(
+                Key::Character("z".into()),
+                Modifiers::CONTROL | Modifiers::SHIFT
+            ),
+            dispatch.geometry(1.0)
+        ));
+        assert_eq!(runner.editor.model.doc.root, Some(gid::Value::list([])));
+    }
+
+    #[test]
     fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
         use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
         for drawn in [false, true] {

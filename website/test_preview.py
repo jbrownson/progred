@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from preview import PreviewHandler, REPOSITORY
 
@@ -108,13 +108,35 @@ class AssetTests(unittest.TestCase):
 
         assets = Assets()
         assets.feed((REPOSITORY / "website/public/index.html").read_text())
-        self.assertEqual(len(assets.frames), 1)
-        self.assertEqual(assets.frames[0]["src"], "./editor/")
-        self.assertTrue(assets.frames[0]["title"])
+        self.assertEqual(len(assets.frames), 2)
+        documents = []
+        for frame in assets.frames:
+            self.assertTrue(frame["title"])
+            self.assertEqual(frame["loading"], "lazy")
+            url = urlsplit(urljoin("http://localhost/", frame["src"]))
+            self.assertEqual(url.path, "/editor/")
+            params = parse_qs(url.query)
+            self.assertEqual(params["menu"], ["hidden"])
+            self.assertEqual(params["threads"], ["1"])
+            libraries = params["libraries"][0].split(",")
+            basic = [
+                "3209ad5d23a0c8513f6bd76324a5cf60",  # name
+                "eaaf309c36a65d2811083944da29aec9",  # text
+                "4ab5da466a7c5f1202f5ef862f5ff915",  # blob
+            ]
+            numeric = [
+                "c46d010325d3a1ec0f2a84dd3a9570ae",  # number
+                "1fdb573a2c56a7063546c195318214bc",  # f64
+            ] if params["document"] == ["../lessons/values.gid"] else []
+            self.assertEqual(libraries, basic + numeric)
+            document = urlsplit(urljoin(url.geturl(), params["document"][0])).path
+            self.assertTrue((REPOSITORY / "website/public" / document.lstrip("/")).is_file())
+            documents.append(document)
+        self.assertEqual(len(set(documents)), len(documents))
         for path in assets.paths:
             with self.subTest(path=path):
                 self.assertFalse(urlsplit(path).scheme)
-                relative = path.removeprefix("./")
+                relative = urlsplit(path).path.removeprefix("./")
                 target = (
                     REPOSITORY / "web" / relative.removeprefix("editor/")
                     if relative.startswith("editor/")

@@ -39,7 +39,8 @@ fn keyboard(
     let geometry = dispatch.geometry(scale);
     // Structure pasted into a pending must bypass its text query. Other keys
     // reach text editing before falling through to structural operations.
-    editor.menu_key(event, geometry)
+    // Native menus own shortcuts; other hosts route them here even without a bar.
+    ((editor.drawn_menu || crate::platform::DRAWN_MENU) && editor.menu_key(event, geometry))
         || editor.pending_paste_key(event)
         || dispatch
             .handler

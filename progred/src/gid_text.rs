@@ -732,6 +732,32 @@ mod tests {
 mod checked_in_files {
     use super::*;
 
+    #[test]
+    fn website_lessons_are_editable_data_without_orphan_definitions() {
+        let (doc, binders) =
+            parse(include_str!("../../website/public/lessons/values.gid")).unwrap();
+        let root = doc.root.as_ref().unwrap().as_record().unwrap();
+        assert_eq!(
+            crate::libraries::text::read(root.get(&binders["greeting"]).unwrap()),
+            Some("Hello, world!")
+        );
+        assert_eq!(
+            crate::libraries::f64::read(root.get(&binders["count"]).unwrap()),
+            Some(3.0)
+        );
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+        let (doc, _) = parse(include_str!("../../website/public/lessons/lists.gid")).unwrap();
+        let items = doc.root.as_ref().unwrap().as_list().unwrap();
+        assert_eq!(
+            items
+                .values()
+                .filter_map(crate::libraries::text::read)
+                .collect::<Vec<_>>(),
+            ["apples", "pears", "plums"]
+        );
+    }
+
     fn root_reachable_cells(doc: &Document) -> HashSet<CellId> {
         fn enqueue(cell: CellId, reached: &mut HashSet<CellId>, pending: &mut Vec<CellId>) {
             if reached.insert(cell) {

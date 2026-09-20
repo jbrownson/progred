@@ -9,6 +9,44 @@ make serve-web
 Open `http://127.0.0.1:8080/editor/` on this machine.
 The built-in documents are under the **Examples** menu.
 
+For a small embedded editor, supply a text-bridge document URL and optionally
+hide the menu: `/editor/?document=../lessons/values.gid&menu=hidden&threads=1`.
+The document URL is relative to the editor page. Without those parameters the
+editor still starts blank with its full menu and the default worker pool.
+Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
+application shortcuts or F10 menu navigation. The website owns the exercise
+documents and reset buttons; there are no tutorial-specific projections.
+The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?)`; malformed supplied
+documents fail explicitly before starting the editor. See the
+[website notes](../website/README.md) for independent embedded sessions.
+
+`libraries` is a comma-separated list of built-in library CellIds, in projection
+precedence order. These are the library identities, not their field tags or
+display names. Only those libraries are constructed and contribute definitions,
+projections, and completions. Omission loads the full default stack; an explicit
+empty string loads no libraries (structural editing remains available). Unknown
+or malformed IDs fail explicitly, without falling back to the full stack.
+There is no automatic dependency loading: the embedding host chooses the set.
+The website's record exercise loads name, text, blob, number, and f64; its list
+exercise loads only name, text, and blob. They still use the same WASM binary
+and worker setup, not separately stripped-down builds.
+
+The optional callback receives a JSON string after the initial browser paint
+and after document or selection changes. Hover, caret movement within the same
+value, and ordinary repainting do not serialize the document. With no callback,
+there is no observer or snapshot cost. Observations contain `document` using
+GID's existing Serde representation, and `selection` (or null): `view` is
+`"document"` or `{pane: path}`, `path` is the occurrence, `source_path` is the
+optional document destination, and `stage` is `"value"`, `"pending"`, or
+`"label"`. Paths use the existing path-library GID encoding; list positions
+have session lifetime. This reports structural selection, not text caret/ranges.
+
+`observe=<channel>` connects that callback to same-origin parent messages:
+`{type: "progred:change", channel, state}`. Only explicitly observed embeds
+send messages; the standalone editor does not. The website owns the checks,
+achievement state, and reset behavior. This is a read-only host observation
+boundary, not a tutorial feature in the editor.
+
 Click a menu heading to open it; while a menu is open, moving over another
 heading switches to it. Mouse and keyboard share one highlighted item.
 F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last

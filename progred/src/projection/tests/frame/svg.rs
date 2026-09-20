@@ -320,6 +320,38 @@ fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
 }
 
 #[test]
+#[ignore = "writes website exercise captures without launching the app"]
+fn website_lesson_svg_captures() {
+    use crate::libraries::{blob, f64, name, number, text};
+    for (name, source, libraries) in [
+        (
+            "values",
+            include_str!("../../../../../website/public/lessons/values.gid"),
+            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
+        ),
+        (
+            "lists",
+            include_str!("../../../../../website/public/lessons/lists.gid"),
+            &[name::ID, text::ID, blob::ID][..],
+        ),
+    ] {
+        let (doc, _) = crate::gid_text::parse(source).unwrap();
+        for width in [320.0, 620.0] {
+            let mut editor = crate::test_editor_with_stack(
+                doc.clone(),
+                crate::stack::load_selected(libraries).unwrap(),
+            );
+            editor.drawn_menu = false;
+            render_editor(
+                editor,
+                kurbo::Size::new(width, 304.0),
+                &format!("website_{name}_{width}.svg"),
+            );
+        }
+    }
+}
+
+#[test]
 #[ignore = "writes drawn-menu layout captures without launching the app"]
 fn drawn_menu_svg_captures() {
     for (menu, file, width) in [

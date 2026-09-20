@@ -1,0 +1,16 @@
+{
+  "binders": {
+    "count": bf0ca17731134521964d0f3aa582fcb1,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "greeting": 60f0faf482445f9c5d3cd4c35d4ce902,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+  },
+  "cells": {
+    count: {name: "count"},
+    greeting: {name: "greeting"},
+  },
+  "root": {
+    greeting: "Hello, world!",
+    count: {f64: 0x0000000000000840},
+  },
+}
