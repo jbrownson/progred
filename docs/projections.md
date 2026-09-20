@@ -163,15 +163,18 @@ lines supply no editing handlers of their own.
 
 The structural fallback follows cells deeply into the selected definition.
 Grap expression projections request shallow named-cell display at direct use
-sites. Compound forms choose their own children; inert containers, declaration
+sites. Without a valid text name, the partial declines and the cell projects
+deeply, keeping its parentheses and editable definition. This is a presentation
+choice, not an inference about lexical bindings or their runtime values.
+Compound forms choose their own children; inert containers, declaration
 metadata, and quoted data use the normal deep structural fallback. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
 unquoted line editor at the real `Follow` → `name` path. This contextual
 projection is not in the default stack. Unrelated definition fields do not
 block it; malformed or missing names and active field insertion decline to the
-ordinary projection. Ordinary cells and quoted data are unchanged; use sites
-remain shallow references.
+ordinary projection. Ordinary cells and quoted data are unchanged; named use
+sites remain shallow references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. This is a raw definition lookup, not evaluation of the callable.

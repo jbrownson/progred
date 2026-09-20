@@ -23,14 +23,7 @@ pub mod vocabulary {
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
 }
 
-fn spelling(env: &dyn crate::display::Env, cell: CellId) -> (String, Face) {
-    match env.name(cell) {
-        Some(name) => (name.to_owned(), Face::Name),
-        None => (short_id(cell), Face::Id),
-    }
-}
-
-/// A cell as a reference, not as an invitation to inspect its value.
+/// A named cell as a reference, otherwise leave its definition visible.
 /// Contextual projections use this for expression and callable references.
 pub(crate) fn shallow_cell(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
@@ -45,10 +38,10 @@ pub(crate) fn shallow_cell_with(
     ) -> Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let cell = input.value?.as_cell()?;
-    let (spelling, face) = spelling(input.env, cell);
+    let name = input.env.name(cell)?;
     let target = input.targets.current();
     Some(activatable(
-        decorate(faced(spelling, face)),
+        decorate(faced(name, Face::Name)),
         target.hover,
         target.select,
     ))
@@ -101,7 +94,7 @@ pub fn shallow_path(
     descend_path_local(steps, crate::display::partial(shallow_cell), default)
 }
 
-/// A direct expression reference is shallow. A compound expression's
+/// A named direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
 pub(crate) fn expression_path(
     steps: impl Into<Vec<Step>>,
@@ -220,7 +213,7 @@ fn standard_field_order(
 }
 
 /// Calls read as calls. Their function position is a shallow
-/// reference when it is a cell; arguments retain Grap's contextual
+/// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
 pub fn call_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,

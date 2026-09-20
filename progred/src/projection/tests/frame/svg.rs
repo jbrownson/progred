@@ -322,7 +322,7 @@ fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
 #[test]
 #[ignore = "writes website exercise captures without launching the app"]
 fn website_lesson_svg_captures() {
-    use crate::libraries::{blob, f64, name, number, text};
+    use crate::libraries::{absent, blob, f64, grap, name, number, text};
     for (name, source, libraries) in [
         (
             "values",
@@ -334,6 +334,24 @@ fn website_lesson_svg_captures() {
             include_str!("../../../../../website/public/lessons/lists.gid"),
             &[name::ID, text::ID, blob::ID][..],
         ),
+        (
+            "cells",
+            include_str!("../../../../../website/public/lessons/cells.gid"),
+            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
+        ),
+        (
+            "grap",
+            include_str!("../../../../../website/public/lessons/grap.gid"),
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                number::ID,
+                f64::ID,
+                grap::ID,
+            ][..],
+        ),
     ] {
         let (doc, _) = crate::gid_text::parse(source).unwrap();
         for width in [320.0, 620.0] {
@@ -341,6 +359,7 @@ fn website_lesson_svg_captures() {
                 doc.clone(),
                 crate::stack::load_selected(libraries).unwrap(),
             );
+            editor.font_cx = crate::bundled_font_context();
             editor.drawn_menu = false;
             render_editor(
                 editor,

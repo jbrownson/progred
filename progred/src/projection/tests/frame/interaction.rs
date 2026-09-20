@@ -126,6 +126,378 @@ fn website_list_instructions_insert_through_a_comma_and_select_the_whole_list() 
 }
 
 #[test]
+fn website_cells_share_values_and_support_constructing_and_picking_a_new_cell() {
+    fn key(world: &mut crate::Editor, key: Key) {
+        assert!(
+            editing_frame(world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    world,
+                    &KeyboardEvent {
+                        key,
+                        state: KeyState::Down,
+                        ..Default::default()
+                    },
+                )
+        );
+    }
+    fn click(world: &mut crate::Editor, point: Point, pick: bool) {
+        let frame = editing_frame_at(world, false, None, Some(point));
+        let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+            panic!("lesson click must have a direct target")
+        };
+        let mut dispatch =
+            placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+        let mut event = press(point.x, pick);
+        event.state.position = (point.x, point.y).into();
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            world,
+            &event,
+            &mut dispatch
+        ));
+    }
+    fn gap(world: &mut crate::Editor) {
+        let frame = editing_frame(world, false);
+        let elements: Vec<_> = frame
+            .descends
+            .iter()
+            .filter(|d| matches!(d.path.as_ref(), [Step::Element(_)]))
+            .collect();
+        click(
+            world,
+            Point::new(
+                (elements[0].rect.x1 + elements[1].rect.x0) / 2.0,
+                elements[0].rect.center().y,
+            ),
+            false,
+        );
+    }
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/cells.gid"
+    ))
+    .unwrap();
+    let shared = names["shared"];
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            crate::libraries::name::ID,
+            text::ID,
+            crate::libraries::blob::ID,
+            crate::libraries::number::ID,
+            f64_convention::ID,
+        ])
+        .unwrap(),
+    );
+
+    let frame = editing_frame(&mut world, false);
+    let number = frame
+        .descends
+        .iter()
+        .find(|d| {
+            matches!(
+                d.path.as_ref(),
+                [Step::Element(_), Step::Follow(gid::Resolution::Document)]
+            )
+        })
+        .unwrap();
+    assert!((number.select)(&mut world, None));
+    key(&mut world, Key::Character("5".into()));
+    assert_eq!(
+        world
+            .model
+            .doc
+            .cells
+            .value(shared)
+            .and_then(f64_convention::read),
+        Some(75.0)
+    );
+    assert!(
+        world
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .values()
+            .all(|value| value.as_cell() == Some(shared))
+    );
+
+    gap(&mut world);
+    key(&mut world, Key::Character("(".into()));
+    let cell_path = world.model.selection.as_ref().unwrap().path().to_vec();
+    let fresh = world
+        .model
+        .selection
+        .as_ref()
+        .unwrap()
+        .value(&world.sources())
+        .unwrap()
+        .as_cell()
+        .unwrap();
+    assert_ne!(fresh, shared);
+    assert!(world.model.doc.cells.value(fresh).is_none());
+    let definition_path: Vec<_> = cell_path
+        .iter()
+        .cloned()
+        .chain([Step::Follow(gid::Resolution::Document)])
+        .collect();
+    let frame = editing_frame(&mut world, false);
+    let empty = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == definition_path)
+        .unwrap();
+    click(&mut world, empty.rect.center(), false);
+    assert_eq!(
+        world.model.selection.as_ref().unwrap().path(),
+        definition_path
+    );
+    key(&mut world, Key::Character("11".into()));
+    key(&mut world, Key::Named(NamedKey::Enter));
+    assert_eq!(
+        world
+            .model
+            .doc
+            .cells
+            .value(fresh)
+            .and_then(f64_convention::read),
+        Some(11.0),
+        "new cell contents: {:?}; selection: {:?}",
+        world.model.doc.cells.value(fresh),
+        world.model.selection.as_ref().unwrap().path(),
+    );
+
+    gap(&mut world);
+    let frame = editing_frame(&mut world, false);
+    let cell = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == cell_path)
+        .unwrap();
+    let number = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == definition_path)
+        .unwrap();
+    click(
+        &mut world,
+        Point::new((cell.rect.x0 + number.rect.x0) / 2.0, cell.rect.center().y),
+        true,
+    );
+    assert_eq!(
+        world
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .values()
+            .filter(|value| value.as_cell() == Some(fresh))
+            .count(),
+        2,
+        "picked root: {:?}; selection: {:?}",
+        world.model.doc.root,
+        world.model.selection.as_ref().unwrap().path(),
+    );
+    let linked_path = world.model.selection.as_ref().unwrap().path().to_vec();
+    assert_ne!(linked_path, cell_path);
+    let linked_definition: Vec<_> = linked_path
+        .into_iter()
+        .chain([Step::Follow(gid::Resolution::Document)])
+        .collect();
+    let frame = editing_frame(&mut world, false);
+    assert!((frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == linked_definition)
+        .unwrap()
+        .select)(&mut world, None));
+    key(&mut world, Key::Character("0".into()));
+    assert_eq!(
+        world
+            .model
+            .doc
+            .cells
+            .value(fresh)
+            .and_then(f64_convention::read),
+        Some(110.0)
+    );
+    assert_eq!(
+        world
+            .model
+            .doc
+            .cells
+            .value(shared)
+            .and_then(f64_convention::read),
+        Some(75.0)
+    );
+}
+
+#[test]
+fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
+    use crate::libraries::{absent, blob, f64, grap as grap_library, name, number};
+    use grap::vocabulary::EVALUATE;
+
+    fn results(world: &crate::Editor) -> Vec<f64> {
+        world
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .values()
+            .filter_map(|item| item.as_record()?.get(&EVALUATE))
+            .map(|expression| {
+                let evaluation = grap::evaluate(expression, &world.sources(), grap::DEFAULT_FUEL);
+                assert!(evaluation.completed);
+                f64::read(&evaluation.result).expect("numeric lesson result")
+            })
+            .collect()
+    }
+
+    fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
+        let frame = editing_frame(world, false);
+        let target = frame
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!((target.select)(world, None));
+        for (key, modifiers) in [
+            (
+                Key::Character("a".into()),
+                if cfg!(target_os = "macos") {
+                    Modifiers::META
+                } else {
+                    Modifiers::CONTROL
+                },
+            ),
+            (Key::Character(value.into()), Modifiers::empty()),
+        ] {
+            assert!(
+                editing_frame(world, false)
+                    .resolve_for_dispatch()
+                    .dispatch_key(
+                        world,
+                        &KeyboardEvent {
+                            key,
+                            modifiers,
+                            state: KeyState::Down,
+                            ..Default::default()
+                        }
+                    )
+            );
+        }
+    }
+
+    let (doc, _) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/grap.gid"
+    ))
+    .unwrap();
+    let positions: Vec<_> = doc
+        .root
+        .as_ref()
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .iter()
+        .map(|(position, _)| position.clone())
+        .collect();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ])
+        .unwrap(),
+    );
+    assert_eq!(results(&world), [5.0, 6.0]);
+
+    replace_text(
+        &mut world,
+        &[
+            Step::Element(positions[1].clone()),
+            Step::Key(EVALUATE),
+            Step::Key(f64::vocabulary::RIGHT),
+        ],
+        "4",
+    );
+    assert_eq!(results(&world), [7.0, 6.0]);
+    let root = world.model.doc.root.clone();
+
+    replace_text(
+        &mut world,
+        &[
+            Step::Element(positions[0].clone()),
+            Step::Follow(gid::Resolution::Document),
+        ],
+        "5",
+    );
+    assert_eq!(results(&world), [9.0, 10.0]);
+    replace_text(
+        &mut world,
+        &[
+            Step::Element(positions[2].clone()),
+            Step::Key(EVALUATE),
+            Step::Key(f64::vocabulary::LEFT),
+            Step::Follow(gid::Resolution::Document),
+        ],
+        "6",
+    );
+    assert_eq!(results(&world), [10.0, 12.0]);
+    assert_eq!(
+        world.model.doc.root, root,
+        "edits follow the shared references"
+    );
+
+    let result = [
+        Step::Element(positions[1].clone()),
+        Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+    ];
+    let frame = editing_frame(&mut world, false);
+    let target = frame
+        .descends
+        .iter()
+        .find(|target| target.path.as_ref() == result)
+        .unwrap();
+    assert!((target.select)(&mut world, None));
+    assert!(
+        world
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .source_path()
+            .is_none()
+    );
+    let before = world.model.doc.clone();
+    assert!(
+        !editing_frame(&mut world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(
+                &mut world,
+                &KeyboardEvent {
+                    key: Key::Character("9".into()),
+                    state: KeyState::Down,
+                    ..Default::default()
+                }
+            )
+    );
+    assert!(Rc::ptr_eq(&world.model.doc, &before));
+}
+
+#[test]
 fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
     let tool = crate::libraries::toolpath::cutter::Tool::ball(0.125, 0.22)
         .unwrap()
@@ -152,44 +524,55 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
             cache: &mut bench.cache,
             scale: 1.0,
         };
-        let node = project(
-            ProjectDescription {
-                computations: None,
-                view: &crate::test_root(),
-                completions: None,
-                sources: Sources {
-                    doc: &doc,
-                    libraries: &bench.stack.libraries,
+        let mut project_tool = || {
+            project(
+                ProjectDescription {
+                    computations: None,
+                    view: &crate::test_root(),
+                    completions: None,
+                    sources: Sources {
+                        doc: &doc,
+                        libraries: &bench.stack.libraries,
+                    },
+                    root: Some(&value),
+                    root_path: &path,
+                    selection: None,
+                    source_selection: None,
+                    annotations: &Annotations::default(),
+                    raw: false,
+                    styles: &bench.styles,
+                    width: 600.0,
+                    projection: Some(&bench.stack.projection),
                 },
-                root: Some(&value),
-                root_path: &path,
-                selection: None,
-                source_selection: None,
-                annotations: &Annotations::default(),
-                raw: false,
-                styles: &bench.styles,
-                width: 600.0,
-                projection: Some(&bench.stack.projection),
-            },
-            &mut text,
-        );
-        // Inside the 110 × 180 profile, clear of both its text and delimiters.
-        let pointer = Point::new(55.0, 90.0);
-        let rect = node.extent.rect_at(Point::ZERO);
-        let frame = crate::display::widget::frame::place(
-            node,
-            Placement::root(rect),
-            &crate::display::widget::HoverInput {
-                pointer: Some(pointer),
-                ..Default::default()
-            },
-        );
+                &mut text,
+            )
+        };
         let mut selected_path = path.clone();
         if evaluated {
             selected_path.push(Step::Key(
                 crate::libraries::presentation::vocabulary::RESULT,
             ));
         }
+        let node = project_tool();
+        let rect = node.extent.rect_at(Point::ZERO);
+        let frame =
+            crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
+        let profile = frame
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == selected_path)
+            .unwrap()
+            .rect;
+        // Inside the 110 × 180 profile, clear of both its text and delimiters.
+        let pointer = Point::new(profile.x0 + 55.0, profile.y0 + 90.0);
+        let frame = crate::display::widget::frame::place(
+            project_tool(),
+            Placement::root(rect),
+            &crate::display::widget::HoverInput {
+                pointer: Some(pointer),
+                ..Default::default()
+            },
+        );
         let target = Hovered::Tree(Hover::Value(Rc::from(selected_path.clone())));
         assert_eq!(
             frame.claim.as_ref().map(|(_, claim)| claim),

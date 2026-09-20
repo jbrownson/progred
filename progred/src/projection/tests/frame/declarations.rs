@@ -2,6 +2,118 @@ use super::*;
 use crate::libraries::control::vocabulary as control;
 
 #[test]
+fn expression_cells_are_shallow_only_with_a_valid_name() {
+    use grap::vocabulary::{EVALUATE, FUNCTION};
+
+    let cell = new_cell_id();
+    for (definition, named) in [
+        (Some(name::record("amount", [])), true),
+        (Some(f64::value(3.0)), false),
+        (
+            Some(Value::record([(name::vocabulary::NAME, f64::value(3.0))])),
+            false,
+        ),
+        (None, false),
+    ] {
+        let mut cells = Cells::new();
+        if let Some(definition) = definition {
+            cells.set_value(cell, definition);
+        }
+        for (root, path, expression) in [
+            (cell.into(), vec![], false),
+            (
+                Value::record([(EVALUATE, cell.into())]),
+                vec![Step::Key(EVALUATE)],
+                true,
+            ),
+            (grap::call(cell.into(), []), vec![Step::Key(FUNCTION)], true),
+            (
+                grap::call(
+                    f64::vocabulary::SUM.into(),
+                    [
+                        (f64::vocabulary::LEFT, cell.into()),
+                        (f64::vocabulary::RIGHT, f64::value(2.0)),
+                    ],
+                ),
+                vec![Step::Key(f64::vocabulary::LEFT)],
+                true,
+            ),
+        ] {
+            let doc = Document {
+                root: Some(root),
+                cells: cells.clone(),
+            };
+            let (frame, _) = place(&doc, None, 1200.0);
+            let followed = path
+                .iter()
+                .cloned()
+                .chain([Step::Follow(gid::Resolution::Document)])
+                .collect::<Path>();
+            assert!(
+                frame
+                    .descends
+                    .iter()
+                    .any(|target| target.path.as_ref() == path)
+            );
+            assert_eq!(
+                frame
+                    .descends
+                    .iter()
+                    .any(|target| target.path.as_ref() == followed),
+                !(expression && named),
+                "named={named}, expression={expression}, path={path:?}",
+            );
+        }
+    }
+}
+
+#[test]
+fn unnamed_expression_cells_edit_the_shared_definition() {
+    let cell = new_cell_id();
+    let expression = grap::call(
+        f64::vocabulary::SUM.into(),
+        [
+            (f64::vocabulary::LEFT, cell.into()),
+            (f64::vocabulary::RIGHT, cell.into()),
+        ],
+    );
+    let mut cells = Cells::new();
+    cells.set_value(cell, f64::value(3.0));
+    let mut world = crate::test_editor(Document {
+        root: Some(expression.clone()),
+        cells,
+    });
+    let path = [
+        Step::Key(f64::vocabulary::LEFT),
+        Step::Follow(gid::Resolution::Document),
+    ];
+    let frame = editing_frame(&mut world, false);
+    let target = frame
+        .descends
+        .iter()
+        .find(|target| target.path.as_ref() == path)
+        .unwrap();
+    assert!((target.select)(&mut world, None));
+    assert!(
+        editing_frame(&mut world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(
+                &mut world,
+                &KeyboardEvent {
+                    key: Key::Character("4".into()),
+                    state: KeyState::Down,
+                    ..Default::default()
+                },
+            )
+    );
+    assert_eq!(world.model.doc.root.as_ref(), Some(&expression));
+    assert_eq!(world.model.doc.cells.value(cell), Some(&f64::value(34.0)));
+    let evaluation = grap::evaluate(&expression, &world.sources(), grap::DEFAULT_FUEL);
+    assert!(evaluation.completed);
+    assert_eq!(f64::read(&evaluation.result), Some(68.0));
+}
+
+#[test]
 fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
     let cell = new_cell_id();
     let follow = Step::Follow(gid::Resolution::Document);

@@ -81,12 +81,67 @@
         </div>
       </section>
 
+      <section class="exercise" id="cells" aria-labelledby="cells-title">
+        <div class="lesson-copy">
+          <p class="eyebrow">03 / Cells</p>
+          <h2 id="cells-title">One value, in two places.</h2>
+          <p>
+            These aren’t two separate copies of 7. Both pairs of parentheses
+            refer to the same <strong>cell</strong>. A cell holds a value;
+            changing it changes what you see everywhere it’s referenced.
+          </p>
+          <ol class="quests">
+            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>7</strong>. Watch the other one change too.</span></li>
+            <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a comma and type <code>(</code> to create a new cell. Click the empty box inside it, type <strong>11</strong>, then press <kbd>Enter</kbd>.</span></li>
+            <li data-task="link"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click another comma to open a space. Hold <kbd>Ctrl</kbd> and click a parenthesis around your new cell—not the number—to put another reference there.</span></li>
+            <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its new partner changes too; the original pair stays separate.</span></li>
+          </ol>
+          <p class="lesson-progress" role="status">0 of 4 steps complete</p>
+          <p class="aside">Cells can hold lists, records, or any other value—not just numbers. The parentheses select the reference; the inside edits its contents.</p>
+        </div>
+        <div class="editor-example">
+          <div class="editor-heading">
+            <span>Shared, not copied</span>
+            <button type="button" class="reset" aria-label="Reset the cells example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <iframe src="./editor/?document=../lessons/cells.gid&amp;menu=hidden&amp;threads=1&amp;observe=cells-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Two references to one editable cell" loading="lazy"></iframe>
+          <p class="editor-note"><kbd>Ctrl</kbd>-click picks a reference into an open space, including on a Mac. <span class="reset-status" role="status"></span></p>
+        </div>
+      </section>
+
+      <section class="exercise" id="grap" aria-labelledby="grap-title">
+        <div class="lesson-copy">
+          <p class="eyebrow">04 / Grap</p>
+          <h2 id="grap-title">Let a value do some work.</h2>
+          <p>
+            Grap is a programming language built from these same structures.
+            Here, each expression before an arrow is evaluated; its result
+            appears after the arrow. <code>*</code> means multiply.
+          </p>
+          <p>The three parenthesized <strong>3</strong>s refer to one cell: on its own, in an addition, and in a multiplication.</p>
+          <ol class="quests">
+            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the <strong>2 after +</strong> to <strong>4</strong>. The sum becomes 7; the multiplication stays at 6.</span></li>
+            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change any parenthesized <strong>3</strong> to <strong>5</strong>. All three references update. After the first step, the results become 9 and 10.</span></li>
+          </ol>
+          <p class="lesson-progress" role="status">0 of 2 steps complete</p>
+          <p class="aside">Results are read-only; change the numbers in the expressions to change them.</p>
+        </div>
+        <div class="editor-example">
+          <div class="editor-heading">
+            <span>Edit an expression, see its result</span>
+            <button type="button" class="reset" aria-label="Reset the Grap example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <iframe src="./editor/?document=../lessons/grap.gid&amp;menu=hidden&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
+          <p class="editor-note">Select a number’s digits to replace them. <kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo. <span class="reset-status" role="status"></span></p>
+        </div>
+      </section>
+
       <section class="next" aria-labelledby="next-title">
         <p class="eyebrow">A small beginning</p>
-        <h2 id="next-title">Then we can connect things.</h2>
+        <h2 id="next-title">From calculations to programs.</h2>
         <p>
-          Shared values, computations, and interactive views build on these same
-          structures. Those are the next steps in this introduction. For now,
+          Functions and interactive views build on these same structures.
+          Those are the next steps in this introduction. For now,
           try the editing—and see what feels natural, or what gets in your way.
         </p>
         <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a>

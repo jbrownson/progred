@@ -756,6 +756,52 @@ mod checked_in_files {
                 .collect::<Vec<_>>(),
             ["apples", "pears", "plums"]
         );
+        let (doc, binders) = parse(include_str!("../../website/public/lessons/cells.gid")).unwrap();
+        assert_eq!(
+            doc.root,
+            Some(Value::list([
+                binders["shared"].into(),
+                binders["shared"].into()
+            ]))
+        );
+        assert_eq!(
+            doc.cells
+                .value(binders["shared"])
+                .and_then(crate::libraries::f64::read),
+            Some(7.0)
+        );
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+    }
+
+    #[test]
+    fn website_grap_lesson_shares_an_unnamed_numeric_cell() {
+        let (doc, binders) = parse(include_str!("../../website/public/lessons/grap.gid")).unwrap();
+        assert_eq!(doc.cells.cells().count(), 1);
+        let input = doc.cells.value(binders["input"]).unwrap();
+        assert_eq!(crate::libraries::f64::read(input), Some(3.0));
+        assert_eq!(crate::libraries::name::read(input), None);
+        let expressions = doc.root.as_ref().unwrap().as_list().unwrap();
+        assert_eq!(expressions.len(), 3);
+        assert_eq!(expressions.values().next(), Some(&binders["input"].into()));
+        for item in expressions.values().skip(1) {
+            let call = item
+                .as_record()
+                .unwrap()
+                .get(&grap::vocabulary::EVALUATE)
+                .unwrap()
+                .as_record()
+                .unwrap();
+            assert_eq!(
+                call.get(&crate::libraries::f64::vocabulary::LEFT),
+                Some(&binders["input"].into())
+            );
+            let argument = call.get(&crate::libraries::f64::vocabulary::RIGHT).unwrap();
+            assert_eq!(crate::libraries::f64::read(argument), Some(2.0));
+            assert_eq!(crate::libraries::name::read(argument), None);
+        }
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
     }
 
     fn root_reachable_cells(doc: &Document) -> HashSet<CellId> {

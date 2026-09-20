@@ -1,0 +1,10 @@
+{
+  "binders": {
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "shared": f56d42a97558ccc8205fb4019b878945,
+  },
+  "cells": {
+    shared: {f64: 0x0000000000001c40},
+  },
+  "root": [shared, shared],
+}

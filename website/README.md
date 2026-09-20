@@ -39,11 +39,13 @@ system chooses an available port, so an existing editor preview can stay open.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page begins with two guided exercises: editing a text/number record, then
-inserting into a list. Both use the real editor without its application menu.
+The page begins with four guided exercises: editing a text/number record,
+inserting into a list, creating and sharing cells, then live Grap calculations.
+All use the real editor without its application menu.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
-for the values exercise, and just name/text/blob for the list exercise. The
-unused libraries are not constructed or offered by the completion picker;
+for the values and cells exercises, and just name/text/blob for the list exercise.
+The Grap exercise adds the Grap and absent libraries to the numeric set.
+The unused libraries are not constructed or offered by the completion picker;
 list editing itself does not require Grap's list-operation library.
 Document shortcuts, including Ctrl+Z / Ctrl+Shift+Z, remain available (also on
 Mac, matching the browser host). The full-page editor remains blank on startup
@@ -64,6 +66,23 @@ the whole text-erasing run. Merely inserting a different item does not count.
 These checks observe results rather than keystrokes: manually recreating that
 same list also counts. The small list snapshots are discarded on restoration
 or Reset.
+
+The cells lesson starts with two references to one numeric cell. It checks for
+editing that shared definition, creating a different cell containing 11,
+inserting another reference to the new cell, then editing its shared contents.
+Checks use cell identities and the document's cell table, not matching displayed
+numbers. Repeated independent numbers don't count as sharing. The instructions
+use the ordinary `(` constructor and Ctrl-click picking; creating a cell selects
+the reference, so the user then clicks its empty contents to fill it.
+
+The Grap lesson uses one unnamed numeric cell in two calculations: addition
+and multiplication. The same cell also appears on its own. Users first edit a
+literal argument, changing only one result, then edit the shared cell through
+any reference, changing both. Its checks inspect the stored calls, shared cell
+identity, and numeric contents; the website does not evaluate Grap. The editor
+performs the actual evaluations and projects their read-only results. Native
+interaction tests cover both kinds of edits. Named numbers and bindings are
+not introduced here.
 
 An embed is an ordinary editor URL:
 

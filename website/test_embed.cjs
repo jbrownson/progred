@@ -74,7 +74,7 @@ test("missing or malformed documents report errors instead of starting empty", a
 
 test("observation is opt-in and forwards ordinary state only to the same-origin parent", async () => {
   const { onChange, messages } = await start("?observe=values-0");
-  const state = { document: { root: { list: [] }, cells: [] }, selection: null };
+  const state = { document: { root: { list: [] }, cells: {} }, selection: null };
   onChange(JSON.stringify(state));
   assert.equal(messages.length, 1);
   assert.deepEqual(messages[0], [{ type: "progred:change", channel: "values-0", state }, "http://localhost"]);
@@ -84,11 +84,17 @@ test("observation is opt-in and forwards ordinary state only to the same-origin 
 async function lessonPage() {
   const { lessonProgress } = await import("./public/lesson-progress.mjs");
   const messageListeners = [];
-  const exercises = ["values", "lists"].map((name) => {
+  const tasksByLesson = {
+    values: ["greeting", "count"],
+    lists: ["gap", "insert", "select-list", "remove", "restore"],
+    cells: ["shared-edit", "create", "link", "linked-edit"],
+    grap: ["argument", "shared-edit"],
+  };
+  const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
     const status = { textContent: "" };
-    const progress = { textContent: "" };
-    const tasks = (name === "values" ? ["greeting", "count"] : ["gap", "insert", "select-list", "remove", "restore"]).map((task) => {
+    const progress = { textContent: `0 of ${tasksByLesson[name].length} steps complete` };
+    const tasks = tasksByLesson[name].map((task) => {
       const marker = { textContent: "" };
       const status = { textContent: "" };
       const classes = new Set();
@@ -133,7 +139,7 @@ async function lessonPage() {
 
 test("reset reloads only its own iframe", async () => {
   const { exercises } = await lessonPage();
-  const resetCounts = [0, 0];
+  const resetCounts = [0, 0, 0, 0];
   for (const [index, exercise] of exercises.entries()) {
     const src = exercise.frame.src;
     Object.defineProperty(exercise.frame, "src", {
@@ -147,12 +153,16 @@ test("reset reloads only its own iframe", async () => {
     });
   }
   exercises[0].listeners.click();
-  assert.deepEqual(resetCounts, [1, 0]);
+  assert.deepEqual(resetCounts, [1, 0, 0, 0]);
   assert.equal(exercises[1].status.textContent, "");
   exercises[0].listeners.load();
   assert.equal(exercises[0].status.textContent, "Example reset.");
   exercises[1].listeners.click();
-  assert.deepEqual(resetCounts, [1, 1]);
+  assert.deepEqual(resetCounts, [1, 1, 0, 0]);
+  exercises[2].listeners.click();
+  assert.deepEqual(resetCounts, [1, 1, 1, 0]);
+  exercises[3].listeners.click();
+  assert.deepEqual(resetCounts, [1, 1, 1, 1]);
 });
 
 const record = (...entries) => ({ record: entries });
@@ -167,6 +177,10 @@ const values = (greeting, count) => ({ document: { root: record(
   ["bf0ca177-3113-4521-964d-0f3aa582fcb1", count],
 ) }, selection: null });
 const fruit = (...names) => ({ document: { root: { list: names.map(text) } }, selection: null });
+const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
+const cell = (id) => ({ cell: id });
+const cells = (list, definitions) => ({ document: { root: { list }, cells: definitions }, selection: null });
+const sharedPair = [cell(sharedCell), cell(sharedCell)];
 
 test("value quests need changed, valid values rather than selections or missing fields", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
@@ -275,4 +289,132 @@ test("restoration needs a previously seen list after removal, not an unrelated e
   assert.equal(observe(original).has("restore"), false);
   observe(fruit("apples", "plums"));
   assert.equal(observe(original).has("restore"), true);
+});
+
+test("cell quests observe shared definitions, not equal numbers or unresolved references", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("cells", cells(sharedPair, { [sharedCell]: number(7) })), []);
+  assert.deepEqual(completedSteps("cells", cells(sharedPair, { [sharedCell]: number(8) })), ["shared-edit"]);
+  assert.deepEqual(completedSteps("cells", cells([cell(sharedCell)], { [sharedCell]: number(8) })), []);
+  assert.deepEqual(completedSteps("cells", cells([number(11), number(11)], {})), []);
+  assert.deepEqual(completedSteps("cells", cells([cell("new"), cell("new")], {})), []);
+  assert.deepEqual(completedSteps("cells", cells([cell("first"), cell("second")], {
+    first: number(11), second: number(11),
+  })), ["create"]);
+  for (const value of [record(), text("11"), number(NaN), number(Infinity)]) {
+    assert.deepEqual(completedSteps("cells", cells(sharedPair, { [sharedCell]: value })), []);
+    assert.deepEqual(completedSteps("cells", cells([cell("new"), cell("new")], { new: value })), []);
+  }
+  assert.deepEqual(completedSteps("cells", { document: { root: null } }), []);
+});
+
+test("creating and linking use a different cell from the supplied shared pair", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const definitions = { [sharedCell]: number(7), new: number(11) };
+  assert.deepEqual(completedSteps("cells", cells(sharedPair, definitions)), []);
+  assert.deepEqual(completedSteps("cells", cells([...sharedPair, cell("new")], definitions)), ["create"]);
+  assert.deepEqual(completedSteps("cells", cells([...sharedPair, cell("new"), cell("new")], definitions)), ["create", "link"]);
+  assert.deepEqual(completedSteps("cells", cells([...sharedPair, cell(sharedCell)], { [sharedCell]: number(11) })), ["shared-edit"]);
+});
+
+test("editing the new pair counts only after both references already exist", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const single = cells([...sharedPair, cell("new")], { [sharedCell]: number(7), new: number(11) });
+  const paired = cells([...single.document.root.list, cell("new")], single.document.cells);
+  const edited = cells(paired.document.root.list, { [sharedCell]: number(7), new: number(12) });
+  assert.deepEqual(completedSteps("cells", paired, single), ["create", "link"]);
+  assert.deepEqual(completedSteps("cells", edited, single), ["link"]);
+  assert.deepEqual(completedSteps("cells", edited, paired), ["link", "linked-edit"]);
+  assert.deepEqual(completedSteps("cells", edited, edited), ["link"]);
+  assert.deepEqual(completedSteps("cells", edited), ["link"]);
+});
+
+test("the cells checklist completes through sharing, latches, and resets independently", async () => {
+  const { exercises, send } = await lessonPage();
+  const page = exercises[2];
+  const original = cells(sharedPair, { [sharedCell]: number(7) });
+  send(2, original);
+  assert.equal(page.progress.textContent, "0 of 4 steps complete");
+  send(2, cells(sharedPair, { [sharedCell]: number(8) }));
+  const definitions = { [sharedCell]: number(8), new: number(11) };
+  send(2, cells([...sharedPair, cell("new")], definitions));
+  assert.equal(page.progress.textContent, "2 of 4 steps complete");
+  const paired = [...sharedPair, cell("new"), cell("new")];
+  send(2, cells(paired, definitions));
+  assert.equal(page.progress.textContent, "3 of 4 steps complete");
+  send(2, cells(paired, { ...definitions, new: number(12) }));
+  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.equal(exercises[0].progress.textContent, "0 of 2 steps complete");
+  assert.equal(exercises[1].progress.textContent, "0 of 5 steps complete");
+  send(2, original);
+  assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
+  send(0, values(text("Changed"), number(10)));
+  page.listeners.click();
+  assert.equal(page.progress.textContent, "0 of 4 steps complete");
+  assert.equal(exercises[0].progress.textContent, "All steps complete. Keep experimenting!");
+});
+
+const grapInput = "4df73aa7-950e-afc6-5d50-d9c6ceca0721";
+const grapState = (argument = 2, input = 3) => cells(
+  [cell(grapInput), ...["201af445-eb7e-2c27-0bb5-ead10b781fc1", "d6f384c4-39d9-d699-96d5-45df422efd79"].map((fn, index) => record(
+    ["acfc5e50-8812-9251-8dab-3cec77cf43ee", record(
+      ["751fca43-73de-bdd0-b7e6-eb73e08d684b", cell(fn)],
+      ["764f6afe-17ba-14e8-1f5a-b61204be0bec", cell(grapInput)],
+      ["4f53ff25-390f-5847-2d31-a6142644dec2", number(index === 0 ? argument : 2)],
+    )],
+  ))],
+  { [grapInput]: number(input) },
+);
+
+test("Grap quests distinguish literal arguments from the shared input", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("grap", grapState()), []);
+  assert.deepEqual(completedSteps("grap", grapState(4)), ["argument"]);
+  assert.deepEqual(completedSteps("grap", grapState(2, 5)), ["shared-edit"]);
+  assert.deepEqual(completedSteps("grap", grapState(4, 5)), ["argument", "shared-edit"]);
+  assert.deepEqual(completedSteps("grap", grapState(NaN, 3)), []);
+  assert.deepEqual(completedSteps("grap", grapState(2, Infinity)), []);
+  assert.deepEqual(completedSteps("grap", grapState(4, NaN)), []);
+  assert.deepEqual(completedSteps("grap", { document: { root: null } }), []);
+  const missing = grapState(4, 5);
+  missing.document.root.list.pop();
+  assert.deepEqual(completedSteps("grap", missing), ["argument"]);
+  const unrelated = grapState();
+  unrelated.document.root.list.push(number(4), number(5));
+  assert.deepEqual(completedSteps("grap", unrelated), []);
+});
+
+test("Grap sharing requires references to the same resolved numeric cell", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  for (const definition of [undefined, record(), text("5"), number(NaN), number(Infinity)]) {
+    const state = grapState(4, 5);
+    state.document.cells[grapInput] = definition;
+    assert.deepEqual(completedSteps("grap", state), []);
+  }
+  for (const replacement of [number(5), cell("separate")]) {
+    const state = grapState(2, 5);
+    state.document.root.list[2].record[0][1].record[1][1] = replacement;
+    state.document.cells.separate = number(5);
+    assert.deepEqual(completedSteps("grap", state), []);
+  }
+  const missingReference = grapState(2, 5);
+  missingReference.document.root.list.shift();
+  assert.deepEqual(completedSteps("grap", missingReference), []);
+});
+
+test("Grap progress latches through undo and resets without touching earlier lessons", async () => {
+  const { exercises, send } = await lessonPage();
+  const page = exercises[3];
+  send(3, grapState());
+  assert.equal(page.progress.textContent, "0 of 2 steps complete");
+  send(3, grapState(4));
+  assert.equal(page.progress.textContent, "1 of 2 steps complete");
+  send(3, grapState(4, 5));
+  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  send(3, grapState());
+  assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
+  send(0, values(text("Changed"), number(10)));
+  page.listeners.click();
+  assert.equal(page.progress.textContent, "0 of 2 steps complete");
+  assert.equal(exercises[0].progress.textContent, "All steps complete. Keep experimenting!");
 });

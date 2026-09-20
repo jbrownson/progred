@@ -4,7 +4,14 @@ const fields = {
   utf8: "332529b8-ea83-a7ba-10fd-7f6d942e5016",
   f64: "ed11fde0-3b7c-2c1b-a2fc-cc3cdba5d561",
   element: "2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1",
+  evaluate: "acfc5e50-8812-9251-8dab-3cec77cf43ee",
+  function: "751fca43-73de-bdd0-b7e6-eb73e08d684b",
+  left: "764f6afe-17ba-14e8-1f5a-b61204be0bec",
+  right: "4f53ff25-390f-5847-2d31-a6142644dec2",
 };
+const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
+const sum = "201af445-eb7e-2c27-0bb5-ead10b781fc1";
+const multiply = "d6f384c4-39d9-d699-96d5-45df422efd79";
 
 export function lessonProgress(lesson) {
   const completed = new Set();
@@ -53,6 +60,16 @@ function number(value) {
   return data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined;
 }
 
+function references(list) {
+  const counts = new Map();
+  for (const value of list ?? []) {
+    if (typeof value?.cell === "string") {
+      counts.set(value.cell, (counts.get(value.cell) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
 // Checks describe achievements; the page retains them until this exercise resets.
 export function completedSteps(lesson, state, previous) {
   const root = state?.document?.root;
@@ -76,6 +93,41 @@ export function completedSteps(lesson, state, previous) {
         && selection.source_path?.list?.length === 0 ? ["select-list"] : []),
       ...(Array.isArray(previous?.document?.root?.list)
         && root.list.length < previous.document.root.list.length ? ["remove"] : []),
+    ];
+  }
+  if (lesson === "cells" && Array.isArray(root?.list)) {
+    const counts = references(root.list);
+    const before = references(previous?.document?.root?.list);
+    const contents = state.document.cells;
+    const original = number(contents?.[sharedCell]);
+    const newCells = [...counts].filter(([id]) => id !== sharedCell
+      && Number.isFinite(number(contents?.[id])));
+    return [
+      ...(counts.get(sharedCell) >= 2 && Number.isFinite(original) && original !== 7 ? ["shared-edit"] : []),
+      ...(newCells.some(([id]) => number(contents[id]) === 11) ? ["create"] : []),
+      ...(newCells.some(([, count]) => count >= 2) ? ["link"] : []),
+      ...(newCells.some(([id, count]) => {
+        const old = number(previous?.document?.cells?.[id]);
+        return count >= 2 && before.get(id) >= 2 && Number.isFinite(old)
+          && old !== number(contents[id]);
+      }) ? ["linked-edit"] : []),
+    ];
+  }
+  if (lesson === "grap" && Array.isArray(root?.list)) {
+    const contents = state.document.cells;
+    const input = (call) => field(call, fields.left)?.cell;
+    const calls = root.list.map((item) => field(item, fields.evaluate));
+    const call = (fn) => calls.find((value) => field(value, fields.function)?.cell === fn
+      && typeof input(value) === "string"
+      && Number.isFinite(number(contents?.[input(value)]))
+      && Number.isFinite(number(field(value, fields.right))));
+    const addition = call(sum);
+    const multiplication = call(multiply);
+    return [
+      ...(number(field(addition, fields.right)) === 4 ? ["argument"] : []),
+      ...(addition && multiplication && input(addition) === input(multiplication)
+        && root.list.some((value) => value?.cell === input(addition))
+        && number(contents[input(addition)]) === 5 ? ["shared-edit"] : []),
     ];
   }
   return [];

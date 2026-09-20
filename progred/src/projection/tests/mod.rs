@@ -142,7 +142,7 @@ fn editing_frame_with_annotations(
     pointer: Option<Point>,
     annotations: &Annotations,
 ) -> crate::placed::HoverOutput<EditingWorld> {
-    let stack = crate::stack::load();
+    let stack = &world.stack;
     let styles = crate::styles::editor(1.0);
     let mut tcx = TextCtx {
         fonts: &mut world.font_cx,
@@ -175,7 +175,11 @@ fn editing_frame_with_annotations(
     let height = measured.extent.height().max(1.0);
     crate::display::widget::frame::place(
         measured,
-        Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
+        // A short document still has a viewport below it for completion popups.
+        Placement::new(
+            Rect::new(0.0, 0.0, 500.0, height),
+            Rect::new(0.0, 0.0, 500.0, height.max(500.0)),
+        ),
         &placed::HoverInput {
             pointer,
             ..Default::default()
