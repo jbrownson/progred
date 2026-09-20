@@ -177,6 +177,7 @@ fn query_content(
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
         Some(query),
+        cx.focused,
         fallback,
         presentation.clone(),
         None,

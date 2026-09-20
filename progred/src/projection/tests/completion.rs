@@ -1164,6 +1164,7 @@ fn projected_completion_entries_with(
     };
     let measured = project(
         ProjectDescription {
+            focused: true,
             computations: None,
             view: &crate::test_root(),
             completions: provider.or(Some(&stack.completions)),

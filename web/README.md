@@ -16,6 +16,9 @@ editor still starts blank with its full menu and the default worker pool.
 Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
 application shortcuts or F10 menu navigation. The website owns the exercise
 documents and reset buttons; there are no tutorial-specific projections.
+Canvas and window focus/blur events control the editor's active presentation.
+Leaving an embed clears its selection, caret, completion query, and related
+highlights. Document edits remain. Loading another lesson does not steal focus.
 The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?)`; malformed supplied
 documents fail explicitly before starting the editor. See the
 [website notes](../website/README.md) for independent embedded sessions.

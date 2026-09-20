@@ -173,6 +173,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 
 pub(crate) struct FrameDescription<'a> {
     computations: &'a crate::computations::Computations,
+    focused: bool,
     drawn_menu: bool,
     model: &'a Model,
     stack: &'a stack::Stack<Editor>,
@@ -345,6 +346,7 @@ impl Editor {
         prepare_frame(
             FrameDescription {
                 computations: &self.computations,
+                focused: self.focused,
                 drawn_menu: self.drawn_menu,
                 toggles: self.menu_toggles(),
                 availability: self.menu_availability(),
@@ -485,6 +487,7 @@ impl EditorRunner {
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
+    focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
@@ -530,6 +533,7 @@ fn project_workspace_view(
     let projected = projection::project(
         projection::ProjectDescription {
             computations: Some(computations),
+            focused,
             view: &view.root,
             completions: Some(&stack.completions),
             sources,
@@ -598,6 +602,7 @@ fn project_workspace_view(
 #[allow(clippy::too_many_arguments)]
 fn project_workspace(
     model: &Model,
+    focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
     styles: &crate::styles::Styles,
@@ -623,6 +628,7 @@ fn project_workspace(
         let rect = placed_view.rect;
         let child = project_workspace_view(
             model,
+            focused,
             computations,
             stack,
             styles,
@@ -710,6 +716,7 @@ fn project_frame(
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
         computations,
+        focused,
         drawn_menu,
         toggles,
         model,
@@ -760,6 +767,7 @@ fn project_frame(
     };
     let body = project_workspace(
         model,
+        focused,
         computations,
         stack,
         &styles,
@@ -1750,6 +1758,7 @@ mod frame_tests {
             crate::display::widget::frame::place(
                 project_workspace(
                     model,
+                    true,
                     &crate::computations::Computations::default(),
                     &stack,
                     &styles,
@@ -1947,6 +1956,7 @@ mod frame_tests {
                 crate::display::widget::frame::place(
                     project_workspace_view(
                         &model,
+                        true,
                         &crate::computations::Computations::default(),
                         &stack,
                         &styles,
@@ -2056,6 +2066,7 @@ mod frame_tests {
         let placed = crate::display::widget::frame::place(
             project_workspace(
                 &model,
+                true,
                 &crate::computations::Computations::default(),
                 &stack,
                 &styles,
@@ -2202,6 +2213,7 @@ mod frame_tests {
             layout,
             &FrameDescription {
                 computations: &editor.computations,
+                focused: editor.focused,
                 drawn_menu: false,
                 model: &editor.model,
                 stack: &editor.stack,

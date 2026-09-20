@@ -80,6 +80,9 @@
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
         };
         wasm.start_editor(source, params.get("menu") !== "hidden", onChange, params.get("libraries") ?? undefined);
+        window.addEventListener("focus", wasm.browser_focus_changed);
+        window.addEventListener("blur", wasm.browser_focus_changed);
+        wasm.browser_focus_changed();
         loading.style.display = "none";
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)));

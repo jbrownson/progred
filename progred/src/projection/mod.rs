@@ -107,6 +107,7 @@ impl<World: 'static> Projection<World> {
 #[derive(Clone)]
 pub(crate) struct Cx<'a> {
     pub(crate) computations: Option<&'a crate::computations::Computations>,
+    pub(crate) focused: bool,
     pub(crate) view: &'a crate::workspace::Root,
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
@@ -505,6 +506,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
 /// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a> {
     pub computations: Option<&'a crate::computations::Computations>,
+    pub focused: bool,
     pub view: &'a crate::workspace::Root,
     pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
@@ -540,6 +542,7 @@ fn prepare_project(
 ) -> ChoiceGraph<HoverPass<crate::Editor>> {
     let ProjectDescription {
         computations,
+        focused,
         view,
         completions,
         sources,
@@ -556,6 +559,7 @@ fn prepare_project(
     let projection = projection.cloned().unwrap_or_default();
     let cx = Cx {
         computations,
+        focused,
         view,
         completions,
         sources,
@@ -1012,6 +1016,7 @@ fn pick_target_with(
 /// empty — its static text otherwise.
 fn atom_content(
     editing: Option<&LineEditState>,
+    focused: bool,
     fallback: Measured<HoverPass<crate::Editor>>,
     presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
@@ -1022,7 +1027,7 @@ fn atom_content(
         Some(line) => render::text_edit(
             LineEditDescription {
                 state: line,
-                focused: true,
+                focused,
                 presentation,
                 style: &styles.edit,
                 placeholder,

@@ -12,6 +12,8 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
 async function start(search, { ok = true, parseError = false } = {}) {
   const calls = [];
   const messages = [];
+  const focusEvents = [];
+  const listeners = {};
   let onChange;
   const loading = { style: {} };
   const canvas = {};
@@ -19,7 +21,10 @@ async function start(search, { ok = true, parseError = false } = {}) {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
     JSON,
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
-    window: { parent: { postMessage: (...args) => messages.push(structuredClone(args)) } },
+    window: {
+      parent: { postMessage: (...args) => messages.push(structuredClone(args)) },
+      addEventListener: (event, callback) => { listeners[event] = callback; },
+    },
     document: { querySelector: (selector) => selector === "#loading" ? loading : canvas },
     console: { info() {}, error() {} },
     fetch: async (url) => {
@@ -29,6 +34,7 @@ async function start(search, { ok = true, parseError = false } = {}) {
     init: async () => { calls.push(["init"]); },
     startWorker: async (...args) => { calls.push(["workers", args[4]]); },
     wasm: {
+      browser_focus_changed: () => focusEvents.push("changed"),
       computation_finished() {},
       worker_threads: () => 1,
       prepare_renderer: async (target) => { assert.equal(target, canvas); return "test"; },
@@ -39,8 +45,17 @@ async function start(search, { ok = true, parseError = false } = {}) {
       },
     },
   });
-  return { calls, loading, messages, onChange };
+  return { calls, loading, messages, onChange, focusEvents, listeners };
 }
+
+test("browser window focus is forwarded without page click handlers", async () => {
+  const { focusEvents, listeners } = await start("?menu=hidden");
+  assert.deepEqual(focusEvents, ["changed"]);
+  assert.deepEqual(Object.keys(listeners).sort(), ["blur", "focus"]);
+  listeners.blur();
+  listeners.focus();
+  assert.deepEqual(focusEvents, ["changed", "changed", "changed"]);
+});
 
 test("standalone startup remains blank with its full menu and default workers", async () => {
   const { calls, loading } = await start("");

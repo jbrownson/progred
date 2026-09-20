@@ -287,6 +287,7 @@ impl BenchContext {
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
         let graph = prepare_project(
             ProjectDescription {
+                focused: true,
                 computations: Some(computations),
                 view: &crate::test_root(),
                 completions: Some(&stack.completions),
@@ -371,6 +372,7 @@ mod declarations;
 mod drawing;
 mod fidget_cube;
 mod fidget_source;
+mod focus;
 mod interaction;
 mod iop_tree_native;
 mod layout;

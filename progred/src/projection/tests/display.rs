@@ -556,6 +556,7 @@ fn partials_receive_selection_and_annotations_positionally() {
         };
         project(
             ProjectDescription {
+                focused: true,
                 computations: None,
                 view: &crate::test_root(),
                 completions: None,
@@ -665,6 +666,7 @@ fn a_projection_defined_as_data_realizes() {
     let empty = Annotations::default();
     let measured = project(
         ProjectDescription {
+            focused: true,
             computations: None,
             view: &crate::test_root(),
             completions: None,

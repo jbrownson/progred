@@ -109,6 +109,8 @@ use winit::window::{CursorIcon, Window, WindowId};
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
     ComputationFinished,
+    #[cfg(target_arch = "wasm32")]
+    BrowserFocusChanged,
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
     Command(Command),
@@ -325,6 +327,7 @@ pub(crate) enum QuitState {
 /// world type.
 pub(crate) struct Editor {
     pub(crate) computations: computations::Computations,
+    pub(crate) focused: bool,
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
     pub(crate) state: RenderState,
@@ -503,6 +506,7 @@ fn new_editor(
         .unwrap_or_default();
     Editor {
         computations,
+        focused: false,
         drawn_menu,
         state: RenderState::Suspended(None),
         #[cfg(not(target_arch = "wasm32"))]
@@ -669,6 +673,22 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
         match event {
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::BrowserFocusChanged => {
+                if let Some(runner) = self.editors.first_mut()
+                    && let RenderState::Active { window, .. } = &runner.editor.state
+                {
+                    let window = window.clone();
+                    let size = window.inner_size();
+                    if runner.focus_changed(
+                        browser_editor_focused(&window),
+                        window.scale_factor(),
+                        Size::new(size.width as f64, size.height as f64),
+                    ) {
+                        window.request_redraw();
+                    }
+                }
+            }
             UserEvent::ComputationFinished => {
                 for runner in &mut self.editors {
                     if runner.editor.computations.tasks.poll()
@@ -901,6 +921,7 @@ impl App {
                     .expect("#progred canvas");
                 attributes
                     .with_canvas(Some(canvas))
+                    .with_active(false)
                     .with_prevent_default(true)
             };
             let window = event_loop.create_window(attributes).unwrap();
@@ -959,6 +980,14 @@ impl App {
 
         if let RenderState::Active { window, .. } = &runner.editor.state {
             let window = window.clone();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                runner.editor.focused = window.has_focus();
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                runner.editor.focused = browser_editor_focused(&window);
+            }
             let size = window.inner_size();
             runner.refresh_frame(
                 window.scale_factor(),
@@ -986,6 +1015,22 @@ impl App {
         // Discrete input (including release/cancel) first settles the batch.
         if runner.flush_before_window_event(&event) {
             window.request_redraw();
+        }
+
+        if let WindowEvent::Focused(_focused) = event {
+            #[cfg(not(target_arch = "wasm32"))]
+            let focused = _focused;
+            #[cfg(target_arch = "wasm32")]
+            let focused = browser_editor_focused(&window);
+            let size = window.inner_size();
+            if runner.focus_changed(
+                focused,
+                scale,
+                Size::new(size.width as f64, size.height as f64),
+            ) {
+                window.request_redraw();
+            }
+            return;
         }
 
         if let WindowEvent::ModifiersChanged(state) = &event {
@@ -1088,6 +1133,26 @@ impl App {
 thread_local! {
     static WEB_PROXY: std::cell::RefCell<Option<winit::event_loop::EventLoopProxy<UserEvent>>> =
         const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(target_arch = "wasm32")]
+fn browser_editor_focused(window: &Window) -> bool {
+    window.canvas().is_some_and(|canvas| {
+        canvas.owner_document().is_some_and(|document| {
+            document.has_focus().unwrap_or(false)
+                && document.active_element().as_ref() == Some(canvas.unchecked_ref())
+        })
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn browser_focus_changed() {
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(UserEvent::BrowserFocusChanged);
+        }
+    });
 }
 
 /// Called by the JS host on the page thread, never on the computation worker.
@@ -1564,6 +1629,7 @@ impl Editor {
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
             computations,
+            focused: _,
             drawn_menu: _,
             state: _,
             #[cfg(not(target_arch = "wasm32"))]
@@ -2304,6 +2370,7 @@ pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Edi
         None,
     );
     editor.model.workspace.document.root = test_root();
+    editor.focused = true;
     editor
 }
 

@@ -62,7 +62,7 @@ pub fn view(
             let widget = puri::edit::text_edit(
                 LineEditDescription {
                     state,
-                    focused: true,
+                    focused: cx.focused,
                     presentation: context.inputs.styles.line_presentation(&line),
                     style: &context.inputs.styles.edit,
                     placeholder: line

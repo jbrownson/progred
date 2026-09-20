@@ -148,6 +148,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             .unwrap();
         with_context(&Output::default(), |context| {
             let inputs = crate::projection::Cx {
+                focused: true,
                 sources,
                 computations: Some(&computations),
                 view: &root,
@@ -244,6 +245,7 @@ fn program_cursor_preserves_list_leaves_and_captures_sources_directly() {
     );
     with_context(&Output::default(), |context| {
         let inputs = crate::projection::Cx {
+            focused: true,
             sources,
             ..context.inputs.clone()
         };
@@ -317,6 +319,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
     let expected = ::grap::evaluate(&collect, &libraries, 1000).result;
     with_context(&Output::default(), |context| {
         let inputs = crate::projection::Cx {
+            focused: true,
             sources: crate::sources::Sources {
                 libraries: &libraries,
                 ..context.inputs.sources
@@ -364,6 +367,7 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
         );
         with_context(&Output::default(), |context| {
             let inputs = crate::projection::Cx {
+                focused: true,
                 sources: crate::sources::Sources {
                     libraries: &libraries,
                     ..context.inputs.sources
@@ -539,6 +543,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
     let graph = with_context(&output, |context| {
         let libraries = &host.0;
         let inputs = crate::projection::Cx {
+            focused: true,
             edits: Default::default(),
             sources: crate::sources::Sources {
                 doc: context.inputs.sources.doc,
@@ -878,6 +883,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let build = |selected: Option<SourceTrace>, hovered: Option<SourceTrace>| {
         let measured = with_context(&Output::default(), |context| {
             let inputs = crate::projection::Cx {
+                focused: true,
                 selected_trace: selected,
                 ..context.inputs.clone()
             };

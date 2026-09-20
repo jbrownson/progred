@@ -90,6 +90,30 @@ fn queue_batch<T>(
 }
 
 impl EditorRunner {
+    pub(crate) fn focus_changed(&mut self, focused: bool, scale: f64, viewport: Size) -> bool {
+        if self.editor.focused == focused {
+            false
+        } else {
+            self.flush_pending_continuous();
+            if !focused {
+                self.editor.model.selection = None;
+            }
+            self.editor.focused = focused;
+            if focused {
+                self.refresh_frame(scale, viewport);
+            } else if let Some(ui_events_winit::WindowEventTranslation::Pointer(event)) =
+                crate::translate_window_event(
+                    &mut self.editor.reducer,
+                    scale,
+                    &winit::event::WindowEvent::Focused(false),
+                )
+            {
+                self.pointer_event(&event, scale, viewport);
+            }
+            true
+        }
+    }
+
     fn queue_pointer(&mut self, next: PendingPointer) -> Option<PendingPointer> {
         match self.pending_pointer.take() {
             None => {
@@ -135,25 +159,27 @@ impl EditorRunner {
         scale: f64,
         viewport: Size,
     ) -> bool {
-        self.update_frame(scale, viewport, |editor, dispatch, hover| {
-            frame_disposition(keyboard(editor, dispatch, hover, event, scale), false)
-        })
+        self.editor.focused
+            && self.update_frame(scale, viewport, |editor, dispatch, hover| {
+                frame_disposition(keyboard(editor, dispatch, hover, event, scale), false)
+            })
     }
 
     pub(crate) fn ime_event(&mut self, event: &ImeEvent, scale: f64, viewport: Size) -> bool {
-        self.update_frame(scale, viewport, |editor, dispatch, hover| {
-            frame_disposition(
-                dispatch
-                    .handler
-                    .dispatch(
-                        editor,
-                        Event::Ime(event),
-                        &mut dispatch.context(hover.cloned()),
-                    )
-                    .handled(),
-                false,
-            )
-        })
+        self.editor.focused
+            && self.update_frame(scale, viewport, |editor, dispatch, hover| {
+                frame_disposition(
+                    dispatch
+                        .handler
+                        .dispatch(
+                            editor,
+                            Event::Ime(event),
+                            &mut dispatch.context(hover.cloned()),
+                        )
+                        .handled(),
+                    false,
+                )
+            })
     }
 
     pub(crate) fn pointer_event(
@@ -486,6 +512,86 @@ mod tests {
             state: KeyState::Down,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(text::value("hello")),
+            cells: Cells::new(),
+        }));
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(runner.keyboard_event(&key(), 1.0, VIEWPORT));
+        let document = runner.editor.model.doc.clone();
+        runner.editor.pressed = true;
+        runner.editor.pointer = Some(Point::new(20.0, 20.0));
+        let cancelled = Rc::new(std::cell::Cell::new(false));
+        runner.frame.dispatch.handler.on_pointer_cancel({
+            let cancelled = cancelled.clone();
+            move |_, _| {
+                cancelled.set(true);
+                true
+            }
+        });
+        assert!(runner.focus_changed(false, 1.0, VIEWPORT));
+        assert!(cancelled.get());
+        assert!(!runner.editor.pressed);
+        assert!(runner.editor.pointer.is_none());
+        assert!(!runner.focus_changed(false, 1.0, VIEWPORT));
+        assert!(!runner.keyboard_event(&key(), 1.0, VIEWPORT));
+        assert!(!runner.ime_event(&ImeEvent::Commit("ignored".into()), 1.0, VIEWPORT));
+        assert!(Rc::ptr_eq(&document, &runner.editor.model.doc));
+        assert!(runner.editor.model.selection.is_none());
+        assert!(runner.focus_changed(true, 1.0, VIEWPORT));
+        assert!(!runner.focus_changed(true, 1.0, VIEWPORT));
+        assert!(runner.editor.model.selection.is_none());
+        assert!(!runner.keyboard_event(&key(), 1.0, VIEWPORT));
+        assert_eq!(
+            text::read(runner.editor.model.doc.root.as_ref().unwrap()),
+            Some("hellox")
+        );
+    }
+
+    #[test]
+    fn focus_loss_ends_ime_composition_without_changing_committed_text() {
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(text::value("hello")),
+            cells: Cells::new(),
+        }));
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(runner.ime_event(
+            &ImeEvent::Preedit("draft".into(), Some((5, 5))),
+            1.0,
+            VIEWPORT
+        ));
+        let composing = |runner: &EditorRunner| {
+            runner
+                .editor
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .is_composing()
+        };
+        assert!(composing(&runner));
+        let document = runner.editor.model.doc.clone();
+        assert!(runner.focus_changed(false, 1.0, VIEWPORT));
+        assert!(runner.editor.model.selection.is_none());
+        assert!(Rc::ptr_eq(&document, &runner.editor.model.doc));
+        assert_eq!(text::read(document.root.as_ref().unwrap()), Some("hello"));
+        assert!(runner.focus_changed(true, 1.0, VIEWPORT));
+        assert!(runner.editor.model.selection.is_none());
+        assert!(!runner.keyboard_event(&key(), 1.0, VIEWPORT));
+        assert_eq!(
+            text::read(runner.editor.model.doc.root.as_ref().unwrap()),
+            Some("hello")
+        );
     }
 
     #[test]

@@ -152,6 +152,7 @@ fn editing_frame_with_annotations(
     };
     let measured = project(
         ProjectDescription {
+            focused: world.focused,
             computations: None,
             view: &crate::test_root(),
             completions: Some(&stack.completions),

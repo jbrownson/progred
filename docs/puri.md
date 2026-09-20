@@ -291,6 +291,14 @@ each names `pinch` (fractional scale) or `rotation` (clockwise radians) and `del
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the
 same pointer-cancellation handlers and clears the adapter's pressed state.
+Window focus is a separate frame input from document selection. Losing focus
+clears selection and its transient editing state, including completion queries
+and uncommitted composition. Document edits already made remain; refocusing does
+not restore the old selection. Primary and related selection highlights disappear.
+Keyboard and IME input require focus. In browser embeds, canvas focus and the
+iframe document's focus must both be present; standard window focus/blur events
+cover leaving the iframe while its canvas remains the active element. Loading an
+embed does not focus it automatically.
 
 Cross-frame reuse consists of caller-threaded text shaping and the explicit
 caller-owned [computation graph](incremental.md), currently used by CAM geometry.

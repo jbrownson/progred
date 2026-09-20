@@ -527,6 +527,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
         let mut project_tool = || {
             project(
                 ProjectDescription {
+                    focused: true,
                     computations: None,
                     view: &crate::test_root(),
                     completions: None,
@@ -618,6 +619,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let node = project(
         ProjectDescription {
+            focused: true,
             computations: None,
             view: &crate::test_root(),
             completions: None,
@@ -695,6 +697,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let active = project(
         ProjectDescription {
+            focused: true,
             computations: None,
             view: &crate::test_root(),
             completions: None,
