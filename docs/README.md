@@ -29,6 +29,9 @@ actual CAM document's computation and retained mesh drawing on both backends,
 including the browser worker-pool and WebGPU improvements.
 [Browser SIMD profiling](browser-simd-profile-2026-09-19.md) measures the smaller
 compiler-flag improvement and checks final color/depth outputs.
+[Fidget bulk-loop experiment](browser-fidget-bulk-profile-2026-09-19.md) profiles
+the actual browser rendering workers and tests a safe slice-loop rewrite that
+enables vectorization; the measured patch is now applied to the vendored core.
 [Browser orbit profiling](browser-orbit-profile-2026-09-19.md) follows the actual
 frame/gesture path and separates source-pane construction from background
 worker contention.

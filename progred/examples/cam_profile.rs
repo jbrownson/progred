@@ -29,6 +29,10 @@ mod web {
     thread_local! { static POLL: RefCell<Option<Box<dyn Fn() -> Option<String>>>> = const { RefCell::new(None) }; }
     #[wasm_bindgen]
     pub fn start_profile(progress: f64, size: u32, controls: bool) {
+        start_profile_rect(progress, size, size, controls);
+    }
+    #[wasm_bindgen]
+    pub fn start_profile_rect(progress: f64, width: u32, height: u32, controls: bool) {
         progred::web_worker::initialize();
         let runtime = Runtime::default();
         let tasks = Tasks::new(
@@ -36,9 +40,9 @@ mod web {
             progred::web_worker::executor(),
             progred::web_worker::wake,
         );
-        let input = runtime.memo(move |_| Ok((progress, size, controls)));
-        let result = tasks.memo(input, |(progress, size, controls), _| {
-            Ok(progred::profile_cam(progress, size, size, controls))
+        let input = runtime.memo(move |_| Ok((progress, width, height, controls)));
+        let result = tasks.memo(input, |(progress, width, height, controls), _| {
+            Ok(progred::profile_cam(progress, width, height, controls))
         });
         let result = runtime.memo(move |read| {
             Ok(match &*result.read(read)? {

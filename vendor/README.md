@@ -10,6 +10,13 @@ metadata and dependency versions, pinning core and workspace-hack to that revisi
 
 Local source changes, each including regression tests:
 
+- [Bulk float slice patch](../docs/experiments/fidget-core-bulk-slices.patch):
+  handle input/output register aliases once per common arithmetic instruction,
+  then operate on safely borrowed slices so LLVM can vectorize the loops.
+  No unsafe code, extra allocation, sampling change, or altered math semantics.
+  Covers aliases, tail lengths, signed zeros, infinities, and NaNs. This is
+  independent of the other patches; see the
+  [browser measurements](../docs/browser-fidget-bulk-profile-2026-09-19.md).
 - [Shared cancellation flag patch](../docs/experiments/fidget-core-cancellation.patch):
   add `CancelToken::from_shared_flag(Arc<AtomicBool>)` so callers can share one
   cancellation signal across libraries without callback bridges. Existing token

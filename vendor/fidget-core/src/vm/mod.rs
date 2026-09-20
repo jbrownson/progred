@@ -788,6 +788,65 @@ impl<T: From<f32> + Clone> BulkVmEval<T> {
     }
 }
 
+#[inline]
+fn float_unary(
+    slots: &mut [Vec<f32>],
+    out: u8,
+    arg: u8,
+    size: usize,
+    f: impl Fn(f32) -> f32,
+) {
+    if out == arg {
+        for value in &mut slots[out as usize][..size] {
+            *value = f(*value);
+        }
+    } else {
+        let [out, arg] = slots
+            .get_disjoint_mut([out as usize, arg as usize])
+            .unwrap();
+        for (out, arg) in out[..size].iter_mut().zip(&arg[..size]) {
+            *out = f(*arg);
+        }
+    }
+}
+
+#[inline]
+fn float_binary(
+    slots: &mut [Vec<f32>],
+    out: u8,
+    lhs: u8,
+    rhs: u8,
+    size: usize,
+    f: impl Fn(f32, f32) -> f32,
+) {
+    if lhs == rhs {
+        float_unary(slots, out, lhs, size, |x| f(x, x));
+    } else if out == lhs {
+        let [out, rhs] = slots
+            .get_disjoint_mut([out as usize, rhs as usize])
+            .unwrap();
+        for (out, rhs) in out[..size].iter_mut().zip(&rhs[..size]) {
+            *out = f(*out, *rhs);
+        }
+    } else if out == rhs {
+        let [out, lhs] = slots
+            .get_disjoint_mut([out as usize, lhs as usize])
+            .unwrap();
+        for (out, lhs) in out[..size].iter_mut().zip(&lhs[..size]) {
+            *out = f(*lhs, *out);
+        }
+    } else {
+        let [out, lhs, rhs] = slots
+            .get_disjoint_mut([out as usize, lhs as usize, rhs as usize])
+            .unwrap();
+        for ((out, lhs), rhs) in
+            out[..size].iter_mut().zip(&lhs[..size]).zip(&rhs[..size])
+        {
+            *out = f(*lhs, *rhs);
+        }
+    }
+}
+
 /// VM-based bulk evaluator for arrays of points, yielding point values
 #[derive(Default)]
 pub struct VmFloatSliceEval<const N: usize>(BulkVmEval<f32>);
@@ -819,14 +878,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     v[out][0..size].copy_from_slice(&vars[i as usize]);
                 }
                 RegOp::NegReg(out, arg) => {
-                    for i in 0..size {
-                        v[out][i] = -v[arg][i];
-                    }
+                    float_unary(v.0, out, arg, size, |x| -x);
                 }
                 RegOp::AbsReg(out, arg) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i].abs();
-                    }
+                    float_unary(v.0, out, arg, size, f32::abs);
                 }
                 RegOp::RecipReg(out, arg) => {
                     for i in 0..size {
@@ -834,15 +889,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     }
                 }
                 RegOp::SqrtReg(out, arg) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i].sqrt();
-                    }
+                    float_unary(v.0, out, arg, size, f32::sqrt);
                 }
                 RegOp::SquareReg(out, arg) => {
-                    for i in 0..size {
-                        let s = v[arg][i];
-                        v[out][i] = s * s;
-                    }
+                    float_unary(v.0, out, arg, size, |x| x * x);
                 }
                 RegOp::FloorReg(out, arg) => {
                     for i in 0..size {
@@ -915,19 +965,13 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     }
                 }
                 RegOp::AddRegImm(out, arg, imm) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i] + imm;
-                    }
+                    float_unary(v.0, out, arg, size, |x| x + imm);
                 }
                 RegOp::MulRegImm(out, arg, imm) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i] * imm;
-                    }
+                    float_unary(v.0, out, arg, size, |x| x * imm);
                 }
                 RegOp::DivRegImm(out, arg, imm) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i] / imm;
-                    }
+                    float_unary(v.0, out, arg, size, |x| x / imm);
                 }
                 RegOp::DivImmReg(out, arg, imm) => {
                     for i in 0..size {
@@ -950,14 +994,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     }
                 }
                 RegOp::SubImmReg(out, arg, imm) => {
-                    for i in 0..size {
-                        v[out][i] = imm - v[arg][i];
-                    }
+                    float_unary(v.0, out, arg, size, |x| imm - x);
                 }
                 RegOp::SubRegImm(out, arg, imm) => {
-                    for i in 0..size {
-                        v[out][i] = v[arg][i] - imm;
-                    }
+                    float_unary(v.0, out, arg, size, |x| x - imm);
                 }
                 RegOp::CompareImmReg(out, arg, imm) => {
                     for i in 0..size {
@@ -1020,24 +1060,16 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     }
                 }
                 RegOp::AddRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i] + v[rhs][i];
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| x + y);
                 }
                 RegOp::MulRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i] * v[rhs][i];
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| x * y);
                 }
                 RegOp::DivRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i] / v[rhs][i];
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| x / y);
                 }
                 RegOp::SubRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i] - v[rhs][i];
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| x - y);
                 }
                 RegOp::CompareRegReg(out, lhs, rhs) => {
                     for i in 0..size {
@@ -1045,14 +1077,14 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                     }
                 }
                 RegOp::MinRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i].min_choice(v[rhs][i]).0;
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| {
+                        x.min_choice(y).0
+                    });
                 }
                 RegOp::MaxRegReg(out, lhs, rhs) => {
-                    for i in 0..size {
-                        v[out][i] = v[lhs][i].max_choice(v[rhs][i]).0;
-                    }
+                    float_binary(v.0, out, lhs, rhs, size, |x, y| {
+                        x.max_choice(y).0
+                    });
                 }
                 RegOp::AndRegReg(out, lhs, rhs) => {
                     for i in 0..size {
@@ -1399,6 +1431,80 @@ impl<const N: usize> BulkEvaluator for VmGradSliceEval<N> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn float_bulk_aliases_and_tails() {
+        let values = [
+            0.0,
+            -0.0,
+            1.0,
+            -2.5,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+        ];
+        let unary: [fn(f32) -> f32; 4] =
+            [|x| -x, f32::abs, f32::sqrt, |x| x * x];
+        let binary: [fn(f32, f32) -> f32; 6] = [
+            |x, y| x + y,
+            |x, y| x - y,
+            |x, y| x * y,
+            |x, y| x / y,
+            |x, y| x.min_choice(y).0,
+            |x, y| x.max_choice(y).0,
+        ];
+        let same = |actual: &[Vec<f32>], expected: &[Vec<f32>]| {
+            for (a, b) in actual.iter().flatten().zip(expected.iter().flatten())
+            {
+                assert!(
+                    a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()),
+                    "{a:?} != {b:?}"
+                );
+            }
+        };
+        for size in [0, 1, 3, 4, 5, 9, 17, 37] {
+            let original: Vec<Vec<f32>> = (0..3)
+                .map(|slot| {
+                    (0..size + 3)
+                        .map(|i| values[(i + slot) % values.len()])
+                        .collect()
+                })
+                .collect();
+            for out in 0..3 {
+                for lhs in 0..3 {
+                    for f in unary {
+                        let mut actual = original.clone();
+                        let mut expected = original.clone();
+                        for i in 0..size {
+                            expected[out][i] = f(original[lhs][i]);
+                        }
+                        float_unary(&mut actual, out as u8, lhs as u8, size, f);
+                        same(&actual, &expected);
+                    }
+                    for rhs in 0..3 {
+                        for f in binary {
+                            let mut actual = original.clone();
+                            let mut expected = original.clone();
+                            for i in 0..size {
+                                expected[out][i] =
+                                    f(original[lhs][i], original[rhs][i]);
+                            }
+                            float_binary(
+                                &mut actual,
+                                out as u8,
+                                lhs as u8,
+                                rhs as u8,
+                                size,
+                                f,
+                            );
+                            same(&actual, &expected);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     crate::grad_slice_tests!(VmFunction);
     crate::interval_tests!(VmFunction);
     crate::float_slice_tests!(VmFunction);

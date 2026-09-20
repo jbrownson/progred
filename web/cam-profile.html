@@ -12,7 +12,7 @@ try {
   await wasm.default();
   const threads = Number(params.get("threads") ?? 8);
   await startWorker(wasm, moduleUrl, () => {}, fail, threads);
-  window.runProfile = async (progress, size, controls) => {
+  window.runProfile = async (progress, size, controls, height = size) => {
     let last = performance.now(), maxGap = 0, ticks = 0;
     const timer = setInterval(() => {
       const now = performance.now();
@@ -22,7 +22,8 @@ try {
     }, 10);
     const start = performance.now();
     try {
-      wasm.start_profile(progress, size, controls);
+      if (height === size) wasm.start_profile(progress, size, controls);
+      else wasm.start_profile_rect(progress, size, height, controls);
       let result;
       while (!(result = wasm.poll_profile())) {
         if (window.profileError) throw new Error(window.profileError);

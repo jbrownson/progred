@@ -4,7 +4,7 @@ const { once } = require("node:events");
 const { chromium } = require("playwright");
 
 (async () => {
-  const size = Number(process.argv[2] ?? 512);
+  const [size, height = size] = (process.argv[2] ?? "512").split("x").map(Number);
   const trials = Number(process.argv[3] ?? 4);
   const positions = (process.argv[4] ?? "0.02,0.5,1").split(",").map(Number);
   const controls = process.argv[5] === "controls";
@@ -32,11 +32,11 @@ const { chromium } = require("playwright");
     await page.waitForFunction(() => window.runProfile || window.profileError, null, { timeout: 60000 });
     const error = await page.evaluate(() => window.profileError);
     if (error) throw new Error(error);
-    console.log(JSON.stringify({ browser: browser.version(), size, trials, positions, controls, threads, pkg }));
+    console.log(JSON.stringify({ browser: browser.version(), size, height, trials, positions, controls, threads, pkg }));
     for (const progress of positions) {
       for (let trial = 0; trial < trials; trial++) {
-        const result = await page.evaluate(async ({ progress, size, controls }) =>
-          window.runProfile(progress, size, controls), { progress, size, controls });
+        const result = await page.evaluate(async ({ progress, size, height, controls }) =>
+          window.runProfile(progress, size, controls, height), { progress, size, height, controls });
         console.log(JSON.stringify({ trial, ...result }));
       }
     }
