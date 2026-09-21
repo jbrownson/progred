@@ -16,7 +16,15 @@ async function start(search, { ok = true, parseError = false } = {}) {
   const listeners = {};
   let onChange;
   const loading = { style: {} };
-  const canvas = {};
+  const canvas = new EventTarget();
+  const canvasListeners = [];
+  const addCanvasListener = canvas.addEventListener.bind(canvas);
+  canvas.addEventListener = (type, listener, options) => {
+    canvasListeners.push({ type, options: structuredClone(options) });
+    addCanvasListener(type, listener, options);
+  };
+  const documentElement = { style: {} };
+  const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
     JSON,
@@ -25,7 +33,10 @@ async function start(search, { ok = true, parseError = false } = {}) {
       parent: { postMessage: (...args) => messages.push(structuredClone(args)) },
       addEventListener: (event, callback) => { listeners[event] = callback; },
     },
-    document: { querySelector: (selector) => selector === "#loading" ? loading : canvas },
+    document: {
+      documentElement, body,
+      querySelector: (selector) => selector === "#loading" ? loading : canvas,
+    },
     console: { info() {}, error() {} },
     fetch: async (url) => {
       calls.push(["fetch", url.href]);
@@ -45,7 +56,8 @@ async function start(search, { ok = true, parseError = false } = {}) {
       },
     },
   });
-  return { calls, loading, messages, onChange, focusEvents, listeners };
+  return { calls, loading, messages, onChange, focusEvents, listeners,
+    canvas, canvasListeners, documentElement, body };
 }
 
 test("browser window focus is forwarded without page click handlers", async () => {
@@ -61,6 +73,50 @@ test("standalone startup remains blank with its full menu and default workers", 
   const { calls, loading } = await start("");
   assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined]]);
   assert.equal(loading.style.display, "none");
+});
+
+test("wheel handling defaults to the editor, including embeds without an explicit choice", async () => {
+  for (const search of ["", "?wheel=editor", "?menu=hidden&document=../lessons/values.gid"]) {
+    const { canvas, canvasListeners, documentElement, body } = await start(search);
+    assert.deepEqual(canvasListeners, []);
+    assert.equal(documentElement.style.overscrollBehavior, undefined);
+    assert.equal(body.style.overscrollBehavior, undefined);
+    let received = 0;
+    canvas.addEventListener("wheel", (event) => { received++; event.preventDefault(); });
+    const event = new Event("wheel", { cancelable: true });
+    canvas.dispatchEvent(event);
+    assert.equal(received, 1);
+    assert.equal(event.defaultPrevented, true);
+  }
+});
+
+test("page wheel handling leaves the browser default intact and excludes editor wheel listeners", async () => {
+  const { canvas, canvasListeners, documentElement, body } = await start("?wheel=page");
+  assert.deepEqual(canvasListeners, [{ type: "wheel", options: { capture: true, passive: true } }]);
+  assert.equal(documentElement.style.overscrollBehavior, "auto");
+  assert.equal(body.style.overscrollBehavior, "auto");
+  let received = 0;
+  canvas.addEventListener("wheel", (event) => { received++; event.preventDefault(); });
+  for (const cancelable of [true, false]) {
+    const event = new Event("wheel", { cancelable });
+    canvas.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, false);
+  }
+  assert.equal(received, 0);
+  for (const type of ["pointerdown", "pointermove", "pointerup", "keydown"]) {
+    canvas.addEventListener(type, () => { received++; });
+    canvas.dispatchEvent(new Event(type));
+  }
+  assert.equal(received, 4);
+});
+
+test("invalid wheel configuration fails before starting workers or the editor", async () => {
+  for (const search of ["?wheel=", "?wheel=unknown"]) {
+    const { calls, loading } = await start(search);
+    assert.deepEqual(calls, []);
+    assert.equal(loading.style.display, "grid");
+    assert.match(loading.textContent, /wheel must be 'editor' or 'page'/);
+  }
 });
 
 test("embed fetches its document and supplies ordinary startup options", async () => {
@@ -127,7 +183,7 @@ async function lessonPage() {
       };
     });
     const frame = {
-      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&threads=1&observe=${name}-0`,
+      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1&observe=${name}-0`,
       contentWindow: {},
       getAttribute() { return this.src; },
       addEventListener: (event, callback) => { listeners[event] = callback; },
@@ -170,6 +226,7 @@ test("reset reloads only its own iframe", async () => {
         const url = new URL(value);
         assert.equal(url.searchParams.get("document"), `../lessons/${exercise.id}.gid`);
         assert.equal(url.searchParams.get("observe"), `${exercise.id}-1`);
+        assert.equal(url.searchParams.get("wheel"), "page");
         resetCounts[index]++;
       },
     });

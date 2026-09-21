@@ -42,7 +42,9 @@ system chooses an available port, so an existing editor preview can stay open.
 The page begins with five guided exercises: editing a text/number record,
 inserting into a list, creating and sharing cells, live Grap calculations,
 then editing a function and its calls.
-All use the real editor without its application menu.
+All use the real editor without its application menu, and explicitly select
+`wheel=page` so scrolling over an exercise scrolls the website. The full-page
+editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
 for the values and cells exercises, and just name/text/blob for the list exercise.
 The Grap and functions exercises add Grap and absent to the numeric set.
@@ -104,7 +106,7 @@ for a later exercise.
 An embed is an ordinary editor URL:
 
 ```html
-<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&threads=1&observe=values-0"
+<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&wheel=page&threads=1&observe=values-0"
         title="Editable greeting and count" loading="lazy"></iframe>
 ```
 
@@ -117,6 +119,8 @@ browser binary still contains the full editor's code.
 `document` resolves relative to the editor URL. A failed fetch or parse displays
 an error, not an empty substitute. `menu=hidden` removes the menu and its layout
 space, plus application shortcuts; it does not restrict what data can be edited.
+`wheel=page` leaves wheel input to the browser; omission or `wheel=editor` keeps
+editor scrolling/zooming. This is independent of menu visibility and embedding.
 `threads=1` gives each small exercise one rendering worker rather than a full
 CAM pool. The independent iframe isolates its WASM instance, event loop, focus,
 history, and worker lifetime. Lazy loading delays startup for distant examples.

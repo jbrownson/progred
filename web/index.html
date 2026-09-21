@@ -61,6 +61,17 @@
       };
       try {
         const params = new URLSearchParams(location.search);
+        const canvas = document.querySelector("#progred");
+        const wheel = params.get("wheel") ?? "editor";
+        if (wheel === "page") {
+          document.documentElement.style.overscrollBehavior = "auto";
+          document.body.style.overscrollBehavior = "auto";
+          // Keep wheel input out of winit without cancelling browser scrolling.
+          canvas.addEventListener("wheel", (event) => event.stopImmediatePropagation(),
+            { capture: true, passive: true });
+        } else if (wheel !== "editor") {
+          throw new Error("wheel must be 'editor' or 'page'");
+        }
         const documentUrl = params.get("document");
         let source;
         if (documentUrl !== null) {
@@ -73,7 +84,7 @@
         await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
           wasm.computation_finished, fail,
           params.has("threads") ? Number(params.get("threads")) : undefined);
-        const renderer = await wasm.prepare_renderer(document.querySelector("#progred"));
+        const renderer = await wasm.prepare_renderer(canvas);
         console.info(`Progred presentation: ${renderer}; ${wasm.worker_threads()} render workers`);
         const channel = params.get("observe");
         const onChange = channel === null ? undefined : (state) => {

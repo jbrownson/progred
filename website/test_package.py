@@ -40,7 +40,9 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(len(frames), 5)
         for src in frames:
             url = urljoin("https://prog.red/", src.replace("&amp;", "&"))
-            document = parse_qs(urlsplit(url).query)["document"][0]
+            params = parse_qs(urlsplit(url).query)
+            self.assertEqual(params["wheel"], ["page"])
+            document = params["document"][0]
             path = urlsplit(urljoin(url, document)).path
             self.assertTrue((self.destination / path.lstrip("/")).is_file())
         for module in self.destination.rglob("*.js"):
