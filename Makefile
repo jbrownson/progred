@@ -81,5 +81,5 @@ sandbox-app:
 	@./tools/build-macos-app
 
 sandbox-web:
-	./tools/sandbox-cargo web-threaded build --release -p progred
+	./tools/sandbox-cargo web-threaded build --release --bin progred -p progred
 	wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm

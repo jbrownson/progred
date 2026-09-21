@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -101,6 +102,20 @@ class PackageTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("make build-website", result.stderr)
+
+    def test_builds_request_the_linked_browser_binary(self):
+        scripts = (
+            ("website/build-ci.sh", 'cargo +"$web_toolchain" build'),
+            ("Makefile", "./tools/sandbox-cargo web-threaded build"),
+        )
+        for file, prefix in scripts:
+            with self.subTest(file=file):
+                source = (REPOSITORY / file).read_text().replace("\\\n", " ")
+                commands = [line.strip() for line in source.splitlines() if line.strip().startswith(prefix)]
+                self.assertEqual(len(commands), 1)
+                arguments = shlex.split(commands[0])
+                self.assertNotIn("--lib", arguments)
+                self.assertEqual(arguments[arguments.index("--bin") + 1], "progred")
 
 
 if __name__ == "__main__":

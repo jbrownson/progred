@@ -51,7 +51,7 @@ do not reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
 
 `website/build-ci.sh` is a second explicit exception, for publishing from a
 disposable x86_64 Linux CI runner with `CI=true`. It compiles only the browser
-library using the locked dependencies and shared browser build settings, into
+binary using the locked dependencies and shared browser build settings, into
 `target/ci-web`. It installs pinned tooling and has network access; it does not
 provide a sandbox within the runner. Dependency build scripts remain trusted
 within that CI environment. The OS/CI checks prevent accidental local use, not

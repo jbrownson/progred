@@ -159,7 +159,7 @@ make build-website
 For a disposable Linux CI runner, `npm run build` in this directory invokes
 `build-ci.sh`. It requires `CI=true` and x86_64 Linux, installs the pinned Rust
 nightly and the official wasm-bindgen CLI release matching `Cargo.lock`, builds
-the browser library, runs the website tests, and packages the assets. The CLI
+the browser binary, runs the website tests, and packages the assets. The CLI
 download is checked against the release's SHA-256 file. This path deliberately
 uses ordinary Cargo, not Seatbelt; don't use it as a local sandbox bypass.
 `tools/web-build-settings.sh` supplies the same Rust version, target, and threaded

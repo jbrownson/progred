@@ -42,7 +42,7 @@ export CARGO_NET_OFFLINE=false
 export CARGO_TARGET_DIR="$project_root/target/ci-web"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="$web_rustflags"
-cargo +"$web_toolchain" build --release --locked --lib -p progred \
+cargo +"$web_toolchain" build --release --locked --bin progred -p progred \
     -Z "build-std=$web_build_std" --target "$web_target"
 "$bindgen_root/wasm-bindgen" --target web --no-typescript \
     --out-dir web/pkg --out-name progred \
