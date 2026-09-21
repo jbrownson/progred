@@ -68,7 +68,7 @@
           if (!response.ok) throw new Error(`Could not load the example (${response.status})`);
           source = await response.text();
         }
-        if (!crossOriginIsolated) throw new Error("Open using Preview.command; this build requires cross-origin isolation");
+        if (!crossOriginIsolated) throw new Error("This editor needs an HTTPS page with cross-origin isolation enabled by its host");
         await init();
         await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
           wasm.computation_finished, fail,

@@ -34,7 +34,7 @@ function scheduleWake() {
 export async function startWorker(wasm, moduleUrl, onWake, onError,
   threads = Math.max(1, Math.min(8, (navigator.hardwareConcurrency ?? 2) - 1))) {
   if (!globalThis.crossOriginIsolated) {
-    throw new Error("Background rendering requires cross-origin isolation. Open the site using Preview.command, or serve it with COOP/COEP headers.");
+    throw new Error("Background rendering needs cross-origin isolation (COOP/COEP headers from the website host).");
   }
   if (worker) throw new Error("Computation worker already started");
   if (!Number.isInteger(threads) || threads < 1) throw new Error("Rendering worker count must be a positive integer");

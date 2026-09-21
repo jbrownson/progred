@@ -10,6 +10,9 @@
 /web/orbit-talc-pkg
 /web/orbit-lock-pkg
 /web/orbit-prepared-pkg
+/website/node_modules
+/website/.wrangler
+/website/__pycache__
 
 # Xcode
 xcuserdata/

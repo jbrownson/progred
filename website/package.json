@@ -1,0 +1,11 @@
+{
+  "name": "progred-website",
+  "private": true,
+  "scripts": {
+    "build": "sh build-ci.sh",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.136.1"
+  }
+}

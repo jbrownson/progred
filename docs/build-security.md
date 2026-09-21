@@ -49,6 +49,15 @@ ordinary locked Cargo run in `target/native`. This is not sandboxed. The
 checked-in launcher is the deliberate Linux exception to the Cargo tripwire;
 do not reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
 
+`website/build-ci.sh` is a second explicit exception, for publishing from a
+disposable x86_64 Linux CI runner with `CI=true`. It compiles only the browser
+library using the locked dependencies and shared browser build settings, into
+`target/ci-web`. It installs pinned tooling and has network access; it does not
+provide a sandbox within the runner. Dependency build scripts remain trusted
+within that CI environment. The OS/CI checks prevent accidental local use, not
+malicious bypass. Local macOS builds continue through Seatbelt. See the
+[website setup](../website/README.md#publishing-on-cloudflare).
+
 The repository also contains `.cargo/config.toml` as an accidental-use
 tripwire. Ordinary `cargo build`, `check`, `test`, and `run` commands stop at a
 compiler wrapper instead of compiling dependency code, use a deliberately
@@ -166,8 +175,8 @@ the separate `target/native` directory.
 The checked-in Cargo tripwire is defense against mistakes, not a security
 boundary: a process running as the repository owner can override Cargo config
 or edit the repository. Seatbelt (or a VM) is the boundary. Outside the
-checked-in Linux launcher, do not bypass the tripwire with `RUSTC_WRAPPER=` and
-then reuse those artifacts.
+checked-in Linux launcher and hosted website build, do not bypass the tripwire
+with `RUSTC_WRAPPER=` and then reuse those artifacts.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a

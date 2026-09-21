@@ -138,8 +138,62 @@ including GPU mesh drawing. Canvas2D/CPU mesh drawing remains a fallback when
 WebGPU is unavailable.
 
 For deployment, use HTTPS and configure those same headers. GitHub Pages alone
-does not provide the header configuration this threaded build requires; no
-service-worker workaround or deployment is configured here.
+does not provide the header configuration this threaded build requires. The
+Cloudflare configuration below supplies them without a service worker.
+
+## Publishing on Cloudflare
+
+This is a static website using Workers Static Assets, not a server-side Worker.
+`wrangler.jsonc` points at `target/website`; `package.py` assembles that directory
+from `public/`, the editor page and worker scripts, and wasm-bindgen's generated
+modules. Source files, development diagnostics, and build tools aren't published.
+`_headers` applies isolation headers to the page, embeds, WASM, and worker scripts.
+Assets revalidate on each visit, and unknown URLs return 404, not the homepage.
+
+To build a publishable directory locally on macOS:
+
+```sh
+make build-website
+```
+
+For a disposable Linux CI runner, `npm run build` in this directory invokes
+`build-ci.sh`. It requires `CI=true` and x86_64 Linux, installs the pinned Rust
+nightly and the official wasm-bindgen CLI release matching `Cargo.lock`, builds
+the browser library, runs the website tests, and packages the assets. The CLI
+download is checked against the release's SHA-256 file. This path deliberately
+uses ordinary Cargo, not Seatbelt; don't use it as a local sandbox bypass.
+`tools/web-build-settings.sh` supplies the same Rust version, target, and threaded
+WASM/SIMD flags to both build paths. No native editor code changes are required.
+
+One-time Cloudflare setup, after the deployment changes are committed and the
+chosen commit is pushed to a `website-live` branch on GitHub:
+
+1. In Workers & Pages, choose **Connect GitHub** and authorize just
+   `jbrownson/progred`.
+2. Name the Worker **progred** (matching `wrangler.jsonc`).
+3. Set the production branch to **website-live**, root directory to **website**,
+   build command to **npm run build**, and deploy command to **npm run deploy**.
+4. Leave non-production branch builds disabled. Cloudflare installs the locked
+   npm dependencies and supplies `CI=true` and deployment authentication.
+5. Check the generated HTTPS `workers.dev` address first. Then add `prog.red`
+   as a custom domain; DNS setup is a separate step, not part of the build.
+
+Do not connect the development branch as production just to get through the
+wizard: **Settings → Build → Branch control** can select `website-live` if it
+isn't offered during creation. Don't deploy until the production branch is set.
+
+Publishing means advancing `website-live` to a tested commit, not copying files
+or merging a second implementation of the website. An explicit
+`git push origin HEAD:website-live` publishes the current commit (only when
+intentionally requested); commits/pushes to `master` alone don't publish.
+Don't force-push to undo a release: use Cloudflare's deployment rollback for an
+immediate rollback, then fix/revert the source and publish a new commit.
+No credentials belong in this repository.
+
+Cloudflare's first hosted build still needs to verify the clean Linux build and
+its 20-minute build limit. Local packaging and dry-run validation don't establish
+that the hosted build or public browser session succeeds. The generated build
+directory and npm dependencies are ignored by Git.
 
 Run the preview server and embed-host checks without opening an editor
 (the latter uses Node's built-in test runner, with no dependencies):

@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "progred",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../target/website",
+    "not_found_handling": "404-page"
+  }
+}

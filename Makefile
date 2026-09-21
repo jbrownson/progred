@@ -8,13 +8,14 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web run-web web serve-web build-ipad build-ipad-device sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
+.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web build-website run-web web serve-web build-ipad build-ipad-device sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
 
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once (alias: run-native)"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C (alias: dev-native)"
 	@echo "  make build-web    Build the browser app"
+	@echo "  make build-website  Build the publishable website into target/website"
 	@echo "  make run-web      Build and serve the browser app on port 8080"
 	@echo "  make build-ipad   Build the native iPad app for Apple Silicon Simulator"
 	@echo "  make build-ipad-device  Build the unsigned native iPad app for a device"
@@ -45,6 +46,9 @@ dev-native:
 	@./tools/dev-native $(ARGS)
 
 build-web: sandbox-web
+
+build-website: build-web
+	python3 -B website/package.py
 
 run-web: build-web
 	@echo "Open Progred: http://127.0.0.1:8080/editor/"

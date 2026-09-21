@@ -78,10 +78,10 @@ run_sandboxed() {
             "$@"
 }
 
-use_minimum_age_toolchain() {
-    cargo_path=$("$rustup_path" which cargo --toolchain nightly-2026-08-27)
-    rustc_path=$("$rustup_path" which rustc --toolchain nightly-2026-08-27)
-    rustdoc_path=$("$rustup_path" which rustdoc --toolchain nightly-2026-08-27)
+use_toolchain() {
+    cargo_path=$("$rustup_path" which cargo --toolchain "$1")
+    rustc_path=$("$rustup_path" which rustc --toolchain "$1")
+    rustdoc_path=$("$rustup_path" which rustdoc --toolchain "$1")
     toolchain_root=$(dirname "$(dirname "$cargo_path")")
 }
 
@@ -89,16 +89,16 @@ use_minimum_age_toolchain() {
 if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
     web_command=$1
     shift
-    use_minimum_age_toolchain
+    . "$tool_dir/web-build-settings.sh"
+    use_toolchain "$web_toolchain"
     target_dir="$build_root/build-web"
-    web_rustflags='-C target-feature=+atomics,+bulk-memory,+simd128 -C link-arg=--shared-memory -C link-arg=--max-memory=2147483648 -C link-arg=--import-memory -C link-arg=--export=__heap_base -C link-arg=--export=__wasm_init_tls -C link-arg=--export=__tls_size -C link-arg=--export=__tls_align -C link-arg=--export=__tls_base'
     if [ "$web_command" = web-threaded-fetch ]; then
         run_sandboxed 1 false 0 "$cargo_path" fetch --locked \
             --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
-            --target wasm32-unknown-unknown
+            --target "$web_target"
     else
         run_sandboxed 0 true 0 "$cargo_path" --frozen "$@" \
-            -Z build-std=std,panic_abort --target wasm32-unknown-unknown
+            -Z "build-std=$web_build_std" --target "$web_target"
     fi
     exit
 fi
@@ -111,7 +111,7 @@ fi
 
 if [ "${1-}" = update ]; then
     shift
-    use_minimum_age_toolchain
+    use_toolchain nightly-2026-08-27
     run_sandboxed 1 false 1 "$cargo_path" update -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' "$@"
     exit
@@ -119,7 +119,7 @@ fi
 
 if [ "${1-}" = resolve ]; then
     shift
-    use_minimum_age_toolchain
+    use_toolchain nightly-2026-08-27
     run_sandboxed 1 false 1 "$cargo_path" metadata -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' \
         --format-version 1 "$@" >/dev/null
