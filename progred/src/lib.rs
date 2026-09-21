@@ -48,6 +48,7 @@ mod styles;
 #[cfg(test)]
 mod test_values;
 mod text_store;
+mod timers;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod web_embed;
 #[cfg(target_arch = "wasm32")]
@@ -71,6 +72,7 @@ use peniko::{Brush, Color};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use web_time::Instant;
 
 #[cfg(target_os = "ios")]
 use gpu::{RenderContext, RenderSurface};
@@ -99,7 +101,7 @@ use winit::application::ApplicationHandler;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::dpi::LogicalSize;
 use winit::event::{Ime, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
 #[cfg(target_os = "linux")]
@@ -327,6 +329,7 @@ pub(crate) enum QuitState {
 /// world type.
 pub(crate) struct Editor {
     pub(crate) computations: computations::Computations,
+    pub(crate) timers: timers::Timers,
     pub(crate) focused: bool,
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
@@ -506,6 +509,7 @@ fn new_editor(
         .unwrap_or_default();
     Editor {
         computations,
+        timers: timers::Timers::default(),
         focused: false,
         drawn_menu,
         state: RenderState::Suspended(None),
@@ -664,6 +668,34 @@ pub(crate) fn text_dialog() -> rfd::FileDialog {
 }
 
 impl ApplicationHandler<UserEvent> for App {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = Instant::now();
+        for runner in &mut self.editors {
+            if let RenderState::Active { window, .. } = &runner.editor.state {
+                let window = window.clone();
+                let size = window.inner_size();
+                if runner.editor.timers.fire_due(now) {
+                    if !runner.flush_pending_continuous() {
+                        runner.refresh_frame(
+                            window.scale_factor(),
+                            Size::new(size.width as f64, size.height as f64),
+                        );
+                    }
+                    runner.sync_cursor(&window);
+                    window.request_redraw();
+                }
+            }
+        }
+        event_loop.set_control_flow(
+            self.editors
+                .iter()
+                .filter(|runner| matches!(runner.editor.state, RenderState::Active { .. }))
+                .filter_map(|runner| runner.editor.timers.deadline())
+                .min()
+                .map_or(ControlFlow::Wait, ControlFlow::WaitUntil),
+        );
+    }
+
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         for runner in &mut self.editors {
             if runner.flush_pending_continuous()
@@ -1632,6 +1664,7 @@ impl Editor {
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
             computations,
+            timers,
             focused: _,
             drawn_menu: _,
             state: _,
@@ -1659,6 +1692,7 @@ impl Editor {
         let changed_path = *doc_path != path;
         *pending_discard = None;
         computations.reset();
+        *timers = timers::Timers::default();
         *pressed = false;
         *menu = menu::State::default();
         *binders = text_binders;

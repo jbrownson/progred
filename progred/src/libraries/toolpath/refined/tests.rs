@@ -69,6 +69,7 @@ fn settings_at(
 
 struct Fixture {
     computations: Computations,
+    interaction: Rc<fidget::interaction::Interaction>,
     graph: Computation,
     queue: Arc<Mutex<VecDeque<Job>>>,
     runs: Rc<Cell<usize>>,
@@ -133,9 +134,18 @@ impl Fixture {
             ),
         );
         let program = crate::libraries::toolpath::tests::tool_program(program);
-        let graph = Computation::new(&computations, program, 10000, settings(0.0, 0.25), 3);
+        let interaction = Rc::new(fidget::interaction::Interaction::new(&computations));
+        let graph = Computation::new(
+            &computations,
+            program,
+            10000,
+            settings(0.0, 0.25),
+            3,
+            interaction.permitted.clone(),
+        );
         Self {
             computations,
+            interaction,
             graph,
             queue,
             runs,
@@ -206,6 +216,65 @@ fn mouse_release_starts_only_the_latest_view_without_repreparing_the_scene() {
     );
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
+}
+
+#[test]
+fn wheel_zoom_waits_for_quiet_and_reuses_the_mesh_and_prepared_scene() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    let mesh = f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+
+    let now = web_time::Instant::now();
+    let mut timers = crate::timers::Timers::default();
+    f.interaction.zoomed(&mut timers, now);
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "closing admission alone preserves the current image"
+    );
+    for zoom in [1.1, 1.4, 2.0] {
+        let mut next = settings(0.0, 0.25);
+        let camera = Value::record([(
+            fidget::vocabulary::CAMERA,
+            Value::record([(fidget::vocabulary::ZOOM, f32::value(zoom))]),
+        )]);
+        next.request =
+            fidget::raster::Request::new(next.request.preview.clone(), Some(&camera), 1.0).unwrap();
+        f.graph.settings.set(next);
+        assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+        assert!(f.queue.lock().unwrap().is_empty());
+    }
+    // Button release must not admit pixels while wheel input is still active.
+    f.computations.pointer_pressed.set(true);
+    f.mesh();
+    f.computations.pointer_pressed.set(false);
+    f.mesh();
+    assert!(f.queue.lock().unwrap().is_empty());
+
+    f.interaction
+        .refresh(now + web_time::Duration::from_millis(150));
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only the latest pixels, not mesh generation or scene preparation"
+    );
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+    assert!(timers.fire_due(now + web_time::Duration::from_secs(1)));
+    f.interaction
+        .refresh(now + web_time::Duration::from_secs(1));
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "late delivery does not restart completed work"
+    );
     assert!(f.queue.lock().unwrap().is_empty());
     assert_eq!(f.runs.get(), 1);
 }

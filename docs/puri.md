@@ -288,6 +288,21 @@ and gesture input flushes the earlier batch; gesture end/cancel also flushes.
 Grap handlers receive `gesture` events with sample records under `content`;
 each names `pinch` (fractional scale) or `rotation` (clockwise radians) and `delta`.
 
+Puri's timer capability creates a one-shot handle and a weak completion handle
+for the shell. Dropping the owning handle cancels it; delivery clears its
+deadline and cannot affect a replacement handle. Progred retains only the weak
+completions, wakes at the earliest deadline through the event loop, delivers due
+timers, and requests a frame. Early platform wakeups leave future deadlines
+pending. Timer queues have document lifetime and retain no document callbacks.
+
+`puri-widgets` supplies a caller-owned debounce over that capability: triggering
+replaces its timer, and readiness means either delivery or elapsed monotonic
+time. CAM camera handlers use it only for accepted zoom changes, with a 150 ms
+delay. Each preview derives readiness at frame build time, so a missing delivery
+recovers on the next frame. Only implicit pixel-job submission waits; input,
+immediate mesh drawing, and other previews continue independently. The shell
+knows nothing about scrolling, debounce durations, or render admission.
+
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the
 same pointer-cancellation handlers and clears the adapter's pressed state.

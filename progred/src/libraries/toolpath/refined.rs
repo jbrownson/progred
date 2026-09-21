@@ -58,6 +58,7 @@ impl Computation {
         fuel: usize,
         settings: implicit::computation::Settings,
         depth: u8,
+        permitted: Memo<bool>,
     ) -> Self {
         let runtime = &computations.runtime;
         let program = runtime.input(program);
@@ -102,6 +103,7 @@ impl Computation {
             settings.clone(),
             fidget::raster::Passes::Final,
             Some(mesh_ready),
+            Some(permitted),
         );
         let view = runtime.memo_by(
             move |read| {
@@ -167,6 +169,8 @@ pub(super) fn display(
                 &local
             }
         };
+        let interaction =
+            fidget::interaction::Interaction::at(computations, context.inputs.view, context.path);
         let computation = computations.at(context.inputs.view, context.path, || {
             Computation::new(
                 computations,
@@ -174,6 +178,7 @@ pub(super) fn display(
                 fuel,
                 image_settings.clone(),
                 depth,
+                interaction.permitted.clone(),
             )
         });
         computation.program.set(program.clone());

@@ -53,6 +53,7 @@ impl Computation {
         program: Value,
         fuel: usize,
         settings: Settings,
+        permitted: Memo<bool>,
     ) -> Self {
         let runtime = &computations.runtime;
         let program = runtime.input(program);
@@ -68,6 +69,7 @@ impl Computation {
                 first_max_edge: 128,
             },
             None,
+            Some(permitted),
         );
         Self {
             program,
@@ -105,6 +107,7 @@ impl Computation {
             computations,
             recording,
             settings.clone(),
+            None,
             None,
             |request, _| Ok(Ok(Arc::new(request))),
             move |scene, view, cancel, publish, progress| {
@@ -154,12 +157,14 @@ pub(crate) fn image(
     settings: Input<Settings>,
     passes: Passes,
     ready: Option<Memo<bool>>,
+    permitted: Option<Memo<bool>>,
 ) -> Memo<Outcome<ViewImage>> {
     image_with(
         computations,
         recording,
         settings,
         ready,
+        permitted,
         |request, cancel| {
             let objects = match scene(request) {
                 Ok(objects) => objects,
@@ -192,6 +197,7 @@ fn image_with<S: Send + Sync + 'static>(
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     ready: Option<Memo<bool>>,
+    permitted: Option<Memo<bool>>,
     prepare: impl Fn(SceneRequest, &incremental::Cancellation) -> Result<Outcome<S>, incremental::Error>
     + Send
     + Sync
@@ -263,13 +269,9 @@ fn image_with<S: Send + Sync + 'static>(
             _ => false,
         },
     );
-    let permitted = runtime.memo({
-        let pressed = computations.pointer_pressed.clone();
-        move |read| Ok(!*pressed.read(read))
-    });
     let worker = computations.tasks.memo_reporting_with_start_condition(
         worker_input,
-        Some(permitted),
+        permitted,
         move |(scene, view), cancel, publish, progress| {
             cancel.check()?;
             match scene.as_ref() {
@@ -547,6 +549,7 @@ mod tests {
             &computations,
             recording(&computations, program, fuel),
             settings_input.clone(),
+            None,
             None,
             move |request, cancel| {
                 started.send(cancel.clone()).unwrap();

@@ -5,7 +5,8 @@ use gid::{Document, Step, Value};
 use grap::Host;
 use incremental::background::{Executor, Tasks};
 use incremental::{Input, Roots, Runtime, Source};
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
+use web_time::Instant;
 
 #[derive(Clone)]
 pub(crate) struct Snapshot {
@@ -17,6 +18,7 @@ pub(crate) struct Computations {
     pub runtime: Runtime,
     pub tasks: Tasks,
     pub pointer_pressed: Input<bool>,
+    pub frame_time: Cell<Instant>,
     snapshot: Input<Snapshot>,
     pub definitions: grap::memo::Definitions<Snapshot>,
     roots: Roots<(Root, Vec<Step>)>,
@@ -54,6 +56,7 @@ impl Computations {
         });
         Self {
             pointer_pressed: runtime.input(false),
+            frame_time: Cell::new(Instant::now()),
             runtime,
             tasks,
             snapshot,

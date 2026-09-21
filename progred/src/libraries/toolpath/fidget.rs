@@ -286,8 +286,16 @@ pub(super) fn display(
                 &local
             }
         };
+        let interaction =
+            fidget::interaction::Interaction::at(computations, context.inputs.view, context.path);
         let computation = computations.at(context.inputs.view, context.path, || {
-            computation::Computation::new(computations, program.clone(), fuel, settings.clone())
+            computation::Computation::new(
+                computations,
+                program.clone(),
+                fuel,
+                settings.clone(),
+                interaction.permitted.clone(),
+            )
         });
         computation.program.set(program.clone());
         computation.fuel.set(fuel);

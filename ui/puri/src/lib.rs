@@ -19,6 +19,7 @@ pub mod interact;
 pub mod mesh;
 pub mod scroll;
 pub mod text;
+pub mod timer;
 
 pub use delim::{Delim, DelimStyle};
 pub use draw::{

@@ -3,6 +3,7 @@
 
 pub mod color_picker;
 pub mod completion;
+pub mod debounce;
 pub mod panel;
 pub mod progress;
 pub mod radio;

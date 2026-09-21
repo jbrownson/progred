@@ -276,14 +276,28 @@ mesh is current. Pixel rendering waits for the current compiled scene. All stage
 are still read while waiting, so obsolete work is cancelled rather than left
 running because the display stopped demanding it. Completed scenes are shared
 through the ordinary async result handle, not a renderer-owned cache.
-Pixel-job submission is separately permitted only while no pointer button is
-held, using a tracked frame input. An orbit drag cancels obsolete pixels on its
-first camera change; further motion keeps only the latest request, and release
-admits it immediately. Cancellation of the gesture also releases this gate.
-There is no debounce or inactivity timer. Mesh generation, scene preparation,
-and immediate tool/path updates continue during a drag. Merely pressing without
-changing render inputs does not discard the current image or cancel valid work.
-Non-button input, including wheel and pinch, is not deferred by this gate.
+Pixel-job submission takes an explicit permission memo. The preview composes
+the existing no-held-button condition with its own zoom debounce. An orbit drag
+cancels obsolete pixels on its first camera change; further motion keeps only
+the latest request, and release admits it immediately unless zoom is still
+debounced. Only a handled wheel/pinch that changes this preview's camera resets
+its 150 ms quiet period. Scrolling elsewhere does not postpone its work.
+
+The reusable `puri_widgets::debounce::Debounce` owns one cancellable timer handle.
+It becomes ready when that timer completes **or** its deadline has elapsed.
+The preview samples that readiness using the frame's monotonic time and updates
+an ordinary tracked boolean before demanding the render; that boolean is
+derived, not a flag that only a callback can repair. The shell stores weak timer
+completion handles, fires due ones and refreshes the frame, using Winit's normal
+event-loop deadline. No worker sleeps and no timer captures a document callback.
+Replacing a debounce drops its old handle, so an old delivery cannot release
+the replacement. Document replacement clears the timer queue and interaction
+roots; closing a window drops them. A missing delivery recovers on the next
+natural frame, and an unexpectedly early delivery releases only its own constraint.
+
+Mesh generation, scene preparation, immediate zoom, and tool/path updates
+continue during interaction. Merely pressing or scrolling without changing
+render inputs does not discard the current image or cancel valid work.
 A current implicit image then wins, including intermediate refinements. While
 it is pending, the viewport draws the available mesh synchronously using the
 current camera. The old implicit image is not used as the fallback. Current
@@ -303,7 +317,7 @@ replace the mesh only in their explicitly covered regions, including transparent
 pixels; unfinished regions remain mesh. The progress bar advances across that
 single pass. The raster API also retains the progressive resolution sequence,
 still used by the standalone implicit preview. The async runtime supplies only
-the general submission condition; the CAM adapter chooses the pointer policy.
+the general submission condition; the CAM adapter chooses the interaction policy.
 
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.

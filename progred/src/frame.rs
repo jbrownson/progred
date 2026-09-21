@@ -343,6 +343,7 @@ impl Editor {
         previous: Option<(Option<Root>, Hovered)>,
     ) -> Frame {
         self.sync_views();
+        self.computations.frame_time.set(web_time::Instant::now());
         prepare_frame(
             FrameDescription {
                 computations: &self.computations,

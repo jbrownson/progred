@@ -23,6 +23,7 @@ use fidget_engine::{
 use gid::{CellId, Cells, Value};
 
 mod completion;
+pub(crate) mod interaction;
 pub(crate) mod mesh;
 #[cfg(all(test, feature = "mesh-experiment"))]
 mod mesh_experiment;
@@ -1079,6 +1080,10 @@ pub(crate) fn interactive_volume(
             orbit_handler(input.state),
         ),
         Rc::new(move |context| {
+            let activity = context.inputs.computations.map(|computations| {
+                interaction::Interaction::at(computations, context.inputs.view, context.path)
+            });
+            let pinch_activity = activity.clone();
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
             let pinch_root = root.clone();
@@ -1093,6 +1098,9 @@ pub(crate) fn interactive_volume(
                     let (state, outcome) = zoom_handler(state)(delta);
                     if let Some(state) = state {
                         editor.annotate(&root, &path, state);
+                        if let Some(activity) = &activity {
+                            activity.zoomed(&mut world.timers, web_time::Instant::now());
+                        }
                     }
                     outcome
                 },
@@ -1107,6 +1115,9 @@ pub(crate) fn interactive_volume(
                         let state = editor.annotation(&pinch_root, &pinch_path);
                         if let Some(state) = pinch_zoom(state, delta) {
                             editor.annotate(&pinch_root, &pinch_path, state);
+                            if let Some(activity) = &pinch_activity {
+                                activity.zoomed(&mut world.timers, web_time::Instant::now());
+                            }
                         }
                         // Own the gesture even at a zoom limit.
                         true
