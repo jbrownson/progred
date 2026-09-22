@@ -181,6 +181,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
     let card = {
         let layout = completion_card::<usize>(
             &mut tcx,
+            crate::modifiers::native(),
             &crate::styles::editor(1.0),
             &entries,
             0,
@@ -229,6 +230,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
             let field = Rect::new(50.0 * scale, y, 150.0 * scale, y + 20.0 * scale);
             let card = completion_card::<crate::Editor>(
                 &mut tcx,
+                crate::modifiers::native(),
                 &styles,
                 &entries,
                 0,
@@ -312,6 +314,7 @@ fn completion_details_share_the_cards_right_edge() {
         });
         let card = completion_card::<crate::Editor>(
             &mut tcx,
+            crate::modifiers::native(),
             &styles,
             &entries,
             0,
@@ -375,6 +378,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         };
         let card = completion_card::<World>(
             &mut tcx,
+            crate::modifiers::native(),
             &crate::styles::editor(1.0),
             &entries,
             0,
@@ -445,6 +449,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     let mut frame = |(scroll, choice, everything), pointer| {
         let layout = completion_card::<(f64, usize, bool)>(
             &mut tcx,
+            crate::modifiers::native(),
             &styles,
             &entries,
             choice,
@@ -609,6 +614,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     let mut frame = |state: &State, clip: Option<Rect>, pointer| {
         let card = completion_card::<State>(
             &mut tcx,
+            crate::modifiers::native(),
             &context.styles,
             &entries,
             state.view.1,
@@ -790,6 +796,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     let mut frame = |state: &State, entries: &[Entry<State>], pointer| {
         let layout = completion_card::<State>(
             &mut tcx,
+            crate::modifiers::native(),
             &styles,
             entries,
             state.view.1,
@@ -929,6 +936,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     };
     let node = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),
@@ -969,6 +977,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     let clicked = activated.clone();
     let card = completion_card::<crate::Editor>(
         &mut tcx,
+        crate::modifiers::native(),
         &styles,
         &[Entry {
             display: "completion offer".into(),

@@ -136,8 +136,15 @@ fn command_a_selects_the_current_views_root() {
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
         let selection = Selection::edge(root, child_path.clone());
         for selection in [None, Some(&selection)] {
-            let target = step_selection(&descends, Some(root), selection, LINE, &event)
-                .expect("Select All reaches the view root");
+            let target = step_selection(
+                crate::modifiers::native(),
+                &descends,
+                Some(root),
+                selection,
+                LINE,
+                &event,
+            )
+            .expect("Select All reaches the view root");
             assert_eq!(target.root.as_ref(), Some(root));
             assert_eq!(target.path.as_ref(), path);
         }
@@ -160,7 +167,17 @@ fn command_a_selects_the_current_views_root() {
             ..event.clone()
         },
     ] {
-        assert!(step_selection(&descends, Some(&document), None, LINE, &event).is_none());
+        assert!(
+            step_selection(
+                crate::modifiers::native(),
+                &descends,
+                Some(&document),
+                None,
+                LINE,
+                &event
+            )
+            .is_none()
+        );
     }
 }
 
@@ -174,13 +191,23 @@ fn navigation_declines_modified_keys_releases_and_other_keys() {
         modifiers: Modifiers::SHIFT,
         ..arrow(NamedKey::ArrowDown)
     };
-    assert!(step_selection(&ds, None, None, LINE, &shifted).is_none());
+    assert!(step_selection(crate::modifiers::native(), &ds, None, None, LINE, &shifted).is_none());
     let released = KeyboardEvent {
         state: KeyState::Up,
         ..arrow(NamedKey::ArrowDown)
     };
-    assert!(step_selection(&ds, None, None, LINE, &released).is_none());
-    assert!(step_selection(&ds, None, None, LINE, &arrow(NamedKey::Escape)).is_none());
+    assert!(step_selection(crate::modifiers::native(), &ds, None, None, LINE, &released).is_none());
+    assert!(
+        step_selection(
+            crate::modifiers::native(),
+            &ds,
+            None,
+            None,
+            LINE,
+            &arrow(NamedKey::Escape)
+        )
+        .is_none()
+    );
 }
 
 #[test]

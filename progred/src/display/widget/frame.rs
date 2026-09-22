@@ -17,6 +17,7 @@ use puri::{Affine, Placement, Point, Rect, Vec2};
 use std::rc::Rc;
 
 pub struct HoverInput<'a, H> {
+    pub command_modifier: puri::keyboard::CommandModifier,
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
     pub reach_px: f64,
@@ -32,6 +33,7 @@ impl<H> Clone for HoverInput<'_, H> {
 impl<H> Default for HoverInput<'_, H> {
     fn default() -> Self {
         Self {
+            command_modifier: crate::modifiers::native(),
             pointer: None,
             prior: None,
             reach_px: 0.0,
@@ -140,6 +142,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
 /// A running placement/hover pass. Ordinary leaves execute immediately;
 /// only floating placements are deferred.
 pub struct HoverPass<C, H> {
+    command_modifier: puri::keyboard::CommandModifier,
     pointer: Option<Point>,
     prior: Option<H>,
     reach_px: f64,
@@ -155,6 +158,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         H: Clone,
     {
         Self {
+            command_modifier: input.command_modifier,
             pointer: input.pointer,
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
@@ -168,6 +172,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
     pub(crate) fn visit(&mut self, step: impl FnOnce(&mut HoverContext<'_, C, H>)) {
         let mut context = HoverContext::new(
             HoverInput {
+                command_modifier: self.command_modifier,
                 pointer: self.pointer,
                 prior: self.prior.as_ref(),
                 reach_px: self.reach_px,

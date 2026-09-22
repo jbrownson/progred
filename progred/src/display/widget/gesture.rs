@@ -97,7 +97,7 @@ pub fn on_state_drag(
             targeted(
                 target.clone(),
                 false,
-                crate::editing::picking,
+                crate::modifiers::picking(context.inputs.command_modifier),
                 PartialEq::eq,
                 move |world, point| {
                     if on_press(world) {

@@ -1,23 +1,35 @@
+use puri::keyboard::CommandModifier;
 use ui_events::keyboard::Modifiers;
+use ui_events::pointer::PointerButtonEvent;
 
 /// The platform's primary application-command modifier.
-pub(crate) fn command(modifiers: &Modifiers) -> bool {
+pub(crate) fn native() -> CommandModifier {
     if cfg!(target_os = "macos") {
-        modifiers.meta()
+        CommandModifier::Meta
     } else {
-        modifiers.ctrl()
+        CommandModifier::Control
     }
 }
 
-/// Nonlocal graph relationships become visible while this pointer
+/// Picking activates a nonlocal graph relationship while the command
 /// modifier is held.
-pub(crate) fn link(modifiers: &Modifiers) -> bool {
-    command(modifiers)
+pub(crate) fn picking(command: CommandModifier) -> fn(&PointerButtonEvent) -> bool {
+    match command {
+        CommandModifier::Meta => |event| event.state.modifiers.meta(),
+        CommandModifier::Control => |event| event.state.modifiers.ctrl(),
+    }
 }
 
-/// Picking is the activating gesture of the same link mode.
-pub(crate) fn pick(modifiers: &Modifiers) -> bool {
-    link(modifiers)
+/// Ordinary editing uses a primary contact outside source-picking mode.
+pub(crate) fn primary_edit(command: CommandModifier) -> fn(&PointerButtonEvent) -> bool {
+    match command {
+        CommandModifier::Meta => {
+            |event| puri::interact::is_primary_contact(event) && !event.state.modifiers.meta()
+        }
+        CommandModifier::Control => {
+            |event| puri::interact::is_primary_contact(event) && !event.state.modifiers.ctrl()
+        }
+    }
 }
 
 pub(crate) fn plain(modifiers: &Modifiers) -> bool {
@@ -36,9 +48,7 @@ mod tests {
             Modifiers::CONTROL
         };
 
-        assert!(link(&platform));
-        assert!(pick(&platform));
-        assert!(!link(&Modifiers::empty()));
-        assert!(!pick(&Modifiers::empty()));
+        assert!(native().pressed(&platform));
+        assert!(!native().pressed(&Modifiers::empty()));
     }
 }

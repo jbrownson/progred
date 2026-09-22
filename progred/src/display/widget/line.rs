@@ -132,7 +132,7 @@ pub fn view(
                 output.claim(super::frame::Probe::retaining(placement, target));
             }
             output.handler().on_pointer_down(move |world, event| {
-                crate::editing::primary_edit(event)
+                crate::modifiers::primary_edit(world.command_modifier)(event)
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && {

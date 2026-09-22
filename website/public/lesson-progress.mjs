@@ -11,6 +11,9 @@ const fields = {
   name: "02e56265-4d6d-0828-d3a7-559e6f75fffe",
   params: "195b378d-0d31-d90a-b0d7-366c15346b70",
   body: "98614386-6eda-2e2f-bf9a-b8484357a0c9",
+  key: "f12dea12-c741-fe36-3127-50a264f3a235",
+  follow: "33c6fb36-3ddc-6f13-fd05-4c68f7a37a98",
+  document: "ef62fa62-f008-c1ec-a703-89571933aba0",
 };
 const slots = [
   "9940ece2-7410-c72a-5308-a544890ccc71",
@@ -20,6 +23,18 @@ const slots = [
 const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
 const sum = "201af445-eb7e-2c27-0bb5-ead10b781fc1";
 const multiply = "d6f384c4-39d9-d699-96d5-45df422efd79";
+const drawing = {
+  drawing: "6889fa23-5b00-2be4-c8b1-06d5f31dafbf",
+  program: "bdf60781-0b27-4ad5-b02b-d409aef34b6a",
+  fill: "1624dc97-3ec7-7902-03eb-8fd22c9d6d05",
+  shape: "fcaaadef-1498-0397-cce9-5363fc5a54f9",
+  circle: "e06a6d09-4c4f-75cd-6c1d-59ed6ed64e05",
+  x: "415def0f-a0a9-ac40-dfba-5fca4d0f8876",
+  y: "4e2dcde5-b1ab-1480-a2f1-26176dd148c7",
+  radius: "6423c35e-07d7-a4ff-5361-27d1f1d8eb53",
+  do: "b1fc4cb4-5c58-b1a6-62c4-31feef5bd140",
+  expressions: "5fab151c-006a-e148-7c28-837f2003f43c",
+};
 
 export function lessonProgress(lesson) {
   const completed = new Set();
@@ -81,6 +96,43 @@ function references(list) {
 // Checks describe achievements; the page retains them until this exercise resets.
 export function completedSteps(lesson, state, previous) {
   const root = state?.document?.root;
+  if (lesson === "create") {
+    return [
+      ...(number(field(root, slots[0])) === 42 ? ["number"] : []),
+      ...(text(field(root, slots[1])) === "hello" ? ["text"] : []),
+      ...(field(root, slots[2])?.list?.some((value) => number(value) === 7) ? ["list"] : []),
+    ];
+  }
+  if (lesson === "forest") {
+    const height = "cc32dd05-0a93-5180-4e7a-704b4d59e7ac";
+    const paint = "cb04728f-5e6a-1d93-a679-0238b5f1ce4d";
+    const rgb = "6c8a17cb-e463-186c-c8b0-7e536ccffa6b";
+    const program = field(root, slots[0])?.cell;
+    const fn = field(root, slots[1])?.cell;
+    const contents = state?.document?.cells;
+    const calls = field(contents?.[program], drawing.expressions)?.list;
+    const body = field(contents?.[fn], fields.body);
+    const leaves = field(body, drawing.expressions)?.list?.[1];
+    const color = bytes(field(field(leaves, paint), rgb));
+    if (typeof fn !== "string" || typeof program !== "string"
+        || field(field(field(root, slots[2]), drawing.drawing), drawing.program)?.cell !== program
+        || calls?.length !== 3
+        || !calls.every((call) => field(call, fields.function)?.cell === fn)
+        || field(leaves, fields.function)?.cell !== drawing.fill) return [];
+    const selection = state.selection;
+    const path = selection?.source_path?.list;
+    return [
+      ...(number(field(calls[0], height)) === 100
+        && number(field(calls[1], height)) === 90 && number(field(calls[2], height)) === 72 ? ["height"] : []),
+      ...(color?.length === 3 && color.some((byte, i) => byte !== [0x54, 0x8b, 0x64][i]) ? ["color"] : []),
+      ...(selection?.view === "document" && selection.stage === "value" && path?.length === 5
+        && field(path[0], fields.key)?.cell === slots[1]
+        && field(path[1], fields.follow)?.cell === fields.document
+        && field(path[2], fields.key)?.cell === fields.body
+        && field(path[3], fields.key)?.cell === drawing.expressions
+        && field(path[4], fields.element) ? ["source"] : []),
+    ];
+  }
   if (lesson === "values") {
     const greeting = text(field(root, fields.greeting));
     const count = number(field(root, fields.count));
@@ -159,6 +211,40 @@ export function completedSteps(lesson, state, previous) {
       ...(inputs.includes(4) && inputs.includes(5) ? ["argument"] : []),
       ...(factor === 3 ? ["body"] : []),
       ...(text(field(contents?.[parameter], fields.name)) === "amount" ? ["rename"] : []),
+    ];
+  }
+  if (lesson === "drawing") {
+    const contents = state?.document?.cells;
+    const fn = field(root, slots[0])?.cell;
+    const program = field(root, slots[1])?.cell;
+    const definition = contents?.[fn];
+    const parameters = field(definition, fields.params)?.list;
+    const body = field(definition, fields.body);
+    const circle = field(field(body, drawing.shape), drawing.circle);
+    const radius = number(field(circle, drawing.radius));
+    const calls = field(contents?.[program], drawing.expressions)?.list;
+    const canvas = field(field(root, slots[2]), drawing.drawing);
+    if (typeof fn !== "string" || typeof program !== "string"
+        || field(canvas, drawing.program)?.cell !== program
+        || parameters?.length !== 1 || parameters[0]?.cell !== drawing.x
+        || field(body, fields.function)?.cell !== drawing.fill
+        || field(circle, drawing.x)?.cell !== drawing.x
+        || !Number.isFinite(radius) || radius <= 0
+        || !Number.isFinite(number(field(circle, drawing.y)))
+        || field(contents?.[program], fields.function)?.cell !== drawing.do
+        || calls?.length !== 2
+        || !calls.every((call) => field(call, fields.function)?.cell === fn
+          && Number.isFinite(number(field(call, drawing.x))))) return [];
+    const selection = state.selection;
+    const path = selection?.source_path?.list;
+    return [
+      ...(number(field(calls[0], drawing.x)) === 80
+        && number(field(calls[1], drawing.x)) === 160 ? ["argument"] : []),
+      ...(radius === 36 ? ["body"] : []),
+      ...(selection?.view === "document" && selection.stage === "value" && path?.length === 3
+        && field(path[0], fields.key)?.cell === slots[0]
+        && field(path[1], fields.follow)?.cell === fields.document
+        && field(path[2], fields.key)?.cell === fields.body ? ["source"] : []),
     ];
   }
   return [];

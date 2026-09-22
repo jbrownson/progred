@@ -1,0 +1,63 @@
+{
+  "binders": {
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "expressions": 5fab151c006ae1487c28837f2003f43c,
+    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "program": bdf607810b274ad5b02bd409aef34b6a,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
+    "descent": 2ed0b9294782093c08695dd5137df21a,
+    "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
+    "fill": 1624dc973ec7790203eb8fd22c9d6d05,
+    "shape": fcaaadef14980397cce95363fc5a54f9,
+    "circle": e06a6d094c4f75cd6c1d59ed6ed64e05,
+    "x": 415def0fa0a9ac40dfba5fca4d0f8876,
+    "y": 4e2dcde5b1ab1480a2f126176dd148c7,
+    "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
+    "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
+    "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
+    "dot": c1ae4281e6899b6a268bc154fe127b7b,
+    "two_dots": d4ebfe96309382811fa21c889be44f53,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "third": 5e716c07490849f072b4e9017dd6230d,
+  },
+  "cells": {
+    dot: {
+      name: "dot",
+      params: [x],
+      body: {
+        function: fill,
+        shape: {circle: {
+          x: x,
+          y: {f64: 0x0000000000004940},
+          radius: {f64: 0x0000000000003840},
+        }},
+        paint: {rgb: 0x3b82a0},
+      },
+    },
+    two_dots: {
+      function: do,
+      expressions: [
+        {function: dot, x: {f64: 0x0000000000004e40}},
+        {function: dot, x: {f64: 0x0000000000006440}},
+      ],
+    },
+  },
+  "root": {
+    first: dot,
+    second: two_dots,
+    third: {drawing: {
+      width: {f64: 0x0000000000806b40},
+      ascent: {f64: 0x0000000000000000},
+      descent: {f64: 0x0000000000005940},
+      fuel: {f64: 0x0000000000408f40},
+      program: two_dots,
+    }},
+  },
+}

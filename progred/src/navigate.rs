@@ -171,6 +171,7 @@ pub fn selection_after_delete<World>(
 /// landmark whose installed transition should run, or `None` for keys
 /// navigation doesn't own.
 pub fn step_selection<'a, World>(
+    command: puri::keyboard::CommandModifier,
     descends: &'a [Descend<World>],
     root: Option<&Root>,
     selection: Option<&Selection>,
@@ -178,7 +179,7 @@ pub fn step_selection<'a, World>(
     event: &KeyboardEvent,
 ) -> Option<&'a Descend<World>> {
     if event.state.is_down()
-        && crate::modifiers::command(&event.modifiers)
+        && command.pressed(&event.modifiers)
         && !(event.modifiers.shift() || event.modifiers.alt())
         && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a"))
     {

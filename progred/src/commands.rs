@@ -169,7 +169,7 @@ impl Editor {
     /// NOT menu items — native menu accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !modifiers::command(&event.modifiers) {
+        if !event.state.is_down() || !self.command_modifier.pressed(&event.modifiers) {
             return false;
         }
         let Key::Character(c) = &event.key else {
@@ -232,7 +232,7 @@ impl Editor {
     /// the query as characters. Claims the chord even when the pick
     /// declines (the label stage takes only what can label).
     pub(crate) fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !modifiers::command(&event.modifiers) {
+        if !event.state.is_down() || !self.command_modifier.pressed(&event.modifiers) {
             return false;
         }
         if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
@@ -341,7 +341,7 @@ impl Editor {
                             .map(|s| s.scope().clone())
                             .unwrap_or_default();
                         let started = match selection.as_ref() {
-                            Some(current) if modifiers::command(&event.modifiers) => {
+                            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
                                 selection::pending_insert(
                                     &root,
                                     &scope.view(sources),

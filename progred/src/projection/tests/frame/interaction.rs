@@ -52,6 +52,276 @@ fn website_values_use_ordinary_text_and_number_editing() {
 }
 
 #[test]
+fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
+    use puri::keyboard::CommandModifier;
+    for (command, modifiers, other) in [
+        (CommandModifier::Meta, Modifiers::META, Modifiers::CONTROL),
+        (
+            CommandModifier::Control,
+            Modifiers::CONTROL,
+            Modifiers::META,
+        ),
+    ] {
+        let mut world = crate::test_editor(Document {
+            root: Some(text::value("hello")),
+            cells: Cells::new(),
+        });
+        world.command_modifier = command;
+        replace_text(&mut world, &[], "changed");
+        assert_eq!(
+            text::read(world.model.doc.root.as_ref().unwrap()),
+            Some("changed")
+        );
+        for (pressed, expected) in [(modifiers, true), (other, false)] {
+            let mut event = press(0.0, false);
+            event.state.modifiers = pressed;
+            assert_eq!(crate::modifiers::picking(command)(&event), expected);
+            assert_eq!(crate::modifiers::primary_edit(command)(&event), !expected);
+            let undo = KeyboardEvent {
+                key: Key::Character("z".into()),
+                modifiers: pressed,
+                state: KeyState::Down,
+                ..Default::default()
+            };
+            assert_eq!(
+                crate::menu::shortcut(&undo, command),
+                expected.then_some(crate::Command::Doc(crate::DocCommand::Undo))
+            );
+        }
+    }
+}
+
+#[test]
+fn website_creation_instructions_make_values_through_the_picker() {
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/create.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            crate::libraries::blob::ID,
+            crate::libraries::number::ID,
+            f64::ID,
+        ])
+        .unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &["first", "second", "third"]
+                .map(|key| names[key].simple().to_string())
+                .join(","),
+        ),
+        world.stack.projection,
+    )
+    .unwrap();
+    let key = |world: &mut crate::Editor, key, modifiers| {
+        let event = KeyboardEvent {
+            key,
+            modifiers,
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        assert!(
+            editing_frame(world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(world, &event)
+                || world.insert_key(Default::default(), &event),
+            "unhandled {:?} at {:?}",
+            event.key,
+            world.model.selection.as_ref().map(Selection::path)
+        );
+    };
+    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[")] {
+        let frame = editing_frame(&mut world, false);
+        let target = frame
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == [Step::Key(names[slot])])
+            .unwrap();
+        assert!((target.select)(&mut world, None));
+        for character in typed.chars() {
+            key(
+                &mut world,
+                Key::Character(character.to_string().into()),
+                Modifiers::empty(),
+            );
+        }
+        if slot != "third" {
+            key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
+        }
+    }
+    let command = match world.command_modifier {
+        puri::keyboard::CommandModifier::Meta => Modifiers::META,
+        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    };
+    key(&mut world, Key::Named(NamedKey::Enter), command);
+    key(&mut world, Key::Character("7".into()), Modifiers::empty());
+    key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
+    let values = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
+    assert_eq!(values.get(&names["first"]).and_then(f64::read), Some(42.0));
+    assert_eq!(
+        values.get(&names["second"]).and_then(text::read),
+        Some("hello")
+    );
+    assert_eq!(
+        values.get(&names["third"]),
+        Some(&Value::list([f64::value(7.0)]))
+    );
+}
+
+#[test]
+fn website_forest_edits_change_one_height_and_all_leaf_colors() {
+    use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
+    fn leaves(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, Brush, Affine)> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::Circle(circle),
+                    brush,
+                    transform,
+                } => vec![(*circle, brush.clone(), *transform)],
+                DrawCmd::Clip { children, .. } => leaves(children),
+                _ => vec![],
+            })
+            .collect()
+    }
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/forest.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            color::ID,
+            control::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+            layout::ID,
+        ])
+        .unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &["third", "first", "second"]
+                .map(|key| names[key].simple().to_string())
+                .join(","),
+        ),
+        world.stack.projection,
+    )
+    .unwrap();
+    let painted = |world: &mut crate::Editor| leaves(&settle(editing_frame(world, false)).list.0);
+    assert_eq!(
+        painted(&mut world)
+            .iter()
+            .map(|(circle, _, _)| circle.center.y)
+            .collect::<Vec<_>>(),
+        [80.0, 50.0, 68.0]
+    );
+    let list = |world: &crate::Editor, cell: &str, body: bool| {
+        let value = world.model.doc.cells.value(names[cell]).unwrap();
+        let value = if body {
+            value
+                .as_record()
+                .unwrap()
+                .get(&grap::vocabulary::BODY)
+                .unwrap()
+        } else {
+            value
+        };
+        positions(
+            value
+                .as_record()
+                .unwrap()
+                .get(&control::vocabulary::EXPRESSIONS)
+                .unwrap(),
+        )
+    };
+    let first = list(&world, "forest", false)[0].clone();
+    replace_text(
+        &mut world,
+        &[
+            Step::Key(names["first"]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names["expressions"]),
+            Step::Element(first),
+            Step::Key(names["height"]),
+        ],
+        "100",
+    );
+    assert_eq!(
+        painted(&mut world)
+            .iter()
+            .map(|(circle, _, _)| circle.center.y)
+            .collect::<Vec<_>>(),
+        [40.0, 50.0, 68.0]
+    );
+    let leaf = list(&world, "tree", true)[1].clone();
+    replace_text(
+        &mut world,
+        &[
+            Step::Key(names["second"]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names["body"]),
+            Step::Key(names["expressions"]),
+            Step::Element(leaf.clone()),
+            Step::Key(names["paint"]),
+        ],
+        "cc7733",
+    );
+    let colors = painted(&mut world);
+    assert_eq!(colors.len(), 3);
+    assert!(
+        colors
+            .iter()
+            .all(|(_, brush, _)| brush == &Brush::from(puri::Color::from_rgb8(0xcc, 0x77, 0x33)))
+    );
+    for (command, modifiers) in [
+        (puri::keyboard::CommandModifier::Meta, Modifiers::META),
+        (puri::keyboard::CommandModifier::Control, Modifiers::CONTROL),
+    ] {
+        world.command_modifier = command;
+        let (circle, _, transform) = &colors[0];
+        let point = *transform * circle.center;
+        let mut frame = editing_frame_at(&mut world, false, None, Some(point));
+        frame.root_navigation(&crate::test_root());
+        let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+            panic!("leaf source hover")
+        };
+        assert!(matches!(hover, Hovered::Tree(Hover::Source(_))));
+        let mut dispatch =
+            placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+        dispatch.descends = Rc::from(frame.descends.clone());
+        let mut event = press(point.x, false);
+        event.state.position.y = point.y;
+        event.state.modifiers = modifiers;
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut dispatch
+        ));
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            &[
+                Step::Key(names["second"]),
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(names["body"]),
+                Step::Key(names["expressions"]),
+                Step::Element(leaf.clone()),
+            ]
+        );
+    }
+}
+
+#[test]
 fn website_list_instructions_insert_through_a_comma_and_select_the_whole_list() {
     let (doc, _) = crate::gid_text::parse(include_str!(
         "../../../../../website/public/lessons/lists.gid"
@@ -366,7 +636,7 @@ fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
     for (key, modifiers) in [
         (
             Key::Character("a".into()),
-            if cfg!(target_os = "macos") {
+            if world.command_modifier == puri::keyboard::CommandModifier::Meta {
                 Modifiers::META
             } else {
                 Modifiers::CONTROL
@@ -634,6 +904,152 @@ fn website_functions_edit_arguments_body_and_parameter_name() {
 }
 
 #[test]
+fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_call() {
+    use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
+    use grap::vocabulary::BODY;
+    use layout::vocabulary::{CIRCLE, RADIUS, SHAPE, X};
+
+    fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, Affine)> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::Circle(circle),
+                    transform,
+                    ..
+                } => vec![(*circle, *transform)],
+                DrawCmd::Clip { children, .. } => circles(children),
+                _ => vec![],
+            })
+            .collect()
+    }
+    fn painted(world: &mut crate::Editor) -> Vec<(kurbo::Circle, Affine)> {
+        circles(&settle(editing_frame(world, false)).list.0)
+    }
+    fn assert_circles(world: &mut crate::Editor, expected: [(f64, f64); 2]) {
+        assert_eq!(
+            painted(world)
+                .iter()
+                .map(|(circle, _)| (circle.center.x, circle.radius))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/drawing.gid"
+    ))
+    .unwrap();
+    let first_call = doc
+        .cells
+        .value(names["two_dots"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&control::vocabulary::EXPRESSIONS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            color::ID,
+            control::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+            layout::ID,
+        ])
+        .unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &["third", "first", "second"]
+                .map(|key| names[key].simple().to_string())
+                .join(","),
+        ),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    assert_circles(&mut world, [(60.0, 24.0), (160.0, 24.0)]);
+    replace_text(
+        &mut world,
+        &[
+            Step::Key(names["second"]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(control::vocabulary::EXPRESSIONS),
+            Step::Element(first_call),
+            Step::Key(X),
+        ],
+        "80",
+    );
+    assert_circles(&mut world, [(80.0, 24.0), (160.0, 24.0)]);
+    let fill_path = [
+        Step::Key(names["first"]),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(BODY),
+    ];
+    replace_text(
+        &mut world,
+        &[
+            fill_path.as_slice(),
+            &[Step::Key(SHAPE), Step::Key(CIRCLE), Step::Key(RADIUS)],
+        ]
+        .concat(),
+        "36",
+    );
+    assert_circles(&mut world, [(80.0, 36.0), (160.0, 36.0)]);
+
+    // The actual painted locations, not guessed pointer coordinates; both
+    // instances trace the same executed fill call inside the shared function.
+    let points: Vec<_> = painted(&mut world)
+        .iter()
+        .map(|(circle, transform)| *transform * circle.center)
+        .collect();
+    let document = world.model.doc.clone();
+    for point in points {
+        let mut frame = editing_frame_at(&mut world, false, None, Some(point));
+        frame.root_navigation(&crate::test_root());
+        let hover = Hovered::Tree(Hover::Source(crate::hover::SourceTrace::InCell {
+            cell: names["dot"],
+            source: gid::Resolution::Document,
+            path: Rc::from([Step::Key(BODY)]),
+        }));
+        assert_eq!(
+            frame.claim.as_ref().map(|(_, claim)| claim),
+            Some(&Claim::Direct(hover.clone()))
+        );
+        let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover));
+        dispatch.descends = Rc::from(frame.descends.clone());
+        let mut event = press(point.x, true);
+        event.state.position.y = point.y;
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut dispatch
+        ));
+        let selection = world.model.selection.as_ref().unwrap();
+        assert_eq!(selection.path(), fill_path);
+        assert_eq!(
+            selection.source_path().as_deref(),
+            Some(fill_path.as_slice())
+        );
+        assert!(
+            Rc::ptr_eq(&world.model.doc, &document),
+            "source picking doesn't change the program"
+        );
+    }
+}
+
+#[test]
 fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
     let tool = crate::libraries::toolpath::cutter::Tool::ball(0.125, 0.22)
         .unwrap()
@@ -663,6 +1079,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
         let mut project_tool = || {
             project(
                 ProjectDescription {
+                    command_modifier: crate::modifiers::native(),
                     focused: true,
                     computations: None,
                     view: &crate::test_root(),
@@ -755,6 +1172,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let node = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),
@@ -833,6 +1251,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     };
     let active = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),
@@ -1172,7 +1591,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             target(),
             Rc::new(move |world: &mut crate::Editor| world.pick_identity(value.clone())),
             true,
-            crate::editing::picking,
+            crate::modifiers::picking(crate::modifiers::native()),
             PartialEq::eq,
         );
         let extent = Extent {

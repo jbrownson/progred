@@ -9,7 +9,8 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
   .match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;$/gm, "");
 
-async function start(search, { ok = true, parseError = false } = {}) {
+async function start(search, { ok = true, parseError = false, platform = "Linux x86_64" } = {}) {
+  const { commandIsMeta } = await import("../web/platform.mjs");
   const calls = [];
   const messages = [];
   const focusEvents = [];
@@ -27,7 +28,7 @@ async function start(search, { ok = true, parseError = false } = {}) {
   const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
-    JSON,
+    JSON, commandIsMeta, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
     window: {
       parent: { postMessage: (...args) => messages.push(structuredClone(args)) },
@@ -71,8 +72,16 @@ test("browser window focus is forwarded without page click handlers", async () =
 
 test("standalone startup remains blank with its full menu and default workers", async () => {
   const { calls, loading } = await start("");
-  assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined]]);
+  assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined, false]]);
   assert.equal(loading.style.display, "none");
+});
+
+test("editor and lesson labels use the browser host's command modifier", async () => {
+  for (const [platform, meta] of [["MacIntel", true], ["iPad", true], ["Win32", false], ["Linux x86_64", false]]) {
+    const { calls } = await start("", { platform });
+    assert.equal(calls.find(([name]) => name === "editor")[6], meta);
+    assert.equal((await lessonPage(platform)).commandLabel.textContent, meta ? "Cmd" : "Ctrl");
+  }
 });
 
 test("wheel handling defaults to the editor, including embeds without an explicit choice", async () => {
@@ -123,7 +132,7 @@ test("embed fetches its document and supplies ordinary startup options", async (
   const { calls } = await start("?document=../lessons/values.gid&menu=hidden&threads=1");
   assert.deepEqual(calls, [
     ["fetch", "http://localhost/lessons/values.gid"], ["init"],
-    ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined],
+    ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined, false],
   ]);
 });
 
@@ -158,7 +167,9 @@ test("observation is opt-in and forwards ordinary state only to the same-origin 
   assert.equal((await start("")).onChange, undefined);
 });
 
-async function lessonPage() {
+async function lessonPage(platform = "Linux x86_64") {
+  const { commandIsMeta } = await import("../web/platform.mjs");
+  const commandLabel = { textContent: "Ctrl" };
   const { lessonProgress } = await import("./public/lesson-progress.mjs");
   const messageListeners = [];
   const tasksByLesson = {
@@ -167,6 +178,9 @@ async function lessonPage() {
     cells: ["shared-edit", "create", "link", "linked-edit"],
     grap: ["argument", "shared-edit"],
     functions: ["argument", "body", "rename"],
+    drawing: ["argument", "body", "source"],
+    forest: ["height", "color", "source"],
+    create: ["number", "text", "list"],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
@@ -196,12 +210,13 @@ async function lessonPage() {
     };
   });
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "public/lessons.js"), "utf8").replace(/^import .*;$/gm, ""), {
-    URL, lessonProgress,
+    URL, lessonProgress, commandIsMeta, navigator: { platform },
     location: { href: "http://localhost/", origin: "http://localhost" },
     window: { addEventListener: (_, callback) => messageListeners.push(callback) },
-    document: { querySelectorAll: () => exercises },
+    document: { querySelectorAll: (selector) => selector === "[data-command-key]" ? [commandLabel] : exercises },
   });
   return {
+    commandLabel,
     exercises,
     send(index, state, overrides = {}) {
       const exercise = exercises[index];
@@ -217,7 +232,7 @@ async function lessonPage() {
 
 test("reset reloads only its own iframe", async () => {
   const { exercises } = await lessonPage();
-  const resetCounts = [0, 0, 0, 0, 0];
+  const resetCounts = exercises.map(() => 0);
   for (const [index, exercise] of exercises.entries()) {
     const src = exercise.frame.src;
     Object.defineProperty(exercise.frame, "src", {
@@ -231,19 +246,13 @@ test("reset reloads only its own iframe", async () => {
       },
     });
   }
-  exercises[0].listeners.click();
-  assert.deepEqual(resetCounts, [1, 0, 0, 0, 0]);
-  assert.equal(exercises[1].status.textContent, "");
-  exercises[0].listeners.load();
-  assert.equal(exercises[0].status.textContent, "Example reset.");
-  exercises[1].listeners.click();
-  assert.deepEqual(resetCounts, [1, 1, 0, 0, 0]);
-  exercises[2].listeners.click();
-  assert.deepEqual(resetCounts, [1, 1, 1, 0, 0]);
-  exercises[3].listeners.click();
-  assert.deepEqual(resetCounts, [1, 1, 1, 1, 0]);
-  exercises[4].listeners.click();
-  assert.deepEqual(resetCounts, [1, 1, 1, 1, 1]);
+  for (const [index, exercise] of exercises.entries()) {
+    exercise.listeners.click();
+    assert.deepEqual(resetCounts, exercises.map((_, i) => i <= index ? 1 : 0));
+    exercise.listeners.load();
+    assert.equal(exercise.status.textContent, "Example reset.");
+    if (index + 1 < exercises.length) assert.equal(exercises[index + 1].status.textContent, "");
+  }
 });
 
 const record = (...entries) => ({ record: entries });
@@ -583,6 +592,154 @@ test("function progress latches through undo and resets only its own lesson", as
   send(4, functionsState({ argument: 4, factor: 3, name: "amount" }));
   assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
   send(4, functionsState());
+  assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
+  send(3, grapState(4, 5));
+  page.listeners.click();
+  assert.equal(page.progress.textContent, "0 of 3 steps complete");
+  assert.equal(exercises[3].progress.textContent, "All steps complete. Keep experimenting!");
+});
+
+const drawingIds = {
+  fn: "c1ae4281-e689-9b6a-268b-c154fe127b7b",
+  program: "d4ebfe96-3093-8281-1fa2-1c889be44f53",
+  function: "751fca43-73de-bdd0-b7e6-eb73e08d684b",
+  params: "195b378d-0d31-d90a-b0d7-366c15346b70",
+  body: "98614386-6eda-2e2f-bf9a-b8484357a0c9",
+  drawing: "6889fa23-5b00-2be4-c8b1-06d5f31dafbf",
+  programField: "bdf60781-0b27-4ad5-b02b-d409aef34b6a",
+  fill: "1624dc97-3ec7-7902-03eb-8fd22c9d6d05",
+  shape: "fcaaadef-1498-0397-cce9-5363fc5a54f9",
+  circle: "e06a6d09-4c4f-75cd-6c1d-59ed6ed64e05",
+  x: "415def0f-a0a9-ac40-dfba-5fca4d0f8876",
+  y: "4e2dcde5-b1ab-1480-a2f1-26176dd148c7",
+  radius: "6423c35e-07d7-a4ff-5361-27d1f1d8eb53",
+  do: "b1fc4cb4-5c58-b1a6-62c4-31feef5bd140",
+  expressions: "5fab151c-006a-e148-7c28-837f2003f43c",
+  key: "f12dea12-c741-fe36-3127-50a264f3a235",
+  follow: "33c6fb36-3ddc-6f13-fd05-4c68f7a37a98",
+  document: "ef62fa62-f008-c1ec-a703-89571933aba0",
+};
+const drawingState = ({ x = 60, radius = 24 } = {}) => {
+  const d = drawingIds;
+  return stacked([
+    cell(d.fn), cell(d.program), record([d.drawing, record([d.programField, cell(d.program)])]),
+  ], {
+    [d.fn]: record(
+      [d.params, { list: [cell(d.x)] }],
+      [d.body, record([d.function, cell(d.fill)], [d.shape, record([d.circle, record(
+        [d.x, cell(d.x)], [d.y, number(50)], [d.radius, number(radius)],
+      )])])],
+    ),
+    [d.program]: record([d.function, cell(d.do)], [d.expressions, { list: [x, 160].map((value) =>
+      record([d.function, cell(d.fn)], [d.x, number(value)])) }]),
+  });
+};
+const drawingSource = () => ({
+  view: "document", stage: "value", source_path: { list: [
+    record([drawingIds.key, cell(slots[0])]),
+    record([drawingIds.follow, cell(drawingIds.document)]),
+    record([drawingIds.key, cell(drawingIds.body)]),
+  ] },
+});
+
+test("creation steps require each value in its own slot, not merely a selection", async () => {
+  const { completedSteps, lessonProgress } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("create", stacked([])), []);
+  assert.deepEqual(completedSteps("create", stacked([number(42), text("hello"), { list: [number(7)] }])), ["number", "text", "list"]);
+  assert.deepEqual(completedSteps("create", stacked([text("42"), number(42), { list: [text("7")] }])), []);
+  const observe = lessonProgress("create");
+  observe(stacked([number(42)]));
+  assert.deepEqual([...observe(stacked([]))], ["number"]);
+  const { exercises, send } = await lessonPage();
+  send(7, stacked([number(42), text("hello"), { list: [number(7)] }]));
+  assert.equal(exercises[7].progress.textContent, "All steps complete. Keep experimenting!");
+  exercises[7].listeners.click();
+  assert.equal(exercises[7].progress.textContent, "0 of 3 steps complete");
+});
+
+test("opening scene checks one tree's height, shared paint, and a source occurrence", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const d = drawingIds;
+  const height = "cc32dd05-0a93-5180-4e7a-704b4d59e7ac";
+  const paint = "cb04728f-5e6a-1d93-a679-0238b5f1ce4d";
+  const rgb = "6c8a17cb-e463-186c-c8b0-7e536ccffa6b";
+  const scene = (h = 60, color = "548b64") => stacked([
+    cell(d.program), cell(d.fn), record([d.drawing, record([d.programField, cell(d.program)])]),
+  ], {
+    [d.program]: record([d.expressions, { list: [h, 90, 72].map((h) => record([d.function, cell(d.fn)], [height, number(h)])) }]),
+    [d.fn]: record([d.body, record([d.expressions, { list: [record(), record([d.function, cell(d.fill)], [paint, record([rgb, { blob: color }])])] }])]),
+  });
+  assert.deepEqual(completedSteps("forest", scene()), []);
+  assert.deepEqual(completedSteps("forest", scene(100, "cc7733")), ["height", "color"]);
+  assert.deepEqual(completedSteps("forest", scene(NaN, "bad")), []);
+  const state = scene(100, "cc7733");
+  state.selection = drawingSource();
+  state.selection.source_path.list[0] = record([d.key, cell(slots[1])]);
+  state.selection.source_path.list.push(record([d.key, cell(d.expressions)]), record(["2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1", record()]));
+  assert.deepEqual(completedSteps("forest", state), ["height", "color", "source"]);
+  state.selection.source_path.list.pop();
+  assert.deepEqual(completedSteps("forest", state), ["height", "color"]);
+  removeSlot(state, 2);
+  assert.deepEqual(completedSteps("forest", state), []);
+});
+
+test("drawing quests distinguish one call's argument, shared radius, and source selection", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("drawing", drawingState()), []);
+  assert.deepEqual(completedSteps("drawing", drawingState({ x: 80 })), ["argument"]);
+  assert.deepEqual(completedSteps("drawing", drawingState({ radius: 36 })), ["body"]);
+  assert.deepEqual(completedSteps("drawing", { ...drawingState(), selection: drawingSource() }), ["source"]);
+  assert.deepEqual(completedSteps("drawing", { document: { root: null } }), []);
+  for (const invalid of [NaN, Infinity]) {
+    assert.deepEqual(completedSteps("drawing", drawingState({ x: invalid, radius: 36 })), []);
+    assert.deepEqual(completedSteps("drawing", drawingState({ x: 80, radius: invalid })), []);
+  }
+  assert.deepEqual(completedSteps("drawing", drawingState({ x: 80, radius: 0 })), []);
+});
+
+test("drawing achievements require the visible function, calls, and drawing to remain connected", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  for (const disconnect of [
+    (state) => { delete state.document.cells[drawingIds.fn]; },
+    (state) => { delete state.document.cells[drawingIds.program]; },
+    ...[0, 1, 2].map((index) => (state) => removeSlot(state, index)),
+    (state) => { items(state)[2].record[0][1].record[0][1] = cell("other"); },
+    (state) => { state.document.cells[drawingIds.program].record[1][1].list[0].record[0][1] = cell("other"); },
+  ]) {
+    const state = { ...drawingState({ x: 80, radius: 36 }), selection: drawingSource() };
+    disconnect(state);
+    assert.deepEqual(completedSteps("drawing", state), []);
+  }
+});
+
+test("source achievement requires the fill call, not its parent, argument, or another view", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  for (const change of [
+    (selection) => { selection.view = { pane: {} }; },
+    (selection) => { selection.stage = "pending"; },
+    (selection) => { selection.source_path = null; },
+    (selection) => { selection.source_path.list.pop(); },
+    (selection) => { selection.source_path.list.push(record([drawingIds.key, cell(drawingIds.shape)])); },
+    (selection) => { selection.source_path.list[1] = record([drawingIds.follow, cell("library")]); },
+  ]) {
+    const selection = drawingSource();
+    change(selection);
+    assert.deepEqual(completedSteps("drawing", { ...drawingState(), selection }), []);
+  }
+});
+
+test("drawing progress latches through undo and resets independently", async () => {
+  const { exercises, send } = await lessonPage();
+  const page = exercises[5];
+  send(5, drawingState());
+  assert.equal(page.progress.textContent, "0 of 3 steps complete");
+  send(5, drawingState({ x: 80 }));
+  assert.equal(page.progress.textContent, "1 of 3 steps complete");
+  send(5, drawingState({ x: 80, radius: 36 }));
+  assert.equal(page.progress.textContent, "2 of 3 steps complete");
+  send(5, { ...drawingState({ x: 80, radius: 36 }), selection: drawingSource() });
+  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  send(5, drawingState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
   send(3, grapState(4, 5));
   page.listeners.click();

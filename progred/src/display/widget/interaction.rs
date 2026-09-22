@@ -50,7 +50,12 @@ pub fn on_click<World: 'static, Hover: 'static>(
 ) -> Layout<World, Hover> {
     before(
         child,
-        Rc::new(move |_context| click(handler.clone(), crate::editing::primary_edit)),
+        Rc::new(move |context| {
+            click(
+                handler.clone(),
+                crate::modifiers::primary_edit(context.inputs.command_modifier),
+            )
+        }),
     )
 }
 
@@ -61,12 +66,12 @@ pub fn on_activate<World: 'static, Hover: Clone + PartialEq + 'static>(
 ) -> Layout<World, Hover> {
     before(
         child,
-        Rc::new(move |_context| {
+        Rc::new(move |context| {
             target_action(
                 target.clone(),
                 handler.clone(),
                 false,
-                crate::editing::picking,
+                crate::modifiers::picking(context.inputs.command_modifier),
                 PartialEq::eq,
             )
         }),
@@ -80,13 +85,13 @@ pub fn pickable(
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     before(
         child,
-        Rc::new(move |_context| {
+        Rc::new(move |context| {
             let value = value.clone();
             target_action(
                 target.clone(),
                 Rc::new(move |world| world.pick_identity(value.clone())),
                 true,
-                crate::editing::picking,
+                crate::modifiers::picking(context.inputs.command_modifier),
                 PartialEq::eq,
             )
         }),

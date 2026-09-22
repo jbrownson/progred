@@ -142,6 +142,7 @@ pub trait TextClipboard {
 /// What an editing dispatch needs from the caller's context: the state
 /// plus the measurement caches parley's driver requires.
 pub struct EditCtx<'a> {
+    pub command_modifier: crate::keyboard::CommandModifier,
     pub state: &'a mut LineEditState,
     pub fonts: &'a mut FontContext,
     pub layouts: &'a mut LayoutContext<Brush>,
@@ -325,16 +326,13 @@ impl LineEditState {
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
         _clipboard: &mut dyn TextClipboard,
+        command_modifier: crate::keyboard::CommandModifier,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || self.is_composing() {
             return false;
         }
-        let action_mod = if cfg!(target_os = "macos") {
-            event.modifiers.meta()
-        } else {
-            event.modifiers.ctrl()
-        };
+        let action_mod = command_modifier.pressed(&event.modifiers);
         let shift = event.modifiers.shift();
         // The selection's reachable span: between the affixes. Motion
         // that only wanders into an affix is no motion — clamped, it
@@ -685,6 +683,7 @@ impl LineEdit {
                         edit.fonts,
                         edit.layouts,
                         edit.clipboard,
+                        edit.command_modifier,
                         event,
                     )
                 })
@@ -952,6 +951,11 @@ mod tests {
             fonts,
             layouts,
             clipboard,
+            if cfg!(target_os = "macos") {
+                crate::keyboard::CommandModifier::Meta
+            } else {
+                crate::keyboard::CommandModifier::Control
+            },
             &key_event(key, modifiers),
         )
     }

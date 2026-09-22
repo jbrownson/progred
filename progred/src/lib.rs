@@ -328,6 +328,7 @@ pub(crate) enum QuitState {
 /// context is a cheap clone over shared font data). The dispatch
 /// world type.
 pub(crate) struct Editor {
+    pub(crate) command_modifier: puri::keyboard::CommandModifier,
     pub(crate) computations: computations::Computations,
     pub(crate) timers: timers::Timers,
     pub(crate) focused: bool,
@@ -483,6 +484,7 @@ pub(crate) fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> 
 }
 
 fn new_editor(
+    command_modifier: puri::keyboard::CommandModifier,
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
     font_cx: FontContext,
@@ -508,6 +510,7 @@ fn new_editor(
         })
         .unwrap_or_default();
     Editor {
+        command_modifier,
         computations,
         timers: timers::Timers::default(),
         focused: false,
@@ -844,6 +847,7 @@ impl App {
         binders: gid_text::Binders,
     ) {
         self.editors.push(EditorRunner::new(new_editor(
+            modifiers::native(),
             self.drawn_menu,
             self.stack.clone(),
             self.fonts.clone(),
@@ -1206,6 +1210,7 @@ pub fn start_editor(
     on_change: Option<web_sys::js_sys::Function>,
     libraries: Option<String>,
     tutorial_slots: Option<String>,
+    command_is_meta: bool,
 ) -> Result<(), wasm_bindgen::JsValue> {
     console_error_panic_hook::set_once();
     let (doc, binders) = gid_text::parse(source.as_deref().unwrap_or("{}"))
@@ -1220,6 +1225,11 @@ pub fn start_editor(
         None,
         show_menu.unwrap_or(true),
         stack,
+        if command_is_meta {
+            puri::keyboard::CommandModifier::Meta
+        } else {
+            puri::keyboard::CommandModifier::Control
+        },
         on_change,
     );
     Ok(())
@@ -1263,6 +1273,7 @@ pub fn run() {
         doc_path,
         drawn_menu,
         stack::load(),
+        modifiers::native(),
         #[cfg(target_arch = "wasm32")]
         None,
     );
@@ -1274,6 +1285,7 @@ fn run_document(
     doc_path: Option<PathBuf>,
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
+    command_modifier: puri::keyboard::CommandModifier,
     #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,
 ) {
     let mut builder = EventLoop::<UserEvent>::with_user_event();
@@ -1312,6 +1324,7 @@ fn run_document(
         #[cfg(target_os = "macos")]
         cascade: macos_window::initial_cascade(),
         editors: vec![EditorRunner::new(new_editor(
+            command_modifier,
             drawn_menu,
             stack,
             fonts,
@@ -1589,7 +1602,7 @@ impl Editor {
         geometry: navigate::Geometry<'_>,
     ) -> bool {
         let availability = self.menu_availability();
-        if let Some(command) = menu::shortcut(event)
+        if let Some(command) = menu::shortcut(event, self.command_modifier)
             .filter(|command| self.drawn_menu || matches!(command, Command::Doc(_)))
             .filter(|command| availability.enabled(*command))
         {
@@ -1664,6 +1677,7 @@ impl Editor {
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
             computations,
+            command_modifier: _,
             timers,
             focused: _,
             drawn_menu: _,
@@ -2398,6 +2412,7 @@ pub(crate) fn test_editor(doc: gid::Document) -> Editor {
 #[cfg(test)]
 pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Editor>) -> Editor {
     let mut editor = new_editor(
+        modifiers::native(),
         false,
         stack,
         FontContext::new(),

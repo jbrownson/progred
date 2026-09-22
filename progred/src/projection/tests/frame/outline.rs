@@ -219,6 +219,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         ..key(Key::Character("a".into()))
     };
     let target = crate::navigate::step_selection(
+        crate::modifiers::native(),
         &f.descends,
         None, // This fixture places one projection without the pane wrapper.
         world.model.selection.as_ref(),

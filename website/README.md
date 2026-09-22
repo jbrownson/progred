@@ -39,26 +39,32 @@ system chooses an available port, so an existing editor preview can stay open.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page begins with five guided exercises: editing a text/number record,
-inserting into a list, creating and sharing cells, live Grap calculations,
-then editing a function and its calls.
+The page opens with a small three-tree drawing: edit one height, change a shared
+color, and follow the picture back to its source. It credits Bret Victor's
+Inventing on Principle. Seven exercises then build up the ideas: editing a
+text/number record, creating values from empty slots, inserting into a list,
+creating and sharing cells, live Grap calculations, editing a function and its
+calls, then drawing with a shared function.
 All use the real editor without its application menu, and explicitly select
 `wheel=page` so scrolling over an exercise scrolls the website. The full-page
 editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
-for the values and cells exercises, and just name/text/blob for the list exercise.
+for the values, creation, and cells exercises, and just name/text/blob for the list exercise.
 The Grap and functions exercises add Grap and absent to the numeric set.
-Their `tutorial-slots` embed option lists three record-field identities in display
-order. An entry-only projection stacks those fields without labels or insertion
+The forest and drawing lessons add control, color, and layout; neither loads CAD/CAM libraries.
+Creation, forest, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
+identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
 refilling it writes the same field. Nested values use the ordinary projection
 and editing behavior. This is tutorial host configuration, not document syntax
 or a library construct. Without the option, the record displays normally.
 The unused libraries are not constructed or offered by the completion picker;
 list editing itself does not require Grap's list-operation library.
-Document shortcuts, including Ctrl+Z / Ctrl+Shift+Z, remain available (also on
-Mac, matching the browser host). The full-page editor remains blank on startup
-and retains its menus. Nothing is deployed, and `prog.red`'s DNS is unchanged.
+Document shortcuts remain available: Cmd on Mac, Ctrl elsewhere. The browser
+host and tutorial share `web/platform.mjs`; the host supplies that convention to
+the editor explicitly, including text editing, source links, and menu labels.
+The full-page editor remains blank on startup
+and retains its menus. The public site is deployed at <https://prog.red>.
 
 The instructions check off when the actual document or selection satisfies
 the step. Achievements stay checked through later edits and undo; Reset clears
@@ -81,7 +87,7 @@ editing that shared definition, creating a different cell containing 11,
 inserting another reference to the new cell, then editing its shared contents.
 Checks use cell identities and the document's cell table, not matching displayed
 numbers. Repeated independent numbers don't count as sharing. The instructions
-use the ordinary `(` constructor and Ctrl-click picking; creating a cell selects
+use the ordinary `(` constructor and Cmd/Ctrl-click picking; creating a cell selects
 the reference, so the user then clicks its empty contents to fill it.
 
 The Grap lesson uses one unnamed numeric cell in two calculations: addition
@@ -102,6 +108,16 @@ The checklist checks the stored recipe, argument values, and parameter name;
 native interaction tests exercise the actual editing and evaluation, including
 unchanged results after renaming. Constructing a function from scratch is left
 for a later exercise.
+
+The drawing lesson uses an ordinary `dot(x)` function that calls `fill`, a `do`
+program calling it twice, and a drawing of that same program. Users move one
+circle by editing its call, enlarge both by editing the shared radius, then
+Cmd/Ctrl-click either circle to select the `fill` call that produced it. Existing
+source tracing also links hover in both directions. Its checklist uses the same
+document/selection notifications, not a new drawing or hover API. Selecting the
+source directly also satisfies that outcome-based check. Headless interaction
+tests inspect the actual painted circles after edits and pick both instances
+back to their shared source. The drawing slot appears above the two source slots.
 
 An embed is an ordinary editor URL:
 

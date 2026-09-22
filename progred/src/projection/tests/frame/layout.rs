@@ -738,6 +738,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     let mut walk: Vec<Path> = Vec::new();
     while walk.len() < 200 {
         match step_selection(
+            crate::modifiers::native(),
             &bench.descends,
             None,
             selection.as_ref(),
@@ -766,6 +767,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     }
     for expect in walk.iter().rev().skip(1) {
         let up = step_selection(
+            crate::modifiers::native(),
             &bench.descends,
             None,
             selection.as_ref(),
@@ -792,6 +794,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     let cell = head[..head.len() - 2].to_vec();
     assert_eq!(
         step_selection(
+            crate::modifiers::native(),
             &bench.descends,
             None,
             Some(&select(&cell)),

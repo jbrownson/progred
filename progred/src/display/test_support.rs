@@ -191,6 +191,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(1.0);
     let cx = crate::projection::Cx {
+        command_modifier: crate::modifiers::native(),
         focused: true,
         edits: Default::default(),
         computations: None,

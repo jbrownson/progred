@@ -322,8 +322,29 @@ fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
 #[test]
 #[ignore = "writes website exercise captures without launching the app"]
 fn website_lesson_svg_captures() {
-    use crate::libraries::{absent, blob, f64, grap, name, number, text};
+    use crate::libraries::{absent, blob, color, control, f64, grap, layout, name, number, text};
     for (name, source, libraries) in [
+        (
+            "forest",
+            include_str!("../../../../../website/public/lessons/forest.gid"),
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                color::ID,
+                control::ID,
+                number::ID,
+                f64::ID,
+                grap::ID,
+                layout::ID,
+            ][..],
+        ),
+        (
+            "create",
+            include_str!("../../../../../website/public/lessons/create.gid"),
+            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
+        ),
         (
             "values",
             include_str!("../../../../../website/public/lessons/values.gid"),
@@ -365,6 +386,22 @@ fn website_lesson_svg_captures() {
                 grap::ID,
             ][..],
         ),
+        (
+            "drawing",
+            include_str!("../../../../../website/public/lessons/drawing.gid"),
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                color::ID,
+                control::ID,
+                number::ID,
+                f64::ID,
+                grap::ID,
+                layout::ID,
+            ][..],
+        ),
     ] {
         let (doc, fields) = crate::gid_text::parse(source).unwrap();
         for width in [320.0, 620.0] {
@@ -372,12 +409,16 @@ fn website_lesson_svg_captures() {
                 doc.clone(),
                 crate::stack::load_selected(libraries).unwrap(),
             );
-            if matches!(name, "grap" | "functions") {
+            if matches!(name, "grap" | "functions" | "drawing" | "forest" | "create") {
                 editor.stack.projection = crate::web_embed::tutorial_slots(
                     Some(
-                        &["first", "second", "third"]
-                            .map(|key| fields[key].simple().to_string())
-                            .join(","),
+                        &if matches!(name, "drawing" | "forest") {
+                            ["third", "first", "second"]
+                        } else {
+                            ["first", "second", "third"]
+                        }
+                        .map(|key| fields[key].simple().to_string())
+                        .join(","),
                     ),
                     editor.stack.projection,
                 )
@@ -387,7 +428,16 @@ fn website_lesson_svg_captures() {
             editor.drawn_menu = false;
             render_editor(
                 editor,
-                kurbo::Size::new(width, 304.0),
+                kurbo::Size::new(
+                    width,
+                    if name == "forest" {
+                        768.0
+                    } else if name == "drawing" {
+                        384.0
+                    } else {
+                        304.0
+                    },
+                ),
                 &format!("website_{name}_{width}.svg"),
             );
         }

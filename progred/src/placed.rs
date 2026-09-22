@@ -120,10 +120,11 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
         action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
     ) {
         if self.visible {
+            let command = self.placed.input.command_modifier;
             self.handler()
                 .on_pointer_down_with(move |ctx, event, pointer| {
                     puri::interact::is_primary_contact(event)
-                        && crate::modifiers::pick(&event.state.modifiers) == pick
+                        && command.pressed(&event.state.modifiers) == pick
                         && pointer.matches(&target)
                         && action(ctx, event)
                 });
@@ -512,6 +513,7 @@ mod tests {
                 prior: Some(&target),
                 reach_px: 3.0,
                 debug_geometry: false,
+                ..Default::default()
             },
         );
         assert!(matches!(

@@ -15,7 +15,9 @@ window, clock, or focus service.
 The caller owns focus and durable interaction state. `LineEditState` contains
 text and cross-frame editing state; `LineEditDescription` supplies font, paint,
 affixes, focus, placeholder, and chrome for this description. `EditCtx` supplies
-mutable state, Parley contexts, and a clipboard capability at dispatch. The
+mutable state, Parley contexts, a clipboard capability, and the host's command
+modifier at dispatch. A WebAssembly host chooses that modifier from the browser's
+platform rather than the compilation target. The
 focused editor emits a caret rectangle for the platform IME.
 
 The caller runs each `EditOperation` with that `EditCtx` rather than lending

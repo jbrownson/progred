@@ -160,6 +160,7 @@ mod tests {
                     prior: Some(&7),
                     reach_px: 4.0,
                     debug_geometry: false,
+                    ..Default::default()
                 }
             )
             .claim

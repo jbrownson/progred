@@ -19,6 +19,7 @@ fn runner() -> EditorRunner {
         cells: Cells::new(),
     });
     editor.drawn_menu = true;
+    editor.command_modifier = puri::keyboard::CommandModifier::Control;
     let mut runner = EditorRunner::new(editor);
     runner.refresh_frame(1.0, VIEWPORT);
     runner

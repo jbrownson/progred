@@ -49,6 +49,7 @@ fn keyboard(
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
         || match navigate::step_selection(
+            editor.command_modifier,
             &dispatch.descends,
             Some(
                 editor

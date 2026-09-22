@@ -287,6 +287,7 @@ impl BenchContext {
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
         let graph = prepare_project(
             ProjectDescription {
+                command_modifier: crate::modifiers::native(),
                 focused: true,
                 computations: Some(computations),
                 view: &crate::test_root(),

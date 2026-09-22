@@ -152,6 +152,7 @@ fn editing_frame_with_annotations(
     };
     let measured = project(
         ProjectDescription {
+            command_modifier: world.command_modifier,
             focused: world.focused,
             computations: None,
             view: &crate::test_root(),
@@ -182,6 +183,7 @@ fn editing_frame_with_annotations(
             Rect::new(0.0, 0.0, 500.0, height.max(500.0)),
         ),
         &placed::HoverInput {
+            command_modifier: world.command_modifier,
             pointer,
             ..Default::default()
         },
@@ -294,8 +296,15 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 
 fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
     let selection = from.map(|path| crate::selection::bare_edge(&crate::test_root(), path));
-    step_selection(ds, None, selection.as_ref(), LINE, &arrow(named))
-        .map(|descend| descend.path.to_vec())
+    step_selection(
+        crate::modifiers::native(),
+        ds,
+        None,
+        selection.as_ref(),
+        LINE,
+        &arrow(named),
+    )
+    .map(|descend| descend.path.to_vec())
 }
 
 mod completion;

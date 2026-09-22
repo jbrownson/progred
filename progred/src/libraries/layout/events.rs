@@ -22,7 +22,7 @@ pub fn on_event(
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
             let edits = context.inputs.edits.clone();
-            let command = crate::modifiers::command;
+            let command = context.inputs.command_modifier.predicate();
             let scale = context.inputs.styles.scale;
             let function = function.clone();
             Box::new(move |output, placement| {

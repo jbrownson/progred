@@ -182,7 +182,7 @@ then related selection, direct hover, and related hover. Pending text frames kee
 their own tighter outline through focus and editing; this widget styling does
 not determine the geometry of ordinary value highlights.
 
-Cmd+A (Ctrl+A off macOS) selects the current view's root through its navigation
+Cmd+A (Ctrl+A on non-Mac hosts) selects the current view's root through its navigation
 callback. With no selection, it targets the document root. Focused text fields
 handle the shortcut first and select their own text.
 
@@ -381,7 +381,7 @@ scene`; its drawing units and editable tree parameters are not rescaled.
 ## History, gestures, and persistence
 
 Examples and replace-in-place New Document are development/demo conveniences,
-not the intended production File menu. Cmd+N (Ctrl+N in the drawn menu) and the
+not the intended production File menu. Cmd+N (Ctrl+N on non-Mac hosts) and the
 example shortcuts replace the current document after confirming any unsaved
 changes. With no desktop window, they create one. Cmd+Shift+N / Ctrl+Shift+N
 is New Window; Open also continues to create a separate window.

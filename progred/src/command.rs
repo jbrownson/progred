@@ -86,7 +86,7 @@ pub enum Command {
 }
 
 /// The logical shortcut for a command; each menu system applies its
-/// own modifier convention (Ctrl drawn, Command native).
+/// host's modifier convention (Command on Mac, Ctrl elsewhere).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Shortcut {
     pub key: ShortcutKey,

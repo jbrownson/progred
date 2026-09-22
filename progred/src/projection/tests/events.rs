@@ -34,6 +34,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     let mut cache = puri::TextCache::default();
     let measured = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),
@@ -130,6 +131,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     let empty = Annotations::default();
     let measured = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),

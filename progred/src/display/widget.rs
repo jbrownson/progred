@@ -127,7 +127,7 @@ pub fn selectable(
                         .on_pointer_down_with(move |world, event, hovered| {
                             puri::interact::is_primary_contact(event)
                                 && hovered.hovered().is_some_and(|hovered| hovered == &target)
-                                && if crate::modifiers::pick(&event.state.modifiers) {
+                                && if world.command_modifier.pressed(&event.state.modifiers) {
                                     value
                                         .as_ref()
                                         .is_some_and(|value| world.pick_identity(value.clone()))

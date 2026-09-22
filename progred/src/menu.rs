@@ -28,10 +28,14 @@ pub fn commands(menus: &[Menu]) -> impl Iterator<Item = Command> + '_ {
     })
 }
 
-/// The drawn shortcut spelling: the drawn system's modifier is Ctrl.
-fn drawn_label(shortcut: command::Shortcut) -> String {
+/// The host supplies the same modifier for labels and dispatch.
+fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModifier) -> String {
     format!(
-        "Ctrl+{}{}",
+        "{}+{}{}",
+        match command {
+            puri::keyboard::CommandModifier::Meta => "Cmd",
+            puri::keyboard::CommandModifier::Control => "Ctrl",
+        },
         if shortcut.shift { "Shift+" } else { "" },
         shortcut.key.label()
     )
@@ -246,9 +250,12 @@ pub fn navigate(
     }
 }
 
-pub fn shortcut(event: &KeyboardEvent) -> Option<Command> {
+pub fn shortcut(
+    event: &KeyboardEvent,
+    command: puri::keyboard::CommandModifier,
+) -> Option<Command> {
     let modifiers = &event.modifiers;
-    if !event.state.is_down() || !modifiers.ctrl() || modifiers.meta() || modifiers.alt() {
+    if !event.state.is_down() || !command.pressed(modifiers) || modifiers.alt() {
         return None;
     }
     match &event.key {
@@ -280,6 +287,7 @@ mod view {
     const MENU_WIDTH: f64 = 230.0;
 
     pub struct Description {
+        pub command_modifier: puri::keyboard::CommandModifier,
         pub state: State,
         pub availability: Availability,
         pub toggles: Toggles,
@@ -440,7 +448,10 @@ mod view {
         let label = crate::render::text(tcx, spec.label, style);
         let shortcut = crate::render::text(
             tcx,
-            &spec.shortcut.map(drawn_label).unwrap_or_default(),
+            &spec
+                .shortcut
+                .map(|shortcut| drawn_label(shortcut, description.command_modifier))
+                .unwrap_or_default(),
             shortcut_style,
         );
         Item {
@@ -653,24 +664,45 @@ mod tests {
     #[test]
     fn shortcuts_are_drawn_application_commands() {
         assert_eq!(
-            shortcut(&key("n", Modifiers::CONTROL)),
+            shortcut(
+                &key("n", Modifiers::CONTROL),
+                puri::keyboard::CommandModifier::Control
+            ),
             Some(Command::App(AppCommand::New))
         );
         assert_eq!(
-            shortcut(&key("N", Modifiers::CONTROL | Modifiers::SHIFT)),
+            shortcut(
+                &key("N", Modifiers::CONTROL | Modifiers::SHIFT),
+                puri::keyboard::CommandModifier::Control
+            ),
             Some(Command::App(AppCommand::NewWindow))
         );
         assert_eq!(
-            shortcut(&key("s", Modifiers::CONTROL)),
+            shortcut(
+                &key("s", Modifiers::CONTROL),
+                puri::keyboard::CommandModifier::Control
+            ),
             Some(Command::Doc(DocCommand::Save))
         );
         assert_eq!(
-            shortcut(&key("S", Modifiers::CONTROL | Modifiers::SHIFT)),
+            shortcut(
+                &key("S", Modifiers::CONTROL | Modifiers::SHIFT),
+                puri::keyboard::CommandModifier::Control
+            ),
             Some(Command::Doc(DocCommand::SaveAs))
         );
-        assert_eq!(shortcut(&key("s", Modifiers::META)), None);
         assert_eq!(
-            shortcut(&key("s", Modifiers::CONTROL | Modifiers::ALT)),
+            shortcut(
+                &key("s", Modifiers::META),
+                puri::keyboard::CommandModifier::Control
+            ),
+            None
+        );
+        assert_eq!(
+            shortcut(
+                &key("s", Modifiers::CONTROL | Modifiers::ALT),
+                puri::keyboard::CommandModifier::Control
+            ),
             None
         );
     }
@@ -688,7 +720,10 @@ mod tests {
             ("8", Example::Cube),
         ] {
             assert_eq!(
-                shortcut(&key(digit, Modifiers::CONTROL)),
+                shortcut(
+                    &key(digit, Modifiers::CONTROL),
+                    puri::keyboard::CommandModifier::Control
+                ),
                 Some(Command::App(AppCommand::Example(example)))
             );
         }

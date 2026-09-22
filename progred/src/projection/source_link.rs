@@ -56,7 +56,7 @@ pub(crate) fn handlers(
             .handler()
             .on_pointer_down_with(move |world, event, input| {
                 puri::interact::is_primary_contact(event)
-                    && crate::modifiers::pick(&event.state.modifiers)
+                    && world.command_modifier.pressed(&event.state.modifiers)
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && match input.hovered() {
@@ -74,7 +74,7 @@ pub(crate) fn handlers(
         output.handler().on(move |world, event, input| {
             let handled = matches!(event, Event::HoverChanged | Event::ModifiersChanged(_))
                 && !world.pressed
-                && crate::modifiers::link(&world.modifiers)
+                && world.command_modifier.pressed(&world.modifiers)
                 && world.pointer.is_some_and(|point| placement.contains(point))
                 && match input.hovered() {
                     Some(Hovered::Tree(Hover::Source(source))) => {

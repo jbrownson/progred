@@ -322,6 +322,7 @@ fn drawing_frame(
     let styles = crate::styles::editor(1.0);
     let annotations = Annotations::default();
     let cx = Cx {
+        command_modifier: crate::modifiers::native(),
         focused: true,
         edits: Default::default(),
         computations: None,

@@ -172,6 +172,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 }
 
 pub(crate) struct FrameDescription<'a> {
+    pub command_modifier: puri::keyboard::CommandModifier,
     computations: &'a crate::computations::Computations,
     focused: bool,
     drawn_menu: bool,
@@ -222,6 +223,7 @@ fn compute_hover(
         layout,
         Placement::root(Rect::from_origin_size(Point::ZERO, description.viewport)),
         &placed::HoverInput {
+            command_modifier: description.command_modifier,
             pointer: if pointer.pressed {
                 None
             } else {
@@ -346,6 +348,7 @@ impl Editor {
         self.computations.frame_time.set(web_time::Instant::now());
         prepare_frame(
             FrameDescription {
+                command_modifier: self.command_modifier,
                 computations: &self.computations,
                 focused: self.focused,
                 drawn_menu: self.drawn_menu,
@@ -368,7 +371,7 @@ impl Editor {
                     .as_ref()
                     .map(|(root, hover)| (root.as_ref(), hover)),
                 pressed: self.pressed,
-                link_sources: crate::modifiers::link(&self.modifiers),
+                link_sources: self.command_modifier.pressed(&self.modifiers),
             },
         )
     }
@@ -488,6 +491,7 @@ impl EditorRunner {
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
+    command_modifier: puri::keyboard::CommandModifier,
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
@@ -533,6 +537,7 @@ fn project_workspace_view(
     };
     let projected = projection::project(
         projection::ProjectDescription {
+            command_modifier,
             computations: Some(computations),
             focused,
             view: &view.root,
@@ -603,6 +608,7 @@ fn project_workspace_view(
 #[allow(clippy::too_many_arguments)]
 fn project_workspace(
     model: &Model,
+    command_modifier: puri::keyboard::CommandModifier,
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
@@ -629,6 +635,7 @@ fn project_workspace(
         let rect = placed_view.rect;
         let child = project_workspace_view(
             model,
+            command_modifier,
             focused,
             computations,
             stack,
@@ -716,6 +723,7 @@ fn project_frame(
     resources: FrameResources<'_>,
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
+        command_modifier,
         computations,
         focused,
         drawn_menu,
@@ -749,6 +757,7 @@ fn project_frame(
         menu::view(
             &mut tcx,
             menu::Description {
+                command_modifier,
                 state: menu,
                 availability,
                 toggles,
@@ -768,6 +777,7 @@ fn project_frame(
     };
     let body = project_workspace(
         model,
+        command_modifier,
         focused,
         computations,
         stack,
@@ -1443,6 +1453,7 @@ mod frame_tests {
             .unwrap()
             .0;
         let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
+        runner.editor.command_modifier = puri::keyboard::CommandModifier::Control;
         let viewport = Size::new(620.0, 304.0);
         runner
             .editor
@@ -1486,6 +1497,7 @@ mod frame_tests {
         for drawn in [false, true] {
             let mut runner = scrolling_runner(&Default::default());
             runner.editor.drawn_menu = drawn;
+            runner.editor.command_modifier = puri::keyboard::CommandModifier::Control;
             let viewport = Size::new(500.0, 400.0);
             runner.refresh_frame(1.0, viewport);
             let path = select_offscreen(&mut runner, viewport);
@@ -1759,6 +1771,7 @@ mod frame_tests {
             crate::display::widget::frame::place(
                 project_workspace(
                     model,
+                    crate::modifiers::native(),
                     true,
                     &crate::computations::Computations::default(),
                     &stack,
@@ -1957,6 +1970,7 @@ mod frame_tests {
                 crate::display::widget::frame::place(
                     project_workspace_view(
                         &model,
+                        crate::modifiers::native(),
                         true,
                         &crate::computations::Computations::default(),
                         &stack,
@@ -2067,6 +2081,7 @@ mod frame_tests {
         let placed = crate::display::widget::frame::place(
             project_workspace(
                 &model,
+                crate::modifiers::native(),
                 true,
                 &crate::computations::Computations::default(),
                 &stack,
@@ -2213,6 +2228,7 @@ mod frame_tests {
         compute_hover(
             layout,
             &FrameDescription {
+                command_modifier: crate::modifiers::native(),
                 computations: &editor.computations,
                 focused: editor.focused,
                 drawn_menu: false,

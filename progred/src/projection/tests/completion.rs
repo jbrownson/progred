@@ -1164,6 +1164,7 @@ fn projected_completion_entries_with(
     };
     let measured = project(
         ProjectDescription {
+            command_modifier: crate::modifiers::native(),
             focused: true,
             computations: None,
             view: &crate::test_root(),

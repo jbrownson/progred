@@ -51,6 +51,7 @@
     <script type="module">
       import init, * as wasm from "./pkg/progred.js";
       import { startWorker } from "./worker-host.js";
+      import { commandIsMeta } from "./platform.mjs";
 
       const loading = document.querySelector("#loading");
       const fail = (error) => {
@@ -91,7 +92,8 @@
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
         };
         wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
-          params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined);
+          params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined,
+          commandIsMeta(navigator.platform));
         window.addEventListener("focus", wasm.browser_focus_changed);
         window.addEventListener("blur", wasm.browser_focus_changed);
         wasm.browser_focus_changed();

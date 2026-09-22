@@ -37,7 +37,7 @@ class PackageTests(unittest.TestCase):
         assemble(self.repository, self.destination)
         html = (self.destination / "index.html").read_text()
         frames = re.findall(r'<iframe\s[^>]*src="([^"]+)"', html)
-        self.assertEqual(len(frames), 5)
+        self.assertEqual(len(frames), 8)
         for src in frames:
             url = urljoin("https://prog.red/", src.replace("&amp;", "&"))
             params = parse_qs(urlsplit(url).query)

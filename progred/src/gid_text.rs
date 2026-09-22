@@ -734,6 +734,15 @@ mod checked_in_files {
 
     #[test]
     fn website_lessons_are_editable_data_without_orphan_definitions() {
+        for source in [
+            include_str!("../../website/public/lessons/forest.gid"),
+            include_str!("../../website/public/lessons/drawing.gid"),
+            include_str!("../../website/public/lessons/create.gid"),
+        ] {
+            let (doc, _) = parse(source).unwrap();
+            let reached = root_reachable_cells(&doc);
+            assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+        }
         let (doc, binders) =
             parse(include_str!("../../website/public/lessons/values.gid")).unwrap();
         let root = doc.root.as_ref().unwrap().as_record().unwrap();

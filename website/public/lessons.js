@@ -1,4 +1,9 @@
 import { lessonProgress } from "./lesson-progress.mjs";
+import { commandIsMeta } from "./editor/platform.mjs";
+
+for (const label of document.querySelectorAll("[data-command-key]")) {
+  label.textContent = commandIsMeta(navigator.platform) ? "Cmd" : "Ctrl";
+}
 
 for (const exercise of document.querySelectorAll(".exercise")) {
   const frame = exercise.querySelector("iframe");

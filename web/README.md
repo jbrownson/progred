@@ -31,9 +31,13 @@ Omitting this option keeps the standard document projection.
 Canvas and window focus/blur events control the editor's active presentation.
 Leaving an embed clears its selection, caret, completion query, and related
 highlights. Document edits remain. Loading another lesson does not steal focus.
-The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?, tutorial_slots?)`; malformed supplied
+The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?, tutorial_slots?, command_is_meta)`; malformed supplied
 documents fail explicitly before starting the editor. See the
 [website notes](../website/README.md) for independent embedded sessions.
+
+The host supplies `command_is_meta` using `platform.mjs`: Command on Mac, Control
+elsewhere. Editing, picking, source links, and drawn menu labels use this same
+convention. The tutorial imports the same helper for its shortcut instructions.
 
 `libraries` is a comma-separated list of built-in library CellIds, in projection
 precedence order. These are the library identities, not their field tags or
@@ -66,7 +70,7 @@ Click a menu heading to open it; while a menu is open, moving over another
 heading switches to it. Mouse and keyboard share one highlighted item.
 F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last
 enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
-losing focus dismisses the menu. The displayed Ctrl shortcuts work with menus
+losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
 open or closed. The native macOS menu remains separate.
 
 The browser build uses a shared-memory coordinator for the existing CAM background
