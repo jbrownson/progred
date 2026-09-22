@@ -84,7 +84,7 @@ The full-page editor remains blank on startup
 and retains its menus. The public site is deployed at <https://prog.red>.
 
 The site defaults to light mode, with white editor surfaces distinct from the
-pale-blue page. The **Dark mode** button switches both the page and live editors
+warm cream page. The **Dark mode** button switches both the page and live editors
 without reloading lessons or losing edits/checkmarks. The preference is stored
 locally when browser storage is available; otherwise switching still works for
 the current page. New and reset embeds receive the current theme. CSS variables

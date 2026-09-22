@@ -1,13 +1,13 @@
 :root {
   color-scheme: light;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #202b47;
-  background: #f0f4ff;
+  color: #382b28;
+  background: #faf5ef;
   font-synthesis: none;
   line-height: 1.65;
-  --accent: #3853d8;
-  --muted: #586784;
-  --border: #cad5ed;
+  --accent: #a6432e;
+  --muted: #78625a;
+  --border: #e1d2c9;
   --editor: #ffffff;
   --success: #167548;
   --on-success: #ffffff;
@@ -15,11 +15,11 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  color: #e6edfc;
-  background: #0c1120;
-  --accent: #9db5ff;
-  --muted: #a0aec9;
-  --border: #35425e;
+  color: #f1e6df;
+  background: #1c1715;
+  --accent: #eda28e;
+  --muted: #bcaaa1;
+  --border: #4b3932;
   --editor: #151b2c;
   --success: #8ae1ae;
   --on-success: #11241b;
@@ -42,7 +42,6 @@ a:focus-visible, button:focus-visible {
   flex-wrap: wrap;
   gap: 1rem;
   padding-block: 1.5rem;
-  border-bottom: 1px solid var(--border);
   font-size: 0.875rem;
 }
 .wordmark {
@@ -57,13 +56,8 @@ a:focus-visible, button:focus-visible {
 .site-actions { display: flex; align-items: center; gap: 1.5rem; }
 #theme-toggle { font: inherit; color: inherit; background: var(--editor); border: 1px solid var(--border); border-radius: 999px; padding: 0.45rem 0.85rem; cursor: pointer; }
 #theme-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-.introduction { max-width: 45rem; padding-block: 4.5rem 4rem; }
 .eyebrow { color: var(--accent); font-size: 0.8rem; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 0.85rem; }
-h1 { font-size: clamp(2.75rem, 5.5vw, 4.5rem); font-weight: 550; letter-spacing: -0.055em; line-height: 1.08; margin: 0 0 1.25rem; }
-.lead { font-size: 1.3rem; line-height: 1.5; margin-block: 0 1rem; }
-.introduction > p:not(.eyebrow):not(.lead) { color: var(--muted); max-width: 38rem; }
-.start-link { display: inline-block; font-size: 0.95rem; margin-top: 0.5rem; color: var(--accent); }
-h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spacing: -0.025em; line-height: 1.25; margin: 0 0 1rem; }
+h1, h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spacing: -0.025em; line-height: 1.25; margin: 0 0 1rem; }
 .exercise {
   display: grid;
   grid-template-columns: minmax(15rem, 0.85fr) minmax(0, 1.3fr);
@@ -73,6 +67,7 @@ h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spacing: 
   border-top: 1px solid var(--border);
   scroll-margin-top: 1.5rem;
 }
+.exercise:first-child { border-top: 0; }
 .lesson-copy > p { margin-top: 0; }
 ol { padding-left: 1.35rem; margin-block: 1.35rem; }
 li { padding-left: 0.3rem; margin-bottom: 0.8rem; }
@@ -111,7 +106,6 @@ footer { border-top: 1px solid var(--border); display: flex; justify-content: sp
 
 @media (max-width: 800px) {
   .site-header, main, footer { width: calc(100% - 2.5rem); }
-  .introduction { padding-block: 3rem; }
   .exercise { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; padding-block: 2.5rem; }
   .lesson-copy { max-width: 38rem; }
 }

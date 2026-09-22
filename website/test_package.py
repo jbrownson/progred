@@ -50,6 +50,7 @@ class PackageTests(unittest.TestCase):
                 self.assertTrue((module.parent / reference).is_file(), (module, reference))
         for name in EDITOR_FILES:
             self.assertTrue((self.destination / "editor" / name).is_file())
+        self.assertTrue((self.destination / "logo.svg").is_file())
 
     def test_excludes_source_and_diagnostic_pages(self):
         (self.repository / "web/secret.env").write_text("private")
