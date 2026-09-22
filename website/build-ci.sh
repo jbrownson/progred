@@ -49,5 +49,5 @@ cargo +"$web_toolchain" build --release --locked --bin progred -p progred \
     "$CARGO_TARGET_DIR/$web_target/release/progred.wasm"
 
 python3 -B -m unittest discover -s website -p 'test_*.py'
-node --test website/test_embed.cjs website/test_appearance.cjs
+node --test website/test_embed.cjs website/test_appearance.cjs website/test_modifiers.cjs
 python3 -B website/package.py

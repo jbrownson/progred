@@ -644,9 +644,10 @@ mod tests {
     }
 
     #[test]
-    fn stationary_modifier_changes_dispatch_with_the_installed_hover() {
+    fn stationary_modifier_changes_dispatch_with_the_installed_hover_without_focus() {
         let log = Log::default();
         let mut runner = instrumented_runner(&log);
+        runner.editor.focused = false;
         runner.refresh_frame(1.0, VIEWPORT);
         log.borrow_mut().clear();
         let hover = crate::frame::Hovered::Blocked;
@@ -669,6 +670,7 @@ mod tests {
             }
         });
         runner.modifiers_changed(Modifiers::META, 1.0, VIEWPORT);
+        assert!(!runner.editor.focused);
         assert_eq!(
             log.take(),
             [

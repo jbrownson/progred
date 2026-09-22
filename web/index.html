@@ -60,6 +60,7 @@
       import { startWorker } from "./worker-host.js";
       import { commandIsMeta } from "./platform.mjs";
       import { isTheme, savedTheme } from "./theme.mjs";
+      import { forwardModifiers } from "./modifiers.mjs";
 
       const loading = document.querySelector("#loading");
       const fail = (error) => {
@@ -114,6 +115,7 @@
         wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
           params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined,
           commandIsMeta(navigator.platform), theme);
+        forwardModifiers(canvas, window, wasm.browser_modifiers_changed);
         ready = true;
         window.parent.postMessage({ type: "progred:ready" }, location.origin);
         window.addEventListener("focus", wasm.browser_focus_changed);

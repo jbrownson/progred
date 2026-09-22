@@ -114,6 +114,8 @@ pub(crate) enum UserEvent {
     #[cfg(target_arch = "wasm32")]
     BrowserFocusChanged,
     #[cfg(target_arch = "wasm32")]
+    BrowserModifiersChanged(winit::keyboard::ModifiersState),
+    #[cfg(target_arch = "wasm32")]
     PaletteChanged(styles::Palette),
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
@@ -714,6 +716,21 @@ impl ApplicationHandler<UserEvent> for App {
         }
         match event {
             #[cfg(target_arch = "wasm32")]
+            UserEvent::BrowserModifiersChanged(modifiers) => {
+                if let Some(id) = self
+                    .editors
+                    .first()
+                    .and_then(|runner| runner.editor.window_id())
+                {
+                    self.editor_window_event(
+                        event_loop,
+                        0,
+                        id,
+                        WindowEvent::ModifiersChanged(modifiers.into()),
+                    );
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
             UserEvent::PaletteChanged(palette) => {
                 for runner in &mut self.editors {
                     runner.editor.palette = palette;
@@ -1208,6 +1225,22 @@ pub fn browser_focus_changed() {
     WEB_PROXY.with(|proxy| {
         if let Some(proxy) = &*proxy.borrow() {
             let _ = proxy.send_event(UserEvent::BrowserFocusChanged);
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn browser_modifiers_changed(shift: bool, control: bool, alt: bool, meta: bool) {
+    use winit::keyboard::ModifiersState;
+    let mut modifiers = ModifiersState::empty();
+    modifiers.set(ModifiersState::SHIFT, shift);
+    modifiers.set(ModifiersState::CONTROL, control);
+    modifiers.set(ModifiersState::ALT, alt);
+    modifiers.set(ModifiersState::SUPER, meta);
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(UserEvent::BrowserModifiersChanged(modifiers));
         }
     });
 }

@@ -12,11 +12,13 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
 async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit } = {}) {
   const { commandIsMeta } = await import("../web/platform.mjs");
   const { isTheme, savedTheme } = await import("../web/theme.mjs");
+  const { forwardModifiers } = await import("../web/modifiers.mjs");
   const calls = [];
   const messages = [];
   const focusEvents = [];
   const listeners = {};
   const themeChanges = [];
+  const modifierChanges = [];
   const parent = { postMessage: (...args) => messages.push(structuredClone(args)) };
   const host = {
     parent,
@@ -39,7 +41,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
-    JSON, commandIsMeta, isTheme, savedTheme, navigator: { platform },
+    JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
     window: host,
     document: {
@@ -55,6 +57,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
     startWorker: async (...args) => { calls.push(["workers", args[4]]); },
     wasm: {
       browser_focus_changed: () => focusEvents.push("changed"),
+      browser_modifiers_changed: (...state) => modifierChanges.push(state),
       set_theme: (theme) => themeChanges.push(theme),
       computation_finished() {},
       worker_threads: () => 1,
@@ -66,7 +69,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       },
     },
   });
-  return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges,
+  return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges, modifierChanges,
     canvas, canvasListeners, documentElement, body };
 }
 
@@ -85,6 +88,15 @@ test("standalone startup remains blank with its full menu and default workers", 
   assert.equal(loading.style.display, "none");
 });
 
+test("embedded pointer modifiers reach WASM before the first click", async () => {
+  const { canvas, modifierChanges } = await start("?menu=hidden&wheel=page");
+  const move = new Event("pointermove", { cancelable: true });
+  Object.assign(move, { metaKey: true });
+  canvas.dispatchEvent(move);
+  assert.deepEqual(modifierChanges, [[false, false, false, true]]);
+  assert.equal(move.defaultPrevented, false);
+});
+
 test("editor and lesson labels use the browser host's command modifier", async () => {
   for (const [platform, meta] of [["MacIntel", true], ["iPad", true], ["Win32", false], ["Linux x86_64", false]]) {
     const { calls } = await start("", { platform });
@@ -96,7 +108,8 @@ test("editor and lesson labels use the browser host's command modifier", async (
 test("wheel handling defaults to the editor, including embeds without an explicit choice", async () => {
   for (const search of ["", "?wheel=editor", "?menu=hidden&document=../lessons/values.gid"]) {
     const { canvas, canvasListeners, documentElement, body } = await start(search);
-    assert.deepEqual(canvasListeners, []);
+    assert.deepEqual(canvasListeners.filter(({ type }) => type === "wheel"),
+      [{ type: "wheel", options: { capture: true, passive: true } }]);
     assert.equal(documentElement.style.overscrollBehavior, undefined);
     assert.equal(body.style.overscrollBehavior, undefined);
     let received = 0;
@@ -110,7 +123,8 @@ test("wheel handling defaults to the editor, including embeds without an explici
 
 test("page wheel handling leaves the browser default intact and excludes editor wheel listeners", async () => {
   const { canvas, canvasListeners, documentElement, body } = await start("?wheel=page");
-  assert.deepEqual(canvasListeners, [{ type: "wheel", options: { capture: true, passive: true } }]);
+  assert.deepEqual(canvasListeners.filter(({ type }) => type === "wheel"),
+    Array.from({ length: 2 }, () => ({ type: "wheel", options: { capture: true, passive: true } })));
   assert.equal(documentElement.style.overscrollBehavior, "auto");
   assert.equal(body.style.overscrollBehavior, "auto");
   let received = 0;

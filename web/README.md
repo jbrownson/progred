@@ -46,6 +46,11 @@ the current preference after lazy loading or a lesson reset.
 The host supplies `command_is_meta` using `platform.mjs`: Command on Mac, Control
 elsewhere. Editing, picking, source links, and drawn menu labels use this same
 convention. The tutorial imports the same helper for its shortcut instructions.
+`modifiers.mjs` also forwards modifier changes observed on canvas input: Winit
+0.30's browser backend otherwise drops pointer modifiers until the canvas has
+focus. This uses the normal modifier-event/reducer path, without focusing the
+editor or cancelling browser events. Unchanged pointer flags are not re-sent;
+focus transitions reset that observation because Winit may clear its own state.
 
 `libraries` is a comma-separated list of built-in library CellIds, in projection
 precedence order. These are the library identities, not their field tags or
