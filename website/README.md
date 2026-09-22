@@ -31,6 +31,15 @@ the normal Cargo sandbox. The browser must support WebAssembly SIMD.
 One-time setup is described in [the browser host notes](../web/README.md).
 No Node or package installation is needed for the site.
 
+The header uses the standard [GitHub Buttons](https://github.com/buttons/github-buttons)
+widget with the GitHub logo and live star count, without a text label. Before
+loading, only the ordinary GitHub text link is visible. Its script is version-pinned,
+integrity-checked, and loaded asynchronously from jsDelivr with anonymous CORS
+for compatibility with the editor's isolation headers. The widget requests the
+count from GitHub's public API; if it is unavailable, no count is shown. If the
+script is blocked, the ordinary repository link remains. No account token or
+custom star-count logic is used. The widget keeps its default light styling.
+
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
 editor needs the isolation headers provided by the local server.

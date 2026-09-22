@@ -231,16 +231,26 @@ class AssetTests(unittest.TestCase):
                 super().__init__()
                 self.paths = []
                 self.frames = []
+                self.external_scripts = []
 
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
-                if tag in ("img", "iframe", "script", "link"):
+                if tag == "script" and urlsplit(attrs.get("src", "")).scheme:
+                    self.external_scripts.append(attrs)
+                elif tag in ("img", "iframe", "script", "link"):
                     self.paths.append(attrs.get("src", attrs.get("href")))
                 if tag == "iframe":
                     self.frames.append(attrs)
 
         assets = Assets()
         assets.feed((REPOSITORY / "website/public/index.html").read_text())
+        self.assertEqual(len(assets.external_scripts), 1)
+        widget = assets.external_scripts[0]
+        self.assertEqual(widget["src"], "https://cdn.jsdelivr.net/npm/github-buttons@2.33.1/dist/buttons.min.js")
+        self.assertEqual(widget["crossorigin"], "anonymous")
+        self.assertTrue(widget["integrity"].startswith("sha384-"))
+        self.assertIn("async", widget)
+        self.assertIn("defer", widget)
         self.assertEqual(len(assets.frames), 8)
         documents = []
         for frame in assets.frames:

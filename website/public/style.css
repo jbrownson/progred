@@ -54,6 +54,7 @@ a:focus-visible, button:focus-visible {
   text-decoration: none;
 }
 .site-actions { display: flex; align-items: center; gap: 1.5rem; }
+.github-stars { display: inline-flex; align-items: center; min-height: 44px; }
 #theme-toggle { font: inherit; color: inherit; background: var(--editor); border: 1px solid var(--border); border-radius: 999px; padding: 0.45rem 0.85rem; cursor: pointer; }
 #theme-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .eyebrow { color: var(--accent); font-size: 0.8rem; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 0.85rem; }
