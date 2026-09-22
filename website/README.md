@@ -5,10 +5,24 @@ there is no separate demo implementation, framework, or hosting dependency.
 
 ## Open it
 
-On macOS, double-click **Preview.command** in Finder. It builds the browser
-editor using the repository's isolated Cargo workflow, starts a loopback-only
-web server, and opens the website in your default browser. Leave its Terminal
-window running; Control+C stops the server. The first build can take a while.
+On macOS, double-click **Preview.command** in Finder, or run `make website`
+from the repository root. It starts a loopback-only web server and leaves the
+URL as the last line in the terminal. Open that link in whichever browser you
+want. Leave the terminal running; Control+C stops the server. Website and lesson
+edits need only a browser refresh. Successful requests are quiet; errors remain
+visible with the URL repeated below them, so ordinary browsing doesn't bury it.
+
+The local address is always <http://127.0.0.1:8081/>. Closing a browser tab does
+not stop the server: reopen that link in Safari, Chrome, or another browser.
+It doesn't launch a browser unless requested with `make website ARGS=--open`.
+The server must remain running; after stopping it or restarting the computer,
+start it again. There is no background service or automatic login startup.
+
+The launcher reuses the existing browser editor. If its generated files are
+missing, it first builds them using the repository's isolated Cargo workflow;
+that first build can take a while. After changing Rust editor code, use
+`make website ARGS=--rebuild` (or `website/Preview.command --rebuild`). Reuse is
+explicit, not a source-freshness check: ordinary launches don't compile changes.
 
 The browser build uses `nightly-2026-08-27` with `rust-src` and `llvm-tools`,
 and `wasm-bindgen-cli` matching the locked `wasm-bindgen` version. It rebuilds
@@ -18,12 +32,15 @@ One-time setup is described in [the browser host notes](../web/README.md).
 No Node or package installation is needed for the site.
 
 Opening `public/index.html` directly is not supported: the WebAssembly module
-and JavaScript imports need HTTP rather than a `file://` origin.
+and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
+editor needs the isolation headers provided by the local server.
 
-After the first build, `python3 website/preview.py` from the repository root
-starts the preview without rebuilding the editor. `--no-open` leaves the browser
-closed, and `--port 8081` requests a particular port. By default the operating
-system chooses an available port, so an existing editor preview can stay open.
+`python3 website/preview.py` is the same launcher without the shell wrapper.
+`--rebuild` requests a build even when files exist. `--open` also opens the default
+browser (`--no-open` explicitly retains the default link-only behavior), and
+`--port 8082` requests another port. An occupied port is an explicit
+error, not a silent change of address. Use `--port 0` to ask the operating system
+for a free port when running an additional preview alongside this one.
 
 ## Work on it
 
@@ -210,10 +227,8 @@ Don't force-push to undo a release: use Cloudflare's deployment rollback for an
 immediate rollback, then fix/revert the source and publish a new commit.
 No credentials belong in this repository.
 
-Cloudflare's first hosted build still needs to verify the clean Linux build and
-its 20-minute build limit. Local packaging and dry-run validation don't establish
-that the hosted build or public browser session succeeds. The generated build
-directory and npm dependencies are ignored by Git.
+The hosted Linux build and public site were verified on September 21, 2026.
+The generated build directory and npm dependencies are ignored by Git.
 
 Run the preview server and embed-host checks without opening an editor
 (the latter uses Node's built-in test runner, with no dependencies):

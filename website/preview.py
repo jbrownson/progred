@@ -4,11 +4,17 @@ import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import subprocess
 from urllib.parse import unquote, urlsplit
 import webbrowser
 
 
 REPOSITORY = Path(__file__).resolve().parent.parent
+DEFAULT_PORT = 8081
+
+
+def preview_url(server):
+    return f"http://127.0.0.1:{server.server_port}/"
 
 
 class PreviewHandler(SimpleHTTPRequestHandler):
@@ -40,6 +46,13 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         self.send_error(404, "Directory listing is disabled")
         return None
 
+    def log_request(self, code="-", size="-"):
+        pass
+
+    def log_error(self, format, *args):
+        super().log_error(format, *args)
+        print(f"\n{preview_url(self.server)}", flush=True)
+
     def end_headers(self):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
@@ -48,27 +61,58 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def main():
+def prepare_editor(repository, rebuild=False):
+    editor = repository / "web"
+    required = [editor / "pkg/progred_bg.wasm", editor / "pkg/progred.js"]
+    if rebuild or not all(path.is_file() for path in required):
+        print("Building Progred's browser editor…", flush=True)
+        subprocess.run(["make", "build-web"], cwd=repository, check=True)
+        if not all(path.is_file() for path in required):
+            raise FileNotFoundError("The browser build did not produce the required editor files.")
+    else:
+        print("Using the existing browser editor. Use --rebuild after editor code changes.", flush=True)
+    return editor
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--no-open", action="store_true", help="Do not open a browser")
-    parser.add_argument("--port", type=int, default=0, help="Local port (default: choose a free one)")
-    args = parser.parse_args()
-    editor = REPOSITORY / "web"
-    if not (editor / "pkg/progred_bg.wasm").is_file():
-        parser.error("Build the editor first with make build-web, or double-click Preview.command.")
+    browser = parser.add_mutually_exclusive_group()
+    browser.add_argument("--open", action="store_true", dest="open_browser",
+                         help="Also open the default browser")
+    browser.add_argument("--no-open", action="store_false", dest="open_browser",
+                         help="Only show the link (the default)")
+    parser.set_defaults(open_browser=False)
+    parser.add_argument("--rebuild", action="store_true", help="Rebuild the browser editor before opening")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"Local port (default: {DEFAULT_PORT}; 0 chooses a free one)")
+    args = parser.parse_args(argv)
+    if not 0 <= args.port <= 65535:
+        parser.error("--port must be between 0 and 65535")
+    try:
+        editor = prepare_editor(REPOSITORY, args.rebuild)
+    except (OSError, subprocess.CalledProcessError) as error:
+        parser.exit(1, f"Could not prepare the browser editor: {error}\n")
     handler = partial(
         PreviewHandler, website=REPOSITORY / "website/public", editor=editor,
     )
-    with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
-        url = f"http://127.0.0.1:{server.server_port}/"
-        print(f"Progred website: {url}", flush=True)
-        print("Refresh after website edits. Stop this preview with Control+C.", flush=True)
-        if not args.no_open:
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+    except OSError as error:
+        parser.exit(1, f"Could not start the preview on port {args.port}: {error}\n"
+                      "Choose a different port with --port PORT if needed.\n")
+    with server:
+        url = preview_url(server)
+        print("\nProgred local website", flush=True)
+        print("Leave this terminal open. Control+C stops the server.", flush=True)
+        print("Open the link in your browser; refresh after website edits.", flush=True)
+        print("Closing a browser tab is fine—you can reopen the same link.", flush=True)
+        if args.open_browser:
             webbrowser.open(url)
+        print(f"\n{url}", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
-            pass
+            print("\nPreview stopped.", flush=True)
 
 
 if __name__ == "__main__":
