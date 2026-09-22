@@ -210,7 +210,7 @@ fn cam_hover_compositor_pixels() {
 fn editor_compositor_profile() {
     let gpu = gpu::Gpu::new();
     let size = kurbo::Size::new(2400.0, 1600.0);
-    let base_color = Color::new([0.965, 0.965, 0.972, 1.0]);
+    let base_color = crate::styles::Theme::Light.palette().paper;
     for example in [
         crate::command::Example::IopTree,
         crate::command::Example::Toolpaths,

@@ -8,7 +8,7 @@ use measured::{Extent, Measured, col, pad};
 use peniko::kurbo::Insets;
 use puri::handler::{HasHandler, Key, Modifiers, NamedKey, PointerType};
 use puri::text::{TextCtx, TextStyle};
-use puri::{Color, Point, Size, Stroke, Vec2};
+use puri::{Point, Size, Stroke, Vec2};
 use puri_widgets::panel::Panel;
 use std::ops::Range;
 use std::rc::Rc;
@@ -73,7 +73,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
             detail: &styles.detail,
             more: &styles.dim,
             scale,
-            chosen: Color::new([0.0, 0.48, 1.0, 0.14]),
+            chosen: styles.palette.accent.with_alpha(0.14),
         },
     );
     let set_view = Rc::new(set_view);
@@ -189,8 +189,8 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         },
     );
     let panel = Panel {
-        fill: Some(Color::WHITE.into()),
-        border: Some((border(scale), Color::new([0.75, 0.77, 0.81, 1.0]).into())),
+        fill: Some(styles.palette.panel.into()),
+        border: Some((border(scale), styles.palette.border.into())),
         radius: 6.0 * scale,
     };
     crate::display::widget::before_place(card, move |placement, output| {

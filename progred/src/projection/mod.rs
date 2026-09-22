@@ -470,16 +470,17 @@ fn hover_block(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placem
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
-fn primary_highlight<P: Canvas + ?Sized>(scale: f64, p: &mut P, outline: RoundedRect) {
-    p.fill(
-        outline,
-        Color::new([0.0, 0.48, 1.0, 0.22]),
-        Affine::IDENTITY,
-    );
+fn primary_highlight<P: Canvas + ?Sized>(
+    palette: crate::styles::Palette,
+    scale: f64,
+    p: &mut P,
+    outline: RoundedRect,
+) {
+    p.fill(outline, palette.accent.with_alpha(0.22), Affine::IDENTITY);
     p.stroke(
         outline,
         primary_highlight_stroke(scale),
-        Color::new([0.0, 0.48, 1.0, 1.0]),
+        palette.accent,
         Affine::IDENTITY,
     );
 }
@@ -616,6 +617,7 @@ fn prepare_project(
 /// background's deselect.
 #[allow(clippy::too_many_arguments)]
 fn descend_landmark_with(
+    palette: crate::styles::Palette,
     selected: bool,
     scale: f64,
     path: SharedPath,
@@ -630,19 +632,19 @@ fn descend_landmark_with(
         let outline = highlight_outline(scale, rect);
         p.render(move |cv, hover| {
             if selected {
-                primary_highlight(scale, cv, outline);
+                primary_highlight(palette, scale, cv, outline);
             } else if matches!(&secondary, Some((_, true))) {
-                secondary_highlight(scale, cv, outline, true);
+                secondary_highlight(palette, scale, cv, outline, true);
             } else if matches!(
                 tree_hovered(hover),
                 Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
             ) {
-                hover_highlight(scale, cv, outline);
+                hover_highlight(palette, scale, cv, outline);
             } else if secondary
                 .as_ref()
                 .is_some_and(|(secondary, _)| hover.hovered_secondary.as_ref() == Some(secondary))
             {
-                secondary_highlight(scale, cv, outline, false);
+                secondary_highlight(palette, scale, cv, outline, false);
             }
         });
     });
@@ -713,7 +715,7 @@ fn bind_selection(
 
 /// A cell projection's ground, painted only at authority
 /// TRANSITIONS: an external cell under document authority takes the
-/// dark tint — no lock, just "from elsewhere" — and a
+/// library tint — no lock, just "from elsewhere" — and a
 /// document-authority cell under an external one takes its light
 /// ground back (opaque, since an alpha wash can't be undone by
 /// another wash). Runs of the same authority draw nothing, so
@@ -734,9 +736,9 @@ fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Colo
     }
     let scale = cx.styles.scale;
     let color = if external {
-        Color::new([0.13, 0.14, 0.16, 0.05])
+        cx.styles.palette.library_ground
     } else {
-        Color::new([0.965, 0.965, 0.972, 1.0])
+        cx.styles.palette.paper
     };
     Some((scale, color))
 }
@@ -753,6 +755,7 @@ fn ground_with(
 }
 
 fn secondary_highlight<P: Canvas + ?Sized>(
+    palette: crate::styles::Palette,
     scale: f64,
     p: &mut P,
     outline: RoundedRect,
@@ -760,14 +763,14 @@ fn secondary_highlight<P: Canvas + ?Sized>(
 ) {
     p.fill(
         outline,
-        Color::new([0.0, 0.48, 1.0, if strong { 0.10 } else { 0.05 }]),
+        palette.accent.with_alpha(if strong { 0.10 } else { 0.05 }),
         Affine::IDENTITY,
     );
     if strong {
         p.stroke(
             outline,
             Stroke::new(1.5 * scale),
-            Color::new([0.0, 0.48, 1.0, 0.55]),
+            palette.accent.with_alpha(0.55),
             Affine::IDENTITY,
         );
     }
@@ -895,6 +898,7 @@ fn prepare_value(
             let selected_value = value.filter(|_| selected).cloned();
             let root = cx.view.clone();
             let scale = cx.styles.scale;
+            let palette = cx.styles.palette;
             let select = navigation_select_handler(landmark_path.clone(), cx);
             let ground = value.and_then(|value| ground_decoration(cx, path, value));
             let target = value.map(|value| (value.clone(), cx.view.clone(), landmark_path.clone()));
@@ -902,6 +906,7 @@ fn prepare_value(
             let pick_edits = edits.clone();
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 let placed = descend_landmark_with(
+                    palette,
                     selected,
                     scale,
                     landmark_path.clone(),

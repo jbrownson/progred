@@ -3,7 +3,7 @@
 use super::{before, hover::block_hover};
 use crate::display::{Layout, floating};
 use measured::Extent;
-use puri::{Color, Placement, Point, Rect, Size, Stroke};
+use puri::{Placement, Point, Rect, Size, Stroke};
 use puri_widgets::panel::Panel;
 use std::rc::Rc;
 
@@ -23,10 +23,10 @@ fn card<World: 'static, Hover: Clone + PartialEq + 'static>(
         crate::display::padding((10.0, 10.0, 10.0, 10.0).into(), content),
         Rc::new(|context| {
             let panel = Panel {
-                fill: Some(Color::new([0.985, 0.985, 0.99, 1.0]).into()),
+                fill: Some(context.inputs.styles.palette.panel.into()),
                 border: Some((
                     Stroke::new(context.inputs.styles.scale),
-                    context.inputs.styles.dim.brush.clone(),
+                    context.inputs.styles.palette.border.into(),
                 )),
                 radius: 6.0 * context.inputs.styles.scale,
             };

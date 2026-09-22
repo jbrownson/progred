@@ -182,6 +182,17 @@ then related selection, direct hover, and related hover. Pending text frames kee
 their own tighter outline through focus and editing; this widget styling does
 not determine the geometry of ordinary value highlights.
 
+The editor owns an explicit `Palette` input, used by text, selections, library
+grounds, menus, completion cards, and popovers. `Theme::Light` is the native and
+browser default: white paper, blue names, violet field labels, and orange
+literals. `Theme::Dark` supplies brighter corresponding colors on navy paper.
+Library authority transitions retain a faint tint; returning to document
+authority restores the same opaque paper used by the window. Changing the
+palette rebuilds the ordinary complete frame without replacing the document,
+selection, or undo history. Authored drawing colors remain document data, not
+theme colors. These styles change presentation, not projection recognition or
+source/selection policy.
+
 Cmd+A (Ctrl+A on non-Mac hosts) selects the current view's root through its navigation
 callback. With no selection, it targets the document root. Focused text fields
 handle the shortcut first and select their own text.

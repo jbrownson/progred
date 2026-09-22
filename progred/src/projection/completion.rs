@@ -77,6 +77,7 @@ fn pending_target(
     let path: SharedPath = Rc::from(path);
     let edits = cx.edits.clone();
     let scale = cx.styles.scale;
+    let palette = cx.styles.palette;
     let selected = cx.selected(path.as_ref());
     let root = cx.view.clone();
     let child = {
@@ -101,12 +102,12 @@ fn pending_target(
         let highlight_path = path.clone();
         p.render(move |cv, hover| {
             if selected {
-                primary_highlight(scale, cv, outline);
+                primary_highlight(palette, scale, cv, outline);
             } else if matches!(
                 tree_hovered(hover),
                 Some(Hover::Value(hovered)) if hovered == &highlight_path
             ) {
-                hover_highlight(scale, cv, outline);
+                hover_highlight(palette, scale, cv, outline);
             }
         });
         hover_claim(p, placement, Hover::Value(path.clone()));
@@ -356,8 +357,9 @@ pub(super) fn label_query(
 ) -> Measured<HoverPass<crate::Editor>> {
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, path, Some(query), true, completions);
+    let palette = cx.styles.palette;
     let ringed = decorate(content, move |p, rect| {
-        primary_highlight(scale, p, text_frame::outline(scale, rect));
+        primary_highlight(palette, scale, p, text_frame::outline(scale, rect));
     });
     // The ring's outset rides inside the node, so glued neighbors —
     // the colon, a flat comma — clear its ink.

@@ -118,7 +118,9 @@ pub fn assert_delimiter(
         14.0,
         0.0,
         0.0,
-        widget::style::editor(1.0).dim.brush,
+        widget::style::editor(widget::style::Theme::Light.palette(), 1.0)
+            .dim
+            .brush,
         &mut expected,
         Affine::translate((
             if side == puri::delim::Side::Close {

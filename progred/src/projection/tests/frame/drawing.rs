@@ -319,7 +319,7 @@ fn drawing_frame(
     libraries: &Libraries,
     shape_function: CellId,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let annotations = Annotations::default();
     let cx = Cx {
         command_modifier: crate::modifiers::native(),

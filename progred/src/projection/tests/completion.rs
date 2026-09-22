@@ -1151,7 +1151,7 @@ fn projected_completion_entries_with(
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<crate::Editor>> {
     let stack = crate::stack::load();
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let annotations = Annotations::default();
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();

@@ -66,7 +66,7 @@ fn editor_cam_outline_svg_captures() {
             None,
             None,
         );
-        write_svg(&bench.list, 780.0, extent.height() + 48.0, "#F6F6F8", file);
+        write_svg(&bench.list, 780.0, extent.height() + 48.0, file);
     }
     render_editor(
         cam_editor(t::PREVIEW_MESH),
@@ -132,7 +132,7 @@ fn readme_svg_captures() {
     puri::frame::render(paint.renders, &mut list);
     assert!(queue.lock().unwrap().is_empty());
     assert!(!runner.editor.computations.tasks.poll());
-    write_svg(&list, size.width, size.height, "#F6F6F8", "readme_cam.svg");
+    write_svg(&list, size.width, size.height, "readme_cam.svg");
 }
 
 #[test]
@@ -225,7 +225,7 @@ fn editor_toolpath_operations_svg_captures() {
             has_image(&list.0),
             "the combined operations must render, not show a fuel/geometry absent"
         );
-        write_svg(&list, size.width, size.height, "#F6F6F8", file);
+        write_svg(&list, size.width, size.height, file);
         eprintln!("{file}: {:.2}s", start.elapsed().as_secs_f64());
     }
 }
@@ -289,13 +289,7 @@ fn editor_toolpath_refined_svg_captures() {
             "{name}: frame {:.2} ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
-        write_svg(
-            &list,
-            size.width,
-            size.height,
-            "#F6F6F8",
-            &format!("{name}.svg"),
-        );
+        write_svg(&list, size.width, size.height, &format!("{name}.svg"));
     };
     let finish_mesh = |runner: &mut crate::EditorRunner, index| {
         let job = queue.lock().unwrap().remove(index).unwrap();

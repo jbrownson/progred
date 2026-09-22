@@ -284,11 +284,22 @@ fn write_clipped_cmds(out: &mut String, cmds: &[DrawCmd], next_id: &mut usize) {
 fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
     let (bench, extent) = place(doc, selection, width);
     let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
-    write_svg(&bench.list, width, height, "#FFFFFF", out_path);
+    write_svg(&bench.list, width, height, out_path);
 }
 
-fn write_svg(list: &DrawList, width: f64, height: f64, background: &str, out_path: &str) {
+fn write_svg(list: &DrawList, width: f64, height: f64, out_path: &str) {
+    write_svg_on(
+        list,
+        width,
+        height,
+        crate::styles::Theme::Light.palette().paper,
+        out_path,
+    );
+}
+
+fn write_svg_on(list: &DrawList, width: f64, height: f64, paper: Color, out_path: &str) {
     let mut out = String::new();
+    let background = css(paper.components);
     writeln!(
             out,
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0}" height="{height:.0}" viewBox="0 0 {width:.0} {height:.0}">"#
@@ -312,11 +323,12 @@ fn write_svg(list: &DrawList, width: f64, height: f64, background: &str, out_pat
 }
 
 fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
+    let paper = editor.palette.paper;
     let mut runner = crate::EditorRunner::new(editor);
     let paint = runner.prepare_paint(1.0, size);
     let mut list = DrawList::new();
     puri::frame::render(paint.renders, &mut list);
-    write_svg(&list, size.width, size.height, "#F6F6F8", out_path);
+    write_svg_on(&list, size.width, size.height, paper, out_path);
 }
 
 #[test]
@@ -404,42 +416,48 @@ fn website_lesson_svg_captures() {
         ),
     ] {
         let (doc, fields) = crate::gid_text::parse(source).unwrap();
-        for width in [320.0, 620.0] {
-            let mut editor = crate::test_editor_with_stack(
-                doc.clone(),
-                crate::stack::load_selected(libraries).unwrap(),
-            );
-            if matches!(name, "grap" | "functions" | "drawing" | "forest" | "create") {
-                editor.stack.projection = crate::web_embed::tutorial_slots(
-                    Some(
-                        &if matches!(name, "drawing" | "forest") {
-                            ["third", "first", "second"]
+        for (theme_name, theme) in [
+            ("light", crate::styles::Theme::Light),
+            ("dark", crate::styles::Theme::Dark),
+        ] {
+            for width in [320.0, 620.0] {
+                let mut editor = crate::test_editor_with_stack(
+                    doc.clone(),
+                    crate::stack::load_selected(libraries).unwrap(),
+                );
+                if matches!(name, "grap" | "functions" | "drawing" | "forest" | "create") {
+                    editor.stack.projection = crate::web_embed::tutorial_slots(
+                        Some(
+                            &if matches!(name, "drawing" | "forest") {
+                                ["third", "first", "second"]
+                            } else {
+                                ["first", "second", "third"]
+                            }
+                            .map(|key| fields[key].simple().to_string())
+                            .join(","),
+                        ),
+                        editor.stack.projection,
+                    )
+                    .unwrap();
+                }
+                editor.font_cx = crate::bundled_font_context();
+                editor.palette = theme.palette();
+                editor.drawn_menu = false;
+                render_editor(
+                    editor,
+                    kurbo::Size::new(
+                        width,
+                        if name == "forest" {
+                            768.0
+                        } else if name == "drawing" {
+                            384.0
                         } else {
-                            ["first", "second", "third"]
-                        }
-                        .map(|key| fields[key].simple().to_string())
-                        .join(","),
+                            304.0
+                        },
                     ),
-                    editor.stack.projection,
-                )
-                .unwrap();
+                    &format!("website_{name}_{width}_{theme_name}.svg"),
+                );
             }
-            editor.font_cx = crate::bundled_font_context();
-            editor.drawn_menu = false;
-            render_editor(
-                editor,
-                kurbo::Size::new(
-                    width,
-                    if name == "forest" {
-                        768.0
-                    } else if name == "drawing" {
-                        384.0
-                    } else {
-                        304.0
-                    },
-                ),
-                &format!("website_{name}_{width}.svg"),
-            );
         }
     }
 }
@@ -640,7 +658,6 @@ fn editor_toolpath_progressive_svg_captures() {
                 &list,
                 size.width,
                 size.height,
-                "#F6F6F8",
                 &format!("cam_progressive_{}.svg", seen.len()),
             );
         }
@@ -707,7 +724,7 @@ fn capture_cam_async(mode: CellId) {
             "{file}: frame {:.2} ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
-        write_svg(&list, size.width, size.height, "#F6F6F8", file);
+        write_svg(&list, size.width, size.height, file);
     };
     let complete = |runner: &mut crate::EditorRunner| {
         let job = queue.lock().unwrap().pop_front().unwrap();
@@ -929,7 +946,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
         paths += usize::from(u16::from(pixel[0]) > 2 * u16::from(pixel[2]));
     }
     assert!(model > 100 && paths > 100, "model {model}, paths {paths}");
-    write_svg(&bench.list, 760.0, 548.0, "#F6F6F8", "toolpaths.svg");
+    write_svg(&bench.list, 760.0, 548.0, "toolpaths.svg");
 }
 
 #[test]

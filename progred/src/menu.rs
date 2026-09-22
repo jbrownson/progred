@@ -277,7 +277,7 @@ mod view {
     use crate::placed::{self, HoverPass};
     use kurbo::{Affine, BezPath, Insets, Rect, Stroke};
     use measured::{self, Extent, Measured};
-    use peniko::{Brush, Color};
+    use peniko::Brush;
     use puri::draw::Canvas;
     use puri::handler::{Event, EventOutcome, HasHandler};
     use puri::text::{TextCtx, TextStyle};
@@ -287,6 +287,7 @@ mod view {
     const MENU_WIDTH: f64 = 230.0;
 
     pub struct Description {
+        pub palette: crate::styles::Palette,
         pub command_modifier: puri::keyboard::CommandModifier,
         pub state: State,
         pub availability: Availability,
@@ -307,17 +308,17 @@ mod view {
         disabled: TextStyle,
     }
 
-    fn styles() -> Styles {
+    fn styles(palette: crate::styles::Palette) -> Styles {
         let text = |color| TextStyle {
             size: 14.0,
-            brush: Brush::from(Color::new(color)),
+            brush: Brush::from(color),
             weight: None,
             family: parley::style::GenericFamily::SystemUi,
         };
         Styles {
-            text: text([0.13, 0.14, 0.16, 1.0]),
-            dim: text([0.42, 0.44, 0.49, 1.0]),
-            disabled: text([0.58, 0.59, 0.62, 1.0]),
+            text: text(palette.ink),
+            dim: text(palette.muted),
+            disabled: text(palette.disabled),
         }
     }
 
@@ -357,6 +358,7 @@ mod view {
     }
 
     fn heading(
+        palette: crate::styles::Palette,
         tcx: &mut TextCtx,
         style: &TextStyle,
         index: usize,
@@ -375,7 +377,7 @@ mod view {
                 let hovered =
                     matches!(hover.hovered.as_ref(), Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
                 if active || hovered {
-                    cv.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
+                    cv.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
                 }
             });
         });
@@ -393,7 +395,11 @@ mod view {
         )
     }
 
-    fn separator<C: 'static>(scale: f64, width: f64) -> Measured<HoverPass<C>> {
+    fn separator<C: 'static>(
+        palette: crate::styles::Palette,
+        scale: f64,
+        width: f64,
+    ) -> Measured<HoverPass<C>> {
         placed::leaf(
             Extent {
                 width,
@@ -409,7 +415,7 @@ mod view {
                         placement.rect.x1 - 9.0 * scale,
                         y + scale.max(1.0),
                     ),
-                    Color::new([0.84, 0.85, 0.87, 1.0]),
+                    palette.border,
                     Affine::IDENTITY,
                 );
             },
@@ -465,7 +471,12 @@ mod view {
         }
     }
 
-    fn item(item: Item, scale: f64, width: f64) -> Measured<HoverPass<Editor>> {
+    fn item(
+        item: Item,
+        palette: crate::styles::Palette,
+        scale: f64,
+        width: f64,
+    ) -> Measured<HoverPass<Editor>> {
         let Item {
             command,
             label,
@@ -484,7 +495,7 @@ mod view {
         );
         let content = placed::decorate(content, move |p, rect| {
             if enabled && cursored {
-                p.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
+                p.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
             }
             if checked {
                 let x = rect.x0;
@@ -496,7 +507,7 @@ mod view {
                 p.stroke(
                     check,
                     Stroke::new(1.5 * scale),
-                    Color::new([0.13, 0.14, 0.16, 1.0]),
+                    palette.ink,
                     Affine::IDENTITY,
                 );
             }
@@ -522,6 +533,7 @@ mod view {
         menu_entries: &[Entry],
     ) -> Measured<HoverPass<Editor>> {
         let scale = description.scale;
+        let palette = description.palette;
         let mut command_index = 0;
         let items = menu_entries
             .iter()
@@ -549,8 +561,8 @@ mod view {
         let entries = items
             .into_iter()
             .map(|entry| match entry {
-                Some(prepared) => item(prepared, scale, width),
-                None => separator(scale, width),
+                Some(prepared) => item(prepared, palette, scale, width),
+                None => separator(palette, scale, width),
             })
             .collect();
         let content = measured::pad(
@@ -559,15 +571,11 @@ mod view {
         );
         placed::before(
             placed::decorate(content, move |p, rect| {
-                p.fill(
-                    rect,
-                    Color::new([0.975, 0.975, 0.982, 1.0]),
-                    Affine::IDENTITY,
-                );
+                p.fill(rect, palette.panel, Affine::IDENTITY);
                 p.stroke(
                     rect.inflate(-scale.max(1.0) / 2.0, -scale.max(1.0) / 2.0),
                     Stroke::new(scale.max(1.0)),
-                    Color::new([0.70, 0.71, 0.74, 1.0]),
+                    palette.border,
                     Affine::IDENTITY,
                 );
             }),
@@ -594,7 +602,8 @@ mod view {
     }
 
     pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
-        let styles = styles();
+        let palette = description.palette;
+        let styles = styles(palette);
         let definition = definition();
         let mut x = 0.0;
         let mut popup_x = 0.0;
@@ -606,6 +615,7 @@ mod view {
                     popup_x = x;
                 }
                 let node = heading(
+                    palette,
                     tcx,
                     &styles.text,
                     index,
@@ -625,11 +635,11 @@ mod view {
         });
         let bar = placed::decorate(
             measured::min_width(description.width, measured::centered_row(0.0, headings)),
-            |p, rect| {
-                p.fill(rect, Color::new([0.93, 0.93, 0.945, 1.0]), Affine::IDENTITY);
+            move |p, rect| {
+                p.fill(rect, palette.chrome, Affine::IDENTITY);
                 p.fill(
                     Rect::new(rect.x0, rect.y1 - 1.0, rect.x1, rect.y1),
-                    Color::new([0.78, 0.79, 0.82, 1.0]),
+                    palette.border,
                     Affine::IDENTITY,
                 );
             },

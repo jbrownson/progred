@@ -408,7 +408,7 @@ mod tests {
         let native = crate::display::test_support::with_context(
             &crate::display::test_support::NoProject,
             |context| {
-                let styles = crate::styles::editor(scale);
+                let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
                 let mut inputs = context.inputs.clone();
                 inputs.styles = &styles;
                 widget::fill_height(side)(&mut widget::Context {

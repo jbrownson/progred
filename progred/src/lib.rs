@@ -68,7 +68,7 @@ use crate::frame::Paint;
 use crate::frame::{FrameState, Hovered};
 use crate::model::Model;
 use kurbo::{Point, Rect, Size};
-use peniko::{Brush, Color};
+use peniko::Brush;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -113,6 +113,8 @@ pub(crate) enum UserEvent {
     ComputationFinished,
     #[cfg(target_arch = "wasm32")]
     BrowserFocusChanged,
+    #[cfg(target_arch = "wasm32")]
+    PaletteChanged(styles::Palette),
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
     Command(Command),
@@ -328,6 +330,7 @@ pub(crate) enum QuitState {
 /// context is a cheap clone over shared font data). The dispatch
 /// world type.
 pub(crate) struct Editor {
+    pub(crate) palette: styles::Palette,
     pub(crate) command_modifier: puri::keyboard::CommandModifier,
     pub(crate) computations: computations::Computations,
     pub(crate) timers: timers::Timers,
@@ -484,6 +487,7 @@ pub(crate) fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> 
 }
 
 fn new_editor(
+    palette: styles::Palette,
     command_modifier: puri::keyboard::CommandModifier,
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
@@ -510,6 +514,7 @@ fn new_editor(
         })
         .unwrap_or_default();
     Editor {
+        palette,
         command_modifier,
         computations,
         timers: timers::Timers::default(),
@@ -709,6 +714,21 @@ impl ApplicationHandler<UserEvent> for App {
         }
         match event {
             #[cfg(target_arch = "wasm32")]
+            UserEvent::PaletteChanged(palette) => {
+                for runner in &mut self.editors {
+                    runner.editor.palette = palette;
+                    if let RenderState::Active { window, .. } = &runner.editor.state {
+                        let window = window.clone();
+                        let size = window.inner_size();
+                        runner.refresh_frame(
+                            window.scale_factor(),
+                            Size::new(size.width as f64, size.height as f64),
+                        );
+                        window.request_redraw();
+                    }
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
             UserEvent::BrowserFocusChanged => {
                 if let Some(runner) = self.editors.first_mut()
                     && let RenderState::Active { window, .. } = &runner.editor.state
@@ -847,6 +867,7 @@ impl App {
         binders: gid_text::Binders,
     ) {
         self.editors.push(EditorRunner::new(new_editor(
+            styles::Theme::Light.palette(),
             modifiers::native(),
             self.drawn_menu,
             self.stack.clone(),
@@ -1191,6 +1212,21 @@ pub fn browser_focus_changed() {
     });
 }
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
+    let palette = theme
+        .parse::<styles::Theme>()
+        .map_err(wasm_bindgen::JsValue::from_str)?
+        .palette();
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(UserEvent::PaletteChanged(palette));
+        }
+    });
+    Ok(())
+}
+
 /// Called by the JS host on the page thread, never on the computation worker.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -1211,6 +1247,7 @@ pub fn start_editor(
     libraries: Option<String>,
     tutorial_slots: Option<String>,
     command_is_meta: bool,
+    theme: Option<String>,
 ) -> Result<(), wasm_bindgen::JsValue> {
     console_error_panic_hook::set_once();
     let (doc, binders) = gid_text::parse(source.as_deref().unwrap_or("{}"))
@@ -1230,6 +1267,12 @@ pub fn start_editor(
         } else {
             puri::keyboard::CommandModifier::Control
         },
+        theme
+            .as_deref()
+            .unwrap_or("light")
+            .parse::<styles::Theme>()
+            .map_err(wasm_bindgen::JsValue::from_str)?
+            .palette(),
         on_change,
     );
     Ok(())
@@ -1274,6 +1317,7 @@ pub fn run() {
         drawn_menu,
         stack::load(),
         modifiers::native(),
+        styles::Theme::Light.palette(),
         #[cfg(target_arch = "wasm32")]
         None,
     );
@@ -1286,6 +1330,7 @@ fn run_document(
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
     command_modifier: puri::keyboard::CommandModifier,
+    palette: styles::Palette,
     #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,
 ) {
     let mut builder = EventLoop::<UserEvent>::with_user_event();
@@ -1324,6 +1369,7 @@ fn run_document(
         #[cfg(target_os = "macos")]
         cascade: macos_window::initial_cascade(),
         editors: vec![EditorRunner::new(new_editor(
+            palette,
             command_modifier,
             drawn_menu,
             stack,
@@ -1676,6 +1722,7 @@ impl Editor {
         self.finish_gesture();
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
+            palette: _,
             computations,
             command_modifier: _,
             timers,
@@ -2008,7 +2055,7 @@ impl App {
                 &layers,
                 &mut runner.editor.paint_resources,
                 &surface.target_texture,
-                Color::new([0.965, 0.965, 0.972, 1.0]),
+                runner.editor.palette.paper,
             )
             .expect("failed to render to texture");
 
@@ -2084,12 +2131,9 @@ impl App {
         runner.sync_cursor(&window);
         let presented = self
             .web_renderer
-            .render(
-                width,
-                height,
-                Color::new([0.965, 0.965, 0.972, 1.0]),
-                |canvas| puri::frame::render(renders, canvas),
-            )
+            .render(width, height, runner.editor.palette.paper, |canvas| {
+                puri::frame::render(renders, canvas)
+            })
             .expect("browser render failed");
         if let Some(observer) = &mut self.web_observer {
             observer.notify(&runner.editor);
@@ -2412,6 +2456,7 @@ pub(crate) fn test_editor(doc: gid::Document) -> Editor {
 #[cfg(test)]
 pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Editor>) -> Editor {
     let mut editor = new_editor(
+        styles::Theme::Light.palette(),
         modifiers::native(),
         false,
         stack,

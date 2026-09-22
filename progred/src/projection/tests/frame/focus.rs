@@ -10,7 +10,12 @@ fn render(runner: &mut crate::EditorRunner) -> DrawList {
 }
 
 fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
-    let color = Brush::from(Color::new([0.0, 0.48, 1.0, alpha]));
+    let color = Brush::from(
+        crate::styles::Theme::Light
+            .palette()
+            .accent
+            .with_alpha(alpha),
+    );
     commands
         .iter()
         .map(|command| match command {
@@ -19,6 +24,56 @@ fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
             _ => 0,
         })
         .sum()
+}
+
+#[test]
+fn changing_palette_repaints_without_losing_edits_selection_or_history() {
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(text::value("hello")),
+        cells: Cells::new(),
+    }));
+    runner.editor.model.selection = Some(Selection::edge(&crate::test_root(), vec![]));
+    runner.refresh_frame(1.0, VIEWPORT);
+    assert!(runner.keyboard_event(
+        &KeyboardEvent {
+            key: Key::Character("!".into()),
+            state: KeyState::Down,
+            ..Default::default()
+        },
+        1.0,
+        VIEWPORT,
+    ));
+    let document = runner.editor.model.doc.clone();
+    fn has_ink(commands: &[DrawCmd], color: Color) -> bool {
+        commands.iter().any(|command| match command {
+            DrawCmd::GlyphRun(run) => run.brush == Brush::from(color),
+            DrawCmd::Clip { children, .. } => has_ink(children, color),
+            _ => false,
+        })
+    }
+    for theme in [crate::styles::Theme::Dark, crate::styles::Theme::Light] {
+        runner.editor.palette = theme.palette();
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(has_ink(&render(&mut runner).0, theme.palette().literal));
+        assert!(Rc::ptr_eq(&document, &runner.editor.model.doc));
+        assert_eq!(
+            runner
+                .editor
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .text(),
+            "hello!"
+        );
+    }
+    assert!(runner.editor.model.step_history(true));
+    assert_eq!(
+        text::read(runner.editor.model.doc.root.as_ref().unwrap()),
+        Some("hello")
+    );
 }
 
 #[test]

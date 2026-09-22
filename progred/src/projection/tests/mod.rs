@@ -143,7 +143,7 @@ fn editing_frame_with_annotations(
     annotations: &Annotations,
 ) -> crate::placed::HoverOutput<EditingWorld> {
     let stack = &world.stack;
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(world.palette, 1.0);
     let mut tcx = TextCtx {
         fonts: &mut world.font_cx,
         layouts: &mut world.layout_cx,

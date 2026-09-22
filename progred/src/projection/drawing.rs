@@ -513,7 +513,10 @@ mod tests {
                 doc: &doc,
                 libraries: &stack.libraries,
             },
-            &Faces::new(&crate::styles::editor(1.0)),
+            &Faces::new(&crate::styles::editor(
+                crate::styles::Theme::Light.palette(),
+                1.0,
+            )),
             Some(&SourceTrace::Stored(Rc::from([]))),
             200,
         );
@@ -570,7 +573,10 @@ mod tests {
             let drawing = record_program(
                 &grap::call(Value::from(function), []),
                 &sources,
-                &Faces::new(&crate::styles::editor(1.0)),
+                &Faces::new(&crate::styles::editor(
+                    crate::styles::Theme::Light.palette(),
+                    1.0,
+                )),
                 Some(&SourceTrace::Stored(Rc::from([]))),
                 100,
             );

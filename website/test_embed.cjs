@@ -9,12 +9,23 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
   .match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;$/gm, "");
 
-async function start(search, { ok = true, parseError = false, platform = "Linux x86_64" } = {}) {
+async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit } = {}) {
   const { commandIsMeta } = await import("../web/platform.mjs");
+  const { isTheme, savedTheme } = await import("../web/theme.mjs");
   const calls = [];
   const messages = [];
   const focusEvents = [];
   const listeners = {};
+  const themeChanges = [];
+  const parent = { postMessage: (...args) => messages.push(structuredClone(args)) };
+  const host = {
+    parent,
+    get localStorage() {
+      if (storageDenied) throw new Error("Storage denied");
+      return { getItem: () => storedTheme };
+    },
+    addEventListener: (event, callback) => { listeners[event] = callback; },
+  };
   let onChange;
   const loading = { style: {} };
   const canvas = new EventTarget();
@@ -24,16 +35,13 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
     canvasListeners.push({ type, options: structuredClone(options) });
     addCanvasListener(type, listener, options);
   };
-  const documentElement = { style: {} };
+  const documentElement = { style: {}, dataset: {} };
   const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
-    JSON, commandIsMeta, navigator: { platform },
+    JSON, commandIsMeta, isTheme, savedTheme, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
-    window: {
-      parent: { postMessage: (...args) => messages.push(structuredClone(args)) },
-      addEventListener: (event, callback) => { listeners[event] = callback; },
-    },
+    window: host,
     document: {
       documentElement, body,
       querySelector: (selector) => selector === "#loading" ? loading : canvas,
@@ -43,10 +51,11 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       calls.push(["fetch", url.href]);
       return { ok, status: ok ? 200 : 404, text: async () => "example source" };
     },
-    init: async () => { calls.push(["init"]); },
+    init: async () => { calls.push(["init"]); duringInit?.(listeners, parent); },
     startWorker: async (...args) => { calls.push(["workers", args[4]]); },
     wasm: {
       browser_focus_changed: () => focusEvents.push("changed"),
+      set_theme: (theme) => themeChanges.push(theme),
       computation_finished() {},
       worker_threads: () => 1,
       prepare_renderer: async (target) => { assert.equal(target, canvas); return "test"; },
@@ -57,14 +66,14 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       },
     },
   });
-  return { calls, loading, messages, onChange, focusEvents, listeners,
+  return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges,
     canvas, canvasListeners, documentElement, body };
 }
 
 test("browser window focus is forwarded without page click handlers", async () => {
   const { focusEvents, listeners } = await start("?menu=hidden");
   assert.deepEqual(focusEvents, ["changed"]);
-  assert.deepEqual(Object.keys(listeners).sort(), ["blur", "focus"]);
+  assert.deepEqual(Object.keys(listeners).sort(), ["blur", "focus", "message"]);
   listeners.blur();
   listeners.focus();
   assert.deepEqual(focusEvents, ["changed", "changed", "changed"]);
@@ -72,7 +81,7 @@ test("browser window focus is forwarded without page click handlers", async () =
 
 test("standalone startup remains blank with its full menu and default workers", async () => {
   const { calls, loading } = await start("");
-  assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined, false]]);
+  assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined, false, "light"]]);
   assert.equal(loading.style.display, "none");
 });
 
@@ -132,7 +141,7 @@ test("embed fetches its document and supplies ordinary startup options", async (
   const { calls } = await start("?document=../lessons/values.gid&menu=hidden&threads=1");
   assert.deepEqual(calls, [
     ["fetch", "http://localhost/lessons/values.gid"], ["init"],
-    ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined, false],
+    ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined, false, "light"],
   ]);
 });
 
@@ -160,11 +169,51 @@ test("missing or malformed documents report errors instead of starting empty", a
 
 test("observation is opt-in and forwards ordinary state only to the same-origin parent", async () => {
   const { onChange, messages } = await start("?observe=values-0");
+  assert.deepEqual(messages.shift(), [{ type: "progred:ready" }, "http://localhost"]);
   const state = { document: { root: { list: [] }, cells: {} }, selection: null };
   onChange(JSON.stringify(state));
   assert.equal(messages.length, 1);
   assert.deepEqual(messages[0], [{ type: "progred:change", channel: "values-0", state }, "http://localhost"]);
   assert.equal((await start("")).onChange, undefined);
+});
+
+test("theme startup defaults to light and tolerates unavailable preferences", async () => {
+  for (const [options, expected] of [
+    [{}, "light"], [{ storedTheme: "dark" }, "dark"],
+    [{ storedTheme: "nonsense" }, "light"], [{ storageDenied: true }, "light"],
+  ]) {
+    const page = await start("", options);
+    assert.equal(page.documentElement.dataset.theme, expected);
+    assert.equal(page.calls.find(([name]) => name === "editor")[7], expected);
+  }
+  const explicit = await start("?theme=light", { storedTheme: "dark" });
+  assert.equal(explicit.calls.find(([name]) => name === "editor")[7], "light");
+  const invalid = await start("?theme=unknown");
+  assert.deepEqual(invalid.calls, []);
+  assert.match(invalid.loading.textContent, /theme must be/);
+});
+
+test("same-origin parent can change appearance without restarting the editor", async () => {
+  const page = await start("");
+  const event = { origin: "http://localhost", source: page.parent,
+    data: { type: "progred:theme", theme: "dark" } };
+  page.listeners.message({ ...event, origin: "http://other" });
+  page.listeners.message({ ...event, source: {} });
+  page.listeners.message({ ...event, data: { type: "progred:theme", theme: "bad" } });
+  assert.deepEqual(page.themeChanges, []);
+  page.listeners.message(event);
+  assert.deepEqual(page.themeChanges, ["dark"]);
+  assert.equal(page.documentElement.dataset.theme, "dark");
+  assert.equal(page.calls.filter(([name]) => name === "editor").length, 1);
+});
+
+test("a theme arriving while WASM loads becomes the startup theme", async () => {
+  const page = await start("", { duringInit(listeners, parent) {
+    listeners.message({ origin: "http://localhost", source: parent,
+      data: { type: "progred:theme", theme: "dark" } });
+  } });
+  assert.equal(page.calls.find(([name]) => name === "editor")[7], "dark");
+  assert.deepEqual(page.themeChanges, []);
 });
 
 async function lessonPage(platform = "Linux x86_64") {

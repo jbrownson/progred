@@ -8,6 +8,7 @@
     <link rel="icon" href="./editor/icon.svg" />
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./lessons.js"></script>
+    <script type="module" src="./appearance.js"></script>
   </head>
   <body>
     <header class="site-header">
@@ -15,7 +16,10 @@
         <img src="./editor/icon.svg" alt="" width="36" height="36" />
         <span>prog.red</span>
       </a>
-      <a href="https://github.com/jbrownson/progred">Source on GitHub <span aria-hidden="true">↗</span></a>
+      <nav class="site-actions" aria-label="Website">
+        <button type="button" id="theme-toggle" aria-pressed="false">Dark mode</button>
+        <a href="https://github.com/jbrownson/progred">Source on GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
     </header>
 
     <main>

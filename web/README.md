@@ -31,9 +31,17 @@ Omitting this option keeps the standard document projection.
 Canvas and window focus/blur events control the editor's active presentation.
 Leaving an embed clears its selection, caret, completion query, and related
 highlights. Document edits remain. Loading another lesson does not steal focus.
-The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?, tutorial_slots?, command_is_meta)`; malformed supplied
+The WASM entry point is `start_editor(source?, show_menu?, on_change?, libraries?, tutorial_slots?, command_is_meta, theme?)`; malformed supplied
 documents fail explicitly before starting the editor. See the
 [website notes](../website/README.md) for independent embedded sessions.
+
+`theme=light` or `theme=dark` selects an editor palette; otherwise the JS host
+uses the website's saved preference, defaulting to light. A same-origin parent
+can send `{type: "progred:theme", theme: "light" | "dark"}` to change it in place.
+The host updates its loading surface and calls the WASM `set_theme` export,
+which queues an ordinary full frame rebuild without resetting editor state.
+The embed sends `{type: "progred:ready"}` after startup so its parent can resend
+the current preference after lazy loading or a lesson reset.
 
 The host supplies `command_is_meta` using `platform.mjs`: Command on Mac, Control
 elsewhere. Editing, picking, source links, and drawn menu labels use this same
@@ -62,7 +70,7 @@ have session lifetime. This reports structural selection, not text caret/ranges.
 
 `observe=<channel>` connects that callback to same-origin parent messages:
 `{type: "progred:change", channel, state}`. Only explicitly observed embeds
-send messages; the standalone editor does not. The website owns the checks,
+send document-change messages. The website owns the checks,
 achievement state, and reset behavior. This is a read-only host observation
 boundary, not a tutorial feature in the editor.
 

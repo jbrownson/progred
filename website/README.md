@@ -44,7 +44,7 @@ for a free port when running an additional preview alongside this one.
 
 ## Work on it
 
-- `public/index.html`, `public/style.css`, and `public/lessons.js` are the website. Edit and refresh.
+- `public/index.html`, `public/style.css`, `public/lessons.js`, and `public/appearance.js` are the website. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.
 - `/editor/` serves the existing `web/` host and generated `web/pkg/` build.
@@ -82,6 +82,15 @@ host and tutorial share `web/platform.mjs`; the host supplies that convention to
 the editor explicitly, including text editing, source links, and menu labels.
 The full-page editor remains blank on startup
 and retains its menus. The public site is deployed at <https://prog.red>.
+
+The site defaults to light mode, with white editor surfaces distinct from the
+pale-blue page. The **Dark mode** button switches both the page and live editors
+without reloading lessons or losing edits/checkmarks. The preference is stored
+locally when browser storage is available; otherwise switching still works for
+the current page. New and reset embeds receive the current theme. CSS variables
+define the site colors; the editor's `display/widget/style/palette.rs` defines
+semantic colors for each preset. Drawing colors belong to the document and are
+not recolored by the theme.
 
 The instructions check off when the actual document or selection satisfies
 the step. Achievements stay checked through later edits and undo; Reset clears

@@ -922,7 +922,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         let frame = build(selected, hovered);
         let mut drawing = DrawList::new();
         puri::frame::render(frame.renders, &mut drawing);
-        let styles = widget::style::editor(1.0);
+        let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
         drawing
             .0
             .iter()

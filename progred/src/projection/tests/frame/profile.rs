@@ -18,7 +18,7 @@ struct ProfileView {
 impl ProfileView {
     fn prepare(mut self, doc: &Document) -> (Self, BenchContext) {
         let mut context = BenchContext::new();
-        context.styles = crate::styles::editor(self.scale);
+        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), self.scale);
         if let Some(path) = &self.root {
             let sources = Sources {
                 doc,

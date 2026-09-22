@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#f6f6f8" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Progred</title>
     <link rel="icon" href="./icon.svg" />
     <style>
@@ -18,8 +18,15 @@
         margin: 0;
         overflow: hidden;
         overscroll-behavior: none;
-        background: #f6f6f8;
+        color-scheme: light;
+        background: #ffffff;
       }
+
+      html[data-theme="dark"], html[data-theme="dark"] body {
+        color-scheme: dark;
+        background: #151b2c;
+      }
+      html[data-theme="dark"] #loading { color: #a0aec9; }
 
       body {
         min-height: 100dvh;
@@ -52,6 +59,7 @@
       import init, * as wasm from "./pkg/progred.js";
       import { startWorker } from "./worker-host.js";
       import { commandIsMeta } from "./platform.mjs";
+      import { isTheme, savedTheme } from "./theme.mjs";
 
       const loading = document.querySelector("#loading");
       const fail = (error) => {
@@ -62,6 +70,18 @@
       };
       try {
         const params = new URLSearchParams(location.search);
+        let theme = params.get("theme") ?? savedTheme(window);
+        if (!isTheme(theme)) throw new Error("theme must be 'light' or 'dark'");
+        let ready = false;
+        document.documentElement.dataset.theme = theme;
+        window.addEventListener("message", (event) => {
+          if (event.origin === location.origin && event.source === window.parent
+              && event.data?.type === "progred:theme" && isTheme(event.data.theme)) {
+            theme = event.data.theme;
+            document.documentElement.dataset.theme = theme;
+            if (ready) wasm.set_theme(theme);
+          }
+        });
         const canvas = document.querySelector("#progred");
         const wheel = params.get("wheel") ?? "editor";
         if (wheel === "page") {
@@ -93,7 +113,9 @@
         };
         wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
           params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined,
-          commandIsMeta(navigator.platform));
+          commandIsMeta(navigator.platform), theme);
+        ready = true;
+        window.parent.postMessage({ type: "progred:ready" }, location.origin);
         window.addEventListener("focus", wasm.browser_focus_changed);
         window.addEventListener("blur", wasm.browser_focus_changed);
         wasm.browser_focus_changed();

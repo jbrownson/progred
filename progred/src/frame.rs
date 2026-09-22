@@ -172,6 +172,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 }
 
 pub(crate) struct FrameDescription<'a> {
+    pub palette: crate::styles::Palette,
     pub command_modifier: puri::keyboard::CommandModifier,
     computations: &'a crate::computations::Computations,
     focused: bool,
@@ -348,6 +349,7 @@ impl Editor {
         self.computations.frame_time.set(web_time::Instant::now());
         prepare_frame(
             FrameDescription {
+                palette: self.palette,
                 command_modifier: self.command_modifier,
                 computations: &self.computations,
                 focused: self.focused,
@@ -659,6 +661,7 @@ fn project_workspace(
         let down_divider = divider.clone();
         let move_divider = divider.clone();
         let up_divider = divider;
+        let border = styles.palette.border;
         let rule = placed::leaf(
             measured::Extent {
                 width: rect.width(),
@@ -672,11 +675,7 @@ fn project_workspace(
                     placement.rect.inflate(0.0, 4.0 * scale)
                 };
                 let clip = placement.clip_rect;
-                p.fill(
-                    placement.rect,
-                    Color::new([0.82, 0.83, 0.86, 1.0]),
-                    Affine::IDENTITY,
-                );
+                p.fill(placement.rect, border, Affine::IDENTITY);
                 p.claim_exact(
                     Placement::new(hit, placement.clip_rect),
                     Hovered::Divider(hover_divider),
@@ -723,6 +722,7 @@ fn project_frame(
     resources: FrameResources<'_>,
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
+        palette,
         command_modifier,
         computations,
         focused,
@@ -752,11 +752,12 @@ fn project_frame(
         scale: scale as f32,
         cache: text_cache,
     };
-    let styles = crate::styles::editor(scale);
+    let styles = crate::styles::editor(palette, scale);
     let application_menu = drawn_menu.then(|| {
         menu::view(
             &mut tcx,
             menu::Description {
+                palette,
                 command_modifier,
                 state: menu,
                 availability,
@@ -1756,7 +1757,7 @@ mod frame_tests {
                 ),
             ),
         );
-        let styles = crate::styles::editor(1.0);
+        let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
@@ -1956,7 +1957,7 @@ mod frame_tests {
             (Size::new(300.0, 500.0), 1.0),
             (Size::new(700.0, 400.0), 2.0),
         ] {
-            let styles = crate::styles::editor(scale);
+            let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
             let mut fonts = FontContext::new();
             let mut layouts = LayoutContext::new();
             let mut cache = puri::text::TextCache::default();
@@ -2067,7 +2068,7 @@ mod frame_tests {
         let upper = model.workspace.left.panes[0].view.root.clone();
         let lower = model.workspace.left.panes[1].view.root.clone();
         let stack = crate::stack::load();
-        let styles = crate::styles::editor(1.0);
+        let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
@@ -2228,6 +2229,7 @@ mod frame_tests {
         compute_hover(
             layout,
             &FrameDescription {
+                palette: editor.palette,
                 command_modifier: crate::modifiers::native(),
                 computations: &editor.computations,
                 focused: editor.focused,

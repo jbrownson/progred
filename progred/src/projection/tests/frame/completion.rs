@@ -182,7 +182,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         let layout = completion_card::<usize>(
             &mut tcx,
             crate::modifiers::native(),
-            &crate::styles::editor(1.0),
+            &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
             &entries,
             0,
             0.0,
@@ -209,7 +209,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
 fn completion_popup_meets_the_painted_field_border_above_and_below() {
     for scale in [1.0, 1.5, 2.0] {
         let mut context = BenchContext::new();
-        let styles = crate::styles::editor(scale);
+        let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
         let mut tcx = TextCtx {
             fonts: &mut context.fonts,
             layouts: &mut context.layouts,
@@ -247,6 +247,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                 &Default::default(),
             ));
             primary_highlight(
+                styles.palette,
                 scale,
                 &mut painted,
                 puri_widgets::text_frame::outline(scale, field),
@@ -269,8 +270,8 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                     })
                     .unwrap()
             };
-            let popup = edge(Color::new([0.75, 0.77, 0.81, 1.0]));
-            let field = edge(Color::new([0.0, 0.48, 1.0, 1.0]));
+            let popup = edge(styles.palette.border);
+            let field = edge(styles.palette.accent);
             let separation = if above {
                 field.y0 - popup.y1
             } else {
@@ -288,7 +289,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
 fn completion_details_share_the_cards_right_edge() {
     for scale in [1.0, 2.0] {
         let mut context = BenchContext::new();
-        let styles = crate::styles::editor(scale);
+        let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
         let mut tcx = TextCtx {
             fonts: &mut context.fonts,
             layouts: &mut context.layouts,
@@ -379,7 +380,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         let card = completion_card::<World>(
             &mut tcx,
             crate::modifiers::native(),
-            &crate::styles::editor(1.0),
+            &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
             &entries,
             0,
             0.0,
@@ -436,7 +437,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             activate: Rc::new(|_| {}),
         })
         .collect();
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -666,8 +667,14 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
                         brush: Brush::Solid(color),
                         ..
                     } if [
-                        Color::new([0.0, 0.48, 1.0, 0.14]),
-                        Color::new([0.0, 0.48, 1.0, 0.08]),
+                        crate::styles::Theme::Light
+                            .palette()
+                            .accent
+                            .with_alpha(0.14),
+                        crate::styles::Theme::Light
+                            .palette()
+                            .accent
+                            .with_alpha(0.08),
                     ]
                     .contains(color) =>
                     {
@@ -783,7 +790,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             state.committed = Some(Value::list([]));
         }),
     }];
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -924,7 +931,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     )))
     .expect("the sample parses");
     let stack = crate::stack::load();
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();

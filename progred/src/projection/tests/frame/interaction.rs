@@ -1160,7 +1160,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     )))
     .expect("the sample parses");
     let stack = crate::stack::load();
-    let styles = crate::styles::editor(1.0);
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
