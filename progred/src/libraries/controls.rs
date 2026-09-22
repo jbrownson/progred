@@ -39,6 +39,9 @@ pub mod vocabulary {
     pub const MAXIMUM: CellId = CellId::from_u128(0x30113361e78c2e47bb88176ac834cac1);
     pub const INITIAL: CellId = CellId::from_u128(0x133b05e33c166614831f01de2365f49c);
     pub const STATE: CellId = CellId::from_u128(0x26f287e5868627eacc4b5a2981932e55);
+    pub const UPDATE: CellId = CellId::from_u128(0x551c68d60e0d993c301ee8418c26de72);
+    pub const ON_CHANGE: CellId = CellId::from_u128(0xc7c092998288d5492108bc7988d4729c);
+    pub const NO_STATE: CellId = CellId::from_u128(0xa447ceb4dea2cb19e5feebaaace4a89b);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0x696753238d1730b42d341ef86a2e2fd0);
     pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0xec88743fae51737b557a2c57aae7712b);
 }
@@ -47,6 +50,7 @@ use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
 type Widget = widget::Widget<crate::Editor, crate::frame::Hovered>;
+type Change = Rc<dyn Fn(&mut crate::Editor, &crate::editing::Scope, &Root, &[gid::Step], Value)>;
 
 const PADDING_X: f64 = 10.0;
 const PADDING_Y: f64 = 4.0;
@@ -92,11 +96,68 @@ fn set_state(state: Option<&Value>, key: CellId, value: Value) -> Value {
     Value::Record(fields)
 }
 
+fn current_state(annotation: Option<&Value>) -> Value {
+    annotation
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&STATE))
+        .cloned()
+        .unwrap_or_else(|| absent::with_reason(NO_STATE))
+}
+
+fn update_function() -> Value {
+    Value::record([(::grap::vocabulary::FFI, UPDATE.into())])
+}
+
+fn apply_change(
+    editor: &mut crate::Editor,
+    scope: &crate::editing::Scope,
+    root: &Root,
+    path: &[gid::Step],
+    handler: &Value,
+    value: Value,
+) {
+    let state = current_state(
+        scope
+            .open(crate::editing::Access::new(editor))
+            .annotation(root, path),
+    );
+    let staged = RefCell::new(None);
+    let update = |_, context: &mut Context<'_>, call, environment: &Environment| {
+        let Some(expression) = context.field(call, VALUE) else {
+            return Ok(context.missing_argument(VALUE));
+        };
+        let value = context.eval(expression, environment)?;
+        Ok(context.effect(|| {
+            staged.replace(Some(value));
+            Value::record([])
+        }))
+    };
+    let result = ::grap::apply_scoped(
+        handler,
+        [(VALUE, value), (STATE, state), (UPDATE, update_function())],
+        &scope.view(editor.sources()).sources,
+        &ForeignOverlay::new(&[UPDATE], &update),
+        ::grap::DEFAULT_FUEL,
+    );
+    if result.completed && !absent::declines(&result.result) {
+        if let Some(value) = staged.into_inner() {
+            let mut editor = scope.open(crate::editing::Access::new(editor));
+            let mut annotation = editor
+                .annotation(root, path)
+                .and_then(Value::as_record)
+                .cloned()
+                .unwrap_or_default();
+            annotation.insert(STATE, value);
+            editor.annotate(root, path, Value::Record(annotation));
+        }
+    }
+}
+
 struct Drag {
     root: Root,
     path: gid::Path,
     edits: crate::editing::Scope,
-    key: CellId,
+    on_change: Change,
     slider: Slider,
     value: Rc<dyn Fn(f64) -> Value>,
     rect: Rect,
@@ -106,21 +167,28 @@ struct Drag {
 impl widget::gesture::Gesture<crate::Editor> for Drag {
     fn advance(&mut self, editor: &mut crate::Editor, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
-            let mut editor = self.edits.open(crate::editing::Access::new(editor));
-            let state = editor.annotation(&self.root, &self.path);
-            let value = set_state(
-                state,
-                self.key,
+            (self.on_change)(
+                editor,
+                &self.edits,
+                &self.root,
+                &self.path,
                 (self.value)(self.slider.value_at(self.rect, self.scale, *point)),
             );
-            editor.annotate(&self.root, &self.path, value);
         }
         false
     }
 }
 
-fn slider_widget(key: CellId, slider: Slider, width: f64) -> Widget {
-    slider_widget_with(key, slider, width, Vec::new(), Rc::new(f64::value))
+fn slider_widget(slider: Slider, width: f64, handler: Value) -> Widget {
+    slider_control(
+        slider,
+        width,
+        Vec::new(),
+        Rc::new(f64::value),
+        Rc::new(move |editor, scope, root, path, value| {
+            apply_change(editor, scope, root, path, &handler, value);
+        }),
+    )
 }
 
 fn slider_widget_with(
@@ -130,6 +198,26 @@ fn slider_widget_with(
     ticks: Vec<puri_widgets::slider::TickLevel>,
     value: Rc<dyn Fn(f64) -> Value>,
 ) -> Widget {
+    slider_control(
+        slider,
+        width,
+        ticks,
+        value,
+        Rc::new(move |editor, scope, root, path, value| {
+            let mut editor = scope.open(crate::editing::Access::new(editor));
+            let state = set_state(editor.annotation(root, path), key, value);
+            editor.annotate(root, path, state);
+        }),
+    )
+}
+
+fn slider_control(
+    slider: Slider,
+    width: f64,
+    ticks: Vec<puri_widgets::slider::TickLevel>,
+    value: Rc<dyn Fn(f64) -> Value>,
+    on_change: Change,
+) -> Widget {
     let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
@@ -137,6 +225,7 @@ fn slider_widget_with(
         let path = context.path.to_vec();
         let edits = context.inputs.edits.clone();
         let value = value.clone();
+        let on_change = on_change.clone();
         let ticks = ticks.clone();
         let rail = widget::leaf(
             Extent {
@@ -160,7 +249,7 @@ fn slider_widget_with(
                             root: root.clone(),
                             path: path.clone(),
                             edits: edits.clone(),
-                            key,
+                            on_change: on_change.clone(),
                             slider,
                             value: value.clone(),
                             rect: placement.rect,
@@ -319,6 +408,39 @@ fn controls_output(
 ) -> Result<(Vec<Widget>, Value), Value> {
     let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
     let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
+        if function == SLIDER {
+            let Some(expression) = context.field(call, VALUE) else {
+                return Ok(context.missing_argument(VALUE));
+            };
+            let Some(value) = context.eval_f64(expression, environment)? else {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            };
+            let Some(expression) = context.field(call, ON_CHANGE) else {
+                return Ok(context.missing_argument(ON_CHANGE));
+            };
+            let handler = context.eval(expression, environment)?;
+            if absent::is_absent(&handler) {
+                return Ok(handler);
+            }
+            let mut number = |field, default| -> Result<Option<f64>, Halt> {
+                match context.field(call, field) {
+                    Some(expression) => context.eval_f64(expression, environment),
+                    None => Ok(Some(default)),
+                }
+            };
+            let (Some(min), Some(max)) = (number(MINIMUM, 0.0)?, number(MAXIMUM, 1.0)?) else {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            };
+            let Some(slider) = Slider::new(min, max, value) else {
+                return Ok(absent::with_reason(INVALID_INPUT));
+            };
+            return Ok(context.effect(|| {
+                widgets
+                    .borrow_mut()
+                    .push(slider_widget(slider, width - 2.0 * PADDING_X, handler));
+                f64::value(slider.value)
+            }));
+        }
         let Some(key) = context.field(call, KEY) else {
             return Ok(context.missing_argument(KEY));
         };
@@ -462,36 +584,11 @@ fn controls_output(
                 selected
             }));
         }
-        let mut number = |field, default| -> Result<Option<f64>, Halt> {
-            match context.field(call, field) {
-                Some(expression) => context.eval_f64(expression, environment),
-                None => Ok(Some(default)),
-            }
-        };
-        let (Some(min), Some(max), Some(initial)) = (
-            number(MINIMUM, 0.0)?,
-            number(MAXIMUM, 1.0)?,
-            number(INITIAL, 0.0)?,
-        ) else {
-            return Ok(absent::with_reason(INVALID_INPUT));
-        };
-        let value = read_state(state, key)
-            .and_then(f64::read)
-            .filter(|value| value.is_finite())
-            .unwrap_or(initial);
-        let Some(slider) = Slider::new(min, max, value) else {
-            return Ok(absent::with_reason(INVALID_INPUT));
-        };
-        Ok(context.effect(|| {
-            widgets
-                .borrow_mut()
-                .push(slider_widget(key, slider, width - 2.0 * PADDING_X));
-            f64::value(slider.value)
-        }))
+        Ok(absent::with_reason(INVALID_INPUT))
     };
     let evaluation = ::grap::apply_scoped(
         controls,
-        [],
+        [(STATE, current_state(state)), (UPDATE, update_function())],
         &frame.inputs.sources,
         &ForeignOverlay::new(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
@@ -546,6 +643,9 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (MAXIMUM, "maximum"),
         (INITIAL, "initial"),
         (STATE, "control state"),
+        (UPDATE, "update"),
+        (ON_CHANGE, "on change"),
+        (NO_STATE, "no control state"),
         (INVALID_INPUT, "invalid control input"),
         (OUTPUT_REQUIRED, "control output required"),
     ] {
@@ -558,6 +658,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         )
         .register(
             SLIDER,
+            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+        )
+        .register(
+            UPDATE,
             ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(

@@ -737,6 +737,7 @@ mod checked_in_files {
         for source in [
             include_str!("../../website/public/lessons/shape.gid"),
             include_str!("../../website/public/lessons/forest.gid"),
+            include_str!("../../website/public/lessons/growing-forest.gid"),
             include_str!("../../website/public/lessons/drawing.gid"),
             include_str!("../../website/public/lessons/create.gid"),
         ] {

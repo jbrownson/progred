@@ -244,7 +244,7 @@ async function lessonPage(platform = "Linux x86_64") {
     drawing: ["argument", "body", "source"],
     forest: ["height", "color", "source"],
     create: ["number", "text", "list"],
-    shape: [],
+    "growing-forest": [],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
@@ -260,7 +260,7 @@ async function lessonPage(platform = "Linux x86_64") {
       };
     });
     const frame = {
-      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1${name === "shape" ? "" : `&observe=${name}-0`}`,
+      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1${name === "growing-forest" ? "" : `&observe=${name}-0`}`,
       contentWindow: {},
       getAttribute() { return this.src; },
       addEventListener: (event, callback) => { listeners[event] = callback; },
@@ -303,7 +303,7 @@ test("reset reloads only its own iframe", async () => {
       set: (value) => {
         const url = new URL(value);
         assert.equal(url.searchParams.get("document"), `../lessons/${exercise.id}.gid`);
-        assert.equal(url.searchParams.get("observe"), exercise.id === "shape" ? null : `${exercise.id}-1`);
+        assert.equal(url.searchParams.get("observe"), exercise.id === "growing-forest" ? null : `${exercise.id}-1`);
         assert.equal(url.searchParams.get("wheel"), "page");
         resetCounts[index]++;
       },

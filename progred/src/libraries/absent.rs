@@ -2,6 +2,7 @@
 //! its cell payload is the stable, language-independent reason identity.
 
 use crate::libraries::{Library, name};
+use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0x873c68ac371dbbb98a4f198546d60241);
@@ -16,6 +17,8 @@ pub mod vocabulary {
     pub const CAUSES: CellId = ::grap::absent::CAUSES;
     pub const NO_ALTERNATIVE: CellId = ::grap::absent::NO_ALTERNATIVE;
     pub const DECLINED: CellId = ::grap::absent::DECLINED;
+    pub const OR_DEFAULT: CellId = CellId::from_u128(0x6a7a30847dd7d939448d0e7eaeb82893);
+    pub const DEFAULT: CellId = CellId::from_u128(0xd8bdf7403b181a43fa73578bd976ba3b);
 }
 
 pub fn with_reason(reason: CellId) -> Value {
@@ -43,6 +46,27 @@ pub fn named_reason(value: impl Into<String>) -> Value {
     name::record(value, [])
 }
 
+fn functions() -> ForeignFunctions {
+    ForeignFunctions::default().register(
+        vocabulary::OR_DEFAULT,
+        ForeignFunction::runtime(|context, call, environment| {
+            let Some(expression) = context.field(call, vocabulary::VALUE) else {
+                return Ok(context.missing_runtime_argument(vocabulary::VALUE));
+            };
+            let value = context.eval_runtime(expression, environment)?;
+            if value.is_absent() {
+                match context.field(call, vocabulary::DEFAULT) {
+                    Some(default) => context.eval_runtime(default, environment),
+                    None => Ok(context.missing_runtime_argument(vocabulary::DEFAULT)),
+                }
+            } else {
+                Ok(value)
+            }
+        })
+        .tracked(),
+    )
+}
+
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
@@ -55,10 +79,12 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         named_reason("no applicable alternative"),
     );
     cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
+    cells.set_value(vocabulary::OR_DEFAULT, name::record("or default", []));
+    cells.set_value(vocabulary::DEFAULT, name::record("default", []));
     Library::named(
         ID,
         "absent",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::partial(|_| None),
     )
 }
@@ -67,6 +93,143 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 mod tests {
     use super::*;
     use gid::new_cell_id;
+
+    fn or_default(value: Value, default: Value) -> Value {
+        ::grap::call(
+            vocabulary::OR_DEFAULT.into(),
+            [(vocabulary::VALUE, value), (vocabulary::DEFAULT, default)],
+        )
+    }
+
+    #[test]
+    fn default_preserves_present_values_without_type_validation() {
+        let metadata = new_cell_id();
+        let enriched = Value::record(
+            crate::libraries::f64::value(0.4)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(metadata, Value::from(vec![7])),
+        );
+        for value in [
+            enriched,
+            crate::libraries::text::value("not a number"),
+            Value::record([]),
+            Value::record([(vocabulary::ABSENT, Value::from(vec![1]))]),
+        ] {
+            let result = crate::libraries::test_evaluate(
+                &or_default(value.clone(), new_cell_id().into()),
+                |_| None,
+                &functions(),
+                100,
+            );
+            assert!(result.completed);
+            assert_eq!(result.result, value);
+        }
+    }
+
+    #[test]
+    fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
+        use std::{cell::Cell, rc::Rc};
+        let first = new_cell_id();
+        let fallback = new_cell_id();
+        let parameter = new_cell_id();
+        for missing in [false, true] {
+            let reads = Rc::new(Cell::new(0));
+            let defaults = Rc::new(Cell::new(0));
+            let functions = functions()
+                .register(
+                    first,
+                    ForeignFunction::new({
+                        let reads = reads.clone();
+                        move |context, _, _| {
+                            Ok(context.effect(|| {
+                                reads.set(reads.get() + 1);
+                                if missing {
+                                    with_reason(new_cell_id())
+                                } else {
+                                    Value::record([])
+                                }
+                            }))
+                        }
+                    }),
+                )
+                .register(
+                    fallback,
+                    ForeignFunction::runtime({
+                        let defaults = defaults.clone();
+                        move |context, call, environment| {
+                            let value = context.field(call, vocabulary::VALUE).unwrap();
+                            let result = context.eval_runtime(value, environment)?;
+                            Ok(context.effect(|| {
+                                defaults.set(defaults.get() + 1);
+                                result
+                            }))
+                        }
+                    }),
+                );
+            let result = crate::libraries::test_apply(
+                &::grap::lambda(
+                    [parameter],
+                    or_default(
+                        ::grap::call(first.into(), []),
+                        ::grap::call(fallback.into(), [(vocabulary::VALUE, parameter.into())]),
+                    ),
+                ),
+                [(parameter, crate::libraries::f64::value(0.65))],
+                |_| None,
+                &functions,
+                100,
+            );
+            assert!(result.completed);
+            assert_eq!(reads.get(), 1);
+            assert_eq!(defaults.get(), usize::from(missing));
+            assert_eq!(
+                result.result,
+                if missing {
+                    crate::libraries::f64::value(0.65)
+                } else {
+                    Value::record([])
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
+        let replacement = with_reason(new_cell_id());
+        let returned = crate::libraries::test_evaluate(
+            &or_default(
+                with_reason(::grap::absent::FUEL_EXHAUSTED),
+                replacement.clone(),
+            ),
+            |_| None,
+            &functions(),
+            100,
+        );
+        assert!(returned.completed);
+        assert_eq!(returned.result, replacement);
+
+        let recurse = new_cell_id();
+        let fallback = new_cell_id();
+        let functions = functions().register(
+            fallback,
+            ForeignFunction::new(|_, _, _| {
+                panic!("an evaluator halt must not evaluate the default")
+            }),
+        );
+        let result = crate::libraries::test_evaluate(
+            &or_default(
+                ::grap::call(recurse.into(), []),
+                ::grap::call(fallback.into(), []),
+            ),
+            |cell| (cell == recurse).then(|| ::grap::lambda([], ::grap::call(recurse.into(), []))),
+            &functions,
+            30,
+        );
+        assert!(!result.completed);
+        assert_eq!(reason(&result.result), Some(::grap::absent::FUEL_EXHAUSTED));
+    }
 
     #[test]
     fn absence_is_an_open_tag_with_a_stable_reason() {

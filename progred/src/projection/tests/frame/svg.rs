@@ -462,6 +462,181 @@ fn website_lesson_svg_captures() {
     }
 }
 
+fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
+    use crate::libraries::{
+        absent, blob, color, control, controls, f64, grap, layout, list, logic, name, number,
+        presentation, text,
+    };
+    let (doc, fields) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/growing-forest.gid"
+    ))
+    .unwrap();
+    let mut editor = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            color::ID,
+            control::ID,
+            number::ID,
+            f64::ID,
+            grap::ID,
+            layout::ID,
+            controls::ID,
+            presentation::ID,
+            logic::ID,
+            list::ID,
+        ])
+        .unwrap(),
+    );
+    editor.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&format!(
+            "{},{}",
+            fields["second"].simple(),
+            fields["first"].simple()
+        )),
+        editor.stack.projection,
+    )
+    .unwrap();
+    editor.font_cx = crate::bundled_font_context();
+    editor.drawn_menu = false;
+    (editor, fields)
+}
+
+#[test]
+fn website_growing_forest_controls_and_edits_change_the_drawing() {
+    use crate::libraries::{color, controls, presentation};
+    fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: puri::Shape::Circle(circle),
+                    brush,
+                    ..
+                } if *brush == peniko::Brush::from(Color::from_rgb8(57, 155, 117))
+                    || *brush == peniko::Brush::from(Color::from_rgb8(220, 90, 40))
+                    || *brush == peniko::Brush::from(Color::from_rgb8(248, 201, 112)) =>
+                {
+                    vec![(*circle, brush.clone())]
+                }
+                DrawCmd::Clip { children, .. } => circles(children),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+    let (editor, names) = website_growing_forest_editor();
+    assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
+    let mut runner = crate::EditorRunner::new(editor);
+    let size = kurbo::Size::new(720.0, 660.0);
+    let render = |runner: &mut crate::EditorRunner| {
+        runner.refresh_frame(1.0, size);
+        let mut list = DrawList::new();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
+        runner.frame_presented();
+        circles(&list.0)
+    };
+    let initial = render(&mut runner);
+    assert_eq!(
+        initial.len(),
+        22,
+        "sun followed by three leaf-colored lobes per tree"
+    );
+    assert_eq!(
+        initial[0].1,
+        peniko::Brush::from(Color::from_rgb8(248, 201, 112))
+    );
+    let mut frames = Vec::new();
+    for growth in [0.0, 0.35, 1.0, 0.35] {
+        runner
+            .editor
+            .model
+            .workspace
+            .document
+            .annotations
+            .set_field(
+                &[
+                    Step::Key(names["second"]),
+                    Step::Key(presentation::vocabulary::RESULT),
+                ],
+                controls::vocabulary::STATE,
+                Some(f64::value(growth)),
+            );
+        frames.push(render(&mut runner));
+    }
+    assert_ne!(frames[0][1..], frames[1][1..]);
+    assert_ne!(frames[1][1..], frames[2][1..]);
+    assert!(frames[0][0].0.center.x < frames[1][0].0.center.x);
+    assert!(frames[1][0].0.center.x < frames[2][0].0.center.x);
+    assert!(frames[1][0].0.center.y < frames[0][0].0.center.y);
+    assert!((frames[0][0].0.center.y - frames[2][0].0.center.y).abs() < 1e-9);
+    assert_eq!(
+        frames[1], frames[3],
+        "scrubbing is deterministic and reversible"
+    );
+    let mut previous = frames.pop().unwrap();
+    for (parameter, value) in [
+        ("count", f64::value(4.0)),
+        ("rate", f64::value(1.5)),
+        ("leaves", color::value(Color::from_rgb8(220, 90, 40))),
+    ] {
+        let mut doc = (*runner.editor.model.doc).clone();
+        fn edit_call(source: &Value, function: CellId, field: CellId, value: &Value) -> Value {
+            match source {
+                Value::Record(record)
+                    if record.get(&::grap::vocabulary::FUNCTION)
+                        == Some(&Value::from(function)) =>
+                {
+                    let mut record = record.clone();
+                    record.insert(field, value.clone());
+                    Value::Record(record)
+                }
+                Value::Record(record) => Value::record(
+                    record
+                        .iter()
+                        .map(|(key, child)| (*key, edit_call(child, function, field, value))),
+                ),
+                Value::List(list) => Value::list(
+                    list.values()
+                        .map(|child| edit_call(child, function, field, value)),
+                ),
+                _ => source.clone(),
+            }
+        }
+        let sample = edit_call(
+            doc.cells.value(names["sample"]).unwrap(),
+            names["forest_view"],
+            names[parameter],
+            &value,
+        );
+        doc.cells.set_value(names["sample"], sample);
+        runner.editor.model.doc = Rc::new(doc);
+        let changed = render(&mut runner);
+        assert_ne!(
+            previous[1..],
+            changed[1..],
+            "{parameter} must affect the trees"
+        );
+        assert_eq!(
+            previous[0], changed[0],
+            "forest arguments must not change the sun"
+        );
+        previous = changed;
+    }
+}
+
+#[test]
+#[ignore = "writes the growing forest showcase without launching the app"]
+fn website_growing_forest_svg_capture() {
+    render_editor(
+        website_growing_forest_editor().0,
+        kurbo::Size::new(720.0, 660.0),
+        "website_growing_forest.svg",
+    );
+}
+
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, f32, f64, fidget, geometry, grap, layout, list,

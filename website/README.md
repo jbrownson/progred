@@ -62,10 +62,10 @@ for a free port when running an additional preview alongside this one.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page opens with a two-face cube machining demo: edit its pass count, depth,
-or tilt, orbit it, and scrub the tool playback. Only the function call is exposed;
-its ordinary Grap definition lives in the same document. It uses the existing
-mesh-first implicit preview, with stock removal and a model/stock switch.
+The page opens with a growing forest. A slider scrubs growth forward or backward;
+the visible `drawing with controls` call connects it to a forest function with editable
+tree count, growth rate, leaf color, and trunk color. Drawing and controls use existing
+libraries; all forest geometry is ordinary Grap in the same document.
 Seven exercises then build up the ideas: editing a
 text/number record, creating values from empty slots, inserting into a list,
 creating and sharing cells, live Grap calculations, editing a function and its
@@ -77,8 +77,8 @@ Each iframe explicitly selects its libraries: name/text/blob plus number/f64
 for the values, creation, and cells exercises, and just name/text/blob for the list exercise.
 The Grap and functions exercises add Grap and absent to the numeric set.
 The drawing lesson adds control, color, and layout and credits Bret Victor's
-Inventing on Principle. The opening machining demo adds Fidget, controls,
-presentation, geometry, logic, list, tree, toolpath, f32, and u64.
+Inventing on Principle. The opening forest adds controls, presentation, logic,
+and list to the drawing set, without loading Fidget or toolpath libraries.
 Creation, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
 identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
@@ -86,13 +86,21 @@ refilling it writes the same field. Nested values use the ordinary projection
 and editing behavior. This is tutorial host configuration, not document syntax
 or a library construct. Without the option, the record displays normally.
 The opener stacks an ordinary `render` result above its editable call, without
-panes. It reuses the cube example's CAM functions for two faces, with fewer
-passes and coarser sampling. Stock subtraction uses Fidget: an asynchronous
-mesh supplies the draft, then a final-resolution implicit pass refines it with
-the ordinary progress bar. Stock mesh jobs finish and catch up to the latest
-position during dragging; implicit refinement waits for release and a current
-mesh. Paths and the moving cutter remain live ordinary meshes. The inline
-preview currently has an explicit 680 × 420 logical size.
+panes. Trunks extend before the canopy expands, with deterministic variation
+and staggered growth across trees. There is no animation clock, worker job,
+or demo-specific runtime: the control value directly drives each drawing.
+The scene explicitly sequences separate background, sun, and forest calls using
+ordinary `do`. The sun follows an arc across the sky with the slider, independently
+of the tree growth rate. The editable background and sun colors are ordinary color
+arguments too. `drawing with controls` is an ordinary Grap helper over `with controls`
+and `draw`, keeping the canvas dimensions and callback wrapping out of the visible
+scene. Its arguments are `controls` and `drawing`. The controls lambda receives
+the stored UI state and an update callable. Here the state is just a float;
+the absent library's `or default` supplies 0.65 when the state is absent. The slider receives
+that value and the update callable as its change handler, and returns the
+current value to the drawing lambda. No quoted state key is needed.
+The inline drawing currently has an explicit 680 × 300 logical size.
+The earlier machining fixture remains available as `lessons/shape.gid`.
 It has no checklist or document-observation channel. Later lessons retain
 individual checkmarks without aggregate completion counters.
 The unused libraries are not constructed or offered by the completion picker;

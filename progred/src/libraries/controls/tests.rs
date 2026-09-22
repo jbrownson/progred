@@ -389,15 +389,194 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
         });
     }
 }
-fn slider(key: CellId, initial: f64, max: f64) -> Value {
+fn slider(value: f64, max: f64) -> Value {
     ::grap::call(
         SLIDER.into(),
         [
-            (KEY, quote(key.into())),
-            (INITIAL, f64::value(initial)),
+            (VALUE, f64::value(value)),
+            (ON_CHANGE, update_function()),
             (MAXIMUM, f64::value(max)),
         ],
     )
+}
+
+#[test]
+fn controls_receive_arbitrary_state_and_an_update_callable() {
+    let controls = ::grap::lambda([STATE], STATE.into());
+    for state in [None, Some(f64::value(0.35)), Some(Value::list([A.into()]))] {
+        let annotation = state.clone().map(|state| Value::record([(STATE, state)]));
+        with_context(&Output::default(), |context| {
+            let output = controls_output(&controls, annotation.as_ref(), 200.0, context);
+            match state {
+                Some(state) => {
+                    let (widgets, result) = output.unwrap();
+                    assert!(widgets.is_empty());
+                    assert_eq!(result, state);
+                }
+                None => {
+                    assert!(matches!(output, Err(error) if error == absent::with_reason(NO_STATE)))
+                }
+            }
+            let (widgets, result) = controls_output(
+                &::grap::lambda([UPDATE], UPDATE.into()),
+                annotation.as_ref(),
+                200.0,
+                context,
+            )
+            .unwrap();
+            assert!(widgets.is_empty());
+            assert_eq!(result, update_function());
+        });
+    }
+}
+
+#[test]
+fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let root = editor.model.workspace.document_root().clone();
+    let camera = crate::libraries::fidget::vocabulary::CAMERA;
+    crate::editing::annotate(&mut editor, &root, &[], Value::record([(camera, A.into())]));
+    let doc = editor.model.doc.clone();
+    let control = slider_widget(
+        Slider::new(0.0, 1.0, 0.2).unwrap(),
+        180.0,
+        update_function(),
+    );
+    let measured = with_context(&Output::default(), |context| control(context));
+    let height = measured.extent.height();
+    let placed = widget::frame::place(
+        measured,
+        Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
+        &Default::default(),
+    );
+    let event = puri::handler::PointerButtonEvent {
+        button: Some(puri::handler::PointerButton::Primary),
+        pointer: puri::handler::PointerInfo {
+            pointer_id: None,
+            persistent_device_id: None,
+            pointer_type: puri::handler::PointerType::Mouse,
+        },
+        state: puri::handler::PointerState {
+            position: (100.0, height / 2.0).into(),
+            ..Default::default()
+        },
+    };
+    assert!(
+        placed
+            .resolve_for_dispatch()
+            .dispatch_pointer_down(&mut editor, &event)
+    );
+    let annotation = editor.model.workspace.document.annotations.at(&[]).unwrap();
+    assert_eq!(f64::read(&current_state(Some(annotation))), Some(0.5));
+    assert_eq!(
+        annotation.as_record().unwrap().get(&camera),
+        Some(&A.into())
+    );
+    assert!(Rc::ptr_eq(&doc, &editor.model.doc));
+}
+
+#[test]
+fn change_handlers_read_current_state_and_stage_writes_until_completion() {
+    fn field_update(field: CellId, other: CellId) -> Value {
+        ::grap::lambda(
+            [STATE, VALUE, UPDATE],
+            ::grap::call(
+                UPDATE.into(),
+                [(
+                    VALUE,
+                    quote(Value::record([
+                        (field, splice(VALUE.into())),
+                        (
+                            other,
+                            splice(::grap::call(
+                                c::MATCH.into(),
+                                [
+                                    (c::VALUE, STATE.into()),
+                                    (
+                                        c::CASES,
+                                        Value::list([
+                                            Value::record([
+                                                (
+                                                    c::PATTERN,
+                                                    Value::record([(
+                                                        other,
+                                                        Value::record([(c::BIND, other.into())]),
+                                                    )]),
+                                                ),
+                                                (::grap::vocabulary::EXPRESSION, other.into()),
+                                            ]),
+                                            Value::record([
+                                                (
+                                                    c::PATTERN,
+                                                    Value::record([(c::BIND, other.into())]),
+                                                ),
+                                                (::grap::vocabulary::EXPRESSION, f64::value(0.0)),
+                                            ]),
+                                        ]),
+                                    ),
+                                ],
+                            )),
+                        ),
+                    ])),
+                )],
+            ),
+        )
+    }
+    let mut editor = crate::test_editor(gid::Document {
+        root: None,
+        cells: Cells::new(),
+    });
+    let root = editor.model.workspace.document_root().clone();
+    let scope = crate::editing::Scope::default();
+    let first = field_update(A, B);
+    let second = field_update(B, A);
+    for (handler, value) in [(&first, 0.2), (&second, 0.8), (&first, 0.4)] {
+        apply_change(&mut editor, &scope, &root, &[], handler, f64::value(value));
+    }
+    assert_eq!(
+        current_state(editor.model.workspace.document.annotations.at(&[])),
+        Value::record([(A, f64::value(0.4)), (B, f64::value(0.8))])
+    );
+    let previous = current_state(editor.model.workspace.document.annotations.at(&[]));
+    let rejected = ::grap::lambda(
+        [VALUE, UPDATE],
+        ::grap::call(
+            c::DO.into(),
+            [(
+                c::EXPRESSIONS,
+                Value::list([
+                    ::grap::call(UPDATE.into(), [(VALUE, VALUE.into())]),
+                    absent::decline(),
+                ]),
+            )],
+        ),
+    );
+    apply_change(&mut editor, &scope, &root, &[], &rejected, f64::value(0.9));
+    assert_eq!(
+        current_state(editor.model.workspace.document.annotations.at(&[])),
+        previous
+    );
+    let recovered = ::grap::lambda(
+        [VALUE, UPDATE],
+        ::grap::call(
+            c::DO.into(),
+            [(
+                c::EXPRESSIONS,
+                Value::list([
+                    ::grap::call(UPDATE.into(), [(VALUE, VALUE.into())]),
+                    absent::with_reason(INVALID_INPUT),
+                ]),
+            )],
+        ),
+    );
+    apply_change(&mut editor, &scope, &root, &[], &recovered, f64::value(0.6));
+    assert_eq!(
+        current_state(editor.model.workspace.document.annotations.at(&[])),
+        f64::value(0.6)
+    );
 }
 
 #[test]
@@ -490,8 +669,8 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
     let controls = ::grap::lambda(
         [],
         quote(Value::list([
-            splice(slider(A, 0.25, 1.0)),
-            splice(slider(B, 5.0, 10.0)),
+            splice(slider(0.25, 1.0)),
+            splice(slider(5.0, 10.0)),
             splice(::grap::call(
                 RADIO.into(),
                 [
@@ -733,7 +912,13 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
         &[],
         Value::record([(camera, Value::record([]))]),
     );
-    let control = slider_widget(A, Slider::new(0.0, 1.0, 0.2).unwrap(), 180.0);
+    let control = slider_widget_with(
+        A,
+        Slider::new(0.0, 1.0, 0.2).unwrap(),
+        180.0,
+        Vec::new(),
+        Rc::new(f64::value),
+    );
     let measured = with_context(&Output::default(), |context| control(context));
     let height = measured.extent.height();
     let placed = widget::frame::place(

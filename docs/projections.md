@@ -421,6 +421,25 @@ share the recording and its source origins. There is no cross-frame canvas memo.
 The installed frame's hover probes retain that recording for subsequent pointer
 hit tests; every successor frame still makes its own recording.
 
+## Controls and state
+
+The controls library's `with controls` projection runs a controls lambda with
+`control state` and `update` arguments. State is an arbitrary GID value held under
+the occurrence's control-state annotation field; a missing field supplies the
+explicit `no control state` absent. Defaults belong to Grap code, not to this
+container. The controls lambda emits widgets and returns ordinary parameters,
+which the view lambda receives unchanged.
+
+The plain `slider` takes `value` and `on change`, with optional numeric bounds.
+It returns its displayed value. During input dispatch its Grap change handler
+receives `value`, the current `control state`, and the scoped `update` callable.
+Calling `update {value: ...}` replaces that control state, preserving unrelated
+site annotations. Updates are staged until the handler completes; ordinary
+absents retain effects, while decline or an evaluator halt discards them.
+The update capability is unavailable while building the controls. The CAM radio
+and tree controls still use their existing keyed state adapters; they have not
+yet migrated to the plain slider's explicit value/handler interface.
+
 ## Scoped layout programs
 
 The layout library's `layout program` function takes a raw `expression` and
@@ -564,6 +583,11 @@ all such loops is not a contract of the current fuel mechanism. Preview meshes,
 images, and display errors do not carry unused evaluator fuel through rendering.
 
 ## Control functions and absents
+
+The absent library's `or default {value, default}` evaluates `value` once and
+returns a non-absent unchanged. Only an absent result evaluates `default`, in the
+same calling environment. It does not validate the value's type or undo effects;
+actual evaluator halts still halt rather than invoking the fallback.
 
 `do` evaluates its expressions in order, returning the first absent unchanged
 or the last successful value. It short-circuits that sequence, not the evaluator:
