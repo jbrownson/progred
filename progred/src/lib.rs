@@ -302,6 +302,8 @@ pub(crate) struct App {
     pub(crate) fonts: FontContext,
     #[cfg(target_os = "macos")]
     pub(crate) native_menu: native_menu::Menu,
+    #[cfg(target_os = "macos")]
+    pub(crate) appearance: Option<winit::window::Theme>,
     #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
@@ -733,15 +735,18 @@ impl ApplicationHandler<UserEvent> for App {
             #[cfg(target_arch = "wasm32")]
             UserEvent::PaletteChanged(palette) => {
                 for runner in &mut self.editors {
-                    runner.editor.palette = palette;
                     if let RenderState::Active { window, .. } = &runner.editor.state {
                         let window = window.clone();
                         let size = window.inner_size();
-                        runner.refresh_frame(
+                        if runner.palette_changed(
+                            palette,
                             window.scale_factor(),
                             Size::new(size.width as f64, size.height as f64),
-                        );
-                        window.request_redraw();
+                        ) {
+                            window.request_redraw();
+                        }
+                    } else {
+                        runner.editor.palette = palette;
                     }
                 }
             }
@@ -813,7 +818,10 @@ impl ApplicationHandler<UserEvent> for App {
         // After launch, so winit cannot replace it (its own default
         // menu is disabled at loop construction).
         #[cfg(target_os = "macos")]
-        self.native_menu.install();
+        {
+            self.native_menu.install();
+            self.native_menu.sync(None, self.appearance);
+        }
 
         for index in 0..self.editors.len() {
             self.resume_editor(event_loop, index);
@@ -913,7 +921,7 @@ impl App {
             }
             // The resident menu bar grays every document command.
             #[cfg(target_os = "macos")]
-            self.native_menu.sync(None);
+            self.native_menu.sync(None, self.appearance);
         }
     }
 
@@ -956,6 +964,8 @@ impl App {
 
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
         #[cfg(target_os = "macos")]
+        let appearance = self.appearance;
+        #[cfg(target_os = "macos")]
         let App {
             editors,
             context,
@@ -979,6 +989,8 @@ impl App {
 
         let window = cached_window.take().unwrap_or_else(|| {
             let attributes = Window::default_attributes().with_title(runner.editor.title());
+            #[cfg(target_os = "macos")]
+            let attributes = attributes.with_theme(appearance);
             #[cfg(not(target_arch = "wasm32"))]
             let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
             // The app id must match linux/progred.desktop for compositors
@@ -1010,6 +1022,12 @@ impl App {
             }
             Arc::new(window)
         });
+
+        #[cfg(target_os = "macos")]
+        {
+            window.set_theme(appearance);
+            runner.editor.palette = macos_window::palette(appearance, window.theme());
+        }
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -1089,6 +1107,18 @@ impl App {
         // Discrete input (including release/cancel) first settles the batch.
         if runner.flush_before_window_event(&event) {
             window.request_redraw();
+        }
+
+        #[cfg(target_os = "macos")]
+        if matches!(event, WindowEvent::ThemeChanged(_)) {
+            let size = window.inner_size();
+            if runner.palette_changed(
+                macos_window::palette(self.appearance, window.theme()),
+                scale,
+                Size::new(size.width as f64, size.height as f64),
+            ) {
+                window.request_redraw();
+            }
         }
 
         if let WindowEvent::Focused(_focused) = event {
@@ -1394,6 +1424,8 @@ fn run_document(
         fonts: fonts.clone(),
         #[cfg(target_os = "macos")]
         native_menu,
+        #[cfg(target_os = "macos")]
+        appearance: None,
         proxy: proxy.clone(),
         drawn_menu,
         focused: None,
@@ -1832,8 +1864,10 @@ impl App {
         #[cfg(target_os = "macos")]
         {
             let editor = &self.editors[index].editor;
-            self.native_menu
-                .sync(Some((editor.menu_availability(), editor.menu_toggles())));
+            self.native_menu.sync(
+                Some((editor.menu_availability(), editor.menu_toggles())),
+                self.appearance,
+            );
         }
         #[cfg(not(target_os = "macos"))]
         let _ = index;
@@ -1926,6 +1960,33 @@ impl App {
                 Ok((doc, binders)) => self.new_document(event_loop, doc, binders),
                 Err(error) => panic!("built-in example failed to parse: {error}"),
             },
+            #[cfg(target_os = "macos")]
+            AppCommand::Appearance(appearance) => {
+                self.appearance = appearance;
+                for runner in &mut self.editors {
+                    if let Some(window) = runner.editor.window() {
+                        window.set_theme(appearance);
+                        let palette = macos_window::palette(appearance, window.theme());
+                        if matches!(runner.editor.state, RenderState::Active { .. }) {
+                            let size = window.inner_size();
+                            if runner.palette_changed(
+                                palette,
+                                window.scale_factor(),
+                                Size::new(size.width as f64, size.height as f64),
+                            ) {
+                                window.request_redraw();
+                            }
+                        } else {
+                            runner.editor.palette = palette;
+                        }
+                    }
+                }
+                if let Some(index) = self.focused_index() {
+                    self.sync_menus(index);
+                } else {
+                    self.native_menu.sync(None, appearance);
+                }
+            }
         }
     }
 

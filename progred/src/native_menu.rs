@@ -147,6 +147,10 @@ fn definition() -> Vec<Section> {
                 Entry::Command(C::Doc(D::Raw)),
                 Entry::Command(C::Doc(D::DebugGeometry)),
                 Entry::Separator,
+                Entry::Command(C::App(A::Appearance(None))),
+                Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Light)))),
+                Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Dark)))),
+                Entry::Separator,
                 Entry::Native(Native::Fullscreen),
             ],
         ),
@@ -379,7 +383,11 @@ impl Menu {
 
     /// `None` is the windowless state: every document command grays,
     /// application commands stay live.
-    pub fn sync(&self, doc: Option<(Availability, Toggles)>) {
+    pub fn sync(
+        &self,
+        doc: Option<(Availability, Toggles)>,
+        appearance: Option<winit::window::Theme>,
+    ) {
         for (command, item) in &self.items {
             item.setEnabled(match command {
                 Command::App(AppCommand::Close) => doc.is_some(),
@@ -390,7 +398,7 @@ impl Menu {
             });
             if command::spec(*command).toggle {
                 item.setState(
-                    if doc.is_some_and(|(_, toggles)| toggles.checked(*command)) {
+                    if checked(*command, doc.map(|(_, toggles)| toggles), appearance) {
                         NSControlStateValueOn
                     } else {
                         NSControlStateValueOff
@@ -398,6 +406,17 @@ impl Menu {
                 );
             }
         }
+    }
+}
+
+fn checked(
+    command: Command,
+    doc: Option<Toggles>,
+    appearance: Option<winit::window::Theme>,
+) -> bool {
+    match command {
+        Command::App(AppCommand::Appearance(theme)) => theme == appearance,
+        _ => doc.is_some_and(|toggles| toggles.checked(command)),
     }
 }
 
@@ -428,20 +447,39 @@ mod tests {
             vec!["Progred", "File", "Examples", "Edit", "View", "Window"]
         );
         let commands = commands(&definition);
-        assert_eq!(commands.len(), 17 + Example::ALL.len());
+        assert_eq!(commands.len(), 20 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }
     }
 
     #[test]
-    fn both_menu_systems_expose_the_same_commands() {
+    fn both_menu_systems_expose_the_same_commands_except_native_appearance() {
         let mut native = commands(&definition());
+        native.retain(|command| !matches!(command, Command::App(AppCommand::Appearance(_))));
         let drawn_definition = crate::menu::definition();
         let mut drawn = crate::menu::commands(&drawn_definition).collect::<Vec<_>>();
         let key = |command: &Command| format!("{command:?}");
         native.sort_by_key(key);
         drawn.sort_by_key(key);
         assert_eq!(native, drawn);
+    }
+
+    #[test]
+    fn appearance_choices_are_exclusive_even_without_a_document() {
+        let choices = [
+            None,
+            Some(winit::window::Theme::Light),
+            Some(winit::window::Theme::Dark),
+        ];
+        for selected in choices {
+            for doc in [None, Some(Toggles::default())] {
+                for choice in choices {
+                    let command = Command::App(AppCommand::Appearance(choice));
+                    assert!(command::spec(command).toggle);
+                    assert_eq!(checked(command, doc, selected), choice == selected);
+                }
+            }
+        }
     }
 }

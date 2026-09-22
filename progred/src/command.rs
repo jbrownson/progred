@@ -15,6 +15,8 @@ pub enum AppCommand {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Close,
     Quit,
+    #[cfg(target_os = "macos")]
+    Appearance(Option<winit::window::Theme>),
     Example(Example),
 }
 
@@ -190,6 +192,15 @@ pub fn spec(command: Command) -> Spec {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Close) => item("Close", Some(Shortcut::plain(ShortcutKey::W))),
         Command::App(AppCommand::Quit) => item("Quit", Some(Shortcut::plain(ShortcutKey::Q))),
+        #[cfg(target_os = "macos")]
+        Command::App(AppCommand::Appearance(theme)) => toggle(
+            match theme {
+                None => "Follow System Appearance",
+                Some(winit::window::Theme::Light) => "Light Mode",
+                Some(winit::window::Theme::Dark) => "Dark Mode",
+            },
+            None,
+        ),
         Command::App(AppCommand::Example(Example::Sample)) => {
             item("Sample", Some(Shortcut::plain(ShortcutKey::Digit1)))
         }

@@ -91,6 +91,23 @@ fn queue_batch<T>(
 }
 
 impl EditorRunner {
+    #[cfg(any(target_os = "macos", target_arch = "wasm32", test))]
+    pub(crate) fn palette_changed(
+        &mut self,
+        palette: crate::styles::Palette,
+        scale: f64,
+        viewport: Size,
+    ) -> bool {
+        if self.editor.palette == palette {
+            false
+        } else {
+            self.flush_pending_continuous();
+            self.editor.palette = palette;
+            self.refresh_frame(scale, viewport);
+            true
+        }
+    }
+
     pub(crate) fn focus_changed(&mut self, focused: bool, scale: f64, viewport: Size) -> bool {
         if self.editor.focused == focused {
             false

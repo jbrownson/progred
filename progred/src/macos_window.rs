@@ -11,6 +11,17 @@ pub(crate) fn initial_cascade() -> CascadePoint {
     NSPoint::new(0.0, 0.0)
 }
 
+pub(crate) fn palette(
+    preference: Option<winit::window::Theme>,
+    observed: Option<winit::window::Theme>,
+) -> crate::styles::Palette {
+    match preference.or(observed) {
+        Some(winit::window::Theme::Dark) => crate::styles::Theme::Dark,
+        _ => crate::styles::Theme::Light,
+    }
+    .palette()
+}
+
 fn with_appkit_window(window: &Window, f: impl FnOnce(&NSWindow)) {
     let RawWindowHandle::AppKit(handle) = window
         .window_handle()

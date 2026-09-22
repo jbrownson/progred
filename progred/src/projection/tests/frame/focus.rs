@@ -52,8 +52,8 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
         })
     }
     for theme in [crate::styles::Theme::Dark, crate::styles::Theme::Light] {
-        runner.editor.palette = theme.palette();
-        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(runner.palette_changed(theme.palette(), 1.0, VIEWPORT));
+        assert!(!runner.palette_changed(theme.palette(), 1.0, VIEWPORT));
         assert!(has_ink(&render(&mut runner).0, theme.palette().literal));
         assert!(Rc::ptr_eq(&document, &runner.editor.model.doc));
         assert_eq!(
@@ -74,6 +74,33 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
         text::read(runner.editor.model.doc.root.as_ref().unwrap()),
         Some("hello")
     );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
+    use winit::window::Theme::{Dark, Light};
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(text::value("hello")),
+        cells: Cells::new(),
+    }));
+    let document = runner.editor.model.doc.clone();
+    for (preference, observed, expected) in [
+        (None, Some(Dark), crate::styles::Theme::Dark),
+        (None, Some(Light), crate::styles::Theme::Light),
+        (Some(Dark), Some(Light), crate::styles::Theme::Dark),
+        (Some(Light), Some(Dark), crate::styles::Theme::Light),
+        (None, Some(Dark), crate::styles::Theme::Dark),
+        (None, None, crate::styles::Theme::Light),
+    ] {
+        runner.palette_changed(
+            crate::macos_window::palette(preference, observed),
+            1.0,
+            VIEWPORT,
+        );
+        assert_eq!(runner.editor.palette, expected.palette());
+        assert!(Rc::ptr_eq(&document, &runner.editor.model.doc));
+    }
 }
 
 #[test]

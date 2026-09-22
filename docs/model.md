@@ -183,9 +183,13 @@ their own tighter outline through focus and editing; this widget styling does
 not determine the geometry of ordinary value highlights.
 
 The editor owns an explicit `Palette` input, used by text, selections, library
-grounds, menus, completion cards, and popovers. `Theme::Light` is the native and
-browser default: white paper, blue names, violet field labels, and orange
-literals. `Theme::Dark` supplies brighter corresponding colors on navy paper.
+grounds, menus, completion cards, and popovers. `Theme::Light` uses white paper,
+blue names, violet field labels, and orange literals. `Theme::Dark` supplies
+brighter corresponding colors on navy paper. The macOS shell follows the system
+appearance at startup and on changes. Its native View menu offers Follow System
+Appearance, Light Mode, and Dark Mode; this application-wide override lasts for
+the session, including newly opened windows, and also updates window chrome.
+Other hosts default to Light; the browser host can explicitly choose either theme.
 Library authority transitions retain a faint tint; returning to document
 authority restores the same opaque paper used by the window. Changing the
 palette rebuilds the ordinary complete frame without replacing the document,
