@@ -11,6 +11,8 @@
   --editor: #ffffff;
   --success: #167548;
   --on-success: #ffffff;
+  --switch-track: #eaded5;
+  --switch-thumb: #ffffff;
 }
 
 :root[data-theme="dark"] {
@@ -23,6 +25,8 @@
   --editor: #151b2c;
   --success: #8ae1ae;
   --on-success: #11241b;
+  --switch-track: #302622;
+  --switch-thumb: #68483c;
 }
 
 * { box-sizing: border-box; }
@@ -55,8 +59,36 @@ a:focus-visible, button:focus-visible {
 }
 .site-actions { display: flex; align-items: center; gap: 1.5rem; }
 .github-stars { display: inline-flex; align-items: center; min-height: 44px; }
-#theme-toggle { font: inherit; color: inherit; background: var(--editor); border: 1px solid var(--border); border-radius: 999px; padding: 0.45rem 0.85rem; cursor: pointer; }
-#theme-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.github-stars span { display: flex; }
+.github-stars .github-dark { display: none; }
+:root[data-theme="dark"] .github-stars .github-light { display: none; }
+:root[data-theme="dark"] .github-stars .github-dark { display: flex; }
+#theme-toggle { display: inline-grid; place-items: center; width: 56px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: none; cursor: pointer; }
+.theme-track { position: relative; width: 56px; height: 28px; border: 1px solid var(--border); border-radius: 999px; background: var(--switch-track); }
+.theme-track::before {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--switch-thumb);
+  box-shadow: 0 1px 2px #0002;
+  transition: transform 160ms ease;
+}
+.theme-track svg { position: absolute; top: 5px; color: var(--muted); }
+.theme-sun { left: 5px; }
+.theme-moon { right: 5px; }
+#theme-toggle[aria-checked="false"] .theme-sun,
+#theme-toggle[aria-checked="true"] .theme-moon { color: var(--accent); }
+#theme-toggle[aria-checked="true"] .theme-track::before { transform: translateX(28px); }
+#theme-toggle:hover .theme-track { border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .theme-track::before { transition: none; }
+}
 .eyebrow { color: var(--accent); font-size: 0.8rem; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 0.85rem; }
 h1, h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spacing: -0.025em; line-height: 1.25; margin: 0 0 1rem; }
 .exercise {

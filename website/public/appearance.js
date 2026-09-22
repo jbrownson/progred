@@ -6,7 +6,8 @@ let theme = savedTheme(window);
 const send = (frame) => frame.contentWindow?.postMessage({ type: "progred:theme", theme }, location.origin);
 const apply = () => {
   document.documentElement.dataset.theme = theme;
-  button.setAttribute("aria-pressed", String(theme === "dark"));
+  button.setAttribute("aria-checked", String(theme === "dark"));
+  button.setAttribute("title", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
   for (const frame of frames) send(frame);
 };
 button.addEventListener("click", () => {

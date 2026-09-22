@@ -38,7 +38,9 @@ integrity-checked, and loaded asynchronously from jsDelivr with anonymous CORS
 for compatibility with the editor's isolation headers. The widget requests the
 count from GitHub's public API; if it is unavailable, no count is shown. If the
 script is blocked, the ordinary repository link remains. No account token or
-custom star-count logic is used. The widget keeps its default light styling.
+custom star-count logic is used. Both stock color variants render once; CSS shows
+only the variant matching the page theme, so switching themes does not reload
+the widget or fetch another count. Hidden controls are excluded from tab order.
 
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
@@ -93,7 +95,7 @@ The full-page editor remains blank on startup
 and retains its menus. The public site is deployed at <https://prog.red>.
 
 The site defaults to light mode, with white editor surfaces distinct from the
-warm cream page. The **Dark mode** button switches both the page and live editors
+warm cream page. The sun/moon switch selects light or dark mode for both the page and live editors
 without reloading lessons or losing edits/checkmarks. The preference is stored
 locally when browser storage is available; otherwise switching still works for
 the current page. New and reset embeds receive the current theme. CSS variables

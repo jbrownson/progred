@@ -38,21 +38,26 @@ async function page({ stored = null, denied = false } = {}) {
 test("light is the default; the toggle updates all embeds in place and remembers its choice", async () => {
   const p = await page();
   assert.equal(p.dataset.theme, "light");
-  assert.equal(p.button.attributes["aria-pressed"], "false");
+  assert.equal(p.button.attributes["aria-checked"], "false");
+  assert.equal(p.button.attributes.title, "Switch to dark mode");
   p.button.click();
   assert.equal(p.dataset.theme, "dark");
-  assert.equal(p.button.attributes["aria-pressed"], "true");
+  assert.equal(p.button.attributes["aria-checked"], "true");
+  assert.equal(p.button.attributes.title, "Switch to light mode");
   assert.equal(p.storage.get("progred-theme"), "dark");
   for (const frame of p.frames) {
     assert.deepEqual(frame.messages.at(-1), [{ type: "progred:theme", theme: "dark" }, "http://localhost"]);
   }
   p.button.click();
   assert.equal(p.dataset.theme, "light");
+  assert.equal(p.button.attributes["aria-checked"], "false");
+  assert.equal(p.button.attributes.title, "Switch to dark mode");
 });
 
 test("saved preference, lazy-loaded and reset lessons use the current theme", async () => {
   const p = await page({ stored: "dark" });
   assert.equal(p.dataset.theme, "dark");
+  assert.equal(p.button.attributes["aria-checked"], "true");
   p.frames[0].load();
   const event = { origin: "http://localhost", source: p.frames[1].contentWindow,
     data: { type: "progred:ready" } };
@@ -64,6 +69,7 @@ test("saved preference, lazy-loaded and reset lessons use the current theme", as
   assert.equal(p.frames[0].messages.length, 2);
   p.listeners.storage({ key: "progred-theme", newValue: "light" });
   assert.equal(p.dataset.theme, "light");
+  assert.equal(p.button.attributes["aria-checked"], "false");
   p.listeners.storage({ key: "progred-theme", newValue: "dark" });
   p.listeners.storage({ key: null, newValue: null });
   assert.equal(p.dataset.theme, "light");
