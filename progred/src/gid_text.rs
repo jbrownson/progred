@@ -735,6 +735,7 @@ mod checked_in_files {
     #[test]
     fn website_lessons_are_editable_data_without_orphan_definitions() {
         for source in [
+            include_str!("../../website/public/lessons/shape.gid"),
             include_str!("../../website/public/lessons/forest.gid"),
             include_str!("../../website/public/lessons/drawing.gid"),
             include_str!("../../website/public/lessons/create.gid"),

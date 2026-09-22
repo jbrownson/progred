@@ -462,6 +462,162 @@ fn website_lesson_svg_captures() {
     }
 }
 
+fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
+    use crate::libraries::{
+        absent, blob, color, control, controls, f32, f64, fidget, geometry, grap, layout, list,
+        logic, name, number, presentation, text, toolpath, tree, u64,
+    };
+    let (doc, fields) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/shape.gid"
+    ))
+    .unwrap();
+    let mut editor = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            color::ID,
+            control::ID,
+            number::ID,
+            f64::ID,
+            grap::ID,
+            layout::ID,
+            f32::ID,
+            u64::ID,
+            fidget::ID,
+            controls::ID,
+            presentation::ID,
+            geometry::ID,
+            logic::ID,
+            list::ID,
+            tree::ID,
+            toolpath::ID,
+        ])
+        .unwrap(),
+    );
+    editor.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&format!(
+            "{},{}",
+            fields["second"].simple(),
+            fields["first"].simple()
+        )),
+        editor.stack.projection,
+    )
+    .unwrap();
+    editor.font_cx = crate::bundled_font_context();
+    editor.drawn_menu = false;
+    (editor, fields)
+}
+
+#[test]
+fn website_shape_edits_and_playback_change_the_rendered_mesh() {
+    use crate::libraries::{controls, presentation};
+    fn meshes(commands: &[DrawCmd]) -> Vec<puri::mesh::Scene> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Mesh { scene, .. } => vec![scene.clone()],
+                DrawCmd::Clip { children, .. } => meshes(children),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+    let (editor, names) = website_shape_editor();
+    assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
+    let mut runner = crate::EditorRunner::new(editor);
+    let size = kurbo::Size::new(720.0, 520.0);
+    let render = |runner: &mut crate::EditorRunner| {
+        runner.refresh_frame(1.0, size);
+        let mut list = DrawList::new();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
+        runner.frame_presented();
+        let scenes = meshes(&list.0);
+        assert_eq!(
+            scenes.len(),
+            1,
+            "the CAM call must produce geometry, not an absent fallback"
+        );
+        assert!(scenes[0].geometry.indices.len() > 100);
+        scenes.into_iter().next().unwrap()
+    };
+    let initial = render(&mut runner);
+    let mut doc = (*runner.editor.model.doc).clone();
+    let mut call = doc
+        .cells
+        .value(names["sample"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .clone();
+    call.insert(names["rows"], f64::value(5.0));
+    doc.cells.set_value(names["sample"], Value::Record(call));
+    runner.editor.model.doc = Rc::new(doc);
+    let edited = render(&mut runner);
+    assert_ne!(
+        initial.geometry.indices.len(),
+        edited.geometry.indices.len()
+    );
+
+    runner
+        .editor
+        .model
+        .workspace
+        .document
+        .annotations
+        .set_field(
+            &[
+                Step::Key(names["second"]),
+                Step::Key(presentation::vocabulary::RESULT),
+            ],
+            controls::vocabulary::STATE,
+            Some(Value::record([(
+                names["preview_mode"],
+                names["model"].into(),
+            )])),
+        );
+    let model = render(&mut runner);
+    assert_ne!(edited.geometry.indices.len(), model.geometry.indices.len());
+
+    // These are arguments of the same call, not disconnected preview controls.
+    let positions = |scene: &puri::mesh::Scene| {
+        scene
+            .geometry
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position)
+            .collect::<Vec<_>>()
+    };
+    let mut previous = positions(&model);
+    for (parameter, value) in [("control_depth", 0.25), ("tilt", 20.0)] {
+        let mut doc = (*runner.editor.model.doc).clone();
+        let mut call = doc
+            .cells
+            .value(names["sample"])
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .clone();
+        call.insert(names[parameter], f64::value(value));
+        doc.cells.set_value(names["sample"], Value::Record(call));
+        runner.editor.model.doc = Rc::new(doc);
+        let current = positions(&render(&mut runner));
+        assert!(previous != current, "{parameter} must change the geometry");
+        previous = current;
+    }
+}
+
+#[test]
+#[ignore = "writes the machining website showcase without launching the app"]
+fn website_shape_svg_capture() {
+    render_editor(
+        website_shape_editor().0,
+        kurbo::Size::new(720.0, 520.0),
+        "website_shape.svg",
+    );
+}
+
 #[test]
 #[ignore = "writes drawn-menu layout captures without launching the app"]
 fn drawn_menu_svg_captures() {

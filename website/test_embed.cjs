@@ -244,11 +244,11 @@ async function lessonPage(platform = "Linux x86_64") {
     drawing: ["argument", "body", "source"],
     forest: ["height", "color", "source"],
     create: ["number", "text", "list"],
+    shape: [],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
     const status = { textContent: "" };
-    const progress = { textContent: `0 of ${tasksByLesson[name].length} steps complete` };
     const tasks = tasksByLesson[name].map((task) => {
       const marker = { textContent: "" };
       const status = { textContent: "" };
@@ -260,16 +260,16 @@ async function lessonPage(platform = "Linux x86_64") {
       };
     });
     const frame = {
-      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1&observe=${name}-0`,
+      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1${name === "shape" ? "" : `&observe=${name}-0`}`,
       contentWindow: {},
       getAttribute() { return this.src; },
       addEventListener: (event, callback) => { listeners[event] = callback; },
     };
     const button = { addEventListener: (event, callback) => { listeners[event] = callback; } };
     return {
-      id: name, frame, status, progress, tasks, listeners,
+      id: name, frame, status, tasks, listeners,
       querySelectorAll: () => tasks,
-      querySelector: (selector) => ({ iframe: frame, ".reset-status": status, ".reset": button, ".lesson-progress": progress })[selector],
+      querySelector: (selector) => ({ iframe: frame, ".reset-status": status, ".reset": button })[selector],
     };
   });
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "public/lessons.js"), "utf8").replace(/^import .*;$/gm, ""), {
@@ -303,7 +303,7 @@ test("reset reloads only its own iframe", async () => {
       set: (value) => {
         const url = new URL(value);
         assert.equal(url.searchParams.get("document"), `../lessons/${exercise.id}.gid`);
-        assert.equal(url.searchParams.get("observe"), `${exercise.id}-1`);
+        assert.equal(url.searchParams.get("observe"), exercise.id === "shape" ? null : `${exercise.id}-1`);
         assert.equal(url.searchParams.get("wheel"), "page");
         resetCounts[index]++;
       },
@@ -369,13 +369,13 @@ test("achievements latch through undo, stay independent, and ignore stale or unr
   assert.equal(page.tasks[0].classes.has("completed"), false);
   send(0, success);
   assert.equal(page.tasks[0].marker.textContent, "✓");
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
   assert.equal(exercises[1].tasks[0].classes.has("completed"), false);
   send(0, values(text("Hello, world!"), number(3)));
   assert.equal(page.tasks[0].classes.has("completed"), true);
   page.listeners.click();
   assert.equal(page.tasks[0].classes.has("completed"), false);
-  assert.equal(page.progress.textContent, "0 of 2 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(0, success, { data: { type: "progred:change", channel: "values-0", state: success } });
   assert.equal(page.tasks[0].classes.has("completed"), false);
   send(0, success);
@@ -406,17 +406,17 @@ test("removal and restoration have separate checkmarks and both reset", async ()
   send(1, { ...fruit("apples", "peaches", "pears", "plums"), selection: {
     view: "document", stage: "value", path: { list: [] }, source_path: { list: [] },
   } });
-  assert.equal(page.progress.textContent, "3 of 5 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 3);
   send(1, fruit("apples", "peache", "pears", "plums"));
   send(1, fruit("apples", "", "pears", "plums"));
   send(1, fruit("apples", "pears", "plums"));
   assert.equal(removal.marker.textContent, "✓");
   assert.equal(restoration.classes.has("completed"), false);
-  assert.equal(page.progress.textContent, "4 of 5 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 4);
   send(1, fruit("apples", "peaches", "pears", "plums"));
   assert.equal(removal.marker.textContent, "✓");
   assert.equal(restoration.marker.textContent, "✓");
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
   send(1, fruit("apples", "pears", "plums"));
   assert.equal(restoration.marker.textContent, "✓");
   page.listeners.click();
@@ -424,7 +424,7 @@ test("removal and restoration have separate checkmarks and both reset", async ()
   assert.equal(removal.marker.textContent, 4);
   assert.equal(removal.classes.has("completed"), false);
   assert.equal(restoration.classes.has("completed"), false);
-  assert.equal(page.progress.textContent, "0 of 5 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(1, fruit("apples", "peaches", "pears", "plums"));
   assert.equal(restoration.classes.has("completed"), false);
 });
@@ -487,24 +487,24 @@ test("the cells checklist completes through sharing, latches, and resets indepen
   const page = exercises[2];
   const original = cells(sharedPair, { [sharedCell]: number(7) });
   send(2, original);
-  assert.equal(page.progress.textContent, "0 of 4 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(2, cells(sharedPair, { [sharedCell]: number(8) }));
   const definitions = { [sharedCell]: number(8), new: number(11) };
   send(2, cells([...sharedPair, cell("new")], definitions));
-  assert.equal(page.progress.textContent, "2 of 4 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
   const paired = [...sharedPair, cell("new"), cell("new")];
   send(2, cells(paired, definitions));
-  assert.equal(page.progress.textContent, "3 of 4 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 3);
   send(2, cells(paired, { ...definitions, new: number(12) }));
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
-  assert.equal(exercises[0].progress.textContent, "0 of 2 steps complete");
-  assert.equal(exercises[1].progress.textContent, "0 of 5 steps complete");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
+  assert.equal(exercises[0].tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.equal(exercises[1].tasks.filter(t => t.classes.has("completed")).length, 0);
   send(2, original);
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
   send(0, values(text("Changed"), number(10)));
   page.listeners.click();
-  assert.equal(page.progress.textContent, "0 of 4 steps complete");
-  assert.equal(exercises[0].progress.textContent, "All steps complete. Keep experimenting!");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
 });
 
 const grapInput = "4df73aa7-950e-afc6-5d50-d9c6ceca0721";
@@ -574,17 +574,17 @@ test("Grap progress latches through undo and resets without touching earlier les
   const { exercises, send } = await lessonPage();
   const page = exercises[3];
   send(3, grapState());
-  assert.equal(page.progress.textContent, "0 of 2 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(3, grapState(4));
-  assert.equal(page.progress.textContent, "1 of 2 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
   send(3, grapState(4, 5));
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
   send(3, grapState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
   send(0, values(text("Changed"), number(10)));
   page.listeners.click();
-  assert.equal(page.progress.textContent, "0 of 2 steps complete");
-  assert.equal(exercises[0].progress.textContent, "All steps complete. Keep experimenting!");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
 });
 
 const scaleFunction = "27b02645-cf74-e4db-930f-7ace768a0aaf";
@@ -647,19 +647,19 @@ test("function progress latches through undo and resets only its own lesson", as
   const { exercises, send } = await lessonPage();
   const page = exercises[4];
   send(4, functionsState());
-  assert.equal(page.progress.textContent, "0 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(4, functionsState({ argument: 4 }));
-  assert.equal(page.progress.textContent, "1 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
   send(4, functionsState({ argument: 4, factor: 3 }));
-  assert.equal(page.progress.textContent, "2 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
   send(4, functionsState({ argument: 4, factor: 3, name: "amount" }));
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
   send(4, functionsState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
   send(3, grapState(4, 5));
   page.listeners.click();
-  assert.equal(page.progress.textContent, "0 of 3 steps complete");
-  assert.equal(exercises[3].progress.textContent, "All steps complete. Keep experimenting!");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.ok(exercises[3].tasks.every(t => t.classes.has("completed")));
 });
 
 const drawingIds = {
@@ -715,9 +715,9 @@ test("creation steps require each value in its own slot, not merely a selection"
   assert.deepEqual([...observe(stacked([]))], ["number"]);
   const { exercises, send } = await lessonPage();
   send(7, stacked([number(42), text("hello"), { list: [number(7)] }]));
-  assert.equal(exercises[7].progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(exercises[7].tasks.every(t => t.classes.has("completed")));
   exercises[7].listeners.click();
-  assert.equal(exercises[7].progress.textContent, "0 of 3 steps complete");
+  assert.equal(exercises[7].tasks.filter(t => t.classes.has("completed")).length, 0);
 });
 
 test("opening scene checks one tree's height, shared paint, and a source occurrence", async () => {
@@ -795,17 +795,17 @@ test("drawing progress latches through undo and resets independently", async () 
   const { exercises, send } = await lessonPage();
   const page = exercises[5];
   send(5, drawingState());
-  assert.equal(page.progress.textContent, "0 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   send(5, drawingState({ x: 80 }));
-  assert.equal(page.progress.textContent, "1 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
   send(5, drawingState({ x: 80, radius: 36 }));
-  assert.equal(page.progress.textContent, "2 of 3 steps complete");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
   send(5, { ...drawingState({ x: 80, radius: 36 }), selection: drawingSource() });
-  assert.equal(page.progress.textContent, "All steps complete. Keep experimenting!");
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
   send(5, drawingState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
   send(3, grapState(4, 5));
   page.listeners.click();
-  assert.equal(page.progress.textContent, "0 of 3 steps complete");
-  assert.equal(exercises[3].progress.textContent, "All steps complete. Keep experimenting!");
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.ok(exercises[3].tasks.every(t => t.classes.has("completed")));
 });

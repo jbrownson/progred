@@ -31,16 +31,11 @@ the normal Cargo sandbox. The browser must support WebAssembly SIMD.
 One-time setup is described in [the browser host notes](../web/README.md).
 No Node or package installation is needed for the site.
 
-The header uses the standard [GitHub Buttons](https://github.com/buttons/github-buttons)
-widget with the GitHub logo and live star count, without a text label. Before
-loading, only the ordinary GitHub text link is visible. Its script is version-pinned,
-integrity-checked, and loaded asynchronously from jsDelivr with anonymous CORS
-for compatibility with the editor's isolation headers. The widget requests the
-count from GitHub's public API; if it is unavailable, no count is shown. If the
-script is blocked, the ordinary repository link remains. No account token or
-custom star-count logic is used. Both stock color variants render once; CSS shows
-only the variant matching the page theme, so switching themes does not reload
-the widget or fetch another count. Hidden controls are excluded from tab order.
+The header's GitHub link uses the standard Octicon and the site's light/dark
+palette. A small local script requests the star count once from GitHub's public
+API, without credentials, retries, or a third-party widget. Until it succeeds
+(or if it fails), the icon remains an ordinary repository link. Switching themes
+only changes CSS. The icon's MIT license is included in `public/octicons-LICENSE.txt`.
 
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
@@ -67,9 +62,11 @@ for a free port when running an additional preview alongside this one.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page opens with a small three-tree drawing: edit one height, change a shared
-color, and follow the picture back to its source. It credits Bret Victor's
-Inventing on Principle. Seven exercises then build up the ideas: editing a
+The page opens with a two-face cube machining demo: edit its pass count, depth,
+or tilt, orbit it, and scrub the tool playback. Only the function call is exposed;
+its ordinary Grap definition lives in the same document. It uses the existing
+mesh-first implicit preview, with stock removal and a model/stock switch.
+Seven exercises then build up the ideas: editing a
 text/number record, creating values from empty slots, inserting into a list,
 creating and sharing cells, live Grap calculations, editing a function and its
 calls, then drawing with a shared function.
@@ -79,13 +76,25 @@ editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
 for the values, creation, and cells exercises, and just name/text/blob for the list exercise.
 The Grap and functions exercises add Grap and absent to the numeric set.
-The forest and drawing lessons add control, color, and layout; neither loads CAD/CAM libraries.
-Creation, forest, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
+The drawing lesson adds control, color, and layout and credits Bret Victor's
+Inventing on Principle. The opening machining demo adds Fidget, controls,
+presentation, geometry, logic, list, tree, toolpath, f32, and u64.
+Creation, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
 identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
 refilling it writes the same field. Nested values use the ordinary projection
 and editing behavior. This is tutorial host configuration, not document syntax
 or a library construct. Without the option, the record displays normally.
+The opener stacks an ordinary `render` result above its editable call, without
+panes. It reuses the cube example's CAM functions for two faces, with fewer
+passes and coarser sampling. Stock subtraction uses Fidget: an asynchronous
+mesh supplies the draft, then a final-resolution implicit pass refines it with
+the ordinary progress bar. Stock mesh jobs finish and catch up to the latest
+position during dragging; implicit refinement waits for release and a current
+mesh. Paths and the moving cutter remain live ordinary meshes. The inline
+preview currently has an explicit 680 × 420 logical size.
+It has no checklist or document-observation channel. Later lessons retain
+individual checkmarks without aggregate completion counters.
 The unused libraries are not constructed or offered by the completion picker;
 list editing itself does not require Grap's list-operation library.
 Document shortcuts remain available: Cmd on Mac, Ctrl elsewhere. The browser

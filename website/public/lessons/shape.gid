@@ -1,0 +1,1319 @@
+{
+  "binders": {
+    "abs": 9f71b219018a191fab7b726732645ab1,
+    "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
+    "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
+    "angle": e44590bd0560cc22dcf6397197ce5635,
+    "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_x": 854f507d94f7d7f2dd9ac31d9f0ab28e,
+    "axis_y": 422dbc64510c54c4b40c5f566e8af3ba,
+    "axis_z": c8eb119e773d8d40985eb3468478d9ad,
+    "ball_center": 98ebb26558b012da933f7ef59de28505,
+    "ball_mill": 79c14e901b08feb6c3ae78f1edb50ab9,
+    "ball_radius": 5fdf6ba19c5bb61b6eb60ce694f38907,
+    "ball_tip": 5caa858bf636751fe7731cc680a7cd41,
+    "ball_tool": a6b46be409fd39a211789adb29716a0a,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "bindings": f6fb0062e8a14f808e416a9edece2a9d,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "bool": b2d13b64336a9e808133d0c7d5e4981e,
+    "cases": a9aadcb44755963498c743fa114f0f00,
+    "ceil": e1ddb3a620b61117d3873c163f603488,
+    "center_depth": 0006e7b3a692dacf923c343f440997b4,
+    "chamfer": c8d941b591fe167eddf75746f1715e3b,
+    "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
+    "children": e10b73d5482f96ca7d3852c0f16b49ea,
+    "closure": db39600f3ed07398c77ac120deb108a8,
+    "color": d6b4c91765541de967c02878c42d15ea,
+    "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
+    "condition": 91c786935eb5794b005582b8e7941bc2,
+    "control_depth": 65ad865257a071f944d92b08fec98ebf,
+    "control_initial": 133b05e33c166614831f01de2365f49c,
+    "control_items": 685f4fc766c54035725efdd652943c7b,
+    "control_key": 600ed992016bae93f3c9ab48a9d7d7b5,
+    "control_options": a84188d71fa018de8ad68c74da7e18e2,
+    "control_range": 870bd3c9e1c2d00a7884be4e9173ed68,
+    "controls": b9d3424b750ee1fbba4df638d995e236,
+    "coordinate": 51c725afd7f69a39972f5e910066a235,
+    "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
+    "crosshatch": 9803d3714aa5736d78f3c03c1305575e,
+    "crossing_passes": 60358199da0169a8a765ca701378007e,
+    "cube": 650c98379ab879a6b902b0bc94305103,
+    "curve": ce7ef50c2548c3a07fb35390a5570406,
+    "cut_axis": 7132cc8a45610a94bc5d8398b7023279,
+    "cutter_diameter": 900b8ac5725af07ea981455d015541bf,
+    "diagonal_groups": c799105d26d64bf6bd4e6186364960c3,
+    "direction": 18bab55f244a06a0f0d30cfeb87c4c4f,
+    "divide": b08dd4c44eeea43ab3c7593ddeedd742,
+    "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "done": b19fe726e3c2eab7a5d81cda12cf44b7,
+    "dot": 81b6551b0b5376142721b23ace40847f,
+    "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
+    "end": 3a816b0af0160bc77ba1948b122b3f29,
+    "environment": e910025c710c25c43d0a5b296378f374,
+    "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "expressions": 5fab151c006ae1487c28837f2003f43c,
+    "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "face": dfc8f0866c65bc9aa4162913a1cc446f,
+    "face_pair": 111895a6b630ea7972df149951c62b9b,
+    "face_paths": 2fd754abf2b4f15b441b8b545af455be,
+    "false": 8fcc0a2e5f26c72efd9e917a28919801,
+    "feed_direction": 4f961bef2d597db99a7f3e7c2e211181,
+    "field": 66bad5269b830181b840cf23a391b10e,
+    "floor": d007814c5f6a6c38b025605b399473d4,
+    "focus": 0548bc872965d8922fb8f93785b1f0d1,
+    "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "grap_value": 5adde9ececa6ad57c81a3b2907e75e08,
+    "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
+    "half_size": f6e416437259d6867c11eced7923bf1c,
+    "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "hypot": fe79fe9c7be4542249fdf604ddf5f5ea,
+    "initial": 24d55aeab9383d53899091958de88d21,
+    "intercept": 94d5e250a796f2d654ca4e81b56850d9,
+    "is_finite": 1ff1fcec05b669eba2314ad52fe8e8f1,
+    "item": 67bdfe4ec7d3bafc14407235618840aa,
+    "iterate": 9546343518fe44f380e6134f3f56cf37,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "length": 52ce1d9d7a07fc917126f7ce3f2e20c1,
+    "lerp": 432ad7a31ef129e353e251419e690ca1,
+    "less": ed44dbf5b4cdf5c952e1ef00f219b655,
+    "let": f4f93c70910c4d8a8eeb8e049cc64c14,
+    "line_radius": 4de64314b3008dcdf01ac387dc68e63f,
+    "line_to": e88873219d230571430941334a51600f,
+    "map_points": 923fb213d0e56383539b43b1fc807458,
+    "map_tree": 7dc1fd86e63e18ce835a5b1768f17abc,
+    "mapped_groups": 5767e045b4e37661336fdc7db5c3fe02,
+    "mapping": a33c6e235d5d94885fcb1afff59e94e5,
+    "match": b3f6a62e4926889bcfcd338025f4a6f9,
+    "max": 9dfc13c9c7e059da42ea74ef63897ce6,
+    "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
+    "max_y": c9e7268eb34af7bea225df94841c1c27,
+    "max_z": da0ed6603210813bf52a20df7bf27c7d,
+    "min": 6daed3f67cff3da30767201e5a895f1a,
+    "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
+    "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
+    "min_z": 392a615eb91c6d64df871ec95831f89a,
+    "model": dc172f7e5c9e1cd46205ab65ca867ef3,
+    "model_divide": f9b35090433ceb932fb6da18d0dcc9bf,
+    "model_max": 7082a82b3fd6dbc575aa5c85adfacc76,
+    "model_multiply": d2b341855e79890fc79bb562b109fcaf,
+    "model_subtract": 90e22494757f01a2ddf9bea409c186ae,
+    "model_sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
+    "model_x": 0192bad40c32c951e2237679084528bc,
+    "model_y": 213e54dd15ac9c9750308f35a606f56f,
+    "model_z": c93e6bb743a9d90f85f8cdea3aabf5c1,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "normal": 4b3db08982e1a337f2d43489f59b82a9,
+    "normal_length": 421de040629c87a3f37d794d999ff3ed,
+    "nx": 351e707a08f74583029720db2c3a7da0,
+    "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
+    "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
+    "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "orientation": ddb447a86cf765e6a19f3c448882659e,
+    "parameters": 6f0875ea2329b14673435cc13e2836d0,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "pi": 9cd591f37312e563f52b7374a6cef5c0,
+    "playback": 0955045e00d5d5f2139fb3ab19591c3e,
+    "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
+    "position": 199e09fd8b4d41632a90d103d278d6ea,
+    "preview_mode": 49b9fdc633d846b9deb63e8ebecbb05c,
+    "profile_tolerance": 4c3b5d5884e040ad1c226f37935ea68b,
+    "program": f23c804bf137581b76605a51366d43b7,
+    "program_items": d7fd034d03b39774532f54295eaa37ad,
+    "program_tree": 6d28b59f6d375a10d0df7f67fbb99e88,
+    "progress": 13feb828ce93822d8d72a3ef3765e2f0,
+    "pull_direction": db5cbec2ad681c4b7d8883529a107fad,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "radio": d3e46e8851004f6786bb6cf771ad1d87,
+    "require": cadca87ed76939f9c1ba3bb94495ad06,
+    "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "right_face": 5999e385d066a0034fda21e9e280f265,
+    "row_direction": 6e582a6a57d4006a0820b079cb351685,
+    "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
+    "sample_pass": 0fe4804f079850dd4a826383c4999a10,
+    "scene": d6757ca4cb992116fe31ede39530709d,
+    "segments": 1b811a6a2c0697a4665e26001f94f1b8,
+    "setup_up": 775e067bc167e68a3145d0a5f4bbc6e9,
+    "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
+    "sin": 9f62e0f56d92be74f6ae36378d889262,
+    "size": f8ddfd6772816a66d2bc9c4d11df6625,
+    "slope": add49f506cecac65e0da65e073ed9e80,
+    "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
+    "square": 6164efe43a126d79bcd252a17a9453c1,
+    "start": 4b4fb6349d2fd798e7aafca85a2deca8,
+    "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
+    "state": 3775735ae4c156144c110ba819cb1e39,
+    "step": 569e33fee165d346791e05c0e9cfea8e,
+    "stock": c7dc9217fe6809ea89ba31d458706e5c,
+    "stock_max": 607b5e9a8636c8258959709bf0c3506b,
+    "stock_min": 8ea1172ebbc67d795f0810ee5ca04d00,
+    "subject": 00dafdc01c7e014edd857e174c6c8b6f,
+    "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
+    "sum": 201af445eb7e2c270bb5ead10b781fc1,
+    "t": 97de1a6f95080533856024449272a3d1,
+    "tilt": 6ebc95bf630e6b36be576e2b22834529,
+    "to_f32": 73bd2225d2091ba893a5570e8e9bacff,
+    "tool": fbe28409798777a59a474570ec600c9a,
+    "tool_axis": c674bd24061031aff48153e907df4d59,
+    "tool_diameter": d2f5197841dcac20dee27cf4cf3d7b1a,
+    "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
+    "tooled_groups": f96d66d11f9bb078f8223787c0335f0b,
+    "top": f64ba93e56b40a2df81a65508057dbf5,
+    "tree_group": c2a9d12a23c6bbb553682d85869481b0,
+    "tree_leaf": a2ee2a23ede9372c4bc71c21b6b83838,
+    "tree_mapping": 4ad3bf56ebbd64849bf8d218f46d7591,
+    "tree_program": e4ee09094ff44e8dd415a05645f99e97,
+    "tree_program_cursor": 0b8e1e3410cfd16c0b36e18be2fcb8a3,
+    "true": 04831f9b704935059231eb111770e62e,
+    "u": c55bbadf3e61435c3aeab495079d1b19,
+    "u0": 29eae588a452e24940f5eae3d9f07c78,
+    "u1": b64d80018a2257079ca8b6b617d9a6d9,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "v": 2029830ebecc5accb54f884443f9ae07,
+    "v0": a5204d915920fe26c29525020c2eae4e,
+    "v1": d9722fd96f763e6016557b9e5cd485e7,
+    "value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "view": 047d43dfc6ba836cd75a7c840f4b9df7,
+    "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "with_controls": 987acea0ded8eadb18f6b926e945cb0a,
+    "with_tool": d7c2368e471579d060460d3546158974,
+    "x": ae582d23ec214f7e2896d91c1b6756f6,
+    "y": 92227b03eda56073f7615c0688040b16,
+    "z": ece1c34e1fe1c2c45757d82d4ed6493d,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "machine": 051d0400d4860f83d08fc26848ae463e,
+    "sample": 20e38b0d6777d6159d93a9e33527084b,
+    "render": 37cda4bdea0091349e305951564fbdf1,
+    "u64": fc77282178c2fa31b80aed2b8b6f7888,
+    "mesh_depth": 47114a01984bb53e1538906f13333f84,
+    "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
+  },
+  "cells": {
+    model: {name: "Model"},
+    progress: {name: "Playback"},
+    program_tree: {
+      name: "Preview groups",
+      params: [],
+      body: {
+        function: tree_group,
+        children: [
+          {
+            function: tooled_groups,
+            program: {
+              params: [],
+              body: {
+                function: face_paths,
+                setup_up: {
+                  function: point,
+                  y: {f64: 0x0000000000000000},
+                  x: {f64: 0x0000000000000000},
+                  z: {f64: 0x000000000000f03f},
+                },
+                orientation: top,
+              },
+            },
+            tool: ball_tool,
+          },
+          {
+            function: tooled_groups,
+            program: {
+              params: [],
+              body: {
+                function: face_paths,
+                setup_up: {
+                  function: point,
+                  y: {f64: 0x0000000000000000},
+                  x: {f64: 0x0000000000000000},
+                  z: {f64: 0x000000000000f03f},
+                },
+                orientation: right_face,
+              },
+            },
+            tool: ball_tool,
+          },
+        ],
+      },
+    },
+    across: {name: "across"},
+    axis_x: {name: "axis x"},
+    axis_y: {name: "axis y"},
+    axis_z: {name: "axis z"},
+    ball_center: {
+      name: "ball center",
+      params: [x, y, z, normal],
+      body: {
+        function: where,
+        expression: {
+          function: point,
+          y: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: {right: ny, function: multiply, left: ball_radius},
+            },
+            function: sum,
+            left: y,
+          },
+          x: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: {right: nx, function: multiply, left: ball_radius},
+            },
+            function: sum,
+            left: x,
+          },
+          z: {
+            right: {
+              right: normal_length,
+              function: divide,
+              left: {right: nz, function: multiply, left: ball_radius},
+            },
+            function: sum,
+            left: z,
+          },
+        },
+        bindings: [
+          {
+            subject: {right: {f64: 0x0000000000000040}, function: divide, left: tool_diameter},
+            bind: ball_radius,
+          },
+          {
+            subject: {function: normal, y: y, x: x, z: z},
+            pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}},
+          },
+          {
+            subject: {right: nz, function: hypot, left: {right: ny, function: hypot, left: nx}},
+            bind: normal_length,
+          },
+        ],
+      },
+    },
+    ball_radius: {name: "ball radius"},
+    ball_tip: {
+      name: "ball tip",
+      params: [x, y, z, normal, orientation, tool_axis],
+      body: {
+        function: where,
+        expression: {
+          function: point,
+          y: {right: {right: axis_y, function: multiply, left: ball_radius}, function: subtract, left: ny},
+          x: {right: {right: axis_x, function: multiply, left: ball_radius}, function: subtract, left: nx},
+          z: {right: {right: axis_z, function: multiply, left: ball_radius}, function: subtract, left: nz},
+        },
+        bindings: [
+          {
+            subject: {normal: normal, function: ball_center, y: y, x: x, z: z},
+            pattern: {y: {bind: y}, x: {bind: x}, z: {bind: z}},
+          },
+          {
+            subject: {function: orientation, y: y, x: x, z: z},
+            pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}},
+          },
+          {subject: tool_axis, pattern: {y: {bind: axis_y}, x: {bind: axis_x}, z: {bind: axis_z}}},
+          {
+            subject: {right: {f64: 0x0000000000000040}, function: divide, left: tool_diameter},
+            bind: ball_radius,
+          },
+        ],
+      },
+    },
+    ball_tool: {
+      name: "ball tool",
+      grap_value: {tool_length: {f64: 0x000000000000e03f}, function: ball_mill, cutter_diameter: tool_diameter},
+    },
+    center_depth: {name: "center depth"},
+    chamfer: {name: "chamfer"},
+    chamfer_pair: {name: "chamfer pair"},
+    chamfer_strip: {name: "chamfer strip"},
+    compensation: {name: "compensation"},
+    control_depth: {name: "depth"},
+    coordinate: {name: "coordinate"},
+    crosshatch: {
+      name: "crosshatch",
+      params: [face, orientation, setup_up, compensation],
+      body: {
+        function: tree_group,
+        children: [
+          {
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {f64: 0x000000000000f03f},
+            orientation: orientation,
+            face: face,
+          },
+          {
+            compensation: compensation,
+            function: crossing_passes,
+            setup_up: setup_up,
+            slope: {f64: 0x000000000000f0bf},
+            orientation: orientation,
+            face: face,
+          },
+        ],
+      },
+    },
+    crossing_passes: {
+      name: "crossing passes",
+      params: [orientation, slope, setup_up, face, compensation],
+      body: {
+        function: where,
+        expression: {
+          function: mapped_groups,
+          mapping: {function: compensation, tool_axis: tool_axis},
+          program: {
+            params: [],
+            body: {
+              function: mapped_groups,
+              mapping: face,
+              program: {
+                params: [],
+                body: {
+                  function: mapped_groups,
+                  mapping: {
+                    params: [x, y, z],
+                    body: {
+                      function: point,
+                      y: {
+                        right: {right: y, function: multiply, left: slope},
+                        function: sum,
+                        left: {
+                          right: {f64: 0x0000000000000040},
+                          function: divide,
+                          left: {right: slope, function: subtract, left: {f64: 0x000000000000f03f}},
+                        },
+                      },
+                      x: x,
+                      z: z,
+                    },
+                  },
+                  program: {
+                    params: [],
+                    body: {
+                      feed_direction: direction,
+                      row_direction: {right: direction, function: multiply, left: slope},
+                      function: diagonal_groups,
+                      spacing: {f64: 0xb81e85eb51b8be3f},
+                      rows: rows,
+                      tool_axis: tool_axis,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        bindings: [
+          {
+            subject: {function: pull_direction, setup_up: setup_up, slope: slope, orientation: orientation},
+            bind: direction,
+          },
+          {
+            subject: {direction: direction, function: cut_axis, slope: slope, orientation: orientation},
+            bind: tool_axis,
+          },
+        ],
+      },
+    },
+    curve: {name: "curve"},
+    slope: {name: "diagonal direction"},
+    diagonal_groups: {
+      name: "diagonal line groups",
+      params: [rows, spacing, tool_axis, feed_direction, row_direction],
+      body: {
+        expressions: [
+          {function: require, condition: {operand: rows, function: is_finite}},
+          {
+            function: require,
+            condition: {right: {operand: rows, function: floor}, function: equal, left: rows},
+          },
+          {function: require, condition: {right: rows, function: less, left: {f64: 0x000000000000f0bf}}},
+          {function: require, condition: {operand: spacing, function: is_finite}},
+          {function: require, condition: {right: spacing, function: less, left: {f64: 0x0000000000000000}}},
+          {
+            function: tree_group,
+            children: {
+              initial: {f64: 0x000000000000f03f},
+              step: {
+                params: [state],
+                body: {
+                  subject: {right: state, function: less, left: rows},
+                  function: match,
+                  cases: [
+                    {pattern: {bool: true}, expression: {absent: done}},
+                    {
+                      pattern: {bool: false},
+                      expression: {
+                        expressions: [
+                          {
+                            function: tree_leaf,
+                            value: {
+                              function: quote,
+                              expression: {
+                                closure: {
+                                  params: [],
+                                  body: {
+                                    feed_direction: feed_direction,
+                                    function: sample_pass,
+                                    spacing: spacing,
+                                    intercept: {
+                                      right: {
+                                        right: {f64: 0x000000000000f03f},
+                                        function: subtract,
+                                        left: {
+                                          right: {right: {f64: 0x000000000000f03f}, function: sum, left: rows},
+                                          function: divide,
+                                          left: {
+                                            right: state,
+                                            function: multiply,
+                                            left: {f64: 0x0000000000000040},
+                                          },
+                                        },
+                                      },
+                                      function: multiply,
+                                      left: row_direction,
+                                    },
+                                    tool_axis: tool_axis,
+                                  },
+                                  environment: {
+                                    state: {unquote: state},
+                                    feed_direction: {unquote: feed_direction},
+                                    row_direction: {unquote: row_direction},
+                                    spacing: {unquote: spacing},
+                                    rows: {unquote: rows},
+                                    tool_axis: {unquote: tool_axis},
+                                  },
+                                },
+                              },
+                            },
+                          },
+                          {right: {f64: 0x000000000000f03f}, function: sum, left: state},
+                        ],
+                        function: do,
+                      },
+                    },
+                  ],
+                },
+              },
+              function: iterate,
+            },
+          },
+        ],
+        function: do,
+      },
+    },
+    dot: {
+      name: "dot product",
+      params: [left, right],
+      body: {
+        function: where,
+        expression: {
+          right: {right: z, function: multiply, left: nz},
+          function: sum,
+          left: {
+            right: {right: y, function: multiply, left: ny},
+            function: sum,
+            left: {right: x, function: multiply, left: nx},
+          },
+        },
+        bindings: [
+          {subject: left, pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}}},
+          {subject: right, pattern: {y: {bind: y}, x: {bind: x}, z: {bind: z}}},
+        ],
+      },
+    },
+    edge_limit: {name: "edge limit"},
+    face_pair: {name: "face pair"},
+    face_paths: {
+      name: "face passes",
+      params: [orientation, setup_up],
+      body: {
+        function: where,
+        expression: {
+          compensation: {
+            params: [tool_axis],
+            body: {
+              params: [x, y, z],
+              body: {
+                normal: normal,
+                function: ball_tip,
+                y: y,
+                x: x,
+                tool_axis: tool_axis,
+                orientation: orientation,
+                z: z,
+              },
+            },
+          },
+          function: crosshatch,
+          setup_up: setup_up,
+          orientation: orientation,
+          face: face,
+        },
+        bindings: [{subject: {function: cube}, pattern: {normal: {bind: normal}, face: {bind: face}}}],
+      },
+    },
+    feed_direction: {name: "feed direction"},
+    cube: {
+      name: "fidget cube",
+      params: [],
+      body: {
+        function: where,
+        expression: {
+          function: quote,
+          expression: {
+            normal: {
+              unquote: {
+                params: [x, y, z],
+                body: {
+                  function: where,
+                  expression: {function: point, y: ny, x: nx, z: {f64: 0x000000000000f03f}},
+                  bindings: [
+                    {
+                      subject: {
+                        right: {right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
+                        function: divide,
+                        left: {right: half_face, function: sum, left: x},
+                      },
+                      bind: u,
+                    },
+                    {
+                      subject: {
+                        right: {right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
+                        function: divide,
+                        left: {right: half_face, function: sum, left: y},
+                      },
+                      bind: v,
+                    },
+                    {
+                      subject: {
+                        right: {
+                          right: {
+                            right: {right: v, function: subtract, left: {f64: 0x000000000000f03f}},
+                            function: multiply,
+                            left: v,
+                          },
+                          function: multiply,
+                          left: {
+                            right: {right: u, function: multiply, left: {f64: 0x0000000000000040}},
+                            function: subtract,
+                            left: {f64: 0x000000000000f03f},
+                          },
+                        },
+                        function: multiply,
+                        left: {
+                          right: half_face,
+                          function: divide,
+                          left: {right: control_depth, function: multiply, left: {f64: 0x0000000000000040}},
+                        },
+                      },
+                      bind: nx,
+                    },
+                    {
+                      subject: {
+                        right: {
+                          right: {
+                            right: {right: u, function: subtract, left: {f64: 0x000000000000f03f}},
+                            function: multiply,
+                            left: u,
+                          },
+                          function: multiply,
+                          left: {
+                            right: {right: v, function: multiply, left: {f64: 0x0000000000000040}},
+                            function: subtract,
+                            left: {f64: 0x000000000000f03f},
+                          },
+                        },
+                        function: multiply,
+                        left: {
+                          right: half_face,
+                          function: divide,
+                          left: {right: control_depth, function: multiply, left: {f64: 0x0000000000000040}},
+                        },
+                      },
+                      bind: ny,
+                    },
+                  ],
+                },
+              },
+            },
+            field: {
+              unquote: {
+                params: [],
+                body: {
+                  function: where,
+                  expression: {
+                    right: {
+                      right: {
+                        right: {v: {axis: model_z}, function: chamfer_pair, u: {axis: model_y}},
+                        function: model_max,
+                        left: {v: {axis: model_z}, function: chamfer_pair, u: {axis: model_x}},
+                      },
+                      function: model_max,
+                      left: {v: {axis: model_y}, function: chamfer_pair, u: {axis: model_x}},
+                    },
+                    function: model_max,
+                    left: {
+                      right: {
+                        right: {
+                          v: {axis: model_y},
+                          normal: {axis: model_z},
+                          function: face_pair,
+                          u: {axis: model_x},
+                        },
+                        function: model_max,
+                        left: {
+                          v: {axis: model_z},
+                          normal: {axis: model_y},
+                          function: face_pair,
+                          u: {axis: model_x},
+                        },
+                      },
+                      function: model_max,
+                      left: {
+                        v: {axis: model_z},
+                        normal: {axis: model_x},
+                        function: face_pair,
+                        u: {axis: model_y},
+                      },
+                    },
+                  },
+                  bindings: [
+                    {subject: {operand: half_size, function: to_f32}, bind: half_size},
+                    {subject: {operand: half_face, function: to_f32}, bind: half_face},
+                    {subject: {operand: center_depth, function: to_f32}, bind: center_depth},
+                    {subject: {operand: edge_limit, function: to_f32}, bind: edge_limit},
+                    {
+                      subject: {
+                        params: [coordinate],
+                        body: {
+                          right: {
+                            right: {
+                              operand: {right: half_face, function: model_divide, left: coordinate},
+                              function: square,
+                            },
+                            function: model_subtract,
+                            left: {f32: 0x0000803f},
+                          },
+                          function: model_max,
+                          left: {f32: 0x00000000},
+                        },
+                      },
+                      bind: shoulder,
+                    },
+                    {
+                      subject: {
+                        params: [normal, u, v],
+                        body: {
+                          right: {
+                            right: {
+                              right: {coordinate: v, function: shoulder},
+                              function: model_multiply,
+                              left: {coordinate: u, function: shoulder},
+                            },
+                            function: model_multiply,
+                            left: center_depth,
+                          },
+                          function: model_sum,
+                          left: {
+                            right: half_size,
+                            function: model_subtract,
+                            left: {operand: normal, function: abs},
+                          },
+                        },
+                      },
+                      bind: face_pair,
+                    },
+                    {
+                      subject: {
+                        params: [u, v],
+                        body: {
+                          right: edge_limit,
+                          function: model_subtract,
+                          left: {
+                            right: {operand: v, function: abs},
+                            function: model_sum,
+                            left: {operand: u, function: abs},
+                          },
+                        },
+                      },
+                      bind: chamfer_pair,
+                    },
+                  ],
+                },
+              },
+            },
+            chamfer_strip: {
+              normal: {
+                unquote: {
+                  function: point,
+                  y: {
+                    right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                    function: divide,
+                    left: {f64: 0x000000000000f03f},
+                  },
+                  x: {f64: 0x0000000000000000},
+                  z: {
+                    right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                    function: divide,
+                    left: {f64: 0x000000000000f03f},
+                  },
+                },
+              },
+              length: {unquote: size},
+              curve: {
+                unquote: {
+                  params: [t],
+                  body: {
+                    function: point,
+                    y: {
+                      right: {right: {f64: 0x0000000000000040}, function: divide, left: chamfer},
+                      function: subtract,
+                      left: half_size,
+                    },
+                    x: {
+                      right: {right: t, function: multiply, left: size},
+                      function: subtract,
+                      left: half_size,
+                    },
+                    z: {
+                      right: {right: {f64: 0x0000000000000040}, function: divide, left: chamfer},
+                      function: subtract,
+                      left: half_size,
+                    },
+                  },
+                },
+              },
+              across: {
+                unquote: {
+                  function: point,
+                  y: {
+                    right: {
+                      right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                      function: divide,
+                      left: {f64: 0x000000000000f03f},
+                    },
+                    function: subtract,
+                    left: {f64: 0x0000000000000000},
+                  },
+                  x: {f64: 0x0000000000000000},
+                  z: {
+                    right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                    function: divide,
+                    left: {f64: 0x000000000000f03f},
+                  },
+                },
+              },
+              width: {
+                unquote: {
+                  right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                  function: multiply,
+                  left: chamfer,
+                },
+              },
+            },
+            face: {
+              unquote: {
+                params: [x, y, z],
+                body: {
+                  function: point,
+                  y: {
+                    right: {right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
+                    function: multiply,
+                    left: {right: {f64: 0x000000000000e03f}, function: subtract, left: y},
+                  },
+                  x: {
+                    right: {right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
+                    function: multiply,
+                    left: {right: {f64: 0x000000000000e03f}, function: subtract, left: x},
+                  },
+                  z: {
+                    right: {
+                      right: {
+                        right: {
+                          right: {right: y, function: subtract, left: {f64: 0x000000000000f03f}},
+                          function: multiply,
+                          left: y,
+                        },
+                        function: multiply,
+                        left: {
+                          right: {right: x, function: subtract, left: {f64: 0x000000000000f03f}},
+                          function: multiply,
+                          left: x,
+                        },
+                      },
+                      function: multiply,
+                      left: {right: control_depth, function: multiply, left: {f64: 0x0000000000001040}},
+                    },
+                    function: subtract,
+                    left: half_size,
+                  },
+                },
+              },
+            },
+          },
+        },
+        bindings: [
+          {subject: {f64: 0x000000000000f03f}, bind: size},
+          {subject: {f64: 0x9a9999999999b93f}, bind: chamfer},
+          {subject: {right: {f64: 0x0000000000000040}, function: divide, left: size}, bind: half_size},
+          {subject: {right: chamfer, function: subtract, left: half_size}, bind: half_face},
+          {
+            subject: {right: {f64: 0x0000000000001040}, function: divide, left: control_depth},
+            bind: center_depth,
+          },
+          {subject: {right: chamfer, function: subtract, left: size}, bind: edge_limit},
+        ],
+      },
+    },
+    t: {name: "fraction"},
+    half_face: {name: "half face"},
+    half_size: {name: "half size"},
+    intercept: {name: "intercept"},
+    length: {name: "length"},
+    mapped_groups: {
+      name: "map path groups",
+      params: [mapping, program],
+      body: {
+        tree_mapping: {
+          params: [value],
+          body: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {function: map_points, mapping: mapping, expression: {function: item}},
+                environment: {item: {unquote: value}, mapping: {unquote: mapping}},
+              },
+            },
+          },
+        },
+        function: map_tree,
+        children: {function: program},
+      },
+    },
+    normal: {name: "normal"},
+    normal_length: {name: "normal length"},
+    nx: {name: "normal x"},
+    ny: {name: "normal y"},
+    nz: {name: "normal z"},
+    orientation: {name: "orientation"},
+    preview_mode: {name: "preview mode"},
+    program_items: {name: "program items"},
+    pull_direction: {
+      name: "pull direction",
+      params: [orientation, slope, setup_up],
+      body: {
+        subject: {
+          right: {f64: 0x0000000000000000},
+          function: less,
+          left: {
+            right: setup_up,
+            function: dot,
+            left: {function: orientation, y: slope, x: {f64: 0x000000000000f03f}, z: {f64: 0x0000000000000000}},
+          },
+        },
+        function: match,
+        cases: [
+          {pattern: {bool: true}, expression: {f64: 0x000000000000f0bf}},
+          {pattern: {bool: false}, expression: {f64: 0x000000000000f03f}},
+        ],
+      },
+    },
+    direction: {name: "pull sign"},
+    right_face: {
+      name: "right face",
+      params: [x, y, z],
+      body: {function: point, y: y, x: z, z: {right: x, function: subtract, left: {f64: 0x0000000000000000}}},
+    },
+    row_direction: {name: "row direction"},
+    rows: {name: "passes"},
+    sample_pass: {
+      name: "sample pass",
+      params: [intercept, spacing, tool_axis, feed_direction],
+      body: {
+        function: let,
+        expression: {
+          expressions: [
+            {
+              function: start_at,
+              y: {
+                end: v1,
+                start: v0,
+                amount: {
+                  right: {f64: 0x0000000000000040},
+                  function: divide,
+                  left: {right: feed_direction, function: subtract, left: {f64: 0x000000000000f03f}},
+                },
+                function: lerp,
+              },
+              x: {
+                end: u1,
+                start: u0,
+                amount: {
+                  right: {f64: 0x0000000000000040},
+                  function: divide,
+                  left: {right: feed_direction, function: subtract, left: {f64: 0x000000000000f03f}},
+                },
+                function: lerp,
+              },
+              tool_axis: tool_axis,
+              z: {f64: 0x0000000000000000},
+            },
+            {
+              initial: {f64: 0x000000000000f03f},
+              step: {
+                params: [state],
+                body: {
+                  subject: {right: state, function: less, left: segments},
+                  function: match,
+                  cases: [
+                    {pattern: {bool: true}, expression: {absent: done}},
+                    {
+                      pattern: {bool: false},
+                      expression: {
+                        expressions: [
+                          {
+                            function: let,
+                            expression: {
+                              function: line_to,
+                              y: {end: v1, start: v0, amount: t, function: lerp},
+                              x: {end: u1, start: u0, amount: t, function: lerp},
+                              z: {f64: 0x0000000000000000},
+                            },
+                            bindings: [
+                              {
+                                subject: {
+                                  right: {
+                                    right: {right: segments, function: divide, left: state},
+                                    function: multiply,
+                                    left: feed_direction,
+                                  },
+                                  function: sum,
+                                  left: {
+                                    right: {f64: 0x0000000000000040},
+                                    function: divide,
+                                    left: {
+                                      right: feed_direction,
+                                      function: subtract,
+                                      left: {f64: 0x000000000000f03f},
+                                    },
+                                  },
+                                },
+                                bind: t,
+                              },
+                            ],
+                          },
+                          {right: {f64: 0x000000000000f03f}, function: sum, left: state},
+                        ],
+                        function: do,
+                      },
+                    },
+                  ],
+                },
+              },
+              function: iterate,
+            },
+          ],
+          function: do,
+        },
+        bindings: [
+          {
+            subject: {
+              right: {f64: 0x000000000000f03f},
+              function: min,
+              left: {right: {f64: 0x0000000000000000}, function: max, left: intercept},
+            },
+            bind: u0,
+          },
+          {subject: {right: intercept, function: subtract, left: u0}, bind: v0},
+          {
+            subject: {
+              right: {f64: 0x000000000000f03f},
+              function: min,
+              left: {
+                right: {f64: 0x0000000000000000},
+                function: max,
+                left: {right: intercept, function: subtract, left: {f64: 0x000000000000f03f}},
+              },
+            },
+            bind: v1,
+          },
+          {subject: {right: intercept, function: sum, left: v1}, bind: u1},
+          {
+            subject: {
+              right: {
+                operand: {
+                  right: spacing,
+                  function: divide,
+                  left: {
+                    right: {right: v0, function: subtract, left: v1},
+                    function: hypot,
+                    left: {right: u0, function: subtract, left: u1},
+                  },
+                },
+                function: ceil,
+              },
+              function: max,
+              left: {f64: 0x000000000000f03f},
+            },
+            bind: segments,
+          },
+        ],
+      },
+    },
+    segments: {name: "segments"},
+    setup_up: {name: "setup up"},
+    shoulder: {name: "shoulder"},
+    size: {name: "size"},
+    spacing: {name: "spacing"},
+    tilt: {name: "tilt"},
+    angle: {name: "tilt (radians)"},
+    cut_axis: {
+      name: "tilted axis",
+      params: [orientation, slope, direction],
+      body: {
+        expressions: [
+          {function: require, condition: {operand: tilt, function: is_finite}},
+          {
+            function: where,
+            expression: {
+              function: orientation,
+              y: {
+                right: {
+                  right: {
+                    right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                    function: divide,
+                    left: {operand: angle, function: sin},
+                  },
+                  function: multiply,
+                  left: slope,
+                },
+                function: multiply,
+                left: direction,
+              },
+              x: {
+                right: {
+                  right: {right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
+                  function: divide,
+                  left: {operand: angle, function: sin},
+                },
+                function: multiply,
+                left: direction,
+              },
+              z: {operand: angle, function: cos},
+            },
+            bindings: [
+              {
+                subject: {
+                  right: {right: {f64: 0x0000000000806640}, function: divide, left: pi},
+                  function: multiply,
+                  left: tilt,
+                },
+                bind: angle,
+              },
+            ],
+          },
+        ],
+        function: do,
+      },
+    },
+    tool_diameter: {name: "tool diameter", f64: 0x000000000000c03f},
+    tooled_groups: {
+      name: "tool for path groups",
+      params: [tool, program],
+      body: {
+        tree_mapping: {
+          params: [value],
+          body: {
+            function: quote,
+            expression: {
+              closure: {
+                params: [],
+                body: {function: with_tool, expression: {function: item}, tool: tool},
+                environment: {item: {unquote: value}, tool: {unquote: tool}},
+              },
+            },
+          },
+        },
+        function: map_tree,
+        children: {function: program},
+      },
+    },
+    top: {name: "top", params: [x, y, z], body: {function: point, y: y, x: x, z: z}},
+    face: {name: "top face"},
+    u: {name: "u"},
+    u1: {name: "u end"},
+    u0: {name: "u start"},
+    v: {name: "v"},
+    v1: {name: "v end"},
+    v0: {name: "v start"},
+    machine: {
+      name: "machine cube",
+      params: [rows, control_depth, tilt],
+      body: {
+        params: [width, height],
+        body: {
+          view: {
+            params: [value, width, height, parameters],
+            body: {
+              function: where,
+              expression: {
+                playback: {
+                  subject: preview_mode,
+                  function: match,
+                  cases: [
+                    {
+                      pattern: model,
+                      expression: {
+                        function: quote,
+                        expression: {
+                          focus: {unquote: focus},
+                          position: {unquote: progress},
+                          profile_tolerance: {unquote: profile_tolerance},
+                          stock_max: {unquote: stock_max},
+                          stock_min: {unquote: stock_min},
+                        },
+                      },
+                    },
+                    {
+                      pattern: stock,
+                      expression: {
+                        function: quote,
+                        expression: {
+                          focus: {unquote: focus},
+                          position: {unquote: progress},
+                          profile_tolerance: {unquote: profile_tolerance},
+                          stock_max: {unquote: stock_max},
+                          stock_min: {unquote: stock_min},
+                          stock: {color: {rgb: 0xb89b6d}},
+                        },
+                      },
+                    },
+                  ],
+                },
+                min_z: {f32: 0x333333bf},
+                fuel: {f64: 0x0000000060e34641},
+                line_radius: {f64: 0x7b14ae47e17a743f},
+                function: preview_paths_refined,
+                value: {
+                  function: quote,
+                  expression: {
+                    scene: [
+                      {
+                        field: {
+                          unquote: {
+                            function: where,
+                            expression: {function: field},
+                            bindings: [{subject: {function: cube}, pattern: {field: {bind: field}}}],
+                          },
+                        },
+                        color: {rgb: 0x5f96b4},
+                      },
+                    ],
+                  },
+                },
+                max_x: {f32: 0x3333333f},
+                max_y: {f32: 0x3333333f},
+                height: height,
+                color: {rgb: 0xf0ae50},
+                max_z: {f32: 0x3333333f},
+                min_y: {f32: 0x333333bf},
+                program: program_items,
+                width: width,
+                min_x: {f32: 0x333333bf},
+                mesh_depth: {u64: 0x0600000000000000},
+              },
+              bindings: [
+                {
+                  subject: parameters,
+                  pattern: {
+                    playback: {
+                      position: {bind: progress},
+                      control_items: {bind: program_items},
+                      control_range: {bind: focus},
+                    },
+                    preview_mode: {bind: preview_mode},
+                  },
+                },
+                {subject: {f64: 0xfca9f1d24d62303f}, pattern: {bind: profile_tolerance}},
+                {
+                  subject: {
+                    y: {f64: 0x000000000000e0bf},
+                    x: {f64: 0x000000000000e0bf},
+                    z: {f64: 0x000000000000e0bf},
+                  },
+                  pattern: {bind: stock_min},
+                },
+                {
+                  subject: {
+                    y: {f64: 0x000000000000e03f},
+                    x: {f64: 0x000000000000e03f},
+                    z: {f64: 0x000000000000e03f},
+                  },
+                  pattern: {bind: stock_max},
+                },
+              ],
+            },
+          },
+          function: with_controls,
+          value: program_tree,
+          controls: {
+            params: [],
+            body: {
+              function: where,
+              expression: {
+                function: quote,
+                expression: {playback: {unquote: parameters}, preview_mode: {unquote: preview_mode}},
+              },
+              bindings: [
+                {
+                  subject: {
+                    control_initial: {function: quote, expression: stock},
+                    control_key: {function: quote, expression: preview_mode},
+                    function: radio,
+                    control_options: [{name: "Model", value: model}, {name: "Stock", value: stock}],
+                  },
+                  pattern: {bind: preview_mode},
+                },
+                {
+                  subject: {
+                    fuel: {f64: 0x00000000804f1241},
+                    control_key: {function: quote, expression: focus},
+                    function: tree_program_cursor,
+                    tree_program: program_tree,
+                    control_initial: {function: multiply, left: rows, right: {f64: 0x9a99999999990540}},
+                  },
+                  pattern: {bind: parameters},
+                },
+              ],
+            },
+          },
+          height: height,
+          width: width,
+        },
+      },
+    },
+    sample: {
+      function: machine,
+      rows: {f64: 0x0000000000002240},
+      control_depth: {f64: 0x000000000000e03f},
+      tilt: {f64: 0x0000000000804640},
+    },
+  },
+  "root": {
+    first: sample,
+    second: {render: {function: sample, width: {f64: 0x0000000000408540}, height: {f64: 0x0000000000407a40}}},
+  },
+}
