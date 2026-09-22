@@ -139,8 +139,15 @@ cancel obsolete work immediately and retain the previous result as pending; only
 the latest replacement waits until permission becomes true. Waiting occupies no
 worker and needs no timer. Permission alone never reruns a completed result.
 
+`memo_conflated` instead lets admitted work finish while retaining only the latest
+desired input. An obsolete completion updates `Pending.previous`, never `Ready`;
+the next demand submits the latest request. No intermediate input jobs accumulate.
+Closing the owner or a preparation failure still cancels work. Worker failures for
+obsolete requests do not block the replacement; current failures still propagate.
+
 Each node has at most one running job and one latest replacement. Changing the
-prepared snapshot cancels the old request and replaces any queued request. The
+prepared snapshot normally cancels the old request and replaces any queued request;
+conflated nodes finish the admitted request before submitting the replacement. The
 executor bounds concurrent jobs and requeues replacements so other nodes can run.
 The latest-job slot uses a single-element `concurrent-queue` and an atomic
 scheduled flag; reports use an unbounded concurrent queue, closed and drained
@@ -203,7 +210,12 @@ line thickness changes retain the stock mesh. Program edits invalidate observed 
 programs show their absence rather than a stale successful image. Native mesh/recording values
 never travel through Grap as opaque values.
 
-While the worker runs, tool motion and the remaining path update immediately.
+Surface jobs use `memo_conflated` on both native and web. Each admitted mesh
+finishes even while playback changes; its completion supplies an outdated preview
+and starts work for the latest desired surface, skipping intermediate requests.
+This continues during dragging, without a debounce timer or movement threshold.
+Camera changes retain the unchanged surface. Tool motion and the remaining path
+update immediately while stock work runs.
 The last stock mesh stays visible, desaturated to indicate that it is outdated.
 Before any surface is available, the tool/path remain visible with an ellipsis.
 The current result restores the original colors. Fidget's supported cancellation
@@ -295,8 +307,9 @@ the replacement. Document replacement clears the timer queue and interaction
 roots; closing a window drops them. A missing delivery recovers on the next
 natural frame, and an unexpectedly early delivery releases only its own constraint.
 
-Mesh generation, scene preparation, immediate zoom, and tool/path updates
-continue during interaction. Merely pressing or scrolling without changing
+Immediate camera rendering and tool/path updates continue during interaction.
+Replacement mesh jobs finish and catch up during dragging; scene preparation
+still waits for a current mesh, and implicit pixels wait for release. Merely pressing or scrolling without changing
 render inputs does not discard the current image or cancel valid work.
 A current implicit image then wins, including intermediate refinements. While
 it is pending, the viewport draws the available mesh synchronously using the

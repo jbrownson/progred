@@ -32,10 +32,13 @@ Fidget's CPU VM and Manifold Dual Contouring, in the supplied model-space
 bounds. There is **no mesh or image cache**, including while orbiting, zooming,
 resizing, or editing. The CAM `preview paths mesh` variant now composes a
 [dependency-tracked recording/stock/mesh graph](incremental.md), retaining valid
-geometry while camera views change. Native CAM stock construction/meshing now
-runs asynchronously; ordinary Fidget previews remain synchronous on a miss.
+geometry while camera views change. CAM stock construction/meshing runs
+asynchronously on native and the threaded web build; ordinary Fidget previews
+remain synchronous on a miss. CAM surface jobs finish and then catch up to the
+latest request during dragging, without restarting on every move. The cutter
+and remaining toolpaths keep following the playback slider immediately.
 While CAM updates, the viewport retains desaturated old stock beside the current
-tool/path. Web remains synchronous until a browser-worker executor is added.
+tool/path.
 
 The viewport emits Puri's backend-neutral `CanvasSink::draw_mesh`: shared
 geometry, an orthographic camera, and optionally a raster surface with depth.

@@ -30,6 +30,134 @@ fn observe(runtime: &Runtime, node: AsyncMemo<usize, usize>) -> Memo<(bool, Opti
 }
 
 #[test]
+fn conflated_work_finishes_and_publishes_stale_before_starting_only_the_latest() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(1usize);
+    let prepare = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let (started, receive) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let node = tasks.memo_conflated(prepare, {
+        let calls = calls.clone();
+        move |value, cancel| {
+            calls.lock().unwrap().push(value);
+            if value == 1 {
+                started.send(cancel.clone()).unwrap();
+                resumed.lock().unwrap().recv().unwrap();
+            }
+            cancel.check()?;
+            Ok(value * 10)
+        }
+    });
+    let parent = observe(&runtime, node);
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    let worker = std::thread::spawn(queue.next());
+    let cancel = receive
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    for value in 2..=5 {
+        input.set(value);
+        assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+        assert!(
+            cancel.check().is_ok(),
+            "input updates must not cancel admitted work"
+        );
+        assert_eq!(queue.len(), 0);
+    }
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    assert_eq!(
+        *runtime.read(&parent).unwrap(),
+        (true, None),
+        "publication waits for poll"
+    );
+    assert!(tasks.poll());
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, Some(10)));
+    assert_eq!(
+        queue.len(),
+        1,
+        "completion starts the latest request without further input"
+    );
+    queue.next()();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(50)));
+    assert_eq!(*calls.lock().unwrap(), vec![1, 5]);
+    assert_eq!(queue.len(), 0);
+}
+
+#[test]
+fn conflated_obsolete_failure_does_not_block_the_latest_request() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let input = runtime.input(1usize);
+    let prepare = runtime.memo({
+        let input = input.clone();
+        move |read| Ok(*input.read(read))
+    });
+    let node = tasks.memo_conflated(prepare, |value, _| {
+        if value % 2 == 1 {
+            Err(Error::Cancelled)
+        } else {
+            Ok(value)
+        }
+    });
+    let parent = observe(&runtime, node);
+    runtime.read(&parent).unwrap();
+    input.set(2);
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
+    queue.next()();
+    tasks.poll();
+    assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(2)));
+    input.set(3);
+    runtime.read(&parent).unwrap();
+    queue.next()();
+    tasks.poll();
+    assert_eq!(
+        runtime.read(&parent),
+        Err(Error::Cancelled),
+        "current failures still propagate"
+    );
+}
+
+#[test]
+fn conflated_work_is_still_cancelled_when_its_owner_closes() {
+    let runtime = Runtime::default();
+    let queue = Queue::default();
+    let tasks = Tasks::new(&runtime, queue.executor(), || {});
+    let (started, receive) = mpsc::channel();
+    let (resume, resumed) = mpsc::channel();
+    let resumed = Mutex::new(resumed);
+    let node = tasks.memo_conflated(runtime.memo(|_| Ok(1usize)), move |value, cancel| {
+        started.send(cancel.clone()).unwrap();
+        resumed.lock().unwrap().recv().unwrap();
+        cancel.check()?;
+        Ok(value)
+    });
+    let parent = observe(&runtime, node);
+    runtime.read(&parent).unwrap();
+    let worker = std::thread::spawn(queue.next());
+    let cancel = receive
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    drop(tasks);
+    assert_eq!(cancel.check(), Err(Error::Cancelled));
+    resume.send(()).unwrap();
+    worker.join().unwrap();
+    assert_eq!(runtime.read(&parent), Err(Error::Cancelled));
+    assert_eq!(queue.len(), 0);
+}
+
+#[test]
 fn start_condition_defers_latest_request_but_preserves_current_results() {
     let runtime = Runtime::default();
     let queue = Queue::default();

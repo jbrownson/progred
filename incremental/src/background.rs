@@ -131,6 +131,12 @@ pub struct Tasks {
     nodes: RefCell<Vec<Weak<dyn BackgroundNode>>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Supersession {
+    Cancel,
+    Finish,
+}
+
 impl Tasks {
     pub fn new(
         runtime: &Runtime,
@@ -179,6 +185,26 @@ impl Tasks {
         self.memo_progressive(prepare, move |input, cancel, _publish| {
             compute(input, cancel)
         })
+    }
+
+    /// Finish admitted work instead of cancelling it on each input change.
+    /// Keep only the latest desired input; after completion, a demand starts
+    /// that replacement. Obsolete results are exposed only as Pending.previous.
+    pub fn memo_conflated<I: Clone + Send + 'static, T: Send + Sync + 'static>(
+        &self,
+        prepare: Memo<I>,
+        compute: impl Fn(I, &Cancellation) -> Result<T, Error> + Send + Sync + 'static,
+    ) -> AsyncMemo<I, T> {
+        let prepare = self.runtime.memo_by(
+            move |read| Ok(Some((*prepare.read(read)?).clone())),
+            |_, _| false,
+        );
+        self.memo_with_policy(
+            prepare,
+            None,
+            Supersession::Finish,
+            move |input, cancel, _, _| compute(input, cancel),
+        )
     }
 
     /// A worker may publish intermediate values before returning its final one.
@@ -261,10 +287,29 @@ impl Tasks {
         + Sync
         + 'static,
     ) -> AsyncMemo<I, T> {
+        self.memo_with_policy(prepare, permitted, Supersession::Cancel, compute)
+    }
+
+    fn memo_with_policy<I: Clone + Send + 'static, T: Send + Sync + 'static>(
+        &self,
+        prepare: Memo<Option<I>>,
+        permitted: Option<Memo<bool>>,
+        supersession: Supersession,
+        compute: impl Fn(
+            I,
+            &Cancellation,
+            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
+            &(dyn Fn(Progress) + Sync),
+        ) -> Result<T, Error>
+        + Send
+        + Sync
+        + 'static,
+    ) -> AsyncMemo<I, T> {
         let node = Rc::new(AsyncNode {
             runtime: self.runtime.clone(),
             prepare,
             permitted,
+            supersession,
             compute: Arc::new(compute),
             wake: self.wake.clone(),
             slot: Arc::new(Slot {
@@ -275,6 +320,7 @@ impl Tasks {
             reports: Arc::new(ConcurrentQueue::unbounded()),
             state: RefCell::new(State {
                 input: None,
+                running_input: None,
                 awaiting_start: false,
                 generation: 0,
                 cancel: Cancellation::default(),
@@ -324,6 +370,7 @@ type Worker<I, T> = dyn Fn(
 struct State<I, T> {
     // Outer None: never prepared. Some(None): observed waiting preparation.
     input: Option<Rc<Option<I>>>,
+    running_input: Option<Rc<Option<I>>>,
     awaiting_start: bool,
     generation: u64,
     cancel: Cancellation,
@@ -341,6 +388,7 @@ struct AsyncNode<I, T> {
     runtime: Runtime,
     prepare: Memo<Option<I>>,
     permitted: Option<Memo<bool>>,
+    supersession: Supersession,
     compute: Arc<Worker<I, T>>,
     wake: Arc<dyn Fn() + Send + Sync>,
     slot: Arc<Slot>,
@@ -405,7 +453,14 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                 let mut state = self.state.borrow_mut();
                 state.cancel.cancel();
                 state.input = None;
+                state.running_input = None;
                 state.awaiting_start = false;
+                state.generation = state
+                    .generation
+                    .checked_add(1)
+                    .expect("request generation exhausted");
+                state.pending_report = None;
+                state.pending_progress = None;
                 self.slot.clear();
                 return Err(error);
             }
@@ -422,16 +477,22 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             .as_ref()
             .is_none_or(|old| !Rc::ptr_eq(old, &input));
         if new_request {
-            state.cancel.cancel();
-            state.cancel = Cancellation::default();
-            state.generation = state
-                .generation
-                .checked_add(1)
-                .expect("request generation exhausted");
+            let keep_running = self.supersession == Supersession::Finish
+                && input.is_some()
+                && state.running_input.is_some();
+            if !keep_running {
+                state.cancel.cancel();
+                state.cancel = Cancellation::default();
+                state.generation = state
+                    .generation
+                    .checked_add(1)
+                    .expect("request generation exhausted");
+                state.running_input = None;
+                state.pending_report = None;
+                state.pending_progress = None;
+            }
             state.input = Some(input.clone());
             state.awaiting_start = input.is_some();
-            state.pending_report = None;
-            state.pending_progress = None;
             state.progress = None;
             state.failure = None;
             let previous = match &*state.value {
@@ -444,8 +505,15 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                 self.slot.clear();
             }
         }
-        let submit = state.awaiting_start && permitted;
+        drop(state);
+        if new_request {
+            self.collect();
+        }
+        let mut state = self.state.borrow_mut();
+        Self::apply_reports(&mut state, read.revision);
+        let submit = state.awaiting_start && permitted && state.running_input.is_none();
         if submit {
+            state.running_input = Some(input.clone());
             let input = input.as_ref().clone().expect("prepared work is waiting");
             state.awaiting_start = false;
             let generation = state.generation;
@@ -485,41 +553,64 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
         drop(state);
         // A newly submitted job may publish inline before its first read.
         // Later reports enter only through poll, at a new graph revision.
-        if new_request || submit {
+        if submit {
             self.collect();
         }
         let mut state = self.state.borrow_mut();
+        Self::apply_reports(&mut state, read.revision);
+        match state.failure {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
+    fn apply_reports(state: &mut State<I, T>, revision: u64) {
         if let Some(progress) = state.pending_progress.take() {
-            state.progress = Some(progress);
-            state.changed = read.revision;
+            state.progress = (!state.awaiting_start).then_some(progress);
+            state.changed = revision;
         }
         if let Some((generation, report)) = state.pending_report.take() {
             if generation == state.generation {
-                state.changed = read.revision;
+                state.changed = revision;
+                let current = state
+                    .running_input
+                    .as_ref()
+                    .zip(state.input.as_ref())
+                    .is_some_and(|(running, wanted)| Rc::ptr_eq(running, wanted));
                 match report {
                     Report::WorkProgress(_) => unreachable!("collected separately from values"),
                     Report::Value(value) => {
-                        state.value = Rc::new(Availability::Refining(Arc::new(value)))
+                        state.value = Rc::new(if current {
+                            Availability::Refining(Arc::new(value))
+                        } else {
+                            Availability::Pending {
+                                previous: Some(Arc::new(value)),
+                            }
+                        })
                     }
                     Report::Finished(completed) => {
                         state.progress = None;
+                        state.running_input = None;
                         let completed = completed.unwrap_or_else(|panic| {
                             state.input = None;
                             std::panic::resume_unwind(panic)
                         });
                         match completed {
                             Ok(value) => {
-                                state.value = Rc::new(Availability::Ready(Arc::new(value)))
+                                state.value = Rc::new(if current {
+                                    Availability::Ready(Arc::new(value))
+                                } else {
+                                    Availability::Pending {
+                                        previous: Some(Arc::new(value)),
+                                    }
+                                })
                             }
-                            Err(error) => state.failure = Some(error),
+                            Err(error) if current => state.failure = Some(error),
+                            Err(_) => {}
                         }
                     }
                 }
             }
-        }
-        match state.failure {
-            Some(error) => Err(error),
-            None => Ok(()),
         }
     }
 }

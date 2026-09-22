@@ -280,7 +280,7 @@ fn wheel_zoom_waits_for_quiet_and_reuses_the_mesh_and_prepared_scene() {
 }
 
 #[test]
-fn held_playback_still_updates_mesh_and_prepares_the_new_scene() {
+fn held_playback_conflates_stock_updates_but_defers_implicit_until_release() {
     let f = Fixture::new();
     f.read();
     f.finish(0);
@@ -290,20 +290,35 @@ fn held_playback_still_updates_mesh_and_prepares_the_new_scene() {
     f.read();
 
     f.computations.pointer_pressed.set(true);
-    f.graph.settings.set(settings(0.0, 0.75));
+    for progress in [0.4, 0.5, 0.75] {
+        f.graph.settings.set(settings(0.0, progress));
+        let mesh = f.mesh();
+        let mesh = mesh.as_ref().as_ref().unwrap();
+        assert!(mesh.surface_pending);
+        assert!(!mesh.awaiting_first_surface);
+        assert_eq!(
+            f.queue.lock().unwrap().len(),
+            1,
+            "one admitted stock job, no implicit jobs during drag"
+        );
+    }
+    f.finish(0); // Finish the first dragged position, then skip to the latest.
     assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
     assert_eq!(f.queue.lock().unwrap().len(), 1);
-    f.finish(0);
-    let mesh = f.mesh();
-    assert!(!mesh.as_ref().as_ref().unwrap().surface_pending);
-    f.finish(0); // Scene preparation may finish while refinement is deferred.
-    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
-    assert!(f.queue.lock().unwrap().is_empty());
+    f.finish(0); // The latest stock mesh is still the prerequisite for implicit.
+    assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    f.finish(0); // Preparation may finish while the pointer remains held.
+    f.mesh();
+    assert!(
+        f.queue.lock().unwrap().is_empty(),
+        "implicit still waits for release"
+    );
     f.computations.pointer_pressed.set(false);
     f.mesh();
     assert_eq!(f.queue.lock().unwrap().len(), 1);
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    assert_eq!(f.runs.get(), 1, "dragging reuses the recorded program");
 }
 
 #[test]
@@ -388,7 +403,14 @@ fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
     assert_eq!(
         f.queue.lock().unwrap().len(),
         1,
-        "only the latest mesh is queued"
+        "only one mesh is admitted"
+    );
+    f.finish(0);
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "latest mesh, not implicit work"
     );
     f.finish(0);
     let current = f.mesh();

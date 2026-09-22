@@ -117,7 +117,9 @@ impl Layers {
                 }))
             }
         });
-        let surface = tasks.memo(prepared, |prepared, cancel| {
+        // Paths and cutter redraw immediately. Let each admitted surface finish,
+        // then catch up to the latest inputs, without a queue of drag samples.
+        let surface = tasks.memo_conflated(prepared, |prepared, cancel| {
             let request = match prepared {
                 Ok(request) => request,
                 Err(failure) => return Ok(Err(failure)),
@@ -368,6 +370,18 @@ mod tests {
         let old_geometry = &old_surface.as_ref().as_ref().unwrap();
         assert!(!old_geometry.vertices.is_empty());
 
+        assert!(Rc::ptr_eq(&ready, &runtime.read(&combined).unwrap()));
+        for progress in [0.4, 0.5, 0.6] {
+            props.playback = Some(playback(progress, 0.001));
+            settings.set(props.clone());
+            let dragging = runtime.read(&combined).unwrap();
+            assert!(dragging.as_ref().as_ref().unwrap().surface_pending);
+            assert_eq!(
+                queue.lock().unwrap().len(),
+                1,
+                "dragging keeps one admitted stock job"
+            );
+        }
         props.playback = Some(playback(0.75, 0.001));
         settings.set(props);
         let waiting = runtime.read(&combined).unwrap();
@@ -406,7 +420,23 @@ mod tests {
                 .zip(&old_geometry.vertices)
                 .all(|(a, b)| { a.position == b.position && a.color == updating_color(b.color) })
         );
-        assert_eq!(queue.lock().unwrap().len(), 1);
+        next()(); // The first dragged position finishes even though it is obsolete.
+        tasks.poll();
+        let catching_up = runtime.read(&combined).unwrap();
+        assert!(catching_up.as_ref().as_ref().unwrap().surface_pending);
+        let intermediate = runtime.read(&surface).unwrap();
+        let Availability::Pending {
+            previous: Some(intermediate),
+        } = &**intermediate
+        else {
+            panic!("the finished mesh must remain visibly stale")
+        };
+        assert!(!Arc::ptr_eq(old_surface, intermediate));
+        assert_eq!(
+            queue.lock().unwrap().len(),
+            1,
+            "completion submits only the latest position"
+        );
         next()();
         tasks.poll();
         let complete = runtime.read(&combined).unwrap();
