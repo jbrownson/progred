@@ -5,7 +5,9 @@
 //! an absent result exposes its source. An explicit viewport function also
 //! receives the pane's assigned logical width and height.
 
-use crate::libraries::{Library, absent, f64, layout, name};
+#[cfg(test)]
+use crate::libraries::absent;
+use crate::libraries::{Library, f64, layout, name};
 use gid::{Cells, Step};
 
 mod outline;
@@ -48,20 +50,30 @@ pub fn viewport_display(
     if width <= 0.0 || height <= 0.0 {
         return Some(crate::display::row(0.0, []));
     }
-    let result = viewport_output(input.value?, input.env, width, height)?;
-    Some(if absent::is_absent(&result) {
+    let result = viewport_runtime_output(input.value?, input.env, width, height)?;
+    Some(if result.is_absent() {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
     })
 }
 
+#[cfg(test)]
 pub(crate) fn viewport_output(
     declaration: &gid::Value,
     env: &dyn crate::display::Env,
     width: f64,
     height: f64,
 ) -> Option<gid::Value> {
+    viewport_runtime_output(declaration, env, width, height).map(::grap::RuntimeValue::into_value)
+}
+
+pub(crate) fn viewport_runtime_output(
+    declaration: &gid::Value,
+    env: &dyn crate::display::Env,
+    width: f64,
+    height: f64,
+) -> Option<::grap::RuntimeValue> {
     let (value, function) = viewport(declaration)?;
     let fields = declaration.as_record()?;
     let value = match fields.get(&vocabulary::PREPARE) {
@@ -74,20 +86,24 @@ pub(crate) fn viewport_output(
                 }
                 None => ::grap::DEFAULT_FUEL,
             };
-            let prepared = env.apply_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
-            if absent::is_absent(&prepared) {
+            let prepared =
+                env.apply_runtime_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
+            if prepared.is_absent() {
                 return Some(prepared);
             }
             prepared
         }
-        None => value.clone(),
+        None => value.into(),
     };
-    Some(env.apply(
+    Some(env.apply_expression_runtime(
         function,
         &[
             (vocabulary::VALUE, value),
-            (layout::vocabulary::WIDTH, f64::value(width)),
-            (layout::vocabulary::HEIGHT, f64::value(height)),
+            (layout::vocabulary::WIDTH, ::grap::RuntimeValue::f64(width)),
+            (
+                layout::vocabulary::HEIGHT,
+                ::grap::RuntimeValue::f64(height),
+            ),
         ],
     ))
 }
@@ -100,11 +116,24 @@ pub fn display(
     let evaluated = expression.as_record().and_then(|fields| {
         let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
         let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
-        (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64)
-            .then(|| input.env.evaluate_memo(expression, fuel as usize))
+        (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64).then(|| {
+            input.env.evaluate_runtime_memo(
+                expression,
+                fuel as usize,
+                &[
+                    Step::Key(vocabulary::RENDER),
+                    Step::Key(::grap::vocabulary::EXPRESSION),
+                ],
+            )
+        })
     });
-    let result =
-        evaluated.unwrap_or_else(|| input.env.evaluate_memo(expression, ::grap::DEFAULT_FUEL));
+    let result = evaluated.unwrap_or_else(|| {
+        input.env.evaluate_runtime_memo(
+            expression,
+            ::grap::DEFAULT_FUEL,
+            &[Step::Key(vocabulary::RENDER)],
+        )
+    });
     Some(at([Step::Key(vocabulary::RESULT)], &result))
 }
 
@@ -118,8 +147,8 @@ pub fn projected_display(
     let function = fields.get(&vocabulary::PROJECTION)?;
     let result = input
         .env
-        .apply(function, &[(vocabulary::VALUE, value.clone())]);
-    Some(if absent::is_absent(&result) {
+        .apply_expression_runtime(function, &[(vocabulary::VALUE, value.into())]);
+    Some(if result.is_absent() {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)

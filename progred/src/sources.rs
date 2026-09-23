@@ -20,6 +20,72 @@ pub struct Sources<'a> {
 }
 
 impl crate::display::Env for Sources<'_> {
+    fn apply_expression_runtime(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, grap::RuntimeValue)],
+    ) -> grap::RuntimeValue {
+        grap::apply_expression(
+            function,
+            arguments.iter().cloned(),
+            self,
+            grap::DEFAULT_FUEL,
+        )
+        .result
+    }
+    fn evaluate_runtime(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        _steps: &[Step],
+    ) -> grap::RuntimeValue {
+        grap::evaluate(expression, self, fuel).result
+    }
+    fn evaluate_runtime_memo(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        steps: &[Step],
+    ) -> grap::RuntimeValue {
+        self.evaluate_runtime(expression, fuel, steps)
+    }
+    fn apply_runtime_scoped(
+        &self,
+        function: &grap::RuntimeValue,
+        arguments: &[(CellId, grap::RuntimeValue)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation {
+        match scope {
+            Some(scope) => grap::apply_scoped(
+                function,
+                arguments.iter().cloned(),
+                self,
+                scope,
+                grap::DEFAULT_FUEL,
+            ),
+            None => grap::apply(
+                function,
+                arguments.iter().cloned(),
+                self,
+                grap::DEFAULT_FUEL,
+            ),
+        }
+    }
+    fn apply_runtime_memo(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        fuel: usize,
+    ) -> grap::RuntimeValue {
+        grap::apply_expression(
+            function,
+            arguments.iter().map(|(k, v)| (*k, v.into())),
+            self,
+            fuel,
+        )
+        .result
+    }
+
     fn apply_scoped(
         &self,
         function: &Value,
@@ -303,9 +369,7 @@ mod tests {
                     origins
                         .borrow_mut()
                         .push(context.source_origin(&call).unwrap());
-                    Ok(context
-                        .value(&context.field(call, result).unwrap())
-                        .clone())
+                    Ok(context.value(&context.field(call, result).unwrap()).clone())
                 };
                 let overlay = grap::ForeignOverlay::from_value(&functions, &observe);
                 let evaluation = if host_apply {

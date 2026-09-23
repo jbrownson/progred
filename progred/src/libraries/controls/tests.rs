@@ -1,4 +1,28 @@
 use super::*;
+
+fn controls_output(
+    controls: &Value,
+    state: Option<&Value>,
+    width: f64,
+    frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
+) -> Result<(Vec<Widget>, Value), Value> {
+    let callable = ::grap::evaluate(controls, &frame.inputs.sources, ::grap::DEFAULT_FUEL).result;
+    super::controls_output(&callable, state, width, frame)
+        .map(|(widgets, value)| (widgets, value.into_value()))
+}
+
+fn apply_change(
+    editor: &mut crate::Editor,
+    scope: &crate::editing::Scope,
+    root: &Root,
+    path: &[gid::Step],
+    handler: &Value,
+    value: Value,
+) {
+    let callable = ::grap::evaluate(handler, &editor.sources(), ::grap::DEFAULT_FUEL).result;
+    super::apply_change(editor, scope, root, path, &callable, value)
+}
+
 use crate::display::test_support::{ResolveForDispatch, with_context};
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
@@ -58,12 +82,12 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut puri::text::TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
-        value: Value,
+        value: ::grap::RuntimeValue,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
-        let height = f64::read(value.as_record().unwrap().get(&HEIGHT).unwrap()).unwrap();
-        self.0.replace(Some(value));
+        let height = value.field(HEIGHT).unwrap().as_f64().unwrap();
+        self.0.replace(Some(value.into_value()));
         ChoiceLayout::fixed(widget::paint(
             Extent {
                 width: 200.0,
@@ -443,7 +467,7 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
     let control = slider_widget(
         Slider::new(0.0, 1.0, 0.2).unwrap(),
         180.0,
-        update_function(),
+        update_function().into(),
     );
     let measured = with_context(&Output::default(), |context| control(context));
     let height = measured.extent.height();
@@ -737,7 +761,9 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             path: context.path,
             value: context.value,
         };
-        display(&input).unwrap().measure(&mut context, &mut build)
+        display(&input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref()))
+            .unwrap()
+            .measure(&mut context, &mut build)
     });
     let measured = resolve_choices(build.finish(graph), 200.0, false);
     assert_eq!(measured.extent.height(), 300.0);

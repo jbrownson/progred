@@ -114,29 +114,29 @@ from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
 
-Public evaluation/application APIs now return owned `RuntimeValue`; code and
+Public evaluation/application APIs return owned `RuntimeValue`; code and
 lexical environments have shared ownership, while execution caches and host
-capabilities remain evaluation-local. Explicit GID adapters still serve the
-editor's projection, presentation, controls, and drawing handoffs. Migrate
-that chain so retained callbacks keep their lowered code and source locations.
-Input-relative origins also need their original input occurrence at those
-handoffs, not rebasing onto a later drawing program. Do not attach origins to
-serialized GID or preserve a creator's dynamic stack as a caller.
+capabilities remain evaluation-local. The projection/presentation/controls/drawing
+chain and retained event handlers now preserve runtime callbacks. Inline origins
+are anchored to their original occurrence. The
+`website_forest_hover_finds_the_available_call` regression is enabled and passes.
 
-The pending `website_forest_hover_finds_the_available_call` regression records
-the remaining end-to-end gap and is explicitly ignored until that migration.
+Data-oriented projections and native functions still have explicit GID adapters;
+these can materialize runtime containers even when a later runtime-aware
+projection ultimately handles them. Reducing that conversion work is a remaining
+optimization, not a reason to put origins in serialized GID. Do not preserve a
+creator's dynamic stack as a caller.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.
 
-After that migration, repeat the optimized `profile_program_tree_construction`
-and `cam_controls_profile_loop` canaries against commit `15985033` and this
-intermediate implementation. The 2026-09-23 local comparison measured warm
-uncached construction at 7.6–8.5 ms before versus 9.2–10.8 ms now, and median
-controls-only frames at about 0.31 ms versus 0.33–0.34 ms. Exclude compilation
-and isolate build outputs for each source tree: sharing a target directory
-between archived copies reused incompatible artifacts. These are not Fidget
-rendering or browser measurements, and recovering that overhead is not assured.
+The [2026-09-23 comparison](performance.md#runtime-callback-handoffs--2026-09-23)
+covers the pre-ownership baseline, the ownership checkpoint, and the consumer
+migration. Keeping runtime callbacks fixes source continuity but has not recovered
+the measured ownership overhead. Profile remaining conversions before broadening
+the migration. Exclude compilation and isolate build outputs for each source
+tree: sharing a target directory between archived copies reused incompatible
+artifacts.
 
 `with controls` still returns a declaration interpreted by its partial. Direct
 widget emission remains separate, deferred work. Profile uncached construction

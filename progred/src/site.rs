@@ -40,27 +40,45 @@ impl PendingChanges {
 }
 
 pub fn grap(
-    function: Value,
+    function: impl Into<grap::RuntimeValue>,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)> + Clone,
 ) -> impl Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool {
-    move |sources, path, staged| {
-        if let Some(next) = evaluate(
-            &function,
-            arguments.clone(),
-            path,
-            staged.annotation.clone(),
-            staged.selection.clone(),
-            &sources.sources,
-            grap::DEFAULT_FUEL,
-        ) {
+    let function = function.into();
+    handler(move |sources, path, annotation, selection| {
+        evaluate_with(path, annotation, selection, |overlay| {
+            grap::apply_expression_scoped(
+                &function,
+                arguments.clone().into_iter().map(|(k, v)| (k, v.into())),
+                sources,
+                overlay,
+                grap::DEFAULT_FUEL,
+            )
+        })
+    })
+}
+
+fn handler(
+    evaluate: impl Fn(
+        &Sources<'_>,
+        &[gid::Step],
+        Option<Value>,
+        Option<(Path, Value)>,
+    ) -> Option<PendingChanges>,
+) -> impl Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool {
+    move |sources, path, staged| match evaluate(
+        &sources.sources,
+        path,
+        staged.annotation.clone(),
+        staged.selection.clone(),
+    ) {
+        Some(next) => {
             staged.annotation = next.annotation;
             staged.annotation_changed |= next.annotation_changed;
             staged.selection = next.selection;
             staged.selection_changed |= next.selection_changed;
             true
-        } else {
-            false
         }
+        None => false,
     }
 }
 
@@ -80,7 +98,7 @@ pub(crate) fn apply_scoped_event(
     scope: crate::editing::Scope,
     root: Root,
     path: Path,
-    function: Value,
+    function: grap::RuntimeValue,
     event: Value,
 ) -> bool {
     let current = app
@@ -162,7 +180,8 @@ pub(crate) fn install_scoped(
     }
 }
 
-pub(crate) fn evaluate(
+#[cfg(test)]
+fn evaluate(
     function: &Value,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)>,
     path: &[gid::Step],
@@ -170,6 +189,22 @@ pub(crate) fn evaluate(
     selection: Option<(Path, Value)>,
     sources: &Sources<'_>,
     fuel: usize,
+) -> Option<PendingChanges> {
+    evaluate_with(path, annotation, selection, |overlay| {
+        let result = grap::apply_value_scoped(function, arguments, sources, overlay, fuel);
+        grap::Evaluation {
+            result: result.result.into(),
+            remaining_fuel: result.remaining_fuel,
+            completed: result.completed,
+        }
+    })
+}
+
+fn evaluate_with(
+    path: &[gid::Step],
+    annotation: Option<Value>,
+    selection: Option<(Path, Value)>,
+    apply: impl FnOnce(&grap::ForeignOverlay<'_>) -> grap::Evaluation,
 ) -> Option<PendingChanges> {
     let staged = RefCell::new(PendingChanges {
         annotation,
@@ -185,9 +220,9 @@ pub(crate) fn evaluate(
             event_foreign(function, context, call, environment, path, &staged)
         };
         let overlay = grap::ForeignOverlay::from_value(&EVENT_FUNCTIONS, &call);
-        grap::apply_value_scoped(function, arguments, sources, &overlay, fuel)
+        apply(&overlay)
     };
-    (evaluation.completed && !absent::declines(&evaluation.result)).then(|| staged.into_inner())
+    (evaluation.completed && !evaluation.result.declines()).then(|| staged.into_inner())
 }
 
 fn event_foreign(

@@ -139,10 +139,7 @@ impl std::fmt::Debug for Expression {
 
 impl Expression {
     fn value(&self) -> &Value {
-        self.0.source.get_or_init(|| match &self.0.form {
-            Form::Ready(value) => value.to_value(),
-            _ => unreachable!("source expressions retain their original GID value"),
-        })
+        self.0.source.as_value()
     }
 }
 
@@ -152,6 +149,7 @@ impl Expression {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceOrigin {
     Input(Vec<gid::Step>),
+    Stored(Vec<gid::Step>),
     Cell {
         cell: CellId,
         source: Resolution,
@@ -298,7 +296,7 @@ pub struct Halt(Value);
 /// containers retain lowered children. No creating Context or host is retained.
 /// [`Self::into_value`] explicitly materializes the equivalent GID data.
 #[derive(Clone)]
-pub struct RuntimeValue(RuntimeValueKind);
+pub struct RuntimeValue(RuntimeValueKind, OnceCell<Rc<Value>>);
 
 pub struct RuntimeListValues<'a> {
     value: &'a RuntimeValue,
@@ -368,12 +366,56 @@ struct Parameter {
 }
 
 impl RuntimeValue {
+    /// Conservative equality for memo reuse, including retained code identity.
+    pub fn same_result(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (RuntimeValueKind::Data(a), RuntimeValueKind::Data(b)) => a == b,
+            (RuntimeValueKind::F64(a), RuntimeValueKind::F64(b)) => {
+                a.number.to_bits() == b.number.to_bits() && a.original == b.original
+            }
+            (RuntimeValueKind::Foreign(a), RuntimeValueKind::Foreign(b)) => a == b,
+            (RuntimeValueKind::Record(a), RuntimeValueKind::Record(b)) => {
+                Rc::ptr_eq(a, b)
+                    || (a.len() == b.len()
+                        && a.iter()
+                            .zip(b.iter())
+                            .all(|((ak, av), (bk, bv))| ak == bk && av.same_result(bv)))
+            }
+            (RuntimeValueKind::List(a), RuntimeValueKind::List(b)) => {
+                Rc::ptr_eq(a, b)
+                    || (a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a.same_result(b)))
+            }
+            (RuntimeValueKind::Closure(a), RuntimeValueKind::Closure(b)) => {
+                a.body == b.body
+                    && a.fields == b.fields
+                    && match (&a.environment.frame, &b.environment.frame) {
+                        (None, None) => true,
+                        (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    }
+
+    fn new(kind: RuntimeValueKind) -> Self {
+        Self(kind, OnceCell::new())
+    }
+
+    /// Explicit borrowed GID view for consumers that have not adopted runtime values.
+    pub fn as_value(&self) -> &Value {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => value,
+            _ => self.1.get_or_init(|| Rc::new(self.to_value())),
+        }
+    }
+
     pub fn from_value(value: Value) -> Self {
-        Self(RuntimeValueKind::Data(value))
+        Self::new(RuntimeValueKind::Data(value))
     }
 
     pub fn f64(number: f64) -> Self {
-        Self(RuntimeValueKind::F64(RuntimeF64 {
+        Self::new(RuntimeValueKind::F64(RuntimeF64 {
             number,
             original: None,
         }))
@@ -382,7 +424,7 @@ impl RuntimeValue {
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
         let mut fields: Vec<_> = fields.into_iter().collect();
         if fields.windows(2).all(|pair| pair[0].0 < pair[1].0) {
-            return Self(RuntimeValueKind::Record(fields.into()));
+            return Self::new(RuntimeValueKind::Record(fields.into()));
         }
         fields.sort_by_key(|(field, _)| *field);
         let fields = fields.into_iter().fold(Vec::new(), |mut unique, field| {
@@ -395,15 +437,15 @@ impl RuntimeValue {
             unique.push(field);
             unique
         });
-        Self(RuntimeValueKind::Record(fields.into()))
+        Self::new(RuntimeValueKind::Record(fields.into()))
     }
 
     pub fn list(elements: impl IntoIterator<Item = RuntimeValue>) -> Self {
-        Self(RuntimeValueKind::List(elements.into_iter().collect()))
+        Self::new(RuntimeValueKind::List(elements.into_iter().collect()))
     }
 
     fn original_f64(number: f64, original: Value) -> Self {
-        Self(RuntimeValueKind::F64(RuntimeF64 {
+        Self::new(RuntimeValueKind::F64(RuntimeF64 {
             number,
             original: Some(original),
         }))
@@ -521,6 +563,19 @@ impl RuntimeValue {
         }
     }
 
+    pub fn list_element(&self, position: &gid::Position) -> Option<RuntimeValue> {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => value.as_list()?.get(position).map(Self::from),
+            RuntimeValueKind::List(values) => {
+                let index = gid::position::spread(values.len())
+                    .binary_search(position)
+                    .ok()?;
+                values.get(index).cloned()
+            }
+            _ => None,
+        }
+    }
+
     pub fn to_value(&self) -> Value {
         reify::value(self)
     }
@@ -539,6 +594,18 @@ impl RuntimeValue {
 impl From<Value> for RuntimeValue {
     fn from(value: Value) -> Self {
         Self::from_value(value)
+    }
+}
+
+impl From<&Value> for RuntimeValue {
+    fn from(value: &Value) -> Self {
+        Self::from_value(value.clone())
+    }
+}
+
+impl From<&RuntimeValue> for RuntimeValue {
+    fn from(value: &RuntimeValue) -> Self {
+        value.clone()
     }
 }
 
@@ -918,7 +985,7 @@ pub struct Context<'a> {
 
 #[derive(Clone)]
 struct Lowered {
-    source: OnceCell<Value>,
+    source: RuntimeValue,
     origin: Option<OriginId>,
     form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
@@ -962,6 +1029,7 @@ struct OriginId(Rc<OriginNode>);
 
 enum OriginRoot {
     Input,
+    Located(SourceOrigin),
     Cell { cell: CellId, source: Resolution },
 }
 
@@ -1076,6 +1144,61 @@ impl<'a> Context<'a> {
         self.lower_with(value, true, None)
     }
 
+    fn lower_runtime_code(&mut self, value: &RuntimeValue) -> Expression {
+        match &value.0 {
+            RuntimeValueKind::Data(value) => self.lower_unattributed_source(value),
+            RuntimeValueKind::Record(fields) => {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|(key, value)| (*key, self.lower_runtime_code(value)))
+                    .collect();
+                let form = if let Some(function) = lowered_field(&fields, vocabulary::FUNCTION) {
+                    Form::Call { function }
+                } else if let (Some(params), Some(body)) = (
+                    value.field(vocabulary::PARAMS),
+                    lowered_field(&fields, vocabulary::BODY),
+                ) {
+                    let parameters = match params.list_values() {
+                        None => LambdaParameters::Malformed,
+                        Some(values) => {
+                            match values
+                                .map(|v| {
+                                    v.as_cell()
+                                        .map(|cell| Parameter { cell })
+                                        .ok_or_else(|| v.to_value())
+                                })
+                                .collect::<Result<Vec<_>, _>>()
+                            {
+                                Ok(params) => LambdaParameters::Valid(params.into()),
+                                Err(value) => LambdaParameters::Invalid(value),
+                            }
+                        }
+                    };
+                    Form::Lambda { parameters, body }
+                } else if let Some(value) = lowered_field(&fields, vocabulary::VALUE) {
+                    Form::Value(value)
+                } else {
+                    Form::Ready(value.clone())
+                };
+                Expression(Rc::new(Lowered {
+                    source: value.clone(),
+                    origin: None,
+                    form,
+                    fields: Some(fields),
+                    elements: None,
+                }))
+            }
+            RuntimeValueKind::List(values) => Expression(Rc::new(Lowered {
+                source: value.clone(),
+                origin: None,
+                form: Form::Ready(value.clone()),
+                fields: None,
+                elements: Some(values.iter().map(|v| self.lower_runtime_code(v)).collect()),
+            })),
+            _ => runtime_expression(value.clone()),
+        }
+    }
+
     fn child_origin(&mut self, parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
         parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
     }
@@ -1184,7 +1307,7 @@ impl<'a> Context<'a> {
             Value::Blob(_) => Form::Data,
         };
         Expression(Rc::new(Lowered {
-            source: OnceCell::from(value.clone()),
+            source: value.into(),
             origin,
             form,
             fields: lowered_fields,
@@ -1201,6 +1324,16 @@ impl<'a> Context<'a> {
         let mut path = Vec::new();
         loop {
             match origin.0.as_ref() {
+                OriginNode::Root(OriginRoot::Located(base)) => {
+                    path.reverse();
+                    let mut base = base.clone();
+                    let prefix = match &mut base {
+                        SourceOrigin::Input(path) | SourceOrigin::Stored(path) => path,
+                        SourceOrigin::Cell { path, .. } => path,
+                    };
+                    prefix.extend(path);
+                    return Some(base);
+                }
                 OriginNode::Root(OriginRoot::Input) => {
                     path.reverse();
                     return Some(SourceOrigin::Input(path));
@@ -1302,7 +1435,7 @@ impl<'a> Context<'a> {
         .into_iter()
         .collect();
         let params = params.into_iter().map(|cell| Parameter { cell }).collect();
-        RuntimeValue(RuntimeValueKind::Closure(Closure {
+        RuntimeValue::new(RuntimeValueKind::Closure(Closure {
             fields,
             params,
             body,
@@ -1350,14 +1483,14 @@ impl<'a> Context<'a> {
         self.burn()?;
         match &expression.0.form {
             Form::Data => {
-                if let Some(RuntimeValue(RuntimeValueKind::F64(cached))) =
+                if let Some(RuntimeValue(RuntimeValueKind::F64(cached), _)) =
                     self.data_runtime.get(&expression)
                 {
                     return Ok(Some(cached.number));
                 }
             }
             Form::Cell(cell) => {
-                if let Some(RuntimeValue(RuntimeValueKind::F64(value))) =
+                if let Some(RuntimeValue(RuntimeValueKind::F64(value), _)) =
                     environment.get_runtime(*cell)
                 {
                     return Ok(Some(value.number));
@@ -1409,7 +1542,7 @@ impl<'a> Context<'a> {
                 let fields = self.value(&expression).as_record().unwrap().clone();
                 match parameters {
                     LambdaParameters::Valid(params) => thunk(move |_, environment| {
-                        Ok(RuntimeValue(RuntimeValueKind::Closure(Closure {
+                        Ok(RuntimeValue::new(RuntimeValueKind::Closure(Closure {
                             fields: fields.clone(),
                             params: params.clone(),
                             body: body.clone(),
@@ -1459,7 +1592,7 @@ impl<'a> Context<'a> {
                             match environment.get_runtime(cell) {
                                 Some(value) => context.lower_runtime(value.clone()),
                                 None => match context.foreign_target_cell(cell) {
-                                    Some(_) => RuntimeValue(RuntimeValueKind::Foreign(cell)),
+                                    Some(_) => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
                                     None => context.eval_cell(cell, environment)?,
                                 },
                             }
@@ -1607,19 +1740,20 @@ impl<'a> Context<'a> {
             Some(self.eval_grap_call(closure, call, environment, plan))
         } else {
             match &callable.0 {
-                RuntimeValueKind::Data(value) => {
-                    let cell = value
+                RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                    let cell = callable
                         .as_cell()
-                        .or_else(|| value.as_record()?.get(&vocabulary::FFI)?.as_cell());
+                        .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
                     if let Some(cell) = cell
                         && self.transient_foreign_target(cell).is_none()
                     {
                         let target = RefCell::new(None);
                         return Some(self.call_cell(cell, call, environment, &target));
                     }
-                    self.foreign_target(value).map(|foreign| {
-                        self.call_foreign_staged(&foreign, call, environment, stages)
-                    })
+                    cell.and_then(|cell| self.foreign_target_cell(cell))
+                        .map(|foreign| {
+                            self.call_foreign_staged(&foreign, call, environment, stages)
+                        })
                 }
                 _ => None,
             }
@@ -1754,13 +1888,6 @@ impl<'a> Context<'a> {
             .map(|function| ResolvedForeign::Permanent(function.clone()))
     }
 
-    fn foreign_target(&self, callable: &Value) -> Option<ResolvedForeign> {
-        let cell = callable
-            .as_cell()
-            .or_else(|| callable.as_record()?.get(&vocabulary::FFI)?.as_cell())?;
-        self.foreign_target_cell(cell)
-    }
-
     fn call_foreign(
         &mut self,
         foreign: &ResolvedForeign,
@@ -1863,10 +1990,10 @@ impl<'a> Context<'a> {
         let reference = match expression.0.form {
             Form::Cell(cell) if environment.get_runtime(cell).is_none() => self
                 .foreign_target_cell(cell)
-                .map(|_| RuntimeValue(RuntimeValueKind::Foreign(cell)))
+                .map(|_| RuntimeValue::new(RuntimeValueKind::Foreign(cell)))
                 .or_else(|| match self.host.resolve(cell) {
                     Some((_, Definition::Foreign(_))) => {
-                        Some(RuntimeValue(RuntimeValueKind::Foreign(cell)))
+                        Some(RuntimeValue::new(RuntimeValueKind::Foreign(cell)))
                     }
                     _ => None,
                 }),
@@ -1890,9 +2017,9 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> PreparedCallable {
         let callable = match &callable.0 {
-            RuntimeValueKind::Data(_) => self
+            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => self
                 .runtime_closure(&callable)
-                .map(|closure| RuntimeValue(RuntimeValueKind::Closure(closure)))
+                .map(|closure| RuntimeValue::new(RuntimeValueKind::Closure(closure)))
                 .unwrap_or(callable),
             _ => callable,
         };
@@ -1964,10 +2091,11 @@ impl<'a> Context<'a> {
                         ),
                     }
                 }
-                RuntimeValueKind::Data(value) => {
+                RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                    let value = &callable.value;
                     let target = value
                         .as_cell()
-                        .or_else(|| value.as_record()?.get(&vocabulary::FFI)?.as_cell());
+                        .or_else(|| value.field(vocabulary::FFI)?.as_cell());
                     match target {
                         Some(cell) if context.transient_foreign_target(cell).is_none() => {
                             let call = runtime_call(callable.value.clone(), arguments);
@@ -1979,11 +2107,13 @@ impl<'a> Context<'a> {
                             )
                         }
                         _ => {
-                            let Some(target) = context.foreign_target(value) else {
+                            let Some(target) =
+                                target.and_then(|cell| context.foreign_target_cell(cell))
+                            else {
                                 return Ok(RuntimeValue::from_value(absent::with_detail(
                                     absent::NOT_CALLABLE,
                                     absent::VALUE,
-                                    value.clone(),
+                                    value.to_value(),
                                 )));
                             };
                             let call = runtime_call(callable.value.clone(), arguments);
@@ -1991,13 +2121,13 @@ impl<'a> Context<'a> {
                         }
                     }
                 }
-                RuntimeValueKind::F64(_)
-                | RuntimeValueKind::Record(_)
-                | RuntimeValueKind::List(_) => Ok(RuntimeValue::from_value(absent::with_detail(
-                    absent::NOT_CALLABLE,
-                    absent::VALUE,
-                    callable.value.to_value(),
-                ))),
+                RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) => {
+                    Ok(RuntimeValue::from_value(absent::with_detail(
+                        absent::NOT_CALLABLE,
+                        absent::VALUE,
+                        callable.value.to_value(),
+                    )))
+                }
             }
         })
     }
@@ -2007,14 +2137,17 @@ impl<'a> Context<'a> {
         function: &Value,
         arguments: Vec<(CellId, Value)>,
     ) -> Result<Value, Halt> {
-        self.apply_values_runtime(function, arguments)
-            .map(RuntimeValue::into_value)
+        self.apply_values_runtime(
+            &function.into(),
+            arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+        )
+        .map(RuntimeValue::into_value)
     }
 
     fn apply_values_runtime(
         &mut self,
-        function: &Value,
-        arguments: Vec<(CellId, Value)>,
+        function: &RuntimeValue,
+        arguments: Vec<(CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
         let environment = Environment::with_indices(self.indices.clone());
         if let Some(cell) = function.as_cell()
@@ -2025,9 +2158,12 @@ impl<'a> Context<'a> {
         self.checked_call(|context| {
             let callable = if function.as_cell().is_some() {
                 context.burn()?;
-                RuntimeValue::from_value(function.clone())
+                function.clone()
             } else {
-                let function = context.lower_source(function, OriginRoot::Input);
+                let function = match &function.0 {
+                    RuntimeValueKind::Data(value) => context.lower_source(value, OriginRoot::Input),
+                    _ => context.lower_runtime_code(function),
+                };
                 context.eval(function, &environment)?
             };
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
@@ -2044,14 +2180,18 @@ impl<'a> Context<'a> {
     fn apply_cell(
         &mut self,
         cell: CellId,
-        callable: Value,
-        arguments: Vec<(CellId, Value)>,
+        callable: RuntimeValue,
+        arguments: Vec<(CellId, RuntimeValue)>,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         self.checked_call(|context| match context.host.resolve(cell) {
             Some((_, Definition::Foreign(definition))) => {
-                let call = context.lower(&call(callable, arguments));
+                let call = context.lower_runtime_code(&RuntimeValue::record(
+                    [(vocabulary::FUNCTION, callable)]
+                        .into_iter()
+                        .chain(arguments),
+                ));
                 context.call_foreign(
                     &ResolvedForeign::Permanent(definition.implementation.clone()),
                     &call,
@@ -2086,7 +2226,7 @@ impl<'a> Context<'a> {
     fn try_apply_callable(
         &mut self,
         callable: RuntimeValue,
-        arguments: &[(CellId, Value)],
+        arguments: &[(CellId, RuntimeValue)],
         environment: &Environment,
     ) -> Option<Result<RuntimeValue, Halt>> {
         if let Some(closure) = self.runtime_closure(&callable) {
@@ -2097,12 +2237,7 @@ impl<'a> Context<'a> {
                     arguments
                         .iter()
                         .find(|(cell, _)| *cell == parameter.cell)
-                        .map(|(_, value)| {
-                            (
-                                parameter.cell,
-                                self.lower_runtime(RuntimeValue::from_value(value.clone())),
-                            )
-                        })
+                        .map(|(_, value)| (parameter.cell, self.lower_runtime(value.clone())))
                         .ok_or(parameter.cell)
                 })
                 .collect();
@@ -2118,37 +2253,37 @@ impl<'a> Context<'a> {
                 } else {
                     return Some(self.apply_cell(
                         *cell,
-                        ffi(*cell),
+                        ffi(*cell).into(),
                         arguments.to_vec(),
                         environment,
                     ));
                 }
             }
-            RuntimeValueKind::Data(value) => {
-                let cell = value
+            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                let cell = callable
                     .as_cell()
-                    .or_else(|| value.as_record()?.get(&vocabulary::FFI)?.as_cell());
+                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
                 if let Some(cell) = cell
                     && self.transient_foreign_target(cell).is_none()
                 {
                     return Some(self.apply_cell(
                         cell,
-                        value.clone(),
+                        callable.clone(),
                         arguments.to_vec(),
                         environment,
                     ));
                 }
-                self.foreign_target(value)
+                cell.and_then(|cell| self.foreign_target_cell(cell))
             }
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => {
+                None
+            }
         };
         foreign.map(|foreign| {
-            let call = self.lower(&call(
-                callable.into_value(),
-                arguments.iter().map(|(cell, value)| (*cell, value.clone())),
+            let call = self.lower_runtime_code(&RuntimeValue::record(
+                [(vocabulary::FUNCTION, callable)]
+                    .into_iter()
+                    .chain(arguments.iter().cloned()),
             ));
             self.call_foreign(&foreign, &call, environment)
         })
@@ -2202,38 +2337,40 @@ impl<'a> Context<'a> {
     fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {
         match &value.0 {
             RuntimeValueKind::Closure(closure) => Some(closure.clone()),
-            RuntimeValueKind::Data(value) => {
-                let fields = value
-                    .as_record()?
-                    .get(&vocabulary::CLOSURE)?
-                    .as_record()?
-                    .clone();
+            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                let fields = value.field(vocabulary::CLOSURE)?;
                 let params = fields
-                    .get(&vocabulary::PARAMS)?
-                    .as_list()?
-                    .values()
-                    .map(Value::as_cell)
-                    .map(|cell| cell.map(|cell| Parameter { cell }))
+                    .field(vocabulary::PARAMS)?
+                    .list_values()?
+                    .map(|value| value.as_cell().map(|cell| Parameter { cell }))
                     .collect::<Option<Vec<_>>>()?;
-                let body = self.lower_unattributed_source(fields.get(&vocabulary::BODY)?);
+                let body = self.lower_runtime_code(&fields.field(vocabulary::BODY)?);
+                let captured = fields.field(vocabulary::ENVIRONMENT)?;
+                let environment = match &captured.0 {
+                    RuntimeValueKind::Data(value) => self.environment(value)?,
+                    RuntimeValueKind::Record(fields) => {
+                        Environment::with_indices(self.indices.clone())
+                            .extended_runtime(fields.iter().cloned())
+                    }
+                    _ => return None,
+                };
                 Some(Closure {
                     params: params.into(),
                     body,
-                    environment: self.environment(fields.get(&vocabulary::ENVIRONMENT)?)?,
-                    fields,
+                    environment,
+                    fields: fields.as_value().as_record()?.clone(),
                 })
             }
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_) => None,
+            RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => {
+                None
+            }
         }
     }
 }
 
 fn runtime_expression(value: RuntimeValue) -> Expression {
     Expression(Rc::new(Lowered {
-        source: OnceCell::new(),
+        source: value.clone(),
         origin: None,
         form: Form::Ready(value),
         fields: None,
@@ -2255,7 +2392,7 @@ fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) 
         .map(|(field, value)| (*field, runtime_expression(value.clone())))
         .collect();
     Expression(Rc::new(Lowered {
-        source: OnceCell::new(),
+        source: value.clone(),
         origin: None,
         form: Form::Ready(value),
         fields: Some(fields),
@@ -2313,6 +2450,49 @@ pub fn evaluate(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation 
     context(host, None, fuel).run(expression)
 }
 
+pub fn evaluate_at(
+    expression: &Value,
+    origin: Option<SourceOrigin>,
+    host: &dyn Host,
+    fuel: usize,
+) -> Evaluation {
+    context(host, None, fuel).conclude(|context| {
+        let expression = match origin {
+            Some(origin) => context.lower_source(expression, OriginRoot::Located(origin)),
+            None => context.lower_unattributed_source(expression),
+        };
+        context.eval(expression, &Environment::default())
+    })
+}
+
+/// Apply a callable expression at the existing host boundary: Grap parameters
+/// receive values, while foreign functions receive argument syntax to interpret.
+/// Use `apply` when the callable and all arguments have already been evaluated.
+pub fn apply_expression(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    host: &dyn Host,
+    fuel: usize,
+) -> Evaluation {
+    context(host, None, fuel).conclude(|context| {
+        context.apply_values_runtime(&function.into(), arguments.into_iter().collect())
+    })
+}
+
+/// Apply runtime-held callable syntax at an expression-facing host boundary.
+/// Grap parameters receive values; foreign functions receive argument syntax,
+/// just as in the GID-facing `apply_value_scoped` adapter.
+pub fn apply_expression_scoped(
+    function: &RuntimeValue,
+    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    host: &dyn Host,
+    overlay: &ForeignOverlay<'_>,
+    fuel: usize,
+) -> Evaluation {
+    context(host, Some(overlay), fuel)
+        .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+}
+
 /// Evaluate with a borrowed foreign-function layer that exists only for
 /// this synchronous evaluation.
 pub fn evaluate_scoped<'a>(
@@ -2337,7 +2517,12 @@ pub fn apply_value(
     fuel: usize,
 ) -> Evaluation<Value> {
     context(host, None, fuel)
-        .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+        .conclude(|context| {
+            context.apply_values_runtime(
+                &function.into(),
+                arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            )
+        })
         .into_value()
 }
 
@@ -2351,12 +2536,33 @@ pub fn apply_value_scoped<'a>(
     fuel: usize,
 ) -> Evaluation<Value> {
     context(host, Some(overlay), fuel)
-        .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+        .conclude(|context| {
+            context.apply_values_runtime(
+                &function.into(),
+                arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            )
+        })
         .into_value()
 }
 
 pub fn evaluate_value(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation<Value> {
     evaluate(expression, host, fuel).into_value()
+}
+
+/// Explicitly interpret runtime-held syntax without serializing its embedded callables.
+pub fn evaluate_runtime_scoped<'a>(
+    expression: &RuntimeValue,
+    host: &dyn Host,
+    overlay: &'a ForeignOverlay<'a>,
+    fuel: usize,
+) -> Evaluation {
+    match &expression.0 {
+        RuntimeValueKind::Data(value) => context(host, Some(overlay), fuel).run(value),
+        _ => context(host, Some(overlay), fuel).conclude(|context| {
+            let expression = context.lower_runtime_code(expression);
+            context.eval(expression, &Environment::default())
+        }),
+    }
 }
 
 pub fn evaluate_value_scoped<'a>(

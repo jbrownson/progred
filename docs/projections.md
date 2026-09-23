@@ -722,14 +722,33 @@ arguments remain values, including closures: they are not materialized and
 reinterpreted as expressions. Raw expression inspection and explicit GID
 adapters remain available for macros and existing consumers.
 `ForeignFunction::from_value` is the explicit adapter for a GID-returning
-implementation. Progred's projection/presentation and drawing handoffs still
-use those GID adapters; migrating that chain is the next step, not an existing
-end-to-end runtime-value contract.
+implementation. Progred now carries runtime values through evaluation results,
+presentation, controls, layout descriptions, drawing programs, and retained
+slider/event callbacks. Descending into a returned container retains its runtime
+children. Existing data-oriented partial projections use an explicit adapter;
+it borrows stored GID directly or lazily materializes a shared GID view. The
+original runtime value remains available to runtime-aware partials and children.
+Copying a result and writing document/UI data are GID boundaries.
+
+Generated drawing syntax may contain retained native closures. Explicitly
+interpreting that syntax lowers its containers without serializing the embedded
+closures. The expression-facing host application adapter preserves the existing
+contract: Grap parameters bind supplied data, while native functions receive
+argument syntax to interpret. This is distinct from `apply`, whose callable and
+arguments are already evaluated.
+
+Inline code retained by the editor is anchored to its original document
+occurrence before evaluation; cell code retains its definition source and path.
+Later invocation does not rebase those locations onto the drawing program.
+Cmd-hover chooses the innermost call with an available projected occurrence.
+Memo result comparison conservatively includes native closure code/capture
+identity, so equal serialized values cannot discard changed source locations.
 
 Materialization preserves existing sharing of runtime records, lists, and
 captured environments within one returned value. Its address table lives only
-for that conversion; it neither interns equal values nor caches across
-evaluations. Environments materialize their effective bindings, newest first,
+for that conversion and does not intern equal values. A runtime value may retain
+a lazily materialized, shared GID view for data-oriented consumers; this is a
+representation conversion, not a computation memo. Environments materialize their effective bindings, newest first,
 without converting shadowed bindings. Closures still capture the shared lexical
 environment, not a statically computed subset of free variables. Native
 constructors that just assemble evaluated arguments should use `Context::eval`

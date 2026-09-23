@@ -1079,10 +1079,8 @@ mod tests {
         let functions = functions().register(
             emit,
             ForeignFunction::from_value(move |context, call, environment| {
-                let value = context.eval_to_value(
-                    context.field(call, vocabulary::VALUE).unwrap(),
-                    environment,
-                )?;
+                let value = context
+                    .eval_to_value(context.field(call, vocabulary::VALUE).unwrap(), environment)?;
                 Ok(context.effect(|| {
                     output.borrow_mut().push(value);
                     Value::record([])
@@ -1186,14 +1184,23 @@ mod tests {
                 name::vocabulary::NAME,
                 crate::libraries::text::value("named"),
             ));
-            assert!(projection(&projection_input(&decorated)).is_some());
+            assert!(
+                projection(&projection_input(&decorated).with_value(Some(&(&decorated).into())))
+                    .is_some()
+            );
             for key in fields.keys() {
                 let missing = Value::record(decorated.as_record().unwrap().without(key));
-                assert!(projection(&projection_input(&missing)).is_none());
+                assert!(
+                    projection(&projection_input(&missing).with_value(Some(&(&missing).into())))
+                        .is_none()
+                );
             }
             let mut input = projection_input(&decorated);
             input.pending = Some(Pending::Field);
-            assert!(projection(&input).is_none());
+            assert!(
+                projection(&input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref()))
+                    .is_none()
+            );
         }
     }
 
@@ -1241,7 +1248,9 @@ mod tests {
                 ),
             ),
         ] {
-            assert!(projection(&projection_input(&value)).is_none());
+            assert!(
+                projection(&projection_input(&value).with_value(Some(&(&value).into()))).is_none()
+            );
         }
     }
 

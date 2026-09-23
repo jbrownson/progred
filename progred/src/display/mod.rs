@@ -256,6 +256,68 @@ impl<World: 'static, Hover: 'static> Layout<World, Hover> {
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
+    fn apply_expression_runtime(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, grap::RuntimeValue)],
+    ) -> grap::RuntimeValue {
+        self.apply(
+            function,
+            &arguments
+                .iter()
+                .map(|(k, v)| (*k, v.to_value()))
+                .collect::<Vec<_>>(),
+        )
+        .into()
+    }
+    fn evaluate_runtime(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        _steps: &[Step],
+    ) -> grap::RuntimeValue {
+        self.evaluate_with_fuel(expression, fuel).into()
+    }
+
+    fn evaluate_runtime_memo(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        _steps: &[Step],
+    ) -> grap::RuntimeValue {
+        self.evaluate_memo(expression, fuel).into()
+    }
+
+    fn apply_runtime_scoped(
+        &self,
+        function: &grap::RuntimeValue,
+        arguments: &[(CellId, grap::RuntimeValue)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation {
+        let result = self.apply_scoped(
+            function.as_value(),
+            &arguments
+                .iter()
+                .map(|(k, v)| (*k, v.to_value()))
+                .collect::<Vec<_>>(),
+            scope,
+        );
+        grap::Evaluation {
+            result: result.result.into(),
+            completed: result.completed,
+            remaining_fuel: result.remaining_fuel,
+        }
+    }
+
+    fn apply_runtime_memo(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        fuel: usize,
+    ) -> grap::RuntimeValue {
+        self.apply_memo(function, arguments, fuel).into()
+    }
+
     /// Loaded libraries' vocabulary, available for explicit provider composition.
     fn completions(&self) -> Option<CompletionProvider> {
         None
@@ -315,13 +377,13 @@ pub trait Env {
 /// selection's payload when this value's path is the selected one,
 /// and this path's annotation record — never an address, never a
 /// store.
-pub struct ProjectionInput<'a, World, Hover> {
+pub struct ProjectionInput<'a, World, Hover, V = Value> {
     pub env: &'a dyn Env,
     /// The composed default for child projections. Clone and compose it
     /// explicitly when choosing a local override or a subtree scope.
     pub default_projection: Partial<World, Hover>,
     /// `None` is a missing location, distinct from every stored GID value.
-    pub value: Option<&'a Value>,
+    pub value: Option<&'a V>,
     /// Physical pixels per logical display unit for this projection pass.
     pub scale_factor: f64,
     /// Whether this projected location can accept a document write.
@@ -346,13 +408,43 @@ pub struct ProjectionInput<'a, World, Hover> {
 /// targets that only the successful projection retains.
 pub type Partial<World, Hover> = Rc<
     dyn for<'a, 'input> Fn(
-        &'input ProjectionInput<'a, World, Hover>,
+        &'input ProjectionInput<'a, World, Hover, grap::RuntimeValue>,
     ) -> Option<Layout<World, Hover>>,
 >;
 
 pub fn partial<World, Hover>(
     projection: impl for<'a, 'input> Fn(
         &'input ProjectionInput<'a, World, Hover>,
+    ) -> Option<Layout<World, Hover>>
+    + 'static,
+) -> Partial<World, Hover> {
+    Rc::new(move |input| {
+        projection(&input.with_value(input.value.map(grap::RuntimeValue::as_value)))
+    })
+}
+
+impl<'a, World, Hover, V> ProjectionInput<'a, World, Hover, V> {
+    pub fn with_value<'b, T>(
+        &'b self,
+        value: Option<&'b T>,
+    ) -> ProjectionInput<'b, World, Hover, T> {
+        ProjectionInput {
+            env: self.env,
+            default_projection: self.default_projection.clone(),
+            value,
+            scale_factor: self.scale_factor,
+            writable: self.writable,
+            selection: self.selection,
+            pending: self.pending.clone(),
+            state: self.state,
+            targets: ProjectionTargets::new(self.targets.at),
+        }
+    }
+}
+
+pub fn runtime_partial<World, Hover>(
+    projection: impl for<'a, 'input> Fn(
+        &'input ProjectionInput<'a, World, Hover, grap::RuntimeValue>,
     ) -> Option<Layout<World, Hover>>
     + 'static,
 ) -> Partial<World, Hover> {
@@ -367,7 +459,7 @@ pub fn compose_partials<World: 'static, Hover: 'static>(
     match partials.as_slice() {
         [] => partial(|_| None),
         [only] => only.clone(),
-        _ => partial(move |input| partials.iter().find_map(|projection| projection(input))),
+        _ => runtime_partial(move |input| partials.iter().find_map(|projection| projection(input))),
     }
 }
 
@@ -674,7 +766,7 @@ pub fn descend_path_with_projection<World: 'static, Hover: 'static>(
 /// Project a supplied value at an occurrence with no document source.
 pub fn at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
+    value: impl Clone + Into<grap::RuntimeValue>,
 ) -> Layout<World, Hover> {
     at_with_projection(steps, value, None, None)
 }
@@ -735,12 +827,12 @@ pub fn descend_path_scoped<World: 'static, Hover: 'static>(
 
 pub fn at_with_projection<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
-    value: &Value,
+    value: impl Clone + Into<grap::RuntimeValue>,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
     let steps = steps.into();
-    let value = value.clone();
+    let value = value.into();
     Layout::program(Rc::new(move |context, build| {
         context.project.at(
             context.text,
@@ -869,7 +961,7 @@ mod tests {
         projection(&ProjectionInput {
             default_projection: partial(|_| None),
             env: &NoEval,
-            value: Some(&Value::record([])),
+            value: Some(&Value::record([]).into()),
             scale_factor: 1.0,
             writable: false,
             selection: None,
@@ -1003,7 +1095,7 @@ mod tests {
 pub fn drawing_program(
     extent: measured::Extent,
     fuel: usize,
-    program: Value,
+    program: grap::RuntimeValue,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     Layout::widget(Rc::new(move |context| {
         crate::projection::drawing::program_leaf(

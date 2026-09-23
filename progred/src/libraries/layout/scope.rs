@@ -114,12 +114,17 @@ pub fn run(
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let function = input.value?.as_record()?.get(&LAYOUT_PROGRAM)?;
+    let function = input.value?.field(LAYOUT_PROGRAM)?;
     let (evaluation, layout) = run(
         || input.targets.current(),
-        |scope| input.env.apply_scoped(function, &[], Some(scope)),
+        |scope| {
+            input
+                .env
+                .apply_runtime_scoped(&function, &[], Some(scope))
+                .into_value()
+        },
     );
     Some(layout.unwrap_or_else(|| {
         crate::display::at(
@@ -287,7 +292,10 @@ fn operation(
         ),
         AT => {
             let steps = arg!(STEPS, crate::libraries::path::read);
-            crate::display::at(steps, &arg!(VALUE, |value| Some(value.clone())))
+            crate::display::at(
+                steps,
+                context.eval(need!(context.field(call, VALUE)), environment)?,
+            )
         }
         CANVAS => {
             let width = number!(WIDTH, None);
@@ -300,7 +308,7 @@ fn operation(
             if fuel < 0.0 || fuel.fract() != 0.0 || fuel > usize::MAX as f64 {
                 return Err(invalid(function));
             }
-            let program = arg!(PROGRAM, |value| Some(value.clone()));
+            let program = context.eval(need!(context.field(call, PROGRAM)), environment)?;
             crate::display::drawing_program(
                 crate::display::widget::Extent {
                     width,
@@ -308,7 +316,7 @@ fn operation(
                     descent,
                 },
                 fuel as usize,
-                program,
+                program.into(),
             )
         }
         SELECTABLE | HOVERABLE | HOVER_BLOCK | PICKABLE | ON_EVENT => {
@@ -318,7 +326,7 @@ fn operation(
                 None
             };
             let handler = if function == ON_EVENT {
-                Some(arg!(HANDLER, |value| Some(value.clone())))
+                Some(context.eval(need!(context.field(call, HANDLER)), environment)?)
             } else {
                 None
             };

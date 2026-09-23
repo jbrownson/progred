@@ -113,7 +113,7 @@ fn apply_change(
     scope: &crate::editing::Scope,
     root: &Root,
     path: &[gid::Step],
-    handler: &Value,
+    handler: &::grap::RuntimeValue,
     value: Value,
 ) {
     let state = current_state(
@@ -132,14 +132,18 @@ fn apply_change(
             Value::record([])
         }))
     };
-    let result = ::grap::apply_value_scoped(
+    let result = ::grap::apply_scoped(
         handler,
-        [(VALUE, value), (STATE, state), (UPDATE, update_function())],
+        [
+            (VALUE, value.into()),
+            (STATE, state.into()),
+            (UPDATE, update_function().into()),
+        ],
         &scope.view(editor.sources()).sources,
         &ForeignOverlay::from_value(&[UPDATE], &update),
         ::grap::DEFAULT_FUEL,
     );
-    if result.completed && !absent::declines(&result.result) {
+    if result.completed && !result.result.declines() {
         if let Some(value) = staged.into_inner() {
             let mut editor = scope.open(crate::editing::Access::new(editor));
             let mut annotation = editor
@@ -179,7 +183,7 @@ impl widget::gesture::Gesture<crate::Editor> for Drag {
     }
 }
 
-fn slider_widget(slider: Slider, width: f64, handler: Value) -> Widget {
+fn slider_widget(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> Widget {
     slider_control(
         slider,
         width,
@@ -335,14 +339,14 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
 }
 
 fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?.get(&WITH_CONTROLS)?.as_record()?;
-    let controls = fields.get(&CONTROLS)?.clone();
-    let view = fields.get(&VIEW)?.clone();
-    let source = fields.get(&VALUE)?.clone();
-    let width = f64::read(fields.get(&WIDTH)?)?;
-    let height = f64::read(fields.get(&HEIGHT)?)?;
+    let fields = input.value?.field(WITH_CONTROLS)?;
+    let controls = fields.field(CONTROLS)?;
+    let view = fields.field(VIEW)?;
+    let source = fields.field(VALUE)?;
+    let width = fields.field(WIDTH)?.as_f64()?;
+    let height = fields.field(HEIGHT)?.as_f64()?;
     if !width.is_finite() || !height.is_finite() || width <= 2.0 * PADDING_X || height <= 0.0 {
         return None;
     }
@@ -357,13 +361,13 @@ fn display(
             }
         };
         let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
-        let result = ::grap::apply_value(
+        let result = ::grap::apply(
             &view,
             [
                 (VALUE, source.clone()),
                 (PARAMETERS, parameters),
-                (WIDTH, f64::value(width)),
-                (HEIGHT, f64::value(height)),
+                (WIDTH, ::grap::RuntimeValue::f64(width)),
+                (HEIGHT, ::grap::RuntimeValue::f64(height)),
             ],
             &context.inputs.sources,
             ::grap::DEFAULT_FUEL,
@@ -401,11 +405,11 @@ fn display(
 }
 
 fn controls_output(
-    controls: &Value,
+    controls: &::grap::RuntimeValue,
     state: Option<&Value>,
     width: f64,
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
-) -> Result<(Vec<Widget>, Value), Value> {
+) -> Result<(Vec<Widget>, ::grap::RuntimeValue), Value> {
     let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
     let emit = |function,
                 context: &mut Context<'_>,
@@ -421,9 +425,9 @@ fn controls_output(
             let Some(expression) = context.field(call, ON_CHANGE) else {
                 return Ok(context.missing_argument(ON_CHANGE));
             };
-            let handler = context.eval_to_value(expression, environment)?;
-            if absent::is_absent(&handler) {
-                return Ok(handler);
+            let handler = context.eval(expression, environment)?;
+            if handler.is_absent() {
+                return Ok(handler.into_value());
             }
             let mut number = |field, default| -> Result<Option<f64>, Halt> {
                 match context.field(call, field) {
@@ -589,9 +593,12 @@ fn controls_output(
         }
         Ok(absent::with_reason(INVALID_INPUT))
     };
-    let evaluation = ::grap::apply_value_scoped(
+    let evaluation = ::grap::apply_scoped(
         controls,
-        [(STATE, current_state(state)), (UPDATE, update_function())],
+        [
+            (STATE, current_state(state).into()),
+            (UPDATE, update_function().into()),
+        ],
         &frame.inputs.sources,
         &ForeignOverlay::from_value(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
@@ -599,8 +606,8 @@ fn controls_output(
         ),
         ::grap::DEFAULT_FUEL,
     );
-    if !evaluation.completed || absent::is_absent(&evaluation.result) {
-        Err(evaluation.result)
+    if !evaluation.completed || evaluation.result.is_absent() {
+        Err(evaluation.result.into_value())
     } else {
         Ok((widgets.into_inner(), evaluation.result))
     }
@@ -684,6 +691,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "controls",
         Definitions::from_parts(cells, functions),
-        display::partial(display),
+        display::runtime_partial(display),
     )
 }

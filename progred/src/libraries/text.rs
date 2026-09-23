@@ -169,7 +169,7 @@ mod tests {
         let display = (library().projection)(&ProjectionInput {
             default_projection: crate::display::partial(|_| None),
             env: &NoEval,
-            value: Some(&value("hi")),
+            value: Some(&value("hi").into()),
             scale_factor: 1.0,
             writable: true,
             selection: None,

@@ -113,6 +113,42 @@ a demonstrated consumer benefit, measuring the receiving computation rather
 than conversion savings alone. Avoid materializing whole closure environments
 merely to inspect container structure.
 
+### Runtime callback handoffs — 2026-09-23
+
+The new owned runtime representation now serves a concrete consumer: closures
+returned through presentation, controls, layouts, drawing programs, and event
+handlers retain their code origins. The forest hover regression is enabled and
+finds the innermost available displayed call. Inline evaluated expressions are
+anchored to their original occurrence; creator call stacks are not retained.
+Existing GID-oriented projections still use explicit conversion adapters.
+
+Local optimized canaries compare:
+
+| Version | Warm uncached tree construction | Controls-only frame median |
+| --- | --- | --- |
+| Before owned results, `15985033` | 7.6–8.5 ms | 0.305–0.309 ms |
+| Ownership checkpoint, `9c676235` | 9.2–10.8 ms | 0.332–0.341 ms |
+| Runtime consumer migration | 9.5–11.4 ms | 0.333–0.345 ms |
+
+The final three frame medians were 344.58, 332.75, and 339.29 µs. Each uses five
+warm-up frames and 60 measured frames including disposal, with 3D work replaced
+by a placeholder. Two final construction runs each had five samples; the first
+sample of each is excluded from the warm range. Memo hits took about 2–3 µs.
+Builds and other test runs were finished before these final measurements.
+
+This is approximately unchanged from the ownership checkpoint, not a recovered
+speedup. Against the pre-ownership baseline there remains roughly 20–40%
+uncached-construction overhead and 8–13% controls-frame overhead. These short
+local runs are not a statistical study, native orbit latency, browser performance,
+or Fidget rendering measurements. The earlier baselines were measured before
+the consumer migration rather than interleaved with it. Source continuity is the
+demonstrated benefit; more conversion removal remains possible.
+
+Use `profile_program_tree_construction` and `cam_controls_profile_loop` with
+`--release --ignored --nocapture --test-threads=1`. Keep separate build outputs
+for archived source copies: sharing a target directory during the earlier
+comparison reused incompatible artifacts.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

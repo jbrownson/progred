@@ -1,6 +1,56 @@
 use super::*;
 use gid::new_cell_id;
 
+#[test]
+fn generated_calls_retain_closures_and_their_original_inline_source() {
+    let sink = new_cell_id();
+    let first = new_cell_id();
+    let second = new_cell_id();
+    let empty = host(vec![]);
+    let make = |field| {
+        evaluate_at(
+            &lambda([], call(sink.into(), [])),
+            Some(SourceOrigin::Stored(vec![gid::Step::Key(field)])),
+            &empty,
+            100,
+        )
+        .result
+    };
+    let a = make(first);
+    let b = make(second);
+    assert!(
+        !a.same_result(&b),
+        "equal serialized code must not erase different origins"
+    );
+    assert_eq!(a.to_value(), b.to_value());
+    for (closure, field) in [(a, first), (b, second)] {
+        let source = RefCell::new(None);
+        let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
+            *source.borrow_mut() = context.call_trace();
+            Ok(RuntimeValue::f64(7.0))
+        };
+        let ids = [sink];
+        let overlay = ForeignOverlay::new(&ids, &capture);
+        let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure)]);
+        let result = evaluate_runtime_scoped(&expression, &empty, &overlay, 100);
+        assert!(result.completed);
+        assert_eq!(result.result.as_f64(), Some(7.0));
+        assert_eq!(
+            source
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .origins()
+                .cloned()
+                .collect::<Vec<_>>(),
+            [SourceOrigin::Stored(vec![
+                gid::Step::Key(field),
+                gid::Step::Key(vocabulary::BODY)
+            ])]
+        );
+    }
+}
+
 fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
     TestHost(move |cell| {
         definitions
@@ -10,6 +60,120 @@ fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
             .into_iter()
             .collect()
     })
+}
+
+#[test]
+fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks() {
+    let (identity, argument, data) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let receiver = host(vec![
+        (data, Definition::Value(f64::value(9.0))),
+        (
+            identity,
+            Definition::foreign(
+                Value::record([]),
+                ForeignFunction::new(move |context, call, environment| {
+                    context.eval(context.field(call, argument).unwrap(), environment)
+                }),
+            ),
+        ),
+    ]);
+    let source_argument = RuntimeValue::from(Value::from(data));
+    let result = apply_expression(
+        &identity.into(),
+        [(argument, source_argument.clone())],
+        &receiver,
+        100,
+    );
+    assert_eq!(result.result.as_f64(), Some(9.0));
+    let result = apply(
+        &ffi(identity).into(),
+        [(argument, source_argument)],
+        &receiver,
+        100,
+    );
+    assert_eq!(
+        result.result.as_cell(),
+        Some(data),
+        "already-evaluated arguments remain data"
+    );
+
+    let closure = evaluate(&lambda([], f64::value(7.0)), &receiver, 100).result;
+    let result = apply_expression(
+        &identity.into(),
+        [(argument, closure.clone())],
+        &receiver,
+        100,
+    );
+    assert!(
+        result.result.same_result(&closure),
+        "the host adapter must retain native closure code"
+    );
+    let nested = RuntimeValue::list([closure.clone()]);
+    let position = gid::position::spread(1).into_iter().next().unwrap();
+    assert!(
+        nested
+            .list_element(&position)
+            .unwrap()
+            .same_result(&closure)
+    );
+    assert!(
+        nested.1.get().is_none(),
+        "following a runtime child must not materialize the container"
+    );
+}
+
+#[test]
+fn runtime_built_callable_records_match_their_gid_forms() {
+    let (identity, argument) = (new_cell_id(), new_cell_id());
+    let receiver = host(vec![(
+        identity,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new(move |context, call, environment| {
+                context.eval(context.field(call, argument).unwrap(), environment)
+            }),
+        ),
+    )]);
+    let foreign = RuntimeValue::record([(vocabulary::FFI, Value::from(identity).into())]);
+    let closure = RuntimeValue::record([(
+        vocabulary::CLOSURE,
+        RuntimeValue::record([
+            (vocabulary::PARAMS, RuntimeValue::list([])),
+            (vocabulary::BODY, Value::from(argument).into()),
+            (
+                vocabulary::ENVIRONMENT,
+                RuntimeValue::record([(argument, RuntimeValue::f64(8.0))]),
+            ),
+        ]),
+    )]);
+    for function in [foreign, closure] {
+        let expected = apply_value(
+            &function.to_value(),
+            [(argument, f64::value(8.0))],
+            &receiver,
+            100,
+        );
+        assert_eq!(expected.result, f64::value(8.0));
+        let actual = apply(
+            &function,
+            [(argument, RuntimeValue::f64(8.0))],
+            &receiver,
+            100,
+        );
+        assert_eq!(actual.result.to_value(), expected.result);
+        let expression = RuntimeValue::record([
+            (vocabulary::FUNCTION, function),
+            (argument, RuntimeValue::f64(8.0)),
+        ]);
+        let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
+        let overlay = ForeignOverlay::new(&[], &noop);
+        assert_eq!(
+            evaluate_runtime_scoped(&expression, &receiver, &overlay, 100)
+                .result
+                .to_value(),
+            expected.result
+        );
+    }
 }
 
 #[test]
@@ -102,7 +266,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
                 let expression = context.field(call, argument).unwrap();
-                assert!(expression.0.source.get().is_none());
+                assert!(expression.0.source.1.get().is_none());
                 context.eval(expression, environment)
             }),
         ),

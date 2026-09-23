@@ -507,7 +507,6 @@ fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) 
 }
 
 #[test]
-#[ignore = "pending runtime closures through presentation/controls/drawing; see docs/deferred.md"]
 fn website_forest_hover_finds_the_available_call() {
     use crate::hover::{Hover, SourceTrace};
     let (editor, names) = website_growing_forest_editor();

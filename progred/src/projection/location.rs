@@ -5,14 +5,16 @@ use crate::libraries::f64;
 use gid::{CellId, Resolution, Step, Value};
 
 pub(super) fn child<'a>(
-    parent: &'a Value,
+    parent: &grap::RuntimeValue,
     step: &Step,
     resolve: impl Fn(CellId, &Resolution) -> Option<&'a Value>,
-) -> Option<&'a Value> {
+) -> Option<grap::RuntimeValue> {
     match step {
-        Step::Key(label) => parent.as_record()?.get(label),
-        Step::Element(position) => parent.as_list()?.get(position),
-        Step::Follow(resolution) => resolve(parent.as_cell()?, resolution),
+        Step::Key(label) => parent.field(*label),
+        Step::Element(position) => parent.list_element(position),
+        Step::Follow(resolution) => {
+            resolve(parent.as_cell()?, resolution).map(grap::RuntimeValue::from)
+        }
     }
 }
 
@@ -26,8 +28,9 @@ mod tests {
         let value = Value::record([(field, f64::value(2.5))]);
         let expected = f64::value(2.5);
         assert_eq!(
-            child(&value, &Step::Key(field), |_, _| None),
-            Some(&expected),
+            child(&(&value).into(), &Step::Key(field), |_, _| None)
+                .map(grap::RuntimeValue::into_value),
+            Some(expected),
         );
     }
 
@@ -35,20 +38,25 @@ mod tests {
     fn child_lookup_preserves_missing_fields_and_resolves_follows() {
         let missing = crate::test_values::label("missing");
         let record = Value::record([]);
-        assert_eq!(child(&record, &Step::Key(missing), |_, _| None), None,);
+        assert_eq!(
+            child(&record.into(), &Step::Key(missing), |_, _| None)
+                .map(grap::RuntimeValue::into_value),
+            None,
+        );
 
         let cell = crate::test_values::label("cell");
         let link = Value::from(cell);
         let resolved = crate::test_values::text("resolved");
         assert_eq!(
             child(
-                &link,
+                &link.into(),
                 &Step::Follow(Resolution::Document),
                 |requested, resolution| {
                     (requested == cell && *resolution == Resolution::Document).then_some(&resolved)
                 }
-            ),
-            Some(&resolved),
+            )
+            .map(grap::RuntimeValue::into_value),
+            Some(resolved.clone()),
         );
     }
 }

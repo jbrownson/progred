@@ -94,7 +94,7 @@ impl<World: 'static> Projection<World> {
 
     fn apply(
         &self,
-        input: &crate::display::ProjectionInput<'_, World, Hovered>,
+        input: &crate::display::ProjectionInput<'_, World, Hovered, grap::RuntimeValue>,
     ) -> Option<crate::display::Layout<World, Hovered>> {
         self.entry
             .as_ref()
@@ -141,7 +141,92 @@ struct ProjectEnv<'a, 's> {
     path: &'a [Step],
 }
 
+impl ProjectEnv<'_, '_> {
+    fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
+        let path: Vec<_> = self.path.iter().chain(steps).cloned().collect();
+        let source = self.cx.edits.source(&path)?;
+        Some(
+            match SourceTrace::from_path(&self.cx.sources, Rc::from(source.as_ref())) {
+                SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
+                SourceTrace::InCell { cell, source, path } => grap::SourceOrigin::Cell {
+                    cell,
+                    source,
+                    path: path.to_vec(),
+                },
+            },
+        )
+    }
+}
+
 impl crate::display::Env for ProjectEnv<'_, '_> {
+    fn apply_expression_runtime(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, grap::RuntimeValue)],
+    ) -> grap::RuntimeValue {
+        grap::apply_expression(
+            function,
+            arguments.iter().cloned(),
+            &self.cx.sources,
+            grap::DEFAULT_FUEL,
+        )
+        .result
+    }
+    fn evaluate_runtime(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        steps: &[Step],
+    ) -> grap::RuntimeValue {
+        grap::evaluate_at(expression, self.origin(steps), &self.cx.sources, fuel).result
+    }
+    fn evaluate_runtime_memo(
+        &self,
+        expression: &Value,
+        fuel: usize,
+        steps: &[Step],
+    ) -> grap::RuntimeValue {
+        match self.cx.computations {
+            Some(c) => c.evaluate_runtime(
+                self.cx.view,
+                self.path,
+                expression,
+                fuel,
+                self.origin(steps),
+            ),
+            None => self.evaluate_runtime(expression, fuel, steps),
+        }
+    }
+    fn apply_runtime_scoped(
+        &self,
+        function: &grap::RuntimeValue,
+        arguments: &[(CellId, grap::RuntimeValue)],
+        scope: Option<&grap::ForeignOverlay<'_>>,
+    ) -> grap::Evaluation {
+        self.cx
+            .sources
+            .apply_runtime_scoped(function, arguments, scope)
+    }
+    fn apply_runtime_memo(
+        &self,
+        function: &Value,
+        arguments: &[(CellId, Value)],
+        fuel: usize,
+    ) -> grap::RuntimeValue {
+        match self.cx.computations {
+            Some(c) => c.apply_runtime(self.cx.view, self.path, function, arguments, fuel),
+            None => {
+                grap::apply_expression(
+                    function,
+                    arguments.iter().map(|(k, v)| (*k, v.into())),
+                    &self.cx.sources,
+                    fuel,
+                )
+                .result
+            }
+        }
+    }
+
     fn completions(&self) -> Option<crate::display::CompletionProvider> {
         self.cx.completions.cloned()
     }
@@ -200,7 +285,7 @@ fn prepare(
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
-    value: Option<&Value>,
+    value: Option<&grap::RuntimeValue>,
     layout: crate::display::Layout<crate::Editor, Hovered>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -217,7 +302,7 @@ fn prepare(
             text: tcx,
             inputs: cx,
             path,
-            value,
+            value: value.map(grap::RuntimeValue::as_value),
         },
         build,
     )
@@ -228,7 +313,7 @@ struct ProjectionScope<'a, 's> {
     projection: &'a Projection<crate::Editor>,
     path: &'a [Step],
     ancestors: &'a Ancestry,
-    value: Option<&'a Value>,
+    value: Option<&'a grap::RuntimeValue>,
 }
 
 impl crate::display::widget::project::Project<crate::Editor, Hovered> for ProjectionScope<'_, '_> {
@@ -292,7 +377,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             text,
             &path,
             &ancestry,
-            value,
+            value.cloned().map(grap::RuntimeValue::from).as_ref(),
             build,
         )
     }
@@ -301,7 +386,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: Vec<Step>,
-        value: Value,
+        value: grap::RuntimeValue,
         current: Option<crate::display::Partial<crate::Editor, Hovered>>,
         default: Option<crate::display::Partial<crate::Editor, Hovered>>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -325,7 +410,7 @@ fn prepare_at(
     tcx: &mut TextCtx,
     path: &[Step],
     steps: Vec<Step>,
-    nested: Value,
+    nested: grap::RuntimeValue,
     current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
@@ -609,7 +694,7 @@ fn prepare_project(
         tcx,
         root_path,
         &ancestry,
-        root,
+        root.cloned().map(grap::RuntimeValue::from).as_ref(),
         &mut build,
     );
     build.finish(layout)
@@ -664,7 +749,7 @@ fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
     root: crate::workspace::Root,
     path: SharedPath,
-    value: Value,
+    value: grap::RuntimeValue,
     fold_default: Option<bool>,
     scale: f64,
 ) -> Measured<HoverPass<crate::Editor>> {
@@ -683,7 +768,7 @@ fn bind_selection(
                 && let Key::Character(key) = &event.key
                 && (key.eq_ignore_ascii_case("c") || key.eq_ignore_ascii_case("x"))
             {
-                if !ctx.copy_value(&value) {
+                if !ctx.copy_value(value.as_value()) {
                     return false;
                 }
                 if key.eq_ignore_ascii_case("x") {
@@ -793,7 +878,7 @@ fn prepare_descend_path(
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &Ancestry,
-    parent: Option<&Value>,
+    parent: Option<&grap::RuntimeValue>,
     steps: &[Step],
     current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
@@ -801,10 +886,10 @@ fn prepare_descend_path(
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let mut path = parent_path.to_vec();
     let mut ancestors = ancestors.clone();
-    let mut value = parent;
+    let mut value = parent.cloned();
     for step in steps {
         if let Step::Follow(source) = &step {
-            if let Some(cell) = value.and_then(Value::as_cell) {
+            if let Some(cell) = value.as_ref().and_then(grap::RuntimeValue::as_cell) {
                 ancestors.cells.insert(cell);
                 ancestors.enclosing = Some((cell, *source, path.len() + 1));
             }
@@ -814,8 +899,11 @@ fn prepare_descend_path(
             .then(|| cx.edits.source(&path))
             .flatten();
         value = match mapped {
-            Some(source) => cx.sources.resolve_path(&source),
-            None => value.and_then(|value| {
+            Some(source) => cx
+                .sources
+                .resolve_path(&source)
+                .map(grap::RuntimeValue::from),
+            None => value.as_ref().and_then(|value| {
                 location::child(value, step, |cell, source| cx.sources.value(cell, source))
             }),
         };
@@ -828,7 +916,7 @@ fn prepare_descend_path(
         tcx,
         &path,
         &ancestors,
-        value,
+        value.as_ref(),
         build,
     )
 }
@@ -842,7 +930,7 @@ fn prepare_value(
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
-    value: Option<&Value>,
+    value: Option<&grap::RuntimeValue>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let child_projection = default_projection
@@ -851,7 +939,7 @@ fn prepare_value(
             entry: None,
         })
         .or_else(|| {
-            (projection.entry.is_some() && !matches!(value, Some(Value::Cell(_))))
+            (projection.entry.is_some() && value.and_then(grap::RuntimeValue::as_cell).is_none())
                 .then(|| projection.without_entry())
         });
     let child_projection = child_projection.as_ref().unwrap_or(projection);
@@ -861,7 +949,7 @@ fn prepare_value(
         let in_cycle = value
             .as_cell()
             .is_some_and(|cell| ancestors.cells.contains(&cell));
-        crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
+        crate::selection::collapse_default_for_value(&cx.sources, value.as_value(), in_cycle)
     });
     let layout = value_layout(
         cx,
@@ -890,10 +978,14 @@ fn prepare_value(
             // mark; the selected one has the primary highlight.
             let secondary = value.filter(|_| !cx.selected(path)).and_then(|value| {
                 let secondary = if cx.edits.is_identity() {
-                    Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing)
+                    Secondary::from_context(
+                        landmark_path.clone(),
+                        value.as_value(),
+                        ancestors.enclosing,
+                    )
                 } else {
                     let source = cx.edits.source(path)?;
-                    Secondary::from_path(&cx.sources, Rc::from(source.as_ref()), value)
+                    Secondary::from_path(&cx.sources, Rc::from(source.as_ref()), value.as_value())
                 };
                 let strong = cx.secondary.as_ref() == Some(&secondary);
                 Some((secondary, strong))
@@ -907,7 +999,7 @@ fn prepare_value(
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
             let select = navigation_select_handler(landmark_path.clone(), cx);
-            let ground = value.and_then(|value| ground_decoration(cx, path, value));
+            let ground = value.and_then(|value| ground_decoration(cx, path, value.as_value()));
             let target = value.map(|value| (value.clone(), cx.view.clone(), landmark_path.clone()));
             let edits = cx.edits.clone();
             let pick_edits = edits.clone();
@@ -959,7 +1051,7 @@ fn value_layout(
     current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: &crate::display::Partial<crate::Editor, Hovered>,
     path: &[Step],
-    value: Option<&Value>,
+    value: Option<&grap::RuntimeValue>,
     fold_default: Option<bool>,
 ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
     #[cfg(all(test, feature = "layout-profile"))]
@@ -967,7 +1059,7 @@ fn value_layout(
     if let Some(value) = value
         && let Some(default) = fold_default
         && crate::annotations::collapsed(cx.annotations, path, default)
-        && let Some(collapsed) = structure::collapsed_layout(cx, path, value, default)
+        && let Some(collapsed) = structure::collapsed_layout(cx, path, value.as_value(), default)
     {
         return Some(collapsed);
     }
@@ -998,7 +1090,16 @@ fn value_layout(
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| value.map(|value| structure::of(cx, path, value, &input)))
+    .or_else(|| {
+        value.map(|value| {
+            structure::of(
+                cx,
+                path,
+                value.as_value(),
+                &input.with_value(Some(value.as_value())),
+            )
+        })
+    })
 }
 
 /// Every projected value's Pick backstop: pick the value into an open
@@ -1007,7 +1108,7 @@ fn value_layout(
 /// first and this catches what they refused.
 fn pick_target_with(
     path: SharedPath,
-    value: Value,
+    value: grap::RuntimeValue,
     root: crate::workspace::Root,
     destination: SharedPath,
     edits: crate::editing::Scope,
@@ -1017,7 +1118,7 @@ fn pick_target_with(
         let path = path.clone();
         let value = value.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
-            if !world.pick_identity(value.clone()) {
+            if !world.pick_identity(value.to_value()) {
                 edits
                     .open(crate::editing::Access::new(world))
                     .select(&root, &destination);

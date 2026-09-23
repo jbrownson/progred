@@ -56,13 +56,16 @@ impl SourceCalls {
     pub fn has_source(&self) -> bool {
         self.trace
             .origins()
-            .any(|origin| self.input.is_some() || matches!(origin, grap::SourceOrigin::Cell { .. }))
+            .any(|origin| self.input.is_some() || !matches!(origin, grap::SourceOrigin::Input(_)))
     }
 
     /// Compare borrowed paths; highlighting must not copy a stack or allocate
     /// source paths for every painted shape.
     pub fn contains(&self, source: &SourceTrace) -> bool {
         self.trace.origins().any(|origin| match (origin, source) {
+            (grap::SourceOrigin::Stored(path), SourceTrace::Stored(target)) => {
+                path.as_slice() == target.as_ref()
+            }
             (
                 grap::SourceOrigin::Cell {
                     cell,
@@ -115,6 +118,7 @@ pub(crate) fn from_grap(
     input: Option<&SourceTrace>,
 ) -> Option<SourceTrace> {
     match origin {
+        grap::SourceOrigin::Stored(path) => Some(SourceTrace::Stored(path.into())),
         grap::SourceOrigin::Input(path) => input.map(|input| input.descendant(&path)),
         grap::SourceOrigin::Cell { cell, source, path } => Some(SourceTrace::InCell {
             cell,

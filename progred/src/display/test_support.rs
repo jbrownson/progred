@@ -162,13 +162,13 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         _: &mut TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         steps: Vec<Step>,
-        value: Value,
+        value: grap::RuntimeValue,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::At {
             steps,
-            value,
+            value: value.into_value(),
             projection,
             default_projection,
         })
@@ -262,7 +262,7 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &mut TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Vec<Step>,
-        _: Value,
+        _: grap::RuntimeValue,
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {

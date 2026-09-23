@@ -22,12 +22,13 @@ pub(crate) fn expression(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     match input.value {
         Some(_) => shallow_cell(input),
-        None => (input.default_projection)(input).or_else(|| {
-            Some(completion(
-                CompletionKind::Value,
-                Some(suggestions::provider(input.env.completions())),
-            ))
-        }),
+        None => (input.default_projection)(&input.with_value(None::<&::grap::RuntimeValue>))
+            .or_else(|| {
+                Some(completion(
+                    CompletionKind::Value,
+                    Some(suggestions::provider(input.env.completions())),
+                ))
+            }),
     }
 }
 
@@ -378,7 +379,10 @@ pub fn evaluate_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let expression = input.value?.as_record()?.get(&EVALUATE)?;
-    let result = input.env.evaluate(expression);
+    let result =
+        input
+            .env
+            .evaluate_runtime(expression, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
     let expression = shared(expression_path(
         [Step::Key(EVALUATE)],
         &input.default_projection,
@@ -780,7 +784,9 @@ mod tests {
                     step,
                     projection: Some(projection),
                     ..
-                } = &inspect(&(projection(&input(&env, &env.0)).unwrap()))
+                } = &inspect(
+                    &(projection(&input(&env, &env.0).with_value(Some(&(&env.0).into()))).unwrap()),
+                )
                 else {
                     panic!("the compact definition descends to its actual name");
                 };
@@ -791,7 +797,7 @@ mod tests {
                     .unwrap()
                     .get(&name::vocabulary::NAME)
                     .unwrap();
-                assert!(projection(&input(&env, value)).is_some());
+                assert!(projection(&input(&env, value).with_value(Some(&value.into()))).is_some());
                 let line = name::editor(value).unwrap();
                 assert_eq!(line.text, spelling);
                 assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
@@ -799,7 +805,13 @@ mod tests {
                     (line.update)(&env, "next", Some(value)),
                     Some(crate::libraries::text::value("next"))
                 );
-                assert!(projection(&input(&env, &Value::record([]))).is_none());
+                assert!(
+                    projection(
+                        &input(&env, &Value::record([]))
+                            .with_value(Some(&Value::record([]).into()))
+                    )
+                    .is_none()
+                );
             }
         }
     }
@@ -833,7 +845,12 @@ mod tests {
         let input = input(&env, &malformed_lambda);
         assert!(lambda_display(&input).is_none());
         assert!(value_display(&input).is_some());
-        assert!((library().projection)(&input).is_some());
+        assert!(
+            (library().projection)(
+                &input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref())
+            )
+            .is_some()
+        );
 
         let call = Value::record([(FUNCTION, Value::record([])), (VALUE, Value::record([]))]);
         let input = ProjectionInput {
@@ -1504,7 +1521,9 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        assert!(projection(&relative_input(&env(), value)).is_some());
+        assert!(
+            projection(&relative_input(&env(), value).with_value(Some(&value.into()))).is_some()
+        );
         let line = name::editor(value).unwrap();
         assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
     }
@@ -1557,7 +1576,9 @@ mod tests {
             .unwrap()
             .get(&name::vocabulary::NAME)
             .unwrap();
-        assert!(projection(&relative_input(&env(), value)).is_some());
+        assert!(
+            projection(&relative_input(&env(), value).with_value(Some(&value.into()))).is_some()
+        );
         let line = name::editor(value).unwrap();
         assert_eq!(line.text, "");
         assert_eq!(line.placeholder, None);

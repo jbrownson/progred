@@ -477,7 +477,7 @@ mod tests {
                     projection(&ProjectionInput {
                         default_projection: crate::display::partial(|_| None),
                         env: &NoEval,
-                        value: Some(&value),
+                        value: Some(&(&value).into()),
                         scale_factor: 1.0,
                         writable: true,
                         selection: None,

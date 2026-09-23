@@ -36,7 +36,6 @@ pub fn is_absent(value: &Value) -> bool {
 
 #[cfg(test)]
 pub use ::grap::absent::decline;
-pub use ::grap::absent::declines;
 
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
     ::grap::absent::from_causes(causes)

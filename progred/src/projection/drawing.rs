@@ -271,12 +271,13 @@ fn transform(
 }
 
 fn record_program(
-    program: &Value,
+    program: impl Into<grap::RuntimeValue>,
     sources: &Sources,
     faces: &Faces,
     input: Option<&SourceTrace>,
     fuel: usize,
 ) -> Recorded {
+    let program = program.into();
     let canvas = RefCell::new(DrawList::new());
     let hits = RefCell::new(Vec::new());
     let path = RefCell::new(BezPath::new());
@@ -368,8 +369,8 @@ fn record_program(
         }
     };
     let overlay = grap::ForeignOverlay::from_value(&functions, &draw);
-    let evaluation = grap::evaluate_value_scoped(program, sources, &overlay, fuel);
-    if evaluation.completed && !absent::declines(&evaluation.result) {
+    let evaluation = grap::evaluate_runtime_scoped(&program, sources, &overlay, fuel);
+    if evaluation.completed && !evaluation.result.declines() {
         Recorded {
             commands: canvas.into_inner(),
             hits: hits.into_inner(),
@@ -389,8 +390,9 @@ pub(crate) fn program_leaf(
     ascent: f64,
     descent: f64,
     fuel: usize,
-    program: Value,
+    program: impl Into<grap::RuntimeValue>,
 ) -> Measured<HoverPass<crate::Editor>> {
+    let program = program.into();
     let scale = cx.styles.scale;
     let extent = Extent {
         width: width * scale,

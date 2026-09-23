@@ -198,7 +198,20 @@ impl Edit<'_> {
         edit_line(self.access.editor, root, path, line, operation)
     }
 
+    #[cfg(test)]
     pub(crate) fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
+        let function =
+            grap::evaluate(&function, &self.access.editor.sources(), grap::DEFAULT_FUEL).result;
+        self.grap_runtime(root, path, function, event)
+    }
+
+    pub(crate) fn grap_runtime(
+        &mut self,
+        root: Root,
+        path: Path,
+        function: grap::RuntimeValue,
+        event: Value,
+    ) -> bool {
         crate::site::apply_scoped_event(
             self.access.editor,
             self.scope.clone(),

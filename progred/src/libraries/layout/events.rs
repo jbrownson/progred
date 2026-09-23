@@ -14,8 +14,9 @@ use std::rc::Rc;
 
 pub fn on_event(
     child: Layout<crate::Editor, crate::frame::Hovered>,
-    function: Value,
+    function: impl Into<::grap::RuntimeValue>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
+    let function = function.into();
     widget::before(
         child,
         Rc::new(move |context| {
@@ -46,12 +47,13 @@ pub fn on_event(
                                         })),
                                     )],
                                 );
-                                let handled = edits.open(crate::editing::Access::new(world)).grap(
-                                    root.clone(),
-                                    path.clone(),
-                                    function.clone(),
-                                    value,
-                                );
+                                let handled =
+                                    edits.open(crate::editing::Access::new(world)).grap_runtime(
+                                        root.clone(),
+                                        path.clone(),
+                                        function.clone(),
+                                        value,
+                                    );
                                 EventOutcome::from_handled(Event::Scroll(events), handled)
                             },
                         );
@@ -75,12 +77,13 @@ pub fn on_event(
                                         })),
                                     )],
                                 );
-                                let handled = edits.open(crate::editing::Access::new(world)).grap(
-                                    root.clone(),
-                                    path.clone(),
-                                    function.clone(),
-                                    value,
-                                );
+                                let handled =
+                                    edits.open(crate::editing::Access::new(world)).grap_runtime(
+                                        root.clone(),
+                                        path.clone(),
+                                        function.clone(),
+                                        value,
+                                    );
                                 EventOutcome::from_handled(Event::Gesture(events), handled)
                             },
                         );
@@ -126,7 +129,7 @@ pub fn on_event(
                                 [modifier_field(modifiers, command)],
                             ),
                         };
-                        edits.open(crate::editing::Access::new(world)).grap(
+                        edits.open(crate::editing::Access::new(world)).grap_runtime(
                             root.clone(),
                             path.clone(),
                             function.clone(),

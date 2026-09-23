@@ -510,7 +510,7 @@ pub fn decode(
     select: &ActionHandler<crate::Editor>,
     hover: &crate::frame::Hovered,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    decode_with(value, &|| ProjectionTarget {
+    decode_with(&value.into(), &|| ProjectionTarget {
         select: select.clone(),
         select_with: {
             let select = select.clone();
@@ -521,51 +521,51 @@ pub fn decode(
 }
 
 fn decode_with(
-    value: &Value,
+    value: &::grap::RuntimeValue,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = value.as_record()?;
-    if let Some(content) = fields.get(&vocabulary::ROW) {
-        let content = content.as_record()?;
+    value.record_len()?;
+    if let Some(content) = value.field(vocabulary::ROW) {
+        content.record_len()?;
         return Some(crate::display::row(
-            read_number(content.get(&vocabulary::GAP)?)?,
-            children(content.get(&vocabulary::CHILDREN)?, target)?,
+            read_number(content.field(vocabulary::GAP)?.as_value())?,
+            children(&content.field(vocabulary::CHILDREN)?, target)?,
         ));
     }
-    if let Some(content) = fields.get(&vocabulary::COL) {
-        let content = content.as_record()?;
-        let baseline = read_number(content.get(&vocabulary::BASELINE)?)?;
+    if let Some(content) = value.field(vocabulary::COL) {
+        content.record_len()?;
+        let baseline = read_number(content.field(vocabulary::BASELINE)?.as_value())?;
         (baseline >= 0.0 && baseline.fract() == 0.0).then_some(())?;
-        let children = children(content.get(&vocabulary::CHILDREN)?, target)?;
+        let children = children(&content.field(vocabulary::CHILDREN)?, target)?;
         (children.is_empty() || baseline < children.len() as f64).then_some(())?;
         return Some(crate::display::col(
             baseline as usize,
-            read_number(content.get(&vocabulary::GAP)?)?,
+            read_number(content.field(vocabulary::GAP)?.as_value())?,
             children,
         ));
     }
-    if let Some(content) = fields.get(&vocabulary::OVERLAY) {
-        return Some(layout_overlay(children(content, target)?));
+    if let Some(content) = value.field(vocabulary::OVERLAY) {
+        return Some(layout_overlay(children(&content, target)?));
     }
-    if let Some(content) = fields.get(&vocabulary::PAD) {
-        let content = content.as_record()?;
+    if let Some(content) = value.field(vocabulary::PAD) {
+        content.record_len()?;
         return Some(crate::display::padding(
             (
-                read_number(content.get(&vocabulary::LEFT)?)?,
-                read_number(content.get(&vocabulary::TOP)?)?,
-                read_number(content.get(&vocabulary::RIGHT)?)?,
-                read_number(content.get(&vocabulary::BOTTOM)?)?,
+                read_number(content.field(vocabulary::LEFT)?.as_value())?,
+                read_number(content.field(vocabulary::TOP)?.as_value())?,
+                read_number(content.field(vocabulary::RIGHT)?.as_value())?,
+                read_number(content.field(vocabulary::BOTTOM)?.as_value())?,
             )
                 .into(),
-            decode_with(content.get(&vocabulary::CHILD)?, target)?,
+            decode_with(&content.field(vocabulary::CHILD)?, target)?,
         ));
     }
-    if let Some(content) = fields.get(&vocabulary::BORDER) {
-        return Some(border(decode_with(content, target)?));
+    if let Some(content) = value.field(vocabulary::BORDER) {
+        return Some(border(decode_with(&content, target)?));
     }
-    if let Some(content) = fields.get(&vocabulary::BRACKET) {
-        let content = content.as_record()?;
-        let delim = match content.get(&vocabulary::DELIM)?.as_cell()? {
+    if let Some(content) = value.field(vocabulary::BRACKET) {
+        content.record_len()?;
+        let delim = match content.field(vocabulary::DELIM)?.as_cell()? {
             cell if cell == vocabulary::PAREN => Delim::Paren,
             cell if cell == vocabulary::SQUARE => Delim::Bracket,
             cell if cell == vocabulary::CURLY => Delim::Brace,
@@ -573,35 +573,36 @@ fn decode_with(
         };
         return Some(bracket(
             delim,
-            decode_with(content.get(&vocabulary::CHILD)?, target)?,
+            decode_with(&content.field(vocabulary::CHILD)?, target)?,
         ));
     }
-    if let Some(content) = fields.get(&vocabulary::ALTERNATIVES) {
-        return Some(alternatives(children(content, target)?));
+    if let Some(content) = value.field(vocabulary::ALTERNATIVES) {
+        return Some(alternatives(children(&content, target)?));
     }
-    if let Some(content) = fields.get(&vocabulary::DESCEND) {
-        let step = crate::libraries::path::read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
+    if let Some(content) = value.field(vocabulary::DESCEND) {
+        let step = crate::libraries::path::read_step(content.field(vocabulary::STEP)?.as_value())?;
         return Some(descend(step, None, None));
     }
-    if let Some(content) = fields.get(&vocabulary::DESCEND_PATH) {
+    if let Some(content) = value.field(vocabulary::DESCEND_PATH) {
         return Some(crate::display::descend_path(crate::libraries::path::read(
-            content,
+            content.as_value(),
         )?));
     }
-    if let Some(content) = fields.get(&vocabulary::JUMP) {
-        let content = content.as_record()?;
-        let steps = crate::libraries::path::read(content.get(&vocabulary::STEPS)?)?;
-        let document = crate::libraries::path::read(content.get(&vocabulary::DOCUMENT_PATH)?)?;
+    if let Some(content) = value.field(vocabulary::JUMP) {
+        content.record_len()?;
+        let steps = crate::libraries::path::read(content.field(vocabulary::STEPS)?.as_value())?;
+        let document =
+            crate::libraries::path::read(content.field(vocabulary::DOCUMENT_PATH)?.as_value())?;
         return Some(crate::display::jump(steps, document));
     }
-    if let Some(content) = fields.get(&vocabulary::AT) {
-        let content = content.as_record()?;
-        let steps = crate::libraries::path::read(content.get(&vocabulary::STEPS)?)?;
-        return Some(crate::display::at(steps, content.get(&vocabulary::VALUE)?));
+    if let Some(content) = value.field(vocabulary::AT) {
+        content.record_len()?;
+        let steps = crate::libraries::path::read(content.field(vocabulary::STEPS)?.as_value())?;
+        return Some(crate::display::at(steps, content.field(vocabulary::VALUE)?));
     }
-    if let Some(content) = fields.get(&vocabulary::TEXT) {
-        let content = content.as_record()?;
-        let face = match content.get(&vocabulary::PAINT)?.as_cell()? {
+    if let Some(content) = value.field(vocabulary::TEXT) {
+        content.record_len()?;
+        let face = match content.field(vocabulary::PAINT)?.as_cell()? {
             cell if cell == vocabulary::NAME_FACE => Face::Name,
             cell if cell == vocabulary::STRING_FACE => Face::String,
             cell if cell == vocabulary::DIM_FACE => Face::Dim,
@@ -612,18 +613,18 @@ fn decode_with(
             _ => return None,
         };
         return Some(leaf(Leaf::Text {
-            text: text::read(content.get(&vocabulary::CONTENT)?)?.to_string(),
+            text: text::read(content.field(vocabulary::CONTENT)?.as_value())?.to_string(),
             paint: Paint::Face(face),
             script: puri::text::Script::Normal,
         }));
     }
-    if let Some(content) = fields.get(&vocabulary::DRAWING) {
-        let content = content.as_record()?;
-        let width = read_nonnegative(content.get(&vocabulary::WIDTH)?)?;
-        let ascent = read_nonnegative(content.get(&vocabulary::ASCENT)?)?;
-        let descent = read_nonnegative(content.get(&vocabulary::DESCENT)?)?;
-        if let Some(program) = content.get(&vocabulary::PROGRAM) {
-            let fuel = read_nonnegative(content.get(&vocabulary::FUEL)?)?;
+    if let Some(content) = value.field(vocabulary::DRAWING) {
+        content.record_len()?;
+        let width = read_nonnegative(content.field(vocabulary::WIDTH)?.as_value())?;
+        let ascent = read_nonnegative(content.field(vocabulary::ASCENT)?.as_value())?;
+        let descent = read_nonnegative(content.field(vocabulary::DESCENT)?.as_value())?;
+        if let Some(program) = content.field(vocabulary::PROGRAM) {
+            let fuel = read_nonnegative(content.field(vocabulary::FUEL)?.as_value())?;
             (fuel.fract() == 0.0).then_some(())?;
             return Some(crate::display::drawing_program(
                 crate::display::widget::Extent {
@@ -636,10 +637,9 @@ fn decode_with(
             ));
         }
         let commands = content
-            .get(&vocabulary::COMMANDS)?
-            .as_list()?
-            .values()
-            .map(read_command)
+            .field(vocabulary::COMMANDS)?
+            .list_values()?
+            .map(|v| read_command(v.as_value()))
             .collect::<Option<Vec<_>>>()?;
         return Some(leaf(Leaf::Drawing(Drawing {
             width,
@@ -648,47 +648,46 @@ fn decode_with(
             commands,
         })));
     }
-    if fields.get(&vocabulary::SLOT).is_some() {
+    if value.field(vocabulary::SLOT).is_some() {
         return Some(slot());
     }
-    if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
-        let child = decode_with(content, target)?;
+    if let Some(content) = value.field(vocabulary::SELECTABLE) {
+        let child = decode_with(&content, target)?;
         let interaction = target();
         return Some(on_activate(child, interaction.hover, interaction.select));
     }
-    if let Some(content) = fields.get(&vocabulary::PICKABLE) {
-        let content = content.as_record()?;
-        let child = decode_with(content.get(&vocabulary::CHILD)?, target)?;
+    if let Some(content) = value.field(vocabulary::PICKABLE) {
+        content.record_len()?;
+        let child = decode_with(&content.field(vocabulary::CHILD)?, target)?;
         let interaction = target();
         return Some(pickable(
             child,
             interaction.hover,
-            content.get(&vocabulary::VALUE)?.clone(),
+            content.field(vocabulary::VALUE)?.to_value(),
         ));
     }
-    if let Some(content) = fields.get(&vocabulary::HOVERABLE) {
-        return Some(on_hover(decode_with(content, target)?, target().hover));
+    if let Some(content) = value.field(vocabulary::HOVERABLE) {
+        return Some(on_hover(decode_with(&content, target)?, target().hover));
     }
-    if let Some(content) = fields.get(&vocabulary::HOVER_BLOCK) {
-        return Some(block_hover(decode_with(content, target)?));
+    if let Some(content) = value.field(vocabulary::HOVER_BLOCK) {
+        return Some(block_hover(decode_with(&content, target)?));
     }
-    if let Some(content) = fields.get(&vocabulary::ON_EVENT) {
-        let content = content.as_record()?;
+    if let Some(content) = value.field(vocabulary::ON_EVENT) {
+        content.record_len()?;
         return Some(on_event(
-            decode_with(content.get(&vocabulary::CHILD)?, target)?,
-            content.get(&vocabulary::HANDLER)?.clone(),
+            decode_with(&content.field(vocabulary::CHILD)?, target)?,
+            content.field(vocabulary::HANDLER)?,
         ));
     }
     None
 }
 
 fn children(
-    list: &Value,
+    list: &::grap::RuntimeValue,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
 ) -> Option<Vec<Layout<crate::Editor, crate::frame::Hovered>>> {
-    list.as_list()?
-        .values()
-        .map(|child| decode_with(child, target))
+    list.list_values()?
+        .map(|child| decode_with(&child, target))
         .collect()
 }
 
@@ -906,7 +905,7 @@ fn read_point(value: &Value) -> Option<Point> {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     scope::display(input).or_else(|| decode_with(input.value?, &|| input.targets.current()))
 }
@@ -1060,7 +1059,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                     ForeignFunction::new(apply_border_projection),
                 ),
         ),
-        crate::display::partial(display),
+        crate::display::runtime_partial(display),
     )
 }
 

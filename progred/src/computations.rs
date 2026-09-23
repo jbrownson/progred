@@ -89,32 +89,59 @@ impl Computations {
     }
 
     pub fn evaluate(&self, view: &Root, path: &[Step], expression: &Value, fuel: usize) -> Value {
+        self.evaluate_runtime(view, path, expression, fuel, None)
+            .into_value()
+    }
+
+    pub fn evaluate_runtime(
+        &self,
+        view: &Root,
+        path: &[Step],
+        expression: &Value,
+        fuel: usize,
+        origin: Option<grap::SourceOrigin>,
+    ) -> grap::RuntimeValue {
         struct Evaluation {
             expression: Input<Value>,
+            origin: Input<Option<grap::SourceOrigin>>,
             fuel: Input<usize>,
-            result: incremental::Memo<grap::Evaluation<gid::Value>>,
+            result: incremental::Memo<grap::Evaluation>,
         }
         let evaluation = self.at(view, path, || {
             let expression = self.runtime.input(expression.clone());
+            let origin = self.runtime.input(origin.clone());
             let fuel = self.runtime.input(fuel);
-            let result = grap::memo::evaluate(
-                &self.runtime,
-                self.definitions.clone(),
-                expression.clone(),
-                fuel.clone(),
+            let result = self.runtime.memo_by(
+                {
+                    let expression = expression.clone();
+                    let origin = origin.clone();
+                    let fuel = fuel.clone();
+                    let definitions = self.definitions.clone();
+                    move |read| {
+                        let expression = expression.read(read);
+                        let fuel = *fuel.read(read);
+                        let origin = origin.read(read).as_ref().clone();
+                        Ok(grap::memo::run(&definitions, read, |host| {
+                            grap::evaluate_at(&expression, origin, host, fuel)
+                        }))
+                    }
+                },
+                same_evaluation,
             );
             Evaluation {
                 expression,
+                origin,
                 fuel,
                 result,
             }
         });
         evaluation.expression.set(expression.clone());
+        evaluation.origin.set(origin);
         evaluation.fuel.set(fuel);
         self.runtime
             .read(&evaluation.result)
             .map(|evaluation| evaluation.result.clone())
-            .unwrap_or_else(grap::memo::failure)
+            .unwrap_or_else(|error| grap::memo::failure(error).into())
     }
 
     pub fn apply(
@@ -125,32 +152,58 @@ impl Computations {
         arguments: &[(gid::CellId, Value)],
         fuel: usize,
     ) -> Value {
+        self.apply_runtime(view, path, function, arguments, fuel)
+            .into_value()
+    }
+
+    pub fn apply_runtime(
+        &self,
+        view: &Root,
+        path: &[Step],
+        function: &Value,
+        arguments: &[(gid::CellId, Value)],
+        fuel: usize,
+    ) -> grap::RuntimeValue {
         struct Application {
             input: Input<(Value, Vec<(gid::CellId, Value)>, usize)>,
-            result: incremental::Memo<grap::Evaluation<gid::Value>>,
+            result: incremental::Memo<grap::Evaluation>,
         }
         let input = (function.clone(), arguments.to_vec(), fuel);
         let application = self.at(view, path, || {
             let input = self.runtime.input(input.clone());
-            let result = self.runtime.memo({
-                let input = input.clone();
-                let definitions = self.definitions.clone();
-                move |read| {
-                    let input = input.read(read);
-                    let (function, arguments, fuel) = &*input;
-                    Ok(grap::memo::run(&definitions, read, |host| {
-                        grap::apply_value(function, arguments.iter().cloned(), host, *fuel)
-                    }))
-                }
-            });
+            let result = self.runtime.memo_by(
+                {
+                    let input = input.clone();
+                    let definitions = self.definitions.clone();
+                    move |read| {
+                        let input = input.read(read);
+                        let (function, arguments, fuel) = &*input;
+                        Ok(grap::memo::run(&definitions, read, |host| {
+                            grap::apply_expression(
+                                function,
+                                arguments.iter().map(|(k, v)| (*k, v.into())),
+                                host,
+                                *fuel,
+                            )
+                        }))
+                    }
+                },
+                same_evaluation,
+            );
             Application { input, result }
         });
         application.input.set(input);
         self.runtime
             .read(&application.result)
             .map(|evaluation| evaluation.result.clone())
-            .unwrap_or_else(grap::memo::failure)
+            .unwrap_or_else(|error| grap::memo::failure(error).into())
     }
+}
+
+fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
+    a.completed == b.completed
+        && a.remaining_fuel == b.remaining_fuel
+        && a.result.same_result(&b.result)
 }
 
 #[cfg(test)]
