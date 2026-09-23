@@ -52,6 +52,8 @@ mod timers;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod web_embed;
 #[cfg(target_arch = "wasm32")]
+mod web_input;
+#[cfg(target_arch = "wasm32")]
 pub mod web_render;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod web_scroll;
@@ -105,7 +107,7 @@ use winit::dpi::LogicalSize;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_arch = "wasm32")]
-use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
+use winit::platform::web::{WindowAttributesExtWebSys, WindowExtWebSys};
 #[cfg(target_os = "linux")]
 use winit::platform::x11::WindowAttributesExtX11;
 use winit::window::{CursorIcon, Window, WindowId};
@@ -1453,7 +1455,7 @@ fn run_document(
         .run_app(&mut app)
         .expect("Couldn't run event loop");
     #[cfg(target_arch = "wasm32")]
-    event_loop.spawn_app(app);
+    web_input::spawn(app, event_loop);
 }
 
 #[cfg(target_os = "ios")]

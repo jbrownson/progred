@@ -62,6 +62,7 @@
       import { isTheme, savedTheme } from "./theme.mjs";
       import { forwardModifiers } from "./modifiers.mjs";
       import { routeWheel } from "./scroll.mjs";
+      import { routeKeyboard } from "./keyboard.mjs";
 
       const loading = document.querySelector("#loading");
       const fail = (error) => {
@@ -120,6 +121,7 @@
           params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined,
           commandIsMeta(navigator.platform), theme);
         forwardModifiers(canvas, window, wasm.browser_modifiers_changed);
+        routeKeyboard(canvas, wasm.browser_keyboard);
         ready = true;
         window.parent.postMessage({ type: "progred:ready" }, location.origin);
         window.addEventListener("focus", wasm.browser_focus_changed);

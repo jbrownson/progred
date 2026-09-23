@@ -202,6 +202,10 @@ an error, not an empty substitute. `menu=hidden` removes the menu and its layout
 space together with its command shortcuts (including Raw mode and examples).
 Editing, navigation, and undo/redo remain independently available; this does not
 restrict what data can be edited.
+Browser key events run the installed editor handlers synchronously and cancel
+the browser default only when handled. A capture listener bypasses Winit's
+unconditional keyboard cancellation and prevents duplicate dispatch. The web
+event-loop adapter and DOM callback share the same app; native routing is unchanged.
 `wheel=auto` captures scrollable editor regions and otherwise leaves input to
 the browser. `wheel=page` always leaves it to the browser; omission or `wheel=editor` keeps
 editor scrolling/zooming. This is independent of menu visibility and embedding.

@@ -14,12 +14,14 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   const { isTheme, savedTheme } = await import("../web/theme.mjs");
   const { forwardModifiers } = await import("../web/modifiers.mjs");
   const { routeWheel } = await import("../web/scroll.mjs");
+  const { routeKeyboard } = await import("../web/keyboard.mjs");
   const calls = [];
   const messages = [];
   const focusEvents = [];
   const listeners = {};
   const themeChanges = [];
   const modifierChanges = [];
+  const keyboardEvents = [];
   const parent = { postMessage: (...args) => messages.push(structuredClone(args)) };
   const host = {
     parent,
@@ -45,7 +47,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
-    JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, routeWheel, navigator: { platform },
+    JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, routeWheel, routeKeyboard, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
     window: host,
     document: {
@@ -63,6 +65,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       browser_focus_changed: () => focusEvents.push("changed"),
       browser_modifiers_changed: (...state) => modifierChanges.push(state),
       browser_captures_scroll: capturesScroll,
+      browser_keyboard: (event) => { keyboardEvents.push(event); return false; },
       set_theme: (theme) => themeChanges.push(theme),
       computation_finished() {},
       worker_threads: () => 1,
@@ -74,7 +77,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       },
     },
   });
-  return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges, modifierChanges,
+  return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges, modifierChanges, keyboardEvents,
     canvas, canvasListeners, documentElement, body };
 }
 
@@ -127,7 +130,7 @@ test("wheel handling defaults to the editor, including embeds without an explici
 });
 
 test("page wheel handling leaves the browser default intact and excludes editor wheel listeners", async () => {
-  const { canvas, canvasListeners, documentElement, body } = await start("?wheel=page");
+  const { canvas, canvasListeners, documentElement, body, keyboardEvents } = await start("?wheel=page");
   assert.deepEqual(canvasListeners.filter(({ type }) => type === "wheel"),
     Array.from({ length: 2 }, () => ({ type: "wheel", options: { capture: true, passive: true } })));
   assert.equal(documentElement.style.overscrollBehavior, "auto");
@@ -144,7 +147,8 @@ test("page wheel handling leaves the browser default intact and excludes editor 
     canvas.addEventListener(type, () => { received++; });
     canvas.dispatchEvent(new Event(type));
   }
-  assert.equal(received, 4);
+  assert.equal(received, 3);
+  assert.equal(keyboardEvents.length, 1); // Keys use the synchronous route, independently of wheel policy.
 });
 
 test("invalid wheel configuration fails before starting workers or the editor", async () => {

@@ -6,7 +6,7 @@ import tempfile
 
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-EDITOR_FILES = ("index.html", "icon.svg", "worker-host.js", "worker.js", "platform.mjs", "theme.mjs", "modifiers.mjs", "scroll.mjs")
+EDITOR_FILES = ("index.html", "icon.svg", "worker-host.js", "worker.js", "platform.mjs", "theme.mjs", "modifiers.mjs", "scroll.mjs", "keyboard.mjs")
 
 
 def assemble(repository, destination):
