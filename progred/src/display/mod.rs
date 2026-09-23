@@ -272,7 +272,7 @@ pub trait Env {
         function: &Value,
         arguments: &[(CellId, Value)],
         scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation;
+    ) -> grap::Evaluation<gid::Value>;
 
     /// Evaluate an expression using the host's ordinary allowance.
     fn evaluate(&self, expression: &Value) -> Value;
@@ -857,7 +857,7 @@ mod tests {
                 _: &Value,
                 _: &[(CellId, Value)],
                 _scope: Option<&grap::ForeignOverlay<'_>>,
-            ) -> grap::Evaluation {
+            ) -> grap::Evaluation<gid::Value> {
                 panic!("unexpected application")
             }
 

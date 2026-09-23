@@ -20,7 +20,7 @@ mod tests;
 
 pub(super) fn preview(
     context: &mut ::grap::Context,
-    call: ::grap::Expression,
+    call: &::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<Value, ::grap::Halt> {
     implicit::preview_with(

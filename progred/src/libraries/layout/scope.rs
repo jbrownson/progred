@@ -29,12 +29,12 @@ const FUNCTIONS: &[CellId] = &[
 
 pub(super) fn program(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     match context.field(call, ::grap::vocabulary::EXPRESSION) {
         Some(expression) => {
-            let closure = context.closure([], context.value(expression).clone(), environment);
+            let closure = context.closure([], expression, environment);
             Ok(::grap::RuntimeValue::record([(LAYOUT_PROGRAM, closure)]))
         }
         None => Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
@@ -80,9 +80,9 @@ impl Output {
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run(
     target: impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
+    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation<gid::Value>,
 ) -> (
-    Evaluation,
+    Evaluation<Value>,
     Option<Layout<crate::Editor, crate::frame::Hovered>>,
 ) {
     let output = Output {
@@ -90,22 +90,17 @@ pub fn run(
     };
     let unit = Value::record([]);
     let emit =
-        |function, context: &mut Context<'_>, call, environment: &Environment| match operation(
-            function,
-            context,
-            call,
-            environment,
-            &output,
-            &target,
-        ) {
-            Ok(layout) => Ok(context.effect(|| {
-                output.children.borrow_mut().push(layout);
-                unit.clone()
-            })),
-            Err(BuildError::Absent(value)) => Ok(value),
-            Err(BuildError::Halt(halt)) => Err(halt),
+        |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
+            match operation(function, context, call, environment, &output, &target) {
+                Ok(layout) => Ok(context.effect(|| {
+                    output.children.borrow_mut().push(layout);
+                    unit.clone()
+                })),
+                Err(BuildError::Absent(value)) => Ok(value),
+                Err(BuildError::Halt(halt)) => Err(halt),
+            }
         };
-    let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
+    let mut evaluation = evaluate(&ForeignOverlay::from_value(FUNCTIONS, &emit));
     let mut children = output.children.into_inner();
     let layout = if !evaluation.completed || absent::is_absent(&evaluation.result) {
         None
@@ -142,14 +137,14 @@ pub(super) fn display(
 
 fn argument<T>(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: CellId,
     read: impl FnOnce(&Value) -> Option<T>,
 ) -> Result<Option<T>, Halt> {
     match context.field(call, field) {
         Some(expression) => context
-            .eval(expression, environment)
+            .eval_to_value(expression, environment)
             .map(|value| read(&value)),
         None => Ok(None),
     }
@@ -157,7 +152,7 @@ fn argument<T>(
 
 fn number_argument(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: CellId,
     default: Option<f64>,
@@ -183,7 +178,7 @@ fn single(
 fn operation(
     function: CellId,
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     output: &Output,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
@@ -214,7 +209,8 @@ fn operation(
     }
     macro_rules! children {
         ($body:expr) => {{
-            let (result, children) = output.collect(|| context.eval($body, environment))?;
+            let (result, children) =
+                output.collect(|| context.eval_to_value($body, environment))?;
             if absent::is_absent(&result) {
                 return Err(BuildError::Absent(result));
             }

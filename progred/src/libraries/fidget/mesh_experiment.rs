@@ -15,7 +15,7 @@ fn cube_preview() -> VolumePreview {
     let declaration = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let entry = crate::projection::viewport::entry(sources, &declaration.path).unwrap();
     let (value, function) = presentation::viewport(entry.value).unwrap();
-    let result = ::grap::apply(
+    let result = ::grap::apply_value(
         function,
         [
             (presentation::vocabulary::VALUE, value.clone()),

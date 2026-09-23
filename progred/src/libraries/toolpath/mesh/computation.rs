@@ -256,7 +256,7 @@ mod tests {
             doc: &doc,
             libraries: &stack.libraries,
         };
-        let value = ::grap::evaluate(
+        let value = ::grap::evaluate_value(
             &::grap::call(
                 fidget::vocabulary::PREVIEW_MESH.into(),
                 [(
@@ -607,7 +607,7 @@ mod tests {
             counter,
             ::grap::Definition::foreign(
                 Value::record([]),
-                ::grap::ForeignFunction::new({
+                ::grap::ForeignFunction::from_value({
                     let runs = runs.clone();
                     move |_, _, _| {
                         runs.set(runs.get() + 1);

@@ -51,7 +51,7 @@ impl Reify {
                 .share(Some(Shared::List(Rc::as_ptr(elements))), |this| {
                     Value::list(elements.iter().map(|value| this.value(value)))
                 }),
-            RuntimeValueKind::Foreign(foreign) => ffi(foreign.cell()),
+            RuntimeValueKind::Foreign(cell) => ffi(*cell),
             RuntimeValueKind::Closure(closure) => Value::record([(
                 vocabulary::CLOSURE,
                 Value::Record(closure.fields.update(
@@ -148,8 +148,8 @@ mod tests {
         let data = RuntimeValue::list([RuntimeValue::f64(42.0)]);
         let environment = Environment::with_indices(context.indices.clone())
             .extended_indexed([(cell_index(&context.indices, captured), data.clone())]);
-        let first = context.closure([], captured.into(), &environment);
-        let second = context.closure([], Value::record([]), &environment);
+        let first = context.closure_value([], captured.into(), &environment);
+        let second = context.closure_value([], Value::record([]), &environment);
         let result = RuntimeValue::list([first, second, data]).into_value();
         let children: Vec<_> = result.as_list().unwrap().values().collect();
         let environment = |value: &Value| {
@@ -175,7 +175,7 @@ mod tests {
             children[2]
         ));
         drop(context);
-        let evaluated = crate::apply(children[0], [], &host, 100);
+        let evaluated = crate::apply_value(children[0], [], &host, 100);
         assert!(evaluated.completed);
         assert_eq!(&evaluated.result, children[2]);
     }
@@ -193,7 +193,7 @@ mod tests {
             ),
         ]);
         let closures = RuntimeValue::list([1.0, 2.0].map(|number| {
-            context.closure(
+            context.closure_value(
                 [],
                 local.into(),
                 &outer.extended_runtime([(local, RuntimeValue::f64(number))]),

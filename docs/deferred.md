@@ -114,13 +114,29 @@ from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
 
-Public evaluation/application APIs return GID `Value`. Lowered values remain
-internal to an evaluation, and materialization preserves shared subgraphs.
+Public evaluation/application APIs now return owned `RuntimeValue`; code and
+lexical environments have shared ownership, while execution caches and host
+capabilities remain evaluation-local. Explicit GID adapters still serve the
+editor's projection, presentation, controls, and drawing handoffs. Migrate
+that chain so retained callbacks keep their lowered code and source locations.
+Input-relative origins also need their original input occurrence at those
+handoffs, not rebasing onto a later drawing program. Do not attach origins to
+serialized GID or preserve a creator's dynamic stack as a caller.
+
+The pending `website_forest_hover_finds_the_available_call` regression records
+the remaining end-to-end gap and is explicitly ignored until that migration.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
-and its supporting evaluator changes were removed after both tested consumers
-favored the GID boundary. Revisit only with a demonstrated consumer benefit;
-retained code needs explicit ownership and fresh host/capability resolution,
-and can retain more storage than the result itself needs.
+measured an earlier, removed implementation. Its results motivate profiling
+the new consumers, not assuming that keeping runtime values is always faster.
+
+After that migration, repeat the optimized `profile_program_tree_construction`
+and `cam_controls_profile_loop` canaries against commit `15985033` and this
+intermediate implementation. The 2026-09-23 local comparison measured warm
+uncached construction at 7.6–8.5 ms before versus 9.2–10.8 ms now, and median
+controls-only frames at about 0.31 ms versus 0.33–0.34 ms. Exclude compilation
+and isolate build outputs for each source tree: sharing a target directory
+between archived copies reused incompatible artifacts. These are not Fidget
+rendering or browser measurements, and recovering that overhead is not assured.
 
 `with controls` still returns a declaration interpreted by its partial. Direct
 widget emission remains separate, deferred work. Profile uncached construction

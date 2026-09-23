@@ -507,6 +507,51 @@ fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) 
 }
 
 #[test]
+#[ignore = "pending runtime closures through presentation/controls/drawing; see docs/deferred.md"]
+fn website_forest_hover_finds_the_available_call() {
+    use crate::hover::{Hover, SourceTrace};
+    let (editor, names) = website_growing_forest_editor();
+    let mut runner = crate::EditorRunner::new(editor);
+    runner.refresh_frame(1.0, kurbo::Size::new(720.0, 684.0));
+    let sources = runner.editor.sources();
+    let expected = runner
+        .frame
+        .dispatch
+        .descends
+        .iter()
+        .find_map(|descend| {
+            let path = descend.scope.source(&descend.path)?;
+            let value = sources.resolve_path(&path)?;
+            (value
+                .as_record()?
+                .get(&grap::vocabulary::FUNCTION)?
+                .as_cell()?
+                == names["forest_view"])
+                .then(|| SourceTrace::from_path(&sources, Rc::from(path.as_ref())))
+        })
+        .expect("the forest call is projected");
+    let hovered = (20..300).step_by(10).find_map(|y| {
+        (20..690).step_by(10).find_map(|x| {
+            let (_, claim) = runner.frame.dispatch.hover_geometry.probe(
+                Some(Point::new(x as f64, y as f64)), None, 0.0,
+            )?;
+            let Claim::Direct(Hovered::Tree(Hover::Calls(calls))) = claim else { return None; };
+            let tree = calls.sources().any(|source| matches!(source, SourceTrace::InCell { cell, .. } if cell == names["growing_tree"]));
+            tree.then_some(Hover::Calls(calls))
+        })
+    }).expect("a tree shape has a captured call chain");
+    assert_eq!(
+        crate::projection::source_link::hover_source(
+            &sources,
+            &runner.frame.dispatch.descends,
+            &hovered
+        ),
+        Some(expected),
+        "{hovered:?}",
+    );
+}
+
+#[test]
 fn website_growing_forest_controls_and_edits_change_the_drawing() {
     use crate::libraries::{color, controls, presentation};
     fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
@@ -1066,7 +1111,7 @@ fn editor_toolpath_focus_svg_captures() {
         doc: &doc,
         libraries: &libraries,
     };
-    let tree = ::grap::apply(&names["program_tree"].into(), [], &sources, 300_000).result;
+    let tree = ::grap::apply_value(&names["program_tree"].into(), [], &sources, 300_000).result;
     for (ranges, file) in [
         (vec![(4, 0..1), (3, 0..1), (2, 0..1)], "cam_focus_top.svg"),
         (vec![(4, 1..2)], "cam_focus_op2.svg"),
@@ -1513,7 +1558,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
                 ],
             );
             let stack = crate::stack::load();
-            let result = grap::evaluate(&expression, &stack.libraries, 1000);
+            let result = grap::evaluate_value(&expression, &stack.libraries, 1000);
             assert!(result.completed && !absent::is_absent(&result.result));
             let doc = Document {
                 root: Some(result.result),

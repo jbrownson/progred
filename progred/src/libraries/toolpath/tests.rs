@@ -14,7 +14,7 @@ impl Recording {
 }
 
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
-    let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
+    let result = ::grap::evaluate_value(&call(names["cube"], []), sources, 10_000);
     assert!(
         result.completed && !absent::is_absent(&result.result),
         "{:?}",
@@ -68,48 +68,50 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         ),
     ]);
     let previews = [None, Some(STOCK.into())].map(|mode| {
-        let emit =
-            |function, context: &mut ::grap::Context, call, environment: &::grap::Environment| {
-                let key = context.field(call, ui::KEY).unwrap();
-                let key = context.eval(key, environment)?;
-                if function == ui::RADIO {
-                    assert_eq!(key, names["preview_mode"].into());
-                    let options = context.field(call, ui::OPTIONS).unwrap();
-                    let options = context.eval(options, environment)?;
-                    assert_eq!(
-                        options
-                            .as_list()
-                            .unwrap()
-                            .values()
-                            .map(|option| {
-                                option
-                                    .as_record()
-                                    .unwrap()
-                                    .get(&presentation::vocabulary::VALUE)
-                                    .unwrap()
-                                    .clone()
-                            })
-                            .collect::<Vec<_>>(),
-                        [names["model"].into(), STOCK.into()]
-                    );
-                    let initial = context.field(call, ui::INITIAL).unwrap();
-                    let initial = context.eval(initial, environment)?;
-                    assert_eq!(
-                        initial,
-                        names["model"].into(),
-                        "Model is the default preview"
-                    );
-                    Ok(mode.clone().unwrap_or(initial))
-                } else {
-                    assert_eq!(function, ui::TREE_PROGRAM_CURSOR);
-                    assert_eq!(key, names["focus"].into());
-                    Ok(cursor.clone())
-                }
-            };
-        let parameters = ::grap::evaluate_scoped(
+        let emit = |function,
+                    context: &mut ::grap::Context,
+                    call: &::grap::Expression,
+                    environment: &::grap::Environment| {
+            let key = context.field(call, ui::KEY).unwrap();
+            let key = context.eval_to_value(key, environment)?;
+            if function == ui::RADIO {
+                assert_eq!(key, names["preview_mode"].into());
+                let options = context.field(call, ui::OPTIONS).unwrap();
+                let options = context.eval_to_value(options, environment)?;
+                assert_eq!(
+                    options
+                        .as_list()
+                        .unwrap()
+                        .values()
+                        .map(|option| {
+                            option
+                                .as_record()
+                                .unwrap()
+                                .get(&presentation::vocabulary::VALUE)
+                                .unwrap()
+                                .clone()
+                        })
+                        .collect::<Vec<_>>(),
+                    [names["model"].into(), STOCK.into()]
+                );
+                let initial = context.field(call, ui::INITIAL).unwrap();
+                let initial = context.eval_to_value(initial, environment)?;
+                assert_eq!(
+                    initial,
+                    names["model"].into(),
+                    "Model is the default preview"
+                );
+                Ok(mode.clone().unwrap_or(initial))
+            } else {
+                assert_eq!(function, ui::TREE_PROGRAM_CURSOR);
+                assert_eq!(key, names["focus"].into());
+                Ok(cursor.clone())
+            }
+        };
+        let parameters = ::grap::evaluate_value_scoped(
             &::grap::call(fields.get(&ui::CONTROLS).unwrap().clone(), []),
             &sources,
-            &::grap::ForeignOverlay::new(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
+            &::grap::ForeignOverlay::from_value(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
             300_000,
         );
         assert!(
@@ -117,7 +119,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             "{:?}",
             parameters.result
         );
-        let preview = ::grap::apply(
+        let preview = ::grap::apply_value(
             fields.get(&ui::VIEW).unwrap(),
             [
                 (
@@ -206,11 +208,11 @@ fn point_call(function: CellId, point: Point3) -> Value {
     call(function, [X, Y, Z].into_iter().zip(point.map(f64::value)))
 }
 
-fn evaluate(expression: &Value, fuel: usize) -> (Evaluation, Recording) {
+fn evaluate(expression: &Value, fuel: usize) -> (Evaluation<gid::Value>, Recording) {
     let stack = crate::stack::load();
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
-        ::grap::evaluate_scoped(expression, &stack.libraries, scope, fuel)
+        ::grap::evaluate_value_scoped(expression, &stack.libraries, scope, fuel)
     });
     (evaluation, recording)
 }
@@ -231,8 +233,8 @@ fn apply_groups(
     host: &dyn ::grap::Host,
     scope: &::grap::ForeignOverlay<'_>,
     fuel: usize,
-) -> Evaluation {
-    let generated = ::grap::evaluate_scoped(
+) -> Evaluation<gid::Value> {
+    let generated = ::grap::evaluate_value_scoped(
         &collect_groups(::grap::call(function.clone(), arguments)),
         host,
         scope,
@@ -241,7 +243,7 @@ fn apply_groups(
     if !generated.completed || absent::is_absent(&generated.result) {
         return generated;
     }
-    ::grap::apply_scoped(
+    ::grap::apply_value_scoped(
         &SEQUENCE.into(),
         [(PROGRAM, generated.result)],
         host,
@@ -255,7 +257,7 @@ fn diagonals(
     rows: f64,
     spacing: f64,
     fuel: usize,
-) -> Evaluation {
+) -> Evaluation<gid::Value> {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
@@ -263,7 +265,7 @@ fn diagonals(
         libraries: &stack.libraries,
     };
     run(sink, |scope| {
-        ::grap::apply_scoped(
+        ::grap::apply_value_scoped(
             &names["diagonals"].into(),
             [
                 (names["rows"], f64::value(rows)),
@@ -549,7 +551,7 @@ fn generation_is_fueled_and_requires_a_scoped_sink() {
     assert!(!result.completed);
     assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
-    let unscoped = ::grap::evaluate(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
+    let unscoped = ::grap::evaluate_value(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
     assert_eq!(unscoped.result, absent::with_reason(OUTPUT_REQUIRED));
 }
 
@@ -599,7 +601,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
+                    ::grap::evaluate_value(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
@@ -625,7 +627,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     });
     let mut centers = Recording::default();
     let b = run(&mut centers, |scope| {
-        ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+        ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
     });
     assert!(
         a.completed && b.completed,
@@ -678,7 +680,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
+                    ::grap::evaluate_value(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
@@ -735,7 +737,7 @@ fn example_ball_path() -> (Recording, f64) {
     };
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+        ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
@@ -865,7 +867,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
+                    ::grap::evaluate_value(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(

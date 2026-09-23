@@ -75,8 +75,8 @@ pub(crate) fn test_evaluate(
     resolve: impl Fn(gid::CellId) -> Option<gid::Value>,
     foreign: &ForeignFunctions,
     fuel: usize,
-) -> ::grap::Evaluation {
-    ::grap::evaluate(expression, &test_host(resolve, foreign), fuel)
+) -> ::grap::Evaluation<gid::Value> {
+    ::grap::evaluate_value(expression, &test_host(resolve, foreign), fuel)
 }
 
 #[cfg(test)]
@@ -86,8 +86,8 @@ pub(crate) fn test_apply(
     resolve: impl Fn(gid::CellId) -> Option<gid::Value>,
     foreign: &ForeignFunctions,
     fuel: usize,
-) -> ::grap::Evaluation {
-    ::grap::apply(function, arguments, &test_host(resolve, foreign), fuel)
+) -> ::grap::Evaluation<gid::Value> {
+    ::grap::apply_value(function, arguments, &test_host(resolve, foreign), fuel)
 }
 
 #[derive(Clone, Copy)]
@@ -367,7 +367,7 @@ mod tests {
 
     fn left_function(
         _: &mut ::grap::Context,
-        _: Expression,
+        _: &Expression,
         _: &Environment,
     ) -> Result<Value, Halt> {
         Ok(Value::from(b"left".to_vec()))
@@ -375,7 +375,7 @@ mod tests {
 
     fn right_function(
         _: &mut ::grap::Context,
-        _: Expression,
+        _: &Expression,
         _: &Environment,
     ) -> Result<Value, Halt> {
         Ok(Value::from(b"right".to_vec()))
@@ -401,7 +401,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 
@@ -425,7 +425,7 @@ mod tests {
                     Definitions::from_parts(
                         left_cells,
                         ForeignFunctions::default()
-                            .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                            .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
                     ),
                     crate::display::partial(left_projection),
                 ),
@@ -438,7 +438,7 @@ mod tests {
                     Definitions::from_parts(
                         right_cells,
                         ForeignFunctions::default()
-                            .register(SHARED_FUNCTION, ForeignFunction::new(right_function)),
+                            .register(SHARED_FUNCTION, ForeignFunction::from_value(right_function)),
                     ),
                     crate::display::partial(right_projection),
                 ),
@@ -456,7 +456,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            ::grap::evaluate(
+            ::grap::evaluate_value(
                 &::grap::call(Value::from(SHARED_FUNCTION), []),
                 &libraries,
                 10,
@@ -506,9 +506,9 @@ mod tests {
             ForeignFunctions::default()
                 .register(
                     SHARED_FUNCTION,
-                    ForeignFunction::new(|_, _, _| Ok(crate::libraries::absent::decline())),
+                    ForeignFunction::from_value(|_, _, _| Ok(crate::libraries::absent::decline())),
                 )
-                .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
         );
         let (libraries, _, _) = Libraries::from_contributions([(
             LEFT_LIBRARY,
@@ -537,15 +537,16 @@ mod tests {
             [LEFT_LIBRARY]
         );
         assert_eq!(
-            ::grap::evaluate(&SHARED_FUNCTION.into(), &libraries, 20).result,
+            ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
             name
         );
         assert_eq!(
-            ::grap::evaluate(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20).result,
+            ::grap::evaluate_value(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20)
+                .result,
             Value::from(b"left".to_vec())
         );
         assert_eq!(
-            ::grap::apply(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
+            ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
             Value::from(b"left".to_vec())
         );
     }
@@ -557,7 +558,7 @@ mod tests {
             SHARED_FUNCTION,
             Definition::foreign(
                 name::record("native", []),
-                ForeignFunction::new(left_function),
+                ForeignFunction::from_value(left_function),
             ),
         );
         definitions.insert(
@@ -675,7 +676,7 @@ mod tests {
         let description = name::record("library", []);
         assert_eq!(libraries.first_value(LEFT_LIBRARY), Some(&description));
         assert_eq!(
-            ::grap::evaluate(&LEFT_LIBRARY.into(), &libraries, 20).result,
+            ::grap::evaluate_value(&LEFT_LIBRARY.into(), &libraries, 20).result,
             description
         );
         assert_eq!(libraries.cell_ids().collect::<Vec<_>>(), [LEFT_LIBRARY]);
@@ -689,17 +690,17 @@ mod tests {
                 Definitions::from_parts(
                     Cells::new(),
                     ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::new(left_function)),
+                        .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
                 ),
                 crate::display::partial(|_| None),
             ),
         )]);
         assert_eq!(
-            ::grap::evaluate(&SHARED_FUNCTION.into(), &libraries, 20).result,
+            ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
             Value::record([])
         );
         assert_eq!(
-            ::grap::apply(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
+            ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
             Value::from(b"left".to_vec())
         );
     }
@@ -714,7 +715,7 @@ mod tests {
             Definitions::from_parts(
                 left_cells,
                 ForeignFunctions::default()
-                    .register(SHARED_CELL, ForeignFunction::new(left_function)),
+                    .register(SHARED_CELL, ForeignFunction::from_value(left_function)),
             ),
             crate::display::partial(|_| None),
         );

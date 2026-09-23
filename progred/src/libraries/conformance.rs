@@ -22,7 +22,7 @@ fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
 }
 
-fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation {
+fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
     crate::libraries::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
@@ -30,7 +30,7 @@ fn evaluate_resolving(
     expression: &Value,
     resolve: impl Fn(CellId) -> Option<Value>,
     fuel: usize,
-) -> grap::Evaluation {
+) -> grap::Evaluation<gid::Value> {
     crate::libraries::test_evaluate(expression, resolve, &functions(), fuel)
 }
 

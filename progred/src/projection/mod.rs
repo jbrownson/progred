@@ -151,7 +151,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         function: &Value,
         arguments: &[(CellId, Value)],
         scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation {
+    ) -> grap::Evaluation<gid::Value> {
         self.cx.sources.apply_scoped(function, arguments, scope)
     }
 
@@ -175,7 +175,10 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
             Some(computations) => {
                 computations.apply(self.cx.view, self.path, function, arguments, fuel)
             }
-            None => grap::apply(function, arguments.iter().cloned(), &self.cx.sources, fuel).result,
+            None => {
+                grap::apply_value(function, arguments.iter().cloned(), &self.cx.sources, fuel)
+                    .result
+            }
         }
     }
 

@@ -296,7 +296,7 @@ fn website_forest_edits_change_one_height_and_all_leaf_colors() {
         let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
             panic!("leaf source hover")
         };
-        assert!(matches!(hover, Hovered::Tree(Hover::Source(_))));
+        assert!(matches!(hover, Hovered::Tree(Hover::Calls(_))));
         let mut dispatch =
             placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
         dispatch.descends = Rc::from(frame.descends.clone());
@@ -618,7 +618,7 @@ fn results(world: &crate::Editor, slots: &[CellId]) -> Vec<f64> {
                 .and_then(|item| item.as_record()?.get(&EVALUATE))
         })
         .map(|expression| {
-            let evaluation = grap::evaluate(expression, &world.sources(), grap::DEFAULT_FUEL);
+            let evaluation = grap::evaluate_value(expression, &world.sources(), grap::DEFAULT_FUEL);
             assert!(evaluation.completed);
             f64::read(&evaluation.result).expect("numeric lesson result")
         })
@@ -1018,15 +1018,18 @@ fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_cal
     for point in points {
         let mut frame = editing_frame_at(&mut world, false, None, Some(point));
         frame.root_navigation(&crate::test_root());
-        let hover = Hovered::Tree(Hover::Source(crate::hover::SourceTrace::InCell {
+        let source = crate::hover::SourceTrace::InCell {
             cell: names["dot"],
             source: gid::Resolution::Document,
             path: Rc::from([Step::Key(BODY)]),
-        }));
-        assert_eq!(
-            frame.claim.as_ref().map(|(_, claim)| claim),
-            Some(&Claim::Direct(hover.clone()))
-        );
+        };
+        let Some((_, Claim::Direct(hover))) = frame.claim.clone() else {
+            panic!("expected a drawing source claim")
+        };
+        let Hovered::Tree(Hover::Calls(ref trace)) = hover else {
+            panic!("expected a drawing call trace")
+        };
+        assert_eq!(trace.sources().next(), Some(source));
         let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover));
         dispatch.descends = Rc::from(frame.descends.clone());
         let mut event = press(point.x, true);

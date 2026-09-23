@@ -180,12 +180,12 @@ pub(crate) fn evaluate(
     let evaluation = {
         let call = |function,
                     context: &mut grap::Context<'_>,
-                    call: grap::Expression,
+                    call: &grap::Expression,
                     environment: &grap::Environment| {
             event_foreign(function, context, call, environment, path, &staged)
         };
-        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
-        grap::apply_scoped(function, arguments, sources, &overlay, fuel)
+        let overlay = grap::ForeignOverlay::from_value(&EVENT_FUNCTIONS, &call);
+        grap::apply_value_scoped(function, arguments, sources, &overlay, fuel)
     };
     (evaluation.completed && !absent::declines(&evaluation.result)).then(|| staged.into_inner())
 }
@@ -193,7 +193,7 @@ pub(crate) fn evaluate(
 fn event_foreign(
     function: gid::CellId,
     context: &mut grap::Context,
-    call: grap::Expression,
+    call: &grap::Expression,
     environment: &grap::Environment,
     path: &[gid::Step],
     staged: &RefCell<PendingChanges>,
@@ -223,7 +223,7 @@ fn event_foreign(
         let Some(expression) = context.field(call, selection_capability::vocabulary::PATH) else {
             return Ok(context.missing_argument(selection_capability::vocabulary::PATH));
         };
-        let encoded = context.eval(expression, environment)?;
+        let encoded = context.eval_to_value(expression, environment)?;
         let Some(path) = path_data::read(&encoded) else {
             return Ok(grap::absent::with_detail(
                 path_data::vocabulary::INVALID_PATH,
@@ -234,7 +234,7 @@ fn event_foreign(
         let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
             return Ok(context.missing_argument(site::vocabulary::VALUE));
         };
-        let value = context.eval(expression, environment)?;
+        let value = context.eval_to_value(expression, environment)?;
         let mut staged = staged.borrow_mut();
         if !absent::is_absent(&value)
             || staged
@@ -252,7 +252,7 @@ fn event_foreign(
         let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
             return Ok(context.missing_argument(site::vocabulary::VALUE));
         };
-        let value = context.eval(expression, environment)?;
+        let value = context.eval_to_value(expression, environment)?;
         let value = (!absent::is_absent(&value)).then_some(value.clone());
         return Ok(context.effect(|| {
             let mut staged = staged.borrow_mut();
@@ -300,15 +300,20 @@ mod tests {
             });
             let foreign = |function,
                            context: &mut grap::Context<'_>,
-                           call,
+                           call: &grap::Expression,
                            environment: &grap::Environment| {
                 event_foreign(function, context, call, environment, &[], &staged)
             };
             let capabilities = [get, set];
-            let scope = grap::ForeignOverlay::new(&capabilities, &foreign);
+            let scope = grap::ForeignOverlay::from_value(&capabilities, &foreign);
             let read = || {
-                grap::evaluate_scoped(&grap::call(get.into(), []), &stack.libraries, &scope, 100)
-                    .result
+                grap::evaluate_value_scoped(
+                    &grap::call(get.into(), []),
+                    &stack.libraries,
+                    &scope,
+                    100,
+                )
+                .result
             };
             assert_eq!(read(), absent::with_reason(reason));
             for payload in [
@@ -325,7 +330,8 @@ mod tests {
                         (site::vocabulary::VALUE, payload.clone()),
                     ],
                 );
-                let evaluation = grap::evaluate_scoped(&expression, &stack.libraries, &scope, 100);
+                let evaluation =
+                    grap::evaluate_value_scoped(&expression, &stack.libraries, &scope, 100);
                 assert!(evaluation.completed);
                 assert_eq!(evaluation.result, Value::record([]));
                 assert_eq!(

@@ -146,7 +146,7 @@ fn editor_tool_profiles_svg_captures() {
         doc: &doc,
         libraries: &libraries,
     };
-    let square = ::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000).result;
+    let square = ::grap::evaluate_value(&Value::from(names["square_tool"]), &sources, 1000).result;
     assert!(Tool::read(&square).is_some());
     for (name, tool) in [
         ("square", square),

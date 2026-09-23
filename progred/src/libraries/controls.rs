@@ -57,7 +57,7 @@ const PADDING_Y: f64 = 4.0;
 
 fn constructor(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let mut fields = Vec::new();
@@ -65,7 +65,7 @@ fn constructor(
         let Some(expression) = context.field(call, key) else {
             return Ok(context.missing_runtime_argument(key));
         };
-        let value = context.eval_runtime(expression, environment)?;
+        let value = context.eval(expression, environment)?;
         if value.is_absent() {
             return Ok(value);
         }
@@ -122,21 +122,21 @@ fn apply_change(
             .annotation(root, path),
     );
     let staged = RefCell::new(None);
-    let update = |_, context: &mut Context<'_>, call, environment: &Environment| {
+    let update = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let Some(expression) = context.field(call, VALUE) else {
             return Ok(context.missing_argument(VALUE));
         };
-        let value = context.eval(expression, environment)?;
+        let value = context.eval_to_value(expression, environment)?;
         Ok(context.effect(|| {
             staged.replace(Some(value));
             Value::record([])
         }))
     };
-    let result = ::grap::apply_scoped(
+    let result = ::grap::apply_value_scoped(
         handler,
         [(VALUE, value), (STATE, state), (UPDATE, update_function())],
         &scope.view(editor.sources()).sources,
-        &ForeignOverlay::new(&[UPDATE], &update),
+        &ForeignOverlay::from_value(&[UPDATE], &update),
         ::grap::DEFAULT_FUEL,
     );
     if result.completed && !absent::declines(&result.result) {
@@ -357,7 +357,7 @@ fn display(
             }
         };
         let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
-        let result = ::grap::apply(
+        let result = ::grap::apply_value(
             &view,
             [
                 (VALUE, source.clone()),
@@ -407,7 +407,10 @@ fn controls_output(
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
 ) -> Result<(Vec<Widget>, Value), Value> {
     let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
-    let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
+    let emit = |function,
+                context: &mut Context<'_>,
+                call: &Expression,
+                environment: &Environment| {
         if function == SLIDER {
             let Some(expression) = context.field(call, VALUE) else {
                 return Ok(context.missing_argument(VALUE));
@@ -418,7 +421,7 @@ fn controls_output(
             let Some(expression) = context.field(call, ON_CHANGE) else {
                 return Ok(context.missing_argument(ON_CHANGE));
             };
-            let handler = context.eval(expression, environment)?;
+            let handler = context.eval_to_value(expression, environment)?;
             if absent::is_absent(&handler) {
                 return Ok(handler);
             }
@@ -444,7 +447,7 @@ fn controls_output(
         let Some(key) = context.field(call, KEY) else {
             return Ok(context.missing_argument(KEY));
         };
-        let key = context.eval(key, environment)?;
+        let key = context.eval_to_value(key, environment)?;
         let Some(key) = key.as_cell() else {
             return Ok(absent::with_reason(INVALID_INPUT));
         };
@@ -452,7 +455,7 @@ fn controls_output(
             let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
                 return Ok(context.missing_argument(tree::vocabulary::PROGRAM));
             };
-            let program = context.eval(program, environment)?;
+            let program = context.eval_to_value(program, environment)?;
             if absent::is_absent(&program) {
                 return Ok(program);
             }
@@ -519,8 +522,8 @@ fn controls_output(
             let Some(expression) = context.field(call, ITEMS) else {
                 return Ok(context.missing_argument(ITEMS));
             };
-            let decorate = stored_tree_items(context, expression);
-            let items = context.eval(expression, environment)?;
+            let decorate = stored_tree_items(context, expression.clone());
+            let items = context.eval_to_value(expression, environment)?;
             if absent::is_absent(&items) {
                 return Ok(items);
             }
@@ -559,12 +562,12 @@ fn controls_output(
             let Some(expression) = context.field(call, OPTIONS) else {
                 return Ok(context.missing_argument(OPTIONS));
             };
-            let options = context.eval(expression, environment)?;
+            let options = context.eval_to_value(expression, environment)?;
             let Some(options) = radio_options(&options) else {
                 return Ok(absent::with_reason(INVALID_INPUT));
             };
             let initial = match context.field(call, INITIAL) {
-                Some(expression) => context.eval(expression, environment)?,
+                Some(expression) => context.eval_to_value(expression, environment)?,
                 None => options[0].value.clone(),
             };
             if !options.iter().any(|option| option.value == initial) {
@@ -586,11 +589,11 @@ fn controls_output(
         }
         Ok(absent::with_reason(INVALID_INPUT))
     };
-    let evaluation = ::grap::apply_scoped(
+    let evaluation = ::grap::apply_value_scoped(
         controls,
         [(STATE, current_state(state)), (UPDATE, update_function())],
         &frame.inputs.sources,
-        &ForeignOverlay::new(
+        &ForeignOverlay::from_value(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
             &emit,
         ),
@@ -607,8 +610,8 @@ fn stored_tree_items(
     context: &Context,
     expression: Expression,
 ) -> Option<tree_range::ItemDecoration> {
-    context.value(expression).as_list()?;
-    let source = crate::hover::from_grap(context.source_origin(expression)?, None)?;
+    context.value(&expression).as_list()?;
+    let source = crate::hover::from_grap(context.source_origin(&expression)?, None)?;
     Some(Rc::new(move |key| {
         Some(crate::projection::source_link::decoration(
             source.descendant(
@@ -652,33 +655,30 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         cells.set_value(key, name::record(label, []));
     }
     let functions = ForeignFunctions::default()
-        .register(
-            WITH_CONTROLS,
-            ForeignFunction::runtime(constructor).tracked(),
-        )
+        .register(WITH_CONTROLS, ForeignFunction::new(constructor).tracked())
         .register(
             SLIDER,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             UPDATE,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             RADIO,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             TREE_RANGE,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             TREE_CURSOR,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         )
         .register(
             TREE_PROGRAM_CURSOR,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
         );
     Library::named(
         ID,

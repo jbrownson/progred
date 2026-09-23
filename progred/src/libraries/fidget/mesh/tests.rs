@@ -51,7 +51,7 @@ fn mesh_function_returns_an_ordinary_declaration() {
         libraries: &stack.libraries,
     };
     let call = |arguments| {
-        ::grap::evaluate(
+        ::grap::evaluate_value(
             &::grap::call(vocabulary::PREVIEW_MESH.into(), arguments),
             &sources,
             10_000,

@@ -26,7 +26,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         (SQUARE_MILL, Tool::square(0.125, 0.22).unwrap()),
         (BULL_MILL, Tool::bull(0.125, 0.01, 0.22).unwrap()),
     ] {
-        let value = ::grap::evaluate(
+        let value = ::grap::evaluate_value(
             &::grap::call(
                 function.into(),
                 [
@@ -53,7 +53,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         );
         assert!(Tool::read(&Value::Record(fields)).is_some());
     }
-    let value = ::grap::evaluate(
+    let value = ::grap::evaluate_value(
         &::grap::call(
             SQUARE_MILL.into(),
             [
@@ -367,12 +367,15 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
         libraries: &stack.libraries,
     };
     assert!(
-        Tool::read(&::grap::evaluate(&Value::from(names["ball_tool"]), &sources, 1000).result)
-            .is_some()
+        Tool::read(
+            &::grap::evaluate_value(&Value::from(names["ball_tool"]), &sources, 1000).result
+        )
+        .is_some()
     );
-    let square =
-        Tool::read(&::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000).result)
-            .unwrap();
+    let square = Tool::read(
+        &::grap::evaluate_value(&Value::from(names["square_tool"]), &sources, 1000).result,
+    )
+    .unwrap();
     assert_eq!(square.sections.len(), 2);
     assert_eq!(square.sections[0].kind, SectionKind::Cutting);
     assert_eq!(square.sections[1].kind, SectionKind::NonCutting);

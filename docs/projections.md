@@ -703,8 +703,28 @@ The runtime can carry unboxed f64 values and containers with lowered children.
 The f64 encoder/decoder live with the runtime carrier and are re-exported by
 the f64 library. They accelerate an ordinary convention without adding numeric
 syntax or new GID primitives. An enriched source number retains its original
-value so a pass-through preserves unrelated fields. Generic boundaries
-materialize ordinary GID values.
+value so a pass-through preserves unrelated fields. Public `evaluate` and
+`apply` return `Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
+`Evaluation::into_value`) explicitly materializes GID; the `*_value` entry
+points adapt callers that still need that representation.
+
+Expressions own shared lowered code and source locations. A returned closure
+keeps its body and lexical environment alive, not its creating evaluator,
+host, compiled thunks, or capabilities. Applying it starts with the receiving
+evaluation's execution caches, host, and capabilities. Foreign references
+retain a cell identity and resolve its implementation in that receiving
+evaluation. Code origins survive; a closure's creation-time call stack is not
+part of its invocation-time call stack.
+
+Native `ForeignFunction::new` callbacks return runtime values, and
+`Context::eval` evaluates an argument to a runtime value. Generated runtime
+arguments remain values, including closures: they are not materialized and
+reinterpreted as expressions. Raw expression inspection and explicit GID
+adapters remain available for macros and existing consumers.
+`ForeignFunction::from_value` is the explicit adapter for a GID-returning
+implementation. Progred's projection/presentation and drawing handoffs still
+use those GID adapters; migrating that chain is the next step, not an existing
+end-to-end runtime-value contract.
 
 Materialization preserves existing sharing of runtime records, lists, and
 captured environments within one returned value. Its address table lives only
@@ -712,7 +732,7 @@ for that conversion; it neither interns equal values nor caches across
 evaluations. Environments materialize their effective bindings, newest first,
 without converting shadowed bindings. Closures still capture the shared lexical
 environment, not a statically computed subset of free variables. Native
-constructors that just assemble evaluated arguments should use `eval_runtime`
+constructors that just assemble evaluated arguments should use `Context::eval`
 and `RuntimeValue` containers, leaving conversion to a real GID boundary.
 
 Environment lookups and structural matching operate on these equivalent host

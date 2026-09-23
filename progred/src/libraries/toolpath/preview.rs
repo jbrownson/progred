@@ -111,7 +111,7 @@ pub(super) fn display(
     Some(Layout::program(Rc::new(move |context, build| {
         let mut lines = projected();
         let evaluation = run(&mut lines, |scope| {
-            ::grap::apply_scoped(&program, [], &context.inputs.sources, scope, fuel)
+            ::grap::apply_value_scoped(&program, [], &context.inputs.sources, scope, fuel)
         });
         if !evaluation.completed || absent::is_absent(&evaluation.result) {
             return crate::display::at(

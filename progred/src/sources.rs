@@ -25,16 +25,16 @@ impl crate::display::Env for Sources<'_> {
         function: &Value,
         arguments: &[(CellId, Value)],
         scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation {
+    ) -> grap::Evaluation<gid::Value> {
         match scope {
-            Some(scope) => grap::apply_scoped(
+            Some(scope) => grap::apply_value_scoped(
                 function,
                 arguments.iter().cloned(),
                 self,
                 scope,
                 grap::DEFAULT_FUEL,
             ),
-            None => grap::apply(
+            None => grap::apply_value(
                 function,
                 arguments.iter().cloned(),
                 self,
@@ -48,11 +48,11 @@ impl crate::display::Env for Sources<'_> {
     }
 
     fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> Value {
-        grap::evaluate(expression, self, fuel).result
+        grap::evaluate_value(expression, self, fuel).result
     }
 
     fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
-        grap::apply(function, arguments.iter().cloned(), self, fuel).result
+        grap::apply_value(function, arguments.iter().cloned(), self, fuel).result
     }
 
     fn name(&self, cell: CellId) -> Option<&str> {
@@ -209,7 +209,7 @@ mod tests {
                     Cells::new(),
                     grap::ForeignFunctions::default().register(
                         function,
-                        grap::ForeignFunction::new(|_, _, _| {
+                        grap::ForeignFunction::from_value(|_, _, _| {
                             panic!("a document definition must shadow the library call")
                         }),
                     ),
@@ -251,8 +251,8 @@ mod tests {
             assert!(!resolved.native);
             assert_eq!(Some(resolved.value), doc.cells.value(function));
             for result in [
-                grap::evaluate(&grap::call(function.into(), []), &sources, 100),
-                grap::apply(&function.into(), [], &sources, 100),
+                grap::evaluate_value(&grap::call(function.into(), []), &sources, 100),
+                grap::apply_value(&function.into(), [], &sources, 100),
             ] {
                 assert!(result.completed);
                 assert_eq!(result.result, expected);
@@ -296,17 +296,22 @@ mod tests {
             for host_apply in [false, true] {
                 let origins = std::cell::RefCell::new(Vec::new());
                 let functions = [probe];
-                let observe = |_, context: &mut grap::Context<'_>, call, _: &grap::Environment| {
+                let observe = |_,
+                               context: &mut grap::Context<'_>,
+                               call: &grap::Expression,
+                               _: &grap::Environment| {
                     origins
                         .borrow_mut()
-                        .push(context.source_origin(call).unwrap());
-                    Ok(context.value(context.field(call, result).unwrap()).clone())
+                        .push(context.source_origin(&call).unwrap());
+                    Ok(context
+                        .value(&context.field(call, result).unwrap())
+                        .clone())
                 };
-                let overlay = grap::ForeignOverlay::new(&functions, &observe);
+                let overlay = grap::ForeignOverlay::from_value(&functions, &observe);
                 let evaluation = if host_apply {
-                    grap::apply_scoped(&Value::from(function), [], &sources, &overlay, 100)
+                    grap::apply_value_scoped(&Value::from(function), [], &sources, &overlay, 100)
                 } else {
-                    grap::evaluate_scoped(
+                    grap::evaluate_value_scoped(
                         &grap::call(Value::from(function), []),
                         &sources,
                         &overlay,
@@ -451,7 +456,7 @@ mod tests {
                 Some(first),
             );
             assert_eq!(
-                grap::evaluate(&cell.into(), &sources, 100).result,
+                grap::evaluate_value(&cell.into(), &sources, 100).result,
                 crate::test_values::text(first),
             );
         }

@@ -13,7 +13,7 @@ impl Env for Names {
         _: &Value,
         _: &[(CellId, Value)],
         _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation {
+    ) -> ::grap::Evaluation<gid::Value> {
         panic!("source projection must not evaluate")
     }
 

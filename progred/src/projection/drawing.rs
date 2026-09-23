@@ -3,7 +3,7 @@
 
 use super::Cx;
 use crate::frame::Hovered;
-use crate::hover::{Hover, SourceTrace};
+use crate::hover::{Hover, SourceCalls, SourceTrace};
 use crate::libraries::{absent, layout as layout_data};
 use crate::placed::{HoverPass, leaf};
 use crate::sources::Sources;
@@ -64,18 +64,35 @@ struct Hit {
     transform: Affine,
     inverse: Affine,
     bounds: Rect,
-    source: SourceTrace,
+    source: HitSource,
+}
+
+enum HitSource {
+    Exact(SourceTrace),
+    Calls(SourceCalls),
+}
+
+impl From<SourceTrace> for HitSource {
+    fn from(source: SourceTrace) -> Self {
+        Self::Exact(source)
+    }
+}
+
+impl From<SourceCalls> for HitSource {
+    fn from(source: SourceCalls) -> Self {
+        Self::Calls(source)
+    }
 }
 
 impl Hit {
-    fn new(shape: puri::Shape, transform: Affine, source: SourceTrace) -> Self {
+    fn new(shape: puri::Shape, transform: Affine, source: impl Into<HitSource>) -> Self {
         let bounds = transform.transform_rect_bbox(shape_bounds(&shape));
         Self {
             shape,
             transform,
             inverse: transform.inverse(),
             bounds,
-            source,
+            source: source.into(),
         }
     }
 
@@ -91,7 +108,12 @@ impl Recorded {
             .iter()
             .rev()
             .find(|hit| hit.contains(point))
-            .map(|hit| Hovered::Tree(Hover::Source(hit.source.clone())))
+            .map(|hit| {
+                Hovered::Tree(match &hit.source {
+                    HitSource::Calls(calls) => Hover::Calls(calls.clone()),
+                    HitSource::Exact(source) => Hover::Source(source.clone()),
+                })
+            })
     }
 
     fn highlight<C: Canvas + ?Sized>(
@@ -101,17 +123,10 @@ impl Recorded {
         source: &SourceTrace,
         brush: &Brush,
     ) {
-        self.highlight_where(canvas, outer, brush, |hit| hit == source);
-    }
-
-    fn highlight_where<C: Canvas + ?Sized>(
-        &self,
-        canvas: &mut C,
-        outer: Affine,
-        brush: &Brush,
-        matches: impl Fn(&SourceTrace) -> bool,
-    ) {
-        for hit in self.hits.iter().filter(|hit| matches(&hit.source)) {
+        for hit in self.hits.iter().filter(|hit| match &hit.source {
+            HitSource::Calls(calls) => calls.contains(source),
+            HitSource::Exact(hit) => hit == source,
+        }) {
             canvas.fill(hit.shape.clone(), brush.clone(), outer * hit.transform);
         }
     }
@@ -139,13 +154,13 @@ fn shape_contains(shape: &puri::Shape, point: Point) -> bool {
 
 fn evaluated_field(
     context: &mut grap::Context,
-    call: grap::Expression,
+    call: &grap::Expression,
     environment: &grap::Environment,
     field: CellId,
 ) -> Result<Option<Value>, grap::Halt> {
     context
-        .field(call, field)
-        .map(|value| context.eval(value, environment))
+        .field(&call, field)
+        .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
 
@@ -166,12 +181,12 @@ fn shape(
     expression: grap::Expression,
     environment: &grap::Environment,
 ) -> Result<Option<puri::Shape>, grap::Halt> {
-    if let Some(content) = context.field(expression, layout_data::vocabulary::RECT) {
+    if let Some(content) = context.field(&expression, layout_data::vocabulary::RECT) {
         let (Some(x), Some(y), Some(width), Some(height)) = (
-            context.field(content, layout_data::vocabulary::X),
-            context.field(content, layout_data::vocabulary::Y),
-            context.field(content, layout_data::vocabulary::WIDTH),
-            context.field(content, layout_data::vocabulary::HEIGHT),
+            context.field(&content, layout_data::vocabulary::X),
+            context.field(&content, layout_data::vocabulary::Y),
+            context.field(&content, layout_data::vocabulary::WIDTH),
+            context.field(&content, layout_data::vocabulary::HEIGHT),
         ) else {
             return Ok(None);
         };
@@ -186,11 +201,11 @@ fn shape(
         return Ok((width >= 0.0 && height >= 0.0)
             .then(|| puri::Shape::Rect(Rect::new(x, y, x + width, y + height))));
     }
-    if let Some(content) = context.field(expression, layout_data::vocabulary::CIRCLE) {
+    if let Some(content) = context.field(&expression, layout_data::vocabulary::CIRCLE) {
         let (Some(x), Some(y), Some(radius)) = (
-            context.field(content, layout_data::vocabulary::X),
-            context.field(content, layout_data::vocabulary::Y),
-            context.field(content, layout_data::vocabulary::RADIUS),
+            context.field(&content, layout_data::vocabulary::X),
+            context.field(&content, layout_data::vocabulary::Y),
+            context.field(&content, layout_data::vocabulary::RADIUS),
         ) else {
             return Ok(None);
         };
@@ -203,14 +218,14 @@ fn shape(
         };
         return Ok((radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius))));
     }
-    if let Some(content) = context.field(expression, layout_data::vocabulary::PATH) {
-        let content = context.eval(content, environment)?;
+    if let Some(content) = context.field(&expression, layout_data::vocabulary::PATH) {
+        let content = context.eval_to_value(content, environment)?;
         return Ok(layout_data::read_shape(&Value::record([(
             layout_data::vocabulary::PATH,
             content,
         )])));
     }
-    let value = context.eval(expression, environment)?;
+    let value = context.eval_to_value(expression, environment)?;
     Ok(layout_data::read_shape(&value))
 }
 
@@ -222,17 +237,17 @@ fn transform(
     expression: grap::Expression,
     environment: &grap::Environment,
 ) -> Result<Option<Affine>, grap::Halt> {
-    let Some(operation_count) = context.elements(expression).map(<[_]>::len) else {
-        let value = context.eval(expression, environment)?;
+    let Some(operation_count) = context.elements(&expression).map(<[_]>::len) else {
+        let value = context.eval_to_value(expression, environment)?;
         return Ok(layout_data::read_transform(&value));
     };
     let mut transform = Affine::IDENTITY;
     for index in 0..operation_count {
-        let operation = context.elements(expression).unwrap()[index];
-        if let Some(point) = context.field(operation, layout_data::vocabulary::TRANSLATE) {
+        let operation = context.elements(&expression).unwrap()[index].clone();
+        if let Some(point) = context.field(&operation, layout_data::vocabulary::TRANSLATE) {
             let (Some(x), Some(y)) = (
-                context.field(point, layout_data::vocabulary::X),
-                context.field(point, layout_data::vocabulary::Y),
+                context.field(&point, layout_data::vocabulary::X),
+                context.field(&point, layout_data::vocabulary::Y),
             ) else {
                 return Ok(None);
             };
@@ -243,7 +258,7 @@ fn transform(
                 return Ok(None);
             };
             transform *= Affine::translate((x, y));
-        } else if let Some(angle) = context.field(operation, layout_data::vocabulary::ROTATE) {
+        } else if let Some(angle) = context.field(&operation, layout_data::vocabulary::ROTATE) {
             let Some(angle) = number(context, angle, environment)? else {
                 return Ok(None);
             };
@@ -264,8 +279,6 @@ fn record_program(
 ) -> Recorded {
     let canvas = RefCell::new(DrawList::new());
     let hits = RefCell::new(Vec::new());
-    // Fill call sites are few; a scan beats hashing per drawn shape.
-    let origins = RefCell::new(Vec::<(grap::Expression, Option<SourceTrace>)>::new());
     let path = RefCell::new(BezPath::new());
     let unit = Value::record([]);
     let functions = [
@@ -277,7 +290,7 @@ fn record_program(
     ];
     let draw = |function,
                 context: &mut grap::Context<'_>,
-                call,
+                call: &grap::Expression,
                 environment: &grap::Environment| {
         match function {
             layout_data::vocabulary::PATH => Ok(context.effect(|| {
@@ -337,25 +350,13 @@ fn record_program(
                         context.value(call).clone(),
                     ));
                 };
-                let cached = origins
-                    .borrow()
-                    .iter()
-                    .find(|(site, _)| *site == call)
-                    .map(|(_, source)| source.clone());
-                let source = match cached {
-                    Some(source) => source,
-                    None => {
-                        let source = context
-                            .source_origin(call)
-                            .and_then(|origin| crate::hover::from_grap(origin, input));
-                        origins.borrow_mut().push((call, source.clone()));
-                        source
-                    }
-                };
+                let calls = context
+                    .call_trace()
+                    .map(|trace| SourceCalls::new(trace, input.cloned()));
                 Ok(context.effect(|| {
-                    if let Some(source) = source {
+                    if let Some(calls) = calls.filter(SourceCalls::has_source) {
                         hits.borrow_mut()
-                            .push(Hit::new(shape.clone(), transform, source));
+                            .push(Hit::new(shape.clone(), transform, calls));
                     }
                     canvas
                         .borrow_mut()
@@ -366,8 +367,8 @@ fn record_program(
             _ => unreachable!("the overlay only advertises drawing functions"),
         }
     };
-    let overlay = grap::ForeignOverlay::new(&functions, &draw);
-    let evaluation = grap::evaluate_scoped(program, sources, &overlay, fuel);
+    let overlay = grap::ForeignOverlay::from_value(&functions, &draw);
+    let evaluation = grap::evaluate_value_scoped(program, sources, &overlay, fuel);
     if evaluation.completed && !absent::declines(&evaluation.result) {
         Recorded {
             commands: canvas.into_inner(),
@@ -588,9 +589,14 @@ mod tests {
                     Step::Key(grap::vocabulary::BODY),
                 ]),
             );
+            let Some(Hovered::Tree(hover)) =
+                drawing.target_at(Point::new(5.0, 5.0), Affine::IDENTITY)
+            else {
+                panic!("drawing should have a source");
+            };
             assert_eq!(
-                drawing.target_at(Point::new(5.0, 5.0), Affine::IDENTITY),
-                Some(Hovered::Tree(Hover::Source(selected)))
+                super::super::source_link::hover_source::<crate::Editor>(&sources, &[], &hover),
+                Some(selected)
             );
             let other = SourceTrace::from_path(
                 &sources,

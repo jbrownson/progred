@@ -121,19 +121,19 @@ fn binary(marker: CellId, left: Value, right: Value) -> Value {
 
 fn evaluated(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: CellId,
 ) -> Result<Option<Value>, Halt> {
     context
-        .field(call, field)
-        .map(|expression| context.eval(expression, environment))
+        .field(&call, field)
+        .map(|expression| context.eval_to_value(expression, environment))
         .transpose()
 }
 
 fn preview_value(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     marker: CellId,
     bounds: impl IntoIterator<Item = (CellId, f32)>,
@@ -194,7 +194,7 @@ fn preview_value(
 }
 
 fn unary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         let Some(operand) = evaluated(context, call, environment, vocabulary::OPERAND)? else {
             return Ok(context.missing_argument(vocabulary::OPERAND));
         };
@@ -203,7 +203,7 @@ fn unary_function(marker: CellId) -> ForeignFunction {
 }
 
 fn binary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         let Some(left) = evaluated(context, call, environment, vocabulary::LEFT)? else {
             return Ok(context.missing_argument(vocabulary::LEFT));
         };
@@ -242,7 +242,7 @@ fn radial_function(spelling: &str, squared_distance: Value) -> Value {
 
 fn translate_function(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
@@ -267,7 +267,7 @@ fn translate_function(
 
 fn preview_function(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     preview_value(
@@ -294,7 +294,7 @@ fn preview_function(
 
 pub(crate) fn preview_3d_function(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     volume_preview_function(context, call, environment, vocabulary::PREVIEW_3D)
@@ -302,7 +302,7 @@ pub(crate) fn preview_3d_function(
 
 fn volume_preview_function(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     marker: CellId,
 ) -> Result<Value, Halt> {
@@ -362,16 +362,19 @@ pub fn functions() -> ForeignFunctions {
     )
     .register(
         vocabulary::TRANSLATE,
-        ForeignFunction::new(translate_function),
+        ForeignFunction::from_value(translate_function),
     )
-    .register(vocabulary::PREVIEW, ForeignFunction::new(preview_function))
+    .register(
+        vocabulary::PREVIEW,
+        ForeignFunction::from_value(preview_function),
+    )
     .register(
         vocabulary::PREVIEW_3D,
-        ForeignFunction::new(preview_3d_function),
+        ForeignFunction::from_value(preview_3d_function),
     )
     .register(
         vocabulary::PREVIEW_MESH,
-        ForeignFunction::new(mesh::preview),
+        ForeignFunction::from_value(mesh::preview),
     )
 }
 
@@ -1940,7 +1943,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 

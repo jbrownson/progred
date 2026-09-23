@@ -403,7 +403,7 @@ pub fn evaluate_display(
 
 fn evaluate_foreign(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     calling_environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
@@ -412,9 +412,9 @@ fn evaluate_foreign(
     let Some(environment) = context.field(call, ::grap::vocabulary::ENVIRONMENT) else {
         return Ok(context.missing_runtime_argument(::grap::vocabulary::ENVIRONMENT));
     };
-    let environment = context.eval(environment, calling_environment)?;
+    let environment = context.eval_to_value(environment, calling_environment)?;
     match context.environment(&environment) {
-        Some(environment) => context.eval_runtime(expression, &environment),
+        Some(environment) => context.eval(expression, &environment),
         None => Ok(::grap::absent::with_detail(
             ::grap::absent::INVALID_ENVIRONMENT,
             ::grap::absent::VALUE,
@@ -427,7 +427,7 @@ fn evaluate_foreign(
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
-        ForeignFunction::runtime(evaluate_foreign),
+        ForeignFunction::new(evaluate_foreign),
     )
 }
 
@@ -652,7 +652,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 
@@ -741,7 +741,7 @@ mod tests {
                 _: &Value,
                 _: &[(CellId, Value)],
                 _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 panic!("declarations do not evaluate");
             }
 
@@ -1000,7 +1000,7 @@ mod tests {
                 _: &gid::Value,
                 _: &[(gid::CellId, gid::Value)],
                 _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 panic!("unexpected projection application")
             }
 
@@ -1284,7 +1284,7 @@ mod tests {
                 _: &gid::Value,
                 _: &[(gid::CellId, gid::Value)],
                 _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 panic!("unexpected projection application")
             }
 

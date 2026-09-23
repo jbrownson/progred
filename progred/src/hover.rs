@@ -21,6 +21,9 @@ pub enum Hover {
     Toggle(Rc<[Step]>),
     /// A generated widget or drawing linked to its source expression.
     Source(SourceTrace),
+    /// A drawing's dynamic call ancestry; the UI chooses the innermost
+    /// source that has an available projected occurrence.
+    Calls(SourceCalls),
     /// A click here commits the completion entry at this index. An
     /// index, not the entry: a hover stores ADDRESSES, never values,
     /// so what it means re-derives from the LIVE entries each frame —
@@ -32,6 +35,76 @@ pub enum Hover {
 }
 
 pub use crate::display::widget::source::{Secondary, SourceTrace};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceCalls {
+    trace: grap::CallTrace,
+    input: Option<SourceTrace>,
+}
+
+impl SourceCalls {
+    pub fn new(trace: grap::CallTrace, input: Option<SourceTrace>) -> Self {
+        Self { trace, input }
+    }
+
+    pub fn sources(&self) -> impl Iterator<Item = SourceTrace> + '_ {
+        self.trace
+            .origins()
+            .filter_map(|origin| from_grap(origin.clone(), self.input.as_ref()))
+    }
+
+    pub fn has_source(&self) -> bool {
+        self.trace
+            .origins()
+            .any(|origin| self.input.is_some() || matches!(origin, grap::SourceOrigin::Cell { .. }))
+    }
+
+    /// Compare borrowed paths; highlighting must not copy a stack or allocate
+    /// source paths for every painted shape.
+    pub fn contains(&self, source: &SourceTrace) -> bool {
+        self.trace.origins().any(|origin| match (origin, source) {
+            (
+                grap::SourceOrigin::Cell {
+                    cell,
+                    source: resolution,
+                    path,
+                },
+                SourceTrace::InCell {
+                    cell: target,
+                    source: target_resolution,
+                    path: target_path,
+                },
+            ) => {
+                cell == target
+                    && resolution == target_resolution
+                    && path.as_slice() == target_path.as_ref()
+            }
+            (grap::SourceOrigin::Input(suffix), target) => match (&self.input, target) {
+                (Some(SourceTrace::Stored(base)), SourceTrace::Stored(path)) => {
+                    base.iter().chain(suffix).eq(path.iter())
+                }
+                (
+                    Some(SourceTrace::InCell {
+                        cell,
+                        source,
+                        path: base,
+                    }),
+                    SourceTrace::InCell {
+                        cell: target,
+                        source: target_source,
+                        path,
+                    },
+                ) => {
+                    cell == target
+                        && source == target_source
+                        && base.iter().chain(suffix).eq(path.iter())
+                }
+                _ => false,
+            },
+            _ => false,
+        })
+    }
+}
 impl crate::display::widget::source::PathLookup for Sources<'_> {
     fn value_at(&self, path: &[Step]) -> Option<&Value> {
         self.resolve_path(path)
@@ -63,6 +136,7 @@ pub(crate) fn hover_secondary<C>(
             .resolve_path(path)
             .map(|value| Secondary::from_path(sources, path.clone(), value)),
         Hover::Source(source) => Some(Secondary::from_trace(source)),
+        Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
         Hover::Toggle(_) | Hover::MoreCompletions => None,
     }

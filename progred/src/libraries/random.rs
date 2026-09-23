@@ -25,20 +25,20 @@ pub mod vocabulary {
 
 fn evaluated(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<Value>, Halt> {
     context
-        .field(call, field)
-        .map(|value| context.eval(value, environment))
+        .field(&call, field)
+        .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
 
 fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
-        ForeignFunction::runtime(move |context, call, environment| {
+        ForeignFunction::new(move |context, call, environment| {
             let Some(min) = context.field(call, vocabulary::MIN) else {
                 return Ok(context.missing_runtime_argument(vocabulary::MIN));
             };
@@ -67,11 +67,13 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::BETWEEN,
-            ForeignFunction::new(|_, _, _| Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))),
+            ForeignFunction::from_value(|_, _, _| {
+                Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))
+            }),
         )
         .register(
             vocabulary::WITH_RANDOM,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let seed = match evaluated(context, call, environment, vocabulary::SEED)? {
                     Some(seed) => match u64::read(&seed) {
                         Some(seed) => seed,
@@ -85,7 +87,7 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
                 };
                 context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                    context.eval_runtime(expression, environment)
+                    context.eval(expression, environment)
                 })
             }),
         )
@@ -168,7 +170,7 @@ mod tests {
             ],
         );
         let functions = functions();
-        let evaluation = grap::evaluate(
+        let evaluation = grap::evaluate_value(
             &grap::call(
                 vocabulary::WITH_RANDOM.into(),
                 [(
@@ -223,15 +225,15 @@ mod tests {
         let second_field = new_cell_id();
         let functions = functions().register(
             pair,
-            ForeignFunction::new(move |context, call, environment| {
+            ForeignFunction::from_value(move |context, call, environment| {
                 let first = context
-                    .field(call, first_field)
-                    .map(|expression| context.eval(expression, environment))
+                    .field(&call, first_field)
+                    .map(|expression| context.eval_to_value(expression, environment))
                     .transpose()?
                     .unwrap_or_else(|| context.missing_argument(first_field));
                 let second = context
-                    .field(call, second_field)
-                    .map(|expression| context.eval(expression, environment))
+                    .field(&call, second_field)
+                    .map(|expression| context.eval_to_value(expression, environment))
                     .transpose()?
                     .unwrap_or_else(|| context.missing_argument(second_field));
                 Ok(Value::list([first, second]))

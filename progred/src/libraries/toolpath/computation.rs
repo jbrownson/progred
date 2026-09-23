@@ -11,7 +11,7 @@ pub(super) type Outcome<T> = Result<T, Value>;
 #[derive(PartialEq)]
 pub(super) struct Recorded {
     pub path: Arc<Recording>,
-    pub evaluation: ::grap::Evaluation,
+    pub evaluation: ::grap::Evaluation<gid::Value>,
 }
 
 impl Recorded {
@@ -52,10 +52,10 @@ fn record_program(
     host: &dyn ::grap::Host,
     fuel: usize,
     output: &mut Recording,
-) -> ::grap::Evaluation {
+) -> ::grap::Evaluation<gid::Value> {
     if program.as_list().is_none() {
         return run(output, |scope| {
-            ::grap::apply_scoped(program, [], host, scope, fuel)
+            ::grap::apply_value_scoped(program, [], host, scope, fuel)
         });
     }
     let mut evaluation = ::grap::Evaluation {
@@ -70,7 +70,7 @@ fn record_program(
         } else {
             let mut part = Recording::default();
             evaluation = run(&mut part, |scope| {
-                ::grap::apply_scoped(program, [], host, scope, evaluation.remaining_fuel)
+                ::grap::apply_value_scoped(program, [], host, scope, evaluation.remaining_fuel)
             });
             if !evaluation.completed || absent::is_absent(&evaluation.result) {
                 return evaluation;
@@ -99,7 +99,7 @@ mod tests {
             function: &Value,
             arguments: &[(gid::CellId, Value)],
             scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             self.sources.apply_scoped(function, arguments, scope)
         }
 
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(pose.tip, [5.5, 0.0, 0.0]);
         let mut direct = Recording::default();
         let evaluation = run(&mut direct, |scope| {
-            ::grap::evaluate_scoped(
+            ::grap::evaluate_value_scoped(
                 &::grap::call(SEQUENCE.into(), [(PROGRAM, tree.clone())]),
                 &libraries,
                 scope,
@@ -375,7 +375,7 @@ mod tests {
         );
         let mut direct = Recording::default();
         let evaluation = run(&mut direct, |scope| {
-            ::grap::apply_scoped(
+            ::grap::apply_value_scoped(
                 &names["preview_operations"].into(),
                 [],
                 &sources,

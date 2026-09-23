@@ -47,7 +47,7 @@ pub(super) fn set_parameter(doc: &mut Document, names: &Binders, name: &str, num
 fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_scoped(&names["ball_path"].into(), [], sources, scope, 500_000)
+        ::grap::apply_value_scoped(&names["ball_path"].into(), [], sources, scope, 500_000)
     });
     assert!(
         result.completed && !absent::is_absent(&result.result),
@@ -73,7 +73,7 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
             let mut recording = Recording::default();
             let result = ::grap::memo::with_recorded_effects(&definitions, read, |host| {
                 run(&mut recording, |scope| {
-                    ::grap::apply_scoped(&program, [], host, scope, 500_000)
+                    ::grap::apply_value_scoped(&program, [], host, scope, 500_000)
                 })
             });
             assert!(
@@ -139,9 +139,10 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         let geometry = cube_geometry(&sources, &names);
         let geometry = geometry.as_record().unwrap();
-        let solid = ::grap::apply(geometry.get(&names["field"]).unwrap(), [], &sources, 10_000);
+        let solid =
+            ::grap::apply_value(geometry.get(&names["field"]).unwrap(), [], &sources, 10_000);
         assert!(solid.completed && !absent::is_absent(&solid.result));
-        let preview = ::grap::apply(
+        let preview = ::grap::apply_value(
             &Value::from(fidget::vocabulary::PREVIEW_MESH),
             [(
                 crate::libraries::presentation::vocabulary::VALUE,
@@ -161,7 +162,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         for u in [0.1, 0.25, 0.5, 0.7, 0.9] {
             for v in [0.1, 0.3, 0.5, 0.75, 0.9] {
-                let contact = ::grap::apply(
+                let contact = ::grap::apply_value(
                     geometry.get(&names["face"]).unwrap(),
                     [X, Y, Z].into_iter().zip([u, v, 0.0].map(f64::value)),
                     &sources,
@@ -172,7 +173,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     sample(contact).abs() < 2e-6,
                     "{size}, {chamfer}, {depth}: {contact:?}"
                 );
-                let normal = ::grap::apply(
+                let normal = ::grap::apply_value(
                     geometry.get(&names["normal"]).unwrap(),
                     [X, Y, Z].into_iter().zip(contact.map(f64::value)),
                     &sources,
@@ -192,7 +193,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                         "{gradient:?} vs {normal:?}"
                     );
                 }
-                let center = ::grap::apply(
+                let center = ::grap::apply_value(
                     &Value::from(names["ball_center"]),
                     [
                         (X, f64::value(contact[0])),

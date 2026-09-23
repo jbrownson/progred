@@ -122,15 +122,15 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
     ])));
     let sink = Rc::new(RefCell::new(Count::default()));
     with_host(&doc, |host| {
-        let emit = |_, context: &mut Context, _, _: &Environment| {
+        let emit = |_, context: &mut Context, _: &Expression, _: &Environment| {
             interpret(context, sink.clone(), |context| {
-                context.apply(&A.into(), [])
+                context.apply_value(&A.into(), [])
             })
         };
-        let result = ::grap::evaluate_scoped(
+        let result = ::grap::evaluate_value_scoped(
             &call(B, []),
             host,
-            &::grap::ForeignOverlay::new(&[B], &emit).tracked(),
+            &::grap::ForeignOverlay::from_value(&[B], &emit).tracked(),
             1000,
         );
         assert!(result.completed && !absent::is_absent(&result.result));
@@ -302,7 +302,7 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
     for tracked in [false, true] {
         let runs = Rc::new(Cell::new(0));
         let mut definitions = Definitions::default();
-        let implementation = ForeignFunction::new({
+        let implementation = ForeignFunction::from_value({
             let runs = runs.clone();
             move |_, _, _| {
                 runs.set(runs.get() + 1);

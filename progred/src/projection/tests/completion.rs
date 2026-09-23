@@ -801,7 +801,7 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
             },
             grap::ForeignFunctions::default().register(
                 function,
-                grap::ForeignFunction::new(|_, _, _| panic!("completion must not run code")),
+                grap::ForeignFunction::from_value(|_, _, _| panic!("completion must not run code")),
             ),
         ),
         crate::display::partial(|_| None),

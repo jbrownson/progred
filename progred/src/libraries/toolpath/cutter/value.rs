@@ -198,7 +198,7 @@ pub(crate) fn functions(mut functions: ForeignFunctions) -> ForeignFunctions {
     for id in [BALL_MILL, SQUARE_MILL, BULL_MILL] {
         functions = functions.register(
             id,
-            ForeignFunction::new(move |context, call, env| {
+            ForeignFunction::from_value(move |context, call, env| {
                 result((|| {
                     let diameter = number(context, call, env, TOOL_DIAMETER)?;
                     let length = number(context, call, env, TOOL_LENGTH)?;

@@ -15,12 +15,12 @@ impl display::Env for Host {
         function: &Value,
         args: &[(CellId, Value)],
         scope: Option<&ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation {
+    ) -> ::grap::Evaluation<gid::Value> {
         match scope {
             Some(scope) => {
-                ::grap::apply_scoped(function, args.iter().cloned(), &self.0, scope, 10_000)
+                ::grap::apply_value_scoped(function, args.iter().cloned(), &self.0, scope, 10_000)
             }
-            None => ::grap::apply(function, args.iter().cloned(), &self.0, 10_000),
+            None => ::grap::apply_value(function, args.iter().cloned(), &self.0, 10_000),
         }
     }
     fn evaluate(&self, _: &Value) -> Value {
@@ -316,7 +316,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
         )],
     );
     let libraries = crate::stack::load().libraries;
-    let expected = ::grap::evaluate(&collect, &libraries, 1000).result;
+    let expected = ::grap::evaluate_value(&collect, &libraries, 1000).result;
     with_context(&Output::default(), |context| {
         let inputs = crate::projection::Cx {
             focused: true,
@@ -594,12 +594,12 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             gid::new_cell_id(),
         );
         let runs = Rc::new(Cell::new(0));
-        let implementation = ForeignFunction::runtime({
+        let implementation = ForeignFunction::new({
             let runs = runs.clone();
             move |context, call, environment| {
                 runs.set(runs.get() + 1);
                 let argument = context.field(call, VALUE).unwrap();
-                let value = context.eval_runtime(argument, environment)?;
+                let value = context.eval(argument, environment)?;
                 if mode == "effectful" {
                     context.effect(|| ());
                 }
@@ -703,7 +703,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             (HEIGHT, f64::value(300.0)),
         ],
     );
-    let declaration = ::grap::evaluate(&call, &host.0, 10_000).result;
+    let declaration = ::grap::evaluate_value(&call, &host.0, 10_000).result;
     let target = |_| unreachable!();
     let input = ProjectionInput {
         env: &host,
@@ -1035,16 +1035,16 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let mut libraries = crate::stack::load().libraries;
     libraries.insert(library, definitions);
     let captured = RefCell::new(None);
-    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+    let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let expression = context.field(call, ITEMS).unwrap();
-        captured.replace(stored_tree_items(context, expression));
-        context.eval(expression, environment)
+        captured.replace(stored_tree_items(context, expression.clone()));
+        context.eval_to_value(expression, environment)
     };
-    let result = ::grap::apply_scoped(
+    let result = ::grap::apply_value_scoped(
         &owner.into(),
         [],
         &libraries,
-        &ForeignOverlay::new(&[probe], &emit),
+        &ForeignOverlay::from_value(&[probe], &emit),
         1000,
     );
     assert!(result.completed);
@@ -1202,17 +1202,17 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     );
     let mut libraries = crate::stack::load().libraries;
     libraries.insert(library, definitions);
-    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+    let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let expression = context.field(call, ITEMS).unwrap();
-        assert!(stored_tree_items(context, expression).is_none());
-        context.eval(expression, environment)
+        assert!(stored_tree_items(context, expression.clone()).is_none());
+        context.eval_to_value(expression, environment)
     };
     assert_eq!(
-        ::grap::apply_scoped(
+        ::grap::apply_value_scoped(
             &owner.into(),
             [],
             &libraries,
-            &ForeignOverlay::new(&[probe], &emit),
+            &ForeignOverlay::from_value(&[probe], &emit),
             1000
         )
         .result,

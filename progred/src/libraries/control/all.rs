@@ -3,19 +3,19 @@ use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 
 pub(super) fn evaluate(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expressions) = context.field(call, control::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(control::EXPRESSIONS));
     };
-    let Some(count) = context.elements(expressions).map(<[_]>::len) else {
+    let Some(count) = context.elements(&expressions).map(<[_]>::len) else {
         return Ok(absent::with_reason(control::INVALID_EXPRESSIONS).into());
     };
     (0..count)
         .map(|index| {
-            let expression = context.elements(expressions).unwrap()[index];
-            context.eval_runtime(expression, environment)
+            let expression = context.elements(&expressions).unwrap()[index].clone();
+            context.eval(expression, environment)
         })
         .collect::<Result<Vec<_>, _>>()
         .map(RuntimeValue::list)
@@ -37,8 +37,7 @@ mod tests {
     }
 
     fn functions() -> ForeignFunctions {
-        ForeignFunctions::default()
-            .register(control::ALL, ForeignFunction::runtime(evaluate).tracked())
+        ForeignFunctions::default().register(control::ALL, ForeignFunction::new(evaluate).tracked())
     }
 
     #[test]
@@ -48,8 +47,9 @@ mod tests {
         let output = log.clone();
         let functions = functions().register(
             emit,
-            ForeignFunction::new(move |context, call, env| {
-                let value = context.eval(context.field(call, control::VALUE).unwrap(), env)?;
+            ForeignFunction::from_value(move |context, call, env| {
+                let value =
+                    context.eval_to_value(context.field(call, control::VALUE).unwrap(), env)?;
                 Ok(context.effect(|| {
                     output.borrow_mut().push(value.clone());
                     value

@@ -184,26 +184,29 @@ fn node(key: CellId, content: Value) -> Value {
 /// produces the same data form that can also be written literally.
 fn drawing_projection(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
         return Ok(context.missing_argument(presentation::vocabulary::VALUE));
     };
-    Ok(node(vocabulary::DRAWING, context.eval(value, environment)?))
+    Ok(node(
+        vocabulary::DRAWING,
+        context.eval_to_value(value, environment)?,
+    ))
 }
 
 /// Turn an ordinary projection into one whose projected result is
 /// redispatched inside the standard border layout.
 fn border_projection(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
-    let projection = context.eval(projection, environment)?;
+    let projection = context.eval_to_value(projection, environment)?;
     let body = ::grap::call(
         Value::from(APPLY_BORDER_PROJECTION),
         [
@@ -214,23 +217,23 @@ fn border_projection(
             ),
         ],
     );
-    Ok(context.closure([presentation::vocabulary::VALUE], body, environment))
+    Ok(context.closure_value([presentation::vocabulary::VALUE], body, environment))
 }
 
 fn apply_border_projection(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
-    let projection = context.eval(projection, environment)?;
+    let projection = context.eval_to_value(projection, environment)?;
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
     };
-    let value = context.eval(value, environment)?;
-    let projected = context.apply(&projection, [(presentation::vocabulary::VALUE, value)])?;
+    let value = context.eval_to_value(value, environment)?;
+    let projected = context.apply_value(&projection, [(presentation::vocabulary::VALUE, value)])?;
     Ok(bordered(at([Step::Key(presentation::vocabulary::RESULT)], projected)).into())
 }
 
@@ -1045,19 +1048,16 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             ForeignFunctions::default()
                 .register(
                     vocabulary::LAYOUT_PROGRAM,
-                    ForeignFunction::runtime(scope::program),
+                    ForeignFunction::new(scope::program),
                 )
                 .register(
                     vocabulary::DRAWING,
-                    ForeignFunction::new(drawing_projection),
+                    ForeignFunction::from_value(drawing_projection),
                 )
-                .register(
-                    vocabulary::BORDER,
-                    ForeignFunction::runtime(border_projection),
-                )
+                .register(vocabulary::BORDER, ForeignFunction::new(border_projection))
                 .register(
                     APPLY_BORDER_PROJECTION,
-                    ForeignFunction::runtime(apply_border_projection),
+                    ForeignFunction::new(apply_border_projection),
                 ),
         ),
         crate::display::partial(display),

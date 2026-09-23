@@ -251,9 +251,8 @@ fn iop_tree_at_size(size: kurbo::Size) {
     assert!(
         matches!(
             &linked.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Source(
-                crate::hover::SourceTrace::InCell { .. }
-            ))))
+            Some(Claim::Direct(Hovered::Tree(Hover::Calls(calls))))
+                if matches!(calls.sources().next(), Some(crate::hover::SourceTrace::InCell { .. }))
         ),
         "unexpected drawing link: {:?}",
         linked.hit
@@ -367,7 +366,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             Cells::new(),
             grap::ForeignFunctions::default().register(
                 shape_function,
-                grap::ForeignFunction::new(move |_, _, _| {
+                grap::ForeignFunction::from_value(move |_, _, _| {
                     count.set(count.get() + 1);
                     Ok(layout_data::rect(0.0, 0.0, 10.0, 10.0))
                 }),
@@ -404,11 +403,13 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert_eq!(calls.get(), expected);
         assert!(selected.borrow().is_empty());
         let source = SourceTrace::Stored(Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]));
-        let target = Hovered::Tree(Hover::Source(source.clone()));
-        assert_eq!(
-            placed.claim.clone().map(|(_, claim)| claim),
-            Some(Claim::Direct(target.clone()))
-        );
+        let Some((_, Claim::Direct(target))) = placed.claim.clone() else {
+            panic!("expected a drawing source claim")
+        };
+        let Hovered::Tree(Hover::Calls(ref trace)) = target else {
+            panic!("expected a drawing call trace")
+        };
+        assert_eq!(trace.sources().next(), Some(source.clone()));
         let mut pointer = placed::DispatchContext::new(None, Some(target));
         pointer.descends = Rc::from([crate::navigate::Descend {
             scope: Default::default(),
@@ -478,7 +479,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
                     cells,
                     grap::ForeignFunctions::default().register(
                         shape_function,
-                        grap::ForeignFunction::new(move |_, _, _| {
+                        grap::ForeignFunction::from_value(move |_, _, _| {
                             Ok(layout_data::rect(0.0, 0.0, width, 10.0))
                         }),
                     ),

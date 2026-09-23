@@ -189,7 +189,7 @@ pub(super) fn read_color(value: &Value) -> Option<[u8; 3]> {
 
 pub(super) fn preview(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     preview_with(
@@ -203,15 +203,15 @@ pub(super) fn preview(
 
 pub(super) fn preview_with(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     marker: gid::CellId,
-    model: impl FnOnce(&mut Context, Expression, &Environment) -> Result<Value, Halt>,
+    model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
 ) -> Result<Value, Halt> {
     result((|| {
         let playback = match context.field(call, PLAYBACK) {
             Some(expression) => {
-                let value = context.eval(expression, environment)?;
+                let value = context.eval_to_value(expression, environment)?;
                 if absent::is_absent(&value) {
                     return Ok(value);
                 }
@@ -221,14 +221,14 @@ pub(super) fn preview_with(
             None => None,
         };
         let program = argument(context, call, PROGRAM)?;
-        let program = context.eval(program, environment)?;
+        let program = context.eval_to_value(program, environment)?;
         if absent::is_absent(&program) {
             return Ok(program);
         }
         let radius = number(context, call, environment, LINE_RADIUS)?;
         read_radius(radius).ok_or_else(invalid)?;
         let color = argument(context, call, fidget::vocabulary::COLOR)?;
-        let color = context.eval(color, environment)?;
+        let color = context.eval_to_value(color, environment)?;
         read_color(&color).ok_or_else(|| {
             Error::Invalid(absent::with_reason(fidget::vocabulary::INVALID_COLOR))
         })?;

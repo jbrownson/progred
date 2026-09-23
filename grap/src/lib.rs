@@ -1,15 +1,18 @@
-//! A small evaluator whose expressions and results are GID
-//! values. The evaluator recognizes only Grap forms; ordinary records
+//! A small evaluator of GID expressions, returning owned runtime values
+//! with an explicit conversion back to GID. It recognizes only Grap forms; ordinary records
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
 use gid::{CellId, Record, Resolution, Value};
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::fmt;
 use std::rc::Rc;
 
 #[cfg(test)]
 mod effect_tests;
+
+#[cfg(test)]
+mod runtime_tests;
 
 pub mod memo;
 mod reify;
@@ -110,10 +113,38 @@ pub mod f64 {
 
 pub const DEFAULT_FUEL: usize = 1_024;
 
-/// A source expression lowered into the current evaluation's arena.
-/// Handles never escape that synchronous evaluation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Expression(usize);
+/// Shared code, independent of the evaluator that executes it.
+#[derive(Clone)]
+pub struct Expression(Rc<Lowered>);
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Expression {}
+
+impl std::hash::Hash for Expression {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::ptr::hash(Rc::as_ptr(&self.0), state);
+    }
+}
+
+impl std::fmt::Debug for Expression {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value().fmt(formatter)
+    }
+}
+
+impl Expression {
+    fn value(&self) -> &Value {
+        self.0.source.get_or_init(|| match &self.0.form {
+            Form::Ready(value) => value.to_value(),
+            _ => unreachable!("source expressions retain their original GID value"),
+        })
+    }
+}
 
 /// Where a source expression came from before evaluation. Generated
 /// runtime values have no origin; expressions read from the input or a
@@ -128,15 +159,48 @@ pub enum SourceOrigin {
     },
 }
 
+/// Captured source-bearing calls, innermost first. Nodes share caller ancestry
+/// and source locations, but retain neither environments nor evaluator storage.
+#[derive(Clone, Debug)]
+pub struct CallTrace(Rc<CallTraceNode>);
+
+#[derive(Debug)]
+struct CallTraceNode {
+    origin: Rc<SourceOrigin>,
+    caller: Option<CallTrace>,
+}
+
+impl CallTrace {
+    pub fn origins(&self) -> impl Iterator<Item = &SourceOrigin> {
+        std::iter::successors(Some(self), |trace| trace.0.caller.as_ref())
+            .map(|trace| trace.0.origin.as_ref())
+    }
+}
+
+impl PartialEq for CallTrace {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || self.origins().eq(other.origins())
+    }
+}
+
+impl Eq for CallTrace {}
+
+struct ActiveCall {
+    expression: Expression,
+    // The outer option means this prefix has been captured, even if none of
+    // its calls has an origin (e.g. a host-generated call).
+    captured: Option<Option<CallTrace>>,
+}
+
 /// A staged foreign function's per-visit form, returned by its
 /// prepare stage with the once-parsed call structure in its captures.
 pub type Stage = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt>>;
 
-type Prepare = Rc<dyn Fn(&Context, Expression) -> Stage>;
+type Prepare = Rc<dyn Fn(&Context, &Expression) -> Stage>;
 
 #[derive(Clone)]
 enum ForeignImplementation {
-    Direct(Rc<dyn Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt>>),
+    Direct(Rc<dyn Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt>>),
     Staged(Prepare),
 }
 
@@ -183,8 +247,8 @@ pub trait Host {
 }
 
 impl ForeignFunction {
-    pub fn new(
-        call: impl Fn(&mut Context, Expression, &Environment) -> Result<Value, Halt> + 'static,
+    pub fn from_value(
+        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<Value, Halt> + 'static,
     ) -> Self {
         Self {
             tracked: false,
@@ -196,8 +260,8 @@ impl ForeignFunction {
         }
     }
 
-    pub fn runtime(
-        call: impl Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
+    pub fn new(
+        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
     ) -> Self {
         Self {
             tracked: false,
@@ -212,7 +276,7 @@ impl ForeignFunction {
     /// or fuel) and re-runnable. The returned stage owns
     /// every observable, including the fuel the straightforward shape
     /// would burn.
-    pub fn staged(prepare: impl Fn(&Context, Expression) -> Stage + 'static) -> Self {
+    pub fn staged(prepare: impl Fn(&Context, &Expression) -> Stage + 'static) -> Self {
         Self {
             tracked: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),
@@ -230,26 +294,9 @@ impl ForeignFunction {
 
 pub struct Halt(Value);
 
-/// Values remain Grap's source and result language. During one
-/// evaluation, callables stay parsed and bundled library values may
-/// use equivalent host representations such as an unboxed f64.
-///
-/// This enum is several words wide and moves through every argument,
-/// binding, and list slot; profiles of drawing-program evaluation put
-/// a low-double-digit share of interpreter time in those moves, drop
-/// glue, and slot sizes. The known next representation, once the model
-/// settles, is a NaN-boxed word: bare f64s, cells, and small
-/// immediates inline in 8 bytes, everything else behind a pointer.
-/// One current design stands in the way and would need rethinking:
-/// enriched f64 records (the open representation keeps metadata beside
-/// the number, so only bare numbers can inline).
-///
-/// Deliberately deferred (2026-08): staged foreign functions and typed
-/// per-node channels capture much of the win first, leaving boxing's
-/// residual too small for its footprint while the model still moves.
-/// When attempted: documents may legitimately carry non-canonical NaN
-/// bit patterns in f64 blobs, so decoding must canonicalize NaNs —
-/// never treat stray patterns as undefined behavior.
+/// An owned evaluated value. Closures retain shared code and lexical captures;
+/// containers retain lowered children. No creating Context or host is retained.
+/// [`Self::into_value`] explicitly materializes the equivalent GID data.
 #[derive(Clone)]
 pub struct RuntimeValue(RuntimeValueKind);
 
@@ -286,7 +333,7 @@ enum RuntimeValueKind {
     F64(RuntimeF64),
     Record(Rc<[(CellId, RuntimeValue)]>),
     List(Rc<[RuntimeValue]>),
-    Foreign(ResolvedForeign),
+    Foreign(CellId),
     Closure(Closure),
 }
 
@@ -318,7 +365,6 @@ struct Closure {
 #[derive(Clone, Copy)]
 struct Parameter {
     cell: CellId,
-    index: CellIndex,
 }
 
 impl RuntimeValue {
@@ -391,7 +437,7 @@ impl RuntimeValue {
                     .then(|| Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))),
             },
             RuntimeValueKind::Foreign(foreign) => {
-                (field == vocabulary::FFI).then(|| Self::from(Value::from(foreign.cell())))
+                (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
             }
             RuntimeValueKind::Closure(_) if field == vocabulary::CLOSURE => self
                 .to_value()
@@ -529,10 +575,6 @@ struct CellIndexTable {
     by_cell:
         std::collections::HashMap<CellId, CellIndex, std::hash::BuildHasherDefault<FoldHasher>>,
     cells: Vec<CellId>,
-    /// Cells ever bound in any environment of this evaluation. Function
-    /// references are typically never bound, so they skip the
-    /// environment walk that must otherwise prove absence frame by frame.
-    bound: Vec<u64>,
 }
 
 impl CellIndexTable {
@@ -554,20 +596,6 @@ impl CellIndexTable {
     fn index(&self, cell: CellId) -> Option<CellIndex> {
         self.by_cell.get(&cell).copied()
     }
-
-    fn mark_bound(&mut self, index: CellIndex) {
-        let word = index.0 / 64;
-        if self.bound.len() <= word {
-            self.bound.resize(word + 1, 0);
-        }
-        self.bound[word] |= 1 << (index.0 & 63);
-    }
-
-    fn is_bound(&self, index: CellIndex) -> bool {
-        self.bound
-            .get(index.0 / 64)
-            .is_some_and(|word| word & (1 << (index.0 & 63)) != 0)
-    }
 }
 
 type CellIndices = Rc<RefCell<CellIndexTable>>;
@@ -580,7 +608,7 @@ fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expre
     fields
         .binary_search_by_key(&label, |(field, _)| *field)
         .ok()
-        .map(|index| fields[index].1)
+        .map(|index| fields[index].1.clone())
 }
 
 #[derive(Debug, Clone)]
@@ -621,8 +649,12 @@ impl Environment {
     }
 
     pub fn get(&self, cell: CellId) -> Option<Value> {
+        self.get_runtime(cell).map(RuntimeValue::to_value)
+    }
+
+    pub fn get_runtime(&self, cell: CellId) -> Option<&RuntimeValue> {
         let index = self.indices.borrow().index(cell)?;
-        self.get_index(index).map(RuntimeValue::to_value)
+        self.get_index(index)
     }
 
     fn get_index(&self, index: CellIndex) -> Option<&RuntimeValue> {
@@ -677,19 +709,11 @@ impl Environment {
         match &mut self.frame {
             Some(frame) => {
                 let frame = Rc::make_mut(frame);
-                for (index, value) in bindings {
-                    self.indices.borrow_mut().mark_bound(index);
-                    frame.bindings.push((index, value));
-                }
+                frame.bindings.extend(bindings);
             }
             None => {
                 let bindings: Vec<_> = bindings.into_iter().collect();
                 if !bindings.is_empty() {
-                    let mut table = self.indices.borrow_mut();
-                    for (index, _) in &bindings {
-                        table.mark_bound(*index);
-                    }
-                    drop(table);
                     self.frame = Some(Rc::new(EnvironmentFrame {
                         parent: None,
                         bindings,
@@ -706,12 +730,6 @@ impl Environment {
         let bindings: Vec<_> = bindings.into_iter().collect();
         if bindings.is_empty() {
             return self.clone();
-        }
-        {
-            let mut table = self.indices.borrow_mut();
-            for (index, _) in &bindings {
-                table.mark_bound(*index);
-            }
         }
         Self {
             indices: self.indices.clone(),
@@ -802,20 +820,21 @@ impl ForeignFunctions {
     }
 }
 
-type ScopedCall<'a> = dyn for<'context> Fn(
-        CellId,
-        &mut Context<'context>,
-        Expression,
-        &Environment,
-    ) -> Result<Value, Halt>
+type ScopedCall<'a, T> = dyn for<'context> Fn(CellId, &mut Context<'context>, &Expression, &Environment) -> Result<T, Halt>
     + 'a;
+
+#[derive(Clone, Copy)]
+enum OverlayCall<'a> {
+    Runtime(&'a ScopedCall<'a, RuntimeValue>),
+    Value(&'a ScopedCall<'a, Value>),
+}
 
 /// A synchronous, borrowed layer of foreign functions. It lets a host
 /// expose state that is valid only for one evaluation without putting
 /// that state in `'static` closures or rebuilding the permanent table.
 pub struct ForeignOverlay<'a> {
     functions: &'a [CellId],
-    call: &'a ScopedCall<'a>,
+    call: OverlayCall<'a>,
     tracked: bool,
 }
 
@@ -826,15 +845,28 @@ impl<'a> ForeignOverlay<'a> {
                 impl for<'context> Fn(
             CellId,
             &mut Context<'context>,
-            Expression,
+            &Expression,
             &Environment,
-        ) -> Result<Value, Halt>
+        ) -> Result<RuntimeValue, Halt>
                 + 'a
             ),
     ) -> Self {
         Self {
             functions,
-            call,
+            call: OverlayCall::Runtime(call),
+            tracked: false,
+        }
+    }
+
+    pub fn from_value(
+        functions: &'a [CellId],
+        call: &'a (
+                impl Fn(CellId, &mut Context<'_>, &Expression, &Environment) -> Result<Value, Halt> + 'a
+            ),
+    ) -> Self {
+        Self {
+            functions,
+            call: OverlayCall::Value(call),
             tracked: false,
         }
     }
@@ -852,11 +884,21 @@ impl<'a> ForeignOverlay<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Evaluation {
-    pub result: Value,
+pub struct Evaluation<T = RuntimeValue> {
+    pub result: T,
     pub remaining_fuel: usize,
     /// False only when evaluation halted, not when it returned an absent value.
     pub completed: bool,
+}
+
+impl Evaluation {
+    pub fn into_value(self) -> Evaluation<Value> {
+        Evaluation {
+            result: self.result.into_value(),
+            remaining_fuel: self.remaining_fuel,
+            completed: self.completed,
+        }
+    }
 }
 
 pub struct Context<'a> {
@@ -866,25 +908,21 @@ pub struct Context<'a> {
     effects: u64,
     remaining_fuel: usize,
     resolving: Vec<CellId>,
-    expressions: Vec<Lowered>,
-    origins: Vec<OriginNode>,
+    compiled: std::collections::HashMap<Expression, Thunk>,
+    data_runtime: std::collections::HashMap<Expression, RuntimeValue>,
+    calls: Vec<ActiveCall>,
+    call_origins: std::collections::HashMap<Expression, Option<Rc<SourceOrigin>>>,
     cell_states: Vec<CellState>,
     indices: CellIndices,
 }
 
 #[derive(Clone)]
 struct Lowered {
-    source: Value,
+    source: OnceCell<Value>,
     origin: Option<OriginId>,
     form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
     elements: Option<Vec<Expression>>,
-    /// The lowered runtime form of a data expression, reused across
-    /// evaluations of the same node.
-    data_runtime: Option<RuntimeValue>,
-    /// The node generated into a host closure on first evaluation; the
-    /// arena stays the authoritative representation the closure runs.
-    compiled: Option<Thunk>,
 }
 
 /// A lowered node's generated form: per-node decisions — dispatch,
@@ -919,8 +957,8 @@ enum PreparedCallTargetKind {
     Missing,
 }
 
-#[derive(Clone, Copy)]
-struct OriginId(usize);
+#[derive(Clone)]
+struct OriginId(Rc<OriginNode>);
 
 enum OriginRoot {
     Input,
@@ -935,7 +973,8 @@ enum OriginNode {
 #[derive(Clone)]
 enum Form {
     Data,
-    Cell(CellIndex),
+    Ready(RuntimeValue),
+    Cell(CellId),
     Value(Expression),
     Call {
         function: Expression,
@@ -953,7 +992,7 @@ enum LambdaParameters {
     Invalid(Value),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum CellState {
     Unknown,
     Ready(Expression),
@@ -962,19 +1001,8 @@ enum CellState {
 
 #[derive(Clone)]
 enum ResolvedForeign {
-    Permanent {
-        cell: CellId,
-        function: ForeignFunction,
-    },
+    Permanent(ForeignFunction),
     Scoped(CellId),
-}
-
-impl ResolvedForeign {
-    fn cell(&self) -> CellId {
-        match self {
-            Self::Permanent { cell, .. } | Self::Scoped(cell) => *cell,
-        }
-    }
 }
 
 impl<'a> Context<'a> {
@@ -988,9 +1016,7 @@ impl<'a> Context<'a> {
             );
         }
         let completed = outcome.is_ok();
-        let result = outcome
-            .map(RuntimeValue::into_value)
-            .unwrap_or_else(|Halt(result)| result);
+        let result = outcome.unwrap_or_else(|Halt(result)| RuntimeValue::from(result));
         Evaluation {
             result,
             remaining_fuel: self.remaining_fuel,
@@ -1033,7 +1059,7 @@ impl<'a> Context<'a> {
         self.conclude(|context| {
             let expression = context.lower_source(expression, OriginRoot::Input);
             let environment = Environment::with_indices(context.indices.clone());
-            context.eval_runtime(expression, &environment)
+            context.eval(expression, &environment)
         })
     }
 
@@ -1042,8 +1068,7 @@ impl<'a> Context<'a> {
     }
 
     fn lower_source(&mut self, value: &Value, root: OriginRoot) -> Expression {
-        let origin = OriginId(self.origins.len());
-        self.origins.push(OriginNode::Root(root));
+        let origin = OriginId(Rc::new(OriginNode::Root(root)));
         self.lower_with(value, true, Some(origin))
     }
 
@@ -1052,11 +1077,7 @@ impl<'a> Context<'a> {
     }
 
     fn child_origin(&mut self, parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
-        parent.map(|parent| {
-            let origin = OriginId(self.origins.len());
-            self.origins.push(OriginNode::Child { parent, step });
-            origin
-        })
+        parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
     }
 
     fn lower_with(
@@ -1068,12 +1089,12 @@ impl<'a> Context<'a> {
         let mut lowered_fields = None;
         let mut lowered_elements = None;
         let form = match value {
-            Value::Cell(cell) => Form::Cell(cell_index(&self.indices, *cell)),
+            Value::Cell(cell) => Form::Cell(*cell),
             Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
                 let fields: Vec<_> = fields
                     .iter()
                     .map(|(field, value)| {
-                        let child = self.child_origin(origin, gid::Step::Key(*field));
+                        let child = self.child_origin(origin.clone(), gid::Step::Key(*field));
                         (*field, self.lower_with(value, descend_data, child))
                     })
                     .collect();
@@ -1093,10 +1114,7 @@ impl<'a> Context<'a> {
                         let mut invalid = None;
                         for parameter in parameters.values() {
                             match parameter.as_cell() {
-                                Some(cell) => parsed.push(Parameter {
-                                    cell,
-                                    index: cell_index(&self.indices, cell),
-                                }),
+                                Some(cell) => parsed.push(Parameter { cell }),
                                 None => {
                                     invalid = Some(parameter.clone());
                                     break;
@@ -1112,7 +1130,8 @@ impl<'a> Context<'a> {
                 Form::Lambda {
                     parameters,
                     body: {
-                        let child = self.child_origin(origin, gid::Step::Key(vocabulary::BODY));
+                        let child =
+                            self.child_origin(origin.clone(), gid::Step::Key(vocabulary::BODY));
                         self.lower_with(fields.get(&vocabulary::BODY).unwrap(), descend_data, child)
                     },
                 }
@@ -1121,7 +1140,7 @@ impl<'a> Context<'a> {
                 let fields: Vec<_> = fields
                     .iter()
                     .map(|(field, value)| {
-                        let child = self.child_origin(origin, gid::Step::Key(*field));
+                        let child = self.child_origin(origin.clone(), gid::Step::Key(*field));
                         (*field, self.lower_with(value, descend_data, child))
                     })
                     .collect();
@@ -1136,7 +1155,8 @@ impl<'a> Context<'a> {
                         fields
                             .iter()
                             .map(|(field, value)| {
-                                let child = self.child_origin(origin, gid::Step::Key(*field));
+                                let child =
+                                    self.child_origin(origin.clone(), gid::Step::Key(*field));
                                 (*field, self.lower_with(value, true, child))
                             })
                             .collect(),
@@ -1150,8 +1170,10 @@ impl<'a> Context<'a> {
                         elements
                             .iter()
                             .map(|(position, value)| {
-                                let child =
-                                    self.child_origin(origin, gid::Step::Element(position.clone()));
+                                let child = self.child_origin(
+                                    origin.clone(),
+                                    gid::Step::Element(position.clone()),
+                                );
                                 self.lower_with(value, true, child)
                             })
                             .collect(),
@@ -1161,28 +1183,24 @@ impl<'a> Context<'a> {
             }
             Value::Blob(_) => Form::Data,
         };
-        let expression = Expression(self.expressions.len());
-        self.expressions.push(Lowered {
-            source: value.clone(),
+        Expression(Rc::new(Lowered {
+            source: OnceCell::from(value.clone()),
             origin,
             form,
             fields: lowered_fields,
             elements: lowered_elements,
-            data_runtime: None,
-            compiled: None,
-        });
-        expression
+        }))
     }
 
-    pub fn value(&self, expression: Expression) -> &Value {
-        &self.expressions[expression.0].source
+    pub fn value<'b>(&self, expression: &'b Expression) -> &'b Value {
+        expression.value()
     }
 
-    pub fn source_origin(&self, expression: Expression) -> Option<SourceOrigin> {
-        let mut origin = self.expressions[expression.0].origin?;
+    pub fn source_origin(&self, expression: &Expression) -> Option<SourceOrigin> {
+        let mut origin = expression.0.origin.as_ref()?;
         let mut path = Vec::new();
         loop {
-            match &self.origins[origin.0] {
+            match origin.0.as_ref() {
                 OriginNode::Root(OriginRoot::Input) => {
                     path.reverse();
                     return Some(SourceOrigin::Input(path));
@@ -1197,22 +1215,55 @@ impl<'a> Context<'a> {
                 }
                 OriginNode::Child { parent, step } => {
                     path.push(step.clone());
-                    origin = *parent;
+                    origin = parent;
                 }
             }
         }
     }
 
-    pub fn eval(
+    /// Capture the active source call chain. Calls without a source are skipped,
+    /// not assigned a fabricated path. Repeated captures share live prefixes.
+    pub fn call_trace(&mut self) -> Option<CallTrace> {
+        let start = self.calls.iter().rposition(|call| call.captured.is_some());
+        let mut caller = start.and_then(|index| self.calls[index].captured.clone().unwrap());
+        for index in start.map_or(0, |index| index + 1)..self.calls.len() {
+            let expression = self.calls[index].expression.clone();
+            let origin = match self.call_origins.get(&expression) {
+                Some(origin) => origin.clone(),
+                None => {
+                    let origin = self.source_origin(&expression).map(Rc::new);
+                    self.call_origins.insert(expression, origin.clone());
+                    origin
+                }
+            };
+            if let Some(origin) = origin {
+                caller = Some(CallTrace(Rc::new(CallTraceNode { origin, caller })));
+            }
+            self.calls[index].captured = Some(caller.clone());
+        }
+        caller
+    }
+
+    fn at_call(
+        &mut self,
+        expression: Expression,
+        run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>,
+    ) -> Result<RuntimeValue, Halt> {
+        self.calls.push(ActiveCall {
+            expression,
+            captured: None,
+        });
+        let result = run(self);
+        self.calls.pop();
+        result
+    }
+
+    pub fn eval_to_value(
         &mut self,
         expression: Expression,
         environment: &Environment,
     ) -> Result<Value, Halt> {
-        debug_assert!(
-            Rc::ptr_eq(&self.indices, &environment.indices),
-            "use Context::environment to decode an environment for this evaluation",
-        );
-        self.eval_runtime(expression, environment)
+        self.eval(expression, environment)
             .map(RuntimeValue::into_value)
     }
 
@@ -1222,7 +1273,7 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<Value, Halt> {
         let expression = self.lower(expression);
-        self.eval(expression, environment)
+        self.eval_to_value(expression, environment)
     }
 
     pub fn eval_value_runtime(
@@ -1231,13 +1282,13 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let expression = self.lower(expression);
-        self.eval_runtime(expression, environment)
+        self.eval(expression, environment)
     }
 
     pub fn closure(
-        &mut self,
+        &self,
         params: impl IntoIterator<Item = CellId>,
-        body: Value,
+        body: Expression,
         environment: &Environment,
     ) -> RuntimeValue {
         let params: Vec<_> = params.into_iter().collect();
@@ -1246,28 +1297,30 @@ impl<'a> Context<'a> {
                 vocabulary::PARAMS,
                 Value::list(params.iter().copied().map(Value::from)),
             ),
-            (vocabulary::BODY, body.clone()),
+            (vocabulary::BODY, self.value(&body).clone()),
         ]
         .into_iter()
         .collect();
-        let params = params
-            .into_iter()
-            .map(|cell| Parameter {
-                cell,
-                index: cell_index(&self.indices, cell),
-            })
-            .collect();
+        let params = params.into_iter().map(|cell| Parameter { cell }).collect();
         RuntimeValue(RuntimeValueKind::Closure(Closure {
             fields,
             params,
-            body: self.lower_unattributed_source(&body),
+            body,
             environment: environment.clone(),
         }))
     }
 
-    /// Decode a Grap environment using this evaluation's cell-index table.
-    /// Environments passed back into this Context must share that table
-    /// with its lowered cell references.
+    pub fn closure_value(
+        &mut self,
+        params: impl IntoIterator<Item = CellId>,
+        body: Value,
+        environment: &Environment,
+    ) -> RuntimeValue {
+        let body = self.lower_unattributed_source(&body);
+        self.closure(params, body, environment)
+    }
+
+    /// Decode GID bindings into a shared lexical environment.
     pub fn environment(&self, value: &Value) -> Option<Environment> {
         let fields = value.as_record()?;
         Some(
@@ -1276,7 +1329,7 @@ impl<'a> Context<'a> {
         )
     }
 
-    pub fn eval_runtime(
+    pub fn eval(
         &mut self,
         expression: Expression,
         environment: &Environment,
@@ -1288,25 +1341,24 @@ impl<'a> Context<'a> {
     /// Evaluate an expression a caller will read as a number, skipping
     /// the owned `RuntimeValue` round trip when the answer is already
     /// an unboxed f64. Fuel and results match
-    /// `eval_runtime` followed by [`RuntimeValue::as_f64`] exactly.
+    /// [`Self::eval`] followed by [`RuntimeValue::as_f64`] exactly.
     pub fn eval_f64(
         &mut self,
         expression: Expression,
         environment: &Environment,
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
-        match &self.expressions[expression.0].form {
+        match &expression.0.form {
             Form::Data => {
                 if let Some(RuntimeValue(RuntimeValueKind::F64(cached))) =
-                    self.expressions[expression.0].data_runtime.as_ref()
+                    self.data_runtime.get(&expression)
                 {
                     return Ok(Some(cached.number));
                 }
             }
-            Form::Cell(index) => {
-                if self.indices.borrow().is_bound(*index)
-                    && let Some(RuntimeValue(RuntimeValueKind::F64(value))) =
-                        environment.get_index(*index)
+            Form::Cell(cell) => {
+                if let Some(RuntimeValue(RuntimeValueKind::F64(value))) =
+                    environment.get_runtime(*cell)
                 {
                     return Ok(Some(value.number));
                 }
@@ -1321,11 +1373,11 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        let compiled = match &self.expressions[expression.0].compiled {
+        let compiled = match self.compiled.get(&expression) {
             Some(compiled) => compiled.clone(),
             None => {
-                let compiled = self.compile(expression);
-                self.expressions[expression.0].compiled = Some(compiled.clone());
+                let compiled = self.compile(expression.clone());
+                self.compiled.insert(expression, compiled.clone());
                 compiled
             }
         };
@@ -1333,31 +1385,34 @@ impl<'a> Context<'a> {
     }
 
     fn compile(&mut self, expression: Expression) -> Thunk {
-        match self.expressions[expression.0].form.clone() {
+        match expression.0.form.clone() {
+            Form::Ready(value) => thunk(move |_, _| Ok(value.clone())),
             Form::Data => thunk(move |context, _| {
-                if let Some(cached) = &context.expressions[expression.0].data_runtime {
+                if let Some(cached) = context.data_runtime.get(&expression) {
                     return Ok(cached.clone());
                 }
                 let value = context
-                    .lower_runtime(RuntimeValue::from_value(context.value(expression).clone()));
-                context.expressions[expression.0].data_runtime = Some(value.clone());
+                    .lower_runtime(RuntimeValue::from_value(context.value(&expression).clone()));
+                context
+                    .data_runtime
+                    .insert(expression.clone(), value.clone());
                 Ok(value)
             }),
             Form::Cell(index) => {
                 thunk(move |context, environment| context.eval_cell(index, environment))
             }
             Form::Value(value) => {
-                thunk(move |context, environment| context.eval_runtime(value, environment))
+                thunk(move |context, environment| context.eval(value.clone(), environment))
             }
-            Form::Call { function } => self.compile_call(expression, function),
+            Form::Call { function } => self.compile_call(&expression, function),
             Form::Lambda { parameters, body } => {
-                let fields = self.value(expression).as_record().unwrap().clone();
+                let fields = self.value(&expression).as_record().unwrap().clone();
                 match parameters {
                     LambdaParameters::Valid(params) => thunk(move |_, environment| {
                         Ok(RuntimeValue(RuntimeValueKind::Closure(Closure {
                             fields: fields.clone(),
                             params: params.clone(),
-                            body,
+                            body: body.clone(),
                             environment: environment.clone(),
                         })))
                     }),
@@ -1380,8 +1435,9 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn compile_call(&mut self, call: Expression, function: Expression) -> Thunk {
-        let function_cell = match &self.expressions[function.0].form {
+    fn compile_call(&mut self, call: &Expression, function: Expression) -> Thunk {
+        let call = call.clone();
+        let function_cell = match &function.0.form {
             Form::Cell(index) => Some(*index),
             _ => None,
         };
@@ -1389,57 +1445,54 @@ impl<'a> Context<'a> {
         let stages: RefCell<Option<(Prepare, Stage)>> = RefCell::new(None);
         let target: RefCell<Option<Rc<PreparedCallTarget>>> = RefCell::new(None);
         thunk(move |context, environment| {
-            if let Some(index) = function_cell
-                && (!context.indices.borrow().is_bound(index)
-                    || environment.get_index(index).is_none())
-                && context
-                    .transient_foreign_target(context.indices.borrow().cell(index))
-                    .is_none()
-            {
-                return context.call_cell(index, call, environment, &target);
-            }
-            context.checked_call(|context| {
-                let callable = match function_cell {
-                    Some(index) => {
-                        context.burn()?;
-                        let cell = context.indices.borrow().cell(index);
-                        match environment.get_index(index) {
-                            Some(value) => context.lower_runtime(value.clone()),
-                            None => match context.foreign_target_cell(cell) {
-                                Some(foreign) => RuntimeValue(RuntimeValueKind::Foreign(foreign)),
-                                None => context.eval_cell(index, environment)?,
-                            },
-                        }
-                    }
-                    None => context.eval_runtime(function, environment)?,
-                };
-                match context.try_call_callable(
-                    callable.clone(),
-                    call,
-                    environment,
-                    Some(&plan),
-                    Some(&stages),
-                ) {
-                    Some(result) => result,
-                    None => Ok(RuntimeValue::from_value(absent::with_detail(
-                        absent::NOT_CALLABLE,
-                        absent::VALUE,
-                        callable.into_value(),
-                    ))),
+            context.at_call(call.clone(), |context| {
+                if let Some(cell) = function_cell
+                    && environment.get_runtime(cell).is_none()
+                    && context.transient_foreign_target(cell).is_none()
+                {
+                    return context.call_cell(cell, &call, environment, &target);
                 }
+                context.checked_call(|context| {
+                    let callable = match function_cell {
+                        Some(cell) => {
+                            context.burn()?;
+                            match environment.get_runtime(cell) {
+                                Some(value) => context.lower_runtime(value.clone()),
+                                None => match context.foreign_target_cell(cell) {
+                                    Some(_) => RuntimeValue(RuntimeValueKind::Foreign(cell)),
+                                    None => context.eval_cell(cell, environment)?,
+                                },
+                            }
+                        }
+                        None => context.eval(function.clone(), environment)?,
+                    };
+                    match context.try_call_callable(
+                        callable.clone(),
+                        &call,
+                        environment,
+                        Some(&plan),
+                        Some(&stages),
+                    ) {
+                        Some(result) => result,
+                        None => Ok(RuntimeValue::from_value(absent::with_detail(
+                            absent::NOT_CALLABLE,
+                            absent::VALUE,
+                            callable.into_value(),
+                        ))),
+                    }
+                })
             })
         })
     }
 
     fn call_cell(
         &mut self,
-        index: CellIndex,
-        call: Expression,
+        cell: CellId,
+        call: &Expression,
         environment: &Environment,
         cache: &RefCell<Option<Rc<PreparedCallTarget>>>,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        let cell = self.indices.borrow().cell(index);
         let cached = cache.borrow().clone();
         let target = match cached {
             Some(target) => target,
@@ -1464,16 +1517,13 @@ impl<'a> Context<'a> {
         };
         self.checked_call(|context| match &target.kind {
             PreparedCallTargetKind::Foreign(function) => context.call_foreign_staged(
-                &ResolvedForeign::Permanent {
-                    cell,
-                    function: function.clone(),
-                },
+                &ResolvedForeign::Permanent(function.clone()),
                 call,
                 environment,
                 Some(&target.stages),
             ),
             PreparedCallTargetKind::Value(expression) => {
-                let callable = context.eval_definition(cell, *expression, environment)?;
+                let callable = context.eval_definition(cell, expression.clone(), environment)?;
                 if callable.is_absent() {
                     Ok(callable)
                 } else {
@@ -1526,7 +1576,7 @@ impl<'a> Context<'a> {
             ))),
             None => {
                 self.resolving.push(cell);
-                let result = self.eval_runtime(expression, environment);
+                let result = self.eval(expression, environment);
                 self.resolving.pop();
                 result
             }
@@ -1536,7 +1586,7 @@ impl<'a> Context<'a> {
     fn try_call_callable(
         &mut self,
         callable: RuntimeValue,
-        call: Expression,
+        call: &Expression,
         environment: &Environment,
         plan: Option<&RefCell<Option<CallPlan>>>,
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
@@ -1545,8 +1595,11 @@ impl<'a> Context<'a> {
             RuntimeValueKind::Closure(closure) => {
                 return Some(self.eval_grap_call(closure.clone(), call, environment, plan));
             }
-            RuntimeValueKind::Foreign(foreign) => {
-                return Some(self.call_foreign_staged(foreign, call, environment, stages));
+            RuntimeValueKind::Foreign(cell) => {
+                return Some(match self.transient_foreign_target(*cell) {
+                    Some(foreign) => self.call_foreign_staged(&foreign, call, environment, stages),
+                    None => self.call_cell(*cell, call, environment, &RefCell::new(None)),
+                });
             }
             _ => {}
         }
@@ -1561,9 +1614,8 @@ impl<'a> Context<'a> {
                     if let Some(cell) = cell
                         && self.transient_foreign_target(cell).is_none()
                     {
-                        let index = cell_index(&self.indices, cell);
                         let target = RefCell::new(None);
-                        return Some(self.call_cell(index, call, environment, &target));
+                        return Some(self.call_cell(cell, call, environment, &target));
                     }
                     self.foreign_target(value).map(|foreign| {
                         self.call_foreign_staged(&foreign, call, environment, stages)
@@ -1602,16 +1654,16 @@ impl<'a> Context<'a> {
         self.remaining_fuel
     }
 
-    pub fn field(&self, call: Expression, label: CellId) -> Option<Expression> {
-        lowered_field(self.expressions[call.0].fields.as_ref()?, label)
+    pub fn field(&self, call: &Expression, label: CellId) -> Option<Expression> {
+        lowered_field(call.0.fields.as_ref()?, label)
     }
 
-    pub fn fields(&self, expression: Expression) -> Option<&[(CellId, Expression)]> {
-        self.expressions[expression.0].fields.as_deref()
+    pub fn fields<'b>(&self, expression: &'b Expression) -> Option<&'b [(CellId, Expression)]> {
+        expression.0.fields.as_deref()
     }
 
-    pub fn elements(&self, expression: Expression) -> Option<&[Expression]> {
-        self.expressions[expression.0].elements.as_deref()
+    pub fn elements<'b>(&self, expression: &'b Expression) -> Option<&'b [Expression]> {
+        expression.0.elements.as_deref()
     }
 
     pub fn missing_argument(&self, cell: CellId) -> Value {
@@ -1622,18 +1674,12 @@ impl<'a> Context<'a> {
         self.missing_argument(cell).into()
     }
 
-    fn eval_cell(
-        &mut self,
-        index: CellIndex,
-        environment: &Environment,
-    ) -> Result<RuntimeValue, Halt> {
-        if self.indices.borrow().is_bound(index)
-            && let Some(value) = environment.get_index(index)
-        {
+    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Result<RuntimeValue, Halt> {
+        if let Some(value) = environment.get_runtime(cell) {
             let value = value.clone();
             return Ok(self.lower_runtime(value));
         }
-        let cell = self.indices.borrow().cell(index);
+        let index = cell_index(&self.indices, cell);
         match self.host.resolve(cell) {
             None => Ok(RuntimeValue::from_value(absent::with_detail(
                 absent::MISSING_CELL,
@@ -1644,7 +1690,7 @@ impl<'a> Context<'a> {
                 while self.cell_states.len() <= index.0 {
                     self.cell_states.push(CellState::Unknown);
                 }
-                match self.cell_states[index.0] {
+                match self.cell_states[index.0].clone() {
                     CellState::Ready(expression) => {
                         self.eval_resolved_cell(index, cell, expression, environment)
                     }
@@ -1664,7 +1710,7 @@ impl<'a> Context<'a> {
                     CellState::Unknown => {
                         let expression = self
                             .lower_source(definition.value(), OriginRoot::Cell { cell, source });
-                        self.cell_states[index.0] = CellState::Ready(expression);
+                        self.cell_states[index.0] = CellState::Ready(expression.clone());
                         self.eval_resolved_cell(index, cell, expression, environment)
                     }
                 }
@@ -1682,7 +1728,7 @@ impl<'a> Context<'a> {
         let stack_index = self.resolving.len();
         self.cell_states[index.0] = CellState::Evaluating { stack_index };
         self.resolving.push(cell);
-        let result = self.eval_runtime(expression, environment);
+        let result = self.eval(expression.clone(), environment);
         self.resolving.pop();
         self.cell_states[index.0] = CellState::Ready(expression);
         result
@@ -1705,10 +1751,7 @@ impl<'a> Context<'a> {
             .iter()
             .rev()
             .find_map(|scope| scope.get(cell))
-            .map(|function| ResolvedForeign::Permanent {
-                cell,
-                function: function.clone(),
-            })
+            .map(|function| ResolvedForeign::Permanent(function.clone()))
     }
 
     fn foreign_target(&self, callable: &Value) -> Option<ResolvedForeign> {
@@ -1721,7 +1764,7 @@ impl<'a> Context<'a> {
     fn call_foreign(
         &mut self,
         foreign: &ResolvedForeign,
-        call: Expression,
+        call: &Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.call_foreign_staged(foreign, call, environment, None)
@@ -1730,19 +1773,19 @@ impl<'a> Context<'a> {
     fn call_foreign_staged(
         &mut self,
         foreign: &ResolvedForeign,
-        call: Expression,
+        call: &Expression,
         environment: &Environment,
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
     ) -> Result<RuntimeValue, Halt> {
         let tracked = match foreign {
-            ResolvedForeign::Permanent { function, .. } => function.tracked,
+            ResolvedForeign::Permanent(function) => function.tracked,
             ResolvedForeign::Scoped(_) => self.overlay.is_some_and(|overlay| overlay.tracked),
         };
         if !tracked {
             self.host.untracked();
         }
         let value = match foreign {
-            ResolvedForeign::Permanent { function, .. } => match &function.implementation {
+            ResolvedForeign::Permanent(function) => match &function.implementation {
                 ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
                 ForeignImplementation::Staged(prepare) => {
                     let cached = stages.and_then(|slot| {
@@ -1768,7 +1811,12 @@ impl<'a> Context<'a> {
                     .overlay
                     .expect("a scoped foreign target came from the active overlay")
                     .call;
-                function(*cell, self, call, environment).map(RuntimeValue::from_value)
+                match function {
+                    OverlayCall::Runtime(function) => function(*cell, self, call, environment),
+                    OverlayCall::Value(function) => {
+                        function(*cell, self, call, environment).map(RuntimeValue::from)
+                    }
+                }
             }
         }?;
         Ok(self.lower_runtime(value))
@@ -1776,12 +1824,21 @@ impl<'a> Context<'a> {
 
     /// Apply a callable to already-evaluated argument values inside
     /// this evaluation — the in-context form of [`apply`].
-    pub fn apply(
+    pub fn apply_value(
         &mut self,
         function: &Value,
         arguments: impl IntoIterator<Item = (CellId, Value)>,
     ) -> Result<Value, Halt> {
         self.apply_values(function, arguments.into_iter().collect())
+    }
+
+    pub fn apply(
+        &mut self,
+        function: &RuntimeValue,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    ) -> Result<RuntimeValue, Halt> {
+        let callable = self.prepare_runtime_callable(function.clone(), &Environment::default());
+        self.call_prepared(&callable, arguments)
     }
 
     /// Run synchronously with an additional foreign-function layer.
@@ -1803,25 +1860,16 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<PreparedCallable, Halt> {
-        debug_assert!(
-            Rc::ptr_eq(&self.indices, &environment.indices),
-            "a prepared callable must use this evaluation's environment",
-        );
-        let reference = match self.expressions[expression.0].form {
-            Form::Cell(index) if environment.get_index(index).is_none() => {
-                let cell = self.indices.borrow().cell(index);
-                self.foreign_target_cell(cell)
-                    .map(|foreign| RuntimeValue(RuntimeValueKind::Foreign(foreign)))
-                    .or_else(|| match self.host.resolve(cell) {
-                        Some((_, Definition::Foreign(definition))) => Some(RuntimeValue(
-                            RuntimeValueKind::Foreign(ResolvedForeign::Permanent {
-                                cell,
-                                function: definition.implementation.clone(),
-                            }),
-                        )),
-                        _ => None,
-                    })
-            }
+        let reference = match expression.0.form {
+            Form::Cell(cell) if environment.get_runtime(cell).is_none() => self
+                .foreign_target_cell(cell)
+                .map(|_| RuntimeValue(RuntimeValueKind::Foreign(cell)))
+                .or_else(|| match self.host.resolve(cell) {
+                    Some((_, Definition::Foreign(_))) => {
+                        Some(RuntimeValue(RuntimeValueKind::Foreign(cell)))
+                    }
+                    _ => None,
+                }),
             _ => None,
         };
         let callable = match reference {
@@ -1829,19 +1877,18 @@ impl<'a> Context<'a> {
                 self.burn()?;
                 reference
             }
-            None => self.eval_runtime(expression, environment)?,
+            None => self.eval(expression, environment)?,
         };
         Ok(self.prepare_runtime_callable(callable, environment))
     }
 
     /// Prepare an already evaluated callable without reifying its closure or
-    /// evaluating the value a second time. It belongs to this evaluation.
+    /// evaluating the value a second time. It owns its retained code and captures.
     pub fn prepare_runtime_callable(
         &mut self,
         callable: RuntimeValue,
         environment: &Environment,
     ) -> PreparedCallable {
-        debug_assert!(Rc::ptr_eq(&self.indices, &environment.indices));
         let callable = match &callable.0 {
             RuntimeValueKind::Data(_) => self
                 .runtime_closure(&callable)
@@ -1858,12 +1905,12 @@ impl<'a> Context<'a> {
     /// Invoke a prepared callable with argument VALUES. It preserves
     /// the ordinary call/function/argument fuel steps while avoiding
     /// a temporary call-shaped Value for Grap closures.
-    pub fn call_prepared(
+    pub fn call_prepared_value(
         &mut self,
         callable: &PreparedCallable,
         arguments: impl IntoIterator<Item = (CellId, Value)>,
     ) -> Result<Value, Halt> {
-        self.call_prepared_runtime(
+        self.call_prepared(
             callable,
             arguments
                 .into_iter()
@@ -1872,7 +1919,7 @@ impl<'a> Context<'a> {
         .map(RuntimeValue::into_value)
     }
 
-    pub fn call_prepared_runtime(
+    pub fn call_prepared(
         &mut self,
         callable: &PreparedCallable,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
@@ -1896,35 +1943,41 @@ impl<'a> Context<'a> {
                             context.lower_runtime(value.clone())
                         };
                         context.burn()?;
-                        bound.push((parameter.index, value));
+                        bound.push((parameter.cell, value));
                     }
-                    context.eval_runtime(closure.body, &closure.environment.extended_indexed(bound))
+                    context.eval(
+                        closure.body.clone(),
+                        &closure.environment.extended_runtime(bound),
+                    )
                 }
-                RuntimeValueKind::Foreign(foreign) => {
-                    let call = call(
-                        callable.value.clone().into_value(),
-                        arguments
-                            .into_iter()
-                            .map(|(cell, value)| (cell, value.into_value())),
-                    );
-                    let call = context.lower(&call);
-                    context.call_foreign(foreign, call, &callable.environment)
+                RuntimeValueKind::Foreign(cell) => {
+                    let call = runtime_call(RuntimeValue::from(ffi(*cell)), arguments);
+                    match context.transient_foreign_target(*cell) {
+                        Some(foreign) => {
+                            context.call_foreign(&foreign, &call, &callable.environment)
+                        }
+                        None => context.call_cell(
+                            *cell,
+                            &call,
+                            &callable.environment,
+                            &RefCell::new(None),
+                        ),
+                    }
                 }
                 RuntimeValueKind::Data(value) => {
                     let target = value
                         .as_cell()
                         .or_else(|| value.as_record()?.get(&vocabulary::FFI)?.as_cell());
                     match target {
-                        Some(cell) if context.transient_foreign_target(cell).is_none() => context
-                            .apply_cell(
+                        Some(cell) if context.transient_foreign_target(cell).is_none() => {
+                            let call = runtime_call(callable.value.clone(), arguments);
+                            context.call_cell(
                                 cell,
-                                value.clone(),
-                                arguments
-                                    .into_iter()
-                                    .map(|(field, value)| (field, value.into_value()))
-                                    .collect(),
+                                &call,
                                 &callable.environment,
-                            ),
+                                &RefCell::new(None),
+                            )
+                        }
                         _ => {
                             let Some(target) = context.foreign_target(value) else {
                                 return Ok(RuntimeValue::from_value(absent::with_detail(
@@ -1933,14 +1986,8 @@ impl<'a> Context<'a> {
                                     value.clone(),
                                 )));
                             };
-                            let call = call(
-                                value.clone(),
-                                arguments
-                                    .into_iter()
-                                    .map(|(cell, value)| (cell, value.into_value())),
-                            );
-                            let call = context.lower(&call);
-                            context.call_foreign(&target, call, &callable.environment)
+                            let call = runtime_call(callable.value.clone(), arguments);
+                            context.call_foreign(&target, &call, &callable.environment)
                         }
                     }
                 }
@@ -1981,7 +2028,7 @@ impl<'a> Context<'a> {
                 RuntimeValue::from_value(function.clone())
             } else {
                 let function = context.lower_source(function, OriginRoot::Input);
-                context.eval_runtime(function, &environment)?
+                context.eval(function, &environment)?
             };
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
                 Some(result) => result,
@@ -2006,11 +2053,8 @@ impl<'a> Context<'a> {
             Some((_, Definition::Foreign(definition))) => {
                 let call = context.lower(&call(callable, arguments));
                 context.call_foreign(
-                    &ResolvedForeign::Permanent {
-                        cell,
-                        function: definition.implementation.clone(),
-                    },
-                    call,
+                    &ResolvedForeign::Permanent(definition.implementation.clone()),
+                    &call,
                     environment,
                 )
             }
@@ -2055,7 +2099,7 @@ impl<'a> Context<'a> {
                         .find(|(cell, _)| *cell == parameter.cell)
                         .map(|(_, value)| {
                             (
-                                parameter.index,
+                                parameter.cell,
                                 self.lower_runtime(RuntimeValue::from_value(value.clone())),
                             )
                         })
@@ -2063,14 +2107,23 @@ impl<'a> Context<'a> {
                 })
                 .collect();
             return Some(match bound {
-                Ok(bound) => {
-                    self.eval_runtime(closure.body, &closure.environment.extended_indexed(bound))
-                }
+                Ok(bound) => self.eval(closure.body, &closure.environment.extended_runtime(bound)),
                 Err(cell) => Ok(RuntimeValue::from_value(self.missing_argument(cell))),
             });
         }
         let foreign = match &callable.0 {
-            RuntimeValueKind::Foreign(foreign) => Some(foreign.clone()),
+            RuntimeValueKind::Foreign(cell) => {
+                if let Some(foreign) = self.transient_foreign_target(*cell) {
+                    Some(foreign)
+                } else {
+                    return Some(self.apply_cell(
+                        *cell,
+                        ffi(*cell),
+                        arguments.to_vec(),
+                        environment,
+                    ));
+                }
+            }
             RuntimeValueKind::Data(value) => {
                 let cell = value
                     .as_cell()
@@ -2097,14 +2150,14 @@ impl<'a> Context<'a> {
                 callable.into_value(),
                 arguments.iter().map(|(cell, value)| (*cell, value.clone())),
             ));
-            self.call_foreign(&foreign, call, environment)
+            self.call_foreign(&foreign, &call, environment)
         })
     }
 
     fn eval_grap_call(
         &mut self,
         closure: Closure,
-        call: Expression,
+        call: &Expression,
         calling_environment: &Environment,
         plan: Option<&RefCell<Option<CallPlan>>>,
     ) -> Result<RuntimeValue, Halt> {
@@ -2119,7 +2172,7 @@ impl<'a> Context<'a> {
                 let arguments: Rc<[Option<Expression>]> = closure
                     .params
                     .iter()
-                    .map(|parameter| self.field(call, parameter.cell))
+                    .map(|parameter| self.field(&call, parameter.cell))
                     .collect();
                 if let Some(slot) = plan {
                     *slot.borrow_mut() = Some(CallPlan {
@@ -2138,12 +2191,12 @@ impl<'a> Context<'a> {
                 ));
             };
             arguments.push((
-                parameter.index,
-                self.eval_runtime(*expression, calling_environment)?,
+                parameter.cell,
+                self.eval(expression.clone(), calling_environment)?,
             ));
         }
-        let body_environment = closure.environment.extended_indexed(arguments);
-        self.eval_runtime(closure.body, &body_environment)
+        let body_environment = closure.environment.extended_runtime(arguments);
+        self.eval(closure.body, &body_environment)
     }
 
     fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {
@@ -2160,12 +2213,7 @@ impl<'a> Context<'a> {
                     .as_list()?
                     .values()
                     .map(Value::as_cell)
-                    .map(|cell| {
-                        cell.map(|cell| Parameter {
-                            cell,
-                            index: cell_index(&self.indices, cell),
-                        })
-                    })
+                    .map(|cell| cell.map(|cell| Parameter { cell }))
                     .collect::<Option<Vec<_>>>()?;
                 let body = self.lower_unattributed_source(fields.get(&vocabulary::BODY)?);
                 Some(Closure {
@@ -2181,6 +2229,38 @@ impl<'a> Context<'a> {
             | RuntimeValueKind::Foreign(_) => None,
         }
     }
+}
+
+fn runtime_expression(value: RuntimeValue) -> Expression {
+    Expression(Rc::new(Lowered {
+        source: OnceCell::new(),
+        origin: None,
+        form: Form::Ready(value),
+        fields: None,
+        elements: None,
+    }))
+}
+
+fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) -> Expression {
+    let value = RuntimeValue::record(
+        [(vocabulary::FUNCTION, function)]
+            .into_iter()
+            .chain(arguments),
+    );
+    let RuntimeValueKind::Record(fields) = &value.0 else {
+        unreachable!()
+    };
+    let fields = fields
+        .iter()
+        .map(|(field, value)| (*field, runtime_expression(value.clone())))
+        .collect();
+    Expression(Rc::new(Lowered {
+        source: OnceCell::new(),
+        origin: None,
+        form: Form::Ready(value),
+        fields: Some(fields),
+        elements: None,
+    }))
 }
 
 pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
@@ -2218,8 +2298,10 @@ fn context<'a>(
         effects: 0,
         remaining_fuel: fuel,
         resolving: Vec::new(),
-        expressions: Vec::new(),
-        origins: Vec::new(),
+        compiled: Default::default(),
+        data_runtime: Default::default(),
+        calls: Vec::new(),
+        call_origins: Default::default(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
@@ -2248,27 +2330,69 @@ pub fn evaluate_scoped<'a>(
 /// it as an expression. A foreign target still receives the
 /// arguments as call fields and evaluates them itself; every value
 /// but a code-shaped one self-quotes through that.
-pub fn apply(
+pub fn apply_value(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     host: &dyn Host,
     fuel: usize,
-) -> Evaluation {
+) -> Evaluation<Value> {
     context(host, None, fuel)
         .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+        .into_value()
 }
 
 /// Apply with a borrowed foreign-function layer that exists only for
 /// this synchronous evaluation.
-pub fn apply_scoped<'a>(
+pub fn apply_value_scoped<'a>(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     host: &dyn Host,
     overlay: &'a ForeignOverlay<'a>,
     fuel: usize,
-) -> Evaluation {
+) -> Evaluation<Value> {
     context(host, Some(overlay), fuel)
         .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+        .into_value()
+}
+
+pub fn evaluate_value(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation<Value> {
+    evaluate(expression, host, fuel).into_value()
+}
+
+pub fn evaluate_value_scoped<'a>(
+    expression: &Value,
+    host: &dyn Host,
+    overlay: &'a ForeignOverlay<'a>,
+    fuel: usize,
+) -> Evaluation<Value> {
+    evaluate_scoped(expression, host, overlay, fuel).into_value()
+}
+
+pub fn apply(
+    function: &RuntimeValue,
+    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    host: &dyn Host,
+    fuel: usize,
+) -> Evaluation {
+    apply_in(context(host, None, fuel), function, arguments)
+}
+
+pub fn apply_scoped<'a>(
+    function: &RuntimeValue,
+    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    host: &dyn Host,
+    overlay: &'a ForeignOverlay<'a>,
+    fuel: usize,
+) -> Evaluation {
+    apply_in(context(host, Some(overlay), fuel), function, arguments)
+}
+
+fn apply_in(
+    context: Context<'_>,
+    function: &RuntimeValue,
+    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+) -> Evaluation {
+    context.conclude(|context| context.apply(function, arguments))
 }
 
 #[cfg(test)]
@@ -2311,8 +2435,8 @@ mod tests {
         resolve: impl Fn(CellId) -> Option<Value>,
         foreign: &ForeignFunctions,
         fuel: usize,
-    ) -> Evaluation {
-        super::evaluate(expression, &definitions_from_parts(resolve, foreign), fuel)
+    ) -> Evaluation<Value> {
+        super::evaluate_value(expression, &definitions_from_parts(resolve, foreign), fuel)
     }
 
     fn apply(
@@ -2321,8 +2445,8 @@ mod tests {
         resolve: impl Fn(CellId) -> Option<Value>,
         foreign: &ForeignFunctions,
         fuel: usize,
-    ) -> Evaluation {
-        super::apply(
+    ) -> Evaluation<Value> {
+        super::apply_value(
             function,
             arguments,
             &definitions_from_parts(resolve, foreign),
@@ -2335,7 +2459,7 @@ mod tests {
         let function = new_cell_id();
         let library = Resolution::Library(new_cell_id());
         let expression = call(Value::from(function), []);
-        let evaluation = super::evaluate(
+        let evaluation = super::evaluate_value(
             &expression,
             &TestHost(|cell| {
                 assert_eq!(cell, function);
@@ -2344,7 +2468,7 @@ mod tests {
                         Resolution::Document,
                         Definition::foreign(
                             gid::Value::record([]),
-                            ForeignFunction::new(|_, _, _| Ok(absent::decline())),
+                            ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                         ),
                     ),
                     (Resolution::Document, Definition::Value(Value::record([]))),
@@ -2356,7 +2480,9 @@ mod tests {
                         library,
                         Definition::foreign(
                             gid::Value::record([]),
-                            ForeignFunction::new(|_, _, _| Ok(Value::from(b"too late".to_vec()))),
+                            ForeignFunction::from_value(|_, _, _| {
+                                Ok(Value::from(b"too late".to_vec()))
+                            }),
                         ),
                     ),
                 ]
@@ -2373,7 +2499,7 @@ mod tests {
         let library = Resolution::Library(new_cell_id());
         let first_missing = new_cell_id();
         let second_missing = new_cell_id();
-        let evaluation = super::evaluate(
+        let evaluation = super::evaluate_value(
             &call(Value::from(function), []),
             &TestHost(|cell| match cell {
                 cell if cell == function => vec![
@@ -2398,7 +2524,7 @@ mod tests {
     #[test]
     fn host_apply_returns_the_selected_definitions_decline() {
         let function = new_cell_id();
-        let evaluation = super::apply(
+        let evaluation = super::apply_value(
             &Value::from(function),
             [],
             &TestHost(|_| {
@@ -2407,7 +2533,7 @@ mod tests {
                         Resolution::Document,
                         Definition::foreign(
                             gid::Value::record([]),
-                            ForeignFunction::new(|_, _, _| Ok(absent::decline())),
+                            ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                         ),
                     ),
                     (
@@ -2486,7 +2612,7 @@ mod tests {
         let count = calls.clone();
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction::new(move |context, _, _| {
+            ForeignFunction::from_value(move |context, _, _| {
                 Ok(context.effect(|| {
                     count.set(count.get() + 1);
                     blob("result")
@@ -2514,7 +2640,7 @@ mod tests {
         let result = wrapper.clone();
         let foreign = ForeignFunctions::default().register(
             foreign_cell,
-            ForeignFunction::new(move |_, _, _| Ok(result.clone())),
+            ForeignFunction::from_value(move |_, _, _| Ok(result.clone())),
         );
         for data in [
             Value::list([wrapper.clone()]),
@@ -2555,18 +2681,18 @@ mod tests {
         let function = new_cell_id();
         let functions = [function];
         let origin = RefCell::new(None);
-        let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
-            *origin.borrow_mut() = context.source_origin(call);
+        let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
+            *origin.borrow_mut() = context.source_origin(&call);
             Ok(blob("result"))
         };
         let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
-        let evaluation = super::evaluate_scoped(
+        let evaluation = super::evaluate_value_scoped(
             &cell.into(),
             &definitions_from_parts(
                 |queried| (queried == cell).then(|| wrapper.clone()),
                 &ForeignFunctions::default(),
             ),
-            &ForeignOverlay::new(&functions, &scoped),
+            &ForeignOverlay::from_value(&functions, &scoped),
             20,
         );
         assert_eq!(evaluation.result, blob("result"));
@@ -2608,12 +2734,12 @@ mod tests {
             )
             .register(
                 repeat,
-                ForeignFunction::runtime(move |context, call, environment| {
-                    let Some(argument) = context.field(call, argument) else {
+                ForeignFunction::new(move |context, call, environment| {
+                    let Some(argument) = context.field(&call, argument) else {
                         return Ok(context.missing_runtime_argument(argument));
                     };
-                    context.eval_runtime(argument, environment)?;
-                    context.eval_runtime(argument, environment)
+                    context.eval(argument.clone(), environment)?;
+                    context.eval(argument.clone(), environment)
                 }),
             );
         let expression = call(
@@ -2654,15 +2780,15 @@ mod tests {
             )
             .register(
                 run_scoped,
-                ForeignFunction::runtime(move |context, call, environment| {
-                    let Some(argument) = context.field(call, argument) else {
+                ForeignFunction::new(move |context, call, environment| {
+                    let Some(argument) = context.field(&call, argument) else {
                         return Ok(context.missing_runtime_argument(argument));
                     };
-                    let before = context.eval_runtime(argument, environment)?;
+                    let before = context.eval(argument.clone(), environment)?;
                     let during = context.with_foreign_functions(scoped.clone(), |context| {
-                        context.eval_runtime(argument, environment)
+                        context.eval(argument.clone(), environment)
                     })?;
-                    let after = context.eval_runtime(argument, environment)?;
+                    let after = context.eval(argument.clone(), environment)?;
                     Ok(RuntimeValue::list([before, during, after]))
                 }),
             );
@@ -2742,7 +2868,7 @@ mod tests {
         let function = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction::new(|_, _, _| Ok(blob("foreign"))),
+            ForeignFunction::from_value(|_, _, _| Ok(blob("foreign"))),
         );
         let shadowed = call(
             lambda([function], Value::from(function)),
@@ -2762,7 +2888,7 @@ mod tests {
         let ignored = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction::new(|_, _, _| Ok(blob("foreign"))),
+            ForeignFunction::from_value(|_, _, _| Ok(blob("foreign"))),
         );
         let expression = call(
             lambda([ignored], call(function.into(), [])),
@@ -2791,16 +2917,16 @@ mod tests {
         }
         let cell = new_cell_id();
         let functions = [cell];
-        let invoke = |_, _: &mut Context<'_>, _, _: &Environment| {
+        let invoke = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
             panic!("reading data must not invoke a scoped capability")
         };
-        let overlay = ForeignOverlay::new(&functions, &invoke);
+        let overlay = ForeignOverlay::from_value(&functions, &invoke);
         let first = (Resolution::Document, Definition::Value(blob("document")));
         let second = (
             Resolution::Library(new_cell_id()),
             Definition::foreign(
                 blob("library"),
-                ForeignFunction::new(|_, _, _| {
+                ForeignFunction::from_value(|_, _, _| {
                     panic!("reading a native definition must not invoke it")
                 }),
             ),
@@ -2815,7 +2941,7 @@ mod tests {
             (vec![first.clone(), second], first.1.value().clone()),
         ] {
             let result =
-                super::evaluate_scoped(&cell.into(), &DataHost(cell, values), &overlay, 20);
+                super::evaluate_value_scoped(&cell.into(), &DataHost(cell, values), &overlay, 20);
             assert!(result.completed);
             assert_eq!(result.result, expected);
         }
@@ -2849,8 +2975,8 @@ mod tests {
         let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
         let foreign = ForeignFunctions::default().register(
             hold,
-            ForeignFunction::new(|context, call, _| match context.field(call, INPUT) {
-                Some(value) => Ok(context.value(value).clone()),
+            ForeignFunction::from_value(|context, call, _| match context.field(&call, INPUT) {
+                Some(value) => Ok(context.value(&value).clone()),
                 None => Ok(context.missing_argument(INPUT)),
             }),
         );
@@ -2874,12 +3000,12 @@ mod tests {
         let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
-            ForeignFunction::new(
-                |context, call, environment| match context.field(call, INPUT) {
-                    Some(value) => context.eval(value, environment),
+            ForeignFunction::from_value(|context, call, environment| {
+                match context.field(&call, INPUT) {
+                    Some(value) => context.eval_to_value(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
-                },
-            ),
+                }
+            }),
         );
 
         let evaluation = evaluate(
@@ -2909,12 +3035,12 @@ mod tests {
         let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
-            ForeignFunction::new(
-                |context, call, environment| match context.field(call, INPUT) {
-                    Some(value) => context.eval(value, environment),
+            ForeignFunction::from_value(|context, call, environment| {
+                match context.field(&call, INPUT) {
+                    Some(value) => context.eval_to_value(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
-                },
-            ),
+                }
+            }),
         );
         let apply = lambda(
             [callable, input],
@@ -2942,20 +3068,20 @@ mod tests {
         let missing = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             choose,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(condition) = context.field(call, CONDITION) else {
+            ForeignFunction::from_value(|context, call, environment| {
+                let Some(condition) = context.field(&call, CONDITION) else {
                     return Ok(context.missing_argument(CONDITION));
                 };
-                let Some(yes) = context.field(call, YES) else {
+                let Some(yes) = context.field(&call, YES) else {
                     return Ok(context.missing_argument(YES));
                 };
-                let Some(no) = context.field(call, NO) else {
+                let Some(no) = context.field(&call, NO) else {
                     return Ok(context.missing_argument(NO));
                 };
-                if context.eval(condition, environment)? == blob("true") {
-                    context.eval(yes, environment)
+                if context.eval_to_value(condition, environment)? == blob("true") {
+                    context.eval_to_value(yes, environment)
                 } else {
-                    context.eval(no, environment)
+                    context.eval_to_value(no, environment)
                 }
             }),
         );
@@ -2988,7 +3114,7 @@ mod tests {
         let parameter = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             inspect,
-            ForeignFunction::new(|_, _, environment| Ok(Value::from(environment))),
+            ForeignFunction::from_value(|_, _, environment| Ok(Value::from(environment))),
         );
         let inspect_from_body = lambda([parameter], call(Value::from(inspect), []));
         let evaluation = evaluate(
@@ -3016,15 +3142,15 @@ mod tests {
         let body = BODY;
         let foreign = ForeignFunctions::default().register(
             bind,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(value) = context.field(call, VALUE) else {
+            ForeignFunction::from_value(|context, call, environment| {
+                let Some(value) = context.field(&call, VALUE) else {
                     return Ok(context.missing_argument(VALUE));
                 };
-                let Some(body) = context.field(call, BODY) else {
+                let Some(body) = context.field(&call, BODY) else {
                     return Ok(context.missing_argument(BODY));
                 };
-                let value = context.eval(value, environment)?;
-                context.eval(body, &environment.extended([(BINDING, value)]))
+                let value = context.eval_to_value(value, environment)?;
+                context.eval_to_value(body, &environment.extended([(BINDING, value)]))
             }),
         );
         let evaluation = evaluate(
@@ -3201,15 +3327,15 @@ mod tests {
         let parameter = PARAMETER;
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction::new(|context, call, _| {
-                let Some(function) = context.field(call, vocabulary::FUNCTION) else {
+            ForeignFunction::from_value(|context, call, _| {
+                let Some(function) = context.field(&call, vocabulary::FUNCTION) else {
                     return Ok(context.missing_argument(vocabulary::FUNCTION));
                 };
-                let Some(value) = context.field(call, PARAMETER) else {
+                let Some(value) = context.field(&call, PARAMETER) else {
                     return Ok(context.missing_argument(PARAMETER));
                 };
-                assert!(context.value(function).as_cell().is_some());
-                Ok(context.value(value).clone())
+                assert!(context.value(&function).as_cell().is_some());
+                Ok(context.value(&value).clone())
             }),
         );
         assert_eq!(
@@ -3227,10 +3353,14 @@ mod tests {
     #[test]
     fn a_later_table_overrides_a_shared_cell() {
         let function = new_cell_id();
-        let left = ForeignFunctions::default()
-            .register(function, ForeignFunction::new(|_, _, _| Ok(blob("left"))));
-        let right = ForeignFunctions::default()
-            .register(function, ForeignFunction::new(|_, _, _| Ok(blob("right"))));
+        let left = ForeignFunctions::default().register(
+            function,
+            ForeignFunction::from_value(|_, _, _| Ok(blob("left"))),
+        );
+        let right = ForeignFunctions::default().register(
+            function,
+            ForeignFunction::from_value(|_, _, _| Ok(blob("right"))),
+        );
         assert_eq!(
             evaluate(
                 &call(Value::from(function), []),
@@ -3290,9 +3420,9 @@ mod tests {
         let function = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction::new(|context, call, environment| {
-                let argument = context.field(call, CellId::from_u128(7)).unwrap();
-                context.eval(argument, environment)
+            ForeignFunction::from_value(|context, call, environment| {
+                let argument = context.field(&call, CellId::from_u128(7)).unwrap();
+                context.eval_to_value(argument, environment)
             }),
         );
         let applied = apply(
@@ -3315,25 +3445,25 @@ mod tests {
         let functions = ForeignFunctions::default()
             .register(
                 foreign,
-                ForeignFunction::new(move |context, call, environment| {
-                    let function = context.field(call, vocabulary::FUNCTION).unwrap();
+                ForeignFunction::from_value(move |context, call, environment| {
+                    let function = context.field(&call, vocabulary::FUNCTION).unwrap();
                     assert_eq!(
                         context
-                            .value(function)
+                            .value(&function)
                             .as_record()
                             .and_then(|fields| fields.get(&decoration)),
                         Some(&blob("retained")),
                     );
-                    let argument = context.field(call, argument).unwrap();
-                    context.eval(argument, environment)
+                    let argument = context.field(&call, argument).unwrap();
+                    context.eval_to_value(argument, environment)
                 }),
             )
             .register(
                 control,
-                ForeignFunction::new(move |context, call, environment| {
-                    let callable = context.field(call, callable).unwrap();
+                ForeignFunction::from_value(move |context, call, environment| {
+                    let callable = context.field(&call, callable).unwrap();
                     let callable = context.prepare_callable(callable, environment)?;
-                    context.call_prepared(&callable, [(argument, blob("passed"))])
+                    context.call_prepared_value(&callable, [(argument, blob("passed"))])
                 }),
             );
         let explicit_foreign = Value::record([
@@ -3356,7 +3486,7 @@ mod tests {
         let calls = std::cell::Cell::new(0);
         let functions = [outer, inner];
         let scoped =
-            |function, context: &mut Context<'_>, _: Expression, environment: &Environment| {
+            |function, context: &mut Context<'_>, _: &Expression, environment: &Environment| {
                 calls.set(calls.get() + 1);
                 if function == outer {
                     context.eval_value(&call(Value::from(inner), []), environment)
@@ -3364,9 +3494,9 @@ mod tests {
                     Ok(blob("scoped"))
                 }
             };
-        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let overlay = ForeignOverlay::from_value(&functions, &scoped);
         let foreign = ForeignFunctions::default();
-        let applied = super::apply_scoped(
+        let applied = super::apply_value_scoped(
             &Value::from(outer),
             [],
             &definitions_from_parts(|_| None, &foreign),
@@ -3382,13 +3512,13 @@ mod tests {
         let function = new_cell_id();
         let calls = std::cell::Cell::new(0);
         let functions = [function];
-        let scoped = |_, _: &mut Context<'_>, _: Expression, _: &Environment| {
+        let scoped = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
             calls.set(calls.get() + 1);
             Ok(blob("drawn"))
         };
-        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let overlay = ForeignOverlay::from_value(&functions, &scoped);
         let foreign = ForeignFunctions::default();
-        let evaluation = super::evaluate_scoped(
+        let evaluation = super::evaluate_value_scoped(
             &call(Value::from(function), []),
             &definitions_from_parts(|_| None, &foreign),
             &overlay,
@@ -3399,20 +3529,115 @@ mod tests {
     }
 
     #[test]
+    fn captured_calls_share_ancestry_and_source_locations() {
+        let repeat = new_cell_id();
+        let body = new_cell_id();
+        let leaf = new_cell_id();
+        let captured = Rc::new(RefCell::new(Vec::new()));
+        let output = captured.clone();
+        let functions = ForeignFunctions::default()
+            .register(
+                repeat,
+                ForeignFunction::from_value(move |context, call, environment| {
+                    let body = context.field(&call, body).unwrap();
+                    context.eval_to_value(body.clone(), environment)?;
+                    context.eval_to_value(body.clone(), environment)
+                }),
+            )
+            .register(
+                leaf,
+                ForeignFunction::from_value(move |context, _, _| {
+                    let trace = context.call_trace().unwrap();
+                    let again = context.call_trace().unwrap();
+                    assert!(Rc::ptr_eq(&trace.0, &again.0));
+                    output.borrow_mut().push(trace);
+                    Ok(blob("done"))
+                }),
+            );
+        let expression = call(repeat.into(), [(body, call(leaf.into(), []))]);
+        let result = evaluate(&expression, |_| None, &functions, 100);
+        assert!(result.completed);
+        let captured = captured.borrow();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(
+            captured[0].origins().cloned().collect::<Vec<_>>(),
+            vec![
+                SourceOrigin::Input(vec![gid::Step::Key(body)]),
+                SourceOrigin::Input(vec![]),
+            ]
+        );
+        assert!(Rc::ptr_eq(&captured[0].0.origin, &captured[1].0.origin));
+        assert!(Rc::ptr_eq(
+            &captured[0].0.caller.as_ref().unwrap().0,
+            &captured[1].0.caller.as_ref().unwrap().0,
+        ));
+    }
+
+    #[test]
+    fn generated_prepared_calls_keep_their_source_callers() {
+        let invoke = new_cell_id();
+        let leaf = new_cell_id();
+        let function = new_cell_id();
+        let captured = Rc::new(RefCell::new(None));
+        let output = captured.clone();
+        let functions = ForeignFunctions::default()
+            .register(
+                invoke,
+                ForeignFunction::from_value(move |context, call, environment| {
+                    let function = context.field(&call, function).unwrap();
+                    let function = context.prepare_callable(function, environment)?;
+                    context.call_prepared_value(&function, [])
+                }),
+            )
+            .register(
+                leaf,
+                ForeignFunction::staged(move |_, _| {
+                    let output = output.clone();
+                    Rc::new(move |context, _| {
+                        *output.borrow_mut() = context.call_trace();
+                        Ok(RuntimeValue::from_value(blob("done")))
+                    })
+                }),
+            );
+        let expression = call(
+            invoke.into(),
+            [(function, lambda([], call(leaf.into(), [])))],
+        );
+        let result = evaluate(&expression, |_| None, &functions, 100);
+        assert!(result.completed);
+        assert_eq!(
+            captured
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .origins()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![
+                SourceOrigin::Input(vec![
+                    gid::Step::Key(function),
+                    gid::Step::Key(vocabulary::BODY)
+                ]),
+                SourceOrigin::Input(vec![]),
+            ]
+        );
+    }
+
+    #[test]
     fn a_foreign_call_retains_its_cell_relative_source_origin() {
         let function = new_cell_id();
         let foreign = new_cell_id();
         let source = RefCell::new(None);
         let functions = [foreign];
-        let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
-            *source.borrow_mut() = context.source_origin(call);
+        let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
+            *source.borrow_mut() = context.source_origin(&call);
             Ok(blob("drawn"))
         };
-        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let overlay = ForeignOverlay::from_value(&functions, &scoped);
         let stored = lambda([], call(Value::from(foreign), []));
         let foreign_functions = ForeignFunctions::default();
 
-        let evaluation = super::evaluate_scoped(
+        let evaluation = super::evaluate_value_scoped(
             &call(Value::from(function), []),
             &definitions_from_parts(
                 |cell| (cell == function).then(|| stored.clone()),
@@ -3440,12 +3665,12 @@ mod tests {
         let functions = [foreign];
         for source in [Resolution::Document, Resolution::Library(new_cell_id())] {
             let origin = RefCell::new(None);
-            let scoped = |_, context: &mut Context<'_>, call: Expression, _: &Environment| {
-                *origin.borrow_mut() = context.source_origin(call);
+            let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
+                *origin.borrow_mut() = context.source_origin(&call);
                 Ok(blob("drawn"))
             };
-            let overlay = ForeignOverlay::new(&functions, &scoped);
-            let evaluation = super::evaluate_scoped(
+            let overlay = ForeignOverlay::from_value(&functions, &scoped);
+            let evaluation = super::evaluate_value_scoped(
                 &Value::from(cell),
                 &TestHost(|queried| {
                     assert_eq!(queried, cell);

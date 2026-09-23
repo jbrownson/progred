@@ -23,7 +23,7 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
     for vector in [[3.0, 0.0, 4.0], [0.0; 3], [f64::NAN, 0.0, 1.0]] {
         let mut recording = Recording::default();
         let result = run(&mut recording, |scope| {
-            ::grap::evaluate_scoped(
+            ::grap::evaluate_value_scoped(
                 &call(
                     START_AT,
                     [
@@ -103,7 +103,7 @@ fn example_program(name: &str) -> Recording {
     };
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_scoped(&names[name].into(), [], &sources, scope, 3_000_000)
+        ::grap::apply_value_scoped(&names[name].into(), [], &sources, scope, 3_000_000)
     });
     assert!(
         result.completed && !absent::is_absent(&result.result),
@@ -139,7 +139,7 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+            ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
         });
         assert!(result.completed);
         if angle.is_finite() {
@@ -185,7 +185,7 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_scoped(
+            ::grap::apply_value_scoped(
                 &names["preview_operations"].into(),
                 [],
                 &sources,

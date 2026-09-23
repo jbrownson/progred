@@ -26,7 +26,7 @@ fn evaluate(
     program: &Value,
     fuel: usize,
 ) -> (
-    Evaluation,
+    Evaluation<gid::Value>,
     Option<Layout<crate::Editor, crate::frame::Hovered>>,
 ) {
     let libraries = [
@@ -51,7 +51,7 @@ fn evaluate(
             select_with: Rc::new(|_, _| true),
             hover: crate::libraries::test_widgets::hover(vec![]),
         },
-        |scope| ::grap::evaluate_scoped(program, &host, scope, fuel),
+        |scope| ::grap::evaluate_value_scoped(program, &host, scope, fuel),
     )
 }
 
@@ -225,7 +225,7 @@ fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
     assert!(layout.is_none());
     let (result, layout) = evaluate(&::grap::lambda([], text("later")), 10000);
     assert!(layout.is_none());
-    let unscoped = ::grap::apply(
+    let unscoped = ::grap::apply_value(
         &result.result,
         [],
         &crate::libraries::TestHost(|_| vec![]),

@@ -104,6 +104,15 @@ fn attribute_hover(
     hovered: Option<Hovered>,
     link: bool,
 ) -> placed::ResolvedHover {
+    // Keep the probe's call chain for subsequent input, but use the selected
+    // source for this frame's ordinary source/secondary decoration.
+    let hovered = match hovered {
+        Some(Hovered::Tree(ref calls @ hover::Hover::Calls(_))) => {
+            crate::projection::source_link::hover_source(sources, descends, calls)
+                .map(|source| Hovered::Tree(hover::Hover::Source(source)))
+        }
+        other => other,
+    };
     let visible = source_hover_visible(hovered.as_ref(), link);
     let source_path = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(path))) => descends
@@ -169,7 +178,12 @@ fn hover_target(
 }
 
 fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
-    !matches!(hover, Some(Hovered::Tree(hover::Hover::Source(_)))) || linking
+    !matches!(
+        hover,
+        Some(Hovered::Tree(
+            hover::Hover::Source(_) | hover::Hover::Calls(_)
+        ))
+    ) || linking
 }
 
 pub(crate) struct FrameDescription<'a> {
@@ -1745,21 +1759,21 @@ mod frame_tests {
                 library_cells,
                 grap::ForeignFunctions::default().register(
                     projector,
-                    grap::ForeignFunction::new({
+                    grap::ForeignFunction::from_value({
                         let calls = calls.clone();
                         let result = result.clone();
                         move |context, call, environment| {
                             let value = context
                                 .field(call, presentation::vocabulary::VALUE)
                                 .unwrap();
-                            assert_eq!(context.eval(value, environment)?, source);
+                            assert_eq!(context.eval_to_value(value, environment)?, source);
                             calls.set(calls.get() + 1);
                             Ok(result.borrow().clone())
                         }
                     }),
                 ).register(
                     nested_projector,
-                    grap::ForeignFunction::new(|_, _, _| {
+                    grap::ForeignFunction::from_value(|_, _, _| {
                         panic!("nested declarations are ordinary data, including results and absent fallbacks")
                     }),
                 ),
@@ -1939,17 +1953,19 @@ mod frame_tests {
                 Cells::new(),
                 grap::ForeignFunctions::default().register(
                     function,
-                    grap::ForeignFunction::new({
+                    grap::ForeignFunction::from_value({
                         let calls = calls.clone();
                         move |context, call, environment| {
                             let value = context
                                 .field(call, presentation::vocabulary::VALUE)
                                 .unwrap();
-                            assert_eq!(context.eval(value, environment)?, source);
+                            assert_eq!(context.eval_to_value(value, environment)?, source);
                             let width = context.field(call, layout::vocabulary::WIDTH).unwrap();
-                            let width = f64::read(&context.eval(width, environment)?).unwrap();
+                            let width =
+                                f64::read(&context.eval_to_value(width, environment)?).unwrap();
                             let height = context.field(call, layout::vocabulary::HEIGHT).unwrap();
-                            let height = f64::read(&context.eval(height, environment)?).unwrap();
+                            let height =
+                                f64::read(&context.eval_to_value(height, environment)?).unwrap();
                             calls.borrow_mut().push(Size::new(width, height));
                             Ok(layout::hoverable(layout::drawing(width, 0.0, height, [])))
                         }

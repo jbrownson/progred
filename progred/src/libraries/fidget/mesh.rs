@@ -5,10 +5,10 @@ use fidget_engine::mesh::{Octree, Settings};
 
 #[cfg(test)]
 mod cpu;
-#[cfg(feature = "cam-profile")]
-pub(crate) mod performance;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod gpu;
+#[cfg(feature = "cam-profile")]
+pub(crate) mod performance;
 #[cfg(test)]
 mod tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -25,7 +25,7 @@ fn depth(value: Option<&Value>) -> Option<u8> {
 
 pub(crate) fn preview(
     context: &mut ::grap::Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let requested = evaluated(context, call, environment, vocabulary::MESH_DEPTH)?;

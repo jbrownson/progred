@@ -60,15 +60,15 @@ pub fn query_spelling(query: &str) -> &str {
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
-        ForeignFunction::new(|context, call, environment| {
+        ForeignFunction::from_value(|context, call, environment| {
             let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
                 return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
             };
             let current = context
                 .field(call, line_edit::vocabulary::CURRENT)
-                .map(|current| context.eval(current, environment))
+                .map(|current| context.eval_to_value(current, environment))
                 .transpose()?;
-            let input = context.eval(input, environment)?;
+            let input = context.eval_to_value(input, environment)?;
             Ok(read(&input)
                 .and_then(|text| edit(text, current.as_ref()))
                 .unwrap_or_else(|| {
@@ -196,7 +196,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 

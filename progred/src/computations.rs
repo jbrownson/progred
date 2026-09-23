@@ -92,7 +92,7 @@ impl Computations {
         struct Evaluation {
             expression: Input<Value>,
             fuel: Input<usize>,
-            result: incremental::Memo<grap::Evaluation>,
+            result: incremental::Memo<grap::Evaluation<gid::Value>>,
         }
         let evaluation = self.at(view, path, || {
             let expression = self.runtime.input(expression.clone());
@@ -127,7 +127,7 @@ impl Computations {
     ) -> Value {
         struct Application {
             input: Input<(Value, Vec<(gid::CellId, Value)>, usize)>,
-            result: incremental::Memo<grap::Evaluation>,
+            result: incremental::Memo<grap::Evaluation<gid::Value>>,
         }
         let input = (function.clone(), arguments.to_vec(), fuel);
         let application = self.at(view, path, || {
@@ -139,7 +139,7 @@ impl Computations {
                     let input = input.read(read);
                     let (function, arguments, fuel) = &*input;
                     Ok(grap::memo::run(&definitions, read, |host| {
-                        grap::apply(function, arguments.iter().cloned(), host, *fuel)
+                        grap::apply_value(function, arguments.iter().cloned(), host, *fuel)
                     }))
                 }
             });
@@ -166,14 +166,14 @@ mod tests {
             let [function, argument, dependency, library, unrelated] =
                 std::array::from_fn(|_| gid::new_cell_id());
             let runs = Rc::new(Cell::new(0));
-            let implementation = ForeignFunction::new({
+            let implementation = ForeignFunction::from_value({
                 let runs = runs.clone();
                 move |context, call, environment| {
                     runs.set(runs.get() + 1);
-                    let value =
-                        context.eval(context.field(call, argument).unwrap(), environment)?;
-                    let observed =
-                        context.eval(context.field(call, dependency).unwrap(), environment)?;
+                    let value = context
+                        .eval_to_value(context.field(call, argument).unwrap(), environment)?;
+                    let observed = context
+                        .eval_to_value(context.field(call, dependency).unwrap(), environment)?;
                     if mode == "effectful" {
                         context.effect(|| ());
                     }
@@ -253,12 +253,12 @@ mod tests {
             function,
             Definition::foreign(
                 Value::record([]),
-                ForeignFunction::new({
+                ForeignFunction::from_value({
                     let runs = runs.clone();
                     move |context, call, environment| {
                         runs.set(runs.get() + 1);
                         let argument = context.field(call, input).unwrap();
-                        context.eval(argument, environment)
+                        context.eval_to_value(argument, environment)
                     }
                 })
                 .tracked(),

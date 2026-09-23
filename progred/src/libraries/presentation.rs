@@ -171,7 +171,7 @@ mod tests {
                 function: &Value,
                 arguments: &[(CellId, Value)],
                 _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 assert_eq!(function, &Value::from(LEFT_VALUE));
                 assert_eq!(
                     arguments,
@@ -228,7 +228,7 @@ mod tests {
                 _: &Value,
                 _: &[(CellId, Value)],
                 _: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 panic!("the viewport must not run after preparation failed")
             }
             fn evaluate(&self, _: &Value) -> Value {
@@ -278,7 +278,7 @@ mod tests {
                 _: &Value,
                 arguments: &[(CellId, Value)],
                 _: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 assert!(self.0.get() > 0);
                 assert_eq!(
                     arguments[0],
@@ -324,7 +324,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             ::grap::Evaluation {
                 result: self.0.clone(),
                 remaining_fuel: 17,
@@ -371,7 +371,7 @@ mod tests {
                 _: &Value,
                 _: &[(CellId, Value)],
                 _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation {
+            ) -> ::grap::Evaluation<gid::Value> {
                 panic!("authoring a declaration must not apply its projection")
             }
             fn evaluate(&self, _: &Value) -> Value {

@@ -53,13 +53,13 @@ pub mod vocabulary {
 
 fn evaluated(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<RuntimeValue>, Halt> {
     context
-        .field(call, field)
-        .map(|value| context.eval_runtime(value, environment))
+        .field(&call, field)
+        .map(|value| context.eval(value, environment))
         .transpose()
 }
 
@@ -67,7 +67,7 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::PREPEND,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
@@ -83,7 +83,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::CONCAT,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(left) = evaluated(context, call, environment, number::vocabulary::LEFT)?
                 else {
                     return Ok(context.missing_runtime_argument(number::vocabulary::LEFT));
@@ -101,7 +101,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::LENGTH,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
@@ -114,14 +114,14 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::AT,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(index) = context.field(call, vocabulary::INDEX) else {
                     return Ok(context.missing_runtime_argument(vocabulary::INDEX));
                 };
-                let index = context.eval_runtime(index, environment)?;
+                let index = context.eval(index, environment)?;
                 if list.list_len().is_none() {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 }
@@ -140,7 +140,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::TAIL,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
@@ -156,7 +156,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::UNFOLD,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
                     return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
@@ -167,8 +167,8 @@ fn functions() -> ForeignFunctions {
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
                 loop {
-                    let result = context
-                        .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
+                    let result =
+                        context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
                     if result.is_absent() {
                         if result
                             .field(absent::vocabulary::ABSENT)
@@ -196,7 +196,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::FOLD,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
@@ -213,7 +213,7 @@ fn functions() -> ForeignFunctions {
                     return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 };
                 for item in values {
-                    accumulator = context.call_prepared_runtime(
+                    accumulator = context.call_prepared(
                         &step,
                         [
                             (vocabulary::ACCUMULATOR, accumulator),
@@ -227,7 +227,7 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::ITERATE,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
                     return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
@@ -237,8 +237,8 @@ fn functions() -> ForeignFunctions {
                 };
                 let step = context.prepare_callable(step, environment)?;
                 loop {
-                    let next = context
-                        .call_prepared_runtime(&step, [(vocabulary::STATE, state.clone())])?;
+                    let next =
+                        context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
                     if next.is_absent() {
                         break Ok(
                             if next
@@ -392,7 +392,7 @@ mod tests {
         let step_calls = calls.clone();
         let functions = functions().register(
             step,
-            ForeignFunction::new(move |_, _, _| {
+            ForeignFunction::from_value(move |_, _, _| {
                 let call = step_calls.get();
                 step_calls.set(call + 1);
                 Ok(if call == 3 {

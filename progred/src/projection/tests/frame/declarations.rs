@@ -108,7 +108,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
     );
     assert_eq!(world.model.doc.root.as_ref(), Some(&expression));
     assert_eq!(world.model.doc.cells.value(cell), Some(&f64::value(34.0)));
-    let evaluation = grap::evaluate(&expression, &world.sources(), grap::DEFAULT_FUEL);
+    let evaluation = grap::evaluate_value(&expression, &world.sources(), grap::DEFAULT_FUEL);
     assert!(evaluation.completed);
     assert_eq!(f64::read(&evaluation.result), Some(68.0));
 }

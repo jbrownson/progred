@@ -49,7 +49,8 @@ fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     }
     doc.cells.set_value(id, definition);
     let libraries = core_libraries();
-    let evaluated = grap::evaluate(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
+    let evaluated =
+        grap::evaluate_value(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
     assert!(evaluated.completed);
     assert!(
         !crate::libraries::absent::is_absent(&evaluated.result),

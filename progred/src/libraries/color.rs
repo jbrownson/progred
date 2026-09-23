@@ -154,7 +154,7 @@ fn completions(
         && request.kind == crate::display::CompletionKind::Value
         && request.scope == crate::display::CompletionScope::Everything
         && request.value().is_none())
-        .then(|| vec![new_color()])
+    .then(|| vec![new_color()])
 }
 
 /// The seed belongs only to the picker. The first point interaction writes the
@@ -315,15 +315,15 @@ fn picker(
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
-        ForeignFunction::new(|context, call, environment| {
+        ForeignFunction::from_value(|context, call, environment| {
             let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
                 return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
             };
             let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
                 return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
             };
-            let current = context.eval(current, environment)?;
-            let input = context.eval(input, environment)?;
+            let current = context.eval_to_value(current, environment)?;
+            let input = context.eval_to_value(input, environment)?;
             Ok(text::read(&input)
                 .and_then(|spelling| edit(spelling, Some(&current)))
                 .unwrap_or_else(|| {
@@ -782,7 +782,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 

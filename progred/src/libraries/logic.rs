@@ -41,11 +41,11 @@ pub fn read(value: &Value) -> Option<bool> {
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::REQUIRE,
-        ForeignFunction::new(|context, call, environment| {
+        ForeignFunction::from_value(|context, call, environment| {
             let Some(condition) = context.field(call, vocabulary::CONDITION) else {
                 return Ok(context.missing_argument(vocabulary::CONDITION));
             };
-            let value = context.eval(condition, environment)?;
+            let value = context.eval_to_value(condition, environment)?;
             Ok(if absent::is_absent(&value) {
                 value
             } else {

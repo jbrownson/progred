@@ -186,31 +186,33 @@ pub(crate) mod tests {
         )];
         let child = gid::Step::Key(gid::new_cell_id());
         let writes = RefCell::new(Vec::new());
-        let interpret =
-            |function, context: &mut ::grap::Context, call, environment: &::grap::Environment| {
-                if function == crate::libraries::site::vocabulary::PATH {
-                    Ok(crate::libraries::path::value(&site))
-                } else {
-                    let path = context.field(call, vocabulary::PATH).unwrap();
-                    let path = context.eval(path, environment)?;
-                    let value = context
-                        .field(call, crate::libraries::site::vocabulary::VALUE)
-                        .unwrap();
-                    let value = context.eval(value, environment)?;
-                    Ok(context.effect(|| {
-                        writes
-                            .borrow_mut()
-                            .push((crate::libraries::path::read(&path).unwrap(), value));
-                        Value::record([])
-                    }))
-                }
-            };
+        let interpret = |function,
+                         context: &mut ::grap::Context,
+                         call: &::grap::Expression,
+                         environment: &::grap::Environment| {
+            if function == crate::libraries::site::vocabulary::PATH {
+                Ok(crate::libraries::path::value(&site))
+            } else {
+                let path = context.field(call, vocabulary::PATH).unwrap();
+                let path = context.eval_to_value(path, environment)?;
+                let value = context
+                    .field(call, crate::libraries::site::vocabulary::VALUE)
+                    .unwrap();
+                let value = context.eval_to_value(value, environment)?;
+                Ok(context.effect(|| {
+                    writes
+                        .borrow_mut()
+                        .push((crate::libraries::path::read(&path).unwrap(), value));
+                    Value::record([])
+                }))
+            }
+        };
         let functions = crate::libraries::list::library().functions();
-        let overlay = ::grap::ForeignOverlay::new(
+        let overlay = ::grap::ForeignOverlay::from_value(
             &[crate::libraries::site::vocabulary::PATH, vocabulary::SET],
             &interpret,
         );
-        let result = ::grap::apply_scoped(
+        let result = ::grap::apply_value_scoped(
             &grap_at(&[child.clone()], pending()),
             [],
             &crate::libraries::TestHost(|cell| {

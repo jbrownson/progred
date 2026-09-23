@@ -49,14 +49,14 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,
-        ForeignFunction::runtime(|context, call, environment| {
+        ForeignFunction::new(|context, call, environment| {
             let Some(expression) = context.field(call, vocabulary::VALUE) else {
                 return Ok(context.missing_runtime_argument(vocabulary::VALUE));
             };
-            let value = context.eval_runtime(expression, environment)?;
+            let value = context.eval(expression, environment)?;
             if value.is_absent() {
                 match context.field(call, vocabulary::DEFAULT) {
-                    Some(default) => context.eval_runtime(default, environment),
+                    Some(default) => context.eval(default, environment),
                     None => Ok(context.missing_runtime_argument(vocabulary::DEFAULT)),
                 }
             } else {
@@ -140,7 +140,7 @@ mod tests {
             let functions = functions()
                 .register(
                     first,
-                    ForeignFunction::new({
+                    ForeignFunction::from_value({
                         let reads = reads.clone();
                         move |context, _, _| {
                             Ok(context.effect(|| {
@@ -156,11 +156,11 @@ mod tests {
                 )
                 .register(
                     fallback,
-                    ForeignFunction::runtime({
+                    ForeignFunction::new({
                         let defaults = defaults.clone();
                         move |context, call, environment| {
                             let value = context.field(call, vocabulary::VALUE).unwrap();
-                            let result = context.eval_runtime(value, environment)?;
+                            let result = context.eval(value, environment)?;
                             Ok(context.effect(|| {
                                 defaults.set(defaults.get() + 1);
                                 result
@@ -214,7 +214,7 @@ mod tests {
         let fallback = new_cell_id();
         let functions = functions().register(
             fallback,
-            ForeignFunction::new(|_, _, _| {
+            ForeignFunction::from_value(|_, _, _| {
                 panic!("an evaluator halt must not evaluate the default")
             }),
         );

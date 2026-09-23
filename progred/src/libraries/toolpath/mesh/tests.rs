@@ -426,7 +426,7 @@ fn tool_normals_capture() {
 fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
     let stack = crate::stack::load();
     for (depth, valid) in [(5, true), (0, false), (9, false)] {
-        let result = ::grap::evaluate(
+        let result = ::grap::evaluate_value(
             &::grap::call(
                 PREVIEW_MESH.into(),
                 [

@@ -79,17 +79,17 @@ pub fn display(
 
 fn update(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
         return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
     };
     let current = context
-        .field(call, line_edit::vocabulary::CURRENT)
-        .map(|current| context.eval(current, environment))
+        .field(&call, line_edit::vocabulary::CURRENT)
+        .map(|current| context.eval_to_value(current, environment))
         .transpose()?;
-    let input = context.eval(input, environment)?;
+    let input = context.eval_to_value(input, environment)?;
     Ok(crate::libraries::text::read(&input)
         .and_then(|text| number::edit(text, current.as_ref(), value))
         .unwrap_or_else(|| {
@@ -103,7 +103,7 @@ fn update(
 
 fn binary(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(f32, f32) -> Value,
 ) -> Result<Value, Halt> {
@@ -113,8 +113,8 @@ fn binary(
     let Some(right) = context.field(call, number::vocabulary::RIGHT) else {
         return Ok(context.missing_argument(number::vocabulary::RIGHT));
     };
-    let left = read(&context.eval(left, environment)?);
-    let right = read(&context.eval(right, environment)?);
+    let left = read(&context.eval_to_value(left, environment)?);
+    let right = read(&context.eval_to_value(right, environment)?);
     Ok(match (left, right) {
         (Some(left), Some(right)) => operation(left, right),
         (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F32),
@@ -123,7 +123,7 @@ fn binary(
 }
 
 fn arithmetic(operation: fn(f32, f32) -> f32) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         binary(context, call, environment, |left, right| {
             value(operation(left, right))
         })
@@ -133,13 +133,13 @@ fn arithmetic(operation: fn(f32, f32) -> f32) -> ForeignFunction {
 
 fn from_f64(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(operand) = context.field(call, number::vocabulary::OPERAND) else {
         return Ok(context.missing_argument(number::vocabulary::OPERAND));
     };
-    let operand = context.eval(operand, environment)?;
+    let operand = context.eval_to_value(operand, environment)?;
     Ok(crate::libraries::f64::read(&operand)
         .map(|number| value(number as f32))
         .unwrap_or_else(|| {
@@ -152,7 +152,7 @@ fn from_f64(
 }
 
 fn comparison(operation: fn(f32, f32) -> bool) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         binary(context, call, environment, |left, right| {
             logic::value(operation(left, right))
         })
@@ -172,10 +172,13 @@ pub fn functions() -> ForeignFunctions {
     .into_iter()
     .fold(
         ForeignFunctions::default()
-            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked())
+            .register(
+                vocabulary::UPDATE,
+                ForeignFunction::from_value(update).tracked(),
+            )
             .register(
                 vocabulary::FROM_F64,
-                ForeignFunction::new(from_f64).tracked(),
+                ForeignFunction::from_value(from_f64).tracked(),
             ),
         |functions, (cell, function)| functions.register(cell, function),
     )

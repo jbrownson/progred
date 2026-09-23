@@ -168,15 +168,15 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::UPDATE,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::from_value(|context, call, environment| {
                 let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
                     return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
                 };
                 let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
                     return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
                 };
-                let current = context.eval(current, environment)?;
-                let input = context.eval(input, environment)?;
+                let current = context.eval_to_value(current, environment)?;
+                let input = context.eval_to_value(input, environment)?;
                 Ok(crate::libraries::text::read(&input)
                     .and_then(|text| number::edit(text, Some(&current), value))
                     .unwrap_or_else(|| {
@@ -191,85 +191,85 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::SUM,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, |left, right| left + right)
             })
             .tracked(),
         )
         .register(
             vocabulary::MULTIPLY,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, |left, right| left * right)
             })
             .tracked(),
         )
         .register(
             vocabulary::SUBTRACT,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, |left, right| left - right)
             })
             .tracked(),
         )
         .register(
             vocabulary::DIVIDE,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, |left, right| left / right)
             })
             .tracked(),
         )
         .register(
             vocabulary::SIN,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 unary(context, call, environment, f64::sin)
             })
             .tracked(),
         )
         .register(
             vocabulary::COS,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 unary(context, call, environment, f64::cos)
             })
             .tracked(),
         )
         .register(
             vocabulary::FLOOR,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 unary(context, call, environment, f64::floor)
             })
             .tracked(),
         )
-        .register(vocabulary::LERP, ForeignFunction::runtime(lerp).tracked())
+        .register(vocabulary::LERP, ForeignFunction::new(lerp).tracked())
         .register(
             vocabulary::MIN,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, f64::min)
             })
             .tracked(),
         )
         .register(
             vocabulary::MAX,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, f64::max)
             })
             .tracked(),
         )
         .register(
             vocabulary::CEIL,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 unary(context, call, environment, f64::ceil)
             })
             .tracked(),
         )
         .register(
             vocabulary::HYPOT,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary(context, call, environment, f64::hypot)
             })
             .tracked(),
         )
         .register(
             vocabulary::IS_FINITE,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 unary_value(context, call, environment, |value| {
                     logic::value(value.is_finite()).into()
                 })
@@ -278,7 +278,7 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::LESS,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary_value(context, call, environment, |left, right| {
                     RuntimeValue::from_value(logic::value(left < right))
                 })
@@ -287,7 +287,7 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::EQUAL,
-            ForeignFunction::runtime(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 binary_value(context, call, environment, |left, right| {
                     RuntimeValue::from_value(logic::value(left == right))
                 })
@@ -298,7 +298,7 @@ pub fn functions() -> ForeignFunctions {
 
 fn lerp(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(start) = context.field(call, vocabulary::START) else {
@@ -323,7 +323,7 @@ fn lerp(
 
 fn binary(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<RuntimeValue, Halt> {
@@ -334,7 +334,7 @@ fn binary(
 
 fn binary_value(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> RuntimeValue,
 ) -> Result<RuntimeValue, Halt> {
@@ -355,7 +355,7 @@ fn binary_value(
 
 fn unary(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(f64) -> f64,
 ) -> Result<RuntimeValue, Halt> {
@@ -366,7 +366,7 @@ fn unary(
 
 fn unary_value(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(f64) -> RuntimeValue,
 ) -> Result<RuntimeValue, Halt> {
@@ -476,7 +476,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 

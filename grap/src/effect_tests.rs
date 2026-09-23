@@ -40,34 +40,35 @@ fn run(
     definitions: impl Fn(CellId) -> Vec<(Resolution, Definition)>,
     initial: Value,
     fuel: usize,
-) -> (Evaluation, Value) {
+) -> (Evaluation<Value>, Value) {
     let definitions = TestHost(definitions);
     let effects = RefCell::new(initial);
     let invoke = new_cell_id();
     let functions = [operations.read, operations.write, invoke];
-    let foreign = |cell, context: &mut Context<'_>, expression, environment: &Environment| {
-        if cell == operations.write {
-            let argument = context.field(expression, operations.value).unwrap();
-            let value = context.eval(argument, environment)?;
-            Ok(context.effect(|| {
-                *effects.borrow_mut() = value.clone();
-                value
-            }))
-        } else if cell == operations.read {
-            Ok(effects.borrow().clone())
-        } else {
-            let argument = context.field(expression, operations.value).unwrap();
-            let callable = context.prepare_callable(argument, environment)?;
-            context.call_prepared(&callable, [])
-        }
-    };
-    let overlay = ForeignOverlay::new(&functions, &foreign);
+    let foreign =
+        |cell, context: &mut Context<'_>, expression: &Expression, environment: &Environment| {
+            if cell == operations.write {
+                let argument = context.field(&expression, operations.value).unwrap();
+                let value = context.eval_to_value(argument, environment)?;
+                Ok(context.effect(|| {
+                    *effects.borrow_mut() = value.clone();
+                    value
+                }))
+            } else if cell == operations.read {
+                Ok(effects.borrow().clone())
+            } else {
+                let argument = context.field(&expression, operations.value).unwrap();
+                let callable = context.prepare_callable(argument, environment)?;
+                context.call_prepared_value(&callable, [])
+            }
+        };
+    let overlay = ForeignOverlay::from_value(&functions, &foreign);
     let result = match invocation {
         Invocation::Expression => {
-            evaluate_scoped(&call(function, []), &definitions, &overlay, fuel)
+            evaluate_value_scoped(&call(function, []), &definitions, &overlay, fuel)
         }
-        Invocation::Applied => apply_scoped(&function, [], &definitions, &overlay, fuel),
-        Invocation::Prepared => evaluate_scoped(
+        Invocation::Applied => apply_value_scoped(&function, [], &definitions, &overlay, fuel),
+        Invocation::Prepared => evaluate_value_scoped(
             &call(invoke.into(), [(operations.value, function)]),
             &definitions,
             &overlay,
@@ -86,7 +87,7 @@ const INVOCATIONS: [Invocation; 3] = [
 #[test]
 fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     let absent = absent::value(absent::FUEL_EXHAUSTED);
-    let evaluation = evaluate(&absent, &TestHost(|_| Vec::new()), 10);
+    let evaluation = evaluate_value(&absent, &TestHost(|_| Vec::new()), 10);
     assert_eq!(evaluation.result, absent);
     assert!(evaluation.completed);
 }
@@ -120,7 +121,7 @@ fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
                             library,
                             Definition::foreign(
                                 gid::Value::record([]),
-                                ForeignFunction::new(|_, _, _| {
+                                ForeignFunction::from_value(|_, _, _| {
                                     panic!("effectful decline must stop before fallback")
                                 }),
                             ),
@@ -165,7 +166,7 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
                         Resolution::Library(new_cell_id()),
                         Definition::foreign(
                             gid::Value::record([]),
-                            ForeignFunction::new(|_, _, _| {
+                            ForeignFunction::from_value(|_, _, _| {
                                 panic!("ordinary absence is definitive")
                             }),
                         ),
@@ -253,7 +254,7 @@ fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
                             Resolution::Library(new_cell_id()),
                             Definition::foreign(
                                 gid::Value::record([]),
-                                ForeignFunction::new(|_, _, _| {
+                                ForeignFunction::from_value(|_, _, _| {
                                     panic!("halt must not fall through")
                                 }),
                             ),
@@ -393,7 +394,7 @@ fn rust_functions_obey_the_same_decline_contract() {
             let foreign = if staged {
                 ForeignFunction::staged(move |_, _| Rc::new(implementation))
             } else {
-                ForeignFunction::runtime(move |context, _, environment| {
+                ForeignFunction::new(move |context, _, environment| {
                     implementation(context, environment)
                 })
             };
@@ -412,7 +413,7 @@ fn rust_functions_obey_the_same_decline_contract() {
                                 Resolution::Library(new_cell_id()),
                                 Definition::foreign(
                                     gid::Value::record([]),
-                                    ForeignFunction::new(move |_, _, _| {
+                                    ForeignFunction::from_value(move |_, _, _| {
                                         assert!(
                                             !effectful,
                                             "effectful decline must not fall through"

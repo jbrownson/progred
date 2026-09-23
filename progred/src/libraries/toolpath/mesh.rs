@@ -15,7 +15,7 @@ mod tubes;
 
 pub(super) fn preview(
     context: &mut ::grap::Context,
-    call: ::grap::Expression,
+    call: &::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<Value, ::grap::Halt> {
     super::fidget::preview_with(

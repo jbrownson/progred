@@ -31,17 +31,21 @@ fn invalid() -> RuntimeValue {
 
 fn evaluated(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<RuntimeValue, Halt> {
     match context.field(call, field) {
-        Some(expression) => context.eval_runtime(expression, environment),
+        Some(expression) => context.eval(expression, environment),
         None => Ok(context.missing_runtime_argument(field)),
     }
 }
 
-fn range(context: &mut Context, call: Expression, env: &Environment) -> Result<RuntimeValue, Halt> {
+fn range(
+    context: &mut Context,
+    call: &Expression,
+    env: &Environment,
+) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
     if count.is_absent() {
         return Ok(count);
@@ -60,12 +64,12 @@ fn range_tail(context: &mut Context, count: f64, index: f64) -> RuntimeValue {
         [(COUNT, f64::value(count)), (INDEX, f64::value(index))],
     );
     let empty = context.environment(&Value::record([])).unwrap();
-    context.closure([], body, &empty)
+    context.closure_value([], body, &empty)
 }
 
 fn range_step(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
@@ -102,7 +106,7 @@ fn range_step(
 
 fn consume(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     env: &Environment,
     collect: bool,
 ) -> Result<RuntimeValue, Halt> {
@@ -121,7 +125,7 @@ fn consume(
     };
     let mut collected = Vec::new();
     loop {
-        let result = context.call_prepared_runtime(&sequence, [])?;
+        let result = context.call_prepared(&sequence, [])?;
         if result.is_absent() {
             if result
                 .field(absent::vocabulary::ABSENT)
@@ -140,7 +144,7 @@ fn consume(
             return Ok(invalid());
         };
         if let Some(action) = &action {
-            let result = context.call_prepared_runtime(action, [(ITEM, item)])?;
+            let result = context.call_prepared(action, [(ITEM, item)])?;
             if result.is_absent() {
                 return Ok(result);
             }
@@ -153,15 +157,15 @@ fn consume(
 
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(RANGE, ForeignFunction::runtime(range).tracked())
-        .register(RANGE_STEP, ForeignFunction::runtime(range_step).tracked())
+        .register(RANGE, ForeignFunction::new(range).tracked())
+        .register(RANGE_STEP, ForeignFunction::new(range_step).tracked())
         .register(
             FOR_EACH,
-            ForeignFunction::runtime(|cx, call, env| consume(cx, call, env, false)).tracked(),
+            ForeignFunction::new(|cx, call, env| consume(cx, call, env, false)).tracked(),
         )
         .register(
             COLLECT,
-            ForeignFunction::runtime(|cx, call, env| consume(cx, call, env, true)).tracked(),
+            ForeignFunction::new(|cx, call, env| consume(cx, call, env, true)).tracked(),
         )
 }
 

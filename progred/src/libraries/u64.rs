@@ -77,7 +77,7 @@ pub fn display(
 
 fn update(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
@@ -86,8 +86,8 @@ fn update(
     let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
         return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
     };
-    let current = context.eval(current, environment)?;
-    let input = context.eval(input, environment)?;
+    let current = context.eval_to_value(current, environment)?;
+    let input = context.eval_to_value(input, environment)?;
     Ok(crate::libraries::text::read(&input)
         .and_then(|text| number::edit(text, Some(&current), value))
         .unwrap_or_else(|| {
@@ -101,7 +101,7 @@ fn update(
 
 fn binary(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     operation: impl FnOnce(u64, u64) -> Value,
 ) -> Result<Value, Halt> {
@@ -111,8 +111,8 @@ fn binary(
     let Some(right) = context.field(call, number::vocabulary::RIGHT) else {
         return Ok(context.missing_argument(number::vocabulary::RIGHT));
     };
-    let left = read(&context.eval(left, environment)?);
-    let right = read(&context.eval(right, environment)?);
+    let left = read(&context.eval_to_value(left, environment)?);
+    let right = read(&context.eval_to_value(right, environment)?);
     Ok(match (left, right) {
         (Some(left), Some(right)) => operation(left, right),
         (None, _) => absent::with_reason(vocabulary::LEFT_NOT_U64),
@@ -123,7 +123,7 @@ fn binary(
 /// Unsigned arithmetic has no representable overflow or division by
 /// zero, so those outcomes are absents rather than wrapped bits.
 fn checked(operation: fn(u64, u64) -> Option<u64>, failure: CellId) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         binary(context, call, environment, |left, right| {
             operation(left, right)
                 .map(value)
@@ -134,7 +134,7 @@ fn checked(operation: fn(u64, u64) -> Option<u64>, failure: CellId) -> ForeignFu
 }
 
 fn comparison(operation: fn(u64, u64) -> bool) -> ForeignFunction {
-    ForeignFunction::new(move |context, call, environment| {
+    ForeignFunction::from_value(move |context, call, environment| {
         binary(context, call, environment, |left, right| {
             logic::value(operation(left, right))
         })
@@ -165,8 +165,10 @@ fn functions() -> ForeignFunctions {
     ]
     .into_iter()
     .fold(
-        ForeignFunctions::default()
-            .register(vocabulary::UPDATE, ForeignFunction::new(update).tracked()),
+        ForeignFunctions::default().register(
+            vocabulary::UPDATE,
+            ForeignFunction::from_value(update).tracked(),
+        ),
         |functions, (cell, function)| functions.register(cell, function),
     )
 }

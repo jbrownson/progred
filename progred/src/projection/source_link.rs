@@ -60,9 +60,14 @@ pub(crate) fn handlers(
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && match input.hovered() {
-                        Some(Hovered::Tree(Hover::Source(source))) => {
+                        Some(Hovered::Tree(hover @ (Hover::Source(_) | Hover::Calls(_)))) => {
+                            let Some(source) =
+                                hover_source(&world.sources(), &input.descends, hover)
+                            else {
+                                return true;
+                            };
                             if let Some(target) =
-                                source_descend(&world.sources(), &input.descends, source)
+                                source_descend(&world.sources(), &input.descends, &source)
                             {
                                 input.geometry(scale).arrive(world, target, None);
                             }
@@ -77,8 +82,11 @@ pub(crate) fn handlers(
                 && world.command_modifier.pressed(&world.modifiers)
                 && world.pointer.is_some_and(|point| placement.contains(point))
                 && match input.hovered() {
-                    Some(Hovered::Tree(Hover::Source(source))) => {
-                        let target = source_descend(&world.sources(), &input.descends, source)
+                    Some(Hovered::Tree(hover @ (Hover::Source(_) | Hover::Calls(_)))) => {
+                        let target = hover_source(&world.sources(), &input.descends, hover)
+                            .and_then(|source| {
+                                source_descend(&world.sources(), &input.descends, &source)
+                            })
                             .and_then(|descend| {
                                 descend.root.clone().map(|root| (root, descend.rect))
                             });
@@ -91,6 +99,23 @@ pub(crate) fn handlers(
                 };
             EventOutcome::from_handled(event, handled)
         });
+    }
+}
+
+/// Source availability is a property of this projection, not of evaluation or
+/// viewport clipping. Preserve leaf attribution if no call has an occurrence.
+pub(crate) fn hover_source<World>(
+    sources: &Sources<'_>,
+    descends: &[crate::navigate::Descend<World>],
+    hover: &Hover,
+) -> Option<SourceTrace> {
+    match hover {
+        Hover::Source(source) => Some(source.clone()),
+        Hover::Calls(calls) => calls
+            .sources()
+            .find(|source| source_descend(sources, descends, source).is_some())
+            .or_else(|| calls.sources().next()),
+        _ => None,
     }
 }
 

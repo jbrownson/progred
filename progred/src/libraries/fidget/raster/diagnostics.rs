@@ -86,7 +86,7 @@ fn paths() -> (Recording, f64) {
     };
     let mut path = Recording::default();
     let evaluation = toolpath::run(&mut path, |scope| {
-        ::grap::apply_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+        ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
     });
     assert!(evaluation.completed && !absent::is_absent(&evaluation.result));
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;

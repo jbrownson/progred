@@ -38,11 +38,11 @@ pub fn read(value: &Value) -> Option<f64> {
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::CIRCLE,
-        ForeignFunction::new(|context, call, environment| {
+        ForeignFunction::from_value(|context, call, environment| {
             let Some(radius) = context.field(call, vocabulary::RADIUS) else {
                 return Ok(context.missing_argument(vocabulary::RADIUS));
             };
-            let radius = context.eval(radius, environment)?;
+            let radius = context.eval_to_value(radius, environment)?;
             Ok(f64::read(&radius)
                 .filter(|radius| radius.is_finite() && *radius >= 0.0)
                 .map(value)

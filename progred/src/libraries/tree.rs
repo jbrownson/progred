@@ -57,19 +57,19 @@ fn children<S: Sink>(
     environment: &Environment,
     output: &Output<S>,
 ) -> Result<Value, Halt> {
-    if let Some(elements) = context.elements(expression).map(<[_]>::to_vec) {
+    if let Some(elements) = context.elements(&expression).map(<[_]>::to_vec) {
         for child in elements {
             context.burn()?;
-            let result = if context.elements(child).is_some() {
+            let result = if context.elements(&child).is_some() {
                 group(
                     context,
-                    child,
-                    context.source_origin(child),
+                    child.clone(),
+                    context.source_origin(&child),
                     environment,
                     output,
                 )?
             } else {
-                context.eval(child, environment)?
+                context.eval_to_value(child, environment)?
             };
             if absent::is_absent(&result) {
                 return Ok(result);
@@ -77,7 +77,7 @@ fn children<S: Sink>(
         }
         Ok(Value::record([]))
     } else {
-        context.eval(expression, environment)
+        context.eval_to_value(expression, environment)
     }
 }
 
@@ -92,7 +92,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
             let output = output.clone();
             functions.register(
                 function,
-                ForeignFunction::new(move |context, call, environment| {
+                ForeignFunction::from_value(move |context, call, environment| {
                     let field = if function == LEAF { VALUE } else { CHILDREN };
                     let Some(expression) = context.field(call, field) else {
                         return Ok(context.missing_argument(field));
@@ -101,7 +101,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                         GROUP => group(
                             context,
                             expression,
-                            context.source_origin(call),
+                            context.source_origin(&call),
                             environment,
                             &output,
                         ),
@@ -116,8 +116,8 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                             result
                         }
                         LEAF => {
-                            let source = context.source_origin(call);
-                            let mut value = context.eval_runtime(expression, environment)?;
+                            let source = context.source_origin(&call);
+                            let mut value = context.eval(expression, environment)?;
                             let maps = output
                                 .maps
                                 .borrow()
@@ -129,7 +129,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                                 if value.is_absent() {
                                     return Ok(value.into_value());
                                 }
-                                value = context.call_prepared_runtime(&map, [(VALUE, value)])?;
+                                value = context.call_prepared(&map, [(VALUE, value)])?;
                             }
                             if value.is_absent() {
                                 return Ok(value.into_value());
@@ -226,7 +226,7 @@ fn collect(
 ) -> Result<Result<Built, Value>, Halt> {
     let sink = Rc::new(RefCell::new(Collector::default()));
     let result = interpret(context, sink.clone(), |context| {
-        context.call_prepared(program, [])
+        context.call_prepared_value(program, [])
     })?;
     if absent::is_absent(&result) {
         Ok(Err(result))
@@ -244,9 +244,9 @@ fn evaluate(
     program: &Value,
     host: &dyn ::grap::Host,
     fuel: usize,
-) -> (::grap::Evaluation, Option<Result<Built, Value>>) {
+) -> (::grap::Evaluation<gid::Value>, Option<Result<Built, Value>>) {
     let built = RefCell::new(None);
-    let emit = |_, context: &mut Context<'_>, call, environment: &Environment| {
+    let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let Some(expression) = context.field(call, PROGRAM) else {
             return Ok(context.missing_argument(PROGRAM));
         };
@@ -260,10 +260,10 @@ fn evaluate(
         Ok(value)
     };
     let expression = ::grap::call(COLLECT.into(), [(PROGRAM, program.clone())]);
-    let evaluation = ::grap::evaluate_scoped(
+    let evaluation = ::grap::evaluate_value_scoped(
         &expression,
         host,
-        &::grap::ForeignOverlay::new(&[COLLECT], &emit).tracked(),
+        &::grap::ForeignOverlay::from_value(&[COLLECT], &emit).tracked(),
         fuel,
     );
     (evaluation, built.into_inner())
@@ -340,12 +340,13 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         .fold(ForeignFunctions::default(), |functions, cell| {
             functions.register(
                 cell,
-                ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))).tracked(),
+                ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                    .tracked(),
             )
         })
         .register(
             COLLECT,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::from_value(|context, call, environment| {
                 let Some(program) = context.field(call, PROGRAM) else {
                     return Ok(context.missing_argument(PROGRAM));
                 };

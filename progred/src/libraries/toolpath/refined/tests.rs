@@ -93,7 +93,7 @@ impl Fixture {
             counter,
             ::grap::Definition::foreign(
                 Value::record([]),
-                ::grap::ForeignFunction::new({
+                ::grap::ForeignFunction::from_value({
                     let runs = runs.clone();
                     move |_, _, _| {
                         runs.set(runs.get() + 1);

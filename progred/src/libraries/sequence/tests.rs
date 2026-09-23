@@ -116,12 +116,12 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
     let functions = functions()
         .register(
             pull,
-            ForeignFunction::runtime({
+            ForeignFunction::new({
                 let log = log.clone();
                 move |cx, call, env| {
                     let index = evaluated(cx, call, env, INDEX)?.as_f64().unwrap();
                     cx.effect(|| log.borrow_mut().push(("pull", index)));
-                    let next = cx.closure(
+                    let next = cx.closure_value(
                         [],
                         ::grap::call(Value::from(pull), [(INDEX, f64::value(index + 1.0))]),
                         env,
@@ -136,7 +136,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
         )
         .register(
             action,
-            ForeignFunction::runtime({
+            ForeignFunction::new({
                 let log = log.clone();
                 let failure = failure.clone();
                 move |cx, call, env| {
@@ -208,7 +208,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
     ] {
         let functions = functions().register(
             step,
-            ForeignFunction::runtime({
+            ForeignFunction::new({
                 let output = output.clone();
                 move |_, _, _| Ok(output.clone().into())
             })

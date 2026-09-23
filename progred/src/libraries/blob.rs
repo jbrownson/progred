@@ -41,11 +41,11 @@ fn parse_hex(hex: &str) -> Option<Vec<u8>> {
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
-        ForeignFunction::new(|context, call, environment| {
+        ForeignFunction::from_value(|context, call, environment| {
             let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
                 return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
             };
-            let input = context.eval(input, environment)?;
+            let input = context.eval_to_value(input, environment)?;
             Ok(text::read(&input)
                 .and_then(|text| edit(text, None))
                 .unwrap_or_else(|| {

@@ -21,7 +21,7 @@ fn counted(runs: &Rc<Cell<usize>>, result: Value) -> Definition {
     let runs = runs.clone();
     Definition::foreign(
         Value::record([]),
-        ForeignFunction::new(move |_, _, _| {
+        ForeignFunction::from_value(move |_, _, _| {
             runs.set(runs.get() + 1);
             Ok(result.clone())
         })
@@ -125,7 +125,7 @@ fn undeclared_foreign_reads_disable_reuse() {
     let hidden = Rc::new(Cell::new(1u8));
     let definition = Definition::foreign(
         Value::record([]),
-        ForeignFunction::new({
+        ForeignFunction::from_value({
             let hidden = hidden.clone();
             move |_, _, _| Ok(Value::from(vec![hidden.get()]))
         }),
@@ -150,7 +150,7 @@ fn foreign_input_observations_and_fuel_are_dependencies() {
     let runs = Rc::new(Cell::new(0));
     let definition = Definition::foreign(
         Value::record([]),
-        ForeignFunction::new({
+        ForeignFunction::from_value({
             let value = value.clone();
             let runs = runs.clone();
             move |context, _, _| {
@@ -192,14 +192,15 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
             move |read| {
                 runs.set(runs.get() + 1);
                 let output = RefCell::new(Vec::new());
-                let emit = |_, context: &mut Context<'_>, _, _: &Environment| {
+                let emit = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
                     context.effect(|| output.borrow_mut().push(7));
                     Ok(Value::record([]))
                 };
                 let cells = [cell];
-                let overlay = ForeignOverlay::new(&cells, &emit).tracked();
-                let eval =
-                    |host: &dyn Host| evaluate_scoped(&call(cell.into(), []), host, &overlay, 100);
+                let overlay = ForeignOverlay::from_value(&cells, &emit).tracked();
+                let eval = |host: &dyn Host| {
+                    evaluate_value_scoped(&call(cell.into(), []), host, &overlay, 100)
+                };
                 let evaluation = if recorded {
                     with_recorded_effects(&source, read, eval)
                 } else {
@@ -249,7 +250,7 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
         move |read| {
             runs.set(runs.get() + 1);
             Ok(run(&source, read, |host| {
-                super::super::evaluate(&Value::record([]), host, 0)
+                super::super::evaluate_value(&Value::record([]), host, 0)
             }))
         }
     });

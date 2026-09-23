@@ -14,9 +14,9 @@ pub mod cutter;
 mod fidget;
 mod mesh;
 pub mod paths;
-mod playback;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
+mod playback;
 mod preview;
 mod refined;
 pub mod stock;
@@ -93,15 +93,15 @@ fn invalid() -> Error {
     Error::Invalid(absent::with_reason(INVALID_INPUT))
 }
 
-fn argument(context: &Context, call: Expression, field: CellId) -> Result<Expression, Error> {
+fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
     context
-        .field(call, field)
+        .field(&call, field)
         .ok_or_else(|| Error::Invalid(context.missing_argument(field)))
 }
 
 fn number(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     field: CellId,
 ) -> Result<f64, Error> {
@@ -114,7 +114,7 @@ fn number(
 
 fn point(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<Point3, Error> {
     Ok([
@@ -139,7 +139,7 @@ fn read_fuel(value: f64) -> Option<usize> {
 
 fn fuel(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<usize, Error> {
     if context.field(call, layout::vocabulary::FUEL).is_some() {
@@ -168,7 +168,8 @@ fn mapped_point(
 ) -> Result<Point3, Error> {
     let mappers = mappers.borrow().clone();
     for mapper in mappers.iter().rev() {
-        let value = context.apply(mapper, [X, Y, Z].into_iter().zip(point.map(f64::value)))?;
+        let value =
+            context.apply_value(mapper, [X, Y, Z].into_iter().zip(point.map(f64::value)))?;
         point = read_point(&value).ok_or_else(|| {
             if absent::is_absent(&value) {
                 Error::Invalid(value)
@@ -218,7 +219,7 @@ impl Emission<'_, '_, '_> {
 fn operation(
     function: CellId,
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
     output: &Output,
 ) -> Result<Value, Error> {
@@ -240,13 +241,13 @@ fn operation(
                     Ok(Value::record([]))
                 } else {
                     context.effect(|| output.sink.borrow_mut().end_path());
-                    let result = context.apply(program, []);
+                    let result = context.apply_value(program, []);
                     context.effect(|| output.sink.borrow_mut().end_path());
                     result
                 }
             }
             let program = argument(context, call, PROGRAM)?;
-            let program = context.eval(program, environment)?;
+            let program = context.eval_to_value(program, environment)?;
             if absent::is_absent(&program) {
                 return Ok(program);
             }
@@ -257,7 +258,7 @@ fn operation(
             let mut emission = Emission { output, context };
             if function == START_AT {
                 let axis = if let Some(expression) = emission.context.field(call, TOOL_AXIS) {
-                    let value = emission.context.eval(expression, environment)?;
+                    let value = emission.context.eval_to_value(expression, environment)?;
                     Axis::new(read_point(&value).ok_or_else(invalid)?).ok_or_else(invalid)?
                 } else {
                     Axis::Z
@@ -270,7 +271,7 @@ fn operation(
         MAP_POINTS | MAP_AXES => {
             let mapper = argument(context, call, MAPPER)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
-            let mapper = context.eval(mapper, environment)?;
+            let mapper = context.eval_to_value(mapper, environment)?;
             let mappers = if function == MAP_POINTS {
                 &output.mappers
             } else {
@@ -278,14 +279,14 @@ fn operation(
             };
             let parent = mappers.borrow().clone();
             Rc::make_mut(&mut mappers.borrow_mut()).push(mapper);
-            let value = context.eval(expression, environment);
+            let value = context.eval_to_value(expression, environment);
             mappers.replace(parent);
             return Ok(value?);
         }
         WITH_TOOL => {
             let tool = argument(context, call, cutter::vocabulary::TOOL)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
-            let value = context.eval(tool, environment)?;
+            let value = context.eval_to_value(tool, environment)?;
             if absent::is_absent(&value) {
                 return Ok(value);
             }
@@ -293,7 +294,7 @@ fn operation(
             // Release the sink borrow before evaluating the body: nested calls
             // emit into it too. Always leave the scope, including on a halt.
             context.effect(|| output.sink.borrow_mut().enter_tool(&tool));
-            let value = context.eval(expression, environment);
+            let value = context.eval_to_value(expression, environment);
             context.effect(|| output.sink.borrow_mut().leave_tool());
             return Ok(value?);
         }
@@ -306,17 +307,18 @@ fn operation(
 /// sink and discard it on failure; the preview does this for each frame.
 pub fn run(
     sink: &mut dyn Sink<Error = InvalidPath>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
-) -> Evaluation {
+    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation<gid::Value>,
+) -> Evaluation<gid::Value> {
     let output = Output {
         sink: RefCell::new(sink),
         mappers: RefCell::new(Rc::new(Vec::new())),
         axis_mappers: RefCell::new(Rc::new(Vec::new())),
     };
-    let emit = |function, context: &mut Context<'_>, call, environment: &Environment| {
-        result(operation(function, context, call, environment, &output))
-    };
-    evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
+    let emit =
+        |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
+            result(operation(function, context, call, environment, &output))
+        };
+    evaluate(&ForeignOverlay::from_value(EMITTERS, &emit).tracked())
 }
 
 fn functions() -> ForeignFunctions {
@@ -325,29 +327,36 @@ fn functions() -> ForeignFunctions {
         .fold(ForeignFunctions::default(), |functions, &cell| {
             functions.register(
                 cell,
-                ForeignFunction::new(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))).tracked(),
+                ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                    .tracked(),
             )
         });
     functions
-        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview).tracked())
-        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview).tracked())
+        .register(
+            PREVIEW_3D,
+            ForeignFunction::from_value(fidget::preview).tracked(),
+        )
+        .register(
+            PREVIEW_MESH,
+            ForeignFunction::from_value(mesh::preview).tracked(),
+        )
         .register(
             PREVIEW_REFINED,
-            ForeignFunction::new(refined::preview).tracked(),
+            ForeignFunction::from_value(refined::preview).tracked(),
         )
         .register(
             POINT,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::from_value(|context, call, environment| {
                 result(point(context, call, environment).map(point_value))
             })
             .tracked(),
         )
         .register(
             PREVIEW,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::from_value(|context, call, environment| {
                 result((|| {
                     let program = argument(context, call, presentation::vocabulary::VALUE)?;
-                    let program = context.eval(program, environment)?;
+                    let program = context.eval_to_value(program, environment)?;
                     let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
                     let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;
                     if width <= 0.0 || height <= 0.0 {

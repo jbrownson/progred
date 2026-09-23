@@ -63,35 +63,32 @@ pub fn functions() -> ForeignFunctions {
             vocabulary::WHERE,
             ForeignFunction::staged(bindings_prepare).tracked(),
         )
-        .register(
-            vocabulary::DO,
-            ForeignFunction::runtime(do_foreign).tracked(),
-        )
+        .register(vocabulary::DO, ForeignFunction::new(do_foreign).tracked())
         .register(
             vocabulary::ALL,
-            ForeignFunction::runtime(all::evaluate).tracked(),
+            ForeignFunction::new(all::evaluate).tracked(),
         )
         .register(
             vocabulary::QUOTE,
-            ForeignFunction::runtime(quote_foreign).tracked(),
+            ForeignFunction::new(quote_foreign).tracked(),
         )
 }
 
 fn do_foreign(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    let Some(count) = context.elements(expressions).map(<[_]>::len) else {
+    let Some(count) = context.elements(&expressions).map(<[_]>::len) else {
         return Ok(absent::with_reason(vocabulary::INVALID_EXPRESSIONS).into());
     };
     let mut result = None;
     for index in 0..count {
-        let expression = context.elements(expressions).unwrap()[index];
-        let value = context.eval_runtime(expression, environment)?;
+        let expression = context.elements(&expressions).unwrap()[index].clone();
+        let value = context.eval(expression, environment)?;
         if value.is_absent() {
             return Ok(value);
         }
@@ -102,7 +99,7 @@ fn do_foreign(
 
 fn quote_foreign(
     context: &mut Context,
-    call: Expression,
+    call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
@@ -116,32 +113,32 @@ fn replace_unquotes(
     context: &mut Context,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(field_count) = context.fields(expression).map(<[_]>::len) {
-        let unquote = context.fields(expression).and_then(|fields| {
+    if let Some(field_count) = context.fields(&expression).map(<[_]>::len) {
+        let unquote = context.fields(&expression).and_then(|fields| {
             fields
                 .iter()
                 .find(|(field, _)| *field == vocabulary::UNQUOTE)
-                .map(|(_, unquote)| *unquote)
+                .map(|(_, unquote)| unquote.clone())
         });
         if let Some(unquote) = unquote {
-            return context.eval_runtime(unquote, environment);
+            return context.eval(unquote, environment);
         }
         let mut replaced = Vec::with_capacity(field_count);
         for index in 0..field_count {
-            let (field, value) = context.fields(expression).unwrap()[index];
+            let (field, value) = context.fields(&expression).unwrap()[index].clone();
             replaced.push((field, replace_unquotes(value, context, environment)?));
         }
         return Ok(RuntimeValue::record(replaced));
     }
-    if let Some(element_count) = context.elements(expression).map(<[_]>::len) {
+    if let Some(element_count) = context.elements(&expression).map(<[_]>::len) {
         let mut replaced = Vec::with_capacity(element_count);
         for index in 0..element_count {
-            let value = context.elements(expression).unwrap()[index];
+            let value = context.elements(&expression).unwrap()[index].clone();
             replaced.push(replace_unquotes(value, context, environment)?);
         }
         return Ok(RuntimeValue::list(replaced));
     }
-    let value = context.value(expression).clone();
+    let value = context.value(&expression).clone();
     replace_unquotes_value(&value, context, environment)
 }
 
@@ -188,23 +185,23 @@ enum CompiledCases {
     Deferred(Expression),
 }
 
-fn match_prepare(context: &Context, call: Expression) -> Stage {
+fn match_prepare(context: &Context, call: &Expression) -> Stage {
     let subject = context.field(call, vocabulary::VALUE);
     let compiled =
         context
-            .field(call, vocabulary::CASES)
-            .map(|cases| match context.elements(cases) {
+            .field(&call, vocabulary::CASES)
+            .map(|cases| match context.elements(&cases) {
                 None => CompiledCases::Deferred(cases),
                 Some(elements) => CompiledCases::Cases(
                     elements
                         .iter()
                         .map(|case| {
                             match (
-                                context.field(*case, vocabulary::PATTERN),
-                                context.field(*case, ::grap::vocabulary::EXPRESSION),
+                                context.field(case, vocabulary::PATTERN),
+                                context.field(case, ::grap::vocabulary::EXPRESSION),
                             ) {
                                 (Some(pattern), Some(expression)) => CompiledCase::Case {
-                                    pattern: context.value(pattern).clone(),
+                                    pattern: context.value(&pattern).clone(),
                                     expression,
                                 },
                                 _ => CompiledCase::Malformed,
@@ -214,13 +211,13 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                 ),
             });
     Rc::new(move |context, environment| {
-        let Some(subject) = subject else {
+        let Some(subject) = subject.clone() else {
             return Ok(context.missing_runtime_argument(vocabulary::VALUE));
         };
         let Some(compiled) = &compiled else {
             return Ok(context.missing_runtime_argument(vocabulary::CASES));
         };
-        let value = context.eval_runtime(subject, environment)?;
+        let value = context.eval(subject, environment)?;
         match compiled {
             CompiledCases::Cases(cases) => {
                 // Selecting over prepared cases skips evaluating the
@@ -237,10 +234,8 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                     };
                     match destructure(pattern, &value) {
                         Ok(Some(bindings)) => {
-                            return context.eval_runtime(
-                                *expression,
-                                &environment.extended_runtime(bindings),
-                            );
+                            return context
+                                .eval(expression.clone(), &environment.extended_runtime(bindings));
                         }
                         Ok(None) => {}
                         Err(InvalidBinder) => {
@@ -257,7 +252,7 @@ fn match_prepare(context: &Context, call: Expression) -> Stage {
                 )
             }
             CompiledCases::Deferred(cases) => {
-                let cases_value = context.eval(*cases, environment)?;
+                let cases_value = context.eval_to_value(cases.clone(), environment)?;
                 match select(&value, &cases_value) {
                     Selection::Expression {
                         expression,
@@ -286,27 +281,27 @@ enum CompiledBindings {
     Deferred(Expression),
 }
 
-fn bindings_prepare(context: &Context, call: Expression) -> Stage {
+fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
     let compiled = context.field(call, vocabulary::BINDINGS).map(|bindings| {
-        match context.elements(bindings) {
+        match context.elements(&bindings) {
             None => CompiledBindings::Deferred(bindings),
             Some(elements) => CompiledBindings::Bindings(
                 elements
                     .iter()
                     .map(|binding| {
-                        let Some(value) = context.field(*binding, vocabulary::VALUE) else {
+                        let Some(value) = context.field(binding, vocabulary::VALUE) else {
                             return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
                         };
                         match (
-                            context.field(*binding, vocabulary::BIND),
-                            context.field(*binding, vocabulary::PATTERN),
+                            context.field(binding, vocabulary::BIND),
+                            context.field(binding, vocabulary::PATTERN),
                         ) {
-                            (Some(binder), None) => match context.value(binder).as_cell() {
+                            (Some(binder), None) => match context.value(&binder).as_cell() {
                                 Some(binder) => CompiledBinding::Bind { binder, value },
                                 None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
                             },
                             (None, Some(pattern)) => CompiledBinding::Pattern {
-                                pattern: context.value(pattern).clone(),
+                                pattern: context.value(&pattern).clone(),
                                 value,
                             },
                             _ => CompiledBinding::Malformed(vocabulary::INVALID_BINDING),
@@ -321,7 +316,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
         let Some(compiled) = &compiled else {
             return Ok(context.missing_runtime_argument(vocabulary::BINDINGS));
         };
-        let Some(expression) = expression else {
+        let Some(expression) = expression.clone() else {
             return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
         };
         match compiled {
@@ -337,11 +332,11 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                             return Ok(absent::with_reason(*reason).into());
                         }
                         CompiledBinding::Bind { binder, value } => {
-                            let value = context.eval_runtime(*value, &environment)?;
+                            let value = context.eval(value.clone(), &environment)?;
                             environment.push_runtime([(*binder, value)]);
                         }
                         CompiledBinding::Pattern { pattern, value } => {
-                            let value = context.eval_runtime(*value, &environment)?;
+                            let value = context.eval(value.clone(), &environment)?;
                             match destructure(pattern, &value) {
                                 Ok(Some(bindings)) => environment.push_runtime(bindings),
                                 Ok(None) => return Ok(pattern_mismatch(pattern).into()),
@@ -354,10 +349,10 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                         }
                     }
                 }
-                context.eval_runtime(expression, &environment)
+                context.eval(expression, &environment)
             }
             CompiledBindings::Deferred(bindings) => {
-                let bindings_value = context.eval(*bindings, environment)?;
+                let bindings_value = context.eval_to_value(bindings.clone(), environment)?;
                 let Some(bindings) = bindings_value.as_list() else {
                     return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
                 };
@@ -397,7 +392,7 @@ fn bindings_prepare(context: &Context, call: Expression) -> Stage {
                         }
                     }
                 }
-                context.eval_runtime(expression, &environment)
+                context.eval(expression, &environment)
             }
         }
     })
@@ -907,7 +902,7 @@ mod tests {
             _: &gid::Value,
             _: &[(gid::CellId, gid::Value)],
             _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation {
+        ) -> ::grap::Evaluation<gid::Value> {
             panic!("unexpected projection application")
         }
 
@@ -1032,11 +1027,11 @@ mod tests {
         )
     }
 
-    fn evaluate(expression: &Value) -> grap::Evaluation {
+    fn evaluate(expression: &Value) -> grap::Evaluation<gid::Value> {
         crate::libraries::test_evaluate(expression, |_| None, &functions(), 100)
     }
 
-    fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation {
+    fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
         crate::libraries::test_evaluate(expression, |_| None, &functions(), fuel)
     }
 
@@ -1050,14 +1045,14 @@ mod tests {
         let functions = functions()
             .register(
                 first,
-                ForeignFunction::new(move |_, _, _| {
+                ForeignFunction::from_value(move |_, _, _| {
                     first_calls.borrow_mut().push(first);
                     Ok(blob("first"))
                 }),
             )
             .register(
                 second,
-                ForeignFunction::new(move |_, _, _| {
+                ForeignFunction::from_value(move |_, _, _| {
                     second_calls.borrow_mut().push(second);
                     Ok(blob("second"))
                 }),
@@ -1083,9 +1078,11 @@ mod tests {
         let output = log.clone();
         let functions = functions().register(
             emit,
-            ForeignFunction::new(move |context, call, environment| {
-                let value =
-                    context.eval(context.field(call, vocabulary::VALUE).unwrap(), environment)?;
+            ForeignFunction::from_value(move |context, call, environment| {
+                let value = context.eval_to_value(
+                    context.field(call, vocabulary::VALUE).unwrap(),
+                    environment,
+                )?;
                 Ok(context.effect(|| {
                     output.borrow_mut().push(value);
                     Value::record([])
@@ -1441,7 +1438,7 @@ mod tests {
         let subject = new_cell_id();
         let foreign = functions().register(
             subject,
-            ForeignFunction::new(|_, _, _| {
+            ForeignFunction::from_value(|_, _, _| {
                 SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
                 Ok(blob("subject"))
             }),
@@ -1615,7 +1612,7 @@ mod tests {
         for subject in [subject.clone(), subject.to_value().into()] {
             let functions = functions().register(
                 subject_cell,
-                ForeignFunction::runtime(move |_, _, _| Ok(subject.clone())),
+                ForeignFunction::new(move |_, _, _| Ok(subject.clone())),
             );
             let subject = grap::call(Value::from(subject_cell), []);
             for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {

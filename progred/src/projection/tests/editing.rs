@@ -1693,8 +1693,8 @@ fn custom_update_can_bind_an_absent_and_return_a_value() {
         root: Some(text::value("before")),
         cells: Cells::new(),
     });
-    let function = grap::evaluate(&update, &src(&doc, &libraries), 1000).result;
-    let evaluated = grap::apply(
+    let function = grap::evaluate_value(&update, &src(&doc, &libraries), 1000).result;
+    let evaluated = grap::apply_value(
         &function,
         [
             (l::INPUT, text::value("after")),

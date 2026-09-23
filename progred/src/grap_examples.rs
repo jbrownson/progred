@@ -13,13 +13,13 @@ fn evaluated_expression(value: &Value) -> &Value {
         .expect("evaluation projection")
 }
 
-fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
+fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation<gid::Value> {
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
         doc,
         libraries: &stack.libraries,
     };
-    grap::evaluate(expression, &sources, grap::DEFAULT_FUEL)
+    grap::evaluate_value(expression, &sources, grap::DEFAULT_FUEL)
 }
 
 #[test]

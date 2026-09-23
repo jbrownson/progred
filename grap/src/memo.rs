@@ -62,30 +62,30 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
     }
 }
 
-pub fn run<S: 'static>(
+pub fn run<S: 'static, T>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
-) -> Evaluation {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
+) -> Evaluation<T> {
     observed(definitions, read, false, evaluate)
 }
 
 /// The caller owns and returns all effects as part of the memo result. This
 /// permits local recording, never unrecorded writes into an enclosing sink.
-pub fn with_recorded_effects<S: 'static>(
+pub fn with_recorded_effects<S: 'static, T>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
-) -> Evaluation {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
+) -> Evaluation<T> {
     observed(definitions, read, true, evaluate)
 }
 
-fn observed<S: 'static>(
+fn observed<S: 'static, T>(
     definitions: &Definitions<S>,
     read: &mut Read,
     recorded_effects: bool,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
-) -> Evaluation {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
+) -> Evaluation<T> {
     let result = evaluate(&ObservingHost {
         definitions,
         read: RefCell::new(read),
@@ -102,12 +102,12 @@ pub fn evaluate<S: 'static>(
     definitions: Definitions<S>,
     expression: Input<Value>,
     fuel: Input<usize>,
-) -> Memo<Evaluation> {
+) -> Memo<Evaluation<Value>> {
     runtime.memo(move |read| {
         let expression = expression.read(read);
         let fuel = *fuel.read(read);
         Ok(run(&definitions, read, |host| {
-            super::evaluate(&expression, host, fuel)
+            super::evaluate_value(&expression, host, fuel)
         }))
     })
 }

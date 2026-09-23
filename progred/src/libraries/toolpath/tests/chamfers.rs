@@ -21,7 +21,7 @@ fn program(sources: &Sources<'_>, names: &Binders, name: &str) -> Recording {
 }
 
 fn square_tool(sources: &Sources<'_>, names: &Binders) -> Tool {
-    let result = ::grap::evaluate(&names["square_tool"].into(), sources, 1000);
+    let result = ::grap::evaluate_value(&names["square_tool"].into(), sources, 1000);
     assert!(result.completed);
     Tool::read(&result.result).unwrap()
 }
@@ -91,7 +91,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
             ],
         ),
     );
-    let curve = ::grap::evaluate(&curve, &sources, 1000).result;
+    let curve = ::grap::evaluate_value(&curve, &sources, 1000).result;
     let strip = Value::record([
         (names["curve"], curve),
         (names["length"], f64::value(4.0)),
@@ -126,7 +126,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
         ),
     ] {
         // Configuration is pure and can be evaluated without any path output.
-        let configured = ::grap::evaluate(&recipe, &sources, 1000);
+        let configured = ::grap::evaluate_value(&recipe, &sources, 1000);
         assert!(configured.completed && !absent::is_absent(&configured.result));
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
@@ -176,7 +176,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
         ),
     );
     let extend = |stroke, before, after| {
-        let result = ::grap::evaluate(
+        let result = ::grap::evaluate_value(
             &call(
                 names["extend_stroke"],
                 [
@@ -206,7 +206,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                 ([1.0, 2.0, 3.0], [3.0, 5.0, 9.0]),
                 ([3.0, 5.0, 9.0], [1.0, 2.0, 3.0]),
             ] {
-                let result = ::grap::apply(
+                let result = ::grap::apply_value(
                     &configured,
                     [
                         (names["start"], point_value(start)),
@@ -242,7 +242,7 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
         doc: &doc,
         libraries: &libraries,
     };
-    let configured = ::grap::evaluate(
+    let configured = ::grap::evaluate_value(
         &call(
             names["extend_stroke"],
             [
@@ -270,7 +270,7 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
     assert!(configured.completed && !absent::is_absent(&configured.result));
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_scoped(
+        ::grap::apply_value_scoped(
             &configured.result,
             [
                 (names["start"], point_value([1.0, 2.0, 3.0])),
@@ -316,7 +316,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_scoped(
+        ::grap::evaluate_value_scoped(
             &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
             &sources,
             scope,
@@ -357,7 +357,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_scoped(
+        ::grap::evaluate_value_scoped(
             &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
             &sources,
             scope,
