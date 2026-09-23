@@ -1,8 +1,8 @@
 //! Grap evaluation control supplied by Rust functions. `match`
 //! selects one case through structural matching, `let` and `where`
 //! extend an environment through sequential bindings, `do` evaluates
-//! expressions until the first absent, and `quote` constructs data while evaluating
-//! explicit unquotes.
+//! expressions until the first absent, `all` retains every result, and
+//! `quote` constructs data while evaluating explicit unquotes.
 
 use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
@@ -19,6 +19,8 @@ use ::grap::{
 };
 use std::rc::Rc;
 
+mod all;
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -33,6 +35,7 @@ pub mod vocabulary {
     pub const WHERE: CellId = CellId::from_u128(0x2a3432e9c5ce4c62b8261a6b248f13c2);
     pub const BINDINGS: CellId = CellId::from_u128(0xf6fb0062e8a14f808e416a9edece2a9d);
     pub const DO: CellId = CellId::from_u128(0xb1fc4cb45c58b1a662c431feef5bd140);
+    pub const ALL: CellId = CellId::from_u128(0xbc2f76148affd64e009a1a37a32aa2bf);
     pub const EXPRESSIONS: CellId = CellId::from_u128(0x5fab151c006ae1487c28837f2003f43c);
 
     pub const INVALID_CASES: CellId = CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
@@ -63,6 +66,10 @@ pub fn functions() -> ForeignFunctions {
         .register(
             vocabulary::DO,
             ForeignFunction::runtime(do_foreign).tracked(),
+        )
+        .register(
+            vocabulary::ALL,
+            ForeignFunction::runtime(all::evaluate).tracked(),
         )
         .register(
             vocabulary::QUOTE,
@@ -802,10 +809,17 @@ pub fn unquote_display(
 pub fn do_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    expression_list_display(input, vocabulary::DO)
+}
+
+fn expression_list_display(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    callable: CellId,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?.as_record()?;
     input.pending.is_none().then_some(())?;
     let function = fields.get(&::grap::vocabulary::FUNCTION)?;
-    (function.as_cell()? == vocabulary::DO).then_some(())?;
+    (function.as_cell()? == callable).then_some(())?;
     let expressions = fields.get(&vocabulary::EXPRESSIONS)?;
     expressions.as_list()?;
     Some(row(
@@ -840,6 +854,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::WHERE, "where"),
         (vocabulary::BINDINGS, "bindings"),
         (vocabulary::DO, "do"),
+        (vocabulary::ALL, "all"),
         (vocabulary::EXPRESSIONS, "expressions"),
     ] {
         cells.set_value(cell, name::record(name, []));
@@ -867,6 +882,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             crate::display::partial(match_display),
             crate::display::partial(bindings_display),
             crate::display::partial(do_display),
+            crate::display::partial(|input| expression_list_display(input, vocabulary::ALL)),
             crate::display::partial(quote_display),
             crate::display::partial(unquote_display),
         ]),

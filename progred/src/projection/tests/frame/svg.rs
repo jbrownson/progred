@@ -641,16 +641,16 @@ fn website_growing_forest_svg_capture() {
     );
 }
 
-fn website_growing_forest_add_clouds(
+fn website_growing_forest_insert(
     editor: &mut crate::Editor,
     names: &crate::gid_text::Binders,
-    speed: f64,
+    expression: &Value,
 ) {
-    use crate::libraries::control::vocabulary::{DO, EXPRESSIONS};
+    use crate::libraries::control::vocabulary::{ALL, EXPRESSIONS};
     fn insert(source: &Value, clouds: &Value) -> Value {
         match source {
             Value::Record(fields)
-                if fields.get(&::grap::vocabulary::FUNCTION) == Some(&Value::from(DO)) =>
+                if fields.get(&::grap::vocabulary::FUNCTION) == Some(&Value::from(ALL)) =>
             {
                 let mut fields = fields.clone();
                 let mut expressions: Vec<_> = fields
@@ -674,6 +674,16 @@ fn website_growing_forest_add_clouds(
             _ => source.clone(),
         }
     }
+    let doc = Rc::make_mut(&mut editor.model.doc);
+    let sample = insert(doc.cells.value(names["sample"]).unwrap(), expression);
+    doc.cells.set_value(names["sample"], sample);
+}
+
+fn website_growing_forest_add_clouds(
+    editor: &mut crate::Editor,
+    names: &crate::gid_text::Binders,
+    speed: f64,
+) {
     let clouds = ::grap::call(
         Value::from(names["clouds"]),
         [
@@ -682,9 +692,45 @@ fn website_growing_forest_add_clouds(
             (names["color"], crate::libraries::color::value(Color::WHITE)),
         ],
     );
-    let doc = Rc::make_mut(&mut editor.model.doc);
-    let sample = insert(doc.cells.value(names["sample"]).unwrap(), &clouds);
-    doc.cells.set_value(names["sample"], sample);
+    website_growing_forest_insert(editor, names, &clouds);
+}
+
+#[test]
+fn website_growing_forest_all_keeps_drawing_after_incomplete_clouds() {
+    fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: puri::Shape::Circle(circle),
+                    brush,
+                    ..
+                } => {
+                    vec![(*circle, brush.clone())]
+                }
+                DrawCmd::Clip { children, .. } => circles(children),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+    let (editor, names) = website_growing_forest_editor();
+    let mut runner = crate::EditorRunner::new(editor);
+    let render = |runner: &mut crate::EditorRunner| {
+        let size = kurbo::Size::new(720.0, 960.0);
+        runner.refresh_frame(1.0, size);
+        let mut drawing = DrawList::new();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut drawing);
+        runner.frame_presented();
+        circles(&drawing.0)
+    };
+    let before = render(&mut runner);
+    assert!(before.len() >= 22, "sun and forest are visible");
+    website_growing_forest_insert(
+        &mut runner.editor,
+        &names,
+        &::grap::call(names["clouds"].into(), []),
+    );
+    assert_eq!(render(&mut runner), before);
 }
 
 #[test]

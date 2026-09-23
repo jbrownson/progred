@@ -661,6 +661,11 @@ fn projected_do_insertion_offers_calls_but_function_slots_keep_references() {
     expression_list_insertion(control::vocabulary::DO);
 }
 
+#[test]
+fn projected_all_insertion_offers_calls_but_function_slots_keep_references() {
+    expression_list_insertion(control::vocabulary::ALL);
+}
+
 fn expression_list_insertion(callable: CellId) {
     let function = new_cell_id();
     let argument = new_cell_id();

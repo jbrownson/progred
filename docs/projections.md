@@ -596,6 +596,13 @@ images, and display errors do not carry unused evaluator fuel through rendering.
 
 ## Control functions and absents
 
+The control library's `all {expressions: [...]}` evaluates independent expressions
+in the calling environment, in order, and returns the list of results, including
+absents. An empty `all` returns `[]`.
+Ordinary absents do not suppress later expressions or roll back earlier effects;
+evaluator halts still stop execution. Its compact projection uses the same
+expression-list presentation as `do`, with normal expression completions.
+
 The absent library's `or default {value, default}` evaluates `value` once and
 returns a non-absent unchanged. Only an absent result evaluates `default`, in the
 same calling environment. It does not validate the value's type or undo effects;

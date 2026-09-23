@@ -39,6 +39,7 @@
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "all": bc2f76148affd64e009a1a37a32aa2bf,
     "draw_scene": 760df9daea94f9ff58652a794d5295f3,
     "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "drawing_with_controls": b6d47a6599ceb167d1950c1bd900ec04,
@@ -900,7 +901,7 @@
         controls_parameters
       ],
       body: {
-        function: do,
+        function: all,
         expressions: [
           {
             function: sky_draw,
