@@ -37,6 +37,77 @@ fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {
 }
 
 #[test]
+fn tutorial_content_is_centered_as_a_unit_without_changing_child_alignment() {
+    let slots = [new_cell_id(), new_cell_id()];
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([
+            (slots[0], text::value("a wider first slot")),
+            (slots[1], f64::value(1.0)),
+        ])),
+        cells: Cells::new(),
+    });
+    configure(&mut world, &slots);
+    let frame = editing_frame(&mut world, false);
+    let root = stop(&frame, &[]).rect;
+    let first = stop(&frame, &[Step::Key(slots[0])]).rect;
+    let second = stop(&frame, &[Step::Key(slots[1])]).rect;
+    assert!((root.center().x - 250.0).abs() < 1e-6);
+    assert!((root.y0 - root.x0).abs() < 1e-6);
+    assert_eq!(first.x0, second.x0);
+    assert!(root.contains(first.center()));
+    assert!((stop(&frame, &[Step::Key(slots[1])]).select)(
+        &mut world, None
+    ));
+    assert_eq!(
+        world.model.selection.as_ref().unwrap().path(),
+        &[Step::Key(slots[1])]
+    );
+}
+
+#[test]
+fn tutorial_centering_uses_the_viewport_at_each_scale_and_keeps_overflow_reachable() {
+    let key = new_cell_id();
+    for scale in [1.0, 2.0] {
+        for width in [80.0, 720.0, 960.0] {
+            let mut editor = crate::test_editor(Document {
+                root: Some(Value::record([(
+                    key,
+                    text::value("a fairly wide tutorial slot"),
+                )])),
+                cells: Cells::new(),
+            });
+            configure(&mut editor, &[key]);
+            let mut runner = crate::EditorRunner::new(editor);
+            let size = kurbo::Size::new(width * scale, 600.0 * scale);
+            runner.refresh_frame(scale, size);
+            let rect = runner
+                .frame
+                .dispatch
+                .descends
+                .iter()
+                .find(|target| target.path.as_ref() == [Step::Key(key)])
+                .unwrap()
+                .rect;
+            if rect.width() < size.width / 2.0 {
+                assert!((rect.center().x - size.width / 2.0).abs() < 1e-6);
+            } else {
+                runner.editor.stack.projection.center_entry = false;
+                runner.refresh_frame(scale, size);
+                let uncentered = runner
+                    .frame
+                    .dispatch
+                    .descends
+                    .iter()
+                    .find(|target| target.path.as_ref() == [Step::Key(key)])
+                    .unwrap()
+                    .rect;
+                assert_eq!(rect, uncentered, "overflow must keep its ordinary origin");
+            }
+        }
+    }
+}
+
+#[test]
 fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     let slots = [new_cell_id(), new_cell_id(), new_cell_id()];
     let original = Value::record([(new_cell_id(), f64::value(2.0))]);

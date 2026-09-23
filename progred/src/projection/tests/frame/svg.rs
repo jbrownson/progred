@@ -540,6 +540,14 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         circles(&list.0)
     };
     let initial = render(&mut runner);
+    let root = runner
+        .frame
+        .dispatch
+        .descends
+        .iter()
+        .find(|target| target.path.is_empty())
+        .expect("tutorial root");
+    assert!((root.rect.center().x - size.width / 2.0).abs() < 1e-6);
     assert_eq!(
         initial.len(),
         22,
