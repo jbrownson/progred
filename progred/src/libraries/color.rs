@@ -595,7 +595,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         let layout = display(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&color),
             scale_factor: 1.0,
@@ -642,7 +642,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         let layout = display(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&color),
             scale_factor: 1.0,
@@ -676,7 +676,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         let layout = display(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&color),
             scale_factor: 1.0,
@@ -720,7 +720,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         let layout = display(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&color),
             scale_factor: 1.0,

@@ -138,7 +138,7 @@ pub(crate) fn hover_secondary<C>(
     match hover {
         Hover::Value(path) => sources
             .resolve_path(path)
-            .map(|value| Secondary::from_path(sources, path.clone(), value)),
+            .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell())),
         Hover::Source(source) => Some(Secondary::from_trace(source)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
@@ -181,7 +181,7 @@ mod tests {
         let path: Rc<[Step]> = Rc::from(path);
         sources
             .resolve_path(&path)
-            .map(|value| Secondary::from_path(sources, path.clone(), value))
+            .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell()))
     }
 
     #[test]

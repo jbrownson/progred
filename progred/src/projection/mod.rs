@@ -60,7 +60,7 @@ impl<World> Clone for Projection<World> {
 impl<World: 'static> Default for Projection<World> {
     fn default() -> Self {
         Self {
-            partial: crate::display::partial(|_| None),
+            partial: crate::display::runtime_partial(|_| None),
             entry: None,
         }
     }
@@ -588,7 +588,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
             let path: SharedPath = Rc::from(current.source_path()?.as_ref());
             sources
                 .resolve_path(&path)
-                .map(|value| Secondary::from_path(sources, path.clone(), value))
+                .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell()))
         }
         _ => None,
     }
@@ -815,7 +815,7 @@ fn bind_selection(
 /// cell at the path's last Follow, so a cell inside a list carries
 /// its list's owner as context. Wraps outside the descend so the
 /// cell's own selection highlight draws over its ground.
-fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Color)> {
+fn ground_decoration(cx: &Cx, path: &[Step], value: &grap::RuntimeValue) -> Option<(f64, Color)> {
     let Some(cell) = value.as_cell() else {
         return None;
     };
@@ -949,7 +949,7 @@ fn prepare_value(
         let in_cycle = value
             .as_cell()
             .is_some_and(|cell| ancestors.cells.contains(&cell));
-        crate::selection::collapse_default_for_value(&cx.sources, value.as_value(), in_cycle)
+        crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
     });
     let layout = value_layout(
         cx,
@@ -980,12 +980,12 @@ fn prepare_value(
                 let secondary = if cx.edits.is_identity() {
                     Secondary::from_context(
                         landmark_path.clone(),
-                        value.as_value(),
+                        value.as_cell(),
                         ancestors.enclosing,
                     )
                 } else {
                     let source = cx.edits.source(path)?;
-                    Secondary::from_path(&cx.sources, Rc::from(source.as_ref()), value.as_value())
+                    Secondary::from_path(&cx.sources, Rc::from(source.as_ref()), value.as_cell())
                 };
                 let strong = cx.secondary.as_ref() == Some(&secondary);
                 Some((secondary, strong))
@@ -999,7 +999,7 @@ fn prepare_value(
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
             let select = navigation_select_handler(landmark_path.clone(), cx);
-            let ground = value.and_then(|value| ground_decoration(cx, path, value.as_value()));
+            let ground = value.and_then(|value| ground_decoration(cx, path, value));
             let target = value.map(|value| (value.clone(), cx.view.clone(), landmark_path.clone()));
             let edits = cx.edits.clone();
             let pick_edits = edits.clone();
@@ -1059,7 +1059,7 @@ fn value_layout(
     if let Some(value) = value
         && let Some(default) = fold_default
         && crate::annotations::collapsed(cx.annotations, path, default)
-        && let Some(collapsed) = structure::collapsed_layout(cx, path, value.as_value(), default)
+        && let Some(collapsed) = structure::collapsed_layout(cx, path, value, default)
     {
         return Some(collapsed);
     }

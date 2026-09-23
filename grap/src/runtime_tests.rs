@@ -2,6 +2,38 @@ use super::*;
 use gid::new_cell_id;
 
 #[test]
+fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
+    let metadata = new_cell_id();
+    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    for bytes in [
+        3.5_f64.to_le_bytes().to_vec(),
+        vec![],
+        vec![0; 7],
+        vec![0; 9],
+    ] {
+        let blob = RuntimeValue::from(Value::from(bytes.clone()));
+        assert_eq!(blob.as_blob(), Some(bytes.as_slice()));
+        let number = RuntimeValue::record([(crate::f64::F64, blob), (metadata, closure.clone())]);
+        assert_eq!(number.as_f64(), crate::f64::read(&number.to_value()));
+        assert_eq!(number.as_blob(), None);
+        assert_eq!(number.record_len(), Some(2));
+        assert!(number.field(metadata).unwrap().same_result(&closure));
+        assert!(
+            number.1.get().is_none(),
+            "inspection must not cache a GID view"
+        );
+    }
+    for other in [
+        closure,
+        RuntimeValue::list([]),
+        RuntimeValue::from(Value::from(metadata)),
+        RuntimeValue::f64(1.0),
+    ] {
+        assert_eq!(other.as_blob(), None);
+    }
+}
+
+#[test]
 fn generated_calls_retain_closures_and_their_original_inline_source() {
     let sink = new_cell_id();
     let first = new_cell_id();

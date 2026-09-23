@@ -378,6 +378,62 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
 }
 
 #[test]
+fn runtime_fold_classification_matches_stored_data() {
+    use grap::RuntimeValue as Runtime;
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let lib = core_libraries();
+    let sources = src(&doc, &lib);
+    let extra = new_cell_id();
+    let cases = [
+        (Runtime::record([]), None),
+        (Runtime::list([]), None),
+        (Runtime::list([Runtime::f64(3.0)]), Some(false)),
+        (Runtime::record([(extra, Runtime::f64(3.0))]), Some(false)),
+        (Runtime::f64(3.0), None),
+        (
+            Runtime::record([
+                (
+                    f64::vocabulary::F64,
+                    Value::from(3.0_f64.to_le_bytes().to_vec()).into(),
+                ),
+                (extra, Runtime::list([])),
+            ]),
+            None,
+        ),
+        (
+            Runtime::record([(
+                text::vocabulary::UTF8,
+                Value::from(b"hello".to_vec()).into(),
+            )]),
+            None,
+        ),
+        (
+            Runtime::record([(text::vocabulary::UTF8, Value::from(vec![0xff]).into())]),
+            Some(false),
+        ),
+        (
+            Runtime::record([(f64::vocabulary::F64, Value::from(vec![0]).into())]),
+            Some(false),
+        ),
+        (Value::from(vec![1]).into(), None),
+        (Value::from(extra).into(), None),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(
+            crate::selection::collapse_default_for_value(&sources, &value, false),
+            expected
+        );
+        assert_eq!(
+            crate::selection::collapse_default_for_value(&sources, &value.to_value().into(), false),
+            expected,
+        );
+    }
+}
+
+#[test]
 fn any_valued_cell_and_any_container_collapse() {
     let lib = core_libraries();
     let (doc, _) = doc_of(vec![(

@@ -121,7 +121,9 @@ fn visibility(
     value: Option<&Value>,
 ) -> (bool, bool) {
     let default_closed = value
-        .and_then(|value| crate::selection::collapse_default_for_value(&cx.sources, value, false))
+        .and_then(|value| {
+            crate::selection::collapse_default_for_value(&cx.sources, &value.clone().into(), false)
+        })
         .unwrap_or(false);
     let selected = cx.selection.is_some_and(|s| s.path().starts_with(path));
     let visible = selected || !crate::annotations::collapsed(cx.annotations, path, default_closed);

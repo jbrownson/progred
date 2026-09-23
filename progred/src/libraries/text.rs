@@ -83,20 +83,26 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    editor(input.value?).map(crate::display::line_edit)
+    let bytes = input.value?.field(vocabulary::UTF8)?;
+    let text = std::str::from_utf8(bytes.as_blob()?).ok()?;
+    Some(crate::display::line_edit(editor_for_text(text)))
 }
 
 pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
-    Some(line_edit::description(
-        read(value)?,
+    Some(editor_for_text(read(value)?))
+}
+
+fn editor_for_text(text: &str) -> crate::display::LineEdit {
+    line_edit::description(
+        text,
         None::<String>,
         line_edit::native(edit),
         "\"",
         "\"",
         crate::display::TextFamily::SystemUi,
-    ))
+    )
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -111,7 +117,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "text",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::partial(display),
+        crate::display::runtime_partial(display),
     )
 }
 
@@ -167,7 +173,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         let display = (library().projection)(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&value("hi").into()),
             scale_factor: 1.0,

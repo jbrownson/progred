@@ -700,7 +700,7 @@ mod tests {
         value: &'a Value,
     ) -> ProjectionInput<'a, crate::Editor, crate::frame::Hovered> {
         ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env,
             value: Some(value),
             scale_factor: 1.0,
@@ -717,7 +717,7 @@ mod tests {
         value: &'a Value,
     ) -> ProjectionInput<'a, crate::Editor, crate::frame::Hovered> {
         ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env,
             value: Some(value),
             scale_factor: 1.0,
@@ -1044,7 +1044,7 @@ mod tests {
         assert_eq!(env.0.get(), 1);
         assert!(
             call_display(&ProjectionInput {
-                default_projection: crate::display::partial(|_| None),
+                default_projection: crate::display::runtime_partial(|_| None),
                 pending: Some(Pending::Field),
                 ..input(&env, &value)
             })

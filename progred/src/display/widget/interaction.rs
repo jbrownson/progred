@@ -83,13 +83,21 @@ pub fn pickable(
     target: crate::frame::Hovered,
     value: Value,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
+    pickable_runtime(child, target, value.into())
+}
+
+pub fn pickable_runtime(
+    child: Layout<crate::Editor, crate::frame::Hovered>,
+    target: crate::frame::Hovered,
+    value: grap::RuntimeValue,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
     before(
         child,
         Rc::new(move |context| {
             let value = value.clone();
             target_action(
                 target.clone(),
-                Rc::new(move |world| world.pick_identity(value.clone())),
+                Rc::new(move |world| world.pick_identity(value.to_value())),
                 true,
                 crate::modifiers::picking(context.inputs.command_modifier),
                 PartialEq::eq,

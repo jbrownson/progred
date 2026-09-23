@@ -36,7 +36,7 @@ fn target(path: Vec<Step>) -> ProjectionTarget<crate::Editor, crate::frame::Hove
 
 fn input(value: &Value) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
     ProjectionInput {
-        default_projection: crate::display::partial(|_| None),
+        default_projection: crate::display::runtime_partial(|_| None),
         env: &Names,
         value: Some(value),
         scale_factor: 1.0,
@@ -157,7 +157,7 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
     let complete = unary(SIN, number(1.0));
     assert!(
         field(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             pending: Some(Pending::Field),
             ..input(&complete)
         })

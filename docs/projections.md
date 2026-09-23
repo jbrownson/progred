@@ -730,6 +730,14 @@ it borrows stored GID directly or lazily materializes a shared GID view. The
 original runtime value remains available to runtime-aware partials and children.
 Copying a result and writing document/UI data are GID boundaries.
 
+Fold classification, collapsed-container display, and source highlighting inspect
+runtime atoms/container shape directly rather than asking for a complete GID
+view. Text and blob partials likewise inspect only their own facets. A collapsed
+value's picking handler retains the runtime value and materializes it only when
+invoked. Empty partials use the runtime interface so declining without inspecting
+anything does not itself request conversion. Other data-oriented partials and
+the expanded structural fallback still use the GID adapter.
+
 Generated drawing syntax may contain retained native closures. Explicitly
 interpreting that syntax lowers its containers without serializing the embedded
 closures. The expression-facing host application adapter preserves the existing

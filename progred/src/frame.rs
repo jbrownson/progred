@@ -125,9 +125,9 @@ fn attribute_hover(
     let hovered_secondary = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
             source_path.as_ref().and_then(|path| {
-                sources
-                    .resolve_path(path)
-                    .map(|value| hover::Secondary::from_path(sources, path.clone(), value))
+                sources.resolve_path(path).map(|value| {
+                    hover::Secondary::from_path(sources, path.clone(), value.as_cell())
+                })
             })
         }
         Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(sources, completion, hover),

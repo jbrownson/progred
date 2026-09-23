@@ -64,7 +64,7 @@ pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     Some(line_edit::layout_with_family(
         gid::hex_string(input.value?.as_blob()?),
@@ -86,7 +86,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "blob",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::partial(display),
+        crate::display::runtime_partial(display),
     )
 }
 

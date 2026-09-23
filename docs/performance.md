@@ -149,6 +149,23 @@ Use `profile_program_tree_construction` and `cam_controls_profile_loop` with
 for archived source copies: sharing a target directory during the earlier
 comparison reused incompatible artifacts.
 
+### Runtime projection inspection — 2026-09-23
+
+Fold classification, collapsed display/picking, source highlighting, text/blob
+partials, and empty partials no longer request whole-runtime-value conversion.
+Runtime f64 record inspection reads only the numeric field, including when
+unrelated metadata contains closures. Expanded structural display and other
+legacy partials still request GID views.
+
+The same release canaries measured a controls-only frame median of 317.54 µs
+before this pass and 329.75, 324.58, and 328.71 µs afterward (five warm-ups,
+60 frames per run). Warm uncached construction was 9.05–11.58 ms before and
+9.79–10.76 ms after; memo hits stayed around 1–3 µs. These sequential local
+measurements demonstrate no speedup, and do not recover the ownership overhead
+above. This pass removes unnecessary conversion requests rather than proving
+an end-to-end performance improvement. The remaining adapters can still
+materialize the same value later in projection dispatch.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

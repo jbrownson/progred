@@ -4,8 +4,8 @@
 
 use super::{Cx, select_handler};
 use crate::display::{
-    Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover, pickable,
-    selectable_bracket,
+    Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover,
+    pickable_runtime, selectable_bracket,
 };
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -21,7 +21,9 @@ pub fn of(
     input: &ProjectionInput<'_, crate::Editor, Hovered>,
 ) -> View {
     match value {
-        Value::Blob(bytes) => selectable(cx, id(blob_text(bytes)), path, value, true),
+        Value::Blob(bytes) => {
+            selectable(cx, id(blob_text(bytes)), path, &value.clone().into(), true)
+        }
         Value::Cell(cell) => cell_layout(cx, *cell),
         Value::List(_) => crate::display::structure::list_layout(input, None).unwrap(),
         Value::Record(_) => crate::display::structure::record_layout(input, |_| None).unwrap(),
@@ -41,24 +43,25 @@ fn blob_text(bytes: &[u8]) -> String {
 pub(super) fn collapsed_layout(
     cx: &Cx,
     path: &[Step],
-    value: &Value,
+    value: &grap::RuntimeValue,
     default: bool,
 ) -> Option<View> {
-    let delim = match value {
-        Value::Cell(cell) => {
-            let value = cx.sources.resolve(*cell)?;
+    let delim = match value.as_cell() {
+        Some(cell) => {
+            let value = cx.sources.resolve(cell)?;
             let mut followed = path.to_vec();
             followed.push(Step::Follow(value.source));
             (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
                 .then_some(Delim::Paren)?
         }
-        Value::List(elements) if !elements.is_empty() && cx.pending_child_of(path).is_none() => {
+        None if value.list_len().is_some_and(|len| len != 0)
+            && cx.pending_child_of(path).is_none() =>
+        {
             Delim::Bracket
         }
-        Value::Record(fields)
-            if !fields.is_empty()
-                && cx.pending_child_of(path).is_none()
-                && cx.pending_edge_under(path).is_none() =>
+        None if value.record_len().is_some_and(|len| len != 0)
+            && cx.pending_child_of(path).is_none()
+            && cx.pending_edge_under(path).is_none() =>
         {
             Delim::Brace
         }
@@ -81,11 +84,17 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
     selectable_bracket(Delim::Paren, descend(Step::Follow(source), None, None))
 }
 
-fn selectable(cx: &Cx, child: View, path: &[Step], value: &Value, claim_hover: bool) -> View {
+fn selectable(
+    cx: &Cx,
+    child: View,
+    path: &[Step],
+    value: &grap::RuntimeValue,
+    claim_hover: bool,
+) -> View {
     let path: Rc<[Step]> = Rc::from(path);
     let target = Hovered::Tree(Hover::Value(path.clone()));
     let clicked = on_activate(
-        pickable(child, target.clone(), value.clone()),
+        pickable_runtime(child, target.clone(), value.clone()),
         target,
         select_handler(path.clone(), cx),
     );

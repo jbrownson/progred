@@ -86,10 +86,10 @@ pub enum Secondary {
 impl Secondary {
     pub fn from_context(
         path: Rc<[Step]>,
-        value: &Value,
+        cell: Option<CellId>,
         enclosing: Option<(CellId, Resolution, usize)>,
     ) -> Self {
-        match value.as_cell() {
+        match cell {
             Some(cell) => Self::Cell(cell),
             None => match enclosing {
                 Some((cell, source, relative_from)) => Self::InCell {
@@ -115,9 +115,9 @@ impl Secondary {
         }
     }
 
-    pub fn from_path(sources: &impl PathLookup, path: Rc<[Step]>, value: &Value) -> Self {
+    pub fn from_path(sources: &impl PathLookup, path: Rc<[Step]>, cell: Option<CellId>) -> Self {
         let enclosing = enclosing_definition(sources, &path);
-        Self::from_context(path, value, enclosing)
+        Self::from_context(path, cell, enclosing)
     }
 }
 

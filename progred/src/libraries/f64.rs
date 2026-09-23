@@ -499,7 +499,7 @@ mod tests {
         value: &Value,
     ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
         ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &TestEnv,
             value: Some(value),
             scale_factor: 1.0,
@@ -714,7 +714,7 @@ mod tests {
             expression_precedence(&call),
             Some(Precedence::Sum)
         ));
-        let default = crate::display::partial(|_| None);
+        let default = crate::display::runtime_partial(|_| None);
         for (parent, field, grouped) in [
             (Precedence::Product, vocabulary::LEFT, true),
             (Precedence::Sum, vocabulary::LEFT, false),

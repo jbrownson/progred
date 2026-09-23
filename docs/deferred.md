@@ -126,6 +126,11 @@ these can materialize runtime containers even when a later runtime-aware
 projection ultimately handles them. Reducing that conversion work is a remaining
 optimization, not a reason to put origins in serialized GID. Do not preserve a
 creator's dynamic stack as a caller.
+Fold classification, collapsed display, source highlighting, text/blob partials,
+and empty partials now avoid requesting a whole GID view. Expanded structural
+display and the remaining legacy partials still need migration. Generated
+`match` cases and `let` bindings also retain conversion paths worth examining
+separately; document edits and copying are intentional GID boundaries.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.

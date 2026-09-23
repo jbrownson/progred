@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 use crate::annotations::{self, Annotations};
-use crate::libraries::{Libraries, blob, f64 as f64_convention, text};
+use crate::libraries::{Libraries, blob, text};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
@@ -836,7 +836,7 @@ pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool>
             .filter_map(|end| sources.resolve_path(&path[..end]).and_then(Value::as_cell))
             .any(|ancestor| ancestor == cell)
     });
-    collapse_default_for_value(sources, value, in_cycle)
+    collapse_default_for_value(sources, &value.clone().into(), in_cycle)
 }
 
 /// The collapse class of an already-resolved value. Projection has
@@ -844,18 +844,25 @@ pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool>
 /// recover the same `in_cycle` answer from their one-off path.
 pub(crate) fn collapse_default_for_value(
     sources: &Sources,
-    value: &Value,
+    value: &grap::RuntimeValue,
     in_cycle: bool,
 ) -> Option<bool> {
-    Some(value)
-        .filter(|value| text::read(value).is_none() && f64_convention::read(value).is_none())
-        .filter(|value| match value {
-            Value::Cell(cell) => sources.values(*cell).next().is_some(),
-            Value::Blob(_) => false,
-            Value::List(elements) => !elements.is_empty(),
-            Value::Record(fields) => !fields.is_empty(),
-        })
-        .map(|_| in_cycle)
+    let is_text = value.field(text::vocabulary::UTF8).is_some_and(|bytes| {
+        bytes
+            .as_blob()
+            .is_some_and(|bytes| std::str::from_utf8(bytes).is_ok())
+    });
+    if is_text || value.as_f64().is_some() {
+        return None;
+    }
+    let collapsible = match value.as_cell() {
+        Some(cell) => sources.values(cell).next().is_some(),
+        None => value
+            .list_len()
+            .or_else(|| value.record_len())
+            .is_some_and(|len| len != 0),
+    };
+    collapsible.then_some(in_cycle)
 }
 
 /// Breaks the open edit run: the next write records a fresh undo

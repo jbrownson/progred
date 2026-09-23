@@ -188,7 +188,7 @@ impl<World, Hover> Default for Library<World, Hover> {
     fn default() -> Self {
         Self {
             definitions: Definitions::default(),
-            projection: crate::display::partial(|_| None),
+            projection: crate::display::runtime_partial(|_| None),
             completions: None,
         }
     }
@@ -475,7 +475,7 @@ mod tests {
                         hover: crate::libraries::test_widgets::hover(vec![]),
                     };
                     projection(&ProjectionInput {
-                        default_projection: crate::display::partial(|_| None),
+                        default_projection: crate::display::runtime_partial(|_| None),
                         env: &NoEval,
                         value: Some(&(&value).into()),
                         scale_factor: 1.0,
@@ -516,7 +516,7 @@ mod tests {
                 LEFT_LIBRARY,
                 "test",
                 definitions,
-                crate::display::partial(|_| None),
+                crate::display::runtime_partial(|_| None),
             ),
         )]);
         assert_eq!(
@@ -670,7 +670,7 @@ mod tests {
                 LEFT_LIBRARY,
                 "library",
                 Definitions::default(),
-                crate::display::partial(|_| None),
+                crate::display::runtime_partial(|_| None),
             ),
         )]);
         let description = name::record("library", []);
@@ -692,7 +692,7 @@ mod tests {
                     ForeignFunctions::default()
                         .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
                 ),
-                crate::display::partial(|_| None),
+                crate::display::runtime_partial(|_| None),
             ),
         )]);
         assert_eq!(
@@ -717,7 +717,7 @@ mod tests {
                 ForeignFunctions::default()
                     .register(SHARED_CELL, ForeignFunction::from_value(left_function)),
             ),
-            crate::display::partial(|_| None),
+            crate::display::runtime_partial(|_| None),
         );
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
@@ -725,7 +725,7 @@ mod tests {
             RIGHT_LIBRARY,
             "right",
             Definitions::from_parts(right_cells, ForeignFunctions::default()),
-            crate::display::partial(|_| None),
+            crate::display::runtime_partial(|_| None),
         );
         let (mut libraries, _, _) =
             Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);

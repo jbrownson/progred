@@ -76,7 +76,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "name",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
-        crate::display::partial(|_| None),
+        crate::display::runtime_partial(|_| None),
     )
     .with_completions(completions)
 }

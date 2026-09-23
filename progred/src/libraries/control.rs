@@ -935,7 +935,7 @@ mod tests {
         value: &Value,
     ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
         ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(value),
             scale_factor: 1.0,
@@ -951,7 +951,7 @@ mod tests {
         value: &Value,
     ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
         ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(value),
             scale_factor: 1.0,

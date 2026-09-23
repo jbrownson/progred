@@ -457,7 +457,7 @@ pub fn compose_partials<World: 'static, Hover: 'static>(
 ) -> Partial<World, Hover> {
     let partials: Vec<_> = partials.into_iter().collect();
     match partials.as_slice() {
-        [] => partial(|_| None),
+        [] => runtime_partial(|_| None),
         [only] => only.clone(),
         _ => runtime_partial(move |input| partials.iter().find_map(|projection| projection(input))),
     }
@@ -520,7 +520,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 }
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
-pub use widget::interaction::{on_activate, on_click, pickable};
+pub use widget::interaction::{on_activate, on_click, pickable, pickable_runtime};
 
 pub fn activatable<World: 'static, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,

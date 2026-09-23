@@ -379,7 +379,7 @@ mod tests {
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
         projection(&ProjectionInput {
-            default_projection: crate::display::partial(|_| None),
+            default_projection: crate::display::runtime_partial(|_| None),
             env,
             value: Some(value),
             scale_factor: 1.0,

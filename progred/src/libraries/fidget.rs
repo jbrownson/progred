@@ -1644,7 +1644,7 @@ mod tests {
         let renderer = RefCell::new(PreviewRenderer::default());
         let layout = display(
             &ProjectionInput {
-                default_projection: crate::display::partial(|_| None),
+                default_projection: crate::display::runtime_partial(|_| None),
                 env: &NoEval,
                 value: Some(&value),
                 scale_factor: 2.0,

@@ -455,7 +455,10 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::F64(value) => Some(value.number),
             RuntimeValueKind::Data(value) => crate::f64::read(value),
-            RuntimeValueKind::Record(_) => crate::f64::read(&self.to_value()),
+            RuntimeValueKind::Record(_) => {
+                let bytes = self.field(crate::f64::F64)?;
+                Some(f64::from_le_bytes(bytes.as_blob()?.try_into().ok()?))
+            }
             RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -500,6 +503,14 @@ impl RuntimeValue {
             | RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
+    /// Inspect an atom without materializing enclosing runtime containers.
+    pub fn as_blob(&self) -> Option<&[u8]> {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => value.as_blob(),
+            _ => None,
         }
     }
 
