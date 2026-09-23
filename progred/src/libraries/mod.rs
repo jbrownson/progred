@@ -29,6 +29,7 @@ pub mod path;
 pub mod presentation;
 pub mod random;
 pub mod selection;
+pub mod sequence;
 pub mod site;
 pub mod text;
 pub mod toolpath;

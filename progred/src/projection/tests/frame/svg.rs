@@ -488,6 +488,7 @@ fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) 
             presentation::ID,
             logic::ID,
             list::ID,
+            crate::libraries::sequence::ID,
         ])
         .unwrap(),
     );
@@ -530,7 +531,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
     let (editor, names) = website_growing_forest_editor();
     assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
     let mut runner = crate::EditorRunner::new(editor);
-    let size = kurbo::Size::new(720.0, 660.0);
+    let size = kurbo::Size::new(720.0, 684.0);
     let render = |runner: &mut crate::EditorRunner| {
         runner.refresh_frame(1.0, size);
         let mut list = DrawList::new();
@@ -614,6 +615,9 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         doc.cells.set_value(names["sample"], sample);
         runner.editor.model.doc = Rc::new(doc);
         let changed = render(&mut runner);
+        if parameter == "count" {
+            assert_eq!(changed.len(), 13, "four trees plus the sun");
+        }
         assert_ne!(
             previous[1..],
             changed[1..],
@@ -632,8 +636,142 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
 fn website_growing_forest_svg_capture() {
     render_editor(
         website_growing_forest_editor().0,
-        kurbo::Size::new(720.0, 660.0),
+        kurbo::Size::new(720.0, 684.0),
         "website_growing_forest.svg",
+    );
+}
+
+fn website_growing_forest_add_clouds(
+    editor: &mut crate::Editor,
+    names: &crate::gid_text::Binders,
+    speed: f64,
+) {
+    use crate::libraries::control::vocabulary::{DO, EXPRESSIONS};
+    fn insert(source: &Value, clouds: &Value) -> Value {
+        match source {
+            Value::Record(fields)
+                if fields.get(&::grap::vocabulary::FUNCTION) == Some(&Value::from(DO)) =>
+            {
+                let mut fields = fields.clone();
+                let mut expressions: Vec<_> = fields
+                    .get(&EXPRESSIONS)
+                    .unwrap()
+                    .as_list()
+                    .unwrap()
+                    .values()
+                    .cloned()
+                    .collect();
+                expressions.insert(1, clouds.clone());
+                fields.insert(EXPRESSIONS, Value::list(expressions));
+                Value::Record(fields)
+            }
+            Value::Record(fields) => Value::record(
+                fields
+                    .iter()
+                    .map(|(key, value)| (*key, insert(value, clouds))),
+            ),
+            Value::List(list) => Value::list(list.values().map(|value| insert(value, clouds))),
+            _ => source.clone(),
+        }
+    }
+    let clouds = ::grap::call(
+        Value::from(names["clouds"]),
+        [
+            (names["sun_time"], Value::from(names["controls_parameters"])),
+            (names["cloud_speed"], f64::value(speed)),
+            (names["color"], crate::libraries::color::value(Color::WHITE)),
+        ],
+    );
+    let doc = Rc::make_mut(&mut editor.model.doc);
+    let sample = insert(doc.cells.value(names["sample"]).unwrap(), &clouds);
+    doc.cells.set_value(names["sample"], sample);
+}
+
+#[test]
+fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
+    use crate::libraries::{controls, presentation};
+    fn cloud_circles(commands: &[DrawCmd]) -> Vec<kurbo::Circle> {
+        commands
+            .iter()
+            .flat_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: puri::Shape::Circle(circle),
+                    brush,
+                    ..
+                } if *brush == peniko::Brush::from(Color::WHITE) => vec![*circle],
+                DrawCmd::Clip { children, .. } => cloud_circles(children),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+    let (editor, names) = website_growing_forest_editor();
+    let offers = completion_entries_with(
+        &editor.sources(),
+        false,
+        &crate::display::CompletionKind::Value,
+        "clouds",
+        Some(&editor.stack.completions),
+        None,
+        true,
+    );
+    assert!(
+        offers
+            .iter()
+            .any(|offer| offer.source == Some(names["clouds"]))
+    );
+    let mut runner = crate::EditorRunner::new(editor);
+    let render = |runner: &mut crate::EditorRunner, time: f64| {
+        runner
+            .editor
+            .model
+            .workspace
+            .document
+            .annotations
+            .set_field(
+                &[
+                    Step::Key(names["second"]),
+                    Step::Key(presentation::vocabulary::RESULT),
+                ],
+                controls::vocabulary::STATE,
+                Some(f64::value(time)),
+            );
+        let size = kurbo::Size::new(720.0, 960.0);
+        runner.refresh_frame(1.0, size);
+        let mut list = DrawList::new();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
+        runner.frame_presented();
+        cloud_circles(&list.0)
+    };
+    assert!(
+        render(&mut runner, 0.0).is_empty(),
+        "clouds are not drawn by default"
+    );
+    let original = runner.editor.model.doc.clone();
+    for speed in [0.0, 1.0, 2.0, -1.0] {
+        runner.editor.model.doc = original.clone();
+        website_growing_forest_add_clouds(&mut runner.editor, &names, speed);
+        let start = render(&mut runner, 0.0);
+        let end = render(&mut runner, 1.0);
+        assert_eq!(start.len(), 9, "three clouds with three lobes each");
+        assert_eq!(end.len(), start.len());
+        for (start, end) in start.iter().zip(&end) {
+            assert!((end.center.x - start.center.x - 60.0 * speed).abs() < 1e-9);
+            assert_eq!(start.center.y, end.center.y);
+            assert_eq!(start.radius, end.radius);
+        }
+        assert_eq!(start, render(&mut runner, 0.0), "scrubbing is reversible");
+    }
+}
+
+#[test]
+#[ignore = "writes the optional clouds scene without launching the app"]
+fn website_growing_forest_clouds_svg_capture() {
+    let (mut editor, names) = website_growing_forest_editor();
+    website_growing_forest_add_clouds(&mut editor, &names, 1.0);
+    render_editor(
+        editor,
+        kurbo::Size::new(720.0, 960.0),
+        "website_growing_forest_clouds.svg",
     );
 }
 

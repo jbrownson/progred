@@ -78,7 +78,7 @@ for the values, creation, and cells exercises, and just name/text/blob for the l
 The Grap and functions exercises add Grap and absent to the numeric set.
 The drawing lesson adds control, color, and layout and credits Bret Victor's
 Inventing on Principle. The opening forest adds controls, presentation, logic,
-and list to the drawing set, without loading Fidget or toolpath libraries.
+list, and sequence to the drawing set, without loading Fidget or toolpath libraries.
 Creation, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
 identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
@@ -89,9 +89,11 @@ The opener stacks an ordinary `render` result above its editable call, without
 panes. Trunks extend before the canopy expands, with deterministic variation
 and staggered growth across trees. There is no animation clock, worker job,
 or demo-specific runtime: the control value directly drives each drawing.
-The scene explicitly sequences separate background, sun, and forest calls using
-ordinary `do`. The sun follows an arc across the sky with the slider, independently
-of the tree growth rate. The editable background and sun colors are ordinary color
+The scene explicitly sequences separate sky, ground, sun, and forest calls using
+ordinary `do`. Inside `forest`, `for each` consumes a streaming `range` and the
+forest calculates each tree's position and size. Individual trees do not take
+the forest's count. The sun follows an arc across the sky with the slider, independently
+of the tree growth rate. The editable sky, ground, and sun colors are ordinary color
 arguments too. `drawing with controls` is an ordinary Grap helper over `with controls`
 and `draw`, keeping the canvas dimensions and callback wrapping out of the visible
 scene. Its arguments are `controls` and `drawing`. The controls lambda receives
@@ -99,6 +101,12 @@ the stored UI state and an update callable. Here the state is just a float;
 the absent library's `or default` supplies 0.65 when the state is absent. The slider receives
 that value and the update callable as its change handler, and returns the
 current value to the drawing lambda. No quoted state key is needed.
+An optional `clouds {time, speed, color}` function is available through ordinary
+cell completion but is not called by the initial scene. Its definition lives in
+the root's `functions` list (outside the two tutorial display slots). Add its call
+after `sky`, connect `time` to `parameters`, and use speed 1 for a gentle drift
+of 60 logical pixels across the slider's full range. Speed 0 holds clouds still;
+negative speeds reverse direction. This is ordinary Grap drawing, not a clock.
 The inline drawing currently has an explicit 680 × 300 logical size.
 The earlier machining fixture remains available as `lessons/shape.gid`.
 It has no checklist or document-observation channel. Later lessons retain

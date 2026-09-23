@@ -276,6 +276,7 @@ class AssetTests(unittest.TestCase):
                 "d22b834154d60b1df228f9bb4d3c13de",  # presentation
                 "f76a2ef341541a5c955fc23094e2df52",  # logic
                 "7b0fa421250c1b5c8a78a3a95b172cb6",  # list
+                "0ad8124ba821acd5fbf2c868371e1492",  # sequence
             ] if forest else []
             self.assertEqual(libraries, basic + evaluation + drawing_libraries + numeric + grap + layout + animation)
             if forest:

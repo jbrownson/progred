@@ -1831,6 +1831,17 @@ impl<'a> Context<'a> {
             }
             None => self.eval_runtime(expression, environment)?,
         };
+        Ok(self.prepare_runtime_callable(callable, environment))
+    }
+
+    /// Prepare an already evaluated callable without reifying its closure or
+    /// evaluating the value a second time. It belongs to this evaluation.
+    pub fn prepare_runtime_callable(
+        &mut self,
+        callable: RuntimeValue,
+        environment: &Environment,
+    ) -> PreparedCallable {
+        debug_assert!(Rc::ptr_eq(&self.indices, &environment.indices));
         let callable = match &callable.0 {
             RuntimeValueKind::Data(_) => self
                 .runtime_closure(&callable)
@@ -1838,10 +1849,10 @@ impl<'a> Context<'a> {
                 .unwrap_or(callable),
             _ => callable,
         };
-        Ok(PreparedCallable {
+        PreparedCallable {
             value: callable,
             environment: environment.clone(),
-        })
+        }
     }
 
     /// Invoke a prepared callable with argument VALUES. It preserves

@@ -1,12 +1,25 @@
 {
   "binders": {
+    "clouds": 126b8b646ecb211918d61b378d4007ca,
+    "cloud_speed": f392440244d467db9e503b9362d9a601,
+    "functions": 6736685adaec1a885c651f5e4fd27f20,
+    "cloud_x": c0b23aa7c9d3ec44ca06c92f37e70304,
+    "cloud_y": ae2efedeef5717fae6a70c83071d0677,
+    "cloud_radius": f6cbb75cbd46707ff40c8b09dcbe4008,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
     "absent_value": cfeaf191b71e06afef86c27ee43eb936,
     "or_default": 6a7a30847dd7d939448d0e7eaeb82893,
     "default": d8bdf7403b181a43fa73578bd976ba3b,
+    "sequence_range": 846f3beb349626d4078ab09c988884e3,
+    "sequence_count": ce24de3241e9827a6eb9bc8bbdcdefce,
+    "for_each": 58a4ac72abe43dd18117ff17f66e157a,
+    "items": f4979d6fbf8752063608f7046c075004,
+    "action": 2669abe847620523793fe4629f5870b8,
+    "item": 67bdfe4ec7d3bafc14407235618840aa,
     "age": b7dcd9a38a71cad0bf2d023e43cc70a2,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
-    "background_draw": cb2a8d3c649ab883434ff5acc25a45d4,
+    "sky_draw": cb2a8d3c649ab883434ff5acc25a45d4,
+    "ground_draw": dc8532cfa19c39746dfaecb18150a610,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
@@ -40,9 +53,9 @@
     "forest_drawing": cec75334a1e2597057b488a144e70ae9,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
-    "ground_color": c56138eaa61086a31ce13c367c6a7fda,
     "growing_tree": e9f23c391db085cf351125e1cbb3e7b2,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "index": 15db24ee6ff0354d94c0628fc412d64f,
     "initial": 24d55aeab9383d53899091958de88d21,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "leaves": 861dbf29926e6a7140b8dcb89ff89e14,
@@ -76,13 +89,12 @@
     "shape": fcaaadef14980397cce95363fc5a54f9,
     "sin": 9f62e0f56d92be74f6ae36378d889262,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
-    "sky_color": 5d50b60fdfb15eee9710c6d33aa28c25,
     "state": 3775735ae4c156144c110ba819cb1e39,
     "step": 569e33fee165d346791e05c0e9cfea8e,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
-    "sun_color": 4d882f7a8710e21e7859ba2773ecea90,
+    "color": 4d882f7a8710e21e7859ba2773ecea90,
     "sun_draw": 3dc9b189568fac1eef82bef53da5a505,
     "sun_time": 25018c3ca0a469155ad7de648fa37be0,
     "tree_height": 7781cedfe2deac8aa2103d46d575156b,
@@ -97,6 +109,189 @@
     "y": 4e2dcde5b1ab1480a2f126176dd148c7,
   },
   "cells": {
+  functions: {name: "functions"},
+  cloud_speed: {name: "speed"},
+  cloud_x: {name: "cloud x"},
+  cloud_y: {name: "cloud y"},
+  cloud_radius: {name: "cloud radius"},
+  clouds: {
+    name: "clouds",
+    params: [
+      sun_time,
+      cloud_speed,
+      color
+    ],
+    body: {
+      function: for_each,
+      items: {
+        function: sequence_range,
+        sequence_count: {f64: 0x0000000000000840}
+      },
+      action: {
+        params: [
+          item
+        ],
+        body: {
+          function: where,
+          bindings: [
+            {
+              bind: cloud_x,
+              subject: {
+                function: sum,
+                left: {
+                  function: sum,
+                  left: {f64: 0x0000000000805640},
+                  right: {
+                    function: multiply,
+                    left: item,
+                    right: {f64: 0x0000000000c06740}
+                  }
+                },
+                right: {
+                  function: multiply,
+                  left: {
+                    function: multiply,
+                    left: sun_time,
+                    right: cloud_speed
+                  },
+                  right: {f64: 0x0000000000004e40}
+                }
+              }
+            },
+            {
+              bind: cloud_y,
+              subject: {
+                function: sum,
+                left: {f64: 0x0000000000005440},
+                right: {
+                  function: multiply,
+                  left: {f64: 0x0000000000003240},
+                  right: {
+                    function: sin,
+                    operand: {
+                      function: multiply,
+                      left: item,
+                      right: {f64: 0x3333333333330340}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              bind: cloud_radius,
+              subject: {
+                function: sum,
+                left: {f64: 0x0000000000003240},
+                right: {
+                  function: multiply,
+                  left: item,
+                  right: {f64: 0x0000000000000040}
+                }
+              }
+            }
+          ],
+          expression: {
+            function: do,
+            expressions: [
+              {
+                function: fill,
+                shape: {
+                  circle: {
+                    x: {
+                      function: sum,
+                      left: cloud_x,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0xcdccccccccccecbf}
+                      }
+                    },
+                    y: {
+                      function: subtract,
+                      left: cloud_y,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0x9a9999999999e93f}
+                      }
+                    },
+                    radius: {
+                      function: multiply,
+                      left: cloud_radius,
+                      right: {f64: 0x9a9999999999e93f}
+                    }
+                  }
+                },
+                paint: color
+              },
+              {
+                function: fill,
+                shape: {
+                  circle: {
+                    x: {
+                      function: sum,
+                      left: cloud_x,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0x0000000000000000}
+                      }
+                    },
+                    y: {
+                      function: subtract,
+                      left: cloud_y,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0x666666666666f23f}
+                      }
+                    },
+                    radius: {
+                      function: multiply,
+                      left: cloud_radius,
+                      right: {f64: 0x666666666666f23f}
+                    }
+                  }
+                },
+                paint: color
+              },
+              {
+                function: fill,
+                shape: {
+                  circle: {
+                    x: {
+                      function: sum,
+                      left: cloud_x,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0x000000000000f03f}
+                      }
+                    },
+                    y: {
+                      function: subtract,
+                      left: cloud_y,
+                      right: {
+                        function: multiply,
+                        left: cloud_radius,
+                        right: {f64: 0xcdccccccccccec3f}
+                      }
+                    },
+                    radius: {
+                      function: multiply,
+                      left: cloud_radius,
+                      right: {f64: 0xcdccccccccccec3f}
+                    }
+                  }
+                },
+                paint: color
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
   age: {name: "growth"},
   count: {name: "tree count"},
   rate: {name: "growth rate"},
@@ -107,9 +302,7 @@
   tree_x: {name: "x"},
   tree_height: {name: "height"},
   sun_time: {name: "time"},
-  sky_color: {name: "sky"},
-  ground_color: {name: "ground"},
-  sun_color: {name: "color"},
+  color: {name: "color"},
   forest_drawing: {name: "drawing"},
   growing_tree: {
     name: "tree",
@@ -473,158 +666,119 @@
   },
   forest_view: {
     name: "forest",
-    params: [
-      age,
-      count,
-      rate,
-      leaves,
-      trunk
-    ],
+    params: [age, count, rate, leaves, trunk],
     body: {
-      function: iterate,
-      initial: {f64: 0x0000000000000000},
-      step: {
-        params: [
-          state
-        ],
+      function: for_each,
+      items: {function: sequence_range, sequence_count: count},
+      action: {
+        params: [item],
         body: {
-          function: match,
-          subject: {
-            function: less,
-            left: state,
-            right: count
-          },
-          cases: [
-            {
-              pattern: {bool: true},
-              expression: {
-                function: do,
-                expressions: [
-                  {
-                    function: growing_tree,
-                    tree_x: {
-                      function: sum,
-                      left: {f64: 0x0000000000804b40},
-                      right: {
-                        function: multiply,
-                        left: {
-                          function: divide,
-                          left: {
-                            function: sum,
-                            left: state,
-                            right: {f64: 0x000000000000e03f}
-                          },
-                          right: count
-                        },
-                        right: {f64: 0x0000000000d08140}
-                      }
-                    },
-                    size: {
-                      function: sum,
-                      left: {f64: 0x0000000000c05c40},
-                      right: {
-                        function: multiply,
-                        left: {f64: 0x0000000000003c40},
-                        right: {
-                          function: sin,
-                          operand: {
-                            function: multiply,
-                            left: state,
-                            right: {f64: 0x3333333333330340}
-                          }
-                        }
-                      }
-                    },
-                    age: {
-                      function: max,
-                      left: {f64: 0x0000000000000000},
-                      right: {
-                        function: min,
-                        left: {f64: 0x000000000000f03f},
-                        right: {
-                          function: subtract,
-                          left: {
-                            function: multiply,
-                            left: {
-                              function: multiply,
-                              left: age,
-                              right: rate
-                            },
-                            right: {f64: 0xcdccccccccccf43f}
-                          },
-                          right: {
-                            function: multiply,
-                            left: {
-                              function: divide,
-                              left: state,
-                              right: count
-                            },
-                            right: {f64: 0xec51b81e85ebd13f}
-                          }
-                        }
-                      }
-                    },
-                    leaves: leaves,
-                    trunk: trunk
-                  },
-                  {
-                    function: sum,
-                    left: state,
-                    right: {f64: 0x000000000000f03f}
-                  }
-                ]
-              }
-            },
-            {
-              pattern: {bool: false},
-              expression: {absent: finished}
+          function: growing_tree,
+          tree_x: {
+            function: sum,
+            left: {f64: 0x0000000000804b40},
+            right: {
+              function: multiply,
+              left: {
+                function: divide,
+                left: {
+                  function: sum,
+                  left: item,
+                  right: {f64: 0x000000000000e03f}
+                },
+                right: count
+              },
+              right: {f64: 0x0000000000d08140}
             }
-          ]
+          },
+          size: {
+            function: sum,
+            left: {f64: 0x0000000000c05c40},
+            right: {
+              function: multiply,
+              left: {f64: 0x0000000000003c40},
+              right: {
+                function: sin,
+                operand: {
+                  function: multiply,
+                  left: item,
+                  right: {f64: 0x3333333333330340}
+                }
+              }
+            }
+          },
+          age: {
+            function: max,
+            left: {f64: 0x0000000000000000},
+            right: {
+              function: min,
+              left: {f64: 0x000000000000f03f},
+              right: {
+                function: subtract,
+                left: {
+                  function: multiply,
+                  left: {
+                    function: multiply,
+                    left: age,
+                    right: rate
+                  },
+                  right: {f64: 0xcdccccccccccf43f}
+                },
+                right: {
+                  function: multiply,
+                  left: {
+                    function: divide,
+                    left: item,
+                    right: count
+                  },
+                  right: {f64: 0xec51b81e85ebd13f}
+                }
+              }
+            }
+          },
+          leaves: leaves,
+          trunk: trunk
         }
       }
     }
   },
-  background_draw: {
-    name: "background",
-    params: [
-      sky_color,
-      ground_color
-    ],
+  sky_draw: {
+    name: "sky",
+    params: [color],
     body: {
-      function: do,
-      expressions: [
-        {
-          function: fill,
-          shape: {
-            rect: {
-              x: {f64: 0x0000000000000000},
-              y: {f64: 0x0000000000000000},
-              width: {f64: 0x0000000000408540},
-              height: {f64: 0x0000000000c07240}
-            }
-          },
-          paint: sky_color
-        },
-        {
-          function: fill,
-          shape: {
-            rect: {
-              x: {f64: 0x0000000000000000},
-              y: {f64: 0x0000000000e06f40},
-              width: {f64: 0x0000000000408540},
-              height: {f64: 0x0000000000804640}
-            }
-          },
-          paint: ground_color
+      function: fill,
+      shape: {
+        rect: {
+          x: {f64: 0x0000000000000000},
+          y: {f64: 0x0000000000000000},
+          width: {f64: 0x0000000000408540},
+          height: {f64: 0x0000000000c07240}
         }
-      ]
+      },
+      paint: color
+    }
+  },
+  ground_draw: {
+    name: "ground",
+    params: [color],
+    body: {
+      function: fill,
+      shape: {
+        rect: {
+          x: {f64: 0x0000000000000000},
+          y: {f64: 0x0000000000e06f40},
+          width: {f64: 0x0000000000408540},
+          height: {f64: 0x0000000000804640}
+        }
+      },
+      paint: color
     }
   },
   sun_draw: {
     name: "sun",
     params: [
       sun_time,
-      sun_color
+      color
     ],
     body: {
       function: fill,
@@ -674,7 +828,7 @@
           radius: {f64: 0x0000000000003940}
         }
       },
-      paint: sun_color
+      paint: color
     }
   },
   draw_scene: {
@@ -749,14 +903,17 @@
         function: do,
         expressions: [
           {
-            function: background_draw,
-            sky_color: {rgb: 0xeff8fa},
-            ground_color: {rgb: 0xdcecc6}
+            function: sky_draw,
+            color: {rgb: 0xeff8fa}
+          },
+          {
+            function: ground_draw,
+            color: {rgb: 0xdcecc6}
           },
           {
             function: sun_draw,
             sun_time: controls_parameters,
-            sun_color: {rgb: 0xf8c970}
+            color: {rgb: 0xf8c970}
           },
           {
             function: forest_view,
@@ -772,6 +929,7 @@
   }
 },
   "root": {
+  functions: [clouds],
   first: sample,
   second: {presentation_render: sample}
 },

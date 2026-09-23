@@ -609,6 +609,23 @@ The list library's `iterate` and `unfold` finish only when a step returns
 actual evaluator halts still halt. `fold` remains an ordinary fold, allowing
 any accumulator value rather than imposing short-circuiting.
 
+The sequence library provides streaming iteration without materializing a list.
+A sequence is a zero-argument callable returning `{item, next}`, where `next`
+is another zero-argument callable, or `{absent: iteration-finished}`. The yielded
+record is open to unrelated fields. Other producer absents propagate unchanged.
+Calling the same pure closure again returns the same item; consumers advance by
+calling the returned successor, not by mutating a cursor. `range {count}` produces
+f64 indices from zero up to (excluding) count, a nonnegative integer no greater
+than 2⁵³ so every increment remains exactly representable.
+`for each {items, action}` pulls one item and calls `action {item}` before pulling
+the next; an absent action result stops it, otherwise completion returns `{}`.
+Even an `iteration-finished` absent from the action propagates as a failure;
+only a producer's return can mark completion. `collect {items}` explicitly
+materializes a GID list. Consumers retain the current callable and obey ordinary
+evaluator fuel limits. An empty range is a callable that immediately finishes.
+Grap-authored producers can use the same record/callable protocol; there is no
+new evaluator syntax, hidden stream handle, or precomputed list of indices.
+
 The [control library](../progred/src/libraries/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
 `match` evaluates its subject once, then tries ordered cases. Record patterns
