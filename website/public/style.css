@@ -102,7 +102,7 @@ h1, h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spaci
   border-top: 1px solid var(--border);
   scroll-margin-top: 1.5rem;
 }
-.exercise:first-child { border-top: 0; }
+.exercise:first-child { border-top: 0; padding-block-start: 0; }
 .lesson-copy > p { margin-top: 0; }
 ol { padding-left: 1.35rem; margin-block: 1.35rem; }
 li { padding-left: 0.3rem; margin-bottom: 0.8rem; }
@@ -115,16 +115,16 @@ li::marker { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
 strong { font-weight: 600; }
 .aside, .session-note { color: var(--muted); font-size: 0.875rem; }
 .editor-example { min-width: 0; }
-.editor-heading {
+.editor-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 1rem;
   min-height: 2.5rem;
   font-size: 0.8rem;
   color: var(--muted);
 }
-.reset { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0.5rem 0.1rem 0.5rem 0.75rem; }
+.reset { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0.5rem 0.1rem; }
 .reset span { margin-left: 0.2rem; font-size: 1.1rem; }
 iframe { display: block; width: 100%; height: 19rem; border: 1px solid var(--border); border-radius: 4px; background: var(--editor); }
 #drawing iframe { height: 24rem; }
