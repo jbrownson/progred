@@ -60,11 +60,12 @@ a:focus-visible, button:focus-visible {
 .wordmark-copy { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
 .wordmark-name { font-size: 2rem; font-weight: 700; line-height: 1.1; letter-spacing: -0.045em; }
 .wordmark-subtitle { font-size: 0.75rem; font-weight: 400; line-height: 1.4; color: var(--subtitle); }
-.site-actions { display: flex; align-items: center; gap: 1.5rem; }
-.github-link { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; color: inherit; text-decoration: none; }
-.github-badge { display: inline-flex; align-items: center; gap: 0.5rem; height: 28px; padding-inline: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--switch-track); font-size: 0.75rem; font-weight: 600; line-height: 1; }
-.github-link:hover .github-badge { border-color: var(--accent); }
-.github-link:hover { color: inherit; }
+.site-actions { display: flex; align-items: center; gap: 2rem; }
+.social-links { display: flex; align-items: center; gap: 0.25rem; }
+.social-link { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; color: inherit; text-decoration: none; }
+.social-badge { display: inline-flex; align-items: center; gap: 0.5rem; height: 28px; padding-inline: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--switch-track); font-size: 0.75rem; font-weight: 600; line-height: 1; }
+.social-link:hover .social-badge { border-color: var(--accent); }
+.social-link:hover { color: inherit; }
 #theme-toggle { display: inline-grid; place-items: center; width: 56px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: none; color: inherit; cursor: pointer; }
 .theme-track { position: relative; width: 56px; height: 28px; border: 1px solid var(--border); border-radius: 999px; background: var(--switch-track); }
 .theme-track::before {
