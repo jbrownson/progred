@@ -20,6 +20,8 @@ use ::grap::{
 use std::rc::Rc;
 
 mod all;
+#[cfg(test)]
+mod runtime_tests;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -252,13 +254,13 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                 )
             }
             CompiledCases::Deferred(cases) => {
-                let cases_value = context.eval_to_value(cases.clone(), environment)?;
+                let cases_value = context.eval(cases.clone(), environment)?;
                 match select(&value, &cases_value) {
                     Selection::Expression {
                         expression,
                         bindings,
                     } => context
-                        .eval_value_runtime(expression, &environment.extended_runtime(bindings)),
+                        .eval_runtime_code(&expression, &environment.extended_runtime(bindings)),
                     Selection::NoMatch(absents) => Ok(absent::from_causes(absents).into()),
                     Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
                 }
@@ -352,21 +354,18 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 context.eval(expression, &environment)
             }
             CompiledBindings::Deferred(bindings) => {
-                let bindings_value = context.eval_to_value(bindings.clone(), environment)?;
-                let Some(bindings) = bindings_value.as_list() else {
+                let bindings_value = context.eval(bindings.clone(), environment)?;
+                let Some(bindings) = bindings_value.list_values() else {
                     return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
                 };
                 let mut environment = environment.clone();
-                for binding in bindings.values() {
-                    let Some(fields) = binding.as_record() else {
-                        return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
-                    };
-                    let Some(value) = fields.get(&vocabulary::VALUE) else {
+                for binding in bindings {
+                    let Some(value) = binding.field(vocabulary::VALUE) else {
                         return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
                     };
                     let (binder, pattern) = match (
-                        fields.get(&vocabulary::BIND),
-                        fields.get(&vocabulary::PATTERN),
+                        binding.field(vocabulary::BIND),
+                        binding.field(vocabulary::PATTERN),
                     ) {
                         (Some(binder), None) => match binder.as_cell() {
                             Some(binder) => (Some(binder), None),
@@ -379,13 +378,14 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                             return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
                         }
                     };
-                    let value = context.eval_value_runtime(value, &environment)?;
+                    let value = context.eval_runtime_code(&value, &environment)?;
                     if let Some(binder) = binder {
                         environment.push_runtime([(binder, value)]);
                     } else if let Some(pattern) = pattern {
-                        match destructure(pattern, &value) {
+                        let pattern = pattern.to_value();
+                        match destructure(&pattern, &value) {
                             Ok(Some(bindings)) => environment.push_runtime(bindings),
-                            Ok(None) => return Ok(pattern_mismatch(pattern).into()),
+                            Ok(None) => return Ok(pattern_mismatch(&pattern).into()),
                             Err(InvalidBinder) => {
                                 return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
                             }
@@ -398,30 +398,27 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
     })
 }
 
-enum Selection<'a> {
+enum Selection {
     Expression {
-        expression: &'a Value,
+        expression: RuntimeValue,
         bindings: Vec<(CellId, RuntimeValue)>,
     },
     NoMatch(Vec<Value>),
     Invalid(CellId),
 }
 
-fn select<'a>(value: &RuntimeValue, cases: &'a Value) -> Selection<'a> {
-    let Some(cases) = cases.as_list() else {
+fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
+    let Some(elements) = cases.list_values() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
-    for case in cases.values() {
-        let Some(fields) = case.as_record() else {
-            return Selection::Invalid(vocabulary::INVALID_CASE);
-        };
+    for case in elements {
         let (Some(pattern), Some(expression)) = (
-            fields.get(&vocabulary::PATTERN),
-            fields.get(&::grap::vocabulary::EXPRESSION),
+            case.field(vocabulary::PATTERN),
+            case.field(::grap::vocabulary::EXPRESSION),
         ) else {
             return Selection::Invalid(vocabulary::INVALID_CASE);
         };
-        match destructure(pattern, value) {
+        match destructure(&pattern.to_value(), value) {
             Ok(Some(bindings)) => {
                 return Selection::Expression {
                     expression,
@@ -436,9 +433,10 @@ fn select<'a>(value: &RuntimeValue, cases: &'a Value) -> Selection<'a> {
     }
     Selection::NoMatch(
         cases
-            .values()
-            .filter_map(|case| case.as_record()?.get(&vocabulary::PATTERN))
-            .map(pattern_mismatch)
+            .list_values()
+            .unwrap()
+            .filter_map(|case| case.field(vocabulary::PATTERN))
+            .map(|pattern| pattern_mismatch(&pattern.to_value()))
             .collect(),
     )
 }

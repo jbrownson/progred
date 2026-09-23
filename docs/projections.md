@@ -656,6 +656,14 @@ Repeated binders require equal captures. Only the selected expression runs,
 in the caller's environment extended by captures. Its absent result is final,
 not a request to try another case. There is no implicit match-subject binding.
 
+Case lists and `let`/`where` binding lists supplied by another expression are
+evaluated once and inspected as runtime containers. Selected expressions and
+binding right-hand sides use `Context::eval_runtime_code` in the appropriate
+environment; they are not serialized back to GID first. Embedded native closures
+therefore retain their original code origins and captures. Patterns still use
+the GID-oriented structural matcher, converting only the individual pattern.
+Literal clause lists keep their existing prepared-expression path.
+
 `quote` walks the original raw structure, replacing `{unquote: expression}`
 leaves by evaluating their expressions in the caller's environment. It never
 revisits a spliced result. Outside that traversal, an unquote-shaped record is

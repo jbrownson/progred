@@ -2,6 +2,28 @@ use super::*;
 use gid::new_cell_id;
 
 #[test]
+fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
+    let interpret = new_cell_id();
+    let source = Value::record([
+        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
+        (vocabulary::VALUE, f64::value(9.0)),
+    ]);
+    let value = RuntimeValue::original_f64(3.0, source);
+    let receiver = host(vec![(
+        interpret,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new(move |context, _, environment| {
+                context.eval_runtime_code(&value, environment)
+            }),
+        ),
+    )]);
+    let result = evaluate(&call(interpret.into(), []), &receiver, 100);
+    assert!(result.completed);
+    assert_eq!(result.result.as_f64(), Some(9.0));
+}
+
+#[test]
 fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
     let metadata = new_cell_id();
     let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;

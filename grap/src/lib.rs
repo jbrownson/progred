@@ -1157,7 +1157,11 @@ impl<'a> Context<'a> {
 
     fn lower_runtime_code(&mut self, value: &RuntimeValue) -> Expression {
         match &value.0 {
-            RuntimeValueKind::Data(value) => self.lower_unattributed_source(value),
+            RuntimeValueKind::Data(value)
+            | RuntimeValueKind::F64(RuntimeF64 {
+                original: Some(value),
+                ..
+            }) => self.lower_unattributed_source(value),
             RuntimeValueKind::Record(fields) => {
                 let fields: Vec<_> = fields
                     .iter()
@@ -1426,6 +1430,17 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let expression = self.lower(expression);
+        self.eval(expression, environment)
+    }
+
+    /// Explicitly interpret runtime-held syntax in this evaluation. Embedded
+    /// native closures keep their code origins and lexical captures.
+    pub fn eval_runtime_code(
+        &mut self,
+        expression: &RuntimeValue,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        let expression = self.lower_runtime_code(expression);
         self.eval(expression, environment)
     }
 
@@ -2569,10 +2584,8 @@ pub fn evaluate_runtime_scoped<'a>(
 ) -> Evaluation {
     match &expression.0 {
         RuntimeValueKind::Data(value) => context(host, Some(overlay), fuel).run(value),
-        _ => context(host, Some(overlay), fuel).conclude(|context| {
-            let expression = context.lower_runtime_code(expression);
-            context.eval(expression, &Environment::default())
-        }),
+        _ => context(host, Some(overlay), fuel)
+            .conclude(|context| context.eval_runtime_code(expression, &Environment::default())),
     }
 }
 

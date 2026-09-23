@@ -166,6 +166,21 @@ above. This pass removes unnecessary conversion requests rather than proving
 an end-to-end performance improvement. The remaining adapters can still
 materialize the same value later in projection dispatch.
 
+### Computed control clauses — 2026-09-23
+
+Computed `match` cases and `let`/`where` bindings now retain their runtime lists
+and executable children instead of materializing the entire list as GID.
+Individual patterns still adapt to the existing matcher. A regression failed
+before this change because a returned closure was reconstructed; it now retains
+code identity, lexical captures, and its original inline source location.
+
+The same release controls-only canary measured 320.62 µs before and 317.58,
+328.92, and 326.96 µs afterward. Warm uncached tree construction measured
+9.54–9.79 ms before and 9.34–9.88 ms afterward. These local sequential canaries
+show no meaningful end-to-end speedup; they do not isolate computed-clause cost.
+The demonstrated benefit is source/closure continuity, not recovered ownership
+overhead. All compilation and other tests had finished before measurement.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:
