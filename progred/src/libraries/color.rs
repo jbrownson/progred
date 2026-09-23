@@ -8,7 +8,7 @@ use crate::display::{
     Layout, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col, descend,
     on_activate, on_hover, on_point, popover, widget,
 };
-use ::grap::{ForeignFunction, ForeignFunctions};
+use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use puri::draw::CanvasSink;
 use puri::{Affine, Canvas, Color, Rect, RoundedRect, Stroke};
 use puri_widgets::color_picker::{self, Hsva};
@@ -57,25 +57,39 @@ fn encoded_field(color: Encoded) -> (gid::CellId, Value) {
 
 fn encoded(value: &Value) -> Option<Encoded> {
     let fields = value.as_record()?;
-    fields
-        .get(&vocabulary::RGBA)
-        .and_then(Value::as_blob)
-        .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+    encoded_bytes(
+        fields.get(&vocabulary::RGBA).and_then(Value::as_blob),
+        fields.get(&vocabulary::RGB).and_then(Value::as_blob),
+    )
+}
+
+fn encoded_runtime(value: &RuntimeValue) -> Option<Encoded> {
+    let rgba = value.field(vocabulary::RGBA);
+    let rgb = value.field(vocabulary::RGB);
+    encoded_bytes(
+        rgba.as_ref().and_then(RuntimeValue::as_blob),
+        rgb.as_ref().and_then(RuntimeValue::as_blob),
+    )
+}
+
+fn encoded_bytes(rgba: Option<&[u8]>, rgb: Option<&[u8]>) -> Option<Encoded> {
+    rgba.and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
         .map(Encoded::Rgba)
         .or_else(|| {
-            fields
-                .get(&vocabulary::RGB)
-                .and_then(Value::as_blob)
-                .and_then(|bytes| <[u8; 3]>::try_from(bytes).ok())
+            rgb.and_then(|bytes| <[u8; 3]>::try_from(bytes).ok())
                 .map(Encoded::Rgb)
         })
 }
 
 pub fn read(value: &Value) -> Option<Color> {
-    Some(match encoded(value)? {
+    encoded(value).map(decoded_color)
+}
+
+fn decoded_color(encoded: Encoded) -> Color {
+    match encoded {
         Encoded::Rgb([red, green, blue]) => Color::from_rgba8(red, green, blue, 0xff),
         Encoded::Rgba([red, green, blue, alpha]) => Color::from_rgba8(red, green, blue, alpha),
-    })
+    }
 }
 
 fn parse(spelling: &str) -> Option<Encoded> {
@@ -160,7 +174,7 @@ fn completions(
 /// The seed belongs only to the picker. The first point interaction writes the
 /// chosen color through the same location and gesture machinery as an edit.
 fn missing_picker(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.value.is_none().then_some(())?;
     input.writable.then_some(())?;
@@ -363,13 +377,13 @@ fn swatch(color: Color) -> Layout<crate::Editor, crate::frame::Hovered> {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     if input.value.is_none() {
         return missing_picker(input);
     }
-    let encoded = encoded(input.value?)?;
-    let color = read(input.value?)?;
+    let encoded = encoded_runtime(input.value?)?;
+    let color = decoded_color(encoded);
     let initial_hue = hsva(encoded).hue;
     let selected_hue = picker_hue(input.selection);
     let next_selection = if selected_hue.is_some() {
@@ -392,12 +406,15 @@ pub fn display(
     let swatch = if input.writable
         && let Some(hue) = selected_hue
     {
-        popover(swatch, picker(input.value?, encoded, hue))
+        popover(swatch, picker(input.value?.as_value(), encoded, hue))
     } else {
         swatch
     };
-    let name =
-        name::read(input.value?).map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
+    let name = input
+        .value?
+        .field(name::vocabulary::NAME)
+        .and_then(|value| text::read(value.as_value()).map(|_| ()))
+        .map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
     let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(centered_row(
         4.0,
@@ -434,7 +451,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "color",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::partial(display),
+        crate::display::runtime_partial(display),
     )
     .with_completions(completions)
 }
@@ -597,7 +614,7 @@ mod tests {
         let layout = display(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
-            value: Some(&color),
+            value: Some(&(&color).into()),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -644,7 +661,7 @@ mod tests {
         let layout = display(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
-            value: Some(&color),
+            value: Some(&(&color).into()),
             scale_factor: 1.0,
             writable: false,
             selection: Some(&selection),
@@ -678,7 +695,7 @@ mod tests {
         let layout = display(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
-            value: Some(&color),
+            value: Some(&(&color).into()),
             scale_factor: 1.0,
             writable: true,
             selection: None,
@@ -722,7 +739,7 @@ mod tests {
         let layout = display(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
-            value: Some(&color),
+            value: Some(&(&color).into()),
             scale_factor: 1.0,
             writable: true,
             selection: Some(&selection),

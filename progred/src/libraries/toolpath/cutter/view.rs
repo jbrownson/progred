@@ -11,7 +11,8 @@ pub(crate) fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let tool = Tool::read(input.value?)?;
-    let fields = structure::record_layout(input, |_| None)?;
+    let value = ::grap::RuntimeValue::from(input.value?.clone());
+    let fields = structure::record_layout(&input.with_value(Some(&value)), |_| None)?;
     let target = input.targets.current();
     let picture = activatable(picture(&tool)?, target.hover, target.select);
     Some(aligned_row(

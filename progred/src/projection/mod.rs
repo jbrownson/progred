@@ -1090,16 +1090,7 @@ fn value_layout(
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| {
-        value.map(|value| {
-            structure::of(
-                cx,
-                path,
-                value.as_value(),
-                &input.with_value(Some(value.as_value())),
-            )
-        })
-    })
+    .or_else(|| value.map(|value| structure::of(cx, path, value, &input)))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

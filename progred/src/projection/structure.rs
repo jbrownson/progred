@@ -9,7 +9,7 @@ use crate::display::{
 };
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use gid::{CellId, Resolution, Step, Value, hex_string};
+use gid::{CellId, Resolution, Step, hex_string};
 use std::rc::Rc;
 
 type View = Layout<crate::Editor, Hovered>;
@@ -17,16 +17,18 @@ type View = Layout<crate::Editor, Hovered>;
 pub fn of(
     cx: &Cx,
     path: &[Step],
-    value: &Value,
-    input: &ProjectionInput<'_, crate::Editor, Hovered>,
+    value: &grap::RuntimeValue,
+    input: &ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
 ) -> View {
-    match value {
-        Value::Blob(bytes) => {
-            selectable(cx, id(blob_text(bytes)), path, &value.clone().into(), true)
-        }
-        Value::Cell(cell) => cell_layout(cx, *cell),
-        Value::List(_) => crate::display::structure::list_layout(input, None).unwrap(),
-        Value::Record(_) => crate::display::structure::record_layout(input, |_| None).unwrap(),
+    if let Some(bytes) = value.as_blob() {
+        selectable(cx, id(blob_text(bytes)), path, value, true)
+    } else if let Some(cell) = value.as_cell() {
+        cell_layout(cx, cell)
+    } else if let Some(list) = crate::display::structure::list_layout(input, None) {
+        list
+    } else {
+        // Every runtime value has one of GID's four structural shapes.
+        crate::display::structure::record_layout(input, |_| None).unwrap()
     }
 }
 

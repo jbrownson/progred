@@ -558,6 +558,52 @@ impl RuntimeValue {
         })
     }
 
+    /// Inspect record membership without converting any of its children.
+    pub fn contains_field(&self, field: CellId) -> bool {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => value
+                .as_record()
+                .is_some_and(|fields| fields.contains_key(&field)),
+            RuntimeValueKind::Record(fields) => fields
+                .binary_search_by_key(&field, |(label, _)| *label)
+                .is_ok(),
+            RuntimeValueKind::F64(value) => match &value.original {
+                Some(value) => value
+                    .as_record()
+                    .is_some_and(|fields| fields.contains_key(&field)),
+                None => field == crate::f64::F64,
+            },
+            RuntimeValueKind::Foreign(_) => field == vocabulary::FFI,
+            RuntimeValueKind::Closure(_) => field == vocabulary::CLOSURE,
+            RuntimeValueKind::List(_) => false,
+        }
+    }
+
+    /// The same labels as the GID representation, without materializing values.
+    pub fn record_keys(&self) -> Option<Vec<CellId>> {
+        Some(match &self.0 {
+            RuntimeValueKind::Data(value) => value.as_record()?.keys().copied().collect(),
+            RuntimeValueKind::Record(fields) => fields.iter().map(|(key, _)| *key).collect(),
+            RuntimeValueKind::F64(value) => match &value.original {
+                Some(value) => value.as_record()?.keys().copied().collect(),
+                None => vec![crate::f64::F64],
+            },
+            RuntimeValueKind::Foreign(_) => vec![vocabulary::FFI],
+            RuntimeValueKind::Closure(_) => vec![vocabulary::CLOSURE],
+            RuntimeValueKind::List(_) => return None,
+        })
+    }
+
+    /// Stored lists retain their positions; generated lists use the positions
+    /// they receive when materialized, also used by `list_element`.
+    pub fn list_positions(&self) -> Option<Vec<gid::Position>> {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => Some(value.as_list()?.keys().cloned().collect()),
+            RuntimeValueKind::List(values) => Some(gid::position::spread(values.len())),
+            _ => None,
+        }
+    }
+
     pub fn list_get(&self, index: usize) -> Option<RuntimeValue> {
         match &self.0 {
             RuntimeValueKind::Data(value) => value

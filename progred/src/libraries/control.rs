@@ -524,15 +524,15 @@ fn matches_pattern(
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
 pub fn match_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
-    let function = fields.get(&::grap::vocabulary::FUNCTION)?;
+    let function = fields.field(::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::MATCH).then_some(())?;
-    fields.get(&vocabulary::VALUE)?;
-    let cases = fields.get(&vocabulary::CASES)?;
-    cases.as_list()?;
+    fields.field(vocabulary::VALUE)?;
+    let cases = fields.field(vocabulary::CASES)?;
+    cases.list_len()?;
     let head = row(
         4.0,
         [
@@ -550,7 +550,7 @@ pub fn match_display(
         head,
         descend_path_local(
             [Step::Key(vocabulary::CASES)],
-            crate::display::structure::list(Some(crate::display::partial(case_display))),
+            crate::display::structure::list(Some(crate::display::runtime_partial(case_display))),
             &input.default_projection,
         ),
         4.0,
@@ -562,15 +562,19 @@ fn pattern_path(
     steps: impl Into<Vec<Step>>,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    crate::display::descend_path_scoped(steps, crate::display::partial(pattern_binder), default)
+    crate::display::descend_path_scoped(
+        steps,
+        crate::display::runtime_partial(pattern_binder),
+        default,
+    )
 }
 
 fn pattern_binder(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
-    let fields = input.value?.as_record()?;
-    let binder = fields.get(&vocabulary::BIND)?;
+    let fields = input.value?;
+    let binder = fields.field(vocabulary::BIND)?;
     binder.as_cell()?;
     Some(record_with(
         [(vocabulary::BIND, binder)],
@@ -597,10 +601,11 @@ fn pattern_binder(
 }
 
 fn case_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
-    case_parts(input.value?)?;
+    input.value?.field(vocabulary::PATTERN)?;
+    input.value?.field(::grap::vocabulary::EXPRESSION)?;
     let expression_target = input
         .targets
         .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
@@ -622,14 +627,6 @@ fn case_display(
     ))
 }
 
-fn case_parts(case: &Value) -> Option<(&Value, &Value)> {
-    let fields = case.as_record()?;
-    Some((
-        fields.get(&vocabulary::PATTERN)?,
-        fields.get(&::grap::vocabulary::EXPRESSION)?,
-    ))
-}
-
 #[derive(Clone, Copy)]
 enum BindingForm {
     Let,
@@ -640,22 +637,22 @@ enum BindingForm {
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
 pub fn bindings_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
-    let function = fields.get(&::grap::vocabulary::FUNCTION)?;
+    let function = fields.field(::grap::vocabulary::FUNCTION)?;
     let form = match function.as_cell()? {
         vocabulary::LET => BindingForm::Let,
         vocabulary::WHERE => BindingForm::Where,
         _ => return None,
     };
-    let bindings = fields.get(&vocabulary::BINDINGS)?;
-    bindings.as_list()?;
-    fields.get(&::grap::vocabulary::EXPRESSION)?;
+    let bindings = fields.field(vocabulary::BINDINGS)?;
+    bindings.list_len()?;
+    fields.field(::grap::vocabulary::EXPRESSION)?;
     let bindings = shared(descend_path_local(
         [Step::Key(vocabulary::BINDINGS)],
-        crate::display::structure::list(Some(crate::display::partial(binding_display))),
+        crate::display::structure::list(Some(crate::display::runtime_partial(binding_display))),
         &input.default_projection,
     ));
     let function = shared(crate::libraries::grap::shallow_path(
@@ -707,13 +704,13 @@ pub fn bindings_display(
 }
 
 fn binding_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let left = match (
-        fields.get(&vocabulary::BIND),
-        fields.get(&vocabulary::PATTERN),
+        fields.field(vocabulary::BIND),
+        fields.field(vocabulary::PATTERN),
     ) {
         (Some(binder), None) => {
             binder.as_cell()?;
@@ -727,7 +724,7 @@ fn binding_display(
         }
         _ => return None,
     };
-    fields.get(&vocabulary::VALUE)?;
+    fields.field(vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
     let equals = activatable(dim("="), value_target.hover, value_target.select);
     Some(hug(
@@ -742,7 +739,7 @@ fn binding_display(
 }
 
 fn quote_marker(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let target = input.targets.current();
@@ -755,16 +752,16 @@ fn quote_marker(
 /// Unrelated fields do not change recognition. Active field insertion
 /// still uses the ordinary record/call projection.
 pub fn quote_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
-    let function = fields.get(&::grap::vocabulary::FUNCTION)?;
+    let function = fields.field(::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
-    fields.get(&::grap::vocabulary::EXPRESSION)?;
+    fields.field(::grap::vocabulary::EXPRESSION)?;
     let marker = descend_path_local(
         [Step::Key(::grap::vocabulary::FUNCTION)],
-        crate::display::partial(quote_marker),
+        crate::display::runtime_partial(quote_marker),
         &input.default_projection,
     );
     Some(row(
@@ -779,11 +776,11 @@ pub fn quote_display(
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
 pub fn unquote_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
-    fields.get(&vocabulary::UNQUOTE)?;
+    fields.field(vocabulary::UNQUOTE)?;
     let target = input.targets.current();
     Some(row(
         2.0,
@@ -800,21 +797,21 @@ pub fn unquote_display(
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
 pub fn do_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     expression_list_display(input, vocabulary::DO)
 }
 
 fn expression_list_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
     callable: CellId,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     input.pending.is_none().then_some(())?;
-    let function = fields.get(&::grap::vocabulary::FUNCTION)?;
+    let function = fields.field(::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == callable).then_some(())?;
-    let expressions = fields.get(&vocabulary::EXPRESSIONS)?;
-    expressions.as_list()?;
+    let expressions = fields.field(vocabulary::EXPRESSIONS)?;
+    expressions.list_len()?;
     Some(row(
         4.0,
         [
@@ -824,7 +821,7 @@ fn expression_list_display(
             ),
             descend_path_local(
                 [Step::Key(vocabulary::EXPRESSIONS)],
-                crate::display::structure::list(Some(crate::display::partial(
+                crate::display::structure::list(Some(crate::display::runtime_partial(
                     crate::libraries::grap::expression,
                 ))),
                 &input.default_projection,
@@ -872,12 +869,14 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "control",
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
-            crate::display::partial(match_display),
-            crate::display::partial(bindings_display),
-            crate::display::partial(do_display),
-            crate::display::partial(|input| expression_list_display(input, vocabulary::ALL)),
-            crate::display::partial(quote_display),
-            crate::display::partial(unquote_display),
+            crate::display::runtime_partial(match_display),
+            crate::display::runtime_partial(bindings_display),
+            crate::display::runtime_partial(do_display),
+            crate::display::runtime_partial(|input| {
+                expression_list_display(input, vocabulary::ALL)
+            }),
+            crate::display::runtime_partial(quote_display),
+            crate::display::runtime_partial(unquote_display),
         ]),
     )
 }
@@ -930,8 +929,8 @@ mod tests {
     }
 
     fn projection_input(
-        value: &Value,
-    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
+        value: &RuntimeValue,
+    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
         ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
@@ -946,8 +945,8 @@ mod tests {
     }
 
     fn relative_projection_input(
-        value: &Value,
-    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
+        value: &RuntimeValue,
+    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
         ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
@@ -1136,9 +1135,10 @@ mod tests {
     #[test]
     fn do_projects_its_expression_list_despite_unrelated_fields() {
         let expression = do_call([blob("first"), blob("second")]);
-        let Recorded::Row { children, .. } = do_display(&relative_projection_input(&expression))
-            .expect("coherent do projection")
-            .record()
+        let Recorded::Row { children, .. } =
+            do_display(&relative_projection_input(&(&expression).into()))
+                .expect("coherent do projection")
+                .record()
         else {
             panic!("do is its marker followed by a list")
         };
@@ -1148,12 +1148,12 @@ mod tests {
             .as_record()
             .unwrap()
             .update(new_cell_id(), blob("extra"));
-        assert!(do_display(&relative_projection_input(&Value::record(decorated))).is_some());
+        assert!(do_display(&relative_projection_input(&Value::record(decorated).into())).is_some());
     }
 
     #[test]
     fn compact_control_projections_recognize_required_fields_in_open_records() {
-        use crate::display::{Pending, partial};
+        use crate::display::{Pending, runtime_partial as partial};
         let binder = new_cell_id();
         for (projection, value) in [
             (partial(match_display), match_call(blob("subject"), [])),
@@ -1182,29 +1182,21 @@ mod tests {
                 name::vocabulary::NAME,
                 crate::libraries::text::value("named"),
             ));
-            assert!(
-                projection(&projection_input(&decorated).with_value(Some(&(&decorated).into())))
-                    .is_some()
-            );
+            assert!(projection(&projection_input(&(&decorated).into())).is_some());
             for key in fields.keys() {
                 let missing = Value::record(decorated.as_record().unwrap().without(key));
-                assert!(
-                    projection(&projection_input(&missing).with_value(Some(&(&missing).into())))
-                        .is_none()
-                );
+                assert!(projection(&projection_input(&(&missing).into())).is_none());
             }
-            let mut input = projection_input(&decorated);
+            let runtime = (&decorated).into();
+            let mut input = projection_input(&runtime);
             input.pending = Some(Pending::Field);
-            assert!(
-                projection(&input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref()))
-                    .is_none()
-            );
+            assert!(projection(&input).is_none());
         }
     }
 
     #[test]
     fn compact_control_projections_still_decline_malformed_contents_and_conflicting_bindings() {
-        use crate::display::partial;
+        use crate::display::runtime_partial as partial;
         for (projection, value) in [
             (
                 partial(match_display),
@@ -1246,9 +1238,7 @@ mod tests {
                 ),
             ),
         ] {
-            assert!(
-                projection(&projection_input(&value).with_value(Some(&(&value).into()))).is_none()
-            );
+            assert!(projection(&projection_input(&(&value).into())).is_none());
         }
     }
 
@@ -1289,7 +1279,7 @@ mod tests {
     fn quote_projects_a_selectable_marker_and_its_expression() {
         let expression = blob("body");
         let quoted = quote_call(expression.clone());
-        let layout = quote_display(&projection_input(&quoted)).unwrap();
+        let layout = quote_display(&projection_input(&(&quoted).into())).unwrap();
         let Recorded::Row { children, .. } = &layout.record() else {
             panic!("quote is an inline prefix");
         };
@@ -1311,7 +1301,8 @@ mod tests {
         };
         assert_eq!(step, &Step::Key(grap::vocabulary::EXPRESSION));
 
-        let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
+        let marker =
+            quote_marker(&projection_input(&Value::from(vocabulary::QUOTE).into())).unwrap();
         let Recorded::Before { child, .. } = marker.record() else {
             panic!("the marker claims hover");
         };
@@ -1341,7 +1332,7 @@ mod tests {
                 (extra, blob("visible")),
             ],
         );
-        assert!(quote_display(&projection_input(&quote)).is_some());
+        assert!(quote_display(&projection_input(&(&quote).into())).is_some());
         let unquote = name::record(
             "named unquote",
             [
@@ -1349,7 +1340,7 @@ mod tests {
                 (extra, blob("metadata")),
             ],
         );
-        assert!(unquote_display(&projection_input(&unquote)).is_some());
+        assert!(unquote_display(&projection_input(&(&unquote).into())).is_some());
         for malformed in [
             Value::record([]),
             Value::record([(grap::vocabulary::FUNCTION, vocabulary::QUOTE.into())]),
@@ -1359,8 +1350,8 @@ mod tests {
                 [(grap::vocabulary::EXPRESSION, blob("body"))],
             ),
         ] {
-            assert!(quote_display(&projection_input(&malformed)).is_none());
-            assert!(unquote_display(&projection_input(&malformed)).is_none());
+            assert!(quote_display(&projection_input(&(&malformed).into())).is_none());
+            assert!(unquote_display(&projection_input(&(&malformed).into())).is_none());
         }
     }
 
@@ -1737,7 +1728,7 @@ mod tests {
         let let_call = bindings_call(vocabulary::LET, clauses(), body.clone());
         let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
-        let let_layout = bindings_display(&relative_projection_input(&let_call)).unwrap();
+        let let_layout = bindings_display(&relative_projection_input(&(&let_call).into())).unwrap();
         let Recorded::Alternatives(let_options) = let_layout.record() else {
             panic!("let has responsive forms");
         };
@@ -1777,7 +1768,8 @@ mod tests {
         };
         assert_eq!(step, &Step::Key(vocabulary::BINDINGS));
 
-        let where_layout = bindings_display(&relative_projection_input(&where_call)).unwrap();
+        let where_layout =
+            bindings_display(&relative_projection_input(&(&where_call).into())).unwrap();
         let Recorded::Alternatives(where_options) = where_layout.record() else {
             panic!("where has responsive forms");
         };
@@ -1797,7 +1789,7 @@ mod tests {
     fn direct_binding_is_deep_and_centered_beside_its_equals() {
         let binder = new_cell_id();
         let binding = bind_clause(binder, blob("value"));
-        let layout = binding_display(&relative_projection_input(&binding)).unwrap();
+        let layout = binding_display(&relative_projection_input(&(&binding).into())).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("a binding has responsive forms");
         };
@@ -1834,7 +1826,7 @@ mod tests {
                 case_arm(binding(binder), Value::from(binder)),
             ],
         );
-        let layout = match_display(&projection_input(&expression)).unwrap();
+        let layout = match_display(&projection_input(&(&expression).into())).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("match has responsive forms");
         };
@@ -1860,12 +1852,12 @@ mod tests {
             .get(&vocabulary::CASES)
             .unwrap();
 
-        assert!(case_display(&relative_projection_input(cases)).is_none());
+        assert!(case_display(&relative_projection_input(&cases.into())).is_none());
         let case = cases
             .as_list()
             .and_then(|cases| cases.values().next())
             .expect("the standard list contains its cases");
-        let case = case_display(&relative_projection_input(case)).unwrap();
+        let case = case_display(&relative_projection_input(&case.into())).unwrap();
         let Recorded::Alternatives(options) = case.record() else {
             panic!("a case has responsive forms");
         };
@@ -1895,14 +1887,14 @@ mod tests {
     #[test]
     fn non_case_elements_use_the_standard_projection_inside_match() {
         let malformed = match_call(blob("subject"), [blob("not a case")]);
-        assert!(match_display(&projection_input(&malformed)).is_some());
+        assert!(match_display(&projection_input(&(&malformed).into())).is_some());
         let case = malformed
             .as_record()
             .and_then(|fields| fields.get(&vocabulary::CASES))
             .and_then(Value::as_list)
             .and_then(|cases| cases.values().next())
             .unwrap();
-        assert!(case_display(&projection_input(case)).is_none());
+        assert!(case_display(&projection_input(&case.into())).is_none());
     }
 
     #[test]

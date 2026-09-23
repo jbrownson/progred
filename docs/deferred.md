@@ -126,9 +126,12 @@ these can materialize runtime containers even when a later runtime-aware
 projection ultimately handles them. Reducing that conversion work is a remaining
 optimization, not a reason to put origins in serialized GID. Do not preserve a
 creator's dynamic stack as a caller.
-Fold classification, collapsed display, source highlighting, text/blob partials,
-and empty partials now avoid requesting a whole GID view. Expanded structural
-display and the remaining legacy partials still need migration. Computed
+Fold classification, collapsed display, source highlighting, text/blob/color
+partials, empty partials, expanded structural lists/records, control-form
+partials, and shallow Grap reference/declaration helpers now avoid requesting a
+whole GID view. General Grap call/lambda display, numeric/domain partials, and
+other legacy projections still need migration. Explicitly expanding a native
+closure's representation also still materializes its body/environment. Computed
 `match` cases and `let`/`where` bindings retain their runtime lists and executable
 children; individual patterns still adapt to the GID-oriented matcher, and
 repeated-binder equality still compares materialized data. Document edits and

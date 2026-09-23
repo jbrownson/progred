@@ -6,7 +6,7 @@ use super::*;
 pub fn list(
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
-    partial(move |input| list_layout(input, child.clone()))
+    runtime_partial(move |input| list_layout(input, child.clone()))
 }
 
 /// An editable list without brackets or commas; items retain the standard
@@ -15,13 +15,13 @@ pub fn list_column(
     gap: f64,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
-    partial(move |input| list_column_with(input, gap, child.clone(), |_, entry| entry))
+    runtime_partial(move |input| list_column_with(input, gap, child.clone(), |_, entry| entry))
 }
 
 /// Compose content beside each projected item, outside that item's value
 /// boundary. The list still owns element paths and pending insertion slots.
 pub(crate) fn list_column_with(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     gap: f64,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
     item: impl Fn(
@@ -46,14 +46,10 @@ pub(crate) fn list_column_with(
 /// Prepare element paths, including a pending insertion, and share their
 /// projection and measurement across any presentations the caller builds.
 pub fn list_items(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)>> {
-    let elements = input.value?.as_list()?;
-    let mut positions = elements
-        .iter()
-        .map(|(position, _)| position.clone())
-        .collect::<Vec<_>>();
+    let mut positions = input.value?.list_positions()?;
     if let Some(Pending::Child(Step::Element(position))) = &input.pending
         && !positions.contains(position)
     {
@@ -80,7 +76,7 @@ pub fn list_items(
 /// supplies item decoration and separator paint; this function owns insertion
 /// eligibility and interaction. Arrange the returned sequence with row/col/etc.
 pub fn list_with<S>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     items: &[(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)],
     item: impl Fn(
         gid::Position,
@@ -139,7 +135,7 @@ fn list_gap(
 }
 
 pub fn list_layout(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let items = list_items(input, child)?;
@@ -173,11 +169,11 @@ pub fn list_layout(
 pub fn record(
     child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>> + 'static,
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
-    partial(move |input| record_layout(input, &child))
+    runtime_partial(move |input| record_layout(input, &child))
 }
 
 pub fn record_layout(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let keys = record_keys(input)?;
@@ -189,10 +185,9 @@ pub fn record_layout(
 }
 
 pub(crate) fn record_keys(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Vec<CellId>> {
-    let fields = input.value?.as_record()?;
-    let mut keys = fields.keys().copied().collect::<Vec<_>>();
+    let mut keys = input.value?.record_keys()?;
     if let Some(Pending::Child(Step::Key(key))) = &input.pending
         && !keys.contains(key)
     {
@@ -210,7 +205,7 @@ pub(crate) fn record_keys(
 }
 
 pub(crate) fn record_field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     key: CellId,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> RecordField<crate::Editor, crate::frame::Hovered> {
@@ -227,10 +222,9 @@ pub(crate) fn record_field(
 /// The ordinary field-name presentation and interaction, independent of how
 /// the enclosing record arranges its fields.
 pub(crate) fn record_label(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     key: CellId,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let fields = input.value.and_then(Value::as_record);
     let label = match input.env.name(key) {
         Some(name) => faced(name, Face::Label),
         None => {
@@ -240,7 +234,7 @@ pub(crate) fn record_label(
     };
     let target = input.targets.at([Step::Key(key)]);
     let head = row(0.0, [label, dim(":")]);
-    if fields.is_some_and(|fields| fields.contains_key(&key)) {
+    if input.value.is_some_and(|value| value.contains_field(key)) {
         activatable(head, target.hover, target.select)
     } else {
         pickable(head, target.hover, key.into())
@@ -248,7 +242,7 @@ pub(crate) fn record_label(
 }
 
 pub(crate) fn pending_field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     matches!(input.pending, Some(Pending::Field)).then(|| {
         block_hover(on_click(

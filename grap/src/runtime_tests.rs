@@ -2,6 +2,85 @@ use super::*;
 use gid::new_cell_id;
 
 #[test]
+fn runtime_record_keys_and_membership_match_all_gid_shapes() {
+    let metadata = new_cell_id();
+    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let decorated_number = Value::record([
+        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
+        (metadata, Value::from(vec![9])),
+    ]);
+    for value in [
+        RuntimeValue::from(Value::record([(metadata, Value::record([]))])),
+        RuntimeValue::record([(metadata, closure.clone())]),
+        RuntimeValue::f64(3.0),
+        RuntimeValue::original_f64(3.0, decorated_number),
+        RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
+        closure,
+        RuntimeValue::list([]),
+        RuntimeValue::from(Value::from(metadata)),
+        RuntimeValue::from(Value::from(vec![1, 2])),
+    ] {
+        let keys = value.record_keys();
+        for key in [
+            metadata,
+            crate::f64::F64,
+            vocabulary::FFI,
+            vocabulary::CLOSURE,
+        ] {
+            assert_eq!(
+                value.contains_field(key),
+                keys.as_ref().is_some_and(|keys| keys.contains(&key))
+            );
+        }
+        let gid = value.to_value();
+        assert_eq!(
+            keys,
+            gid.as_record()
+                .map(|fields| fields.keys().copied().collect())
+        );
+    }
+}
+
+#[test]
+fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
+    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let generated = RuntimeValue::list([closure.clone(), RuntimeValue::f64(2.0)]);
+    let positions = generated.list_positions().unwrap();
+    assert_eq!(
+        positions,
+        generated
+            .to_value()
+            .as_list()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        generated
+            .list_element(&positions[0])
+            .unwrap()
+            .same_result(&closure)
+    );
+    let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
+    let mut stored = gid::List::new();
+    stored.insert(positions[0].clone(), Value::record([]));
+    stored.insert(inserted.clone(), f64::value(1.0));
+    stored.insert(positions[1].clone(), f64::value(2.0));
+    let stored = RuntimeValue::from(Value::List(stored));
+    assert_eq!(
+        stored.list_positions(),
+        Some(vec![
+            positions[0].clone(),
+            inserted.clone(),
+            positions[1].clone()
+        ])
+    );
+    assert_eq!(stored.list_element(&inserted).unwrap().as_f64(), Some(1.0));
+    assert_eq!(RuntimeValue::record([]).list_positions(), None);
+}
+
+#[test]
 fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
     let source = Value::record([

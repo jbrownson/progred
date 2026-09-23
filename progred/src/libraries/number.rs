@@ -65,8 +65,8 @@ const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;
 
-fn with_representation(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+fn with_representation<V>(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
     content: Layout<crate::Editor, crate::frame::Hovered>,
     representation: CellId,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
@@ -87,7 +87,7 @@ fn with_representation(
 }
 
 pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate::frame::Hovered> {
-    partial(move |input| {
+    crate::display::runtime_partial(move |input| {
         crate::libraries::grap::shallow_cell_with(input, |label| {
             with_representation(input, label, representation)
         })

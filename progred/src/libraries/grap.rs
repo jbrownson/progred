@@ -18,7 +18,7 @@ use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions
 mod suggestions;
 
 pub(crate) fn expression(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     match input.value {
         Some(_) => shallow_cell(input),
@@ -43,13 +43,13 @@ pub mod vocabulary {
 /// A named cell as a reference, otherwise leave its definition visible.
 /// Contextual projections use this for expression and callable references.
 pub(crate) fn shallow_cell(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     shallow_cell_with(input, |label| label)
 }
 
 pub(crate) fn shallow_cell_with(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     decorate: impl FnOnce(
         Layout<crate::Editor, crate::frame::Hovered>,
     ) -> Layout<crate::Editor, crate::frame::Hovered>,
@@ -65,7 +65,7 @@ pub(crate) fn shallow_cell_with(
 }
 
 fn declaration_cell(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
@@ -108,7 +108,11 @@ pub fn shallow_path(
     steps: impl Into<Vec<Step>>,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    descend_path_local(steps, crate::display::partial(shallow_cell), default)
+    descend_path_local(
+        steps,
+        crate::display::runtime_partial(shallow_cell),
+        default,
+    )
 }
 
 /// A named direct expression reference is shallow. A compound expression's
@@ -117,7 +121,7 @@ pub(crate) fn expression_path(
     steps: impl Into<Vec<Step>>,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    descend_path_local(steps, crate::display::partial(expression), default)
+    descend_path_local(steps, crate::display::runtime_partial(expression), default)
 }
 
 /// Declaration cells keep their parentheses, with a named definition
@@ -126,7 +130,11 @@ pub(crate) fn declaration_path(
     steps: impl Into<Vec<Step>>,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    descend_path_local(steps, crate::display::partial(declaration_cell), default)
+    descend_path_local(
+        steps,
+        crate::display::runtime_partial(declaration_cell),
+        default,
+    )
 }
 
 pub(crate) fn expression_descend(
@@ -264,7 +272,7 @@ pub(crate) fn call_with_function(
     };
     let function = descend_path_local(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::partial(shallow_cell)),
+        function_projection.unwrap_or_else(|| crate::display::runtime_partial(shallow_cell)),
         &input.default_projection,
     );
     let arguments = record_with(
@@ -318,7 +326,7 @@ pub fn lambda_display(
         .then_some(())?;
     let params = descend_path_local(
         [Step::Key(PARAMS)],
-        crate::display::structure::list(Some(crate::display::partial(declaration_cell))),
+        crate::display::structure::list(Some(crate::display::runtime_partial(declaration_cell))),
         &input.default_projection,
     );
     let body_target = input.targets.at([Step::Key(BODY)]);
@@ -769,7 +777,10 @@ mod tests {
             for spelling in ["size", ""] {
                 let env = DefinitionEnv(name::record(spelling, []), source);
                 let cell = Value::from(new_cell_id());
-                let declaration = declaration_cell(&input(&env, &cell)).unwrap().record();
+                let declaration =
+                    declaration_cell(&input(&env, &cell).with_value(Some(&(&cell).into())))
+                        .unwrap()
+                        .record();
                 let (_, child, _) = crate::display::test_support::delimited(&declaration);
                 let ProjectionCall::Descend {
                     step,

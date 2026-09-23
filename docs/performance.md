@@ -181,6 +181,26 @@ show no meaningful end-to-end speedup; they do not isolate computed-clause cost.
 The demonstrated benefit is source/closure continuity, not recovered ownership
 overhead. All compilation and other tests had finished before measurement.
 
+### Expanded runtime projections — 2026-09-23
+
+Expanded structural lists/records now inspect keys/positions without converting
+their children. Color and control-form partials, plus shallow Grap references
+and declarations, likewise inspect runtime inputs. General Grap call/lambda and
+numeric/domain adapters remain.
+
+Three final serial controls-only frame medians were 326.25, 324.17, and
+320.79 µs. Warm uncached tree construction was 9.27–9.84 ms. These overlap the
+preceding checkpoint's ranges; there is no demonstrated end-to-end speedup.
+A preliminary pre-edit sample was unusually high at 461.96 µs, so interpreting
+that one sample as a 30% improvement would not be justified. Final runs began
+after builds and the correctness suite finished.
+
+The unchanged controls canary still uses a GID-oriented stub for the omitted
+3D preview. That stub requests materialization before library dispatch, so this
+comparison does not isolate the conversion savings of the migrated partials.
+An eventual focused conversion-cost comparison should account for that test
+boundary rather than treating these frame times as proof of no savings.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

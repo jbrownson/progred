@@ -21,24 +21,28 @@ pub(super) fn display(
 ) -> Option<Layout<crate::Editor, Hovered>> {
     let keys = sections(input.value?)?;
     let fields = input.value?.as_record()?.clone();
-    let footer = extras(input, &keys);
-    let label = d::structure::record_label(input, OUTLINE);
+    let value = ::grap::RuntimeValue::from(input.value?.clone());
+    let runtime_input = input.with_value(Some(&value));
+    let footer = extras(&runtime_input, &keys);
+    let label = d::structure::record_label(&runtime_input, OUTLINE);
     Some(Layout::program(Rc::new(move |context, build| {
         let source = context
             .inputs
             .edits
             .source(context.path)
             .map(|path| path.into_owned());
-        let entries = d::partial({
+        let entries = d::runtime_partial({
             let fields = fields.clone();
             move |input| {
-                let elements = input.value?.as_list()?;
-                let heading = d::partial({
+                let elements = input.value?;
+                elements.list_len()?;
+                let heading = d::runtime_partial({
                     let fields = fields.clone();
                     move |input| heading(input, &fields)
                 });
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
-                    let Some(key) = elements.get(&position).and_then(Value::as_cell) else {
+                    let Some(key) = elements.list_element(&position).and_then(|v| v.as_cell())
+                    else {
                         return heading;
                     };
                     section(
@@ -131,7 +135,7 @@ fn visibility(
 }
 
 fn heading(
-    input: &ProjectionInput<'_, crate::Editor, Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, Hovered, ::grap::RuntimeValue>,
     fields: &gid::Record,
 ) -> Option<Layout<crate::Editor, Hovered>> {
     let key = input.value?.as_cell()?;
@@ -166,7 +170,7 @@ fn heading(
 }
 
 fn extras(
-    input: &ProjectionInput<'_, crate::Editor, Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, Hovered, ::grap::RuntimeValue>,
     sections: &[CellId],
 ) -> Option<Layout<crate::Editor, Hovered>> {
     let fields = d::structure::record_keys(input)?

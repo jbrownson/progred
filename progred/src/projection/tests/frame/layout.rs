@@ -1,6 +1,61 @@
 use super::*;
 
 #[test]
+fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
+    use crate::display as d;
+    use std::cell::Cell;
+
+    let field = gid::new_cell_id();
+    let result = gid::new_cell_id();
+    struct Empty;
+    impl ::grap::Host for Empty {
+        fn resolve(&self, _: CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+            None
+        }
+    }
+    let closure = ::grap::evaluate(&::grap::lambda([], Value::record([])), &Empty, 100).result;
+    let list = ::grap::RuntimeValue::list([closure.clone()]);
+    let position = list.list_positions().unwrap()[0].clone();
+    let value = ::grap::RuntimeValue::record([(field, list)]);
+    let visits = Rc::new(Cell::new(0));
+    let child = d::runtime_partial({
+        let visits = visits.clone();
+        move |input| {
+            input.value?.same_result(&closure).then(|| {
+                visits.set(visits.get() + 1);
+                d::text("retained closure")
+            })
+        }
+    });
+    let projection = Projection::new([d::runtime_partial(move |_| {
+        let children = d::compose_partials([
+            child.clone(),
+            d::structure::list(None),
+            d::structure::record(|_| None),
+        ]);
+        Some(d::at_with_projection(
+            [Step::Key(result)],
+            value.clone(),
+            Some(children.clone()),
+            Some(children),
+        ))
+    })]);
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    });
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    assert_eq!(visits.get(), 1);
+    let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
+    assert!(
+        frame
+            .descends
+            .iter()
+            .any(|item| item.path.as_ref() == path.as_slice())
+    );
+}
+
+#[test]
 fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusion() {
     use crate::display::{Layout, widget};
     use std::cell::RefCell;
@@ -1039,7 +1094,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                 .stack
                 .projection
                 .clone()
-                .with_entry(d::partial(move |input| {
+                .with_entry(d::runtime_partial(move |input| {
                     let items = d::structure::list_items(input, Some(child.clone()))?;
                     let horizontal = d::structure::list_with(
                         input,
@@ -1133,7 +1188,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         .stack
         .projection
         .clone()
-        .with_entry(d::partial(|input| {
+        .with_entry(d::runtime_partial(|input| {
             Some(d::padding(
                 (0.0, 0.0, 0.0, 400.0).into(),
                 d::structure::list_layout(input, None)?,
