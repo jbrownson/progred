@@ -22,10 +22,12 @@ pub(crate) fn expression(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     match input.value {
         Some(_) => shallow_cell(input),
-        None => Some(completion(
-            CompletionKind::Value,
-            Some(suggestions::provider(input.env.completions())),
-        )),
+        None => (input.default_projection)(input).or_else(|| {
+            Some(completion(
+                CompletionKind::Value,
+                Some(suggestions::provider(input.env.completions())),
+            ))
+        }),
     }
 }
 
@@ -197,13 +199,11 @@ pub fn call_completion<'a>(
 ) -> Completion {
     let first =
         function_parameters(&function, resolve).and_then(|parameters| parameters.first().copied());
-    let offer = Completion::new(display, ::grap::call(function, []));
-    match first {
-        Some(parameter) => offer.on_commit(crate::libraries::selection::pending_at(&[Step::Key(
-            parameter,
-        )])),
-        None => crate::libraries::completion::select(offer),
-    }
+    let continuation = match first {
+        Some(parameter) => crate::libraries::selection::pending_at(&[Step::Key(parameter)]),
+        None => crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
+    };
+    crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
 }
 
 fn standard_field_order(
@@ -494,40 +494,46 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
     use crate::display::CompletionScope;
     match (request.scope, request.kind, request.path) {
         (CompletionScope::Suggested, CompletionKind::Value, []) => Some(vec![
-            Completion::generated(vocabulary::GRAP, || {
-                let cell = gid::new_cell_id();
-                Value::record([
-                    (vocabulary::GRAP, cell.into()),
-                    (
-                        crate::libraries::workspace::vocabulary::PANES,
-                        Value::record([(
-                            crate::libraries::workspace::vocabulary::LEFT,
-                            Value::list([Value::record([(
-                                crate::libraries::presentation::vocabulary::RENDER,
-                                cell.into(),
-                            )])]),
-                        )]),
-                    ),
-                ])
-            })
-            .with_detail(ID)
-            .on_commit(crate::libraries::selection::pending_at(&[
-                gid::Step::Key(vocabulary::GRAP),
-                gid::Step::Follow(gid::Resolution::Document),
-            ])),
+            crate::libraries::completion::generated(
+                vocabulary::GRAP,
+                || {
+                    let cell = gid::new_cell_id();
+                    Value::record([
+                        (vocabulary::GRAP, cell.into()),
+                        (
+                            crate::libraries::workspace::vocabulary::PANES,
+                            Value::record([(
+                                crate::libraries::workspace::vocabulary::LEFT,
+                                Value::list([Value::record([(
+                                    crate::libraries::presentation::vocabulary::RENDER,
+                                    cell.into(),
+                                )])]),
+                            )]),
+                        ),
+                    ])
+                },
+                Some(crate::libraries::selection::pending_at(&[
+                    gid::Step::Key(vocabulary::GRAP),
+                    gid::Step::Follow(gid::Resolution::Document),
+                ])),
+            )
+            .with_detail(ID),
         ]),
         (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
             crate::libraries::completion::label(vocabulary::GRAP).with_detail(ID),
         ]),
         (CompletionScope::Everything, CompletionKind::Value, _) => Some(
             std::iter::once(
-                Completion::new("new lambda", Value::record([(PARAMS, Value::list([]))]))
-                    .with_aliases(["lambda", "λ"])
-                    .with_detail(ID)
-                    .on_commit(crate::libraries::selection::at(
+                crate::libraries::completion::insert(
+                    "new lambda",
+                    Value::record([(PARAMS, Value::list([]))]),
+                    Some(crate::libraries::selection::at(
                         &[Step::Key(BODY)],
                         crate::libraries::selection::edge(),
                     )),
+                )
+                .with_aliases(["lambda", "λ"])
+                .with_detail(ID),
             )
             .chain(
                 (!request.query.trim().is_empty())
@@ -617,6 +623,7 @@ mod tests {
             };
             let enumerate = || order.clone();
             let request = CompletionRequest {
+                raw: false,
                 query: "",
                 kind: CompletionKind::Value,
                 scope: CompletionScope::Suggested,
@@ -628,7 +635,7 @@ mod tests {
             assert_eq!(
                 call_completions(&request)
                     .iter()
-                    .map(|offer| offer.value.instantiate())
+                    .map(|offer| offer.test_value())
                     .collect::<Vec<_>>(),
                 [cells[3], cells[1], cells[2], cells[0]].map(|cell| ::grap::call(cell.into(), [])),
             );
@@ -856,6 +863,7 @@ mod tests {
                 })
             };
             let request = CompletionRequest {
+                raw: false,
                 query: "",
                 kind: CompletionKind::Field,
                 scope: CompletionScope::Suggested,
@@ -878,7 +886,7 @@ mod tests {
             assert_eq!(
                 offers
                     .iter()
-                    .map(|offer| offer.value.instantiate())
+                    .map(|offer| offer.test_value())
                     .collect::<Vec<_>>(),
                 expected
                     .iter()
@@ -898,35 +906,23 @@ mod tests {
                     .collect::<Vec<_>>()
             );
             let call = call_completion(function.into(), function, &resolve);
-            assert_eq!(call.value.instantiate(), ::grap::call(function.into(), []));
-            let mut effects = crate::site::PendingChanges {
-                annotation: None,
-                annotation_changed: false,
-                selection: None,
-                selection_changed: false,
-            };
-            let document = gid::Document {
-                root: None,
-                cells: gid::Cells::new(),
-            };
-            let sources = crate::sources::Sources {
-                doc: &document,
-                libraries: &Default::default(),
-            };
-            assert!(call.on_commit.unwrap()(
-                &crate::editing::Scope::default().view(sources),
-                &[],
-                &mut effects
-            ));
+            assert_eq!(call.test_value(), ::grap::call(function.into(), []));
+            let world = crate::libraries::test_widgets::activate_completion(&call);
+            let selected = world.model.selection.as_ref().unwrap();
             assert_eq!(
-                effects.selection,
-                Some(match expected.first() {
-                    Some(first) => (
-                        vec![Step::Key(*first)],
-                        crate::libraries::selection::pending()
-                    ),
-                    None => (vec![], crate::libraries::selection::edge()),
-                })
+                selected.path(),
+                expected
+                    .first()
+                    .map(|first| vec![Step::Key(*first)])
+                    .unwrap_or_default()
+            );
+            assert_eq!(
+                selected.stage(&world.sources()),
+                if expected.is_empty() {
+                    crate::selection::Stage::Edge
+                } else {
+                    crate::selection::Stage::Pending
+                }
             );
         }
     }

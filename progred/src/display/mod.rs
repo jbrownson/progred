@@ -70,20 +70,18 @@ pub use widget::gesture::{
     PointEvent, PointHandler, PointUpdate, StateDragEvent, StateDragGesture, StateDragHandler,
 };
 
-/// One value a projection suggests at an explicit completion control.
-/// The host owns filtering and presentation; the projection owns the
-/// contextual vocabulary and the value ultimately inserted.
+/// An offer at an explicit completion control. Activation, not highlighting,
+/// runs its handler. The handler owns any edits or selection transitions.
 #[derive(Clone)]
 pub struct Completion {
     pub display: CompletionText,
     pub aliases: Vec<String>,
     pub detail: Option<CompletionText>,
-    pub value: CompletionValue,
-    /// Continuation run at the committed location. Its selection and
-    /// annotation effects are staged with the insertion.
-    /// No continuation means no selection change; standard completion
-    /// combinators supply their own selection transitions explicitly.
-    pub on_commit: Option<crate::site::Continuation>,
+    pub activate: Rc<dyn Fn(&mut crate::Editor)>,
+    pub face: Face,
+    /// Optional advertised value, for source attribution and contextual filtering.
+    /// Activation never derives its behavior from this metadata.
+    pub preview: Option<Value>,
 }
 
 /// Names are resolved from the current sources when the picker is built,
@@ -112,48 +110,18 @@ impl From<CellId> for CompletionText {
     }
 }
 
-#[derive(Clone)]
-pub enum CompletionValue {
-    Literal(Value),
-    Create(Rc<dyn Fn() -> Value>),
-}
-
-impl CompletionValue {
-    pub fn literal(&self) -> Option<&Value> {
-        match self {
-            Self::Literal(value) => Some(value),
-            Self::Create(_) => None,
-        }
-    }
-
-    pub fn instantiate(&self) -> Value {
-        match self {
-            Self::Literal(value) => value.clone(),
-            Self::Create(create) => create(),
-        }
-    }
-}
-
 impl Completion {
-    pub fn new(display: impl Into<CompletionText>, value: Value) -> Self {
-        Self::with_value(display, CompletionValue::Literal(value))
-    }
-
-    /// Construct a value only when activated, for offers that mint fresh identities.
-    pub fn generated(
+    pub fn new(
         display: impl Into<CompletionText>,
-        create: impl Fn() -> Value + 'static,
+        activate: impl Fn(&mut crate::Editor) + 'static,
     ) -> Self {
-        Self::with_value(display, CompletionValue::Create(Rc::new(create)))
-    }
-
-    fn with_value(display: impl Into<CompletionText>, value: CompletionValue) -> Self {
         Self {
             display: display.into(),
             aliases: Vec::new(),
             detail: None,
-            value,
-            on_commit: None,
+            activate: Rc::new(activate),
+            face: Face::Label,
+            preview: None,
         }
     }
 
@@ -164,11 +132,6 @@ impl Completion {
 
     pub fn with_detail(mut self, detail: impl Into<CompletionText>) -> Self {
         self.detail = Some(detail.into());
-        self
-    }
-
-    pub fn on_commit(mut self, function: crate::site::Continuation) -> Self {
-        self.on_commit = Some(function);
         self
     }
 }
@@ -190,6 +153,8 @@ pub struct ResolvedCell<'a> {
 /// The path names the missing value, or the record receiving a new label.
 /// Reads use that same source context, including source-qualified Follow steps.
 pub struct CompletionRequest<'a> {
+    /// Raw projection has no library-specific interaction presentations.
+    pub raw: bool,
     pub query: &'a str,
     pub kind: CompletionKind,
     pub scope: CompletionScope,

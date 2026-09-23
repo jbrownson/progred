@@ -2,6 +2,28 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
 use crate::{Editor, frame::Hovered};
+
+/// Exercise an offer's actual handler, including its selection effects.
+pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
+    let mut world = crate::test_editor(gid::Document {
+        root: None,
+        cells: gid::Cells::new(),
+    });
+    world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
+    (offer.activate)(&mut world);
+    world
+}
+
+impl crate::display::Completion {
+    pub(crate) fn test_value(&self) -> gid::Value {
+        activate_completion(self)
+            .model
+            .doc
+            .root
+            .clone()
+            .expect("offer inserts a value")
+    }
+}
 pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri::DrawList) {
     let Recorded::Widget(widget) = layout.record() else {
         panic!("expected a native widget");

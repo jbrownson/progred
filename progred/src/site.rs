@@ -126,26 +126,6 @@ pub(crate) fn apply_scoped_event(
     handled
 }
 
-#[cfg(test)]
-pub(crate) fn install(
-    staged: PendingChanges,
-    sources: &Sources,
-    root: &Root,
-    path: &[gid::Step],
-    annotations: &mut crate::annotations::Annotations,
-    selection: &mut Option<Selection>,
-) {
-    install_scoped(
-        staged,
-        sources,
-        root,
-        Default::default(),
-        path,
-        annotations,
-        selection,
-    );
-}
-
 pub(crate) fn install_scoped(
     staged: PendingChanges,
     sources: &Sources,

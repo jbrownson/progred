@@ -53,12 +53,9 @@ pub(crate) fn completions<N: std::str::FromStr + Display>(
     .parse::<N>()
     .ok()
     .map(|number| {
-        crate::libraries::completion::select(crate::display::Completion::new(
-            number.to_string(),
-            encode(number),
-        ))
-        .with_aliases([query])
-        .with_detail(representation)
+        crate::libraries::completion::select(number.to_string(), encode(number))
+            .with_aliases([query])
+            .with_detail(representation)
     })
     .into_iter()
     .collect()
@@ -305,7 +302,7 @@ mod tests {
                 };
                 assert_eq!(offer.display, "0".into());
                 assert_eq!(offer.detail, Some(representation.into()));
-                assert_eq!(offer.value.literal(), Some(&zero));
+                assert_eq!(offer.preview.as_ref(), Some(&zero));
             }
             for query in ["not a number", "-", ".", "1e"] {
                 assert!(complete(query).is_empty(), "{representation}: {query:?}");

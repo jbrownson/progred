@@ -108,6 +108,7 @@ mod tests {
             gid::Step::Key(vocabulary::NAME),
         ];
         let request = CompletionRequest {
+            raw: false,
             query: "",
             kind: CompletionKind::Value,
             scope: CompletionScope::Suggested,
@@ -125,8 +126,13 @@ mod tests {
         ] {
             let offers = completions(&CompletionRequest { query, ..request }).unwrap();
             assert_eq!(offers.len(), 1);
-            assert_eq!(offers[0].value.instantiate(), text::value(expected));
-            assert!(offers[0].on_commit.is_some());
+            assert_eq!(offers[0].test_value(), text::value(expected));
+            assert!(
+                crate::libraries::test_widgets::activate_completion(&offers[0])
+                    .model
+                    .selection
+                    .is_some()
+            );
         }
         assert!(
             completions(&CompletionRequest {

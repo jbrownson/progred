@@ -2,7 +2,7 @@
 
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionScope,
-    CompletionText, CompletionValue, Face,
+    CompletionText, Face,
 };
 use crate::filter;
 use crate::identity::short_id;
@@ -16,14 +16,14 @@ pub use crate::display::widget::offers::{Entry, Offers};
 
 fn activation(
     kind: CompletionKind,
-    value: CompletionValue,
+    value: Value,
     on_commit: Option<Continuation>,
 ) -> Option<Rc<dyn Fn(&mut crate::Editor)>> {
     match kind {
         CompletionKind::Value => Some(Rc::new(move |world| {
-            crate::editing::commit_value(world, value.instantiate(), on_commit.clone())
+            crate::editing::commit_value(world, value.clone(), on_commit.clone())
         })),
-        CompletionKind::Field => value.literal().and_then(Value::as_cell).map(|cell| {
+        CompletionKind::Field => value.as_cell().map(|cell| {
             Rc::new(move |world: &mut crate::Editor| {
                 crate::editing::commit_label(world, cell, None, on_commit.clone())
             }) as Rc<dyn Fn(&mut crate::Editor)>
@@ -55,16 +55,25 @@ fn completion_entry(
     offer: Completion,
     kind: CompletionKind,
 ) -> Option<Entry<crate::Editor>> {
-    offered_entry(
-        completion_text(sources, &offer.display),
-        offer
+    if kind == CompletionKind::Field
+        && offer
+            .preview
+            .as_ref()
+            .is_some_and(|value| value.as_cell().is_none())
+    {
+        return None;
+    }
+    Some(Entry {
+        display: completion_text(sources, &offer.display),
+        detail: offer
             .detail
             .as_ref()
             .map(|detail| completion_text(sources, detail)),
-        offer.value,
-        offer.on_commit,
-        kind,
-    )
+        matches: Vec::new(),
+        face: offer.face,
+        source: offer.preview.as_ref().and_then(Value::as_cell),
+        activate: offer.activate,
+    })
 }
 
 fn value_entry(
@@ -74,19 +83,13 @@ fn value_entry(
     on_commit: Continuation,
     kind: CompletionKind,
 ) -> Option<Entry<crate::Editor>> {
-    offered_entry(
-        display,
-        detail,
-        CompletionValue::Literal(value),
-        Some(on_commit),
-        kind,
-    )
+    offered_entry(display, detail, value, Some(on_commit), kind)
 }
 
 fn offered_entry(
     display: String,
     detail: Option<String>,
-    value: CompletionValue,
+    value: Value,
     on_commit: Option<Continuation>,
     kind: CompletionKind,
 ) -> Option<Entry<crate::Editor>> {
@@ -94,14 +97,14 @@ fn offered_entry(
         display,
         detail,
         matches: Vec::new(),
-        face: if value.literal().and_then(text::read).is_some() {
+        face: if text::read(&value).is_some() {
             Face::String
-        } else if value.literal().and_then(Value::as_blob).is_some() {
+        } else if value.as_blob().is_some() {
             Face::Id
         } else {
             Face::Label
         },
-        source: value.literal().and_then(Value::as_cell),
+        source: value.as_cell(),
         activate,
     })
 }
@@ -219,11 +222,11 @@ pub(crate) fn prepare(
 
 pub(crate) fn completion_entries_with(
     sources: &Sources,
-    raw: bool,
     request: &CompletionRequest<'_>,
     providers: Option<&CompletionProvider>,
     contextual: Option<&CompletionProvider>,
 ) -> (Vec<Entry<crate::Editor>>, bool) {
+    let raw = request.raw;
     let kind = request.kind;
     let narrow = CompletionRequest {
         scope: CompletionScope::Suggested,
@@ -392,8 +395,8 @@ fn contextual_entries(
             .filter(|offer| {
                 request.kind != CompletionKind::Field
                     || !offer
-                        .value
-                        .literal()
+                        .preview
+                        .as_ref()
                         .and_then(Value::as_cell)
                         .is_some_and(|cell| {
                             request
@@ -410,18 +413,8 @@ fn contextual_entries(
     )
     .into_iter()
     .filter_map(|ranked| {
-        let (display, completion) = ranked.item;
-        offered_entry(
-            display,
-            completion
-                .detail
-                .as_ref()
-                .map(|detail| completion_text(sources, detail)),
-            completion.value,
-            completion.on_commit,
-            request.kind,
-        )
-        .map(|entry| Entry {
+        let (_, completion) = ranked.item;
+        completion_entry(sources, completion, request.kind).map(|entry| Entry {
             matches: ranked.matches,
             ..entry
         })

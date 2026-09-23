@@ -157,6 +157,7 @@ fn query_content(
         return placeholder_box(tcx, cx.styles);
     };
     let request = crate::display::CompletionRequest {
+        raw: cx.raw,
         query: query.text(),
         kind: if labels {
             crate::display::CompletionKind::Field
@@ -174,7 +175,7 @@ fn query_content(
         cells: &|| cx.sources.cells().collect(),
     };
     let (entries, everything) =
-        completion_entries_with(&cx.sources, cx.raw, &request, cx.completions, completions);
+        completion_entries_with(&cx.sources, &request, cx.completions, completions);
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(

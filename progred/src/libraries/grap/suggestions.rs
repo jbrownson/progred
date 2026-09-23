@@ -26,7 +26,7 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
         });
         let mut offers: Vec<_> = ordered
             .into_iter()
-            .map(|(cell, _)| select(Completion::new(*cell, (*cell).into()).with_detail("binding")))
+            .map(|(cell, _)| select(*cell, (*cell).into()).with_detail("binding"))
             .collect();
         if !quoted {
             let library_request = CompletionRequest {
@@ -50,8 +50,8 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                     )
                     .filter(|offer| {
                         !offer
-                            .value
-                            .literal()
+                            .preview
+                            .as_ref()
                             .and_then(Value::as_record)
                             .and_then(|fields| fields.get(&FUNCTION))
                             .and_then(Value::as_cell)
@@ -59,8 +59,8 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                     }),
             );
             offers.extend([
-                select(Completion::new("new list", Value::list([])).with_aliases(["["])),
-                select(Completion::new("new record", Value::record([])).with_aliases(["{"])),
+                select("new list", Value::list([])).with_aliases(["["]),
+                select("new record", Value::record([])).with_aliases(["{"]),
             ]);
         }
         offers.push(text::completion(text::query_spelling(request.query)));
@@ -186,6 +186,7 @@ mod tests {
             libraries: &libraries,
         };
         bindings(&CompletionRequest {
+            raw: false,
             query: "",
             kind: CompletionKind::Value,
             scope: CompletionScope::Suggested,
@@ -224,6 +225,7 @@ mod tests {
                 libraries: &libraries,
             };
             let request = CompletionRequest {
+                raw: false,
                 query: "",
                 kind: CompletionKind::Value,
                 scope: CompletionScope::Suggested,
@@ -236,7 +238,7 @@ mod tests {
             assert_eq!(
                 offers
                     .iter()
-                    .filter_map(|offer| offer.value.instantiate().as_cell())
+                    .filter_map(|offer| offer.test_value().as_cell())
                     .collect::<Vec<_>>(),
                 expected,
             );
@@ -248,6 +250,7 @@ mod tests {
             libraries: &libraries,
         };
         let depths = bindings(&CompletionRequest {
+            raw: false,
             query: "",
             kind: CompletionKind::Value,
             scope: CompletionScope::Suggested,

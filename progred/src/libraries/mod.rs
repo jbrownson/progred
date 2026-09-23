@@ -610,7 +610,10 @@ mod tests {
             replacement_projection.clone(),
         )
         .with_completions(|request| {
-            Some(vec![Completion::new(request.query, SHARED_FUNCTION.into())])
+            Some(vec![completion::select(
+                request.query,
+                SHARED_FUNCTION.into(),
+            )])
         });
         let right = Library::named(
             RIGHT_LIBRARY,
@@ -642,6 +645,7 @@ mod tests {
         ] {
             assert_eq!(
                 providers[0](&CompletionRequest {
+                    raw: false,
                     query: "query",
                     kind,
                     scope: crate::display::CompletionScope::Suggested,

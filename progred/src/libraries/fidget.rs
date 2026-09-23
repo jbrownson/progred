@@ -1234,31 +1234,34 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 }
 
 fn root_completion() -> crate::display::Completion {
-    crate::display::Completion::generated(vocabulary::FIDGET, || {
-        let cell = gid::new_cell_id();
-        Value::record([
-            (vocabulary::FIDGET, cell.into()),
-            (
-                crate::libraries::workspace::vocabulary::PANES,
-                Value::record([(
-                    crate::libraries::workspace::vocabulary::LEFT,
-                    Value::list([Value::record([
-                        (presentation::vocabulary::VALUE, cell.into()),
-                        (
-                            presentation::vocabulary::VIEWPORT,
-                            vocabulary::PREVIEW_3D.into(),
-                        ),
-                    ])]),
-                )]),
-            ),
-        ])
-    })
+    crate::libraries::completion::generated(
+        vocabulary::FIDGET,
+        || {
+            let cell = gid::new_cell_id();
+            Value::record([
+                (vocabulary::FIDGET, cell.into()),
+                (
+                    crate::libraries::workspace::vocabulary::PANES,
+                    Value::record([(
+                        crate::libraries::workspace::vocabulary::LEFT,
+                        Value::list([Value::record([
+                            (presentation::vocabulary::VALUE, cell.into()),
+                            (
+                                presentation::vocabulary::VIEWPORT,
+                                vocabulary::PREVIEW_3D.into(),
+                            ),
+                        ])]),
+                    )]),
+                ),
+            ])
+        },
+        Some(crate::libraries::selection::pending_at(&[
+            gid::Step::Key(vocabulary::FIDGET),
+            gid::Step::Follow(gid::Resolution::Document),
+        ])),
+    )
     .with_aliases(["sdf"])
     .with_detail(ID)
-    .on_commit(crate::libraries::selection::pending_at(&[
-        gid::Step::Key(vocabulary::FIDGET),
-        gid::Step::Follow(gid::Resolution::Document),
-    ]))
 }
 
 #[cfg(test)]

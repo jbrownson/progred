@@ -10,8 +10,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
                 .into_iter()
                 .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
                 .unwrap()
-                .value
-                .instantiate(),
+                .test_value(),
         ),
         cells: Cells::new(),
     };
@@ -85,8 +84,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
                 .into_iter()
                 .find(|offer| offer.display == fidget::vocabulary::FIDGET.into())
                 .unwrap()
-                .value
-                .instantiate(),
+                .test_value(),
         ),
         cells: Cells::new(),
     };

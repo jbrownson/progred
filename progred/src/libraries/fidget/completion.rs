@@ -131,12 +131,15 @@ fn fields() -> Vec<Completion> {
                         .map(|field| Step::Key(*field)),
                 )
                 .collect::<Vec<_>>();
-            Completion::new(*marker, node(*marker, Value::record([])))
-                .with_detail(super::ID)
-                .on_commit(crate::libraries::selection::pending_at(&path))
+            crate::libraries::completion::insert(
+                *marker,
+                node(*marker, Value::record([])),
+                Some(crate::libraries::selection::pending_at(&path)),
+            )
+            .with_detail(super::ID)
         })
         .chain([X, Y, Z].map(|axis| {
-            crate::libraries::completion::select(Completion::new(axis, node(AXIS, axis.into())))
+            crate::libraries::completion::select(axis, node(AXIS, axis.into()))
                 .with_detail(super::ID)
         }))
         .collect()
@@ -179,17 +182,19 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                 Some(labels(SHAPES).into_iter().chain(labels(&[AXIS])).collect())
             }
             (Slot::Parameters(parameters), CompletionKind::Field) => Some(labels(&parameters)),
-            (Slot::Parameters(parameters), CompletionKind::Value) => Some(vec![
-                Completion::new(::grap::vocabulary::PARAMS, Value::record([])).on_commit(
-                    crate::libraries::selection::pending_at(
+            (Slot::Parameters(parameters), CompletionKind::Value) => {
+                Some(vec![crate::libraries::completion::insert(
+                    ::grap::vocabulary::PARAMS,
+                    Value::record([]),
+                    Some(crate::libraries::selection::pending_at(
                         &parameters
                             .first()
                             .map(|id| Step::Key(*id))
                             .into_iter()
                             .collect::<Vec<_>>(),
-                    ),
-                ),
-            ]),
+                    )),
+                )])
+            }
             (Slot::Number, CompletionKind::Value) => Some(f32::completions(request.query)),
             (Slot::Size, CompletionKind::Value) => {
                 Some(crate::libraries::f64::completions(request.query))
@@ -201,7 +206,7 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                 [X, Y, Z]
                     .into_iter()
                     .map(|axis| {
-                        crate::libraries::completion::select(Completion::new(axis, axis.into()))
+                        crate::libraries::completion::select(axis, axis.into())
                             .with_detail(super::ID)
                     })
                     .collect(),
@@ -260,7 +265,7 @@ mod tests {
     #[test]
     fn constructor_offers_use_the_fidget_data_language() {
         for offer in fields() {
-            let value = offer.value.instantiate();
+            let value = offer.test_value();
             let record = value.as_record().unwrap();
             assert!(!record.contains_key(&::grap::vocabulary::FUNCTION));
             let marker = super::super::one_marker(record).unwrap();
@@ -268,7 +273,14 @@ mod tests {
                 assert!(super::super::tree(&value).is_some());
             } else {
                 assert_eq!(record.get(&marker), Some(&Value::record([])));
-                assert!(offer.on_commit.is_some());
+                assert!(
+                    crate::libraries::test_widgets::activate_completion(&offer)
+                        .model
+                        .selection
+                        .unwrap()
+                        .path()
+                        .starts_with(&[Step::Key(marker)])
+                );
             }
         }
     }
@@ -278,6 +290,7 @@ mod tests {
         let path = [Step::Key(FIDGET)];
         let lookup = |_: &[Step]| None;
         let request = CompletionRequest {
+            raw: false,
             path: &path,
             query: "",
             kind: CompletionKind::Value,
@@ -291,7 +304,7 @@ mod tests {
                 offers(&request)
                     .unwrap()
                     .iter()
-                    .any(|offer| { offer.value.instantiate() == ::grap::call(shape.into(), []) })
+                    .any(|offer| { offer.test_value() == ::grap::call(shape.into(), []) })
             );
             assert!(
                 !offers(&CompletionRequest {
@@ -302,8 +315,7 @@ mod tests {
                 .iter()
                 .any(|offer| {
                     offer
-                        .value
-                        .instantiate()
+                        .test_value()
                         .as_record()
                         .unwrap()
                         .contains_key(&::grap::vocabulary::FUNCTION)

@@ -34,7 +34,7 @@ its library identity, so references and name lookup need no metadata side channe
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
 receives the query, field/value kind, suggestion/Everything scope, source-qualified
-path, read-only path and cell lookups, and lazy enumeration of defined cells.
+path, Raw mode, read-only path and cell lookups, and lazy enumeration of defined cells.
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
@@ -141,6 +141,9 @@ Only explicit expression children use this provider, not quoted data, parameter
 declarations, or ordinary structural containers. Provider composition is lazy:
 the projection obtains the library provider from `Env`, but offers and scope are
 read only for the active picker.
+At a missing expression, the default partial gets the first opportunity to
+present selection-driven interactions (such as the new-color picker), before
+falling back to expression completion.
 
 The shared `structure::list(Some(child_projection))` combinator explicitly
 applies a partial at each immediate element. Standard lists use the same

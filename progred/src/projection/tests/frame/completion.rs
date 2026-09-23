@@ -1,6 +1,152 @@
 use super::*;
 
 #[test]
+fn new_color_completion_opens_without_editing_and_commits_at_the_missing_location() {
+    use crate::libraries::color;
+    let list = Value::list([text::value("before"), text::value("after")]);
+    let positions: Vec<_> = list
+        .as_list()
+        .unwrap()
+        .iter()
+        .map(|(p, _)| p.clone())
+        .collect();
+    let between = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
+    let field = new_cell_id();
+    let function = new_cell_id();
+    let argument = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(function, grap::lambda([argument], argument.into()));
+    for (value, path) in [
+        (None, vec![]),
+        (Some(Value::record([])), vec![Step::Key(field)]),
+        (Some(list), vec![Step::Element(between)]),
+        (
+            Some(grap::call(function.into(), [])),
+            vec![Step::Key(argument)],
+        ),
+    ] {
+        let mut world = crate::test_editor(Document {
+            root: value.clone(),
+            cells: cells.clone(),
+        });
+        world.model.selection = Some(crate::selection::pending_with_query(
+            &crate::test_root(),
+            path.clone(),
+            "new color",
+        ));
+        world
+            .model
+            .selection
+            .as_mut()
+            .unwrap()
+            .set_completion_view(0.0, 0, true);
+        let frame = editing_frame(&mut world, false);
+        let entry = frame
+            .completion
+            .as_ref()
+            .unwrap()
+            .entries
+            .iter()
+            .find(|e| e.display == "new color")
+            .unwrap();
+        let document = world.model.doc.clone();
+        (entry.activate)(&mut world);
+        assert!(Rc::ptr_eq(&document, &world.model.doc));
+        assert!(!world.model.history.can_undo());
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+        world.model.selection = None;
+        assert!(
+            Rc::ptr_eq(&document, &world.model.doc),
+            "leaving does not insert the seed"
+        );
+        assert!(!world.model.history.can_undo());
+        world.model.selection = Some(pending_value(&crate::test_root(), path.clone()));
+        (entry.activate)(&mut world);
+        let frame = editing_frame(&mut world, false);
+        assert!(frame.completion.is_none(), "picker replaces completion");
+        assert!(frame.resolve_for_dispatch().dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Escape),
+                state: KeyState::Down,
+                ..Default::default()
+            }
+        ));
+        assert!(Rc::ptr_eq(&document, &world.model.doc));
+        assert!(editing_frame(&mut world, false).completion.is_some());
+
+        // Re-open the retained action, then click the actual projected color plane.
+        (entry.activate)(&mut world);
+        let drawing = settle(editing_frame(&mut world, false)).list;
+        let plane = drawing
+            .0
+            .iter()
+            .find_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::Rect(rect),
+                    brush: peniko::Brush::Gradient(_),
+                    transform,
+                    ..
+                } if rect.width() == puri_widgets::color_picker::WIDTH
+                    && rect.height() == puri_widgets::color_picker::PLANE_HEIGHT =>
+                {
+                    Some(transform.transform_rect_bbox(*rect))
+                }
+                _ => None,
+            })
+            .expect("visible color plane");
+        let point = plane.center();
+        let frame = editing_frame(&mut world, false);
+        let mut event = PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: Default::default(),
+        };
+        event.state.position = (point.x, point.y).into();
+        assert!(
+            frame
+                .resolve_for_dispatch()
+                .dispatch_pointer_down(&mut world, &event)
+        );
+        world.advance_gesture(&[Point::new(plane.x0 + plane.width() * 0.75, point.y)]);
+        world.finish_gesture();
+        assert!(color::read(world.sources().resolve_path(&path).unwrap()).is_some());
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+        assert_eq!(
+            world
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .stage(&world.sources()),
+            Stage::Edge
+        );
+        assert!(editing_frame(&mut world, false).completion.is_none());
+        if let Some(elements) = world.model.doc.root.as_ref().and_then(Value::as_list) {
+            assert_eq!(elements.len(), 3);
+            assert_eq!(
+                text::read(elements.get(&positions[0]).unwrap()),
+                Some("before")
+            );
+            assert_eq!(
+                text::read(elements.get(&positions[1]).unwrap()),
+                Some("after")
+            );
+        }
+        assert!(
+            world.model.step_history(true),
+            "one undo for the whole drag"
+        );
+        assert_eq!(world.model.doc.root, value);
+        assert!(!world.model.history.can_undo());
+    }
+}
+
+#[test]
 fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker() {
     let root = crate::test_root();
     let press = |key: &str, modifiers| KeyboardEvent {

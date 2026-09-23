@@ -19,10 +19,7 @@ pub fn parse(text: &str) -> Option<Vec<u8>> {
 
 pub fn completion(bytes: Vec<u8>) -> crate::display::Completion {
     let spelling = gid::hex_string(&bytes);
-    crate::libraries::completion::select(crate::display::Completion::new(
-        format!("0x{spelling}"),
-        Value::from(bytes),
-    ))
+    crate::libraries::completion::select(format!("0x{spelling}"), Value::from(bytes))
 }
 
 fn parse_hex(hex: &str) -> Option<Vec<u8>> {

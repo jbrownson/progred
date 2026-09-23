@@ -53,6 +53,7 @@ fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::dis
     };
     let sources = src(&document, &stack.libraries);
     (stack.completions)(&crate::display::CompletionRequest {
+        raw: false,
         query: "",
         kind: crate::display::CompletionKind::Value,
         scope: crate::display::CompletionScope::Suggested,
@@ -77,8 +78,8 @@ fn completion_entries_with(
     let value_at = |path: &[Step]| sources.resolve_path(path);
     crate::completion::completion_entries_with(
         sources,
-        raw,
         &CompletionRequest {
+            raw,
             query,
             kind: *kind,
             scope: if everything {

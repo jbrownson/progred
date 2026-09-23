@@ -206,7 +206,7 @@ handle the shortcut first and select their own text.
 The projection rendering a pending value or label explicitly requests
 completion and may supply a lazy vocabulary. Only the active picker asks the
 provider for offers. Each request includes the query, field/value kind,
-suggestion/Everything scope, source-qualified path, and read-only path and cell
+suggestion/Everything scope, Raw mode, source-qualified path, and read-only path and cell
 lookups, plus lazy enumeration of defined cells. Cell lookup exposes the selected
 definition's value, source, and whether it has a native implementation, without
 evaluating it.
@@ -220,7 +220,7 @@ Completion display text and detail can be literal text or a named cell reference
 Library, constructor, parameter, and numeric-type labels use references; the
 picker resolves their current names before filtering each frame. Renaming a
 definition therefore updates even retained offers without changing their
-insertion value or continuation. An explicit empty name stays empty; a missing
+activation handler. An explicit empty name stays empty; a missing
 name uses the usual short cell identity. Typed values remain literal text.
 Cell search entries show their source name as a right-aligned note, without
 appending the cell identity. Identities are low-level inspection information,
@@ -300,10 +300,16 @@ list. A field label permits only the cell constructor. Nonempty queries and
 IME composition keep ordinary text input; quoted punctuation leads with literal
 text. Shortcuts use the same insertion callbacks as the constructor offers.
 
-A library completion can provide an `on_commit` continuation, run at the
-committed location against the staged selection and annotation state. Native
-offers use Rust functions directly. `site::grap` adapts a Grap callable to the
-same interface and uses the same capabilities as Grap event handlers. Insertion
+A library completion consists of presentation metadata and an activation handler
+receiving `&mut Editor`. Clicking or pressing Enter runs it; highlighting or
+moving between suggestions does not. Handlers may edit, change selection, or
+start an interaction without inserting data. An optional advertised value supplies
+source/filter metadata only; it never determines activation behavior.
+
+The completion library's `insert` and `generated` helpers build ordinary insertion
+handlers. They accept an optional `on_commit` continuation, run at the committed
+location against the staged selection and annotation state. `site::grap` adapts
+a Grap callable to that continuation interface. Insertion
 and continuation effects are prepared together and installed only if the
 continuation accepts; Grap explicitly declining or halting declines the whole
 operation. Ordinary absent results do not veto it. Selection changes are
@@ -320,9 +326,14 @@ Raw without an override, since that projection contains no atomic line control.
 Enter commits only through the placed completion control; the shell has no
 fallback which inserts query text after its offers decline.
 
-The native offer builder takes the completion request's field/value kind and
-produces ordinary `Editor` handlers. It does not carry a separate dictionary of
-insertion callbacks.
+The color library's `new color` offer changes selection to picker state at the
+same missing location. No color is inserted and no undo entry is made until the
+first picker interaction. List insertion positions remain stable through that
+transition. The existing point-control gesture writes the selected color and
+groups the drag into one undo step. Escape before choosing returns to completion;
+leaving the location discards the picker without an edit. The seed color belongs
+only to the picker. Raw mode omits this offer because it does not render the
+color library's picker; ordinary value-inserting offers remain available.
 
 Root `grap` and `fidget` offers create a fresh bare
 cell shared by their domain field and a left pane. Fidget's pane applies

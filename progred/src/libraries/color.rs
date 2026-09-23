@@ -43,7 +43,6 @@ pub fn value(color: Color) -> Value {
     })
 }
 
-#[cfg(test)]
 fn encoded_value(color: Encoded) -> Value {
     Value::record([encoded_field(color)])
 }
@@ -123,6 +122,76 @@ fn picker_selection(hue: f64) -> Value {
         vocabulary::PICKER,
         Value::record([(vocabulary::HUE, f64::value(hue))]),
     )])
+}
+
+fn new_color() -> crate::display::Completion {
+    crate::display::Completion::new("new color", |world| {
+        let Some(selection) = world.model.selection.as_ref() else {
+            return;
+        };
+        if selection.stage(&world.sources()) != crate::selection::Stage::Pending
+            || !selection.writable(&world.sources())
+            || selection.value(&world.sources()).is_some()
+        {
+            return;
+        }
+        let next = crate::selection::Selection::from_scoped_payload(
+            selection.root(),
+            &world.sources(),
+            selection.scope().clone(),
+            selection.path().to_vec(),
+            picker_selection(0.0),
+        );
+        world.model.selection = Some(next);
+    })
+    .with_aliases(["color", "colour"])
+}
+
+fn completions(
+    request: &crate::display::CompletionRequest<'_>,
+) -> Option<Vec<crate::display::Completion>> {
+    (!request.raw
+        && request.kind == crate::display::CompletionKind::Value
+        && request.scope == crate::display::CompletionScope::Everything
+        && request.value().is_none())
+        .then(|| vec![new_color()])
+}
+
+/// The seed belongs only to the picker. The first point interaction writes the
+/// chosen color through the same location and gesture machinery as an edit.
+fn missing_picker(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input.value.is_none().then_some(())?;
+    input.writable.then_some(())?;
+    let hue = picker_hue(input.selection)?;
+    let seed = Encoded::Rgb([255, 0, 0]);
+    let close = input.targets.current().select_with;
+    Some(widget::before(
+        popover(
+            crate::display::dim("color"),
+            picker(&encoded_value(seed), seed, hue),
+        ),
+        Rc::new(move |_| {
+            let close = close.clone();
+            Box::new(move |output, _| {
+                use puri::handler::HasHandler;
+                output.handler().on_key(move |world, event| {
+                    if event.state.is_down()
+                        && event.key
+                            == ui_events::keyboard::Key::Named(
+                                ui_events::keyboard::NamedKey::Escape,
+                            )
+                    {
+                        close(world, crate::libraries::selection::pending());
+                        true
+                    } else {
+                        false
+                    }
+                });
+            })
+        }),
+    ))
 }
 
 fn picker_hue(selection: Option<&Value>) -> Option<f64> {
@@ -296,6 +365,9 @@ fn swatch(color: Color) -> Layout<crate::Editor, crate::frame::Hovered> {
 pub fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    if input.value.is_none() {
+        return missing_picker(input);
+    }
     let encoded = encoded(input.value?)?;
     let color = read(input.value?)?;
     let initial_hue = hsva(encoded).hue;
@@ -364,11 +436,35 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::partial(display),
     )
+    .with_completions(completions)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_color_is_only_offered_where_its_picker_can_be_presented() {
+        use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
+        for raw in [false, true] {
+            for kind in [CompletionKind::Value, CompletionKind::Field] {
+                let request = CompletionRequest {
+                    raw,
+                    kind,
+                    query: "color",
+                    scope: CompletionScope::Everything,
+                    path: &[],
+                    value_at: &|_| None,
+                    resolve: &|_| None,
+                    cells: &Vec::new,
+                };
+                assert_eq!(
+                    completions(&request).is_some(),
+                    !raw && kind == CompletionKind::Value
+                );
+            }
+        }
+    }
     use crate::display::recording::{Recordable, Recorded};
 
     use crate::display::test_support::{ProjectionCall, inspect};
