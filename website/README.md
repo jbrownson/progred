@@ -84,10 +84,7 @@ Creation, Grap, functions, and drawing use `tutorial-slots`, listing three recor
 identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
 refilling it writes the same field. Nested values use the ordinary projection
-and editing behavior. The measured slot column is centered within the editor's
-available content width, using the same measured inset on all sides, with its
-children still left-aligned. Oversized columns
-retain the ordinary left origin for scrolling. This is tutorial host configuration, not document syntax
+and editing behavior. This is tutorial host configuration, not document syntax
 or a library construct. Without the option, the record displays normally.
 The opener stacks an ordinary `render` result above its editable call, without
 panes. Trunks extend before the canopy expands, with deterministic variation

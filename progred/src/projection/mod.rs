@@ -46,7 +46,6 @@ type SharedPath = Rc<[Step]>;
 pub struct Projection<World> {
     partial: crate::display::Partial<World, Hovered>,
     entry: Option<crate::display::Partial<World, Hovered>>,
-    center_entry: bool,
 }
 
 impl<World> Clone for Projection<World> {
@@ -54,7 +53,6 @@ impl<World> Clone for Projection<World> {
         Self {
             partial: self.partial.clone(),
             entry: self.entry.clone(),
-            center_entry: self.center_entry,
         }
     }
 }
@@ -64,7 +62,6 @@ impl<World: 'static> Default for Projection<World> {
         Self {
             partial: crate::display::partial(|_| None),
             entry: None,
-            center_entry: false,
         }
     }
 }
@@ -76,7 +73,6 @@ impl<World: 'static> Projection<World> {
         Self {
             partial: crate::display::compose_partials(partials),
             entry: None,
-            center_entry: false,
         }
     }
 
@@ -89,20 +85,10 @@ impl<World: 'static> Projection<World> {
         }
     }
 
-    /// Center the complete entry with equal framing insets after choosing its
-    /// layout, without changing child alignment or responsive alternatives.
-    pub fn centered_entry(self) -> Self {
-        Self {
-            center_entry: true,
-            ..self
-        }
-    }
-
     fn without_entry(&self) -> Self {
         Self {
             partial: self.partial.clone(),
             entry: None,
-            center_entry: false,
         }
     }
 
@@ -550,20 +536,11 @@ pub(crate) fn project(
     tcx: &mut TextCtx,
 ) -> Measured<HoverPass<crate::Editor>> {
     let width = description.width;
-    let center = description
-        .projection
-        .is_some_and(|projection| projection.center_entry);
-    let projected = resolve_choices(
+    resolve_choices(
         prepare_project(description, tcx),
         width,
         std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
-    );
-    if center {
-        let space = (width - projected.extent.width).max(0.0) / 2.0;
-        measured::pad(kurbo::Insets::uniform(space), projected)
-    } else {
-        projected
-    }
+    )
 }
 
 fn prepare_project(
@@ -869,7 +846,6 @@ fn prepare_value(
         .map(|partial| Projection {
             partial: partial.clone(),
             entry: None,
-            center_entry: false,
         })
         .or_else(|| {
             (projection.entry.is_some() && !matches!(value, Some(Value::Cell(_))))
