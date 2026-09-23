@@ -114,6 +114,7 @@ mod tests {
             path: &path,
             value_at: &|_| None,
             resolve: &|_| None,
+            cells: &Vec::new,
         };
         for (query, expected) in [
             ("", ""),

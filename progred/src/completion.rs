@@ -369,8 +369,12 @@ pub(crate) fn completion_entries_with(
     } else {
         let (weak, strong): (Vec<_>, Vec<_>) =
             references.into_iter().partition(|(_, demoted)| *demoted);
+        let (exact, other): (Vec<_>, Vec<_>) = value_entries
+            .into_iter()
+            .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
+        entries.extend(exact);
         entries.extend(strong.into_iter().map(|(entry, _)| entry));
-        entries.extend(value_entries);
+        entries.extend(other);
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }

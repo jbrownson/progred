@@ -142,6 +142,10 @@ struct ProjectEnv<'a, 's> {
 }
 
 impl crate::display::Env for ProjectEnv<'_, '_> {
+    fn completions(&self) -> Option<crate::display::CompletionProvider> {
+        self.cx.completions.cloned()
+    }
+
     fn apply_scoped(
         &self,
         function: &Value,

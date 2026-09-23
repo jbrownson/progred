@@ -95,6 +95,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         path: &path,
         value_at: &|_| None,
         resolve: &|cell| src(&document, &stack.libraries).definition(cell),
+        cells: &|| src(&document, &stack.libraries).cells().collect(),
     })
     .unwrap()
     .into_iter()
@@ -132,6 +133,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                     path: &path,
                     value_at: &|_| None,
                     resolve: &|cell| sources.definition(cell),
+                    cells: &|| sources.cells().collect(),
                 },
                 None,
                 Some(&provider),
@@ -398,10 +400,11 @@ fn completion_offers_follow_the_stage() {
     let roof = completion_entries(&sources, false, false, "roof");
     assert_eq!(activated(&roof[0]).value, Some(Value::from(cell)));
     let sum = completion_entries(&sources, false, false, "+");
-    assert_eq!(
-        activated(&sum[0]).value,
-        Some(Value::from(f64::vocabulary::SUM))
+    assert!(
+        sum.iter()
+            .any(|entry| activated(entry).value == Some(Value::from(f64::vocabulary::SUM)))
     );
+    assert_eq!(sum.first().unwrap().detail.as_deref(), Some("call · f64"));
 
     // A bare id never outranks the typed text: the string the
     // query spells comes before every unnamed reference, however
@@ -555,7 +558,7 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
 }
 
 #[test]
-fn completion_name_matches_precede_numeric_interpretations_unless_explicitly_quoted() {
+fn exact_interpretations_precede_partial_name_matches_unless_explicitly_quoted() {
     use crate::libraries::{f32, u64};
     let cell = new_cell_id();
     let mut cells = Cells::new();
@@ -571,10 +574,10 @@ fn completion_name_matches_precede_numeric_interpretations_unless_explicitly_quo
             .map(|entry| activated(entry).value.unwrap())
             .collect::<Vec<_>>(),
         [
-            cell.into(),
             f32::value(12.0),
             f64::value(12.0),
             u64::value(12),
+            cell.into(),
             text::value("12"),
         ]
     );
@@ -613,7 +616,220 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
             .iter()
             .map(|entry| activated(entry).value.unwrap())
             .collect::<Vec<_>>(),
-        [cell.into(), Value::record([]), text::value("custom"),]
+        [Value::record([]), cell.into(), text::value("custom"),]
+    );
+}
+
+#[test]
+fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
+    let (document, names) = crate::gid_text::parse(include_str!(
+        "../../../../website/public/lessons/growing-forest.gid"
+    ))
+    .unwrap();
+    let clouds = names["clouds"];
+    let time = names["sun_time"];
+    let libraries = core_libraries();
+    let sources = src(&document, &libraries);
+    let entries = completion_entries(&sources, false, false, "clouds");
+    let call = entries.first().unwrap();
+    assert_eq!(call.detail.as_deref(), Some("call"));
+    let result = activated(call);
+    assert_eq!(result.value, Some(grap::call(clouds.into(), [])));
+    let (selected, payload) = result.selected.unwrap();
+    assert_eq!(selected, vec![Step::Key(time)]);
+    assert_eq!(
+        payload
+            .as_record()
+            .unwrap()
+            .get(&crate::libraries::selection::vocabulary::STAGE),
+        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry| activated(entry).value == Some(clouds.into()))
+    );
+    let labels = completion_entries(&sources, false, true, "clouds");
+    assert_eq!(
+        activated(labels.first().unwrap()).label,
+        Some((clouds, None))
+    );
+}
+
+#[test]
+fn projected_do_insertion_offers_calls_but_function_slots_keep_references() {
+    expression_list_insertion(control::vocabulary::DO);
+}
+
+fn expression_list_insertion(callable: CellId) {
+    let function = new_cell_id();
+    let argument = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        function,
+        name::record(
+            "clouds",
+            [
+                (grap::vocabulary::PARAMS, Value::list([argument.into()])),
+                (grap::vocabulary::BODY, Value::record([])),
+            ],
+        ),
+    );
+    let document = Document {
+        root: Some(grap::call(
+            callable.into(),
+            [(control::vocabulary::EXPRESSIONS, Value::list([]))],
+        )),
+        cells,
+    };
+    let path = vec![
+        Step::Key(control::vocabulary::EXPRESSIONS),
+        Step::Element(gid::position::between(None, None).unwrap()),
+    ];
+    let selection =
+        crate::selection::pending_with_query(&crate::test_root(), path.clone(), "clouds");
+    let entries = projected_completion_entries(&document, &selection);
+    let world = activate_projected(&document, &selection, entries.first().unwrap());
+    assert_eq!(
+        world.sources().resolve_path(&path),
+        Some(&grap::call(function.into(), []))
+    );
+    assert_eq!(
+        world.model.selection.as_ref().unwrap().path(),
+        [path.as_slice(), &[Step::Key(argument)]].concat()
+    );
+
+    let document = Document {
+        root: Some(Value::record([])),
+        ..document
+    };
+    let selection = crate::selection::pending_with_query(
+        &crate::test_root(),
+        vec![Step::Key(grap::vocabulary::FUNCTION)],
+        "clouds",
+    );
+    let entries = projected_completion_entries(&document, &selection);
+    assert_eq!(
+        inserted_value(&document, &selection, entries.first().unwrap()),
+        Some(function.into())
+    );
+    assert!(
+        !entries
+            .iter()
+            .any(|entry| entry.detail.as_deref() == Some("call"))
+    );
+}
+
+#[test]
+fn expression_completion_suggestions_are_focused_but_can_expand() {
+    let parameter = new_cell_id();
+    let unrelated = new_cell_id();
+    let callable = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(parameter, name::record("growth", []));
+    cells.set_value(unrelated, name::record("unrelated parameter", []));
+    cells.set_value(
+        callable,
+        name::record(
+            "clouds",
+            [
+                (grap::vocabulary::PARAMS, Value::list([unrelated.into()])),
+                (grap::vocabulary::BODY, Value::record([])),
+            ],
+        ),
+    );
+    let document = Document {
+        root: Some(Value::record([(
+            grap::vocabulary::PARAMS,
+            Value::list([parameter.into()]),
+        )])),
+        cells,
+    };
+    let path = vec![Step::Key(grap::vocabulary::BODY)];
+    let selected = crate::selection::pending_value(&crate::test_root(), path.clone());
+    let entries = projected_completion_entries(&document, &selected);
+    assert!(entries.iter().any(|entry| entry.source == Some(parameter)));
+    assert!(!entries.iter().any(|entry| entry.source == Some(unrelated)));
+    assert!(!entries.iter().any(|entry| entry.display == "name"));
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
+    );
+    assert!(entries.iter().any(|entry| entry.display == "new lambda"));
+    assert!(entries.iter().any(|entry| entry.display == "new list"));
+    assert!(entries.iter().any(|entry| entry.display == "new record"));
+
+    let mut expanded = crate::selection::pending_value(&crate::test_root(), path.clone());
+    expanded.set_completion_view(0.0, 0, true);
+    let entries = projected_completion_entries(&document, &expanded);
+    assert!(entries.iter().any(|entry| entry.source == Some(unrelated)));
+    assert!(entries.iter().any(|entry| entry.source == Some(callable)));
+    assert!(entries.iter().any(|entry| entry.display == "name"));
+
+    for (query, expected) in [
+        ("cloud", grap::call(callable.into(), [])),
+        ("growth", parameter.into()),
+        ("\"hello", text::value("hello")),
+    ] {
+        let selected =
+            crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
+        let entries = projected_completion_entries(&document, &selected);
+        assert_eq!(
+            inserted_value(&document, &selected, &entries[0]),
+            Some(expected)
+        );
+    }
+    let selected = crate::selection::pending_with_query(&crate::test_root(), path, "2.5");
+    let entries = projected_completion_entries(&document, &selected);
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.detail.as_deref() == Some("f64"))
+    );
+}
+
+#[test]
+fn call_offers_follow_resolved_definitions_without_evaluating_them() {
+    let function = new_cell_id();
+    let mut cells = Cells::new();
+    let library = crate::libraries::Library::<crate::Editor, crate::frame::Hovered>::new(
+        crate::libraries::Definitions::from_parts(
+            {
+                let mut definitions = Cells::new();
+                definitions.set_value(function, name::record("probe", []));
+                definitions
+            },
+            grap::ForeignFunctions::default().register(
+                function,
+                grap::ForeignFunction::new(|_, _, _| panic!("completion must not run code")),
+            ),
+        ),
+        crate::display::partial(|_| None),
+    );
+    let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
+    let root = Some(Value::list([]));
+    let document = Document {
+        root: root.clone(),
+        cells: cells.clone(),
+    };
+    let entries = completion_entries(&src(&document, &libraries), false, false, "probe");
+    assert_eq!(
+        activated(entries.first().unwrap()).value,
+        Some(grap::call(function.into(), []))
+    );
+
+    cells.set_value(function, name::record("probe", []));
+    let document = Document { root, cells };
+    let entries = completion_entries(&src(&document, &libraries), false, false, "probe");
+    assert_eq!(
+        activated(entries.first().unwrap()).value,
+        Some(function.into())
+    );
+    assert!(
+        !entries
+            .iter()
+            .any(|entry| entry.detail.as_deref() == Some("call"))
     );
 }
 
@@ -1376,6 +1592,35 @@ fn grap_call_field_completion_offers_missing_parameters() {
 }
 
 #[test]
+fn missing_call_argument_slots_edit_real_fields_without_materializing_other_arguments() {
+    let function = new_cell_id();
+    let arguments = [new_cell_id(), new_cell_id(), new_cell_id()];
+    let mut cells = Cells::new();
+    cells.set_value(function, grap::lambda(arguments, Value::record([])));
+    let document = Document {
+        root: Some(grap::call(function.into(), [])),
+        cells,
+    };
+    for argument in arguments {
+        let path = vec![Step::Key(argument)];
+        let selected =
+            crate::selection::pending_with_query(&crate::test_root(), path.clone(), "0.5");
+        let entries = projected_completion_entries(&document, &selected);
+        let offer = entries
+            .iter()
+            .find(|entry| entry.detail.as_deref() == Some("f64"))
+            .unwrap();
+        let world = activate_projected(&document, &selected, offer);
+        assert_eq!(
+            world.model.doc.root,
+            Some(grap::call(function.into(), [(argument, f64::value(0.5))]))
+        );
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+    }
+    assert_eq!(document.root, Some(grap::call(function.into(), [])));
+}
+
+#[test]
 fn existing_root_fields_are_not_offered_again() {
     let document = Document {
         root: Some(Value::record([(
@@ -1590,6 +1835,7 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         path: &path,
         value_at: &value_at,
         resolve: &|cell| sources.definition(cell),
+        cells: &|| sources.cells().collect(),
     };
     let (entries, everything) = crate::completion::completion_entries_with(
         &sources,

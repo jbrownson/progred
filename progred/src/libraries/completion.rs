@@ -49,6 +49,7 @@ mod tests {
             path: &[],
             value_at: &|_| None,
             resolve: &|_| None,
+            cells: &Vec::new,
         };
         let calls = Rc::new(std::cell::Cell::new(0));
         let counted = calls.clone();

@@ -59,6 +59,7 @@ fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::dis
         path: &[],
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
+        cells: &|| sources.cells().collect(),
     })
     .unwrap_or_default()
 }
@@ -88,6 +89,7 @@ fn completion_entries_with(
             path: &[],
             value_at: &value_at,
             resolve: &|cell| sources.definition(cell),
+            cells: &|| sources.cells().collect(),
         },
         providers,
         contextual,

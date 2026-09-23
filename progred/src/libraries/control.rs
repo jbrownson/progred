@@ -818,7 +818,7 @@ pub fn do_display(
             descend_path_local(
                 [Step::Key(vocabulary::EXPRESSIONS)],
                 crate::display::structure::list(Some(crate::display::partial(
-                    crate::libraries::grap::shallow_cell,
+                    crate::libraries::grap::expression,
                 ))),
                 &input.default_projection,
             ),

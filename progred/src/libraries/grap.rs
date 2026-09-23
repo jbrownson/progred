@@ -15,6 +15,20 @@ use crate::display::{
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
+mod suggestions;
+
+pub(crate) fn expression(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    match input.value {
+        Some(_) => shallow_cell(input),
+        None => Some(completion(
+            CompletionKind::Value,
+            Some(suggestions::provider(input.env.completions())),
+        )),
+    }
+}
+
 pub mod vocabulary {
     use gid::CellId;
 
@@ -100,7 +114,7 @@ pub(crate) fn expression_path(
     steps: impl Into<Vec<Step>>,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    shallow_path(steps, default)
+    descend_path_local(steps, crate::display::partial(expression), default)
 }
 
 /// Declaration cells keep their parentheses, with a named definition
@@ -112,18 +126,11 @@ pub(crate) fn declaration_path(
     descend_path_local(steps, crate::display::partial(declaration_cell), default)
 }
 
-pub(crate) fn shallow_descend(
-    step: Step,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    descend_local(step, crate::display::partial(shallow_cell), default)
-}
-
 pub(crate) fn expression_descend(
     step: Step,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    shallow_descend(step, default)
+    expression_path([step], default)
 }
 
 fn field_spelling(env: &dyn crate::display::Env, field: CellId) -> (String, Face) {
@@ -242,16 +249,14 @@ pub(crate) fn call_with_function(
                 value: slot(),
             }]
         }
-        Some(Pending::Child(Step::Key(field))) if !fields.contains_key(field) => {
+        Some(Pending::Child(Step::Key(field)))
+            if !fields.contains_key(field) && !parameter_positions.contains_key(field) =>
+        {
             let (spelling, face) = field_spelling(input.env, *field);
             let target = input.targets.at([Step::Key(*field)]);
             vec![RecordField {
                 label: activatable(faced(spelling, face), target.hover, target.select),
-                value: descend_local(
-                    Step::Key(*field),
-                    crate::display::partial(shallow_cell),
-                    &input.default_projection,
-                ),
+                value: expression_path([Step::Key(*field)], &input.default_projection),
             }]
         }
         _ => Vec::new(),
@@ -265,7 +270,13 @@ pub(crate) fn call_with_function(
         fields
             .iter()
             .filter(|(field, _)| *field != FUNCTION)
-            .map(|(field, value)| (*field, value)),
+            .map(|(field, value)| (*field, Some(value)))
+            .chain(
+                parameter_positions
+                    .keys()
+                    .filter(|field| !fields.contains_key(field))
+                    .map(|field| (*field, None)),
+            ),
         |left, right| match (
             parameter_positions.get(left),
             parameter_positions.get(right),
@@ -508,16 +519,61 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
         (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
             crate::libraries::completion::label(vocabulary::GRAP).with_detail(ID),
         ]),
-        (CompletionScope::Everything, CompletionKind::Value, _) => Some(vec![
-            Completion::new("new lambda", Value::record([(PARAMS, Value::list([]))]))
-                .with_aliases(["lambda", "λ"])
-                .with_detail(ID)
-                .on_commit(crate::libraries::selection::at(
-                    &[Step::Key(BODY)],
-                    crate::libraries::selection::edge(),
-                )),
-        ]),
+        (CompletionScope::Everything, CompletionKind::Value, _) => Some(
+            std::iter::once(
+                Completion::new("new lambda", Value::record([(PARAMS, Value::list([]))]))
+                    .with_aliases(["lambda", "λ"])
+                    .with_detail(ID)
+                    .on_commit(crate::libraries::selection::at(
+                        &[Step::Key(BODY)],
+                        crate::libraries::selection::edge(),
+                    )),
+            )
+            .chain(
+                (!request.query.trim().is_empty())
+                    .then(|| call_completions(request))
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect(),
+        ),
         _ => None,
+    }
+}
+
+fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Completion> {
+    if matches!(request.path.last(), Some(Step::Key(field)) if *field == FUNCTION || *field == FFI)
+    {
+        Vec::new()
+    } else {
+        let mut offers: Vec<_> = (request.cells)()
+            .into_iter()
+            .filter_map(|cell| {
+                let definition = (request.resolve)(cell)?;
+                let name = name::read(definition.value)?;
+                (definition.native || function_parameters(&cell.into(), request.resolve).is_some())
+                    .then(|| {
+                        let offer = call_completion(cell.into(), cell, request.resolve)
+                            .with_detail(match definition.source {
+                                gid::Resolution::Document => "call".to_owned(),
+                                gid::Resolution::Library(library) => format!(
+                                    "call · {}",
+                                    (request.resolve)(library)
+                                        .and_then(|definition| name::read(definition.value))
+                                        .map(str::to_owned)
+                                        .unwrap_or_else(|| short_id(library))
+                                ),
+                            });
+                        (
+                            matches!(definition.source, gid::Resolution::Library(_)),
+                            name,
+                            offer,
+                        )
+                    })
+            })
+            .collect();
+        offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), *name));
+        offers.into_iter().map(|(_, _, offer)| offer).collect()
     }
 }
 
@@ -529,6 +585,55 @@ mod tests {
     use crate::display::Env;
     use crate::display::test_support::{ProjectionCall, inspect};
     use gid::new_cell_id;
+
+    #[test]
+    fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
+        use crate::display::{CompletionRequest, CompletionScope};
+        let library = new_cell_id();
+        let mut cells = [new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id()];
+        cells.sort();
+        let definitions = [
+            (gid::Resolution::Library(library), "Zoo"),
+            (gid::Resolution::Document, "sun"),
+            (gid::Resolution::Library(library), "apple"),
+            (gid::Resolution::Document, "Clouds"),
+        ]
+        .map(|(source, name)| {
+            (
+                source,
+                name::record(name, [(PARAMS, Value::list([])), (BODY, Value::record([]))]),
+            )
+        });
+        for order in [cells.to_vec(), cells.iter().rev().copied().collect()] {
+            let resolve = |cell| {
+                cells
+                    .iter()
+                    .position(|candidate| *candidate == cell)
+                    .map(|index| ResolvedCell {
+                        source: definitions[index].0,
+                        value: &definitions[index].1,
+                        native: false,
+                    })
+            };
+            let enumerate = || order.clone();
+            let request = CompletionRequest {
+                query: "",
+                kind: CompletionKind::Value,
+                scope: CompletionScope::Suggested,
+                path: &[],
+                value_at: &|_| None,
+                resolve: &resolve,
+                cells: &enumerate,
+            };
+            assert_eq!(
+                call_completions(&request)
+                    .iter()
+                    .map(|offer| offer.value.instantiate())
+                    .collect::<Vec<_>>(),
+                [cells[3], cells[1], cells[2], cells[0]].map(|cell| ::grap::call(cell.into(), [])),
+            );
+        }
+    }
 
     struct TestEnv {
         result: Value,
@@ -757,6 +862,7 @@ mod tests {
                 path: &[],
                 value_at: &|_| None,
                 resolve: &resolve,
+                cells: &Vec::new,
             };
             let before = reads.get();
             assert!(
@@ -890,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn parameter_offers_defer_name_lookup_to_the_picker() {
+    fn parameter_picker_does_not_lookup_names_beyond_visible_argument_labels() {
         struct CountingEnv(std::cell::Cell<usize>);
         impl Env for CountingEnv {
             fn apply_scoped(
@@ -922,7 +1028,7 @@ mod tests {
         )]);
         let env = CountingEnv(std::cell::Cell::new(0));
         assert!(call_display(&input(&env, &value)).is_some());
-        assert_eq!(env.0.get(), 0);
+        assert_eq!(env.0.get(), 1);
         assert!(
             call_display(&ProjectionInput {
                 default_projection: crate::display::partial(|_| None),
@@ -931,7 +1037,7 @@ mod tests {
             })
             .is_some()
         );
-        assert_eq!(env.0.get(), 0);
+        assert_eq!(env.0.get(), 2);
     }
 
     fn unshared(
@@ -1221,6 +1327,35 @@ mod tests {
             argument_order(&layout),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA,]
         );
+        let incomplete = ::grap::call(
+            FUNCTION_CELL.into(),
+            [
+                (SECOND_PARAMETER, Value::from(vec![2])),
+                (FIRST_EXTRA, Value::from(vec![4])),
+            ],
+        );
+        let initial = input(&env, &incomplete);
+        assert_eq!(
+            argument_order(&call_display(&initial).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
+        );
+        let editing = ProjectionInput {
+            pending: Some(Pending::Child(Step::Key(FIRST_PARAMETER))),
+            ..initial
+        };
+        assert_eq!(
+            argument_order(&call_display(&editing).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
+        );
+        let unknown = new_cell_id();
+        let editing = ProjectionInput {
+            pending: Some(Pending::Child(Step::Key(unknown))),
+            ..editing
+        };
+        assert_eq!(
+            argument_order(&call_display(&editing).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, unknown]
+        );
         let native = DefinitionEnv {
             native: true,
             ..env
@@ -1228,6 +1363,10 @@ mod tests {
         assert_eq!(
             argument_order(&call_display(&input(&native, &call)).unwrap()),
             [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
+        );
+        assert_eq!(
+            argument_order(&call_display(&input(&native, &incomplete)).unwrap()),
+            [SECOND_PARAMETER, FIRST_EXTRA]
         );
     }
 
@@ -1248,6 +1387,17 @@ mod tests {
         let layout = call_display(&input(&env(), &call)).unwrap();
 
         assert_eq!(argument_order(&layout), [FIRST_PARAMETER, SECOND_PARAMETER]);
+        let empty = ::grap::call(
+            ::grap::lambda(
+                [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_PARAMETER],
+                Value::record([]),
+            ),
+            [],
+        );
+        assert_eq!(
+            argument_order(&call_display(&input(&env(), &empty)).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER]
+        );
     }
 
     #[test]

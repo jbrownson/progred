@@ -34,7 +34,8 @@ its library identity, so references and name lookup need no metadata side channe
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
 receives the query, field/value kind, suggestion/Everything scope, source-qualified
-path, and read-only path and cell lookups. Library providers compose in library order;
+path, read-only path and cell lookups, and lazy enumeration of defined cells.
+Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
 provider decisions about that request. Documents
@@ -133,6 +134,14 @@ the universal picker. It inserts `{params: []}` and selects the missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
 
+The expression-use partial also handles missing values with a focused completion
+provider. It combines statically visible bindings and function calls with the
+loaded libraries' value constructors; general cell search remains behind `…`.
+Only explicit expression children use this provider, not quoted data, parameter
+declarations, or ordinary structural containers. Provider composition is lazy:
+the projection obtains the library provider from `Env`, but offers and scope are
+read only for the active picker.
+
 The shared `structure::list(Some(child_projection))` combinator explicitly
 applies a partial at each immediate element. Standard lists use the same
 renderer with `None`. Lambda parameters, match cases, let/where bindings, and
@@ -177,7 +186,10 @@ ordinary projection. Ordinary cells and quoted data are unchanged; named use
 sites remain shallow references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
-extra fields. This is a raw definition lookup, not evaluation of the callable.
+extra fields. Missing declared arguments appear as ordinary editable empty slots
+at their real field paths; they remain absent from the document until edited.
+An active missing argument stays in its declared position rather than gaining a
+second trailing row. This is a raw definition lookup, not evaluation of the callable.
 Numeric libraries decorate their math calls' function references with the same
 representation subscript used by literals. Both names come from definitions;
 the decorated label still selects the call's `function` field. A comparison's

@@ -171,6 +171,7 @@ fn query_content(
         path: &source_path,
         value_at: &value_at,
         resolve: &resolve,
+        cells: &|| cx.sources.cells().collect(),
     };
     let (entries, everything) =
         completion_entries_with(&cx.sources, cx.raw, &request, cx.completions, completions);

@@ -207,8 +207,9 @@ The projection rendering a pending value or label explicitly requests
 completion and may supply a lazy vocabulary. Only the active picker asks the
 provider for offers. Each request includes the query, field/value kind,
 suggestion/Everything scope, source-qualified path, and read-only path and cell
-lookups. Cell lookup exposes the selected definition's value, source, and whether
-it has a native implementation, without evaluating it.
+lookups, plus lazy enumeration of defined cells. Cell lookup exposes the selected
+definition's value, source, and whether it has a native implementation, without
+evaluating it.
 The path names a missing value or the record receiving a new label. A local
 projection provider takes precedence; otherwise library providers contribute
 in library order. `None` leaves the vocabulary unspecified, while `Some([])`
@@ -233,6 +234,33 @@ and `call_completion`'s initial pending parameter. It follows cell aliases, decl
 cycles and computed callables, and does not interpret native descriptions as lambdas.
 Filtering names and excluding existing record labels remain picker responsibilities.
 
+For nonempty value searches, Grap also offers calls to named stored lambdas,
+closures, and native functions discovered through those definitions. These are
+ordinary `call_completion` offers, distinguished by a `call` detail; choosing one
+inserts `{function: cell}` and opens its first declared argument when known.
+Call suggestions put document-defined functions before library functions, sorting
+each group alphabetically by display name, ignoring case. Typed-query matching
+still takes precedence; this order breaks equally ranked matches.
+The bare reference remains a separate choice. Discovery does not evaluate code
+or guess the result of computed callables. Function/FFI reference slots and label
+pickers do not receive these call offers.
+
+Grap expression slots supply a focused provider: statically visible lambda
+parameters, preceding `let`/`where` bindings and the current match case's pattern
+bindings, plus named function calls, library literal/constructor offers, text,
+lists, and records. This is an explicit local projection, including the items of
+`do`, not a global change to data completion. Existing domain-specific suggestions
+are tried first. Binding suggestions put the nearest enclosing lexical scope
+first, then outer scopes, sorting names alphabetically within each scope.
+Rebinding a cell gives it the nearer scope's rank; scrolling and layout have no
+effect on this order. Typed-query match quality still ranks ahead of proximity.
+The projection environment exposes
+the loaded library provider for composition; Grap reuses those offers rather than
+duplicating numeric conventions. Scope discovery reads source structure only;
+quoted template declarations do not introduce bindings into unquotes. Computed
+binding lists and runtime callable types are not inferred. `…` restores all cell
+references, including function values, named constants, and library vocabulary.
+
 Root templates and root field suggestions are ordinary library providers
 checking the path, not separate editor hooks. The name library offers the query
 as text at a name field, including an empty string and optional surrounding
@@ -255,8 +283,9 @@ vocabulary. The numeric libraries offer `f32`, `f64`, and `u64` interpretations
 when the query parses, showing the representation and the actual stored
 number. An empty or whitespace-only query offers zero in each available
 representation; it remains a suggestion until committed. Other invalid numeric
-queries offer no number. Universal offers use a general ordering: strong named
-cell and constructor matches, library-provided interpretations in library order,
+queries offer no number. Universal offers use a general ordering: exact nonempty
+display-name matches from library interpretations, strong named cell and constructor
+matches, remaining library-provided interpretations in library order,
 plain text (or a new label), then weak fuzzy and unnamed references. The editor
 does not distinguish particular numeric representations for ranking. With an
 empty query, the zero interpretations therefore follow named cells and

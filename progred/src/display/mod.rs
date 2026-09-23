@@ -196,6 +196,7 @@ pub struct CompletionRequest<'a> {
     pub path: &'a [Step],
     pub value_at: &'a dyn Fn(&[Step]) -> Option<&'a Value>,
     pub resolve: &'a dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+    pub cells: &'a dyn Fn() -> Vec<CellId>,
 }
 
 impl CompletionRequest<'_> {
@@ -290,6 +291,11 @@ impl<World: 'static, Hover: 'static> Layout<World, Hover> {
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
+    /// Loaded libraries' vocabulary, available for explicit provider composition.
+    fn completions(&self) -> Option<CompletionProvider> {
+        None
+    }
+
     /// Apply a callable to values without evaluating those arguments as expressions.
     fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> Value {
         self.apply_scoped(function, arguments, None).result
@@ -575,10 +581,10 @@ pub fn record<'a>(
 /// The record layout with explicit trailing fields, such as the one
 /// pending field currently being authored. They participate in both
 /// responsive forms but not in sorting the stored fields.
-pub fn record_with<'a>(
-    fields: impl IntoIterator<Item = (CellId, &'a Value)>,
+pub fn record_with<T>(
+    fields: impl IntoIterator<Item = (CellId, T)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
-    mut field: impl FnMut(CellId, &'a Value) -> RecordField<crate::Editor, crate::frame::Hovered>,
+    mut field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
     trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     let mut fields = fields.into_iter().collect::<Vec<_>>();

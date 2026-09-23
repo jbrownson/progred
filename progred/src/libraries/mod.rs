@@ -648,6 +648,7 @@ mod tests {
                     path: &[],
                     value_at: &|_| None,
                     resolve: &|_| None,
+                    cells: &Vec::new,
                 })
                 .unwrap()[0]
                     .display,

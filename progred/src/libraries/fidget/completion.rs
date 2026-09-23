@@ -284,6 +284,7 @@ mod tests {
             scope: CompletionScope::Suggested,
             value_at: &lookup,
             resolve: &|_| None,
+            cells: &Vec::new,
         };
         for shape in [SPHERE, CIRCLE] {
             assert!(
