@@ -254,19 +254,7 @@ pub fn shortcut(
     event: &KeyboardEvent,
     command: puri::keyboard::CommandModifier,
 ) -> Option<Command> {
-    let modifiers = &event.modifiers;
-    if !event.state.is_down() || !command.pressed(modifiers) || modifiers.alt() {
-        return None;
-    }
-    match &event.key {
-        Key::Character(key) => commands(&definition()).find(|command| {
-            command::spec(*command).shortcut.is_some_and(|shortcut| {
-                shortcut.shift == modifiers.shift()
-                    && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
-            })
-        }),
-        _ => None,
-    }
+    command::shortcut(event, command, commands(&definition()))
 }
 
 mod view {
@@ -298,6 +286,7 @@ mod view {
 
     pub struct View<P> {
         pub bar: Measured<P>,
+        pub keyboard: puri::handler::Handler<Editor, placed::DispatchContext<Editor>>,
         pub heading_width: f64,
         pub popup: Option<(f64, Measured<P>)>,
     }
@@ -644,8 +633,19 @@ mod view {
                 );
             },
         );
+        let scale = description.scale;
+        let keyboard = puri::handler::Handler::from_function(
+            move |editor: &mut Editor, event, input: &mut placed::DispatchContext<Editor>| {
+                let handled = match &event {
+                    Event::Key(key) => editor.menu_key(key, input.geometry(scale)),
+                    _ => false,
+                };
+                EventOutcome::from_handled(event, handled)
+            },
+        );
         View {
             bar,
+            keyboard,
             heading_width,
             popup: popup.map(|popup| (popup_x, popup)),
         }

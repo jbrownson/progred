@@ -1716,14 +1716,10 @@ impl Editor {
     ) -> bool {
         let availability = self.menu_availability();
         if let Some(command) = menu::shortcut(event, self.command_modifier)
-            .filter(|command| self.drawn_menu || matches!(command, Command::Doc(_)))
             .filter(|command| availability.enabled(*command))
         {
             self.choose_menu(command, geometry);
             return true;
-        }
-        if !self.drawn_menu {
-            return false;
         }
         match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
             menu::Navigation::Activate(command) => {

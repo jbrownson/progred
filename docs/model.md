@@ -435,6 +435,12 @@ scene`; its drawing units and editable tree parameters are not rescaled.
 
 ## History, gestures, and persistence
 
+The drawn menu contributes its keyboard handler along with its bar and popups.
+Frame composition places that handler ahead of content handlers; omitting the
+menu also omits its shortcuts and keyboard navigation. Undo/redo have a separate
+editing handler, so embedded tutorials retain history without inheriting Raw,
+example switching, or pane commands. Native menus keep their own command routing.
+
 Examples and replace-in-place New Document are development/demo conveniences,
 not the intended production File menu. Cmd+N (Ctrl+N on non-Mac hosts) and the
 example shortcuts replace the current document after confirming any unsaved

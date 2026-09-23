@@ -199,7 +199,9 @@ browser binary still contains the full editor's code.
 
 `document` resolves relative to the editor URL. A failed fetch or parse displays
 an error, not an empty substitute. `menu=hidden` removes the menu and its layout
-space, plus application shortcuts; it does not restrict what data can be edited.
+space together with its command shortcuts (including Raw mode and examples).
+Editing, navigation, and undo/redo remain independently available; this does not
+restrict what data can be edited.
 `wheel=auto` captures scrollable editor regions and otherwise leaves input to
 the browser. `wheel=page` always leaves it to the browser; omission or `wheel=editor` keeps
 editor scrolling/zooming. This is independent of menu visibility and embedding.

@@ -223,11 +223,19 @@ fn prepare_frame(
         .computations
         .pointer_pressed
         .set(pointer.pressed);
-    compute_hover(
-        project_frame(&description, resources),
-        &description,
-        pointer,
-    )
+    let (layout, keyboard) = project_frame(&description, resources);
+    let mut frame = compute_hover(layout, &description, pointer);
+    // Structural paste precedes a pending's text query, while menu handling
+    // still takes precedence over all document editing when installed.
+    frame.dispatch.handler.on(|editor, event, _| {
+        let handled = match &event {
+            Event::Key(key) => editor.pending_paste_key(key),
+            _ => false,
+        };
+        puri::handler::EventOutcome::from_handled(event, handled)
+    });
+    frame.dispatch.handler = frame.dispatch.handler.over(keyboard);
+    frame
 }
 
 fn compute_hover(
@@ -742,7 +750,10 @@ fn project_workspace(
 fn project_frame(
     description: &FrameDescription<'_>,
     resources: FrameResources<'_>,
-) -> measured::Measured<HoverPass<Editor>> {
+) -> (
+    measured::Measured<HoverPass<Editor>>,
+    Handler<Editor, placed::DispatchContext<Editor>>,
+) {
     let FrameDescription {
         palette,
         command_modifier,
@@ -789,9 +800,15 @@ fn project_frame(
             },
         )
     });
-    let (menu_bar, menu_popup, menu_heading_width) = match application_menu {
-        Some(menu) => (Some(menu.bar), menu.popup, menu.heading_width),
-        None => (None, None, 0.0),
+    let history = crate::command::history_handler(scale);
+    let (menu_bar, menu_popup, menu_heading_width, keyboard) = match application_menu {
+        Some(menu) => (
+            Some(menu.bar),
+            menu.popup,
+            menu.heading_width,
+            history.over(menu.keyboard),
+        ),
+        None => (None, None, 0.0, history),
     };
     let content_viewport = content_viewport(drawn_menu, viewport, scale);
     let sources = sources::Sources {
@@ -865,7 +882,7 @@ fn project_frame(
             ))
         });
     }
-    stage
+    (stage, keyboard)
 }
 
 #[cfg(test)]
@@ -1470,7 +1487,7 @@ mod frame_tests {
     }
 
     #[test]
-    fn hidden_application_menu_keeps_document_shortcuts_without_opening_menus() {
+    fn omitted_menu_keeps_history_but_not_menu_commands() {
         use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
         let doc = crate::gid_text::parse(include_str!("../../website/public/lessons/values.gid"))
             .unwrap()
@@ -1491,27 +1508,68 @@ mod frame_tests {
             state: KeyState::Down,
             ..Default::default()
         };
-        let dispatch = &runner.frame.dispatch;
-        assert!(runner.editor.menu_key(
+        assert!(runner.keyboard_event(
             &input(Key::Character("z".into()), Modifiers::CONTROL),
-            dispatch.geometry(1.0)
+            1.0,
+            viewport
         ));
         assert_eq!(runner.editor.model.doc.root, doc.root);
         for event in [
             input(Key::Character("n".into()), Modifiers::CONTROL),
+            input(Key::Character("r".into()), Modifiers::CONTROL),
+            input(Key::Character("d".into()), Modifiers::CONTROL),
+            input(Key::Character("p".into()), Modifiers::CONTROL),
             input(Key::Character("1".into()), Modifiers::CONTROL),
             input(Key::Named(NamedKey::F10), Modifiers::empty()),
         ] {
-            assert!(!runner.editor.menu_key(&event, dispatch.geometry(1.0)));
+            assert!(!runner.keyboard_event(&event, 1.0, viewport));
         }
-        assert!(runner.editor.menu_key(
+        assert!(runner.keyboard_event(
             &input(
                 Key::Character("z".into()),
                 Modifiers::CONTROL | Modifiers::SHIFT
             ),
-            dispatch.geometry(1.0)
+            1.0,
+            viewport
         ));
         assert_eq!(runner.editor.model.doc.root, Some(gid::Value::list([])));
+    }
+
+    #[test]
+    fn raw_shortcut_is_contributed_only_by_the_menu() {
+        use puri::keyboard::CommandModifier;
+        use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
+        for (modifier, modifiers) in [
+            (CommandModifier::Meta, Modifiers::META),
+            (CommandModifier::Control, Modifiers::CONTROL),
+        ] {
+            for menu in [false, true] {
+                let mut editor = crate::test_editor(Document {
+                    root: Some(Value::list([])),
+                    cells: Cells::new(),
+                });
+                editor.drawn_menu = menu;
+                editor.command_modifier = modifier;
+                let mut runner = crate::EditorRunner::new(editor);
+                let viewport = Size::new(620.0, 304.0);
+                runner.refresh_frame(1.0, viewport);
+                assert!(!runner.editor.menu_toggles().raw);
+                assert_eq!(
+                    runner.keyboard_event(
+                        &KeyboardEvent {
+                            key: Key::Character("r".into()),
+                            modifiers,
+                            state: KeyState::Down,
+                            ..Default::default()
+                        },
+                        1.0,
+                        viewport
+                    ),
+                    menu
+                );
+                assert_eq!(runner.editor.menu_toggles().raw, menu);
+            }
+        }
     }
 
     #[test]

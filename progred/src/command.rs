@@ -2,6 +2,56 @@
 //! shortcuts — asks the app to do. Application commands are meaningful
 //! with no window at all; document commands act on one editor.
 
+/// Match only the commands contributed by this component.
+pub fn shortcut(
+    event: &ui_events::keyboard::KeyboardEvent,
+    modifier: puri::keyboard::CommandModifier,
+    commands: impl IntoIterator<Item = Command>,
+) -> Option<Command> {
+    let modifiers = &event.modifiers;
+    if !event.state.is_down() || !modifier.pressed(modifiers) || modifiers.alt() {
+        return None;
+    }
+    let ui_events::keyboard::Key::Character(key) = &event.key else {
+        return None;
+    };
+    commands.into_iter().find(|command| {
+        spec(*command).shortcut.is_some_and(|shortcut| {
+            shortcut.shift == modifiers.shift()
+                && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
+        })
+    })
+}
+
+/// History belongs to editing, independently of whether a menu is installed.
+pub(crate) fn history_handler(
+    scale: f64,
+) -> puri::handler::Handler<crate::Editor, crate::placed::DispatchContext<crate::Editor>> {
+    use puri::handler::{Event, EventOutcome, Handler};
+    Handler::from_function(
+        move |editor: &mut crate::Editor,
+              event,
+              input: &mut crate::placed::DispatchContext<crate::Editor>| {
+            let Event::Key(key) = &event else {
+                return EventOutcome::decline(event);
+            };
+            let Some(Command::Doc(command)) = shortcut(
+                key,
+                editor.command_modifier,
+                [
+                    Command::Doc(DocCommand::Undo),
+                    Command::Doc(DocCommand::Redo),
+                ],
+            )
+            .filter(|command| editor.menu_availability().enabled(*command)) else {
+                return EventOutcome::decline(event);
+            };
+            editor.run_doc_command(command, input.geometry(scale));
+            EventOutcome::accept()
+        },
+    )
+}
+
 /// Meaningful without any window. New and examples replace the current
 /// document; desktop Open and NewWindow create windows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

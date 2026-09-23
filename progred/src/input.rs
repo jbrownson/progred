@@ -37,14 +37,10 @@ fn keyboard(
 ) -> bool {
     let mut input = dispatch.context(hover.cloned());
     let geometry = dispatch.geometry(scale);
-    // Structure pasted into a pending must bypass its text query. Other keys
-    // reach text editing before falling through to structural operations.
-    // Native menus own shortcuts; other hosts route them here even without a bar.
-    ((editor.drawn_menu || crate::platform::DRAWN_MENU) && editor.menu_key(event, geometry))
-        || editor.pending_paste_key(event)
-        || dispatch
-            .handler
-            .dispatch_key_with(editor, event, &mut input)
+    // Frame handlers precede the editor's structural fallbacks.
+    dispatch
+        .handler
+        .dispatch_key_with(editor, event, &mut input)
         || editor.paste_key(event)
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
