@@ -40,6 +40,7 @@ pub(crate) struct Dispatch {
 /// A completed frame. Installing it retains hover and dispatch together;
 /// its paint continuations can be run separately or discarded.
 pub(crate) struct Frame {
+    pub(crate) scroll_probes: Vec<crate::display::widget::scroll::Probe>,
     pub(crate) hover: Option<Hovered>,
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render>,
@@ -273,6 +274,7 @@ fn compute_hover(
         "selection handler escaped its landmark"
     );
     let crate::display::widget::frame::FrameOutput {
+        scroll_probes,
         renders,
         handler,
         descends,
@@ -280,6 +282,7 @@ fn compute_hover(
         hover_geometry,
     } = output.bind(resolved);
     Frame {
+        scroll_probes,
         hover,
         dispatch: Dispatch {
             handler: handler.unwrap_or_else(Handler::new),
@@ -460,10 +463,15 @@ impl EditorRunner {
 
     fn install_frame(&mut self, frame: Frame, scale: f64, viewport: Size) -> PendingPaint {
         let Frame {
+            scroll_probes,
             hover,
             dispatch,
             renders,
         } = frame;
+        #[cfg(target_arch = "wasm32")]
+        crate::web_scroll::install(scroll_probes, scale);
+        #[cfg(not(target_arch = "wasm32"))]
+        drop(scroll_probes);
         self.frame.hover = hover;
         self.frame.dispatch = dispatch;
         PendingPaint {

@@ -196,6 +196,17 @@ Native pointer gestures use the same ordered-batch contract through
 `Event::Gesture`, `on_gesture_batch`, and the sample-wise `on_gesture` adapter.
 `interact::on_pinch` adds placement/clipping checks; widgets own the zoom policy.
 Pinch deltas are fractional scale changes, not pixels or scroll distances.
+
+Scroll containers also emit read-only capture probes with their settled placement,
+scale, offset, and limits. The web embed's `wheel=auto` listener consults these
+before allowing winit to receive the event: any consumable scroll captures the
+whole event, otherwise the browser keeps it. Probes reuse the offset/clamping
+calculation and ancestor clips; normal handlers still choose the frontmost
+consumer and propagate internal remainders. Probes are snapshots of the installed
+frame, so a batch can briefly continue capturing after reaching an edge, until
+its successor is installed. They do not dispatch handlers, mutate state, or force
+a build. Native dispatch ignores this output. Custom wheel actions such as camera
+zoom remain available in the full editor's unconditional `wheel=editor` mode.
 The typed helpers are ordinary combinators over this interface.
 Widgets test their own geometry; Puri does not infer acceptance from state changes.
 

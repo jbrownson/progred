@@ -71,7 +71,8 @@ text/number record, creating values from empty slots, inserting into a list,
 creating and sharing cells, live Grap calculations, editing a function and its
 calls, then drawing with a shared function.
 All use the real editor without its application menu, and explicitly select
-`wheel=page` so scrolling over an exercise scrolls the website. The full-page
+`wheel=auto` so scrolling over an exercise scrolls its overflowing document or
+completion popup when possible, and otherwise scrolls the website. The full-page
 editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
 for the values, creation, and cells exercises, and just name/text/blob for the list exercise.
@@ -184,7 +185,7 @@ back to their shared source. The drawing slot appears above the two source slots
 An embed is an ordinary editor URL:
 
 ```html
-<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&wheel=page&threads=1&observe=values-0"
+<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&wheel=auto&threads=1&observe=values-0"
         title="Editable greeting and count" loading="lazy"></iframe>
 ```
 
@@ -197,7 +198,8 @@ browser binary still contains the full editor's code.
 `document` resolves relative to the editor URL. A failed fetch or parse displays
 an error, not an empty substitute. `menu=hidden` removes the menu and its layout
 space, plus application shortcuts; it does not restrict what data can be edited.
-`wheel=page` leaves wheel input to the browser; omission or `wheel=editor` keeps
+`wheel=auto` captures scrollable editor regions and otherwise leaves input to
+the browser. `wheel=page` always leaves it to the browser; omission or `wheel=editor` keeps
 editor scrolling/zooming. This is independent of menu visibility and embedding.
 `threads=1` gives each small exercise one rendering worker rather than a full
 CAM pool. The independent iframe isolates its WASM instance, event loop, focus,

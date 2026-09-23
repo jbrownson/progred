@@ -489,8 +489,23 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         state: pointer_state,
         delta: ScrollDelta::LineDelta(0.0, -5.0),
     };
+    let initial = frame(state, None);
     assert!(
-        frame(state, None)
+        initial
+            .scroll_probes
+            .iter()
+            .any(|probe| probe.captures(&scroll))
+    );
+    let mut upward = scroll.clone();
+    upward.delta = ScrollDelta::LineDelta(0.0, 5.0);
+    assert!(
+        !initial
+            .scroll_probes
+            .iter()
+            .any(|probe| probe.captures(&upward))
+    );
+    assert!(
+        initial
             .resolve_for_dispatch()
             .dispatch_scroll(&mut state, &scroll)
             .handled()

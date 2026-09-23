@@ -2,6 +2,33 @@ use super::HoverCallback;
 use puri::handler::{HasHandler, ScrollOutcome};
 use puri::{Point, Size, Vec2};
 
+// Shared frame output; only the browser needs synchronous wheel admission.
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+#[derive(Clone, Copy)]
+pub struct Probe {
+    pub placement: puri::Placement,
+    pub offset: Vec2,
+    pub maximum: Vec2,
+    pub scale: f64,
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+impl Probe {
+    pub fn captures(&self, event: &puri::handler::PointerScrollEvent) -> bool {
+        self.placement
+            .contains(Point::new(event.state.position.x, event.state.position.y))
+            && offset(
+                self.offset,
+                event,
+                self.scale,
+                self.placement.rect.size(),
+                self.maximum,
+            )
+            .1
+            .handled()
+    }
+}
+
 pub fn offset(
     stored: Vec2,
     update: &puri::handler::PointerScrollEvent,

@@ -111,6 +111,10 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
     pub fn view_region(&mut self, region: ViewRegion) {
         self.output.view_regions.push(region);
     }
+
+    pub fn scroll_probe(&mut self, probe: super::scroll::Probe) {
+        self.output.scroll_probes.push(probe);
+    }
 }
 impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
     pub fn claim(&mut self, probe: Probe<H>) {
@@ -362,6 +366,7 @@ pub struct Effects<C, H> {
 
 /// Completed widget output: no hover work remains, and painting is optional.
 pub struct FrameOutput<C, H> {
+    pub scroll_probes: Vec<super::scroll::Probe>,
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
     pub descends: Vec<Landmark<C>>,
@@ -386,6 +391,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
 }
 
 pub struct HoverOutput<C, Hover> {
+    pub scroll_probes: Vec<super::scroll::Probe>,
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
     pub debug_regions: Vec<(Hover, Rect)>,
@@ -419,6 +425,7 @@ fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
 impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     fn empty() -> Self {
         Self {
+            scroll_probes: Vec::new(),
             claim: None,
             hover_geometry: HoverGeometry::default(),
             debug_regions: Vec::new(),
@@ -432,6 +439,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     }
 
     fn over(mut self, above: Self) -> Self {
+        append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
         append(&mut self.debug_regions, above.debug_regions);
@@ -490,6 +498,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         };
         self.after_hover.bind(Rc::new(hover), &mut effects);
         FrameOutput {
+            scroll_probes: self.scroll_probes,
             renders: effects.renders,
             handler: effects.handler,
             descends: self.descends,
@@ -534,6 +543,13 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
 }
 impl<C: 'static, H: 'static> HoverOutput<C, H> {
     fn clipped(mut self, placement: Placement) -> Self {
+        for probe in &mut self.scroll_probes {
+            probe.placement.clip_rect = probe
+                .placement
+                .clip_rect
+                .intersect(placement.rect)
+                .intersect(placement.clip_rect);
+        }
         let after = std::mem::take(&mut self.after_hover);
         self.after_hover.push(move |hover, output| {
             let mut child = Effects::default();

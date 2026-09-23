@@ -264,7 +264,8 @@ pub fn scrolled_at<C: 'static>(
     on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<HoverPass<C>> {
     let extent = child.extent;
-    let scrolled = container::scrolled(child, offset, on_scroll);
+    let scale = owner.as_ref().map(|(_, scale)| *scale).unwrap_or(1.0);
+    let scrolled = container::scrolled(child, offset, scale, on_scroll);
     before(scrolled, move |output, placement| {
         if let Some((root, scale)) = owner {
             output.placed.view_region(ViewRegion {

@@ -9,10 +9,11 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
   .match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;$/gm, "");
 
-async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit } = {}) {
+async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit, capturesScroll = () => false } = {}) {
   const { commandIsMeta } = await import("../web/platform.mjs");
   const { isTheme, savedTheme } = await import("../web/theme.mjs");
   const { forwardModifiers } = await import("../web/modifiers.mjs");
+  const { routeWheel } = await import("../web/scroll.mjs");
   const calls = [];
   const messages = [];
   const focusEvents = [];
@@ -31,6 +32,9 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   let onChange;
   const loading = { style: {} };
   const canvas = new EventTarget();
+  canvas.width = 400;
+  canvas.height = 200;
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 });
   const canvasListeners = [];
   const addCanvasListener = canvas.addEventListener.bind(canvas);
   canvas.addEventListener = (type, listener, options) => {
@@ -41,7 +45,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   const body = { style: {} };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
     URL, URLSearchParams, Error, crossOriginIsolated: true,
-    JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, navigator: { platform },
+    JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, routeWheel, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
     window: host,
     document: {
@@ -58,6 +62,7 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
     wasm: {
       browser_focus_changed: () => focusEvents.push("changed"),
       browser_modifiers_changed: (...state) => modifierChanges.push(state),
+      browser_captures_scroll: capturesScroll,
       set_theme: (theme) => themeChanges.push(theme),
       computation_finished() {},
       worker_threads: () => 1,
@@ -147,8 +152,29 @@ test("invalid wheel configuration fails before starting workers or the editor", 
     const { calls, loading } = await start(search);
     assert.deepEqual(calls, []);
     assert.equal(loading.style.display, "grid");
-    assert.match(loading.textContent, /wheel must be 'editor' or 'page'/);
+    assert.match(loading.textContent, /wheel must be 'editor', 'auto', or 'page'/);
   }
+});
+
+test("auto wheel mode consults the installed WASM probe before allowing editor dispatch", async () => {
+  let accepts = false;
+  const probes = [];
+  const { canvas, documentElement, body } = await start("?wheel=auto", {
+    capturesScroll: (...args) => { probes.push(args); return accepts; },
+  });
+  assert.equal(documentElement.style.overscrollBehavior, "auto");
+  assert.equal(body.style.overscrollBehavior, "auto");
+  let received = 0;
+  canvas.addEventListener("wheel", (event) => { received++; event.preventDefault(); });
+  for (const take of [false, true, false]) {
+    accepts = take;
+    const event = new Event("wheel", { cancelable: true });
+    Object.assign(event, { clientX: 20, clientY: 30, deltaX: 0, deltaY: 10, deltaMode: 0 });
+    canvas.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, take);
+  }
+  assert.equal(received, 1);
+  assert.deepEqual(probes, Array.from({ length: 3 }, () => [40, 60, 0, 10, 0]));
 });
 
 test("embed fetches its document and supplies ordinary startup options", async () => {
@@ -260,7 +286,7 @@ async function lessonPage(platform = "Linux x86_64") {
       };
     });
     const frame = {
-      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=page&threads=1${name === "growing-forest" ? "" : `&observe=${name}-0`}`,
+      src: `./editor/?document=../lessons/${name}.gid&menu=hidden&wheel=auto&threads=1${name === "growing-forest" ? "" : `&observe=${name}-0`}`,
       contentWindow: {},
       getAttribute() { return this.src; },
       addEventListener: (event, callback) => { listeners[event] = callback; },
@@ -304,7 +330,7 @@ test("reset reloads only its own iframe", async () => {
         const url = new URL(value);
         assert.equal(url.searchParams.get("document"), `../lessons/${exercise.id}.gid`);
         assert.equal(url.searchParams.get("observe"), exercise.id === "growing-forest" ? null : `${exercise.id}-1`);
-        assert.equal(url.searchParams.get("wheel"), "page");
+        assert.equal(url.searchParams.get("wheel"), "auto");
         resetCounts[index]++;
       },
     });

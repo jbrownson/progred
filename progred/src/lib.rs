@@ -53,6 +53,8 @@ mod timers;
 mod web_embed;
 #[cfg(target_arch = "wasm32")]
 pub mod web_render;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod web_scroll;
 #[cfg(target_arch = "wasm32")]
 pub mod web_worker;
 mod workspace;

@@ -41,7 +41,7 @@ class PackageTests(unittest.TestCase):
         for src in frames:
             url = urljoin("https://prog.red/", src.replace("&amp;", "&"))
             params = parse_qs(urlsplit(url).query)
-            self.assertEqual(params["wheel"], ["page"])
+            self.assertEqual(params["wheel"], ["auto"])
             document = params["document"][0]
             path = urlsplit(urljoin(url, document)).path
             self.assertTrue((self.destination / path.lstrip("/")).is_file())

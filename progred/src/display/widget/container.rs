@@ -30,11 +30,22 @@ pub fn floating<O: Layers + 'static>(
 pub fn scrolled<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     offset: Vec2,
+    scale: f64,
     on_scroll: impl Fn(&mut World, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<HoverPass<World, H>> {
+    let extent = child.extent;
     measured::around_into(child, move |placement, inner, output| {
         output.visit(move |base| {
             if !placement.clipped_out() {
+                base.scroll_probe(super::scroll::Probe {
+                    placement,
+                    offset: offset / scale,
+                    maximum: Vec2::new(
+                        ((extent.width - placement.rect.width()) / scale).max(0.0),
+                        ((extent.height() - placement.rect.height()) / scale).max(0.0),
+                    ),
+                    scale,
+                });
                 base.handler().on_scroll(move |state, event| {
                     if placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
@@ -153,7 +164,7 @@ mod tests {
             Rect::new(0.0, 0.0, 30.0, 100.0),
         );
         let frame = crate::display::widget::frame::place(
-            scrolled(child, Vec2::new(5.0, 15.0), |log, event| {
+            scrolled(child, Vec2::new(5.0, 15.0), 1.0, |log, event| {
                 log.push("scroll");
                 ScrollOutcome::consume(event)
             }),
@@ -198,6 +209,69 @@ mod tests {
             matches!(&drawing.0[..], [DrawCmd::Clip { shape: Shape::Rect(rect), children, .. }]
             if *rect == viewport.rect && matches!(&children[..], [DrawCmd::Fill { .. }]))
         );
+    }
+
+    #[test]
+    fn scroll_capture_matches_offset_handling_and_parent_clipping() {
+        for scale in [1.0, 2.0] {
+            for stored in [0.0, 50.0, 100.0] {
+                let child = leaf(
+                    Extent {
+                        width: 100.0 * scale,
+                        ascent: 0.0,
+                        descent: 200.0 * scale,
+                    },
+                    |_: &mut HoverContext<'_, Vec2, ()>, _| {},
+                );
+                let viewport = Placement::new(
+                    Rect::new(0.0, 0.0, 100.0 * scale, 100.0 * scale),
+                    Rect::new(0.0, 0.0, 80.0 * scale, 100.0 * scale),
+                );
+                let frame = super::super::frame::place(
+                    scrolled(
+                        child,
+                        Vec2::new(0.0, stored * scale),
+                        scale,
+                        move |state, event| {
+                            let (next, outcome) = super::super::scroll::offset(
+                                *state,
+                                event,
+                                scale,
+                                viewport.rect.size(),
+                                Vec2::new(0.0, 100.0),
+                            );
+                            *state = next;
+                            outcome
+                        },
+                    ),
+                    viewport,
+                    &Default::default(),
+                )
+                .bind(Default::default());
+                for x in [50.0, 90.0] {
+                    for delta in [-500.0, -1.0, 0.0, 1.0, 500.0] {
+                        let pointer = pointer_at(x * scale, 50.0 * scale);
+                        let event = PointerScrollEvent {
+                            pointer: pointer.pointer,
+                            state: pointer.state,
+                            delta: ScrollDelta::PixelDelta((0.0, delta * scale).into()),
+                        };
+                        let capture = frame
+                            .scroll_probes
+                            .iter()
+                            .any(|probe| probe.captures(&event));
+                        let mut offset = Vec2::new(0.0, stored);
+                        let handled = frame
+                            .handler
+                            .as_ref()
+                            .unwrap()
+                            .dispatch_scroll(&mut offset, &event)
+                            .handled();
+                        assert_eq!(capture, handled);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

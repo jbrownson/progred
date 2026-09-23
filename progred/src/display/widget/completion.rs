@@ -122,6 +122,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     let scrolled = container::scrolled(
         content,
         Vec2::new(0.0, scroll * scale),
+        scale,
         move |world, event| {
             if let Some(scroll) = current_scroll(world) {
                 let (next, outcome) = scroll::offset(

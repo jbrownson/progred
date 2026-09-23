@@ -13,14 +13,23 @@ For a small embedded editor, supply a text-bridge document URL and optionally
 hide the menu: `/editor/?document=../lessons/values.gid&menu=hidden&threads=1`.
 The document URL is relative to the editor page. Without those parameters the
 editor still starts blank with its full menu and the default worker pool.
-`wheel=page` leaves wheel input to browser scrolling rather than editor scrolling
+`wheel=auto` captures a wheel event only when a placed editor scroll container
+can move in its direction; otherwise the browser scrolls the page. The same
+policy covers document panes and completion lists. Admission is read-only and
+uses the latest installed frame, before the normal batched editor handling.
+An event is never split between editor and browser; excess at a boundary is
+not replayed as browser scrolling. Events before the next frame may still use
+the prior limits. Non-cancelable events stay entirely with the browser.
+`wheel=page` leaves all wheel input to browser scrolling rather than editor scrolling
 or zooming. A passive capture listener keeps those events out of the editor,
 without cancelling their browser default; the embed permits scroll chaining on
 both its document root and body. Clicks, dragging, and keyboard input are unchanged.
 Omitting the option (or `wheel=editor`) keeps normal editor wheel handling,
 even when embedded or using a hidden menu. Unknown wheel modes fail explicitly.
-The tutorial embeds select `wheel=page`; the full editor does not. This option
-belongs entirely to the JS host, not the WASM entry point or native editor.
+The tutorial embeds select `wheel=auto`; the full editor does not. The web host
+consults scroll-container probes emitted by the shared frame; native dispatch
+does not consult them. `auto` covers scrolling containers, not arbitrary custom
+wheel actions such as viewport zoom; the full editor retains those normally.
 Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
 application shortcuts or F10 menu navigation. The website owns the exercise
 documents and reset buttons. An optional `tutorial-slots` parameter lists distinct
