@@ -777,6 +777,14 @@ contract: Grap parameters bind supplied data, while native functions receive
 argument syntax to interpret. This is distinct from `apply`, whose callable and
 arguments are already evaluated.
 
+Toolpath execution retains runtime programs through nested `sequence paths`,
+point/axis mapper scopes, and tool-scope results. Mapper inputs and point results
+use runtime numeric fields; absent details retain runtime children too. The 2D
+preview constructor and projection pass the program through without materializing
+it. Tool-profile parsing remains an explicit GID boundary. The tree collector and
+3D preview/recording adapters still use GID program data; those are separate
+remaining migrations, not a requirement of the toolpath output scope.
+
 Inline code retained by the editor is anchored to its original document
 occurrence before evaluation; cell code retains its definition source and path.
 Later invocation does not rebase those locations onto the drawing program.

@@ -144,6 +144,11 @@ materializes only on activation. Border-projection composition and declaration
 application now retain runtime callables and results too. Narrow path, paint,
 and drawing-command parsers remain GID-oriented, as does the viewport preparation
 memo's input (currently read directly from the stored declaration).
+Toolpath sequence/mapping execution and the 2D path preview now retain runtime
+callbacks and results. The tree collector, its memo/control handoff, and the 3D
+preview/recording adapters still materialize program data. Migrating the tree
+memo must compare runtime inputs/results with source-aware equality, not just
+their serialized GID forms.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.

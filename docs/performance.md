@@ -263,6 +263,32 @@ fixture measured 68.50/70.88 µs for stored descriptions and 104.54/106.04 µs f
 scoped calls. These checks show no clear overall change; they do not isolate
 border conversion cost or demonstrate recovery of the ownership overhead.
 
+### Runtime toolpath execution — 2026-09-23
+
+Nested path programs, point/axis mappers, scope results, and the 2D preview now
+retain runtime values. The tree collector and 3D preview/recording adapters
+remain GID boundaries. The full editor suite passed 888 tests (51 ignored),
+including retained-callable/capture/origin and absence-detail regressions; the
+threaded web build passed.
+
+The new `runtime_mapping_profile` release fixture records 256 segments through
+two nested captured point mappers. It compares a retained native mapper with
+its materialized GID equivalent in the same implementation, alternating order
+each iteration with five warm-ups and 30 measured samples. The two recordings
+must match. One-time materialization is outside timing; repeated execution and
+recording disposal are inside it.
+
+Three serial runs measured native-mapper medians of 694.21, 680.63, and 698.13 µs
+versus GID-mapper medians of 2.318, 2.288, and 2.429 ms: roughly 3.4× faster for
+this fixture. This isolates representation cost, not a before/after full-app
+comparison or Fidget-rendering speedup. The third run had noisy tails (1.99 ms
+native and 5.94 ms GID p95).
+
+Controls-only frame medians were 337.21, 332.58, and 336.38 µs versus the preceding
+checkpoint's 318.42, 343.42, and 329.58 µs: no clear overall improvement. Builds
+and correctness tests had finished before timing; the preview-stub caveat above
+still applies. This does not establish recovery of the earlier ownership cost.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

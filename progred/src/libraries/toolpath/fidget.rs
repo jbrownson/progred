@@ -230,7 +230,7 @@ pub(super) fn preview_with(
         let color = argument(context, call, fidget::vocabulary::COLOR)?;
         let color = context.eval_to_value(color, environment)?;
         read_color(&color).ok_or_else(|| {
-            Error::Invalid(absent::with_reason(fidget::vocabulary::INVALID_COLOR))
+            Error::Invalid(absent::with_reason(fidget::vocabulary::INVALID_COLOR).into())
         })?;
         let fuel = super::fuel(context, call, environment)?;
         let model = model(context, call, environment)?;

@@ -5,6 +5,7 @@ mod chamfers;
 mod geometry;
 mod orientation;
 mod render_profile;
+mod runtime;
 mod scopes;
 
 impl Recording {

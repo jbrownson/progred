@@ -2,9 +2,11 @@
 //! through a sink; recording is one consumer, not the program representation.
 
 use crate::libraries::{Definitions, Library, absent, f64, layout, name, presentation};
+#[cfg(test)]
+use ::grap::Evaluation;
 use ::grap::{
-    Context, Environment, Evaluation, Expression, ForeignFunction, ForeignFunctions,
-    ForeignOverlay, Halt,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
+    RuntimeValue,
 };
 use gid::{CellId, Cells, Value};
 use std::{cell::RefCell, rc::Rc};
@@ -64,22 +66,30 @@ use vocabulary::*;
 
 const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL, SEQUENCE];
 
+#[cfg(any(test, feature = "cam-profile"))]
 fn point_value(point: Point3) -> Value {
     Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
 }
 
+fn runtime_point_value(point: Point3) -> RuntimeValue {
+    RuntimeValue::record([X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)))
+}
+
 fn read_point(value: &Value) -> Option<Point3> {
-    let fields = value.as_record()?;
+    read_runtime_point(&value.into())
+}
+
+fn read_runtime_point(value: &RuntimeValue) -> Option<Point3> {
     let point = [
-        f64::read(fields.get(&X)?)?,
-        f64::read(fields.get(&Y)?)?,
-        f64::read(fields.get(&Z)?)?,
+        value.field(X)?.as_f64()?,
+        value.field(Y)?.as_f64()?,
+        value.field(Z)?.as_f64()?,
     ];
     point.into_iter().all(f64::is_finite).then_some(point)
 }
 
 enum Error {
-    Invalid(Value),
+    Invalid(RuntimeValue),
     Halt(Halt),
 }
 
@@ -90,13 +100,13 @@ impl From<Halt> for Error {
 }
 
 fn invalid() -> Error {
-    Error::Invalid(absent::with_reason(INVALID_INPUT))
+    Error::Invalid(absent::with_reason(INVALID_INPUT).into())
 }
 
 fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
     context
         .field(&call, field)
-        .ok_or_else(|| Error::Invalid(context.missing_argument(field)))
+        .ok_or_else(|| Error::Invalid(context.missing_runtime_argument(field)))
 }
 
 fn number(
@@ -125,6 +135,10 @@ fn point(
 }
 
 fn result(value: Result<Value, Error>) -> Result<Value, Halt> {
+    runtime_result(value.map(Into::into)).map(RuntimeValue::into_value)
+}
+
+fn runtime_result(value: Result<RuntimeValue, Error>) -> Result<RuntimeValue, Halt> {
     match value {
         Ok(value) => Ok(value),
         Err(Error::Invalid(value)) => Ok(value),
@@ -157,21 +171,23 @@ fn fuel(
 
 struct Output<'a> {
     sink: RefCell<&'a mut dyn Sink<Error = InvalidPath>>,
-    mappers: RefCell<Rc<Vec<Value>>>,
-    axis_mappers: RefCell<Rc<Vec<Value>>>,
+    mappers: RefCell<Rc<Vec<RuntimeValue>>>,
+    axis_mappers: RefCell<Rc<Vec<RuntimeValue>>>,
 }
 
 fn mapped_point(
     context: &mut Context,
-    mappers: &RefCell<Rc<Vec<Value>>>,
+    mappers: &RefCell<Rc<Vec<RuntimeValue>>>,
     mut point: Point3,
 ) -> Result<Point3, Error> {
     let mappers = mappers.borrow().clone();
     for mapper in mappers.iter().rev() {
-        let value =
-            context.apply_value(mapper, [X, Y, Z].into_iter().zip(point.map(f64::value)))?;
-        point = read_point(&value).ok_or_else(|| {
-            if absent::is_absent(&value) {
+        let value = context.apply_expression(
+            mapper,
+            [X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)),
+        )?;
+        point = read_runtime_point(&value).ok_or_else(|| {
+            if value.is_absent() {
                 Error::Invalid(value)
             } else {
                 invalid()
@@ -222,33 +238,33 @@ fn operation(
     call: &Expression,
     environment: &Environment,
     output: &Output,
-) -> Result<Value, Error> {
+) -> Result<RuntimeValue, Error> {
     match function {
         SEQUENCE => {
             fn sequence(
                 context: &mut Context,
-                program: &Value,
+                program: &RuntimeValue,
                 output: &Output,
-            ) -> Result<Value, Halt> {
+            ) -> Result<RuntimeValue, Halt> {
                 context.burn()?;
-                if let Some(list) = program.as_list() {
-                    for child in list.values() {
-                        let value = sequence(context, child, output)?;
-                        if absent::is_absent(&value) {
+                if let Some(list) = program.list_values() {
+                    for child in list {
+                        let value = sequence(context, &child, output)?;
+                        if value.is_absent() {
                             return Ok(value);
                         }
                     }
-                    Ok(Value::record([]))
+                    Ok(RuntimeValue::record([]))
                 } else {
                     context.effect(|| output.sink.borrow_mut().end_path());
-                    let result = context.apply_value(program, []);
+                    let result = context.apply_expression(program, []);
                     context.effect(|| output.sink.borrow_mut().end_path());
                     result
                 }
             }
             let program = argument(context, call, PROGRAM)?;
-            let program = context.eval_to_value(program, environment)?;
-            if absent::is_absent(&program) {
+            let program = context.eval(program, environment)?;
+            if program.is_absent() {
                 return Ok(program);
             }
             return Ok(sequence(context, &program, output)?);
@@ -258,8 +274,9 @@ fn operation(
             let mut emission = Emission { output, context };
             if function == START_AT {
                 let axis = if let Some(expression) = emission.context.field(call, TOOL_AXIS) {
-                    let value = emission.context.eval_to_value(expression, environment)?;
-                    Axis::new(read_point(&value).ok_or_else(invalid)?).ok_or_else(invalid)?
+                    let value = emission.context.eval(expression, environment)?;
+                    Axis::new(read_runtime_point(&value).ok_or_else(invalid)?)
+                        .ok_or_else(invalid)?
                 } else {
                     Axis::Z
                 };
@@ -271,7 +288,7 @@ fn operation(
         MAP_POINTS | MAP_AXES => {
             let mapper = argument(context, call, MAPPER)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
-            let mapper = context.eval_to_value(mapper, environment)?;
+            let mapper = context.eval(mapper, environment)?;
             let mappers = if function == MAP_POINTS {
                 &output.mappers
             } else {
@@ -279,36 +296,36 @@ fn operation(
             };
             let parent = mappers.borrow().clone();
             Rc::make_mut(&mut mappers.borrow_mut()).push(mapper);
-            let value = context.eval_to_value(expression, environment);
+            let value = context.eval(expression, environment);
             mappers.replace(parent);
             return Ok(value?);
         }
         WITH_TOOL => {
             let tool = argument(context, call, cutter::vocabulary::TOOL)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
-            let value = context.eval_to_value(tool, environment)?;
-            if absent::is_absent(&value) {
+            let value = context.eval(tool, environment)?;
+            if value.is_absent() {
                 return Ok(value);
             }
-            let tool = cutter::Tool::read(&value).ok_or_else(invalid)?;
+            let tool = cutter::Tool::read(value.as_value()).ok_or_else(invalid)?;
             // Release the sink borrow before evaluating the body: nested calls
             // emit into it too. Always leave the scope, including on a halt.
             context.effect(|| output.sink.borrow_mut().enter_tool(&tool));
-            let value = context.eval_to_value(expression, environment);
+            let value = context.eval(expression, environment);
             context.effect(|| output.sink.borrow_mut().leave_tool());
             return Ok(value?);
         }
         _ => unreachable!("only toolpath emitters are installed in this scope"),
     }
-    Ok(Value::record([]))
+    Ok(RuntimeValue::record([]))
 }
 
 /// Run with caller-owned output. Consumers that need atomic results stage their
 /// sink and discard it on failure; the preview does this for each frame.
-pub fn run(
+pub fn run<T>(
     sink: &mut dyn Sink<Error = InvalidPath>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation<gid::Value>,
-) -> Evaluation<gid::Value> {
+    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> T,
+) -> T {
     let output = Output {
         sink: RefCell::new(sink),
         mappers: RefCell::new(Rc::new(Vec::new())),
@@ -316,9 +333,9 @@ pub fn run(
     };
     let emit =
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-            result(operation(function, context, call, environment, &output))
+            runtime_result(operation(function, context, call, environment, &output))
         };
-    evaluate(&ForeignOverlay::from_value(EMITTERS, &emit).tracked())
+    evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
 }
 
 fn functions() -> ForeignFunctions {
@@ -346,30 +363,30 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             POINT,
-            ForeignFunction::from_value(|context, call, environment| {
-                result(point(context, call, environment).map(point_value))
+            ForeignFunction::new(|context, call, environment| {
+                runtime_result(point(context, call, environment).map(runtime_point_value))
             })
             .tracked(),
         )
         .register(
             PREVIEW,
-            ForeignFunction::from_value(|context, call, environment| {
-                result((|| {
+            ForeignFunction::new(|context, call, environment| {
+                runtime_result((|| {
                     let program = argument(context, call, presentation::vocabulary::VALUE)?;
-                    let program = context.eval_to_value(program, environment)?;
+                    let program = context.eval(program, environment)?;
                     let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
                     let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;
                     if width <= 0.0 || height <= 0.0 {
                         return Err(invalid());
                     }
                     let fuel = fuel(context, call, environment)?;
-                    Ok(Value::record([(
+                    Ok(RuntimeValue::record([(
                         PREVIEW,
-                        Value::record([
+                        RuntimeValue::record([
                             (PROGRAM, program),
-                            (layout::vocabulary::WIDTH, f64::value(width)),
-                            (layout::vocabulary::HEIGHT, f64::value(height)),
-                            (layout::vocabulary::FUEL, f64::value(fuel as f64)),
+                            (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
+                            (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
+                            (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
                         ]),
                     )]))
                 })())
@@ -423,7 +440,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         Definitions::from_parts(cells, cutter::functions(functions())),
         crate::display::compose_partials([
             crate::display::partial(cutter::display),
-            crate::display::partial(preview::display),
+            crate::display::runtime_partial(preview::display),
             crate::display::partial(fidget::display),
             crate::display::partial(mesh::display),
             crate::display::partial(refined::display),

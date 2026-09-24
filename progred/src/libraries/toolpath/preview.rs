@@ -5,7 +5,7 @@ use super::{
     vocabulary::*,
 };
 use crate::display::{Layout, ProjectionInput, widget};
-use crate::libraries::{absent, f64, layout};
+use crate::libraries::{absent, layout};
 use puri::draw::Canvas;
 use puri::{Affine, BezPath, Color, Point, Rect, Size, Stroke};
 use std::rc::Rc;
@@ -97,13 +97,13 @@ fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?.get(&PREVIEW)?.as_record()?;
-    let program = fields.get(&PROGRAM)?.clone();
-    let width = f64::read(fields.get(&layout::vocabulary::WIDTH)?)?;
-    let height = f64::read(fields.get(&layout::vocabulary::HEIGHT)?)?;
-    let fuel = super::read_fuel(f64::read(fields.get(&layout::vocabulary::FUEL)?)?)?;
+    let fields = input.value?.field(PREVIEW)?;
+    let program = fields.field(PROGRAM)?;
+    let width = fields.field(layout::vocabulary::WIDTH)?.as_f64()?;
+    let height = fields.field(layout::vocabulary::HEIGHT)?.as_f64()?;
+    let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return None;
     }
@@ -111,9 +111,9 @@ pub(super) fn display(
     Some(Layout::program(Rc::new(move |context, build| {
         let mut lines = projected();
         let evaluation = run(&mut lines, |scope| {
-            ::grap::apply_value_scoped(&program, [], &context.inputs.sources, scope, fuel)
+            ::grap::apply_expression_scoped(&program, [], &context.inputs.sources, scope, fuel)
         });
-        if !evaluation.completed || absent::is_absent(&evaluation.result) {
+        if !evaluation.completed || evaluation.result.is_absent() {
             return crate::display::at(
                 [gid::Step::Key(
                     crate::libraries::presentation::vocabulary::RESULT,
