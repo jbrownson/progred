@@ -3,9 +3,7 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::{
-    Face, Layout, Partial, ProjectionInput, overlay_value, partial, row, subscript,
-};
+use crate::display::{Face, Layout, Partial, ProjectionInput, overlay_value, row, subscript};
 use crate::libraries::{Library, line_edit, name};
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
@@ -99,11 +97,10 @@ pub(crate) fn calls(
     operations: &'static [CellId],
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
     let function_projection = operation(representation);
-    partial(move |input| {
+    crate::display::runtime_partial(move |input| {
         let function = input
             .value?
-            .as_record()?
-            .get(&::grap::vocabulary::FUNCTION)?
+            .field(::grap::vocabulary::FUNCTION)?
             .as_cell()?;
         operations.contains(&function).then_some(())?;
         crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
@@ -119,7 +116,7 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
 }
 
 pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     number: N,
     representation: CellId,
     encode: fn(N) -> Value,
@@ -142,7 +139,7 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
             line,
             target.hover,
             Rc::new(move || {
-                let original = original.clone();
+                let original = original.to_value();
                 let mut scrub = NumberScrub::new(number);
                 Box::new(move |event| {
                     let scrubbed = scrub.update(event);

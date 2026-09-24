@@ -72,9 +72,11 @@ impl number::Scrubbable for f32 {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    number::layout(input, read(input.value?)?, vocabulary::F32, value)
+    let bytes = input.value?.field(vocabulary::F32)?;
+    let number = f32::from_le_bytes(bytes.as_blob()?.try_into().ok()?);
+    number::layout(input, number, vocabulary::F32, value)
 }
 
 fn update(
@@ -222,7 +224,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                     vocabulary::EQUAL,
                 ],
             ),
-            crate::display::partial(display),
+            crate::display::runtime_partial(display),
         ]),
     )
     .with_completions(|request| {

@@ -201,6 +201,19 @@ comparison does not isolate the conversion savings of the migrated partials.
 An eventual focused conversion-cost comparison should account for that test
 boundary rather than treating these frame times as proof of no savings.
 
+### Runtime calls and numeric projections — 2026-09-23
+
+General Grap call/lambda/value/FFI projections and numeric facets/notation now
+inspect runtime values. Numeric scrubbing materializes the edited record only
+when the gesture starts. Callable parameter discovery and the evaluate
+projection's source interface remain narrower GID boundaries.
+
+The unchanged controls-only canary measured 323.21, 321.00, and 337.54 µs after
+the preceding checkpoint's 326.25, 324.17, and 320.79 µs. Warm uncached program
+construction was 9.31–9.48 ms versus 9.27–9.84 ms. These short serial runs show
+no meaningful overall performance change; the preview-stub caveat above still
+applies. Compilation and correctness testing had finished before measurements.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

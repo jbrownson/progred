@@ -232,18 +232,21 @@ fn standard_field_order(
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
 pub fn call_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     call_with_function(input, None)
 }
 
 pub(crate) fn call_with_function(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     function_projection: Option<crate::display::Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
-    let function = fields.get(&FUNCTION)?;
-    let parameters = function_parameters(function, &|cell| input.env.resolve(cell));
+    let fields = input.value?;
+    let function = fields.field(FUNCTION)?;
+    // Parameter discovery still reads source metadata. Only the callable
+    // crosses that boundary, never the call's argument values.
+    let parameter_source = function.as_value();
+    let parameters = function_parameters(parameter_source, &|cell| input.env.resolve(cell));
     let mut parameter_positions = std::collections::BTreeMap::new();
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
@@ -253,13 +256,13 @@ pub(crate) fn call_with_function(
             vec![RecordField {
                 label: completion(
                     CompletionKind::Field,
-                    Some(parameter_labels(function.clone())),
+                    Some(parameter_labels(parameter_source.clone())),
                 ),
                 value: slot(),
             }]
         }
         Some(Pending::Child(Step::Key(field)))
-            if !fields.contains_key(field) && !parameter_positions.contains_key(field) =>
+            if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
         {
             let (spelling, face) = field_spelling(input.env, *field);
             let target = input.targets.at([Step::Key(*field)]);
@@ -277,14 +280,15 @@ pub(crate) fn call_with_function(
     );
     let arguments = record_with(
         fields
-            .iter()
-            .filter(|(field, _)| *field != FUNCTION)
-            .map(|(field, value)| (*field, Some(value)))
+            .record_keys()?
+            .into_iter()
+            .filter(|field| *field != FUNCTION)
+            .map(|field| (field, ()))
             .chain(
                 parameter_positions
                     .keys()
-                    .filter(|field| !fields.contains_key(field))
-                    .map(|field| (*field, None)),
+                    .filter(|field| !fields.contains_field(**field))
+                    .map(|field| (*field, ())),
             ),
         |left, right| match (
             parameter_positions.get(left),
@@ -311,17 +315,16 @@ pub(crate) fn call_with_function(
 /// A stored lambda exposes its parameter declarations deeply and
 /// projects its body as an expression.
 pub fn lambda_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
+    let fields = input.value?;
     match &input.pending {
         None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY))) => (),
         _ => return None,
     }
-    let params = fields.get(&PARAMS)?;
+    let params = fields.field(PARAMS)?;
     params
-        .as_list()?
-        .values()
+        .list_values()?
         .all(|param| param.as_cell().is_some())
         .then_some(())?;
     let params = descend_path_local(
@@ -348,10 +351,10 @@ pub fn lambda_display(
 /// A named expression, not a lexical binding. The name slot is always
 /// present in the projection; only the value field matters to evaluation.
 pub fn value_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
-    fields.get(&VALUE)?;
+    let fields = input.value?;
+    fields.field(VALUE)?;
     match &input.pending {
         None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE))) => (),
         _ => return None,
@@ -376,21 +379,22 @@ pub fn value_display(
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
 pub fn ffi_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let ffi = input.value?.as_record()?.get(&FFI)?;
+    let ffi = input.value?.field(FFI)?;
     ffi.as_cell()?;
     Some(shallow_path([Step::Key(FFI)], &input.default_projection))
 }
 
 pub fn evaluate_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let expression = input.value?.as_record()?.get(&EVALUATE)?;
-    let result =
-        input
-            .env
-            .evaluate_runtime(expression, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
+    let expression = input.value?.field(EVALUATE)?;
+    let result = input.env.evaluate_runtime(
+        expression.as_value(),
+        ::grap::DEFAULT_FUEL,
+        &[Step::Key(EVALUATE)],
+    );
     let expression = shared(expression_path(
         [Step::Key(EVALUATE)],
         &input.default_projection,
@@ -492,11 +496,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         // Calls, lambdas, and value wrappers follow evaluator precedence,
         // but ordinary partial failures still try the next projection.
         crate::display::compose_partials([
-            crate::display::partial(evaluate_display),
-            crate::display::partial(call_display),
-            crate::display::partial(lambda_display),
-            crate::display::partial(value_display),
-            crate::display::partial(ffi_display),
+            crate::display::runtime_partial(evaluate_display),
+            crate::display::runtime_partial(call_display),
+            crate::display::runtime_partial(lambda_display),
+            crate::display::runtime_partial(value_display),
+            crate::display::runtime_partial(ffi_display),
         ]),
     )
     .with_completions(completions)
@@ -703,6 +707,44 @@ mod tests {
         }
     }
 
+    fn project_runtime(
+        projection: impl FnOnce(
+            &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+        ) -> Option<Layout<crate::Editor, crate::frame::Hovered>>,
+        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        let value = input.value.map(::grap::RuntimeValue::from);
+        projection(&input.with_value(value.as_ref()))
+    }
+
+    #[test]
+    fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
+        use ::grap::RuntimeValue as R;
+        let parameter = new_cell_id();
+        let extra = new_cell_id();
+        let metadata = new_cell_id();
+        let lambda = R::record([
+            (PARAMS, R::list([Value::from(parameter).into()])),
+            (BODY, Value::from(parameter).into()),
+            (metadata, R::list([R::f64(3.0)])),
+        ]);
+        let call = R::record([
+            (FUNCTION, lambda.clone()),
+            (extra, R::list([lambda.clone()])),
+        ]);
+        let env = env();
+        let source = Value::record([]);
+        let input = input(&env, &source);
+        let layout = call_display(&input.with_value(Some(&call))).unwrap();
+        assert_eq!(argument_order(&layout), [parameter, extra]);
+        assert!(lambda_display(&input.with_value(Some(&lambda))).is_some());
+
+        let malformed = R::record([(PARAMS, R::list([R::f64(3.0)]))]);
+        assert!(lambda_display(&input.with_value(Some(&malformed))).is_none());
+        let wrapper = R::record([(VALUE, call)]);
+        assert!(value_display(&input.with_value(Some(&wrapper))).is_some());
+    }
+
     fn input<'a>(
         env: &'a dyn Env,
         value: &'a Value,
@@ -741,7 +783,7 @@ mod tests {
         env: &dyn Env,
         value: &Value,
     ) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-        evaluate_display(&input(env, value)).map(|layout| layout.record())
+        project_runtime(evaluate_display, &input(env, value)).map(|layout| layout.record())
     }
 
     #[test]
@@ -854,8 +896,8 @@ mod tests {
             (VALUE, Value::record([])),
         ]);
         let input = input(&env, &malformed_lambda);
-        assert!(lambda_display(&input).is_none());
-        assert!(value_display(&input).is_some());
+        assert!(project_runtime(lambda_display, &input).is_none());
+        assert!(project_runtime(value_display, &input).is_some());
         assert!(
             (library().projection)(
                 &input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref())
@@ -868,8 +910,8 @@ mod tests {
             value: Some(&call),
             ..input
         };
-        assert!(call_display(&input).is_some());
-        assert!(value_display(&input).is_some());
+        assert!(project_runtime(call_display, &input).is_some());
+        assert!(project_runtime(value_display, &input).is_some());
     }
 
     #[test]
@@ -1051,14 +1093,17 @@ mod tests {
             ]),
         )]);
         let env = CountingEnv(std::cell::Cell::new(0));
-        assert!(call_display(&input(&env, &value)).is_some());
+        assert!(project_runtime(call_display, &input(&env, &value)).is_some());
         assert_eq!(env.0.get(), 1);
         assert!(
-            call_display(&ProjectionInput {
-                default_projection: crate::display::runtime_partial(|_| None),
-                pending: Some(Pending::Field),
-                ..input(&env, &value)
-            })
+            project_runtime(
+                call_display,
+                &ProjectionInput {
+                    default_projection: crate::display::runtime_partial(|_| None),
+                    pending: Some(Pending::Field),
+                    ..input(&env, &value)
+                }
+            )
             .is_some()
         );
         assert_eq!(env.0.get(), 2);
@@ -1226,10 +1271,13 @@ mod tests {
     fn a_call_projects_its_function_cell_shallowly() {
         let function = new_cell_id();
         let argument = new_cell_id();
-        let layout = call_display(&input(
-            &env(),
-            &::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]),
-        ))
+        let layout = project_runtime(
+            call_display,
+            &input(
+                &env(),
+                &::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]),
+            ),
+        )
         .unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("call has responsive forms");
@@ -1251,7 +1299,7 @@ mod tests {
         let function = new_cell_id();
         let argument = new_cell_id();
         let call = ::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]);
-        let layout = call_display(&relative_input(&env(), &call)).unwrap();
+        let layout = project_runtime(call_display, &relative_input(&env(), &call)).unwrap();
         let Recorded::Alternatives(call_options) = layout.record() else {
             panic!("call has responsive forms");
         };
@@ -1345,7 +1393,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![3])),
             ],
         );
-        let layout = call_display(&input(&env, &call)).unwrap();
+        let layout = project_runtime(call_display, &input(&env, &call)).unwrap();
 
         assert_eq!(
             argument_order(&layout),
@@ -1360,7 +1408,7 @@ mod tests {
         );
         let initial = input(&env, &incomplete);
         assert_eq!(
-            argument_order(&call_display(&initial).unwrap()),
+            argument_order(&project_runtime(call_display, &initial).unwrap()),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
         );
         let editing = ProjectionInput {
@@ -1368,7 +1416,7 @@ mod tests {
             ..initial
         };
         assert_eq!(
-            argument_order(&call_display(&editing).unwrap()),
+            argument_order(&project_runtime(call_display, &editing).unwrap()),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
         );
         let unknown = new_cell_id();
@@ -1377,7 +1425,7 @@ mod tests {
             ..editing
         };
         assert_eq!(
-            argument_order(&call_display(&editing).unwrap()),
+            argument_order(&project_runtime(call_display, &editing).unwrap()),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, unknown]
         );
         let native = DefinitionEnv {
@@ -1385,11 +1433,11 @@ mod tests {
             ..env
         };
         assert_eq!(
-            argument_order(&call_display(&input(&native, &call)).unwrap()),
+            argument_order(&project_runtime(call_display, &input(&native, &call)).unwrap()),
             [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
         );
         assert_eq!(
-            argument_order(&call_display(&input(&native, &incomplete)).unwrap()),
+            argument_order(&project_runtime(call_display, &input(&native, &incomplete)).unwrap()),
             [SECOND_PARAMETER, FIRST_EXTRA]
         );
     }
@@ -1408,7 +1456,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![2])),
             ],
         );
-        let layout = call_display(&input(&env(), &call)).unwrap();
+        let layout = project_runtime(call_display, &input(&env(), &call)).unwrap();
 
         assert_eq!(argument_order(&layout), [FIRST_PARAMETER, SECOND_PARAMETER]);
         let empty = ::grap::call(
@@ -1419,7 +1467,7 @@ mod tests {
             [],
         );
         assert_eq!(
-            argument_order(&call_display(&input(&env(), &empty)).unwrap()),
+            argument_order(&project_runtime(call_display, &input(&env(), &empty)).unwrap()),
             [FIRST_PARAMETER, SECOND_PARAMETER]
         );
     }
@@ -1428,7 +1476,7 @@ mod tests {
     fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
         let parameter = new_cell_id();
         let definition = ::grap::lambda([parameter], Value::from(parameter));
-        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };
@@ -1480,11 +1528,11 @@ mod tests {
             (new_cell_id(), Value::record([])),
         ]);
         let mut input = relative_input(&env, &definition);
-        assert!(lambda_display(&input).is_some());
+        assert!(project_runtime(lambda_display, &input).is_some());
         input.pending = Some(Pending::Child(Step::Key(BODY)));
-        assert!(lambda_display(&input).is_some());
+        assert!(project_runtime(lambda_display, &input).is_some());
         input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
-        assert!(lambda_display(&input).is_none());
+        assert!(project_runtime(lambda_display, &input).is_none());
 
         for malformed in [
             Value::record([]),
@@ -1494,7 +1542,7 @@ mod tests {
                 Value::list([crate::libraries::text::value("not a cell")]),
             )]),
         ] {
-            assert!(lambda_display(&relative_input(&env, &malformed)).is_none());
+            assert!(project_runtime(lambda_display, &relative_input(&env, &malformed)).is_none());
         }
     }
 
@@ -1508,7 +1556,7 @@ mod tests {
                 (new_cell_id(), Value::record([])),
             ],
         );
-        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };
@@ -1565,7 +1613,7 @@ mod tests {
             "",
             [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
-        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
         let Recorded::Alternatives(options) = layout.record() else {
             panic!("lambda has responsive forms");
         };

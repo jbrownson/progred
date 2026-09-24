@@ -3,7 +3,9 @@
 //! functions.
 
 use crate::libraries::{Library, absent, line_edit, logic, name, number};
-use gid::{CellId, Cells, Step, Value};
+#[cfg(test)]
+use gid::Value;
+use gid::{CellId, Cells, Step};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
 use crate::display::{Delim, Layout, ProjectionInput, overlay_value, row, selectable_bracket};
@@ -83,9 +85,9 @@ impl number::Scrubbable for f64 {
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let number = read(input.value?)?;
+    let number = input.value?.as_f64()?;
     number::layout(input, number, vocabulary::F64, value)
 }
 
@@ -105,16 +107,16 @@ fn precedence(function: CellId) -> Option<Precedence> {
     }
 }
 
-fn expression_precedence(value: &Value) -> Option<Precedence> {
-    let fields = value.as_record()?;
-    fields.get(&vocabulary::LEFT)?;
-    fields.get(&vocabulary::RIGHT)?;
-    fields.get(&FUNCTION)?.as_cell().and_then(precedence)
+fn expression_precedence(value: &RuntimeValue) -> Option<Precedence> {
+    let fields = value;
+    fields.field(vocabulary::LEFT)?;
+    fields.field(vocabulary::RIGHT)?;
+    fields.field(FUNCTION)?.as_cell().and_then(precedence)
 }
 
 fn operand(
     field: CellId,
-    value: &Value,
+    value: &RuntimeValue,
     parent: Precedence,
     default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
@@ -132,20 +134,20 @@ fn operand(
 }
 
 pub fn binary_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     input.pending.is_none().then_some(())?;
-    let fields = input.value?.as_record()?;
-    let function = fields.get(&FUNCTION)?;
+    let fields = input.value?;
+    let function = fields.field(FUNCTION)?;
     let precedence = precedence(function.as_cell()?)?;
-    let left = fields.get(&vocabulary::LEFT)?;
-    let right = fields.get(&vocabulary::RIGHT)?;
+    let left = fields.field(vocabulary::LEFT)?;
+    let right = fields.field(vocabulary::RIGHT)?;
     Some(row(
         6.0,
         [
             operand(
                 vocabulary::LEFT,
-                left,
+                &left,
                 precedence,
                 &input.default_projection,
             ),
@@ -156,7 +158,7 @@ pub fn binary_display(
             ),
             operand(
                 vocabulary::RIGHT,
-                right,
+                &right,
                 precedence,
                 &input.default_projection,
             ),
@@ -429,7 +431,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "f64",
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
-            crate::display::partial(binary_display),
+            crate::display::runtime_partial(binary_display),
             number::calls(
                 vocabulary::F64,
                 &[
@@ -450,7 +452,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                     vocabulary::LERP,
                 ],
             ),
-            crate::display::partial(display),
+            crate::display::runtime_partial(display),
         ]),
     )
     .with_completions(|request| {
@@ -496,8 +498,8 @@ mod tests {
     }
 
     fn projection_input(
-        value: &Value,
-    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
+        value: &RuntimeValue,
+    ) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
         ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &TestEnv,
@@ -509,6 +511,66 @@ mod tests {
             state: None,
             targets: crate::display::ProjectionTargets::new(&target),
         }
+    }
+
+    #[test]
+    fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
+        type Project = for<'a, 'b> fn(
+            &'b ProjectionInput<'a, crate::Editor, crate::frame::Hovered, RuntimeValue>,
+        )
+            -> Option<Layout<crate::Editor, crate::frame::Hovered>>;
+        let extra = new_cell_id();
+        let functions = functions();
+        let host = crate::libraries::test_host(|_| None, &functions);
+        let callback = ::grap::evaluate(&::grap::lambda([], value(1.0)), &host, 100).result;
+        for (field, bytes, project) in [
+            (
+                vocabulary::F64,
+                3.5_f64.to_le_bytes().to_vec(),
+                display as Project,
+            ),
+            (
+                crate::libraries::f32::vocabulary::F32,
+                3.5_f32.to_le_bytes().to_vec(),
+                crate::libraries::f32::display,
+            ),
+            (
+                crate::libraries::u64::vocabulary::U64,
+                42_u64.to_le_bytes().to_vec(),
+                crate::libraries::u64::display,
+            ),
+        ] {
+            let number = RuntimeValue::record([
+                (field, Value::from(bytes).into()),
+                (extra, callback.clone()),
+            ]);
+            assert!(project(&projection_input(&number)).is_some());
+            assert!(number.field(extra).unwrap().same_result(&callback));
+            let invalid = RuntimeValue::record([(field, Value::from(vec![0]).into())]);
+            assert!(project(&projection_input(&invalid)).is_none());
+        }
+        assert!(display(&projection_input(&RuntimeValue::f64(3.5))).is_some());
+    }
+
+    #[test]
+    fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
+        let sum = RuntimeValue::record([
+            (FUNCTION, Value::from(vocabulary::SUM).into()),
+            (vocabulary::LEFT, RuntimeValue::f64(1.0)),
+            (vocabulary::RIGHT, RuntimeValue::f64(2.0)),
+        ]);
+        let product = RuntimeValue::record([
+            (FUNCTION, Value::from(vocabulary::MULTIPLY).into()),
+            (vocabulary::LEFT, sum),
+            (vocabulary::RIGHT, RuntimeValue::f64(3.0)),
+        ]);
+        let Recorded::Row { children, .. } = binary_display(&projection_input(&product))
+            .unwrap()
+            .record()
+        else {
+            panic!("binary notation is a row")
+        };
+        crate::display::test_support::delimited(&children[0]);
     }
 
     fn call(function: CellId, left: Value, right: Value) -> Value {
@@ -662,7 +724,7 @@ mod tests {
     fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
         let sum = call(vocabulary::SUM, value(1.0), product);
-        let layout = binary_display(&projection_input(&sum)).unwrap();
+        let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
         let Recorded::Row { children, .. } = layout.record() else {
             panic!("binary notation is a row");
         };
@@ -691,7 +753,7 @@ mod tests {
             call(vocabulary::SUM, value(1.0), value(2.0)),
             value(3.0),
         );
-        let layout = binary_display(&projection_input(&product)).unwrap();
+        let layout = binary_display(&projection_input(&(&product).into())).unwrap();
         let Recorded::Row { children, .. } = layout.record() else {
             panic!("binary notation is a row");
         };
@@ -709,9 +771,9 @@ mod tests {
                 (extra, value(3.0)),
             ],
         );
-        assert!(binary_display(&projection_input(&call)).is_some());
+        assert!(binary_display(&projection_input(&(&call).into())).is_some());
         assert!(matches!(
-            expression_precedence(&call),
+            expression_precedence(&(&call).into()),
             Some(Precedence::Sum)
         ));
         let default = crate::display::runtime_partial(|_| None);
@@ -722,7 +784,7 @@ mod tests {
         ] {
             assert_eq!(
                 matches!(
-                    operand(field, &call, parent, &default).record(),
+                    operand(field, &(&call).into(), parent, &default).record(),
                     Recorded::Row { .. }
                 ),
                 grouped,
@@ -730,8 +792,8 @@ mod tests {
         }
         for key in [FUNCTION, vocabulary::LEFT, vocabulary::RIGHT] {
             let incomplete = Value::record(call.as_record().unwrap().without(&key));
-            assert!(binary_display(&projection_input(&incomplete)).is_none());
-            assert!(expression_precedence(&incomplete).is_none());
+            assert!(binary_display(&projection_input(&(&incomplete).into())).is_none());
+            assert!(expression_precedence(&(&incomplete).into()).is_none());
         }
     }
 

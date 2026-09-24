@@ -39,15 +39,19 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
 /// Explicitly include the stored name beside a facet's own presentation.
 /// This is decoration, not a binding or a record field/value pair.
 pub(crate) fn with_name(
-    input: &crate::display::ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &crate::display::ProjectionInput<
+        '_,
+        crate::Editor,
+        crate::frame::Hovered,
+        ::grap::RuntimeValue,
+    >,
     content: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
 ) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
     use crate::display::{Pending, descend_local, line_edit, partial, row};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
         .value
-        .and_then(Value::as_record)
-        .is_some_and(|fields| fields.contains_key(&vocabulary::NAME));
+        .is_some_and(|value| value.contains_field(vocabulary::NAME));
     if !has_name && input.pending != Some(Pending::Child(step.clone())) {
         return content;
     }
