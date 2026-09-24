@@ -96,7 +96,7 @@ pub(crate) fn viewport_runtime_output(
         None => value.into(),
     };
     Some(env.apply_expression_runtime(
-        function,
+        &function.into(),
         &[
             (vocabulary::VALUE, value),
             (layout::vocabulary::WIDTH, ::grap::RuntimeValue::f64(width)),
@@ -139,14 +139,13 @@ pub fn display(
 /// Opt-in presentation of a declaration; not part of the library's
 /// ordinary authoring projection.
 pub fn projected_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
-    let value = fields.get(&vocabulary::VALUE)?;
-    let function = fields.get(&vocabulary::PROJECTION)?;
+    let value = input.value?.field(vocabulary::VALUE)?;
+    let function = input.value?.field(vocabulary::PROJECTION)?;
     let result = input
         .env
-        .apply_expression_runtime(function, &[(vocabulary::VALUE, value.into())]);
+        .apply_expression_runtime(&function, &[(vocabulary::VALUE, value)]);
     Some(if result.is_absent() {
         crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
     } else {
@@ -189,6 +188,13 @@ mod tests {
     use std::rc::Rc;
 
     const LEFT_VALUE: CellId = CellId::from_u128(1);
+
+    fn projected_display(
+        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        let value = input.value.map(::grap::RuntimeValue::from);
+        super::projected_display(&input.with_value(value.as_ref()))
+    }
 
     fn display(
         input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
@@ -372,11 +378,11 @@ mod tests {
         }
     }
 
-    fn projected(
-        value: &Value,
+    fn projected<V>(
+        value: &V,
         env: &dyn Env,
         projection: impl FnOnce(
-            &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+            &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
         ) -> Option<Layout<crate::Editor, crate::frame::Hovered>>,
     ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
         let target = |_| crate::display::ProjectionTarget {
@@ -395,6 +401,56 @@ mod tests {
             state: None,
             targets: ProjectionTargets::new(&target),
         })
+    }
+
+    #[test]
+    fn declaration_passes_runtime_callable_and_data_without_reification() {
+        struct CheckRuntime(::grap::RuntimeValue);
+        impl Env for CheckRuntime {
+            fn apply_scoped(
+                &self,
+                _: &Value,
+                _: &[(CellId, Value)],
+                _: Option<&::grap::ForeignOverlay<'_>>,
+            ) -> ::grap::Evaluation<Value> {
+                panic!("runtime declarations must not use the GID application adapter")
+            }
+            fn evaluate(&self, _: &Value) -> Value {
+                panic!("runtime declarations must not use the GID evaluation adapter")
+            }
+            fn apply_expression_runtime(
+                &self,
+                function: &::grap::RuntimeValue,
+                arguments: &[(CellId, ::grap::RuntimeValue)],
+            ) -> ::grap::RuntimeValue {
+                assert!(function.same_result(&self.0));
+                assert_eq!(arguments.len(), 1);
+                assert_eq!(arguments[0].0, vocabulary::VALUE);
+                assert!(arguments[0].1.same_result(&self.0));
+                ::grap::RuntimeValue::f64(42.0)
+            }
+        }
+        let host = crate::libraries::TestHost(|_| vec![]);
+        let callback = ::grap::evaluate_at(
+            &::grap::lambda([], f64::value(7.0)),
+            Some(::grap::SourceOrigin::Stored(vec![Step::Key(LEFT_VALUE)])),
+            &host,
+            100,
+        )
+        .result;
+        let declaration = ::grap::RuntimeValue::record([
+            (vocabulary::PROJECTION, callback.clone()),
+            (vocabulary::VALUE, callback.clone()),
+        ]);
+        let layout = projected(
+            &declaration,
+            &CheckRuntime(callback),
+            super::projected_display,
+        )
+        .unwrap();
+        assert!(
+            matches!(inspect(&layout), ProjectionCall::At { value, .. } if f64::read(&value) == Some(42.0))
+        );
     }
 
     #[test]

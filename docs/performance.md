@@ -248,6 +248,21 @@ calls in two serial runs. This is a new baseline, not a before/after speedup
 measurement. A separate passing regression confirms that returned layout code
 has an independent execution allowance.
 
+### Runtime border and declaration composition — 2026-09-23
+
+Border wrappers now capture the runtime projection instead of embedding a GID
+copy in their generated code. Their argument/result and the declaration
+projection's callable stay runtime values. The expression-facing FFI contract
+is unchanged; regressions cover delayed syntax, native captures, original call
+locations, and real-frame border equivalence. All 83 Grap tests and 885 editor
+tests passed (50 editor tests ignored), as did the threaded web build.
+
+Serial release controls-frame medians were 318.42, 343.42, and 329.58 µs versus
+the preceding checkpoint's 325.21, 324.54, and 331.46 µs. The 20-row layout
+fixture measured 68.50/70.88 µs for stored descriptions and 104.54/106.04 µs for
+scoped calls. These checks show no clear overall change; they do not isolate
+border conversion cost or demonstrate recovery of the ownership overhead.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

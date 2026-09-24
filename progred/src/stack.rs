@@ -54,7 +54,9 @@ fn compose(
         libraries,
         pane_projection: projection
             .clone()
-            .with_entry(crate::display::partial(presentation::projected_display)),
+            .with_entry(crate::display::runtime_partial(
+                presentation::projected_display,
+            )),
         projection,
         completions,
     }

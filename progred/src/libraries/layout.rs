@@ -27,6 +27,7 @@ use puri::{
 };
 
 const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
+const CAPTURED_BORDER_PROJECTION: CellId = CellId::from_u128(0x79e405aaf432422ca572617eb6d98fa3);
 
 mod events;
 pub use events::on_event;
@@ -175,6 +176,7 @@ pub mod vocabulary {
     pub const CURLY: CellId = CellId::from_u128(0x63b8f5a2c90e17d4e12489d5b6a0c73f);
 }
 
+#[cfg(test)]
 fn node(key: CellId, content: Value) -> Value {
     Value::record([(key, content)])
 }
@@ -206,18 +208,22 @@ fn border_projection(
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
-    let projection = context.eval_to_value(projection, environment)?;
+    let projection = context.eval(projection, environment)?;
+    let captured = environment.extended_runtime([(CAPTURED_BORDER_PROJECTION, projection)]);
     let body = ::grap::call(
         Value::from(APPLY_BORDER_PROJECTION),
         [
-            (presentation::vocabulary::PROJECTION, projection),
+            (
+                presentation::vocabulary::PROJECTION,
+                Value::from(CAPTURED_BORDER_PROJECTION),
+            ),
             (
                 presentation::vocabulary::VALUE,
                 Value::from(presentation::vocabulary::VALUE),
             ),
         ],
     );
-    Ok(context.closure_value([presentation::vocabulary::VALUE], body, environment))
+    Ok(context.closure_value([presentation::vocabulary::VALUE], body, &captured))
 }
 
 fn apply_border_projection(
@@ -228,13 +234,20 @@ fn apply_border_projection(
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
-    let projection = context.eval_to_value(projection, environment)?;
+    let projection = context.eval(projection, environment)?;
+    // The captured projection used to be embedded as syntax in this wrapper's
+    // body. Interpret that syntax here too, without reifying native closures.
+    let projection = context.eval_runtime_code(&projection, environment)?;
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
     };
-    let value = context.eval_to_value(value, environment)?;
-    let projected = context.apply_value(&projection, [(presentation::vocabulary::VALUE, value)])?;
-    Ok(bordered(at([Step::Key(presentation::vocabulary::RESULT)], projected)).into())
+    let value = context.eval(value, environment)?;
+    let projected =
+        context.apply_expression(&projection, [(presentation::vocabulary::VALUE, value)])?;
+    Ok(::grap::RuntimeValue::record([(
+        vocabulary::BORDER,
+        at([Step::Key(presentation::vocabulary::RESULT)], projected),
+    )]))
 }
 
 #[cfg(test)]
@@ -302,17 +315,20 @@ pub fn descend_step(step: Step) -> Value {
     )
 }
 
-pub fn at(steps: impl IntoIterator<Item = Step>, value: Value) -> Value {
-    node(
+pub fn at(
+    steps: impl IntoIterator<Item = Step>,
+    value: ::grap::RuntimeValue,
+) -> ::grap::RuntimeValue {
+    ::grap::RuntimeValue::record([(
         vocabulary::AT,
-        Value::record([
+        ::grap::RuntimeValue::record([
             (vocabulary::VALUE, value),
             (
                 vocabulary::STEPS,
-                crate::libraries::path::value(&steps.into_iter().collect::<Vec<_>>()),
+                crate::libraries::path::value(&steps.into_iter().collect::<Vec<_>>()).into(),
             ),
         ]),
-    )
+    )])
 }
 
 #[cfg(test)]
@@ -497,6 +513,7 @@ pub fn on(child: Value, handler: Value) -> Value {
     )
 }
 
+#[cfg(test)]
 pub fn bordered(child: Value) -> Value {
     node(vocabulary::BORDER, child)
 }
@@ -1191,6 +1208,232 @@ mod tests {
             evaluation.result,
             Value::record([(vocabulary::DRAWING, configuration)])
         );
+    }
+
+    #[test]
+    fn border_retains_native_callbacks_and_their_call_origins() {
+        use ::grap::{RuntimeValue, SourceOrigin};
+        use std::{cell::RefCell, rc::Rc};
+
+        let library = library();
+        let sink = gid::new_cell_id();
+        let captured = gid::new_cell_id();
+        let origin = gid::new_cell_id();
+        let traces = Rc::new(RefCell::new(Vec::new()));
+        let host = crate::libraries::TestHost(|cell: CellId| {
+            let definition = if cell == sink {
+                let traces = traces.clone();
+                Some(::grap::Definition::foreign(
+                    Value::record([]),
+                    ForeignFunction::new(move |context, call, environment| {
+                        traces.borrow_mut().push(context.call_trace().unwrap());
+                        context.eval(context.field(call, captured).unwrap(), environment)
+                    }),
+                ))
+            } else {
+                library.definitions.get(cell).cloned()
+            };
+            definition
+                .map(|definition| (gid::Resolution::Document, definition))
+                .into_iter()
+                .collect()
+        });
+        let callback = ::grap::evaluate_at(
+            &::grap::lambda([], number(7.0)),
+            Some(SourceOrigin::Stored(vec![Step::Key(gid::new_cell_id())])),
+            &host,
+            100,
+        )
+        .result;
+        let maker = ::grap::evaluate_at(
+            &::grap::lambda(
+                [captured],
+                ::grap::lambda(
+                    [presentation::vocabulary::VALUE],
+                    ::grap::call(sink.into(), [(captured, captured.into())]),
+                ),
+            ),
+            Some(SourceOrigin::Stored(vec![Step::Key(origin)])),
+            &host,
+            100,
+        )
+        .result;
+        let projection = ::grap::apply(&maker, [(captured, callback.clone())], &host, 100).result;
+        let bordered = ::grap::apply(
+            &Value::from(vocabulary::BORDER).into(),
+            [(presentation::vocabulary::PROJECTION, projection)],
+            &host,
+            100,
+        );
+        assert!(bordered.completed);
+        assert!(
+            traces.borrow().is_empty(),
+            "composition must not run the projection"
+        );
+        // The constructed closure outlives the evaluation that captured it.
+        for _ in 0..2 {
+            let result = ::grap::apply_expression(
+                &bordered.result,
+                [(presentation::vocabulary::VALUE, RuntimeValue::record([]))],
+                &host,
+                100,
+            );
+            assert!(result.completed);
+            let retained = result
+                .result
+                .field(vocabulary::BORDER)
+                .unwrap()
+                .field(vocabulary::AT)
+                .unwrap()
+                .field(vocabulary::VALUE)
+                .unwrap();
+            assert!(retained.same_result(&callback));
+            assert_eq!(
+                ::grap::apply(&retained, [], &host, 100).result.as_f64(),
+                Some(7.0)
+            );
+        }
+        let traces = traces.borrow();
+        assert_eq!(traces.len(), 2);
+        let expected = SourceOrigin::Stored(vec![
+            Step::Key(origin),
+            Step::Key(::grap::vocabulary::BODY),
+            Step::Key(::grap::vocabulary::BODY),
+        ]);
+        for trace in traces.iter() {
+            assert_eq!(trace.origins().next(), Some(&expected));
+        }
+    }
+
+    #[test]
+    fn border_preserves_expression_facing_foreign_arguments() {
+        let library = library();
+        let data = gid::new_cell_id();
+        let value = number(12.0);
+        let host = crate::libraries::TestHost(|cell: CellId| {
+            let definition = if cell == data {
+                Some(::grap::Definition::Value(value.clone()))
+            } else {
+                library.definitions.get(cell).cloned()
+            };
+            definition
+                .map(|definition| (gid::Resolution::Document, definition))
+                .into_iter()
+                .collect()
+        });
+        for (projection, expected) in [
+            (
+                ::grap::ffi(vocabulary::DRAWING),
+                ::grap::RuntimeValue::record([(vocabulary::DRAWING, (&value).into())]),
+            ),
+            (
+                ::grap::lambda(
+                    [presentation::vocabulary::VALUE],
+                    presentation::vocabulary::VALUE.into(),
+                ),
+                ::grap::RuntimeValue::from(Value::from(data)),
+            ),
+        ] {
+            let wrapper = ::grap::evaluate(
+                &::grap::call(
+                    vocabulary::BORDER.into(),
+                    [(presentation::vocabulary::PROJECTION, projection)],
+                ),
+                &host,
+                100,
+            );
+            let result = ::grap::apply_expression(
+                &wrapper.result,
+                [(presentation::vocabulary::VALUE, Value::from(data).into())],
+                &host,
+                100,
+            );
+            assert!(result.completed);
+            let output = result
+                .result
+                .field(vocabulary::BORDER)
+                .unwrap()
+                .field(vocabulary::AT)
+                .unwrap()
+                .field(vocabulary::VALUE)
+                .unwrap();
+            assert_eq!(output.to_value(), expected.to_value());
+        }
+    }
+
+    #[test]
+    fn border_interprets_captured_projection_syntax_only_when_invoked() {
+        use std::{cell::Cell, rc::Rc};
+
+        let library = library();
+        let syntax = gid::new_cell_id();
+        let resolve = gid::new_cell_id();
+        let runs = Rc::new(Cell::new(0));
+        let host = crate::libraries::TestHost(|cell: CellId| {
+            let definition = if cell == syntax {
+                Some(::grap::Definition::foreign(
+                    Value::record([]),
+                    ForeignFunction::new(
+                        move |_, _, _| Ok(::grap::call(resolve.into(), []).into()),
+                    ),
+                ))
+            } else if cell == resolve {
+                let runs = runs.clone();
+                Some(::grap::Definition::foreign(
+                    Value::record([]),
+                    ForeignFunction::new(move |_, _, _| {
+                        runs.set(runs.get() + 1);
+                        Ok(::grap::ffi(vocabulary::DRAWING).into())
+                    }),
+                ))
+            } else {
+                library.definitions.get(cell).cloned()
+            };
+            definition
+                .map(|definition| (gid::Resolution::Document, definition))
+                .into_iter()
+                .collect()
+        });
+        let wrapper = ::grap::evaluate(
+            &::grap::call(
+                vocabulary::BORDER.into(),
+                [(
+                    presentation::vocabulary::PROJECTION,
+                    ::grap::call(syntax.into(), []),
+                )],
+            ),
+            &host,
+            100,
+        );
+        assert!(wrapper.completed);
+        assert_eq!(runs.get(), 0);
+        for expected_runs in 1..=2 {
+            let result = ::grap::apply_expression(
+                &wrapper.result,
+                [(
+                    presentation::vocabulary::VALUE,
+                    ::grap::RuntimeValue::f64(12.0),
+                )],
+                &host,
+                100,
+            );
+            assert!(result.completed);
+            assert_eq!(runs.get(), expected_runs);
+            assert_eq!(
+                result
+                    .result
+                    .field(vocabulary::BORDER)
+                    .unwrap()
+                    .field(vocabulary::AT)
+                    .unwrap()
+                    .field(vocabulary::VALUE)
+                    .unwrap()
+                    .field(vocabulary::DRAWING)
+                    .unwrap()
+                    .as_f64(),
+                Some(12.0)
+            );
+        }
     }
 
     #[test]

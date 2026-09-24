@@ -161,7 +161,7 @@ impl ProjectEnv<'_, '_> {
 impl crate::display::Env for ProjectEnv<'_, '_> {
     fn apply_expression_runtime(
         &self,
-        function: &Value,
+        function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
         grap::apply_expression(
@@ -217,7 +217,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
             Some(c) => c.apply_runtime(self.cx.view, self.path, function, arguments, fuel),
             None => {
                 grap::apply_expression(
-                    function,
+                    &function.into(),
                     arguments.iter().map(|(k, v)| (*k, v.into())),
                     &self.cx.sources,
                     fuel,

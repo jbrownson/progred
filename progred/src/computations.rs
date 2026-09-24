@@ -182,7 +182,7 @@ impl Computations {
                         let (function, arguments, fuel) = &*input;
                         Ok(grap::memo::run(&definitions, read, |host| {
                             grap::apply_expression(
-                                function,
+                                &function.into(),
                                 arguments.iter().map(|(k, v)| (*k, v.into())),
                                 host,
                                 *fuel,

@@ -22,7 +22,7 @@ pub struct Sources<'a> {
 impl crate::display::Env for Sources<'_> {
     fn apply_expression_runtime(
         &self,
-        function: &Value,
+        function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
         grap::apply_expression(
@@ -84,7 +84,7 @@ impl crate::display::Env for Sources<'_> {
         fuel: usize,
     ) -> grap::RuntimeValue {
         grap::apply_expression(
-            function,
+            &function.into(),
             arguments.iter().map(|(k, v)| (*k, v.into())),
             self,
             fuel,

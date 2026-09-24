@@ -2260,18 +2260,22 @@ impl<'a> Context<'a> {
         function: &Value,
         arguments: Vec<(CellId, Value)>,
     ) -> Result<Value, Halt> {
-        self.apply_values_runtime(
+        self.apply_expression(
             &function.into(),
-            arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            arguments.into_iter().map(|(k, v)| (k, v.into())),
         )
         .map(RuntimeValue::into_value)
     }
 
-    fn apply_values_runtime(
+    /// Apply runtime-held callable syntax. Grap parameters receive values;
+    /// foreign functions receive argument expressions to interpret. Use
+    /// `apply` when arguments must remain already-evaluated values for FFIs too.
+    pub fn apply_expression(
         &mut self,
         function: &RuntimeValue,
-        arguments: Vec<(CellId, RuntimeValue)>,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
+        let arguments = arguments.into_iter().collect();
         let environment = Environment::with_indices(self.indices.clone());
         if let Some(cell) = function.as_cell()
             && self.transient_foreign_target(cell).is_none()
@@ -2608,14 +2612,12 @@ pub fn evaluate_runtime_at(
 /// receive values, while foreign functions receive argument syntax to interpret.
 /// Use `apply` when the callable and all arguments have already been evaluated.
 pub fn apply_expression(
-    function: &Value,
+    function: &RuntimeValue,
     arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     host: &dyn Host,
     fuel: usize,
 ) -> Evaluation {
-    context(host, None, fuel).conclude(|context| {
-        context.apply_values_runtime(&function.into(), arguments.into_iter().collect())
-    })
+    context(host, None, fuel).conclude(|context| context.apply_expression(function, arguments))
 }
 
 /// Apply runtime-held callable syntax at an expression-facing host boundary.
@@ -2629,7 +2631,7 @@ pub fn apply_expression_scoped(
     fuel: usize,
 ) -> Evaluation {
     context(host, Some(overlay), fuel)
-        .conclude(|context| context.apply_values_runtime(function, arguments.into_iter().collect()))
+        .conclude(|context| context.apply_expression(function, arguments))
 }
 
 /// Evaluate with a borrowed foreign-function layer that exists only for
@@ -2657,9 +2659,9 @@ pub fn apply_value(
 ) -> Evaluation<Value> {
     context(host, None, fuel)
         .conclude(|context| {
-            context.apply_values_runtime(
+            context.apply_expression(
                 &function.into(),
-                arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+                arguments.into_iter().map(|(k, v)| (k, v.into())),
             )
         })
         .into_value()
@@ -2676,9 +2678,9 @@ pub fn apply_value_scoped<'a>(
 ) -> Evaluation<Value> {
     context(host, Some(overlay), fuel)
         .conclude(|context| {
-            context.apply_values_runtime(
+            context.apply_expression(
                 &function.into(),
-                arguments.into_iter().map(|(k, v)| (k, v.into())).collect(),
+                arguments.into_iter().map(|(k, v)| (k, v.into())),
             )
         })
         .into_value()

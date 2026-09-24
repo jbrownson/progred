@@ -256,13 +256,15 @@ impl<World: 'static, Hover: 'static> Layout<World, Hover> {
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
+    /// Expression-facing application without materializing the callable or its
+    /// arguments. Legacy/test hosts may use the GID adapter below.
     fn apply_expression_runtime(
         &self,
-        function: &Value,
+        function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
         self.apply(
-            function,
+            function.as_value(),
             &arguments
                 .iter()
                 .map(|(k, v)| (*k, v.to_value()))
@@ -323,7 +325,8 @@ pub trait Env {
         None
     }
 
-    /// Apply a callable to values without evaluating those arguments as expressions.
+    /// Legacy GID application boundary: Grap parameters receive values, while
+    /// foreign functions may interpret argument syntax themselves.
     fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> Value {
         self.apply_scoped(function, arguments, None).result
     }

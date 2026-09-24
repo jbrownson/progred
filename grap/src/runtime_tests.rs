@@ -385,7 +385,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
     ]);
     let source_argument = RuntimeValue::from(Value::from(data));
     let result = apply_expression(
-        &identity.into(),
+        &Value::from(identity).into(),
         [(argument, source_argument.clone())],
         &receiver,
         100,
@@ -405,7 +405,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
 
     let closure = evaluate(&lambda([], f64::value(7.0)), &receiver, 100).result;
     let result = apply_expression(
-        &identity.into(),
+        &Value::from(identity).into(),
         [(argument, closure.clone())],
         &receiver,
         100,

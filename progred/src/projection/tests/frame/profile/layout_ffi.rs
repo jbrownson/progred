@@ -104,10 +104,13 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
 
 fn setup() -> (ProfileView, BenchContext) {
     let mut context = BenchContext::new();
-    context.stack.projection = context
-        .stack
-        .projection
-        .with_entry(crate::display::partial(presentation::projected_display));
+    context.stack.projection =
+        context
+            .stack
+            .projection
+            .with_entry(crate::display::runtime_partial(
+                presentation::projected_display,
+            ));
     (
         ProfileView {
             size: kurbo::Size::new(1400.0, 10000.0),
@@ -150,7 +153,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
         .get(&presentation::vocabulary::PROJECTION)
         .unwrap();
     let prepared = grap::apply_expression(
-        function,
+        &function.into(),
         [(presentation::vocabulary::VALUE, Value::record([]).into())],
         &sources,
         100_000,

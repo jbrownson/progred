@@ -763,8 +763,12 @@ Scoped layout programs retain runtime results through nested child collection,
 absence propagation, and the final output check. An absent's detail fields may
 themselves contain retained callbacks. The `drawing` constructor wraps its
 runtime configuration unchanged; layout picking retains its payload until
-activation writes it into editor state. Narrow path/paint readers and the older
-border-projection composition helpers still use GID adapters.
+activation writes it into editor state. Border-projection composition captures
+its runtime callable in the wrapper's lexical environment and retains the
+projected result inside its border/`at` description. Declaration projection also
+passes its callable and argument as runtime values. Neither boundary needs to
+materialize callback code or captures. Narrow path/paint readers still use GID
+adapters.
 
 Generated drawing syntax may contain retained native closures. Explicitly
 interpreting that syntax lowers its containers without serializing the embedded

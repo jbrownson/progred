@@ -140,9 +140,10 @@ repeated-binder equality still compares materialized data. Document edits and
 copying are intentional GID boundaries.
 Scoped layout execution, nested child results, and the `drawing` constructor now
 preserve runtime values, including callbacks in absence details. Layout picking
-materializes only on activation. The older border-projection helpers and the
-declaration-projection callable boundary still need inspection; narrow path,
-paint, and drawing-command parsers also remain GID-oriented.
+materializes only on activation. Border-projection composition and declaration
+application now retain runtime callables and results too. Narrow path, paint,
+and drawing-command parsers remain GID-oriented, as does the viewport preparation
+memo's input (currently read directly from the stored declaration).
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.
