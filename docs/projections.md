@@ -759,6 +759,13 @@ Opening the writable color picker or
 starting a numeric scrub requests GID for document-editing callbacks; simply
 recognizing or displaying those facets does not materialize the enclosing record.
 
+Scoped layout programs retain runtime results through nested child collection,
+absence propagation, and the final output check. An absent's detail fields may
+themselves contain retained callbacks. The `drawing` constructor wraps its
+runtime configuration unchanged; layout picking retains its payload until
+activation writes it into editor state. Narrow path/paint readers and the older
+border-projection composition helpers still use GID adapters.
+
 Generated drawing syntax may contain retained native closures. Explicitly
 interpreting that syntax lowers its containers without serializing the embedded
 closures. The expression-facing host application adapter preserves the existing

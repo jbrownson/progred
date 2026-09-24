@@ -17,8 +17,8 @@ use gid::{CellId, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
     Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, alternatives, block_hover,
-    border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay, pickable,
-    slot,
+    border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay,
+    pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::{
@@ -186,14 +186,14 @@ fn drawing_projection(
     context: &mut ::grap::Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<Value, Halt> {
+) -> Result<::grap::RuntimeValue, Halt> {
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
+        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
     };
-    Ok(node(
+    Ok(::grap::RuntimeValue::record([(
         vocabulary::DRAWING,
-        context.eval_to_value(value, environment)?,
-    ))
+        context.eval(value, environment)?,
+    )]))
 }
 
 /// Turn an ordinary projection into one whose projected result is
@@ -660,10 +660,10 @@ fn decode_with(
         content.record_len()?;
         let child = decode_with(&content.field(vocabulary::CHILD)?, target)?;
         let interaction = target();
-        return Some(pickable(
+        return Some(pickable_runtime(
             child,
             interaction.hover,
-            content.field(vocabulary::VALUE)?.to_value(),
+            content.field(vocabulary::VALUE)?,
         ));
     }
     if let Some(content) = value.field(vocabulary::HOVERABLE) {
@@ -1051,7 +1051,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                 )
                 .register(
                     vocabulary::DRAWING,
-                    ForeignFunction::from_value(drawing_projection),
+                    ForeignFunction::new(drawing_projection),
                 )
                 .register(vocabulary::BORDER, ForeignFunction::new(border_projection))
                 .register(
@@ -1128,6 +1128,52 @@ mod tests {
         assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
             Some(ProjectionCall::Jump { steps: decoded, document: target, .. }) if decoded == steps && target == document
         ));
+    }
+
+    #[test]
+    fn drawing_constructor_keeps_native_program_code_and_captures() {
+        let library = library();
+        let host = crate::libraries::TestHost(|cell| {
+            library
+                .definitions
+                .get(cell)
+                .cloned()
+                .map(|definition| (gid::Resolution::Document, definition))
+                .into_iter()
+                .collect()
+        });
+        let captured = gid::new_cell_id();
+        let program = ::grap::evaluate_at(
+            &::grap::call(
+                ::grap::lambda([captured], ::grap::lambda([], captured.into())),
+                [(captured, number(7.0))],
+            ),
+            Some(::grap::SourceOrigin::Stored(vec![Step::Key(
+                gid::new_cell_id(),
+            )])),
+            &host,
+            100,
+        )
+        .result;
+        let configuration = ::grap::RuntimeValue::record([
+            (vocabulary::WIDTH, ::grap::RuntimeValue::f64(12.0)),
+            (vocabulary::PROGRAM, program.clone()),
+        ]);
+        let result = ::grap::apply(
+            &Value::from(vocabulary::DRAWING).into(),
+            [(presentation::vocabulary::VALUE, configuration.clone())],
+            &host,
+            100,
+        );
+        assert!(result.completed);
+        let drawn = result.result.field(vocabulary::DRAWING).unwrap();
+        assert!(drawn.same_result(&configuration));
+        let retained = drawn.field(vocabulary::PROGRAM).unwrap();
+        assert!(retained.same_result(&program));
+        assert_eq!(
+            ::grap::apply(&retained, [], &host, 100).result.as_f64(),
+            Some(7.0)
+        );
     }
 
     #[test]

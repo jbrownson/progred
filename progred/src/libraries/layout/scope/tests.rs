@@ -18,6 +18,81 @@ fn quote(value: Value) -> Value {
     call(control::QUOTE, [(::grap::vocabulary::EXPRESSION, value)])
 }
 
+fn target() -> ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+    ProjectionTarget {
+        select: Rc::new(|_| true),
+        select_with: Rc::new(|_, _| true),
+        hover: crate::libraries::test_widgets::hover(vec![]),
+    }
+}
+
+#[test]
+fn layout_results_and_nested_absent_details_keep_native_callbacks() {
+    let control = crate::libraries::control::library();
+    let host = crate::libraries::TestHost(|cell| {
+        control
+            .definitions
+            .get(cell)
+            .cloned()
+            .map(|definition| (gid::Resolution::Document, definition))
+            .into_iter()
+            .collect()
+    });
+    let callback = ::grap::evaluate_at(
+        &::grap::lambda([], Value::record([])),
+        Some(::grap::SourceOrigin::Stored(vec![Step::Key(
+            gid::new_cell_id(),
+        )])),
+        &host,
+        100,
+    )
+    .result;
+    let returned = RuntimeValue::record([(::grap::vocabulary::VALUE, callback.clone())]);
+    let (evaluation, layout) = run(target, |scope| {
+        ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
+    });
+    assert!(evaluation.completed);
+    assert!(evaluation.result.same_result(&callback));
+    assert!(layout.is_none());
+
+    let failure = RuntimeValue::record([
+        (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
+        (VALUE, callback.clone()),
+    ]);
+    let program = RuntimeValue::record([
+        (::grap::vocabulary::FUNCTION, Value::from(ROW).into()),
+        (
+            CHILDREN,
+            RuntimeValue::record([
+                (
+                    ::grap::vocabulary::FUNCTION,
+                    Value::from(control::DO).into(),
+                ),
+                (
+                    control::EXPRESSIONS,
+                    RuntimeValue::list([call(SLOT, []).into(), failure.clone()]),
+                ),
+            ]),
+        ),
+    ]);
+    let (evaluation, layout) = run(target, |scope| {
+        ::grap::evaluate_runtime_scoped(&program, &host, scope, 1000)
+    });
+    assert!(evaluation.completed);
+    assert!(evaluation.result.same_result(&failure));
+    assert!(
+        evaluation
+            .result
+            .field(VALUE)
+            .unwrap()
+            .same_result(&callback)
+    );
+    assert!(
+        layout.is_none(),
+        "failed child discards the partially emitted row"
+    );
+}
+
 fn text(value: &str) -> Value {
     call(TEXT, [(CONTENT, crate::libraries::text::value(value))])
 }
@@ -26,7 +101,7 @@ fn evaluate(
     program: &Value,
     fuel: usize,
 ) -> (
-    Evaluation<gid::Value>,
+    Evaluation,
     Option<Layout<crate::Editor, crate::frame::Hovered>>,
 ) {
     let libraries = [
@@ -45,14 +120,9 @@ fn evaluate(
             })
             .collect()
     });
-    run(
-        || ProjectionTarget {
-            select: Rc::new(|_| true),
-            select_with: Rc::new(|_, _| true),
-            hover: crate::libraries::test_widgets::hover(vec![]),
-        },
-        |scope| ::grap::evaluate_value_scoped(program, &host, scope, fuel),
-    )
+    run(target, |scope| {
+        ::grap::evaluate_scoped(program, &host, scope, fuel)
+    })
 }
 
 #[test]
@@ -87,7 +157,7 @@ fn scoped_layout_calls_compose_through_grap_functions_and_nested_bodies() {
     );
     let (result, layout) = evaluate(&program, 10000);
     assert!(result.completed);
-    assert_eq!(result.result, Value::record([]));
+    assert_eq!(result.result.to_value(), Value::record([]));
     let Recorded::Row { gap, children, .. } = layout.unwrap().record() else {
         panic!("row")
     };
@@ -160,7 +230,10 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
     ];
     for program in programs {
         let (result, layout) = evaluate(&program, 10000);
-        assert_eq!(absent::reason(&result.result), Some(INVALID_PROGRAM));
+        assert_eq!(
+            absent::reason(&result.result.to_value()),
+            Some(INVALID_PROGRAM)
+        );
         assert!(layout.is_none());
     }
     let (result, layout) = evaluate(&sequence([text("one"), text("two")]), 1);
@@ -183,7 +256,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
     );
     let (evaluation, layout) = evaluate(&failed, 1000);
     assert!(evaluation.completed);
-    assert_eq!(evaluation.result, failure);
+    assert_eq!(evaluation.result.to_value(), failure);
     assert!(layout.is_none());
     let recovered = call(
         control::MATCH,
@@ -203,7 +276,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
     );
     let (evaluation, layout) = evaluate(&recovered, 1000);
     assert!(evaluation.completed);
-    assert_eq!(evaluation.result, Value::record([]));
+    assert_eq!(evaluation.result.to_value(), Value::record([]));
     assert!(
         matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "recovered")
     );
@@ -211,7 +284,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
     let empty = call(ROW, [(CHILDREN, sequence([]))]);
     let (evaluation, layout) = evaluate(&empty, 1000);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_reason(control::MISSING_FINAL_EXPRESSION)
     );
     assert!(layout.is_none());
@@ -221,17 +294,17 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
 fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
     let value = super::super::row(2.0, [super::super::text_leaf("data", NAME_FACE)]);
     let (result, layout) = evaluate(&quote(value.clone()), 10000);
-    assert_eq!(result.result, value);
+    assert_eq!(result.result.to_value(), value);
     assert!(layout.is_none());
     let (result, layout) = evaluate(&::grap::lambda([], text("later")), 10000);
     assert!(layout.is_none());
-    let unscoped = ::grap::apply_value(
+    let unscoped = ::grap::apply(
         &result.result,
         [],
         &crate::libraries::TestHost(|_| vec![]),
         10000,
     );
-    assert!(absent::is_absent(&unscoped.result));
+    assert!(unscoped.result.is_absent());
 }
 
 #[test]
@@ -256,20 +329,17 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     );
     assert!(result.completed);
     assert!(layout.is_none());
-    let function = result
-        .result
-        .as_record()
-        .unwrap()
-        .get(&LAYOUT_PROGRAM)
-        .unwrap();
-    assert!(
-        function
-            .as_record()
-            .unwrap()
-            .get(&::grap::vocabulary::CLOSURE)
-            .is_some()
-    );
-    let (result, layout) = evaluate(&::grap::call(function.clone(), []), 10000);
+    let function = result.result.field(LAYOUT_PROGRAM).unwrap();
+    assert!(function.contains_field(::grap::vocabulary::CLOSURE));
+    let (result, layout) = run(target, |scope| {
+        ::grap::apply_scoped(
+            &function,
+            [],
+            &crate::libraries::TestHost(|_| vec![]),
+            scope,
+            10000,
+        )
+    });
     assert!(result.completed);
     assert!(
         matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "captured")

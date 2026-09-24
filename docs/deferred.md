@@ -138,6 +138,11 @@ a native closure's representation still materializes its body/environment. Compu
 children; individual patterns still adapt to the GID-oriented matcher, and
 repeated-binder equality still compares materialized data. Document edits and
 copying are intentional GID boundaries.
+Scoped layout execution, nested child results, and the `drawing` constructor now
+preserve runtime values, including callbacks in absence details. Layout picking
+materializes only on activation. The older border-projection helpers and the
+declaration-projection callable boundary still need inspection; narrow path,
+paint, and drawing-command parsers also remain GID-oriented.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.

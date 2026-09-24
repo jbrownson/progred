@@ -2,7 +2,7 @@
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
 use crate::libraries::absent;
-use ::grap::{Context, Evaluation, ForeignOverlay};
+use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
 
@@ -46,7 +46,7 @@ struct Output {
 }
 
 enum BuildError {
-    Absent(Value),
+    Absent(RuntimeValue),
     Halt(Halt),
 }
 
@@ -57,11 +57,14 @@ impl From<Halt> for BuildError {
 }
 
 fn invalid(function: CellId) -> BuildError {
-    BuildError::Absent(::grap::absent::with_detail(
-        INVALID_PROGRAM,
-        ::grap::vocabulary::FUNCTION,
-        function.into(),
-    ))
+    BuildError::Absent(
+        ::grap::absent::with_detail(
+            INVALID_PROGRAM,
+            ::grap::vocabulary::FUNCTION,
+            function.into(),
+        )
+        .into(),
+    )
 }
 
 impl Output {
@@ -80,15 +83,15 @@ impl Output {
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run(
     target: impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation<gid::Value>,
+    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
 ) -> (
-    Evaluation<Value>,
+    Evaluation,
     Option<Layout<crate::Editor, crate::frame::Hovered>>,
 ) {
     let output = Output {
         children: RefCell::new(Vec::new()),
     };
-    let unit = Value::record([]);
+    let unit = RuntimeValue::record([]);
     let emit =
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
             match operation(function, context, call, environment, &output, &target) {
@@ -100,12 +103,12 @@ pub fn run(
                 Err(BuildError::Halt(halt)) => Err(halt),
             }
         };
-    let mut evaluation = evaluate(&ForeignOverlay::from_value(FUNCTIONS, &emit));
+    let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
     let mut children = output.children.into_inner();
-    let layout = if !evaluation.completed || absent::is_absent(&evaluation.result) {
+    let layout = if !evaluation.completed || evaluation.result.is_absent() {
         None
     } else if children.len() > 1 {
-        evaluation.result = absent::with_reason(INVALID_PROGRAM);
+        evaluation.result = absent::with_reason(INVALID_PROGRAM).into();
         None
     } else {
         children.pop()
@@ -119,22 +122,20 @@ pub(super) fn display(
     let function = input.value?.field(LAYOUT_PROGRAM)?;
     let (evaluation, layout) = run(
         || input.targets.current(),
-        |scope| {
-            input
-                .env
-                .apply_runtime_scoped(&function, &[], Some(scope))
-                .into_value()
-        },
+        |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),
     );
     Some(layout.unwrap_or_else(|| {
         crate::display::at(
             [gid::Step::Key(
                 crate::libraries::presentation::vocabulary::RESULT,
             )],
-            &if absent::is_absent(&evaluation.result) {
+            &if evaluation.result.is_absent() {
                 evaluation.result
             } else {
-                ::grap::absent::with_detail(INVALID_PROGRAM, VALUE, evaluation.result)
+                RuntimeValue::record([
+                    (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
+                    (VALUE, evaluation.result),
+                ])
             },
         )
     }))
@@ -145,11 +146,11 @@ fn argument<T>(
     call: &Expression,
     environment: &Environment,
     field: CellId,
-    read: impl FnOnce(&Value) -> Option<T>,
+    read: impl FnOnce(&RuntimeValue) -> Option<T>,
 ) -> Result<Option<T>, Halt> {
     match context.field(call, field) {
         Some(expression) => context
-            .eval_to_value(expression, environment)
+            .eval(expression, environment)
             .map(|value| read(&value)),
         None => Ok(None),
     }
@@ -214,9 +215,8 @@ fn operation(
     }
     macro_rules! children {
         ($body:expr) => {{
-            let (result, children) =
-                output.collect(|| context.eval_to_value($body, environment))?;
-            if absent::is_absent(&result) {
+            let (result, children) = output.collect(|| context.eval($body, environment))?;
+            if result.is_absent() {
                 return Err(BuildError::Absent(result));
             }
             children
@@ -273,10 +273,13 @@ fn operation(
         }
         TEXT => {
             let paint = match context.field(call, PAINT) {
-                Some(_) => arg!(PAINT, read_paint),
+                Some(_) => arg!(PAINT, |value| read_paint(value.as_value())),
                 None => Paint::Face(Face::Ink),
             };
-            let text = arg!(CONTENT, |value| text::read(value).map(str::to_owned));
+            let text = arg!(CONTENT, |value| {
+                let blob = value.field(text::vocabulary::UTF8)?;
+                std::str::from_utf8(blob.as_blob()?).ok().map(str::to_owned)
+            });
             leaf(Leaf::Text {
                 text,
                 paint,
@@ -284,14 +287,30 @@ fn operation(
             })
         }
         SLOT => slot(),
-        DESCEND => descend(arg!(STEP, crate::libraries::path::read_step), None, None),
-        DESCEND_PATH => crate::display::descend_path(arg!(STEPS, crate::libraries::path::read)),
+        DESCEND => descend(
+            arg!(STEP, |value| crate::libraries::path::read_step(
+                value.as_value()
+            )),
+            None,
+            None,
+        ),
+        DESCEND_PATH => {
+            crate::display::descend_path(arg!(STEPS, |value| crate::libraries::path::read(
+                value.as_value()
+            )))
+        }
         JUMP => crate::display::jump(
-            arg!(STEPS, crate::libraries::path::read),
-            arg!(DOCUMENT_PATH, crate::libraries::path::read),
+            arg!(STEPS, |value| crate::libraries::path::read(
+                value.as_value()
+            )),
+            arg!(DOCUMENT_PATH, |value| crate::libraries::path::read(
+                value.as_value()
+            )),
         ),
         AT => {
-            let steps = arg!(STEPS, crate::libraries::path::read);
+            let steps = arg!(STEPS, |value| crate::libraries::path::read(
+                value.as_value()
+            ));
             crate::display::at(
                 steps,
                 context.eval(need!(context.field(call, VALUE)), environment)?,
@@ -316,12 +335,12 @@ fn operation(
                     descent,
                 },
                 fuel as usize,
-                program.into(),
+                program,
             )
         }
         SELECTABLE | HOVERABLE | HOVER_BLOCK | PICKABLE | ON_EVENT => {
             let value = if function == PICKABLE {
-                Some(arg!(VALUE, |value| Some(value.clone())))
+                Some(context.eval(need!(context.field(call, VALUE)), environment)?)
             } else {
                 None
             };
@@ -340,7 +359,7 @@ fn operation(
                 }
                 HOVERABLE => on_hover(child, target().hover),
                 HOVER_BLOCK => block_hover(child),
-                PICKABLE => pickable(child, target().hover, need!(value)),
+                PICKABLE => pickable_runtime(child, target().hover, need!(value)),
                 ON_EVENT => on_event(child, need!(handler)),
                 _ => unreachable!(),
             }
