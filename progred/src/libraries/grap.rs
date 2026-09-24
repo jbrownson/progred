@@ -440,6 +440,12 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (::grap::vocabulary::FFI, "ffi"),
         (::grap::vocabulary::EVALUATE, "evaluate"),
         (::grap::vocabulary::EXPRESSION, "expression"),
+        (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
+        (::grap::source::vocabulary::INPUT, "input source"),
+        (::grap::source::vocabulary::STORED, "document source"),
+        (::grap::source::vocabulary::CELL, "source cell"),
+        (::grap::source::vocabulary::PATH, "source path"),
+        (::grap::source::vocabulary::SOURCE, "definition source"),
         (vocabulary::GRAP, "grap"),
     ] {
         cells.set_value(cell, name::record(value, []));

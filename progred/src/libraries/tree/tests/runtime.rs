@@ -99,7 +99,7 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
     let root = crate::workspace::Root::document();
     let callbacks =
         [A, B].map(|source| retained(::grap::lambda([], f64::value(7.0)), source, &host));
-    assert_eq!(callbacks[0].to_value(), callbacks[1].to_value());
+    assert_ne!(callbacks[0].to_value(), callbacks[1].to_value());
     assert!(!callbacks[0].same_result(&callbacks[1]));
     for fail in [false, true] {
         let maker = retained(
@@ -130,7 +130,7 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
         let programs = payloads
             .clone()
             .map(|value| ::grap::apply(&maker, [(VALUE, value)], &host, 1000).result);
-        assert_eq!(programs[0].to_value(), programs[1].to_value());
+        assert_ne!(programs[0].to_value(), programs[1].to_value());
         let first = prepared(&computations, &root, &[], programs[0].clone(), 1000);
         assert!(Rc::ptr_eq(
             &first,

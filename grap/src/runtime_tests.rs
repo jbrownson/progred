@@ -326,9 +326,9 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     let b = make(second);
     assert!(
         !a.same_result(&b),
-        "equal serialized code must not erase different origins"
+        "identical code at different origins is not interchangeable"
     );
-    assert_eq!(a.to_value(), b.to_value());
+    assert_ne!(a.to_value(), b.to_value());
     for (closure, field) in [(a, first), (b, second)] {
         let source = RefCell::new(None);
         let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
@@ -513,7 +513,10 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
     )
     .result;
 
-    for offset in [1.0, 2.0] {
+    for (offset, callback_value) in [
+        (1.0, closure.clone()),
+        (2.0, RuntimeValue::from(closure.to_value())),
+    ] {
         let traces = Rc::new(RefCell::new(Vec::new()));
         let output = traces.clone();
         let receiver = host(vec![(
@@ -531,7 +534,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
         let result = apply(
             &driver,
             [
-                (callback, closure.clone()),
+                (callback, callback_value),
                 (captured, RuntimeValue::f64(999.0)),
             ],
             &receiver,
@@ -561,6 +564,233 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
         code.upgrade().is_none(),
         "execution caches must not keep code alive after the run"
     );
+}
+
+#[test]
+fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() {
+    let (sink, creation, invocation, ancestor, library) = (
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+    );
+    let empty = host(vec![]);
+    let path = vec![
+        gid::Step::Key(creation),
+        gid::Step::Element(gid::position::between(None, None).unwrap()),
+    ];
+    for origin in [
+        Some(SourceOrigin::Stored(path.clone())),
+        Some(SourceOrigin::Cell {
+            cell: ancestor,
+            source: Resolution::Library(library),
+            path,
+        }),
+        None,
+    ] {
+        let native = evaluate_at(
+            &lambda([], call(sink.into(), [])),
+            origin.clone(),
+            &empty,
+            100,
+        )
+        .result;
+        let expected = source::origin(match &native.0 {
+            RuntimeValueKind::Closure(closure) => &closure.body,
+            _ => panic!("expected a closure"),
+        });
+        let mut encoded = native.to_value();
+        let trace = RefCell::new(None);
+        let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
+            *trace.borrow_mut() = context.call_trace();
+            Ok(RuntimeValue::f64(7.0))
+        };
+        let ids = [sink];
+        let overlay = ForeignOverlay::new(&ids, &capture);
+        for _ in 0..3 {
+            // The source library is deliberately absent from the receiving host.
+            let mut context = context(&empty, Some(&overlay), 100);
+            let closure = RuntimeValue::new(RuntimeValueKind::Closure(
+                context.runtime_closure(&encoded.clone().into()).unwrap(),
+            ));
+            let next = closure.to_value();
+            assert_eq!(next, encoded);
+            encoded = next;
+            let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure)]);
+            let code = context.lower_runtime_code_at(
+                &expression,
+                Some(OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(
+                    SourceOrigin::Stored(vec![gid::Step::Key(invocation)]),
+                ))))),
+            );
+            let result = context
+                .eval(code, &Environment::default())
+                .unwrap_or_else(|halt| panic!("{:?}", halt.0));
+            assert_eq!(result.as_f64(), Some(7.0));
+            assert_eq!(
+                trace
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .origins()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .cloned()
+                    .chain([SourceOrigin::Stored(vec![gid::Step::Key(invocation)])])
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+}
+
+#[test]
+fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
+    let (sink, caller, callback) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let empty = host(vec![]);
+    let generated = {
+        let mut context = context(&empty, None, 100);
+        context.closure_value([], call(sink.into(), []), &Environment::default())
+    };
+    let serialized = generated.to_value();
+    let fields = serialized
+        .as_record()
+        .unwrap()
+        .get(&vocabulary::CLOSURE)
+        .unwrap()
+        .as_record()
+        .unwrap();
+    assert!(!fields.contains_key(&source::vocabulary::BODY_ORIGIN));
+    let malformed = Value::record([(
+        vocabulary::CLOSURE,
+        Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0))),
+    )]);
+    let driver = evaluate_at(
+        &lambda([callback], call(callback.into(), [])),
+        Some(SourceOrigin::Stored(vec![gid::Step::Key(caller)])),
+        &empty,
+        100,
+    )
+    .result;
+    let trace = RefCell::new(None);
+    let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
+        *trace.borrow_mut() = context.call_trace();
+        Ok(RuntimeValue::f64(7.0))
+    };
+    let ids = [sink];
+    let overlay = ForeignOverlay::new(&ids, &capture);
+    for value in [generated, serialized.into(), malformed.into()] {
+        let result = apply_scoped(&driver, [(callback, value)], &empty, &overlay, 100);
+        assert!(result.completed);
+        assert_eq!(result.result.as_f64(), Some(7.0));
+        assert_eq!(
+            trace
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .origins()
+                .cloned()
+                .collect::<Vec<_>>(),
+            [SourceOrigin::Stored(vec![
+                gid::Step::Key(caller),
+                gid::Step::Key(vocabulary::BODY)
+            ])]
+        );
+    }
+}
+
+#[test]
+fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
+    let (first, second, enclosing, library, sink) = (
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+        new_cell_id(),
+    );
+    let creator = TestHost(move |cell| {
+        if cell == first || cell == second {
+            vec![(Resolution::Document, Definition::Value(enclosing.into()))]
+        } else if cell == enclosing {
+            vec![(
+                Resolution::Library(library),
+                Definition::Value(Value::record([(
+                    vocabulary::VALUE,
+                    lambda([], call(sink.into(), [])),
+                )])),
+            )]
+        } else {
+            vec![]
+        }
+    });
+    let a = evaluate(&first.into(), &creator, 100).result.to_value();
+    let b = evaluate(&second.into(), &creator, 100).result.to_value();
+    assert_eq!(a, b);
+    let fields = a
+        .as_record()
+        .unwrap()
+        .get(&vocabulary::CLOSURE)
+        .unwrap()
+        .as_record()
+        .unwrap();
+    assert_eq!(
+        source::read(fields.get(&source::vocabulary::BODY_ORIGIN).unwrap()),
+        Some(SourceOrigin::Cell {
+            cell: enclosing,
+            source: Resolution::Library(library),
+            path: vec![
+                gid::Step::Key(vocabulary::VALUE),
+                gid::Step::Key(vocabulary::BODY)
+            ],
+        })
+    );
+}
+
+#[test]
+fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() {
+    let (sink, location, binding) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let empty = host(vec![]);
+    let inner = evaluate_at(
+        &lambda([], call(sink.into(), [])),
+        Some(SourceOrigin::Stored(vec![gid::Step::Key(location)])),
+        &empty,
+        100,
+    )
+    .result;
+    let mut context = context(&empty, None, 100);
+    let environment = Environment::default().extended_runtime([(binding, inner.clone())]);
+    let captured = context.closure_value([], call(binding.into(), []), &environment);
+    let inline = context.lower_runtime_code(&RuntimeValue::record([(vocabulary::FUNCTION, inner)]));
+    let embedded = context.closure([], inline, &Environment::default());
+    let trace = RefCell::new(None);
+    let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
+        *trace.borrow_mut() = context.call_trace();
+        Ok(RuntimeValue::f64(7.0))
+    };
+    let ids = [sink];
+    let overlay = ForeignOverlay::new(&ids, &capture);
+    for closure in [captured, embedded] {
+        for value in [closure.clone(), closure.to_value().into()] {
+            let result = apply_scoped(&value, [], &empty, &overlay, 100);
+            assert!(result.completed);
+            assert_eq!(result.result.as_f64(), Some(7.0));
+            assert_eq!(
+                trace
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .origins()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                [SourceOrigin::Stored(vec![
+                    gid::Step::Key(location),
+                    gid::Step::Key(vocabulary::BODY)
+                ])]
+            );
+        }
+    }
 }
 
 #[test]

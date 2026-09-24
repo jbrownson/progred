@@ -392,7 +392,7 @@ mod tests {
         };
         let a = make(gid::new_cell_id());
         let b = make(gid::new_cell_id());
-        assert_eq!(a.to_value(), b.to_value());
+        assert_ne!(a.to_value(), b.to_value());
         assert!(!a.same_result(&b));
         for closure in [&a, &a, &b, &b, &a] {
             let expression = RuntimeValue::record([(grap::vocabulary::VALUE, closure.clone())]);

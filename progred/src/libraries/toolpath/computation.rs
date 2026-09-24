@@ -394,7 +394,7 @@ mod tests {
                 )
                 .result])])
             });
-            assert_eq!(programs[0].to_value(), programs[1].to_value());
+            assert_ne!(programs[0].to_value(), programs[1].to_value());
             let input = computations.runtime.input(programs[0].clone());
             let memo = recording(
                 &computations,

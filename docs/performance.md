@@ -324,6 +324,30 @@ this does not measure subsequent recording or Fidget rendering. Warm memo
 demands took about 1–8 µs. The editor suite passed 892 tests (51 ignored), the
 threaded web build passed, and the optional profiling examples compiled.
 
+### Closure source metadata round trips — 2026-09-23
+
+Native closures now materialize optional body-origin metadata in their ordinary
+GID representation, and reload that metadata when called. The existing path
+codec is shared with the editor. Retained native code/captures and invocation
+stacks are unchanged; no eager origin encoding or new computation cache was
+added. Generated code without a source remains unannotated.
+
+A controls-only release canary measured 322.12 µs before and 331.00 / 340.00 µs
+after (five warm-up, 60 measured frames). These are small absolute differences,
+not evidence of a speedup or a precisely established regression. Two serial
+five-trial tree canaries, excluding each first trial, measured 4.13–4.71 ms for
+the native 504-leaf tree, versus the preceding checkpoint's 4.03–4.47 ms.
+Explicit materialization took 3.45–3.81 ms, versus 2.33–2.60 ms previously:
+preserving the additional source data costs roughly another millisecond at that
+boundary. The normal runtime preview does not request that complete GID view.
+These measurements exclude Fidget geometry/rendering and native presentation.
+
+The evaluator suite passed 88 tests, the editor suite 892 (51 ignored), and
+the threaded web check passed. Tests cover cross-evaluation captures/current
+call stacks, repeated serialization, absent/malformed annotations, unavailable
+source libraries, nested closures, and nearest-cell anchors independent of the
+reference occurrence.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

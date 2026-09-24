@@ -724,6 +724,34 @@ retain a cell identity and resolve its implementation in that receiving
 evaluation. Code origins survive; a closure's creation-time call stack is not
 part of its invocation-time call stack.
 
+Closure GID records also retain an optional `body origin` field beside `body`
+and `environment`. It describes the body's source, not the call that created
+the closure. The ordinary record forms are:
+
+```text
+{document source: path}
+{source cell: cell, definition source: document | {library: id}, source path: path}
+{input source: path}
+```
+
+Paths use the existing path-library convention. The shared codec lives in
+`grap::path`; Progred's path library re-exports it and supplies its presentation
+names. These are ordinary GID records, not new atoms. The editor anchors source
+at the closest enclosing cell definition, or the document root when there is
+none. A cell origin does not remember which reference occurrence led to it.
+The low-level evaluator's `input source` form remains relative to a
+caller-supplied input; editor evaluations supply anchored origins before
+retaining closures across runs.
+
+Materializing and reloading a closure preserves its body's known origin,
+lexical captures, and the separate origins of embedded closures. Child code
+locations extend the body origin. Generated bodies without an origin remain
+unattributed; neither materialization nor invocation fabricates one. Missing
+or malformed origin metadata does not prevent calling a valid closure. Origins
+are best-effort annotations: decoding does not resolve or retain the referenced
+document/library, and unavailable locations simply fail to link on hover.
+No creation-time stack, projection occurrence, or evaluator identity is encoded.
+
 Native `ForeignFunction::new` callbacks return runtime values, and
 `Context::eval` evaluates an argument to a runtime value. Generated runtime
 arguments remain values, including closures: they are not materialized and
@@ -753,8 +781,9 @@ argument values; parameter discovery reads native closure parameters directly,
 without materializing code or captures. Both `evaluate` and presentation's
 `render` pass runtime syntax into evaluation, including memoized evaluation.
 The memo input uses the same conservative runtime equality as results, so
-equal serialized closures with different origins cannot silently reuse one
-another. Domain-specific and other legacy partials still use the GID adapter.
+closures with different origins cannot silently reuse one another. Those
+origins now differ in their GID representations too. Domain-specific and other
+legacy partials still use the GID adapter.
 Opening the writable color picker or
 starting a numeric scrub requests GID for document-editing callbacks; simply
 recognizing or displaying those facets does not materialize the enclosing record.
@@ -800,8 +829,10 @@ Inline code retained by the editor is anchored to its original document
 occurrence before evaluation; cell code retains its definition source and path.
 Later invocation does not rebase those locations onto the drawing program.
 Cmd-hover chooses the innermost call with an available projected occurrence.
-Memo result comparison conservatively includes native closure code/capture
-identity, so equal serialized values cannot discard changed source locations.
+Memo result comparison still conservatively includes native closure code/capture
+identity. It can decline reuse for separately allocated but equivalent closures;
+this is a cheap reuse test, not Grap value equality. GID equality now includes
+the explicit origin metadata instead of silently discarding it.
 
 Materialization preserves existing sharing of runtime records, lists, and
 captured environments within one returned value. Its address table lives only

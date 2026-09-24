@@ -15,7 +15,9 @@ mod effect_tests;
 mod runtime_tests;
 
 pub mod memo;
+pub mod path;
 mod reify;
+pub mod source;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -1432,38 +1434,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn source_origin(&self, expression: &Expression) -> Option<SourceOrigin> {
-        let mut origin = expression.0.origin.as_ref()?;
-        let mut path = Vec::new();
-        loop {
-            match origin.0.as_ref() {
-                OriginNode::Root(OriginRoot::Located(base)) => {
-                    path.reverse();
-                    let mut base = base.clone();
-                    let prefix = match &mut base {
-                        SourceOrigin::Input(path) | SourceOrigin::Stored(path) => path,
-                        SourceOrigin::Cell { path, .. } => path,
-                    };
-                    prefix.extend(path);
-                    return Some(base);
-                }
-                OriginNode::Root(OriginRoot::Input) => {
-                    path.reverse();
-                    return Some(SourceOrigin::Input(path));
-                }
-                OriginNode::Root(OriginRoot::Cell { cell, source }) => {
-                    path.reverse();
-                    return Some(SourceOrigin::Cell {
-                        cell: *cell,
-                        source: *source,
-                        path,
-                    });
-                }
-                OriginNode::Child { parent, step } => {
-                    path.push(step.clone());
-                    origin = parent;
-                }
-            }
-        }
+        source::origin(expression)
     }
 
     /// Capture the active source call chain. Calls without a source are skipped,
@@ -2471,7 +2442,11 @@ impl<'a> Context<'a> {
                     .list_values()?
                     .map(|value| value.as_cell().map(|cell| Parameter { cell }))
                     .collect::<Option<Vec<_>>>()?;
-                let body = self.lower_runtime_code(&fields.field(vocabulary::BODY)?);
+                let origin = fields
+                    .field(source::vocabulary::BODY_ORIGIN)
+                    .and_then(|value| source::read(value.as_value()))
+                    .map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
+                let body = self.lower_runtime_code_at(&fields.field(vocabulary::BODY)?, origin);
                 let captured = fields.field(vocabulary::ENVIRONMENT)?;
                 let environment = match &captured.0 {
                     RuntimeValueKind::Data(value) => self.environment(value)?,

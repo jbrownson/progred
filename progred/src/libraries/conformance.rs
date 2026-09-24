@@ -208,12 +208,19 @@ fn callable_record_patterns_are_transparent_to_lowering() {
         (grap::ffi(f64::vocabulary::SUM), grap::vocabulary::FFI),
     ] {
         let evaluated = evaluate(&subject, 100).result;
+        let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
+        // The subject is evaluated at a different location inside `match`.
+        // This open pattern compares callable contents, not that annotation.
+        let contents = if field == grap::vocabulary::CLOSURE {
+            let mut fields = contents.as_record().unwrap().clone();
+            fields.remove(&grap::source::vocabulary::BODY_ORIGIN);
+            Value::Record(fields)
+        } else {
+            contents
+        };
         for pattern in [
             Value::record([]),
-            Value::record([(
-                field,
-                evaluated.as_record().unwrap().get(&field).unwrap().clone(),
-            )]),
+            Value::record([(field, contents)]),
         ] {
             let cases = Value::list([
                 Value::record([

@@ -124,8 +124,9 @@ are anchored to their original occurrence. The
 Data-oriented projections and native functions still have explicit GID adapters;
 these can materialize runtime containers even when a later runtime-aware
 projection ultimately handles them. Reducing that conversion work is a remaining
-optimization, not a reason to put origins in serialized GID. Do not preserve a
-creator's dynamic stack as a caller.
+optimization. Closure code origins now round-trip as explicit GID metadata;
+keeping values lowered is an efficiency choice, not the only way to preserve
+their source annotations. Do not preserve a creator's dynamic stack as a caller.
 Fold classification, collapsed display, source highlighting, text/blob/color
 partials, empty partials, expanded structural lists/records, control-form
 partials, shallow Grap reference/declaration helpers, general call/lambda/value/FFI
