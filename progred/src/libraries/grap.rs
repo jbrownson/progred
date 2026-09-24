@@ -151,29 +151,14 @@ fn field_spelling(env: &dyn crate::display::Env, field: CellId) -> (String, Face
     }
 }
 
-fn parameters(value: &Value) -> Option<Vec<CellId>> {
-    let fields = value.as_record()?;
-    let fields = match fields.get(&::grap::vocabulary::CLOSURE) {
-        Some(closure) => closure.as_record()?,
-        None => fields,
-    };
-    fields.get(&BODY)?;
-    fields
-        .get(&PARAMS)?
-        .as_list()?
-        .values()
-        .map(Value::as_cell)
-        .collect()
-}
-
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
 pub fn function_parameters<'a>(
-    function: &Value,
+    function: &::grap::RuntimeValue,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Option<Vec<CellId>> {
-    let mut function = function;
+    let mut function = function.clone();
     let mut followed = std::collections::BTreeSet::new();
     while let Some(cell) = function.as_cell() {
         if !followed.insert(cell) {
@@ -183,12 +168,12 @@ pub fn function_parameters<'a>(
         if definition.native {
             return None;
         }
-        function = definition.value;
+        function = definition.value.into();
     }
-    parameters(function)
+    function.callable_parameters()
 }
 
-pub fn parameter_labels(function: Value) -> CompletionProvider {
+pub fn parameter_labels(function: ::grap::RuntimeValue) -> CompletionProvider {
     std::rc::Rc::new(move |request| {
         matches!(request.kind, CompletionKind::Field).then_some(())?;
         Some(
@@ -206,8 +191,8 @@ pub fn call_completion<'a>(
     display: impl Into<crate::display::CompletionText>,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Completion {
-    let first =
-        function_parameters(&function, resolve).and_then(|parameters| parameters.first().copied());
+    let first = function_parameters(&(&function).into(), resolve)
+        .and_then(|parameters| parameters.first().copied());
     let continuation = match first {
         Some(parameter) => crate::libraries::selection::pending_at(&[Step::Key(parameter)]),
         None => crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
@@ -243,10 +228,7 @@ pub(crate) fn call_with_function(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?;
     let function = fields.field(FUNCTION)?;
-    // Parameter discovery still reads source metadata. Only the callable
-    // crosses that boundary, never the call's argument values.
-    let parameter_source = function.as_value();
-    let parameters = function_parameters(parameter_source, &|cell| input.env.resolve(cell));
+    let parameters = function_parameters(&function, &|cell| input.env.resolve(cell));
     let mut parameter_positions = std::collections::BTreeMap::new();
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
@@ -256,7 +238,7 @@ pub(crate) fn call_with_function(
             vec![RecordField {
                 label: completion(
                     CompletionKind::Field,
-                    Some(parameter_labels(parameter_source.clone())),
+                    Some(parameter_labels(function.clone())),
                 ),
                 value: slot(),
             }]
@@ -390,11 +372,10 @@ pub fn evaluate_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let expression = input.value?.field(EVALUATE)?;
-    let result = input.env.evaluate_runtime(
-        expression.as_value(),
-        ::grap::DEFAULT_FUEL,
-        &[Step::Key(EVALUATE)],
-    );
+    let result =
+        input
+            .env
+            .evaluate_runtime(&expression, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
     let expression = shared(expression_path(
         [Step::Key(EVALUATE)],
         &input.default_projection,
@@ -573,25 +554,27 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
             .filter_map(|cell| {
                 let definition = (request.resolve)(cell)?;
                 let name = name::read(definition.value)?;
-                (definition.native || function_parameters(&cell.into(), request.resolve).is_some())
-                    .then(|| {
-                        let offer = call_completion(cell.into(), cell, request.resolve)
-                            .with_detail(match definition.source {
-                                gid::Resolution::Document => "call".to_owned(),
-                                gid::Resolution::Library(library) => format!(
-                                    "call · {}",
-                                    (request.resolve)(library)
-                                        .and_then(|definition| name::read(definition.value))
-                                        .map(str::to_owned)
-                                        .unwrap_or_else(|| short_id(library))
-                                ),
-                            });
-                        (
-                            matches!(definition.source, gid::Resolution::Library(_)),
-                            name,
-                            offer,
-                        )
-                    })
+                (definition.native
+                    || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
+                .then(|| {
+                    let offer = call_completion(cell.into(), cell, request.resolve).with_detail(
+                        match definition.source {
+                            gid::Resolution::Document => "call".to_owned(),
+                            gid::Resolution::Library(library) => format!(
+                                "call · {}",
+                                (request.resolve)(library)
+                                    .and_then(|definition| name::read(definition.value))
+                                    .map(str::to_owned)
+                                    .unwrap_or_else(|| short_id(library))
+                            ),
+                        },
+                    );
+                    (
+                        matches!(definition.source, gid::Resolution::Library(_)),
+                        name,
+                        offer,
+                    )
+                })
             })
             .collect();
         offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), *name));
@@ -920,7 +903,7 @@ mod tests {
         let function = new_cell_id();
         let first = new_cell_id();
         let second = new_cell_id();
-        let provider = parameter_labels(function.into());
+        let provider = parameter_labels(Value::from(function).into());
         let reads = std::cell::Cell::new(0);
         for expected in [vec![first, second], vec![second, first], vec![]] {
             let definition = ::grap::lambda(expected.iter().copied(), Value::record([]));
@@ -1013,7 +996,9 @@ mod tests {
         )]);
         for value in [&lambda, &closure] {
             assert_eq!(
-                function_parameters(value, &|_| panic!("inline function needs no lookup")),
+                function_parameters(&value.into(), &|_| panic!(
+                    "inline function needs no lookup"
+                )),
                 Some(vec![parameter])
             );
         }
@@ -1026,12 +1011,12 @@ mod tests {
             })
         };
         assert_eq!(
-            function_parameters(&alias.into(), &resolve),
+            function_parameters(&Value::from(alias).into(), &resolve),
             Some(vec![parameter])
         );
-        assert_eq!(function_parameters(&reference, &|_| None), None);
+        assert_eq!(function_parameters(&(&reference).into(), &|_| None), None);
         assert_eq!(
-            function_parameters(&reference, &|_| Some(ResolvedCell {
+            function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
                 source: gid::Resolution::Document,
                 value: &reference,
                 native: false,
@@ -1039,7 +1024,7 @@ mod tests {
             None
         );
         assert_eq!(
-            function_parameters(&reference, &|_| Some(ResolvedCell {
+            function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
                 source: gid::Resolution::Library(ID),
                 value: &lambda,
                 native: true,
@@ -1055,7 +1040,9 @@ mod tests {
             ]),
         ] {
             assert_eq!(
-                function_parameters(&invalid, &|_| panic!("metadata must not evaluate a call")),
+                function_parameters(&(&invalid).into(), &|_| panic!(
+                    "metadata must not evaluate a call"
+                )),
                 None
             );
         }

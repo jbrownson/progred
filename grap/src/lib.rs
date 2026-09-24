@@ -539,6 +539,28 @@ impl RuntimeValue {
         }
     }
 
+    /// Declared parameter order, without evaluating syntax or materializing a
+    /// native closure's code and captured environment.
+    pub fn callable_parameters(&self) -> Option<Vec<CellId>> {
+        if let RuntimeValueKind::Closure(closure) = &self.0 {
+            return Some(
+                closure
+                    .params
+                    .iter()
+                    .map(|parameter| parameter.cell)
+                    .collect(),
+            );
+        }
+        let fields = self.field(vocabulary::CLOSURE);
+        let fields = fields.as_ref().unwrap_or(self);
+        fields.field(vocabulary::BODY)?;
+        fields
+            .field(vocabulary::PARAMS)?
+            .list_values()?
+            .map(|parameter| parameter.as_cell())
+            .collect()
+    }
+
     pub fn list_len(&self) -> Option<usize> {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_list()?.len()),
@@ -1202,16 +1224,27 @@ impl<'a> Context<'a> {
     }
 
     fn lower_runtime_code(&mut self, value: &RuntimeValue) -> Expression {
+        self.lower_runtime_code_at(value, None)
+    }
+
+    fn lower_runtime_code_at(
+        &mut self,
+        value: &RuntimeValue,
+        origin: Option<OriginId>,
+    ) -> Expression {
         match &value.0 {
             RuntimeValueKind::Data(value)
             | RuntimeValueKind::F64(RuntimeF64 {
                 original: Some(value),
                 ..
-            }) => self.lower_unattributed_source(value),
+            }) => self.lower_with(value, true, origin),
             RuntimeValueKind::Record(fields) => {
                 let fields: Vec<_> = fields
                     .iter()
-                    .map(|(key, value)| (*key, self.lower_runtime_code(value)))
+                    .map(|(key, value)| {
+                        let child = self.child_origin(origin.clone(), gid::Step::Key(*key));
+                        (*key, self.lower_runtime_code_at(value, child))
+                    })
                     .collect();
                 let form = if let Some(function) = lowered_field(&fields, vocabulary::FUNCTION) {
                     Form::Call { function }
@@ -1243,19 +1276,37 @@ impl<'a> Context<'a> {
                 };
                 Expression(Rc::new(Lowered {
                     source: value.clone(),
-                    origin: None,
+                    origin,
                     form,
                     fields: Some(fields),
                     elements: None,
                 }))
             }
-            RuntimeValueKind::List(values) => Expression(Rc::new(Lowered {
-                source: value.clone(),
-                origin: None,
-                form: Form::Ready(value.clone()),
-                fields: None,
-                elements: Some(values.iter().map(|v| self.lower_runtime_code(v)).collect()),
-            })),
+            RuntimeValueKind::List(values) => {
+                let elements = if origin.is_some() {
+                    values
+                        .iter()
+                        .zip(gid::position::spread(values.len()))
+                        .map(|(value, position)| {
+                            let child =
+                                self.child_origin(origin.clone(), gid::Step::Element(position));
+                            self.lower_runtime_code_at(value, child)
+                        })
+                        .collect()
+                } else {
+                    values
+                        .iter()
+                        .map(|value| self.lower_runtime_code(value))
+                        .collect()
+                };
+                Expression(Rc::new(Lowered {
+                    source: value.clone(),
+                    origin,
+                    form: Form::Ready(value.clone()),
+                    fields: None,
+                    elements: Some(elements),
+                }))
+            }
             _ => runtime_expression(value.clone()),
         }
     }
@@ -2533,6 +2584,22 @@ pub fn evaluate_at(
             Some(origin) => context.lower_source(expression, OriginRoot::Located(origin)),
             None => context.lower_unattributed_source(expression),
         };
+        context.eval(expression, &Environment::default())
+    })
+}
+
+/// Interpret runtime-held syntax at an optional source location. Embedded
+/// native callables retain their own code origins and lexical captures.
+pub fn evaluate_runtime_at(
+    expression: &RuntimeValue,
+    origin: Option<SourceOrigin>,
+    host: &dyn Host,
+    fuel: usize,
+) -> Evaluation {
+    context(host, None, fuel).conclude(|context| {
+        let origin =
+            origin.map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
+        let expression = context.lower_runtime_code_at(expression, origin);
         context.eval(expression, &Environment::default())
     })
 }

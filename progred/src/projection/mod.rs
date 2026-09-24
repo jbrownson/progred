@@ -174,15 +174,15 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
     }
     fn evaluate_runtime(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         steps: &[Step],
     ) -> grap::RuntimeValue {
-        grap::evaluate_at(expression, self.origin(steps), &self.cx.sources, fuel).result
+        grap::evaluate_runtime_at(expression, self.origin(steps), &self.cx.sources, fuel).result
     }
     fn evaluate_runtime_memo(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         steps: &[Step],
     ) -> grap::RuntimeValue {

@@ -214,6 +214,22 @@ construction was 9.31–9.48 ms versus 9.27–9.84 ms. These short serial runs s
 no meaningful overall performance change; the preview-stub caveat above still
 applies. Compilation and correctness testing had finished before measurements.
 
+### Runtime evaluation inputs — 2026-09-23
+
+Callable parameter discovery now inspects native closure parameters without
+materializing code or captures. The `evaluate` and `render` projection boundaries,
+including the memo input, accept runtime syntax and retain embedded closures.
+Located runtime lowering supplies origins for generated containers without
+rebasing retained closure bodies. Memo input comparison preserves those identities.
+
+After builds and correctness tests completed, three serial controls-only frame
+medians were 317.92, 325.87, and 330.17 µs, compared with 323.21, 321.00, and
+337.54 µs at the previous checkpoint. Warm uncached program construction was
+9.44–9.91 ms versus 9.31–9.48 ms. These short runs show no clear overall gain;
+they do not establish recovery of the ownership overhead. The existing
+GID-oriented preview-stub caveat above still applies. All 83 Grap tests and
+878 editor tests passed (50 editor tests ignored); the threaded web build passed.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

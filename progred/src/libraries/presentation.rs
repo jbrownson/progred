@@ -109,16 +109,15 @@ pub(crate) fn viewport_runtime_output(
 }
 
 pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?;
-    let expression = fields.get(&vocabulary::RENDER)?;
-    let evaluated = expression.as_record().and_then(|fields| {
-        let expression = fields.get(&::grap::vocabulary::EXPRESSION)?;
-        let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
+    let expression = input.value?.field(vocabulary::RENDER)?;
+    let evaluated = (|| {
+        let fuel = expression.field(layout::vocabulary::FUEL)?.as_f64()?;
+        let expression = expression.field(::grap::vocabulary::EXPRESSION)?;
         (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64).then(|| {
             input.env.evaluate_runtime_memo(
-                expression,
+                &expression,
                 fuel as usize,
                 &[
                     Step::Key(vocabulary::RENDER),
@@ -126,10 +125,10 @@ pub fn display(
                 ],
             )
         })
-    });
+    })();
     let result = evaluated.unwrap_or_else(|| {
         input.env.evaluate_runtime_memo(
-            expression,
+            &expression,
             ::grap::DEFAULT_FUEL,
             &[Step::Key(vocabulary::RENDER)],
         )
@@ -173,7 +172,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "presentation",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
         crate::display::compose_partials([
-            crate::display::partial(display),
+            crate::display::runtime_partial(display),
             crate::display::partial(outline::display),
         ]),
     )
@@ -190,6 +189,13 @@ mod tests {
     use std::rc::Rc;
 
     const LEFT_VALUE: CellId = CellId::from_u128(1);
+
+    fn display(
+        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        let value = input.value.map(::grap::RuntimeValue::from);
+        super::display(&input.with_value(value.as_ref()))
+    }
 
     #[test]
     fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {

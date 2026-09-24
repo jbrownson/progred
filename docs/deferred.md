@@ -131,9 +131,9 @@ partials, empty partials, expanded structural lists/records, control-form
 partials, shallow Grap reference/declaration helpers, general call/lambda/value/FFI
 projections, and numeric facets/notation now avoid requesting a whole GID view.
 Domain and other legacy projections still need migration. Callable parameter
-discovery still inspects GID metadata, and the evaluate projection's source
-interface still accepts GID. Explicitly expanding a native closure's
-representation also still materializes its body/environment. Computed
+discovery and the `evaluate`/`render` source interfaces now retain runtime values,
+including embedded closures through memoized evaluation. Explicitly expanding
+a native closure's representation still materializes its body/environment. Computed
 `match` cases and `let`/`where` bindings retain their runtime lists and executable
 children; individual patterns still adapt to the GID-oriented matcher, and
 repeated-binder equality still compares materialized data. Document edits and

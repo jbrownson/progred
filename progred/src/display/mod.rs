@@ -272,20 +272,20 @@ pub trait Env {
     }
     fn evaluate_runtime(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         _steps: &[Step],
     ) -> grap::RuntimeValue {
-        self.evaluate_with_fuel(expression, fuel).into()
+        self.evaluate_with_fuel(expression.as_value(), fuel).into()
     }
 
     fn evaluate_runtime_memo(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         _steps: &[Step],
     ) -> grap::RuntimeValue {
-        self.evaluate_memo(expression, fuel).into()
+        self.evaluate_memo(expression.as_value(), fuel).into()
     }
 
     fn apply_runtime_scoped(

@@ -89,7 +89,7 @@ impl Computations {
     }
 
     pub fn evaluate(&self, view: &Root, path: &[Step], expression: &Value, fuel: usize) -> Value {
-        self.evaluate_runtime(view, path, expression, fuel, None)
+        self.evaluate_runtime(view, path, &expression.into(), fuel, None)
             .into_value()
     }
 
@@ -97,12 +97,12 @@ impl Computations {
         &self,
         view: &Root,
         path: &[Step],
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         origin: Option<grap::SourceOrigin>,
     ) -> grap::RuntimeValue {
         struct Evaluation {
-            expression: Input<Value>,
+            expression: Input<grap::RuntimeValue>,
             origin: Input<Option<grap::SourceOrigin>>,
             fuel: Input<usize>,
             result: incremental::Memo<grap::Evaluation>,
@@ -122,7 +122,7 @@ impl Computations {
                         let fuel = *fuel.read(read);
                         let origin = origin.read(read).as_ref().clone();
                         Ok(grap::memo::run(&definitions, read, |host| {
-                            grap::evaluate_at(&expression, origin, host, fuel)
+                            grap::evaluate_runtime_at(&expression, origin, host, fuel)
                         }))
                     }
                 },
@@ -135,7 +135,9 @@ impl Computations {
                 result,
             }
         });
-        evaluation.expression.set(expression.clone());
+        evaluation
+            .expression
+            .set_by(expression.clone(), grap::RuntimeValue::same_result);
         evaluation.origin.set(origin);
         evaluation.fuel.set(fuel);
         self.runtime
@@ -363,6 +365,40 @@ mod tests {
             Value::record([])
         );
         assert_eq!(runs.get(), 4);
+    }
+
+    #[test]
+    fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
+        use grap::{RuntimeValue, SourceOrigin};
+        let computations = Computations::default();
+        let view = Root::document();
+        let doc = Document {
+            root: None,
+            cells: gid::Cells::new(),
+        };
+        let libraries = Libraries::default();
+        let sources = Sources {
+            doc: &doc,
+            libraries: &libraries,
+        };
+        let make = |field| {
+            grap::evaluate_at(
+                &grap::lambda([], Value::record([])),
+                Some(SourceOrigin::Stored(vec![Step::Key(field)])),
+                &sources,
+                100,
+            )
+            .result
+        };
+        let a = make(gid::new_cell_id());
+        let b = make(gid::new_cell_id());
+        assert_eq!(a.to_value(), b.to_value());
+        assert!(!a.same_result(&b));
+        for closure in [&a, &a, &b, &b, &a] {
+            let expression = RuntimeValue::record([(grap::vocabulary::VALUE, closure.clone())]);
+            let result = computations.evaluate_runtime(&view, &[], &expression, 100, None);
+            assert!(result.same_result(closure));
+        }
     }
 
     #[test]

@@ -1,6 +1,60 @@
 use super::*;
 
 #[test]
+fn runtime_render_preserves_native_closures_through_evaluation() {
+    use crate::display as d;
+    use std::cell::Cell;
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([])),
+        cells: Cells::new(),
+    });
+    let sources = crate::sources::Sources {
+        doc: &world.model.doc,
+        libraries: &world.stack.libraries,
+    };
+    let closure = ::grap::evaluate_at(
+        &::grap::lambda([], Value::record([])),
+        Some(::grap::SourceOrigin::Stored(vec![Step::Key(
+            gid::new_cell_id(),
+        )])),
+        &sources,
+        100,
+    )
+    .result;
+    let expression = ::grap::RuntimeValue::record([(::grap::vocabulary::VALUE, closure.clone())]);
+    let value = ::grap::RuntimeValue::record([(
+        crate::libraries::presentation::vocabulary::RENDER,
+        expression,
+    )]);
+    let visits = Rc::new(Cell::new(0));
+    let child = d::runtime_partial({
+        let visits = visits.clone();
+        move |input| {
+            input.value?.same_result(&closure).then(|| {
+                visits.set(visits.get() + 1);
+                d::text("retained callback")
+            })
+        }
+    });
+    let projection = Projection::new([d::runtime_partial(move |_| {
+        let children = d::compose_partials([
+            d::runtime_partial(crate::libraries::presentation::display),
+            child.clone(),
+        ]);
+        Some(d::at_with_projection(
+            [],
+            value.clone(),
+            Some(children.clone()),
+            Some(children),
+        ))
+    })]);
+    for expected in 1..=2 {
+        let _frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+        assert_eq!(visits.get(), expected);
+    }
+}
+
+#[test]
 fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     use crate::display as d;
     use std::cell::Cell;

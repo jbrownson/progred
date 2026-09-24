@@ -749,10 +749,13 @@ stored list positions remain unchanged. Control-form partials and shallow Grap
 reference/declaration helpers also inspect runtime inputs directly. General Grap
 call/lambda/value/FFI projections, evaluate-form recognition, numeric facets, and
 arithmetic notation now do likewise. Call layout inspects labels rather than
-argument values; parameter discovery still requests a GID view of the callable
-alone. The evaluate projection's source interface still takes GID, so only its
-expression crosses that boundary after recognition. Domain-specific and other
-legacy partials still use the GID adapter. Opening the writable color picker or
+argument values; parameter discovery reads native closure parameters directly,
+without materializing code or captures. Both `evaluate` and presentation's
+`render` pass runtime syntax into evaluation, including memoized evaluation.
+The memo input uses the same conservative runtime equality as results, so
+equal serialized closures with different origins cannot silently reuse one
+another. Domain-specific and other legacy partials still use the GID adapter.
+Opening the writable color picker or
 starting a numeric scrub requests GID for document-editing callbacks; simply
 recognizing or displaying those facets does not materialize the enclosing record.
 

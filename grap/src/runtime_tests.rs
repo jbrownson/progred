@@ -2,6 +2,179 @@ use super::*;
 use gid::new_cell_id;
 
 #[test]
+fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
+    let first = new_cell_id();
+    let second = new_cell_id();
+    let syntax = lambda([second, first], Value::record([]));
+    let closure = evaluate(&syntax, &host(vec![]), 100).result;
+    let generated = RuntimeValue::record([
+        (
+            vocabulary::PARAMS,
+            RuntimeValue::list([Value::from(second).into(), Value::from(first).into()]),
+        ),
+        (vocabulary::BODY, closure.clone()),
+    ]);
+    for value in [
+        syntax.into(),
+        closure.clone(),
+        closure.to_value().into(),
+        generated,
+    ] {
+        assert_eq!(value.callable_parameters(), Some(vec![second, first]));
+        assert!(value.1.get().is_none());
+    }
+    for value in [
+        RuntimeValue::record([(vocabulary::PARAMS, RuntimeValue::list([]))]),
+        RuntimeValue::record([
+            (
+                vocabulary::PARAMS,
+                RuntimeValue::list([RuntimeValue::f64(1.0)]),
+            ),
+            (vocabulary::BODY, closure.clone()),
+        ]),
+        RuntimeValue::record([(vocabulary::CLOSURE, RuntimeValue::f64(1.0))]),
+        RuntimeValue::f64(1.0),
+    ] {
+        assert_eq!(value.callable_parameters(), None);
+    }
+}
+
+#[test]
+fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins() {
+    let sink = new_cell_id();
+    let creation = new_cell_id();
+    let invocation = new_cell_id();
+    let closure = evaluate_at(
+        &lambda([], call(sink.into(), [])),
+        Some(SourceOrigin::Stored(vec![gid::Step::Key(creation)])),
+        &host(vec![]),
+        100,
+    )
+    .result;
+    let traces = Rc::new(RefCell::new(Vec::new()));
+    let receiver = host(vec![(
+        sink,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new({
+                let traces = traces.clone();
+                move |context, _, _| {
+                    traces.borrow_mut().push(context.call_trace().unwrap());
+                    Ok(RuntimeValue::f64(7.0))
+                }
+            }),
+        ),
+    )]);
+    let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure.clone())]);
+    let result = evaluate_runtime_at(
+        &expression,
+        Some(SourceOrigin::Stored(vec![gid::Step::Key(invocation)])),
+        &receiver,
+        100,
+    );
+    assert!(result.completed);
+    assert_eq!(result.result.as_f64(), Some(7.0));
+    assert_eq!(
+        traces.borrow()[0].origins().cloned().collect::<Vec<_>>(),
+        vec![
+            SourceOrigin::Stored(vec![
+                gid::Step::Key(creation),
+                gid::Step::Key(vocabulary::BODY)
+            ]),
+            SourceOrigin::Stored(vec![gid::Step::Key(invocation)]),
+        ]
+    );
+    // Returning an embedded callback must not serialize and re-lower it.
+    let wrapper = RuntimeValue::record([(vocabulary::VALUE, closure.clone())]);
+    assert!(
+        evaluate_runtime_at(&wrapper, None, &receiver, 100)
+            .result
+            .same_result(&closure)
+    );
+}
+
+#[test]
+fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
+    let field = new_cell_id();
+    let root = new_cell_id();
+    let syntax = RuntimeValue::record([(
+        field,
+        RuntimeValue::list([RuntimeValue::record([
+            (vocabulary::PARAMS, RuntimeValue::list([])),
+            (vocabulary::BODY, RuntimeValue::record([])),
+        ])]),
+    )]);
+    let receiver = host(vec![]);
+    let mut context = context(&receiver, None, 100);
+    let origin = SourceOrigin::Stored(vec![gid::Step::Key(root)]);
+    let lowered = context.lower_runtime_code_at(
+        &syntax,
+        Some(OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(
+            origin,
+        ))))),
+    );
+    let list = context.field(&lowered, field).unwrap();
+    let lambda = context.elements(&list).unwrap()[0].clone();
+    let body = context.field(&lambda, vocabulary::BODY).unwrap();
+    assert_eq!(
+        context.source_origin(&body),
+        Some(SourceOrigin::Stored(vec![
+            gid::Step::Key(root),
+            gid::Step::Key(field),
+            gid::Step::Element(gid::position::spread(1).remove(0)),
+            gid::Step::Key(vocabulary::BODY),
+        ]))
+    );
+}
+
+#[test]
+fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
+    let sink = new_cell_id();
+    let location = new_cell_id();
+    let traces = Rc::new(RefCell::new(Vec::new()));
+    let receiver = host(vec![(
+        sink,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new({
+                let traces = traces.clone();
+                move |context, _, _| {
+                    traces.borrow_mut().push(context.call_trace());
+                    Ok(RuntimeValue::f64(7.0))
+                }
+            }),
+        ),
+    )]);
+    let runtime = RuntimeValue::record([(
+        vocabulary::VALUE,
+        RuntimeValue::record([(vocabulary::FUNCTION, Value::from(sink).into())]),
+    )]);
+    let stored = runtime.to_value();
+    for origin in [
+        None,
+        Some(SourceOrigin::Stored(vec![gid::Step::Key(location)])),
+    ] {
+        for fuel in [0, 1, 100] {
+            traces.borrow_mut().clear();
+            let a = evaluate_at(&stored, origin.clone(), &receiver, fuel);
+            let b = evaluate_runtime_at(&runtime, origin.clone(), &receiver, fuel);
+            assert_eq!(a.completed, b.completed);
+            assert_eq!(a.remaining_fuel, b.remaining_fuel);
+            assert!(a.result.same_result(&b.result));
+            if a.completed {
+                let traces = traces.borrow();
+                let origins = |index: usize| {
+                    traces[index]
+                        .as_ref()
+                        .map(|trace| trace.origins().cloned().collect::<Vec<_>>())
+                };
+                assert_eq!(origins(0), origins(1));
+            }
+        }
+    }
+}
+
+#[test]
 fn runtime_record_keys_and_membership_match_all_gid_shapes() {
     let metadata = new_cell_id();
     let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;

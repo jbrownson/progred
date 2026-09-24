@@ -59,7 +59,7 @@ fn call_parameters(request: &CompletionRequest<'_>, function: CellId) -> Option<
     if (request.resolve)(function)?.native {
         parameters(function).map(<[CellId]>::to_vec)
     } else {
-        crate::libraries::grap::function_parameters(&function.into(), request.resolve)
+        crate::libraries::grap::function_parameters(&Value::from(function).into(), request.resolve)
     }
 }
 

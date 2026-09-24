@@ -35,15 +35,21 @@ impl crate::display::Env for Sources<'_> {
     }
     fn evaluate_runtime(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         _steps: &[Step],
     ) -> grap::RuntimeValue {
-        grap::evaluate(expression, self, fuel).result
+        grap::evaluate_runtime_at(
+            expression,
+            Some(grap::SourceOrigin::Input(vec![])),
+            self,
+            fuel,
+        )
+        .result
     }
     fn evaluate_runtime_memo(
         &self,
-        expression: &Value,
+        expression: &grap::RuntimeValue,
         fuel: usize,
         steps: &[Step],
     ) -> grap::RuntimeValue {
