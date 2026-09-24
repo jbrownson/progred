@@ -134,10 +134,56 @@ fn scoped_layout_program_matches_value_layout_through_the_real_frame_and_border_
 }
 
 #[test]
+fn returned_layout_program_uses_its_own_evaluation_allowance() {
+    let doc = document(true, 100, false);
+    let (_, context) = setup();
+    let sources = Sources {
+        doc: &doc,
+        libraries: &context.stack.libraries,
+    };
+    let function = doc
+        .root
+        .as_ref()
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&presentation::vocabulary::PROJECTION)
+        .unwrap();
+    let prepared = grap::apply_expression(
+        function,
+        [(presentation::vocabulary::VALUE, Value::record([]).into())],
+        &sources,
+        100_000,
+    );
+    assert!(prepared.completed);
+    let function = prepared.result.field(l::LAYOUT_PROGRAM).unwrap();
+    for fuel in [grap::DEFAULT_FUEL, 100_000] {
+        let (evaluation, layout) = layout::scope::run(
+            || panic!("text-only layout needs no editing target"),
+            |scope| grap::apply_scoped(&function, [], &sources, scope, fuel),
+        );
+        if fuel == grap::DEFAULT_FUEL {
+            assert!(!evaluation.completed);
+            assert_eq!(
+                grap::absent::reason(&evaluation.result.to_value()),
+                Some(grap::absent::FUEL_EXHAUSTED)
+            );
+            assert!(layout.is_none());
+        } else {
+            assert!(evaluation.completed);
+            assert!(layout.is_some());
+        }
+    }
+}
+
+#[test]
 #[ignore]
 fn grap_layout_ffi_profile_loop() {
+    // The returned program has the ordinary fresh evaluation allowance,
+    // independent of the explicit budget used to construct it below.
+    const ROWS: usize = 20;
     let docs = [false, true].map(|emitting| {
-        let mut doc = document(emitting, 100, false);
+        let mut doc = document(emitting, ROWS, false);
         let function = doc
             .root
             .as_ref()
@@ -173,7 +219,7 @@ fn grap_layout_ffi_profile_loop() {
             let start = Instant::now();
             let (bench, _) = context.frame(view.frame(&docs[variant], &annotations));
             let build = start.elapsed();
-            assert_eq!(bench.list.0.len(), 200);
+            assert_eq!(bench.list.0.len(), ROWS * 2, "variant {variant}");
             let phases = bench.times;
             let cleanup = Instant::now();
             drop(bench);
@@ -191,7 +237,7 @@ fn grap_layout_ffi_profile_loop() {
         .into_iter()
         .zip(samples)
     {
-        eprintln!("{label}; 100 two-text rows, {count} interleaved warm frames");
+        eprintln!("{label}; {ROWS} two-text rows, {count} interleaved warm frames");
         distribution("frame + disposal", timings.iter().map(|t| t.total));
         distribution("prepare", timings.iter().map(|t| t.phases.prepare));
     }

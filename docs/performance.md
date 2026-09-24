@@ -230,6 +230,24 @@ they do not establish recovery of the ownership overhead. The existing
 GID-oriented preview-stub caveat above still applies. All 83 Grap tests and
 878 editor tests passed (50 editor tests ignored); the threaded web build passed.
 
+### Runtime layout helpers — 2026-09-23
+
+Scoped layout execution now keeps runtime results through nested child
+collection and absence checks. The `drawing` constructor retains its runtime
+configuration, and picking converts its payload only on activation. The full
+editor suite passed 880 tests (50 ignored); the browser build passed.
+
+Isolated controls-frame medians were 325.21, 324.54, and 331.46 µs versus the
+preceding checkpoint's 317.92, 325.87, and 330.17 µs: no clear change. These
+canaries do not isolate the layout-helper conversions.
+
+The layout-specific benchmark exposed its stale 100-row fuel assumption; see
+[the corrected fixture](#inputs-and-measurements). The 20-row fixture measured
+70.62/97.67 µs for stored descriptions and 106.42/108.04 µs for scoped layout
+calls in two serial runs. This is a new baseline, not a before/after speedup
+measurement. A separate passing regression confirms that returned layout code
+has an independent execution allowance.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:
@@ -488,12 +506,20 @@ Two additional opt-in checks cover layout construction:
   iop_source_form_profile -- --ignored --nocapture --test-threads=1
 ```
 
-The first alternates the two variants each pair: 100 two-text rows built by Grap
+The first alternates the two variants each pair: 20 two-text rows built by Grap
 as GID layout descriptions versus scoped layout-emitting FFIs. Both use the
 same explicit fuel budget, library stack, fonts, text cache, geometry, and draw
 endpoint. A normal regression test compares their complete paint commands and
 extents, with and without the existing border combinator. No timing assertion
 is a correctness test.
+
+The workload was reduced from 100 to 20 rows on 2026-09-23: the returned layout
+program runs with its own ordinary fuel allowance, not the larger explicit
+allowance used to construct it. The old 100-row case exhausted that allowance
+and rendered an error presentation instead of a layout (its output assertion
+caught this). A regression checks both exhaustion and successful execution with
+a larger allowance. Historical 100-row timings below are not directly comparable
+to the current smaller fixture; application fuel behavior has not changed.
 
 The `layout-profile` feature adds diagnostic scopes and a test-only counting
 allocator. Ordinary builds have neither the scopes nor that allocator. The
