@@ -1,7 +1,8 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
 use super::{Definitions, Library, absent, layout, name, presentation};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, SourceOrigin,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    SourceOrigin,
 };
 use gid::{CellId, Cells, Value};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
@@ -30,7 +31,7 @@ use vocabulary::*;
 pub trait Sink {
     fn begin_group(&mut self, source: Option<SourceOrigin>);
     fn end_group(&mut self);
-    fn leaf(&mut self, value: Value, source: Option<SourceOrigin>);
+    fn leaf(&mut self, value: RuntimeValue, source: Option<SourceOrigin>);
 }
 
 struct Output<S> {
@@ -44,7 +45,7 @@ fn group<S: Sink>(
     source: Option<SourceOrigin>,
     environment: &Environment,
     output: &Output<S>,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     context.effect(|| output.sink.borrow_mut().begin_group(source));
     let result = children(context, expression, environment, output);
     context.effect(|| output.sink.borrow_mut().end_group());
@@ -56,7 +57,7 @@ fn children<S: Sink>(
     expression: Expression,
     environment: &Environment,
     output: &Output<S>,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     if let Some(elements) = context.elements(&expression).map(<[_]>::to_vec) {
         for child in elements {
             context.burn()?;
@@ -69,15 +70,15 @@ fn children<S: Sink>(
                     output,
                 )?
             } else {
-                context.eval_to_value(child, environment)?
+                context.eval(child, environment)?
             };
-            if absent::is_absent(&result) {
+            if result.is_absent() {
                 return Ok(result);
             }
         }
-        Ok(Value::record([]))
+        Ok(RuntimeValue::record([]))
     } else {
-        context.eval_to_value(expression, environment)
+        context.eval(expression, environment)
     }
 }
 
@@ -92,10 +93,10 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
             let output = output.clone();
             functions.register(
                 function,
-                ForeignFunction::from_value(move |context, call, environment| {
+                ForeignFunction::new(move |context, call, environment| {
                     let field = if function == LEAF { VALUE } else { CHILDREN };
                     let Some(expression) = context.field(call, field) else {
-                        return Ok(context.missing_argument(field));
+                        return Ok(context.missing_runtime_argument(field));
                     };
                     match function {
                         GROUP => group(
@@ -107,7 +108,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                         ),
                         MAP => {
                             let Some(map) = context.field(call, MAPPING) else {
-                                return Ok(context.missing_argument(MAPPING));
+                                return Ok(context.missing_runtime_argument(MAPPING));
                             };
                             let map = context.prepare_callable(map, environment)?;
                             output.maps.borrow_mut().push(map);
@@ -127,16 +128,16 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                                 .collect::<Vec<_>>();
                             for map in maps {
                                 if value.is_absent() {
-                                    return Ok(value.into_value());
+                                    return Ok(value);
                                 }
                                 value = context.call_prepared(&map, [(VALUE, value)])?;
                             }
                             if value.is_absent() {
-                                return Ok(value.into_value());
+                                return Ok(value);
                             }
                             Ok(context.effect(|| {
-                                output.sink.borrow_mut().leaf(value.into_value(), source);
-                                Value::record([])
+                                output.sink.borrow_mut().leaf(value, source);
+                                RuntimeValue::record([])
                             }))
                         }
                         _ => unreachable!(),
@@ -156,9 +157,9 @@ pub fn interpret<S: Sink + 'static, T>(
     context.with_foreign_functions(functions(sink), run)
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub(crate) struct Built {
-    pub items: Value,
+    pub items: RuntimeValue,
     pub root: Rc<Node>,
 }
 
@@ -189,12 +190,11 @@ impl Sink for Collector {
     fn end_group(&mut self) {
         let (source, parent) = self.parents.pop().expect("balanced group interpretation");
         let children = std::mem::replace(&mut self.items, parent);
-        let items = Value::list(children.iter().map(|child| child.items.clone()));
+        let items = RuntimeValue::list(children.iter().map(|child| child.items.clone()));
         let children = items
-            .as_list()
+            .list_positions()
             .unwrap()
-            .keys()
-            .cloned()
+            .into_iter()
             .zip(
                 children
                     .into_iter()
@@ -209,7 +209,7 @@ impl Sink for Collector {
             }),
         });
     }
-    fn leaf(&mut self, value: Value, source: Option<SourceOrigin>) {
+    fn leaf(&mut self, value: RuntimeValue, source: Option<SourceOrigin>) {
         self.items.push(Built {
             items: value,
             root: Rc::new(Node {
@@ -223,32 +223,32 @@ impl Sink for Collector {
 fn collect(
     context: &mut Context,
     program: &::grap::PreparedCallable,
-) -> Result<Result<Built, Value>, Halt> {
+) -> Result<Result<Built, RuntimeValue>, Halt> {
     let sink = Rc::new(RefCell::new(Collector::default()));
     let result = interpret(context, sink.clone(), |context| {
-        context.call_prepared_value(program, [])
+        context.call_prepared(program, [])
     })?;
-    if absent::is_absent(&result) {
+    if result.is_absent() {
         Ok(Err(result))
     } else {
         let mut sink = sink.borrow_mut();
         Ok(if sink.items.len() == 1 {
             Ok(sink.items.pop().unwrap())
         } else {
-            Err(absent::with_reason(INVALID_OUTPUT))
+            Err(absent::with_reason(INVALID_OUTPUT).into())
         })
     }
 }
 
 fn evaluate(
-    program: &Value,
+    program: &RuntimeValue,
     host: &dyn ::grap::Host,
     fuel: usize,
-) -> (::grap::Evaluation<gid::Value>, Option<Result<Built, Value>>) {
+) -> (::grap::Evaluation, Option<Result<Built, RuntimeValue>>) {
     let built = RefCell::new(None);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let Some(expression) = context.field(call, PROGRAM) else {
-            return Ok(context.missing_argument(PROGRAM));
+            return Ok(context.missing_runtime_argument(PROGRAM));
         };
         let callable = context.prepare_callable(expression, environment)?;
         let result = collect(context, &callable)?;
@@ -259,17 +259,24 @@ fn evaluate(
         built.replace(Some(result));
         Ok(value)
     };
-    let expression = ::grap::call(COLLECT.into(), [(PROGRAM, program.clone())]);
-    let evaluation = ::grap::evaluate_value_scoped(
+    let expression = RuntimeValue::record([
+        (::grap::vocabulary::FUNCTION, Value::from(COLLECT).into()),
+        (PROGRAM, program.clone()),
+    ]);
+    let evaluation = ::grap::evaluate_runtime_scoped(
         &expression,
         host,
-        &::grap::ForeignOverlay::from_value(&[COLLECT], &emit).tracked(),
+        &::grap::ForeignOverlay::new(&[COLLECT], &emit).tracked(),
         fuel,
     );
     (evaluation, built.into_inner())
 }
 
-pub(crate) fn build(program: &Value, host: &dyn ::grap::Host, fuel: usize) -> Result<Built, Value> {
+pub(crate) fn build(
+    program: &RuntimeValue,
+    host: &dyn ::grap::Host,
+    fuel: usize,
+) -> Result<Built, RuntimeValue> {
     let (evaluation, built) = evaluate(program, host, fuel);
     if evaluation.completed {
         built.unwrap_or(Err(evaluation.result))
@@ -282,42 +289,56 @@ pub(crate) fn prepared(
     computations: &crate::computations::Computations,
     root: &crate::workspace::Root,
     path: &[gid::Step],
-    program: Value,
+    program: RuntimeValue,
     fuel: usize,
-) -> Rc<Result<Built, Value>> {
+) -> Rc<Result<Built, RuntimeValue>> {
     struct Prepared {
-        input: incremental::Input<(Value, usize)>,
-        result: incremental::Memo<Result<Built, Value>>,
+        input: incremental::Input<(RuntimeValue, usize)>,
+        result: incremental::Memo<Result<Built, RuntimeValue>>,
     }
     let prepared = computations.at(root, path, || {
         let input = computations.runtime.input((program.clone(), fuel));
-        let result = computations.runtime.memo({
-            let input = input.clone();
-            let definitions = computations.definitions.clone();
-            move |read| {
-                let input = input.read(read);
-                let mut built = None;
-                // The returned Built contains every emission; replaying those
-                // effects would only rebuild the same immutable output.
-                let evaluation = ::grap::memo::with_recorded_effects(&definitions, read, |host| {
-                    let (evaluation, output) = evaluate(&input.0, host, input.1);
-                    built = output;
-                    evaluation
-                });
-                Ok(if evaluation.completed {
-                    built.unwrap_or(Err(evaluation.result))
-                } else {
-                    Err(evaluation.result)
-                })
-            }
-        });
+        let result = computations.runtime.memo_by(
+            {
+                let input = input.clone();
+                let definitions = computations.definitions.clone();
+                move |read| {
+                    let input = input.read(read);
+                    let mut built = None;
+                    // The returned Built contains every emission; replaying those
+                    // effects would only rebuild the same immutable output.
+                    let evaluation =
+                        ::grap::memo::with_recorded_effects(&definitions, read, |host| {
+                            let (evaluation, output) = evaluate(&input.0, host, input.1);
+                            built = output;
+                            evaluation
+                        });
+                    Ok(if evaluation.completed {
+                        built.unwrap_or(Err(evaluation.result))
+                    } else {
+                        Err(evaluation.result)
+                    })
+                }
+            },
+            same_output,
+        );
         Prepared { input, result }
     });
-    prepared.input.set((program, fuel));
+    prepared
+        .input
+        .set_by((program, fuel), |a, b| a.1 == b.1 && a.0.same_result(&b.0));
     computations
         .runtime
         .read(&prepared.result)
-        .unwrap_or_else(|error| Rc::new(Err(::grap::memo::failure(error))))
+        .unwrap_or_else(|error| Rc::new(Err(::grap::memo::failure(error).into())))
+}
+
+fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>) -> bool {
+    match (a, b) {
+        (Ok(a), Ok(b)) => a.root == b.root && a.items.same_result(&b.items),
+        (Err(a), Err(b)) => a.same_result(b),
+        _ => false,
+    }
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -346,9 +367,9 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         })
         .register(
             COLLECT,
-            ForeignFunction::from_value(|context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                 let Some(program) = context.field(call, PROGRAM) else {
-                    return Ok(context.missing_argument(PROGRAM));
+                    return Ok(context.missing_runtime_argument(PROGRAM));
                 };
                 let program = context.prepare_callable(program, environment)?;
                 Ok(match collect(context, &program)? {

@@ -781,9 +781,20 @@ Toolpath execution retains runtime programs through nested `sequence paths`,
 point/axis mapper scopes, and tool-scope results. Mapper inputs and point results
 use runtime numeric fields; absent details retain runtime children too. The 2D
 preview constructor and projection pass the program through without materializing
-it. Tool-profile parsing remains an explicit GID boundary. The tree collector and
-3D preview/recording adapters still use GID program data; those are separate
-remaining migrations, not a requirement of the toolpath output scope.
+it. Tool-profile parsing remains an explicit GID boundary. Tree collection,
+mapping, memo inputs/results, and the tree-program cursor's control/view handoff
+also retain runtime values. Tree memo comparisons include callable code/capture
+identity and the separate source-linked hierarchy, not just serialized GID.
+The 3D preview constructors, projections, and recording memo retain runtime
+programs and results as well. Model, playback, color, and tool-profile decoders
+still use GID views of their own data. Recorded failures adapt to GID at the
+existing render-outcome boundary; worker requests contain geometry, never
+runtime closures. Fidget and cutter projections check their identifying fields
+before requesting a GID view, so unrelated executable containers aren't
+materialized merely to decline a projection.
+Widget preparation also receives the runtime value, not an eagerly materialized
+GID copy. A selectable widget converts only when the user actually picks its
+value into the editable document.
 
 Inline code retained by the editor is anchored to its original document
 occurrence before evaluation; cell code retains its definition source and path.

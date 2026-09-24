@@ -26,8 +26,8 @@ fn cam_render_profile() {
     };
     let mut recording = Recording::default();
     let eval = run(&mut recording, |scope| {
-        ::grap::apply_value_scoped(
-            &names["preview_operations"].into(),
+        ::grap::apply_expression_scoped(
+            &Value::from(names["preview_operations"]).into(),
             [],
             &sources,
             scope,
@@ -35,7 +35,7 @@ fn cam_render_profile() {
         )
     });
     assert!(
-        eval.completed && !absent::is_absent(&eval.result),
+        eval.completed && !eval.result.is_absent(),
         "{:?}",
         eval.result
     );

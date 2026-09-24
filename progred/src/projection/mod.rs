@@ -302,7 +302,7 @@ fn prepare(
             text: tcx,
             inputs: cx,
             path,
-            value: value.map(grap::RuntimeValue::as_value),
+            value,
         },
         build,
     )

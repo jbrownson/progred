@@ -114,10 +114,12 @@ fn arguments(
 }
 
 pub(super) fn field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     // An active new field needs the structural record's insertion control.
     input.pending.is_none().then_some(())?;
+    super::one_marker_by(|marker| input.value.is_some_and(|v| v.contains_field(marker)))?;
+    let input = input.with_value(input.value.map(::grap::RuntimeValue::as_value));
     let (marker, content) = form(input.value?)?;
     let body = if marker == AXIS {
         crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)

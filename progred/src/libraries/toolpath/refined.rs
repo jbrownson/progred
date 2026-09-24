@@ -6,11 +6,15 @@ use super::{
     fidget as implicit, mesh, playback,
     vocabulary::*,
 };
-use crate::libraries::{absent, f64, fidget, layout, presentation};
+#[cfg(test)]
+use crate::libraries::f64;
+use crate::libraries::{absent, fidget, layout, presentation};
 use crate::{
     computations::Computations,
     display::{Layout, ProjectionInput},
 };
+use ::grap::RuntimeValue;
+#[cfg(test)]
 use gid::Value;
 use incremental::{Input, Memo};
 use std::rc::Rc;
@@ -22,7 +26,7 @@ pub(super) fn preview(
     context: &mut ::grap::Context,
     call: &::grap::Expression,
     environment: &::grap::Environment,
-) -> Result<Value, ::grap::Halt> {
+) -> Result<RuntimeValue, ::grap::Halt> {
     implicit::preview_with(
         context,
         call,
@@ -33,7 +37,7 @@ pub(super) fn preview(
 }
 
 struct Computation {
-    program: Input<Value>,
+    program: Input<RuntimeValue>,
     fuel: Input<usize>,
     settings: Input<implicit::computation::Settings>,
     depth: Input<u8>,
@@ -54,7 +58,7 @@ enum View {
 impl Computation {
     fn new(
         computations: &Computations,
-        program: Value,
+        program: RuntimeValue,
         fuel: usize,
         settings: implicit::computation::Settings,
         depth: u8,
@@ -135,21 +139,18 @@ impl Computation {
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input
-        .value?
-        .as_record()?
-        .get(&PREVIEW_REFINED)?
-        .as_record()?;
-    let (model, depth) = fidget::mesh::read(fields.get(&presentation::vocabulary::VALUE)?)?;
-    let program = fields.get(&PROGRAM)?.clone();
-    let radius = f64::read(fields.get(&LINE_RADIUS)?)?;
+    let fields = input.value?.field(PREVIEW_REFINED)?;
+    let (model, depth) =
+        fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
+    let program = fields.field(PROGRAM)?;
+    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
     implicit::read_radius(radius)?;
-    let color = implicit::read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
-    let fuel = super::read_fuel(f64::read(fields.get(&layout::vocabulary::FUEL)?)?)?;
-    let playback = match fields.get(&PLAYBACK) {
-        Some(value) => Some(playback::Settings::read(value)?),
+    let color = implicit::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
+    let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
+    let playback = match fields.field(PLAYBACK) {
+        Some(value) => Some(playback::Settings::read(value.as_value())?),
         None => None,
     };
     let image_settings = implicit::computation::Settings {
@@ -181,7 +182,9 @@ pub(super) fn display(
                 interaction.permitted.clone(),
             )
         });
-        computation.program.set(program.clone());
+        computation
+            .program
+            .set_by(program.clone(), RuntimeValue::same_result);
         computation.fuel.set(fuel);
         computation.settings.set(image_settings.clone());
         computation.depth.set(depth);

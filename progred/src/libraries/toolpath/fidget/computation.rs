@@ -40,7 +40,7 @@ pub(crate) struct ViewImage {
 }
 
 pub(super) struct Computation {
-    pub program: Input<Value>,
+    pub program: Input<RuntimeValue>,
     pub fuel: Input<usize>,
     pub settings: Input<Settings>,
     pub image: Memo<Outcome<ViewImage>>,
@@ -50,7 +50,7 @@ pub(super) struct Computation {
 impl Computation {
     pub fn new(
         computations: &Computations,
-        program: Value,
+        program: RuntimeValue,
         fuel: usize,
         settings: Settings,
         permitted: Memo<bool>,
@@ -83,7 +83,7 @@ impl Computation {
     #[cfg(test)]
     fn with_render(
         computations: &Computations,
-        program: Value,
+        program: RuntimeValue,
         fuel: usize,
         settings: Settings,
         render: impl Fn(
@@ -442,25 +442,26 @@ mod tests {
         );
         let program = crate::libraries::toolpath::tests::tool_program(program);
         let rendered = Arc::new(Mutex::new(Vec::new()));
-        let graph = Computation::with_render(&computations, program, 10000, settings(0.0), {
-            let rendered = rendered.clone();
-            move |scene, view, cancel, _publish, _progress| {
-                cancel.check()?;
-                let mut rendered = rendered.lock().unwrap();
-                rendered.push((scene, view));
-                Ok(Ok(fidget::raster::Frame {
-                    image: puri::ImageData {
-                        data: vec![rendered.len() as u8, 0, 0, 255].into(),
-                        format: peniko::ImageFormat::Rgba8,
-                        alpha_type: peniko::ImageAlphaType::Alpha,
-                        width: 1,
-                        height: 1,
-                    },
-                    depth: vec![1.0].into(),
-                    partial: false,
-                }))
-            }
-        });
+        let graph =
+            Computation::with_render(&computations, program.into(), 10000, settings(0.0), {
+                let rendered = rendered.clone();
+                move |scene, view, cancel, _publish, _progress| {
+                    cancel.check()?;
+                    let mut rendered = rendered.lock().unwrap();
+                    rendered.push((scene, view));
+                    Ok(Ok(fidget::raster::Frame {
+                        image: puri::ImageData {
+                            data: vec![rendered.len() as u8, 0, 0, 255].into(),
+                            format: peniko::ImageFormat::Rgba8,
+                            alpha_type: peniko::ImageAlphaType::Alpha,
+                            width: 1,
+                            height: 1,
+                        },
+                        depth: vec![1.0].into(),
+                        partial: false,
+                    }))
+                }
+            });
         let read = || computations.runtime.read(&graph.image).unwrap();
         let finish = || {
             let job = queue.lock().unwrap().pop_front().unwrap();
@@ -538,7 +539,7 @@ mod tests {
             || {},
         );
         let runtime = &computations.runtime;
-        let program = runtime.input(::grap::lambda([], Value::record([])));
+        let program = runtime.input(::grap::lambda([], Value::record([])).into());
         let fuel = runtime.input(10000);
         let settings_input = runtime.input(settings(0.0));
         let (started, receive) = mpsc::channel();
@@ -629,7 +630,7 @@ mod tests {
         let resumed = Mutex::new(resumed);
         let graph = Computation::with_render(
             &computations,
-            ::grap::lambda([], Value::record([])),
+            ::grap::lambda([], Value::record([])).into(),
             10000,
             settings(0.0),
             move |_, _, _, publish, progress| {

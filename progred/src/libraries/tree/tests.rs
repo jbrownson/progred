@@ -6,6 +6,8 @@ const A: CellId = CellId::from_u128(1);
 const B: CellId = CellId::from_u128(2);
 const C: CellId = CellId::from_u128(3);
 
+mod runtime;
+
 fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(function.into(), fields)
 }
@@ -51,9 +53,11 @@ fn lists_are_groups_and_equal_leaves_have_distinct_occurrences() {
         leaf(f64::value(1.0)),
         Value::list([leaf(f64::value(1.0))]),
     ])));
-    let result = with_host(&doc, |host| build(&A.into(), host, 1000).unwrap());
+    let result = with_host(&doc, |host| {
+        build(&Value::from(A).into(), host, 1000).unwrap()
+    });
     assert_eq!(
-        result.items,
+        result.items.to_value(),
         Value::list([f64::value(1.0), Value::list([f64::value(1.0)])])
     );
     let origins = sources(&result.root);
@@ -112,7 +116,7 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
         fn end_group(&mut self) {
             self.depth -= 1;
         }
-        fn leaf(&mut self, _: Value, _: Option<SourceOrigin>) {
+        fn leaf(&mut self, _: RuntimeValue, _: Option<SourceOrigin>) {
             self.leaves += 1;
         }
     }
@@ -161,9 +165,11 @@ fn leaf_mapping_composes_inside_out_without_changing_origins() {
         ),
         leaf(f64::value(2.0)),
     ])));
-    let result = with_host(&doc, |host| build(&A.into(), host, 1000).unwrap());
+    let result = with_host(&doc, |host| {
+        build(&Value::from(A).into(), host, 1000).unwrap()
+    });
     assert_eq!(
-        result.items,
+        result.items.to_value(),
         Value::list([f64::value(6.0), f64::value(2.0)])
     );
     for source in sources(&result.root).into_iter().skip(1) {
@@ -219,20 +225,26 @@ fn failures_stop_children_and_scopes_balance_when_a_caller_recovers() {
         ],
     );
     let doc = document(group(recover));
-    let result = with_host(&doc, |host| build(&A.into(), host, 1000).unwrap());
+    let result = with_host(&doc, |host| {
+        build(&Value::from(A).into(), host, 1000).unwrap()
+    });
     assert_eq!(
-        result.items,
+        result.items.to_value(),
         Value::list([Value::list([f64::value(99.0)]), f64::value(4.0)])
     );
     let doc = document(group(Value::list([leaf(f64::value(1.0)), failure.clone()])));
     assert_eq!(
-        with_host(&doc, |host| build(&A.into(), host, 1000)).err(),
+        with_host(&doc, |host| build(&Value::from(A).into(), host, 1000))
+            .err()
+            .map(RuntimeValue::into_value),
         Some(failure)
     );
-    assert!(with_host(&doc, |host| build(&A.into(), host, 1)).is_err());
+    assert!(with_host(&doc, |host| build(&Value::from(A).into(), host, 1)).is_err());
     let doc = document(sequence([leaf(f64::value(1.0)), leaf(f64::value(2.0))]));
     assert_eq!(
-        with_host(&doc, |host| build(&A.into(), host, 1000)).err(),
+        with_host(&doc, |host| build(&Value::from(A).into(), host, 1000))
+            .err()
+            .map(RuntimeValue::into_value),
         Some(absent::with_reason(INVALID_OUTPUT))
     );
 }
@@ -245,7 +257,7 @@ fn memo_tracks_definition_reads_absents_and_unrelated_edits() {
     let root = crate::workspace::Root::document();
     let demand = |doc: &gid::Document| {
         computations.begin(Rc::new(doc.clone()), libraries.clone());
-        prepared(&computations, &root, &[], A.into(), 1000)
+        prepared(&computations, &root, &[], Value::from(A).into(), 1000)
     };
     let missing = demand(&doc);
     assert!(missing.is_err());
@@ -253,14 +265,14 @@ fn memo_tracks_definition_reads_absents_and_unrelated_edits() {
     doc.cells.set_value(B, f64::value(7.0));
     let first = demand(&doc);
     assert_eq!(
-        first.as_ref().as_ref().unwrap().items,
+        first.as_ref().as_ref().unwrap().items.to_value(),
         Value::list([f64::value(7.0)])
     );
     doc.cells.set_value(C, f64::value(9.0));
     assert!(Rc::ptr_eq(&first, &demand(&doc)));
     doc.cells.set_value(B, f64::value(8.0));
     assert_eq!(
-        demand(&doc).as_ref().as_ref().unwrap().items,
+        demand(&doc).as_ref().as_ref().unwrap().items.to_value(),
         Value::list([f64::value(8.0)])
     );
 }
@@ -277,9 +289,11 @@ fn nested_collect_checks_arguments_and_does_not_steal_outer_emissions() {
         )),
         leaf(f64::value(3.0)),
     ])));
-    let result = with_host(&doc, |host| build(&A.into(), host, 1000).unwrap());
+    let result = with_host(&doc, |host| {
+        build(&Value::from(A).into(), host, 1000).unwrap()
+    });
     assert_eq!(
-        result.items,
+        result.items.to_value(),
         Value::list([Value::list([f64::value(2.0)]), f64::value(3.0)])
     );
     assert!(
@@ -293,7 +307,7 @@ fn nested_collect_checks_arguments_and_does_not_steal_outer_emissions() {
         "collecting a list into a leaf must not turn the leaf into a group"
     );
     let doc = document(group(call(COLLECT, [])));
-    assert!(with_host(&doc, |host| build(&A.into(), host, 1000)).is_err());
+    assert!(with_host(&doc, |host| build(&Value::from(A).into(), host, 1000)).is_err());
 }
 
 #[test]
@@ -334,10 +348,10 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
                 libraries: &libraries,
             });
         let root = crate::workspace::Root::document();
-        let first = prepared(&computations, &root, &[], A.into(), 100);
+        let first = prepared(&computations, &root, &[], Value::from(A).into(), 100);
         let before = runs.get();
         assert!(before > 0);
-        let second = prepared(&computations, &root, &[], A.into(), 100);
+        let second = prepared(&computations, &root, &[], Value::from(A).into(), 100);
         assert!(runs.get() > before);
         assert_eq!(first.is_err(), tracked);
         assert_eq!(second.is_err(), tracked);

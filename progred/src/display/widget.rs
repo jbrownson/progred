@@ -53,7 +53,7 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub text: &'a mut TextCtx<'fonts>,
     pub inputs: &'a crate::projection::Cx<'a>,
     pub path: &'a [gid::Step],
-    pub value: Option<&'a Value>,
+    pub value: Option<&'a grap::RuntimeValue>,
 }
 
 pub type Widget<World, Hover> = Rc<
@@ -130,7 +130,7 @@ pub fn selectable(
                                 && if world.command_modifier.pressed(&event.state.modifiers) {
                                     value
                                         .as_ref()
-                                        .is_some_and(|value| world.pick_identity(value.clone()))
+                                        .is_some_and(|value| world.pick_identity(value.to_value()))
                                 } else {
                                     select(world)
                                 }

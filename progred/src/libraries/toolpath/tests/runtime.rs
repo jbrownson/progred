@@ -262,6 +262,44 @@ fn preview_constructor_preserves_its_runtime_program() {
             .unwrap()
             .same_result(&program)
     );
+    // The three 3D constructors must keep the same executable leaves as the
+    // 2D one; only the model/appearance data goes through domain decoders.
+    for function in [PREVIEW_3D, PREVIEW_MESH, PREVIEW_REFINED] {
+        let programs = RuntimeValue::list([RuntimeValue::list([program.clone()])]);
+        let result = ::grap::apply(
+            &Value::from(function).into(),
+            [
+                (PROGRAM, programs.clone()),
+                (
+                    presentation::vocabulary::VALUE,
+                    crate::libraries::f32::value(1.0).into(),
+                ),
+                (layout::vocabulary::WIDTH, RuntimeValue::f64(200.0)),
+                (layout::vocabulary::HEIGHT, RuntimeValue::f64(150.0)),
+                (LINE_RADIUS, RuntimeValue::f64(0.01)),
+                (
+                    crate::libraries::fidget::vocabulary::COLOR,
+                    crate::libraries::color::value(puri::Color::WHITE).into(),
+                ),
+            ],
+            &host,
+            1000,
+        );
+        assert!(
+            result.completed && !result.result.is_absent(),
+            "{:?}",
+            result.result
+        );
+        assert!(
+            result
+                .result
+                .field(function)
+                .unwrap()
+                .field(PROGRAM)
+                .unwrap()
+                .same_result(&programs)
+        );
+    }
 }
 
 #[test]

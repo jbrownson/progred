@@ -257,7 +257,7 @@ fn editing_a_tool_invalidates_the_recording_even_when_points_are_unchanged() {
     );
     let record = computation::recording(
         &computations,
-        computations.runtime.input(program),
+        computations.runtime.input(program.into()),
         computations.runtime.input(1000),
     );
     let first = computations.runtime.read(&record).unwrap();

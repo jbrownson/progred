@@ -15,12 +15,18 @@ pub fn profile_cam(progress: f64, width: u32, height: u32, controls: bool) -> St
     };
     let setup_ms = start.elapsed().as_secs_f64() * 1000.0;
     let start = Instant::now();
-    let program = tree::build(&names["program_tree"].into(), &sources, 3_000_000).unwrap();
+    let program = tree::build(
+        &Value::from(names["program_tree"]).into(),
+        &sources,
+        3_000_000,
+    )
+    .unwrap();
+    let program = program.items;
     let tree_ms = start.elapsed().as_secs_f64() * 1000.0;
     let computations = crate::computations::Computations::from_sources(sources);
     let recording = computation::recording(
         &computations,
-        computations.runtime.input(program.items),
+        computations.runtime.input(program),
         computations.runtime.input(3_000_000),
     );
     let start = Instant::now();

@@ -32,9 +32,13 @@ pub(super) fn cam_position(progress: f64) -> Value {
         doc: &doc,
         libraries: &libraries,
     };
-    let tree =
-        crate::libraries::tree::build(&names["program_tree"].into(), &sources, 3_000_000).unwrap();
-    let selection = tree_range::Selection::new(&tree.items, None);
+    let tree = crate::libraries::tree::build(
+        &Value::from(names["program_tree"]).into(),
+        &sources,
+        3_000_000,
+    )
+    .unwrap();
+    let selection = tree_range::Selection::new(tree.items.as_value(), None);
     Value::record([
         (
             names["focus"],

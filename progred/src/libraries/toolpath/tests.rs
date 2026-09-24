@@ -63,9 +63,14 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),
         (
             ui::ITEMS,
-            crate::libraries::tree::build(&names["program_tree"].into(), &sources, 300_000)
-                .unwrap()
-                .items,
+            crate::libraries::tree::build(
+                &Value::from(names["program_tree"]).into(),
+                &sources,
+                300_000,
+            )
+            .unwrap()
+            .items
+            .into_value(),
         ),
     ]);
     let previews = [None, Some(STOCK.into())].map(|mode| {

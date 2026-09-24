@@ -145,18 +145,20 @@ application now retain runtime callables and results too. Narrow path, paint,
 and drawing-command parsers remain GID-oriented, as does the viewport preparation
 memo's input (currently read directly from the stored declaration).
 Toolpath sequence/mapping execution and the 2D path preview now retain runtime
-callbacks and results. The tree collector, its memo/control handoff, and the 3D
-preview/recording adapters still materialize program data. Migrating the tree
-memo must compare runtime inputs/results with source-aware equality, not just
-their serialized GID forms.
+callbacks and results. The tree collector and its memo/control handoff now do
+likewise, comparing runtime inputs/results with source-aware equality. The 3D
+preview/recording pipeline also retains executable programs; model/playback/
+appearance decoders and render-failure outcomes still adapt their data to GID.
+Radio options and the older list-based range-control inputs remain GID-oriented.
 The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.
 
 The [2026-09-23 comparison](performance.md#runtime-callback-handoffs--2026-09-23)
 covers the pre-ownership baseline, the ownership checkpoint, and the consumer
-migration. Keeping runtime callbacks fixes source continuity but has not recovered
-the measured ownership overhead. Profile remaining conversions before broadening
+migration. The newer [tree-to-3D comparison](performance.md#runtime-tree-to-3d-pipeline--2026-09-23)
+improves uncached construction; steady-state controls frames remain roughly at
+the ownership checkpoint. Profile remaining conversions before broadening
 the migration. Exclude compilation and isolate build outputs for each source
 tree: sharing a target directory between archived copies reused incompatible
 artifacts.

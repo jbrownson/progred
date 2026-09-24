@@ -379,6 +379,10 @@ pub fn functions() -> ForeignFunctions {
 }
 
 fn one_marker(fields: &gid::Record) -> Option<CellId> {
+    one_marker_by(|marker| fields.contains_key(&marker))
+}
+
+fn one_marker_by(contains: impl Fn(CellId) -> bool) -> Option<CellId> {
     let markers = [
         vocabulary::AXIS,
         vocabulary::SUM,
@@ -398,9 +402,7 @@ fn one_marker(fields: &gid::Record) -> Option<CellId> {
         vocabulary::INTERSECTION,
         vocabulary::DIFFERENCE,
     ];
-    let mut present = markers
-        .into_iter()
-        .filter(|marker| fields.contains_key(marker));
+    let mut present = markers.into_iter().filter(|marker| contains(*marker));
     let marker = present.next()?;
     present.next().is_none().then_some(marker)
 }
@@ -1049,29 +1051,27 @@ pub(crate) fn volume_display(
 }
 
 fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    if input
-        .value?
-        .as_record()
-        .is_some_and(|fields| fields.contains_key(&vocabulary::PREVIEW_3D))
-    {
+    let value = input.value?;
+    if value.contains_field(vocabulary::PREVIEW_3D) {
         let drawing = volume_display(
-            &volume_preview(input.value?)?,
+            &volume_preview(value.as_value())?,
             input.state,
             input.scale_factor,
             &mut renderer.borrow_mut(),
         )?;
         Some(interactive_volume(drawing, input))
     } else {
-        slice_display(slice_preview(input.value?)?, input.scale_factor)
+        value.field(vocabulary::PREVIEW)?;
+        slice_display(slice_preview(value.as_value())?, input.scale_factor)
     }
 }
 
-pub(crate) fn interactive_volume(
+pub(crate) fn interactive_volume<V>(
     drawing: Layout<crate::Editor, crate::frame::Hovered>,
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     let target = input.targets.current();
     let hover = target.hover;
@@ -1228,9 +1228,9 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "fidget",
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
-            crate::display::partial(projection::field),
-            crate::display::partial(move |input| display(input, &renderer)),
-            crate::display::partial(mesh::display),
+            crate::display::runtime_partial(projection::field),
+            crate::display::runtime_partial(move |input| display(input, &renderer)),
+            crate::display::runtime_partial(mesh::display),
         ]),
     )
     .with_completions(completion::offers)
@@ -1646,7 +1646,7 @@ mod tests {
             &ProjectionInput {
                 default_projection: crate::display::runtime_partial(|_| None),
                 env: &NoEval,
-                value: Some(&value),
+                value: Some(&value.into()),
                 scale_factor: 2.0,
                 writable: false,
                 selection: None,

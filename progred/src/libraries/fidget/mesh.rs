@@ -168,9 +168,11 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let (preview, depth) = read(input.value?)?;
+    let value = input.value?;
+    value.field(vocabulary::PREVIEW_MESH)?;
+    let (preview, depth) = read(value.as_value())?;
     let geometry = generate(&preview, depth)?;
     Some(interactive_volume(
         drawing(&geometry, &preview, input.state, input.scale_factor)?,

@@ -413,7 +413,7 @@ mod tests {
                 let mut inputs = context.inputs.clone();
                 inputs.styles = &styles;
                 widget::fill_height(side)(&mut widget::Context {
-                    value: Some(&value),
+                    value: Some(&value.into()),
                     inputs: &inputs,
                     project: context.project,
                     path: context.path,

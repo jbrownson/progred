@@ -3,7 +3,9 @@
 use super::{fidget::coordinate, paths::*, playback, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
+use ::grap::RuntimeValue;
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
+#[cfg(test)]
 use gid::Value;
 use nalgebra::Vector3;
 use std::rc::Rc;
@@ -17,7 +19,7 @@ pub(super) fn preview(
     context: &mut ::grap::Context,
     call: &::grap::Expression,
     environment: &::grap::Environment,
-) -> Result<Value, ::grap::Halt> {
+) -> Result<RuntimeValue, ::grap::Halt> {
     super::fidget::preview_with(
         context,
         call,
@@ -28,17 +30,18 @@ pub(super) fn preview(
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?.get(&PREVIEW_MESH)?.as_record()?;
-    let (model, depth) = fidget::mesh::read(fields.get(&presentation::vocabulary::VALUE)?)?;
-    let program = fields.get(&PROGRAM)?.clone();
-    let radius = f64::read(fields.get(&LINE_RADIUS)?)?;
-    let color = super::fidget::read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
+    let fields = input.value?.field(PREVIEW_MESH)?;
+    let (model, depth) =
+        fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
+    let program = fields.field(PROGRAM)?;
+    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
+    let color = super::fidget::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     super::fidget::read_radius(radius)?;
-    let fuel = super::read_fuel(f64::read(fields.get(&layout::vocabulary::FUEL)?)?)?;
-    let playback = match fields.get(&PLAYBACK) {
-        Some(value) => Some(playback::Settings::read(value)?),
+    let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
+    let playback = match fields.field(PLAYBACK) {
+        Some(value) => Some(playback::Settings::read(value.as_value())?),
         None => None,
     };
     let state = input.state.cloned();
@@ -67,7 +70,9 @@ pub(super) fn display(
                 depth,
             )
         });
-        computation.program.set(program.clone());
+        computation
+            .program
+            .set_by(program.clone(), RuntimeValue::same_result);
         computation.fuel.set(fuel);
         computation.settings.set(settings.clone());
         computation.depth.set(depth);

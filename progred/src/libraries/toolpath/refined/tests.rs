@@ -137,7 +137,7 @@ impl Fixture {
         let interaction = Rc::new(fidget::interaction::Interaction::new(&computations));
         let graph = Computation::new(
             &computations,
-            program,
+            program.into(),
             10000,
             settings(0.0, 0.25),
             3,

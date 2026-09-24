@@ -9,6 +9,7 @@ fn controls_output(
     let callable = ::grap::evaluate(controls, &frame.inputs.sources, ::grap::DEFAULT_FUEL).result;
     super::controls_output(&callable, state, width, frame)
         .map(|(widgets, value)| (widgets, value.into_value()))
+        .map_err(RuntimeValue::into_value)
 }
 
 fn apply_change(
@@ -152,7 +153,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
     let computations = crate::computations::Computations::from_sources(sources);
     let root = crate::workspace::Root::document();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    let mut previous: Option<Value> = None;
+    let mut previous: Option<RuntimeValue> = None;
     for width in [400.0, 600.0, 401.0] {
         let declaration = presentation::viewport_output(
             sources.resolve_path(&pane.path).unwrap(),
@@ -186,22 +187,20 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
                 value: context.value,
             };
             let start = std::time::Instant::now();
-            let (widgets, parameters) = controls_output(controls, None, width, &context).unwrap();
+            let controls = ::grap::evaluate(controls, &sources, ::grap::DEFAULT_FUEL).result;
+            let (widgets, parameters) =
+                super::controls_output(&controls, None, width, &context).unwrap();
             eprintln!("CAM controls width {width}: {:?}", start.elapsed());
             let tree = parameters
-                .as_record()
+                .field(names["playback"])
                 .unwrap()
-                .get(&names["playback"])
-                .unwrap()
-                .as_record()
-                .unwrap()
-                .get(&ITEMS)
+                .field(ITEMS)
                 .unwrap();
             if let Some(previous) = &previous {
-                assert!(std::ptr::eq(
-                    previous.as_list().unwrap().iter().as_slice(),
-                    tree.as_list().unwrap().iter().as_slice()
-                ));
+                assert!(
+                    previous.same_result(&tree),
+                    "native leaf code and captures must be reused"
+                );
             }
             previous = Some(tree.clone());
             assert_eq!(widgets.len(), 7, "radio, playback, and five grouping rows");
@@ -413,6 +412,94 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
         });
     }
 }
+
+#[test]
+fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization() {
+    use tree::vocabulary as t;
+    let libraries = crate::stack::load().libraries;
+    let callback = ::grap::evaluate_at(
+        &::grap::lambda([], f64::value(7.0)),
+        Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(A)])),
+        &libraries,
+        1000,
+    )
+    .result;
+    let maker = ::grap::evaluate_at(
+        &::grap::lambda(
+            [VALUE],
+            ::grap::lambda(
+                [],
+                ::grap::call(
+                    t::GROUP.into(),
+                    [(
+                        layout::vocabulary::CHILDREN,
+                        Value::list([::grap::call(t::LEAF.into(), [(VALUE, VALUE.into())])]),
+                    )],
+                ),
+            ),
+        ),
+        Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(B)])),
+        &libraries,
+        1000,
+    )
+    .result;
+    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &libraries, 1000).result;
+    let controls = ::grap::evaluate_runtime_at(
+        &RuntimeValue::record([
+            (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
+            (
+                ::grap::vocabulary::BODY,
+                RuntimeValue::record([
+                    (
+                        ::grap::vocabulary::FUNCTION,
+                        Value::from(TREE_PROGRAM_CURSOR).into(),
+                    ),
+                    (KEY, quote(A.into()).into()),
+                    (t::PROGRAM, program),
+                ]),
+            ),
+        ]),
+        None,
+        &libraries,
+        1000,
+    )
+    .result;
+    with_context(&Output::default(), |context| {
+        let sources = crate::sources::Sources {
+            libraries: &libraries,
+            ..context.inputs.sources
+        };
+        let computations = crate::computations::Computations::from_sources(sources);
+        for memo in [None, Some(&computations)] {
+            let inputs = crate::projection::Cx {
+                sources,
+                computations: memo,
+                ..context.inputs.clone()
+            };
+            let context = widget::Context {
+                inputs: &inputs,
+                text: context.text,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+            };
+            for _ in 0..2 {
+                let (widgets, result) =
+                    super::controls_output(&controls, None, 200.0, &context).unwrap();
+                assert_eq!(widgets.len(), 2);
+                assert!(
+                    result
+                        .field(ITEMS)
+                        .unwrap()
+                        .list_get(0)
+                        .unwrap()
+                        .same_result(&callback)
+                );
+            }
+        }
+    });
+}
+
 fn slider(value: f64, max: f64) -> Value {
     ::grap::call(
         SLIDER.into(),

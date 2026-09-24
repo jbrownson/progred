@@ -349,17 +349,11 @@ fn functions() -> ForeignFunctions {
             )
         });
     functions
-        .register(
-            PREVIEW_3D,
-            ForeignFunction::from_value(fidget::preview).tracked(),
-        )
-        .register(
-            PREVIEW_MESH,
-            ForeignFunction::from_value(mesh::preview).tracked(),
-        )
+        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview).tracked())
+        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview).tracked())
         .register(
             PREVIEW_REFINED,
-            ForeignFunction::from_value(refined::preview).tracked(),
+            ForeignFunction::new(refined::preview).tracked(),
         )
         .register(
             POINT,
@@ -439,11 +433,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "toolpaths",
         Definitions::from_parts(cells, cutter::functions(functions())),
         crate::display::compose_partials([
-            crate::display::partial(cutter::display),
+            crate::display::runtime_partial(cutter::display),
             crate::display::runtime_partial(preview::display),
-            crate::display::partial(fidget::display),
-            crate::display::partial(mesh::display),
-            crate::display::partial(refined::display),
+            crate::display::runtime_partial(fidget::display),
+            crate::display::runtime_partial(mesh::display),
+            crate::display::runtime_partial(refined::display),
         ]),
     )
 }

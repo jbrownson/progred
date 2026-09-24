@@ -451,11 +451,10 @@ fn cam_controls_profile_loop() {
     let previews = Rc::new(std::cell::Cell::new(0));
     let rendered = previews.clone();
     context.stack.projection.partial = crate::display::compose_partials([
-        crate::display::partial(move |input| {
+        crate::display::runtime_partial(move |input| {
             input
                 .value?
-                .as_record()?
-                .get(&crate::libraries::toolpath::vocabulary::PREVIEW_REFINED)?;
+                .field(crate::libraries::toolpath::vocabulary::PREVIEW_REFINED)?;
             rendered.set(rendered.get() + 1);
             Some(crate::display::dim("preview omitted"))
         }),

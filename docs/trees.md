@@ -35,11 +35,15 @@ interpreter return `tree output required`.
 
 ## Editor collection
 
-The native collector returns ordinary items alongside an explicit native hierarchy.
+The native collector returns runtime items alongside an explicit native hierarchy.
 Each node retains its emission source and distinguishes a leaf from a group,
 including a list-valued leaf or an empty group. Group children use the same list
 positions as their returned items. Plain `collect tree` returns only those items,
 deliberately forgetting that distinction; it has the same meaning in every scope.
+Leaf payloads, mapped results, and absent details retain runtime children,
+including closures with their original code locations and lexical captures.
+`tree::Sink::leaf` receives a `RuntimeValue`; a consumer that actually needs GID
+materializes it explicitly. Group positions agree with the eventual GID list.
 
 The [controls](controls.md) library's `tree program cursor` consumes an emitting
 program directly. It uses the native hierarchy to build the sliders and captures
@@ -50,6 +54,13 @@ memo root and control state. Dependencies include observed
 cell definitions and missing definitions. The complete retained result contains
 all emission effects, so recording explicitly permits memo reuse; halts and
 untracked calls still prevent reuse.
+The memo retains the runtime builder and output. Input comparison uses
+`RuntimeValue::same_result` plus fuel; output comparison includes both runtime
+items and the source-linked hierarchy (or the runtime absent). Equal serialized
+closures are not interchangeable if their code locations or captures differ.
+The cursor passes collected runtime leaves to the view unchanged. The 2D and 3D
+CAM previews retain them through path recording; workers receive recorded
+geometry, not evaluator values.
 
 The CAM example emits its hierarchy this way, collecting it once within the cursor
 for playback, range controls, and the preview. Mapping/rotation/tool wrappers transform emitted

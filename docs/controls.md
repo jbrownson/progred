@@ -14,7 +14,7 @@ It takes `controls` (a zero-argument Grap callable), `view` (a callable), `value
    pointer starts from reaching the view, including between controls.
 
 The constructor keeps its evaluated arguments in Grap's runtime representation
-until the evaluation's GID result boundary. The declaration is still data, not
+through the declaration projection. The declaration is still data, not
 an emitted widget: its partial performs the control/view work described above.
 Returning that data preserves sharing between captured environments and `value`;
 it does not expand a separate copy of a program tree for every captured binding.
@@ -78,6 +78,10 @@ inspection connects data back to provenance, and no opaque Rust handle or source
 fields enter Grap data. Passing the returned items to the view shares the collected
 result rather than running the program again. The CAM example uses this interface;
 see [trees](trees.md).
+Builder inputs, memoized leaves, and the returned `items` remain runtime values,
+so callbacks keep their code locations and captures through the control/view
+handoff. Cursor state is still ordinary GID annotation data. Radio options and
+the older list-based range controls retain their existing GID adapters.
 
 Plain `collect tree` remains an ordinary library function inside controls as well
 as outside them: it has no control key or implicit association with later widgets.

@@ -5,10 +5,10 @@ use super::cutter::{SectionKind, Tool};
 use super::playback;
 #[cfg(test)]
 use super::playback::Draw;
-use super::{Error, argument, invalid, number, paths::*, result, vocabulary::*};
+use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
 use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, color, f64, fidget, layout, presentation};
-use ::grap::{Context, Environment, Expression, Halt};
+use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use fidget_engine::context::Tree;
 use gid::Value;
 use std::rc::Rc;
@@ -191,7 +191,7 @@ pub(super) fn preview(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     preview_with(
         context,
         call,
@@ -207,22 +207,22 @@ pub(super) fn preview_with(
     environment: &Environment,
     marker: gid::CellId,
     model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
-) -> Result<Value, Halt> {
-    result((|| {
+) -> Result<RuntimeValue, Halt> {
+    runtime_result((|| {
         let playback = match context.field(call, PLAYBACK) {
             Some(expression) => {
                 let value = context.eval_to_value(expression, environment)?;
                 if absent::is_absent(&value) {
-                    return Ok(value);
+                    return Ok(value.into());
                 }
                 playback::Settings::read(&value).ok_or_else(invalid)?;
-                Some((PLAYBACK, value))
+                Some((PLAYBACK, value.into()))
             }
             None => None,
         };
         let program = argument(context, call, PROGRAM)?;
-        let program = context.eval_to_value(program, environment)?;
-        if absent::is_absent(&program) {
+        let program = context.eval(program, environment)?;
+        if program.is_absent() {
             return Ok(program);
         }
         let radius = number(context, call, environment, LINE_RADIUS)?;
@@ -235,17 +235,17 @@ pub(super) fn preview_with(
         let fuel = super::fuel(context, call, environment)?;
         let model = model(context, call, environment)?;
         if absent::is_absent(&model) {
-            return Ok(model);
+            return Ok(model.into());
         }
-        Ok(Value::record([(
+        Ok(RuntimeValue::record([(
             marker,
-            Value::record(
+            RuntimeValue::record(
                 [
-                    (presentation::vocabulary::VALUE, model),
+                    (presentation::vocabulary::VALUE, model.into()),
                     (PROGRAM, program),
-                    (LINE_RADIUS, f64::value(radius)),
-                    (fidget::vocabulary::COLOR, color),
-                    (layout::vocabulary::FUEL, f64::value(fuel as f64)),
+                    (LINE_RADIUS, RuntimeValue::f64(radius)),
+                    (fidget::vocabulary::COLOR, color.into()),
+                    (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
                 ]
                 .into_iter()
                 .chain(playback),
@@ -255,23 +255,23 @@ pub(super) fn preview_with(
 }
 
 pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let fields = input.value?.as_record()?.get(&PREVIEW_3D)?.as_record()?;
-    let model = fidget::volume_preview(fields.get(&presentation::vocabulary::VALUE)?)?;
-    let program = fields.get(&PROGRAM)?.clone();
-    let radius = f64::read(fields.get(&LINE_RADIUS)?)?;
+    let fields = input.value?.field(PREVIEW_3D)?;
+    let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
+    let program = fields.field(PROGRAM)?;
+    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
     read_radius(radius)?;
-    let color = read_color(fields.get(&fidget::vocabulary::COLOR)?)?;
-    let fuel = f64::read(fields.get(&layout::vocabulary::FUEL)?)?;
+    let color = read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
+    let fuel = fields.field(layout::vocabulary::FUEL)?.as_f64()?;
     let fuel = super::read_fuel(fuel)?;
     let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
     let settings = computation::Settings {
         request,
         radius,
         color,
-        playback: match fields.get(&PLAYBACK) {
-            Some(value) => Some(playback::Settings::read(value)?),
+        playback: match fields.field(PLAYBACK) {
+            Some(value) => Some(playback::Settings::read(value.as_value())?),
             None => None,
         },
     };
@@ -297,7 +297,9 @@ pub(super) fn display(
                 interaction.permitted.clone(),
             )
         });
-        computation.program.set(program.clone());
+        computation
+            .program
+            .set_by(program.clone(), RuntimeValue::same_result);
         computation.fuel.set(fuel);
         computation.settings.set(settings.clone());
         let image = computations.runtime.read(&computation.image);

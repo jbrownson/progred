@@ -8,11 +8,12 @@ use std::rc::Rc;
 
 /// A picture alongside, not instead of, the editable profile data.
 pub(crate) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let tool = Tool::read(input.value?)?;
-    let value = ::grap::RuntimeValue::from(input.value?.clone());
-    let fields = structure::record_layout(&input.with_value(Some(&value)), |_| None)?;
+    let value = input.value?;
+    value.field(vocabulary::TOOL)?;
+    let tool = Tool::read(value.as_value())?;
+    let fields = structure::record_layout(input, |_| None)?;
     let target = input.targets.current();
     let picture = activatable(picture(&tool)?, target.hover, target.select);
     Some(aligned_row(

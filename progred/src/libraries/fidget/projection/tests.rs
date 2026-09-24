@@ -1,4 +1,11 @@
 use super::*;
+
+fn field(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let value = input.value.map(::grap::RuntimeValue::from);
+    super::field(&input.with_value(value.as_ref()))
+}
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::{ProjectionCall, inspect};
 use crate::display::{Env, Pending, ProjectionTarget, ProjectionTargets};

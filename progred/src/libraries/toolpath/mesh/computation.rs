@@ -29,7 +29,7 @@ struct Surface {
 }
 
 pub(super) struct Computation {
-    pub program: Input<Value>,
+    pub program: Input<RuntimeValue>,
     pub fuel: Input<usize>,
     pub settings: Input<Settings>,
     pub depth: Input<u8>,
@@ -39,7 +39,7 @@ pub(super) struct Computation {
 impl Computation {
     pub fn new(
         computations: &Computations,
-        program: Value,
+        program: RuntimeValue,
         fuel: usize,
         settings: Settings,
         depth: u8,
@@ -298,16 +298,19 @@ mod tests {
         path.line_to([0.25, 0.0, 0.5]).unwrap();
         path.leave_tool();
         let path = Arc::new(path);
-        let recording = runtime.memo(move |_| {
-            Ok(Recorded {
-                path: path.clone(),
-                evaluation: ::grap::Evaluation {
-                    result: Value::record([]),
-                    completed: true,
-                    remaining_fuel: 100,
-                },
-            })
-        });
+        let recording = runtime.memo_by(
+            move |_| {
+                Ok(Recorded {
+                    path: path.clone(),
+                    evaluation: ::grap::Evaluation {
+                        result: RuntimeValue::record([]),
+                        completed: true,
+                        remaining_fuel: 100,
+                    },
+                })
+            },
+            Recorded::same_result,
+        );
         let playback = |progress, tolerance| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
@@ -467,25 +470,28 @@ mod tests {
     fn path_appearance_changes_retain_the_stock_mesh() {
         let runtime = Runtime::default();
         let tasks = Tasks::new(&runtime, incremental::background::Executor::inline(), || {});
-        let recording = runtime.memo(move |_| {
-            let mut path = Recording::default();
-            path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
-            path.start_at(
-                [-0.25, 0.0, 0.5],
-                crate::libraries::toolpath::paths::Axis::Z,
-            )
-            .unwrap();
-            path.line_to([0.25, 0.0, 0.5]).unwrap();
-            path.leave_tool();
-            Ok(Recorded {
-                path: Arc::new(path),
-                evaluation: ::grap::Evaluation {
-                    result: Value::record([]),
-                    completed: true,
-                    remaining_fuel: 100,
-                },
-            })
-        });
+        let recording = runtime.memo_by(
+            move |_| {
+                let mut path = Recording::default();
+                path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
+                path.start_at(
+                    [-0.25, 0.0, 0.5],
+                    crate::libraries::toolpath::paths::Axis::Z,
+                )
+                .unwrap();
+                path.line_to([0.25, 0.0, 0.5]).unwrap();
+                path.leave_tool();
+                Ok(Recorded {
+                    path: Arc::new(path),
+                    evaluation: ::grap::Evaluation {
+                        result: RuntimeValue::record([]),
+                        completed: true,
+                        remaining_fuel: 100,
+                    },
+                })
+            },
+            Recorded::same_result,
+        );
         let playback = |progress, tolerance| {
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
@@ -656,7 +662,13 @@ mod tests {
             doc: &doc,
             libraries: &libraries,
         });
-        let graph = Computation::new(&computations, program.clone(), 10000, settings.clone(), 3);
+        let graph = Computation::new(
+            &computations,
+            program.clone().into(),
+            10000,
+            settings.clone(),
+            3,
+        );
         let first = computations.runtime.read(&graph.geometry).unwrap();
         assert!(!first.as_ref().as_ref().unwrap().geometry.indices.is_empty());
         assert!(Rc::ptr_eq(
@@ -692,7 +704,7 @@ mod tests {
         graph.settings.set(settings.clone());
         graph.depth.set(3);
         let reused = computations.runtime.read(&graph.geometry).unwrap();
-        let fresh = Computation::new(&computations, program, 10000, settings, 3);
+        let fresh = Computation::new(&computations, program.into(), 10000, settings, 3);
         let recomputed = computations.runtime.read(&fresh.geometry).unwrap();
         let a = reused.as_ref().as_ref().unwrap();
         let b = recomputed.as_ref().as_ref().unwrap();

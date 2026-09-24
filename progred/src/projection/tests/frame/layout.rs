@@ -31,8 +31,16 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         let visits = visits.clone();
         move |input| {
             input.value?.same_result(&closure).then(|| {
-                visits.set(visits.get() + 1);
-                d::text("retained callback")
+                let visits = visits.clone();
+                let closure = closure.clone();
+                d::Layout::program(Rc::new(move |context, build| {
+                    assert!(
+                        context.value.unwrap().same_result(&closure),
+                        "widget preparation must retain the native callback too"
+                    );
+                    visits.set(visits.get() + 1);
+                    d::text("retained callback").measure(context, build)
+                }))
             })
         }
     });

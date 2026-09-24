@@ -667,13 +667,16 @@ fn changing_strategy_stepover_and_diameter_invalidates_the_observed_program() {
     });
     let memo = computation::recording(
         &computations,
-        computations.runtime.input(::grap::lambda(
-            [],
-            call(
-                SEQUENCE,
-                [(PROGRAM, collect_groups(call(names["op1_chamfers"], [])))],
-            ),
-        )),
+        computations.runtime.input(
+            ::grap::lambda(
+                [],
+                call(
+                    SEQUENCE,
+                    [(PROGRAM, collect_groups(call(names["op1_chamfers"], [])))],
+                ),
+            )
+            .into(),
+        ),
         computations.runtime.input(100_000),
     );
     let initial = computations.runtime.read(&memo).unwrap();

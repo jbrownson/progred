@@ -289,6 +289,41 @@ checkpoint's 318.42, 343.42, and 329.58 µs: no clear overall improvement. Build
 and correctness tests had finished before timing; the preview-stub caveat above
 still applies. This does not establish recovery of the earlier ownership cost.
 
+### Runtime tree-to-3D pipeline — 2026-09-23
+
+Tree collection/mapping, the tree memo, the program cursor's returned items,
+all three 3D preview constructors/projections, and path recording now retain
+runtime values. Memo comparisons preserve code/capture/source distinctions.
+Workers still receive recorded geometry, not runtime closures. Domain decoders
+for model, playback, appearance, and tools remain explicit GID boundaries.
+
+An intermediate migration exposed a repeated-frame regression: retaining native
+tree leaves while materializing them downstream raised the controls-only canary
+to 3.19 ms. Migrating the 3D consumers alone left about 3.0 ms. A three-second
+CPU sample of a 6,000-frame headless run located the dominant remaining cost in
+`projection::prepare`: constructing a widget context unconditionally requested
+the displayed value's GID representation. The context now borrows the runtime
+value. Picking converts at the actual edit; ordinary widget preparation does
+not. Fidget/cutter partials also inspect their identifying fields before asking
+their data decoders for a GID view. No cache was added.
+
+After all builds and correctness tests finished, three serial controls-frame
+medians were 334.38, 331.17, and 325.58 µs, versus 337.21, 332.58, and 336.38 µs
+at the preceding checkpoint: essentially unchanged, not an established speedup.
+The preview stub now reads its marker directly from the runtime value, matching
+the real 3D projections rather than introducing a conversion of its own.
+The usual five warm-up and 60 measured frames include disposal and exclude 3D
+geometry generation/rasterization; these are not native orbit timings.
+
+Two five-trial runs split uncached construction from optional materialization:
+excluding each first trial, the 504-leaf runtime tree took 4.03–4.47 ms; an
+explicit GID view cost another 2.33–2.60 ms. The sum was 6.36–7.01 ms, versus
+the earlier GID-returning construction canaries' 9.2–11.4 ms. The preview no
+longer needs that view, so the runtime construction is the relevant new cost;
+this does not measure subsequent recording or Fidget rendering. Warm memo
+demands took about 1–8 µs. The editor suite passed 892 tests (51 ignored), the
+threaded web build passed, and the optional profiling examples compiled.
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

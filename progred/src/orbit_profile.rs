@@ -52,7 +52,7 @@ impl OrbitProfile {
         let (doc, names) = crate::gid_text::parse(&source).unwrap();
         let stack = crate::stack::load();
         let tree = libraries::tree::build(
-            &names["program_tree"].into(),
+            &gid::Value::from(names["program_tree"]).into(),
             &crate::sources::Sources {
                 doc: &doc,
                 libraries: &stack.libraries,
@@ -60,7 +60,7 @@ impl OrbitProfile {
             3_000_000,
         )
         .unwrap();
-        let selection = tree_range::Selection::new(&tree.items, None);
+        let selection = tree_range::Selection::new(tree.items.as_value(), None);
         let declarations = workspace::declarations(doc.root.as_ref());
         let controls: Vec<_> = declarations[0]
             .path
