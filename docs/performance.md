@@ -348,6 +348,41 @@ call stacks, repeated serialization, absent/malformed annotations, unavailable
 source libraries, nested closures, and nearest-cell anchors independent of the
 reference occurrence.
 
+### Forest runtime-boundary check — 2026-09-23
+
+Two opt-in headless canaries now use the actual growing-forest lesson and its
+tutorial projection at 720 × 684 @1. The slider canary changes the control's
+annotation directly, then rebuilds and paints the successor frame. The hover
+canary dispatches real pointer motion between a tree and empty margin with the
+platform command modifier held, including retained hit testing, source linking,
+successor builds, and painting. Both dispose their drawing-command output inside
+the measurement. Neither measures browser overhead, GPU work, or display latency.
+
+After five warm-up frames, a 40,000-frame slider run measured 334 µs median /
+387 µs p95. Longer runs used for CPU sampling measured 330 / 379 µs for slider
+updates (200,000 frames) and 687 / 766 µs for source-hover transitions (120,000).
+The latter alternates entering and leaving a source target; these transitions
+need not have the same cost. These are current-state measurements, not a
+before/after speedup claim.
+
+Three-second native CPU samples attributed about 43% of the test thread's samples
+to recording/evaluating the drawing program in each case. They did not show a
+prominent runtime-to-GID materialization hotspot. Inspection agrees: drawing
+coordinates use runtime numeric evaluation, while the remaining paint adapter
+reads small color values. The older radio and range-control adapters are not
+exercised by this lesson. There is no evidence here for migrating those controls
+or adding another cache to improve the forest. Production code is unchanged.
+
+```sh
+./tools/sandbox-cargo test -p progred --lib --release \
+  --config 'env.FRAME_PROFILE_ITERATIONS="6000"' \
+  frame::profile::forest:: -- --ignored --nocapture --test-threads=1
+```
+
+The existing website regressions still cover slider-dependent drawing changes
+and source-hover fallback to the displayed forest call (17 passed, four optional
+capture tests ignored).
+
 ### Repeated-frame regression
 
 The uncached construction improvement alone missed a frame-level regression:

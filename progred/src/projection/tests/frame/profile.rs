@@ -4,6 +4,7 @@ use super::*;
 use crate::command::Example;
 use std::time::{Duration, Instant};
 
+mod forest;
 #[cfg(feature = "layout-profile")]
 mod forms;
 mod layout_ffi;

@@ -466,7 +466,7 @@ fn website_lesson_svg_captures() {
     }
 }
 
-fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
+pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, f64, grap, layout, list, logic, name, number,
         presentation, text,
