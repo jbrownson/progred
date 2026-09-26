@@ -176,6 +176,12 @@ entries use the default. Pointer placement also remains an explicit interaction.
 The shell does not inspect values or the render tree to infer editability.
 See [navigation](../progred/src/navigate.rs).
 
+Line editing uses the host-supplied keyboard convention: Mac Command+Left/Right
+moves to the content's ends and Option+Left/Right moves by words. Control-based
+hosts use Control+Left/Right for words. Shift extends the selection in each case.
+These controls handle movement before structural navigation; affixes remain
+outside the editable span.
+
 Ordinary hover, selection, and related-occurrence highlights share one padded
 outline. Each occurrence paints at most one mark: selection takes precedence,
 then related selection, direct hover, and related hover. Pending text frames keep

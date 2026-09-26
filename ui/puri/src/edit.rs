@@ -333,6 +333,12 @@ impl LineEditState {
             return false;
         }
         let action_mod = command_modifier.pressed(&event.modifiers);
+        let (line_mod, word_mod) = match command_modifier {
+            crate::keyboard::CommandModifier::Meta => {
+                (event.modifiers.meta(), event.modifiers.alt())
+            }
+            crate::keyboard::CommandModifier::Control => (false, event.modifiers.ctrl()),
+        };
         let shift = event.modifiers.shift();
         // The selection's reachable span: between the affixes. Motion
         // that only wanders into an affix is no motion — clamped, it
@@ -393,21 +399,25 @@ impl LineEditState {
                 // can interpret them (selection navigation).
                 Key::Named(NamedKey::ArrowLeft) => {
                     let before = clamp(cursor_of(drv.editor.raw_selection()));
-                    match (action_mod, shift) {
-                        (true, true) => drv.select_word_left(),
-                        (true, false) => drv.move_word_left(),
-                        (false, true) => drv.select_left(),
-                        (false, false) => drv.move_left(),
+                    match (line_mod, word_mod, shift) {
+                        (true, _, true) => drv.select_to_line_start(),
+                        (true, _, false) => drv.move_to_line_start(),
+                        (false, true, true) => drv.select_word_left(),
+                        (false, true, false) => drv.move_word_left(),
+                        (false, false, true) => drv.select_left(),
+                        (false, false, false) => drv.move_left(),
                     }
                     clamp(cursor_of(drv.editor.raw_selection())) != before
                 }
                 Key::Named(NamedKey::ArrowRight) => {
                     let before = clamp(cursor_of(drv.editor.raw_selection()));
-                    match (action_mod, shift) {
-                        (true, true) => drv.select_word_right(),
-                        (true, false) => drv.move_word_right(),
-                        (false, true) => drv.select_right(),
-                        (false, false) => drv.move_right(),
+                    match (line_mod, word_mod, shift) {
+                        (true, _, true) => drv.select_to_line_end(),
+                        (true, _, false) => drv.move_to_line_end(),
+                        (false, true, true) => drv.select_word_right(),
+                        (false, true, false) => drv.move_word_right(),
+                        (false, false, true) => drv.select_right(),
+                        (false, false, false) => drv.move_right(),
                     }
                     clamp(cursor_of(drv.editor.raw_selection())) != before
                 }
@@ -1009,6 +1019,49 @@ mod tests {
             Key::Named(NamedKey::Escape),
             Modifiers::empty(),
         ));
+    }
+
+    #[test]
+    fn arrow_modifiers_use_the_hosts_text_navigation_convention() {
+        use crate::keyboard::CommandModifier::{Control, Meta};
+        let (mut fonts, mut layouts) = contexts();
+        let presentation = LineEditPresentation {
+            prefix: "[".into(),
+            suffix: "]".into(),
+            ..presentation()
+        };
+        for (command, modifiers, key, start, end) in [
+            (Meta, Modifiers::META, NamedKey::ArrowLeft, 13, 0),
+            (Meta, Modifiers::META, NamedKey::ArrowRight, 0, 13),
+            (Meta, Modifiers::ALT, NamedKey::ArrowLeft, 13, 8),
+            (Meta, Modifiers::ALT, NamedKey::ArrowRight, 0, 3),
+            (Control, Modifiers::CONTROL, NamedKey::ArrowLeft, 13, 8),
+            (Control, Modifiers::CONTROL, NamedKey::ArrowRight, 0, 3),
+        ] {
+            for shift in [false, true] {
+                let mut state = state("one two three");
+                state.cursor_to(start);
+                let modifiers = modifiers
+                    | if shift {
+                        Modifiers::SHIFT
+                    } else {
+                        Modifiers::empty()
+                    };
+                assert!(state.handle_key(
+                    &presentation,
+                    &mut fonts,
+                    &mut layouts,
+                    &mut MemoryClipboard::default(),
+                    command,
+                    &key_event(Key::Named(key), modifiers),
+                ));
+                assert_eq!(
+                    state.selection_offsets(),
+                    (if shift { start } else { end }, end)
+                );
+                assert_eq!(state.text(), "one two three");
+            }
+        }
     }
 
     #[test]
