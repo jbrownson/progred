@@ -115,7 +115,7 @@ pub fn view(
         let navigation: Select<crate::Editor> = Rc::new(move |world, direction| {
             let mut editor = nav_edits.open(crate::editing::Access::new(world));
             editor.select(&nav_root, &nav_path);
-            if direction == Some(Direction::Left) {
+            if direction == Some(Direction::Right) {
                 editor.edit_line(&nav_root, &nav_path, &description, &|edit| {
                     edit.state.cursor_to_start();
                     true
@@ -127,6 +127,13 @@ pub fn view(
         let scale = context.inputs.styles.scale as f32;
         let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
         crate::display::widget::before_place(content, move |placement: Placement, output| {
+            output.navigation(super::navigation::Navigation::stop(
+                super::navigation::Stop {
+                    path: path.clone(),
+                    entry: super::navigation::Entry::Line,
+                    scope: edits.clone(),
+                },
+            ));
             output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
@@ -161,7 +168,15 @@ pub fn view(
             });
         })
     } else {
-        content
+        crate::display::widget::before_place(content, move |_, output| {
+            output.navigation(super::navigation::Navigation::stop(
+                super::navigation::Stop {
+                    path,
+                    entry: super::navigation::Entry::Value,
+                    scope: edits,
+                },
+            ));
+        })
     }
 }
 

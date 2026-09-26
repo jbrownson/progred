@@ -83,7 +83,10 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
         .sources
         .resolve(cell)
         .map_or(Resolution::Document, |value| value.source);
-    selectable_bracket(Delim::Paren, descend(Step::Follow(source), None, None))
+    crate::display::widget::navigation::nav_group(selectable_bracket(
+        Delim::Paren,
+        descend(Step::Follow(source), None, None),
+    ))
 }
 
 fn selectable(
@@ -95,6 +98,7 @@ fn selectable(
 ) -> View {
     let path: Rc<[Step]> = Rc::from(path);
     let target = Hovered::Tree(Hover::Value(path.clone()));
+    let child = crate::display::widget::navigation::target(child);
     let clicked = on_activate(
         pickable_runtime(child, target.clone(), value.clone()),
         target,

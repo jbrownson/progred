@@ -424,7 +424,7 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
 }
 
 #[test]
-fn leftward_entry_is_explicit_but_ordinary_navigation_keeps_state_missing() {
+fn rightward_entry_starts_at_the_left_while_other_entries_use_the_default() {
     let libraries = core_libraries();
     let doc = Document {
         root: Some(text::value("hello")),
@@ -448,7 +448,7 @@ fn leftward_entry_is_explicit_but_ordinary_navigation_keeps_state_missing() {
             .unwrap();
         assert!((target.select)(&mut world, direction));
         match direction {
-            Some(Direction::Left) => assert_eq!(
+            Some(Direction::Right) => assert_eq!(
                 world
                     .model
                     .selection

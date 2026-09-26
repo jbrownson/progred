@@ -1,6 +1,7 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
+use crate::display::widget::navigation::{nav_group, scope, vertical};
 use crate::display::{self as d, Layout, ProjectionInput};
 use crate::frame::Hovered;
 use gid::{CellId, Path, Step, Value};
@@ -56,20 +57,23 @@ pub(super) fn display(
                 })
             }
         });
-        d::col(
-            0,
-            24.0,
-            [d::col(
+        nav_group(scope(
+            d::col(
                 0,
-                8.0,
-                [
-                    label.clone(),
-                    d::descend(Step::Key(OUTLINE), Some(entries), None),
-                ],
-            )]
-            .into_iter()
-            .chain(footer.clone()),
-        )
+                24.0,
+                [d::col(
+                    0,
+                    8.0,
+                    [
+                        label.clone(),
+                        d::descend(Step::Key(OUTLINE), Some(entries), None),
+                    ],
+                )]
+                .into_iter()
+                .chain(footer.clone()),
+            ),
+            vertical,
+        ))
         .measure(context, build)
     })))
 }
@@ -108,12 +112,15 @@ fn section(
     Layout::program(Rc::new(move |context, build| {
         let path: Path = context.path.iter().cloned().chain(steps.clone()).collect();
         let (_, visible) = visibility(context.inputs, &path, value.as_ref());
-        d::col(
-            0,
-            8.0,
-            [heading.clone()]
-                .into_iter()
-                .chain(visible.then(|| d::pad(18.0, body.clone()))),
+        scope(
+            d::col(
+                0,
+                8.0,
+                [heading.clone()]
+                    .into_iter()
+                    .chain(visible.then(|| d::pad(18.0, body.clone()))),
+            ),
+            vertical,
         )
         .measure(context, build)
     }))
@@ -182,7 +189,7 @@ fn extras(
     if fields.is_empty() && pending.is_none() {
         None
     } else {
-        Some(d::record_heads(fields, pending))
+        Some(d::record_fragment(fields, pending))
     }
 }
 

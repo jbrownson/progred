@@ -7,7 +7,7 @@ use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{Libraries, f64, fidget, name, text};
-use crate::navigate::{projected_name_owner, step_selection};
+use crate::navigate::select_all;
 use crate::placed::leaf;
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
@@ -276,8 +276,6 @@ fn positions(value: &Value) -> Vec<Position> {
     value.as_list().unwrap().keys().cloned().collect()
 }
 
-const LINE: f64 = 16.0;
-
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
     Descend {
         scope: Default::default(),
@@ -295,19 +293,6 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
         modifiers: Modifiers::empty(),
         ..Default::default()
     }
-}
-
-fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
-    let selection = from.map(|path| crate::selection::bare_edge(&crate::test_root(), path));
-    step_selection(
-        crate::modifiers::native(),
-        ds,
-        None,
-        selection.as_ref(),
-        LINE,
-        &arrow(named),
-    )
-    .map(|descend| descend.path.to_vec())
 }
 
 mod completion;

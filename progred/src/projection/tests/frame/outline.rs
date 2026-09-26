@@ -130,6 +130,10 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
         .as_list()
         .unwrap()
         .clone();
+    let first_heading = vec![
+        Step::Key(OUTLINE),
+        Step::Element(entries.keys().next().unwrap().clone()),
+    ];
     for (position, value) in entries {
         world.set_collapsed(
             &crate::test_root(),
@@ -145,12 +149,135 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     let path = [Step::Key(panes)];
     assert!(hidden(&world, &path));
     let f = frame(&mut world);
+    let navigation = crate::display::widget::navigation::Navigation::join(
+        f.navigation.iter().map(|n| n.navigation.clone()).collect(),
+    )
+    .resolve();
+    assert!(navigation.issues().is_empty());
+    let entry = navigation
+        .destination(&[], crate::navigate::Direction::Down)
+        .expect("the root enters its outline");
+    assert_eq!(entry.path.as_ref(), [Step::Key(OUTLINE)]);
+    let heading = navigation
+        .destination(&[Step::Key(OUTLINE)], crate::navigate::Direction::Down)
+        .unwrap();
+    assert_eq!(heading.path.as_ref(), first_heading);
+    assert_eq!(
+        navigation
+            .destination(&first_heading, crate::navigate::Direction::Up)
+            .unwrap()
+            .path
+            .as_ref(),
+        [Step::Key(OUTLINE)]
+    );
+    assert_eq!(
+        navigation
+            .destination(&[Step::Key(OUTLINE)], crate::navigate::Direction::Up)
+            .unwrap()
+            .path
+            .as_ref(),
+        []
+    );
     stop(&f, &path);
     assert!(
         !f.descends
             .iter()
             .any(|d| d.path.starts_with(&path) && d.path.len() > path.len())
     );
+}
+
+#[test]
+fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
+    use ui_events::keyboard::NamedKey;
+    for with_extras in [false, true] {
+        let (mut doc, a, b, extra) = document();
+        if !with_extras {
+            let Value::Record(fields) = doc.root.as_mut().unwrap() else {
+                unreachable!()
+            };
+            fields.remove(&extra);
+        }
+        let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+        let root = runner.editor.model.workspace.document_root().clone();
+        let a_heading = entry(&runner.editor, &[], a);
+        let b_heading = entry(&runner.editor, &[], b);
+        let a_body = body(&a_heading, a);
+        let b_body = body(&b_heading, b);
+        for path in [&a_body, &b_body] {
+            runner.editor.set_collapsed(&root, path, false, Some(false));
+        }
+        let positions = runner
+            .editor
+            .sources()
+            .resolve_path(&[Step::Key(a)])
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let items = positions
+            .into_iter()
+            .map(|position| {
+                a_body
+                    .iter()
+                    .cloned()
+                    .chain([Step::Element(position)])
+                    .collect::<Path>()
+            })
+            .collect::<Vec<_>>();
+        let viewport = kurbo::Size::new(700.0, 600.0);
+        runner.refresh_frame(1.0, viewport);
+        // Entering the first section can be reversed without following the
+        // outline's document jump or skipping its whole-list stop.
+        for (direction, path) in [
+            (NamedKey::ArrowDown, vec![]),
+            (NamedKey::ArrowDown, vec![Step::Key(OUTLINE)]),
+            (NamedKey::ArrowDown, b_heading.clone()),
+            (NamedKey::ArrowUp, vec![Step::Key(OUTLINE)]),
+            (NamedKey::ArrowUp, vec![]),
+        ] {
+            assert!(runner.keyboard_event(&key(Key::Named(direction)), 1.0, viewport));
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+        }
+        runner.editor.model.selection = None;
+        runner.refresh_frame(1.0, viewport);
+        let mut expected = vec![
+            vec![],
+            vec![Step::Key(OUTLINE)],
+            b_heading.clone(),
+            b_body.clone(),
+            a_heading.clone(),
+            a_body.clone(),
+        ];
+        expected.extend(items.clone());
+        if with_extras {
+            expected.push(vec![Step::Key(extra)]);
+        }
+        for path in expected {
+            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+        }
+        if with_extras {
+            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowUp)), 1.0, viewport));
+            assert_eq!(
+                runner.editor.model.selection.as_ref().unwrap().path(),
+                [Step::Key(OUTLINE)]
+            );
+        }
+        // Collapsed bodies contribute no stops; moving onto a heading doesn't
+        // run its pointer activation handler or unfold it.
+        runner.editor.model.selection = None;
+        runner
+            .editor
+            .set_collapsed(&root, &b_body, false, Some(true));
+        runner.refresh_frame(1.0, viewport);
+        for path in [vec![], vec![Step::Key(OUTLINE)], b_heading, a_heading] {
+            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+        }
+        assert!(hidden(&runner.editor, &b_body));
+    }
 }
 
 #[test]
@@ -218,12 +345,10 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         },
         ..key(Key::Character("a".into()))
     };
-    let target = crate::navigate::step_selection(
+    let target = crate::navigate::select_all(
         crate::modifiers::native(),
         &f.descends,
         None, // This fixture places one projection without the pane wrapper.
-        world.model.selection.as_ref(),
-        18.0,
         &select_all,
     )
     .expect("select all reaches the root");

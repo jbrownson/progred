@@ -5,6 +5,10 @@ use puri::Leaf;
 use std::{collections::HashMap, rc::Rc};
 
 pub enum Recorded<World, Hover> {
+    Around {
+        child: Box<Recorded<World, Hover>>,
+        wrap: widget::Around<World, Hover>,
+    },
     Leaf(Leaf<Paint>),
     /// Retain an opaque preparation function without executing it.
     Program(widget::Program<World, Hover>),
@@ -69,6 +73,10 @@ pub enum Recorded<World, Hover> {
 impl<World, Hover> Clone for Recorded<World, Hover> {
     fn clone(&self) -> Self {
         match self {
+            Self::Around { child, wrap } => Self::Around {
+                child: child.clone(),
+                wrap: wrap.clone(),
+            },
             Self::Leaf(display) => Self::Leaf(display.clone()),
             Self::Program(program) => Self::Program(program.clone()),
             Self::Widget(widget) => Self::Widget(widget.clone()),
@@ -128,6 +136,15 @@ impl<World, Hover> Clone for Recorded<World, Hover> {
                 child: child.clone(),
             },
             Self::Alternatives(options) => Self::Alternatives(options.clone()),
+        }
+    }
+}
+
+impl<W, H> Recorded<W, H> {
+    pub fn content(&self) -> &Self {
+        match self {
+            Self::Around { child, .. } => child.content(),
+            _ => self,
         }
     }
 }
@@ -206,6 +223,10 @@ impl<W: 'static, H: 'static> Builder<W, H> for Recording<W, H> {
             gap,
             children,
         })
+    }
+    fn around(&mut self, child: Node, wrap: widget::Around<W, H>) -> Node {
+        let child = Box::new(self.take(child));
+        self.push(Recorded::Around { child, wrap })
     }
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node {
         let children = self.children(children);

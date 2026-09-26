@@ -57,11 +57,11 @@ pub(crate) fn shallow_cell_with(
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
     let target = input.targets.current();
-    Some(activatable(
+    Some(crate::display::widget::navigation::target(activatable(
         decorate(faced(name, Face::Name)),
         target.hover,
         target.select,
-    ))
+    )))
 }
 
 fn declaration_cell(
@@ -1140,7 +1140,7 @@ mod tests {
         let Recorded::Alternatives(argument_options) = child else {
             panic!("arguments have responsive forms");
         };
-        let Recorded::Row { children, .. } = &argument_options[0] else {
+        let Recorded::Row { children, .. } = argument_options[0].content() else {
             panic!("flat arguments first");
         };
         children
@@ -1313,7 +1313,7 @@ mod tests {
         let Recorded::Alternatives(argument_options) = child else {
             panic!("arguments have responsive forms");
         };
-        let Recorded::Row { children, .. } = &argument_options[0] else {
+        let Recorded::Row { children, .. } = argument_options[0].content() else {
             panic!("flat arguments first");
         };
         let Recorded::Row { children, .. } = &children[0] else {

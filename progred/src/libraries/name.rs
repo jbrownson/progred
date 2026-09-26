@@ -55,16 +55,19 @@ pub(crate) fn with_name(
     if !has_name && input.pending != Some(Pending::Child(step.clone())) {
         return content;
     }
-    row(
-        6.0,
-        [
-            descend_local(
-                step,
-                partial(|input| editor(input.value?).map(line_edit)),
-                &input.default_projection,
-            ),
-            content,
-        ],
+    crate::display::widget::navigation::scope(
+        row(
+            6.0,
+            [
+                descend_local(
+                    step,
+                    partial(|input| editor(input.value?).map(line_edit)),
+                    &input.default_projection,
+                ),
+                content,
+            ],
+        ),
+        crate::display::widget::navigation::horizontal,
     )
 }
 

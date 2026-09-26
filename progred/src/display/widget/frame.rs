@@ -1,7 +1,7 @@
 //! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
     container::{self, Layers},
-    navigation::{Landmark, Select},
+    navigation::{Graph, Landmark, Navigation, Select, ViewNavigation, resolve_views},
     offers::Offers,
     source::{Secondary, SourceTrace},
     view::Root,
@@ -102,6 +102,13 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
 
     pub fn on_arrival(&mut self, select: Option<Select<C>>) {
         self.output.landmark_select = select.or(self.output.landmark_select.take());
+    }
+
+    pub fn navigation(&mut self, navigation: Navigation) {
+        self.output.navigation.push(ViewNavigation {
+            root: None,
+            navigation,
+        });
     }
 
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
@@ -366,6 +373,7 @@ pub struct Effects<C, H> {
 
 /// Completed widget output: no hover work remains, and painting is optional.
 pub struct FrameOutput<C, H> {
+    pub navigation: Vec<ViewNavigation<Graph>>,
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
@@ -391,6 +399,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
 }
 
 pub struct HoverOutput<C, Hover> {
+    pub navigation: Vec<ViewNavigation>,
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
@@ -425,6 +434,7 @@ fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
 impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     fn empty() -> Self {
         Self {
+            navigation: Vec::new(),
             scroll_probes: Vec::new(),
             claim: None,
             hover_geometry: HoverGeometry::default(),
@@ -439,6 +449,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     }
 
     fn over(mut self, above: Self) -> Self {
+        append(&mut self.navigation, above.navigation);
         append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
@@ -459,6 +470,9 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
 
 impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
     pub fn root_navigation(&mut self, root: &Root) {
+        for navigation in &mut self.navigation {
+            navigation.root = Some(root.clone());
+        }
         if let Some((owner, _)) = &mut self.claim {
             *owner = Some(root.clone());
         }
@@ -498,6 +512,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         };
         self.after_hover.bind(Rc::new(hover), &mut effects);
         FrameOutput {
+            navigation: resolve_views(self.navigation),
             scroll_probes: self.scroll_probes,
             renders: effects.renders,
             handler: effects.handler,

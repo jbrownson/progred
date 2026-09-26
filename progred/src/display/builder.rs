@@ -13,6 +13,7 @@ pub trait Builder<W, H> {
     fn program(&mut self, program: widget::Program<W, H>) -> Node;
     fn before(&mut self, child: Node, before: widget::Decoration<W, H>) -> Node;
     fn after(&mut self, child: Node, after: widget::Decoration<W, H>) -> Node;
+    fn around(&mut self, child: Node, wrap: widget::Around<W, H>) -> Node;
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node;
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node;
     fn overlay(&mut self, children: Vec<Node>) -> Node;

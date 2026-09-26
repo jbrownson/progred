@@ -1,7 +1,8 @@
 use crate::frame::{Dispatch, frame_disposition};
+#[cfg(test)]
+use crate::selection;
 use crate::{
     Editor, EditorRunner, PendingBatch, PendingGesture, PendingPointer, PendingScroll, navigate,
-    selection,
 };
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
@@ -44,24 +45,7 @@ fn keyboard(
         || editor.paste_key(event)
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
-        || match navigate::step_selection(
-            editor.command_modifier,
-            &dispatch.descends,
-            Some(
-                editor
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .unwrap_or_else(|| editor.model.workspace.document_root()),
-            ),
-            editor.model.selection.as_ref(),
-            dispatch.line,
-            event,
-        ) {
-            Some(target) => geometry.arrive(editor, target, navigate::direction(event)),
-            None => false,
-        }
+        || navigate::keyboard(editor, &dispatch.navigation, geometry, event)
 }
 
 fn queue_batch<T>(
@@ -526,6 +510,164 @@ mod tests {
             state: KeyState::Down,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn down_selects_an_expanded_cell_before_its_name() {
+        use crate::libraries::name;
+        use gid::{Step, Value};
+        use ui_events::keyboard::NamedKey;
+        let cell = gid::new_cell_id();
+        let list = Value::list([Value::Cell(cell)]);
+        let cell_path = vec![Step::Element(
+            list.as_list().unwrap().keys().next().unwrap().clone(),
+        )];
+        let name_path = cell_path
+            .iter()
+            .cloned()
+            .chain([
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(name::vocabulary::NAME),
+            ])
+            .collect::<Vec<_>>();
+        let mut cells = Cells::new();
+        cells.set_value(
+            cell,
+            name::record("tilt", f64::value(45.0).as_record().unwrap().clone()),
+        );
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(list),
+            cells,
+        }));
+        runner.refresh_frame(1.0, VIEWPORT);
+        let press = |key| KeyboardEvent {
+            key: Key::Named(key),
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        for path in [vec![], cell_path.clone(), name_path] {
+            assert!(runner.keyboard_event(&press(NamedKey::ArrowDown), 1.0, VIEWPORT));
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+        }
+        // Go back through the name's text, then back to the cell's own stop.
+        for _ in 0.."tilt".len() + 1 {
+            assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        }
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            cell_path
+        );
+    }
+
+    #[test]
+    fn arrows_edit_text_before_routing_and_enter_the_destination_at_the_near_edge() {
+        use ui_events::keyboard::NamedKey;
+        let list = gid::Value::list([text::value("ab"), text::value("cd")]);
+        let paths: Vec<_> = list
+            .as_list()
+            .unwrap()
+            .keys()
+            .map(|position| vec![gid::Step::Element(position.clone())])
+            .collect();
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(list),
+            cells: Cells::new(),
+        }));
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, paths[0].clone()));
+        runner.refresh_frame(1.0, VIEWPORT);
+        let press = |key| KeyboardEvent {
+            key: Key::Named(key),
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        // Plain selection defaults to the end; Left first moves within "ab".
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), paths[0]);
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (1, 1));
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            paths[0]
+        );
+        // Only at the boundary does Right hand off to the list's next item.
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), paths[1]);
+        assert_eq!(selected.initial_line("cd").selection_offsets(), (0, 0));
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), paths[0]);
+        // Leftward arrival uses the destination's ordinary end-of-text default.
+        assert!(selected.edit().is_none());
+    }
+
+    #[test]
+    fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
+        use crate::libraries::name;
+        use ui_events::keyboard::NamedKey;
+        let list = gid::Value::list([
+            text::value("before"),
+            name::record("tilt", f64::value(45.0).as_record().unwrap().clone()),
+            text::value("after"),
+        ]);
+        let paths: Vec<_> = list
+            .as_list()
+            .unwrap()
+            .keys()
+            .map(|position| vec![gid::Step::Element(position.clone())])
+            .collect();
+        let name_path: Vec<_> = paths[1]
+            .iter()
+            .cloned()
+            .chain([gid::Step::Key(name::vocabulary::NAME)])
+            .collect();
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(list),
+            cells: Cells::new(),
+        }));
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, name_path.clone()));
+        runner.refresh_frame(1.0, VIEWPORT);
+        let press = |key| KeyboardEvent {
+            key: Key::Named(key),
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), paths[1]);
+        assert_eq!(selected.initial_line("45").selection_offsets(), (0, 0));
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), name_path);
+        assert!(selected.edit().is_none());
+
+        for _ in 0.."tilt".len() {
+            assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        }
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            paths[0]
+        );
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            name_path
+        );
+        for _ in 0.."tilt".len() + 1 + "45".len() + 1 {
+            assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        }
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            paths[2]
+        );
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        let selected = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), paths[1]);
+        assert!(selected.edit().is_none());
     }
 
     #[test]

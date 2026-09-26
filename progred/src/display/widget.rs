@@ -62,6 +62,21 @@ pub type Widget<World, Hover> = Rc<
     ) -> Measured<HoverPass<World, Hover>>,
 >;
 
+pub type Around<World, Hover> = Rc<
+    dyn for<'a, 'fonts> Fn(
+        &mut Context<'a, 'fonts, World, Hover>,
+    ) -> Box<
+        dyn FnOnce(Measured<HoverPass<World, Hover>>) -> Measured<HoverPass<World, Hover>>,
+    >,
+>;
+
+pub fn around<W: 'static, H: 'static>(child: Layout<W, H>, wrap: Around<W, H>) -> Layout<W, H> {
+    Layout::new(move |builder| {
+        let child = child.run(builder);
+        builder.around(child, wrap.clone())
+    })
+}
+
 /// Contribute a layer beneath the child, without inspecting its widget type.
 pub fn before<World: 'static, Hover: 'static>(
     child: Layout<World, Hover>,

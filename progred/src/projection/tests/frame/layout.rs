@@ -843,100 +843,46 @@ fn expression_children_are_real() {
     );
 }
 
-/// The keyboard walk against real settled geometry: down visits
-/// rows in screen order — never climbing back up — and up
-/// retraces the same stops exactly.
+/// The chosen presentation supplies routing, independently of font metrics.
 #[test]
-fn the_row_walk_descends_the_sample_projection_in_screen_order() {
-    use ui_events::keyboard::{KeyState, Modifiers};
-    let doc = sample_document();
-    let (bench, _) = place(&doc, None, 560.0);
-    let line = 14.0;
-    let press = |named: NamedKey| KeyboardEvent {
-        key: Key::Named(named),
-        state: KeyState::Down,
-        modifiers: Modifiers::empty(),
-        ..Default::default()
+fn list_navigation_follows_the_selected_layout_alternative() {
+    use crate::display::widget::navigation::Direction;
+    let list = Value::list([
+        text::value("first"),
+        text::value("second"),
+        text::value("third"),
+    ]);
+    let paths: Vec<_> = positions(&list)
+        .into_iter()
+        .map(|position| vec![Step::Element(position)])
+        .collect();
+    let doc = Document {
+        root: Some(list),
+        cells: Cells::new(),
     };
-    let rect_of = |path: &Path| {
-        bench
-            .descends
-            .iter()
-            .find(|descend| descend.path.as_ref() == path)
-            .expect("walk stops on placed descends")
-            .rect
-    };
-    let select = |path: &[Step]| crate::selection::bare_edge(&crate::test_root(), path.to_vec());
-    let mut selection: Option<Selection> = None;
-    let mut walk: Vec<Path> = Vec::new();
-    while walk.len() < 200 {
-        match step_selection(
-            crate::modifiers::native(),
-            &bench.descends,
-            None,
-            selection.as_ref(),
-            line,
-            &press(NamedKey::ArrowDown),
-        ) {
-            Some(target) => {
-                selection = Some(select(&target.path));
-                walk.push(target.path.to_vec());
-            }
-            None => break,
-        }
-    }
-    assert!(walk.len() >= 5 && walk.len() < 200, "walked {}", walk.len());
-    assert!(
-        walk.iter().any(|path| path.len() >= 2),
-        "walk enters open blocks"
-    );
-    for pair in walk.windows(2) {
+    for (width, along, across) in [
+        (1400.0, Direction::Right, Direction::Down),
+        (100.0, Direction::Down, Direction::Right),
+    ] {
+        let (bench, _) = place(&doc, None, width);
+        let mut world = crate::test_editor(doc.clone());
         assert!(
-            rect_of(&pair[1]).y0 >= rect_of(&pair[0]).y0,
-            "down never climbs: {:?} -> {:?}",
-            pair[0],
-            pair[1]
+            bench
+                .navigation
+                .iter()
+                .find_map(|route| route.navigation.destination(&paths[0], across))
+                .is_none()
         );
+        let arrival = bench
+            .navigation
+            .iter()
+            .find_map(|route| route.navigation.destination(&paths[0], along))
+            .expect("the list routes along its chosen layout");
+        assert!(world.model.selection.is_none(), "resolving is read-only");
+        let root = world.model.workspace.document_root().clone();
+        crate::navigate::arrive(&mut world, root, arrival, along);
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[1]);
     }
-    for expect in walk.iter().rev().skip(1) {
-        let up = step_selection(
-            crate::modifiers::native(),
-            &bench.descends,
-            None,
-            selection.as_ref(),
-            line,
-            &press(NamedKey::ArrowUp),
-        )
-        .expect("up retraces the walk");
-        assert_eq!(up.path.as_ref(), expect);
-        selection = Some(select(&up.path));
-    }
-    // A projected simple-name field is the cell's editable head.
-    let head = bench
-        .descends
-        .iter()
-        .map(|descend| descend.path.to_vec())
-        .find(|path| {
-            matches!(
-                path.last(),
-                Some(Step::Key(label))
-                    if *label == name::vocabulary::NAME
-            )
-        })
-        .expect("the sample has a cell head");
-    let cell = head[..head.len() - 2].to_vec();
-    assert_eq!(
-        step_selection(
-            crate::modifiers::native(),
-            &bench.descends,
-            None,
-            Some(&select(&cell)),
-            line,
-            &press(NamedKey::ArrowRight),
-        )
-        .map(|target| target.path.to_vec()),
-        Some(head)
-    );
 }
 
 #[test]
@@ -959,7 +905,7 @@ fn placement_claims_the_hover_innermost_last() {
             sources
                 .resolve_path(&descend.path)
                 .is_some_and(|value| text::read(value).is_some())
-                && projected_name_owner(&descend.path).is_none()
+                && !matches!(descend.path.last(), Some(Step::Key(label)) if *label == name::vocabulary::NAME)
         })
         .expect("the sample has a string leaf");
     let string_rect = string.rect;

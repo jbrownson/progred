@@ -133,12 +133,25 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 `HasHandler`. The editor adds view ownership separately. Ordinary probes run in
 painting order; floating placements run afterward, outside ancestor clips.
 
-The [navigation combinator](../progred/src/display/widget/navigation.rs) similarly
-contributes a projection-declared path, settled rectangle, and arrival handler.
-It scopes a child's placement output and consumes the control's arrival override
-only at the nearest landmark. The native output can carry complete landmarks;
-view attribution remains the editor's separate wrapper. Unplaced subtrees
-contribute neither geometry nor navigation.
+The [navigation combinators](../progred/src/display/widget/navigation.rs) compose
+frame-local descriptions: occurrence stops, directional link declarations, and
+explicit entry/exit boundaries. Parents connect those boundaries, not arbitrary
+stops without outgoing links. After placement, each view's declarations resolve
+into a graph; conflicting routes are reported and omitted, never overwritten by
+construction order. Stops
+carry selection scope and a bounded entry policy, never an arbitrary navigation
+action. The root follows a link only after raw key handlers decline the event,
+then selects and reveals its destination. Landmarks separately supply geometry
+and direct selection behavior for pointer/source selection and Select All.
+
+Plain row/column preparation and occurrence bookkeeping add no routing.
+Projections explicitly wrap their layout with `navigation::scope` and choose a
+data combinator such as `horizontal` or `vertical`; the list, record, and named
+number helpers do this. Leaf controls contribute stops. An explicit `nav_group`
+combinator supplies a whole-value entry stop before its contents. These wrappers use the generic
+`widget::around` placement boundary, not a navigation opcode in layout. Only
+placed alternatives contribute; view attribution remains a separate wrapper.
+The generic measured/Puri layers remain unaware of these editor policies.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,

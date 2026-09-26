@@ -1,11 +1,9 @@
 //! Keyboard navigation over a frame's settled descends.
 
-use crate::libraries::name;
 use crate::selection::Selection;
 use crate::workspace::{Root, Target};
 use gid::{Path, Step};
 use kurbo::{Rect, Vec2};
-use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 pub use crate::display::widget::{Direction, Select};
@@ -158,60 +156,91 @@ pub fn selection_after_delete<World>(
         })
 }
 
-/// Keyboard navigation over the frame's descends, reading the layout
-/// the frame actually chose. Down and up walk the ROWS — every stop
-/// that opens a new line of its container — in reading order,
-/// entering open blocks the way a file tree walks its visible rows,
-/// so each press moves down (or up) the screen. Right and left walk
-/// WITHIN the line, into and across the content beside the current
-/// stop; left from a row widens to the parent. Any arrow selects the
-/// view's root when nothing is selected; Cmd+A (Ctrl+A elsewhere)
-/// selects that root from anywhere. `line` is one nominal line height,
-/// the quantum separating "beside" from "below". Returns the settled
-/// landmark whose installed transition should run, or `None` for keys
-/// navigation doesn't own.
-pub fn step_selection<'a, World>(
+/// The root translates only unclaimed keys. Routing is supplied by the chosen
+/// projection, not reconstructed from geometry or document ancestry.
+pub(crate) fn keyboard(
+    editor: &mut crate::Editor,
+    navigation: &[crate::display::widget::navigation::ViewNavigation<
+        crate::display::widget::navigation::Graph,
+    >],
+    geometry: Geometry<'_>,
+    event: &KeyboardEvent,
+) -> bool {
+    let root = editor
+        .model
+        .selection
+        .as_ref()
+        .map(Selection::root)
+        .unwrap_or_else(|| editor.model.workspace.document_root());
+    if let Some(target) = select_all(
+        editor.command_modifier,
+        geometry.descends,
+        Some(root),
+        event,
+    ) {
+        return geometry.arrive(editor, target, None);
+    }
+    let Some(direction) = direction(event) else {
+        return false;
+    };
+    let Some(selection) = editor.model.selection.as_ref() else {
+        let root = root.clone();
+        return root_target(geometry.descends, Some(&root)).is_some_and(|target| {
+            target
+                .scope
+                .open(crate::editing::Access::new(editor))
+                .select(&root, &target.path);
+            true
+        });
+    };
+    let destination = navigation
+        .iter()
+        .filter(|route| route.root.as_ref() == Some(root))
+        .find_map(|route| route.navigation.destination(selection.path(), direction));
+    if let Some(destination) = destination {
+        arrive(editor, root.clone(), destination, direction);
+        geometry.reveal_selection(editor);
+        true
+    } else {
+        false
+    }
+}
+
+pub(crate) fn arrive(
+    editor: &mut crate::Editor,
+    root: Root,
+    stop: &crate::display::widget::navigation::Stop,
+    direction: Direction,
+) {
+    use crate::display::widget::navigation::Entry;
+    let mut edit = stop.scope.open(crate::editing::Access::new(editor));
+    if stop.entry == Entry::Line && direction == Direction::Right {
+        use crate::selection::payload::vocabulary::{ANCHOR, FOCUS};
+        edit.select_payload(
+            &root,
+            stop.path.to_vec(),
+            gid::Value::record([
+                (ANCHOR, crate::libraries::f64::value(0.0)),
+                (FOCUS, crate::libraries::f64::value(0.0)),
+            ]),
+        );
+    } else {
+        edit.select(&root, &stop.path);
+    }
+}
+
+pub fn select_all<'a, World>(
     command: puri::keyboard::CommandModifier,
     descends: &'a [Descend<World>],
     root: Option<&Root>,
-    selection: Option<&Selection>,
-    line: f64,
     event: &KeyboardEvent,
 ) -> Option<&'a Descend<World>> {
-    if event.state.is_down()
+    (event.state.is_down()
         && command.pressed(&event.modifiers)
         && !(event.modifiers.shift() || event.modifiers.alt())
-        && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a"))
-    {
-        return root_target(descends, root);
-    }
-    let direction = direction(event)?;
-    let Some(selection) = selection else {
-        return root_target(descends, root);
-    };
-    let path = selection.path();
-    let order = reading_order(descends, root, line);
-    let at = order
-        .iter()
-        .position(|stop| descends[stop.descend].path.as_ref() == path);
-    let found = |stop: &Stop| Some(&descends[stop.descend]);
-    match (direction, at) {
-        (Direction::Down, Some(at)) => order[at + 1..].iter().find(|stop| stop.row).and_then(found),
-        (Direction::Up, Some(at)) => order[..at]
-            .iter()
-            .rev()
-            .find(|stop| stop.row)
-            .and_then(found),
-        (Direction::Right, Some(at)) => order.get(at + 1).filter(|stop| !stop.row).and_then(found),
-        (Direction::Left, Some(at)) if !order[at].row => found(&order[at - 1]),
-        (Direction::Left, _) => path.split_last().and_then(|(_, parent)| {
-            descends.iter().find(|descend| {
-                root.is_none_or(|root| descend.root.as_ref() == Some(root))
-                    && descend.path.as_ref() == parent
-            })
-        }),
-        _ => None,
-    }
+        && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a")))
+    .then(|| root_target(descends, root))
+    .flatten()
 }
 
 fn root_target<'a, World>(
@@ -225,95 +254,6 @@ fn root_target<'a, World>(
     descends.iter().find(|descend| {
         root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.as_ref() == path
     })
-}
-
-/// One stop in the frame's reading order: pre-order over the
-/// descends, with the bit saying whether the stop opens a new line of
-/// its container (a row) or rides one beside its predecessor.
-struct Stop {
-    descend: usize,
-    row: bool,
-}
-
-pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
-    match path {
-        [owner @ .., Step::Follow(_), Step::Key(label)] if *label == name::vocabulary::NAME => {
-            Some(owner)
-        }
-        _ => None,
-    }
-}
-
-/// The frame's stops in pre-order, each classified as row or beside
-/// from the geometry the layout settled: a stop is a row when its
-/// container stacked it — no shared line band with the sibling before
-/// it, or first into a multi-line container — and beside when it
-/// rides the same line. A projected simple-name field is its owner's
-/// own first line, never a row. Order is rebuilt from per-parent
-/// registration order, which is document order; the raw list settles
-/// children first.
-fn reading_order<World>(descends: &[Descend<World>], root: Option<&Root>, line: f64) -> Vec<Stop> {
-    let by_path: HashMap<&[Step], usize> = descends
-        .iter()
-        .enumerate()
-        .filter(|(_, descend)| root.is_none_or(|root| descend.root.as_ref() == Some(root)))
-        .map(|(index, descend)| (descend.path.as_ref(), index))
-        .collect();
-    let mut children: Vec<Vec<usize>> = vec![Vec::new(); descends.len()];
-    let mut roots = Vec::new();
-    for (index, descend) in descends.iter().enumerate() {
-        if root.is_some_and(|root| descend.root.as_ref() != Some(root)) {
-            continue;
-        }
-        let parent = projected_name_owner(&descend.path)
-            .and_then(|owner| by_path.get(owner).copied())
-            .or_else(|| {
-                (0..descend.path.len())
-                    .rev()
-                    .find_map(|end| by_path.get(&descend.path[..end]).copied())
-            });
-        match parent {
-            Some(parent) => children[parent].push(index),
-            None => roots.push(index),
-        }
-    }
-    let mut order = Vec::with_capacity(descends.len());
-    let mut stack: Vec<(usize, Option<usize>, Option<usize>)> = roots
-        .into_iter()
-        .rev()
-        .map(|root| (root, None, None))
-        .collect();
-    while let Some((index, parent, before)) = stack.pop() {
-        let descend = &descends[index];
-        let row = match (parent, before) {
-            (None, _) => true,
-            _ if projected_name_owner(&descend.path).is_some() => false,
-            (Some(_), Some(before)) => !same_line(descend.rect, descends[before].rect, line),
-            (Some(parent), None) => descends[parent].rect.height() > line * 1.5,
-        };
-        order.push(Stop {
-            descend: index,
-            row,
-        });
-        let mut before = None;
-        let entries: Vec<_> = children[index]
-            .iter()
-            .map(|&child| {
-                let entry = (child, Some(index), before);
-                before = Some(child);
-                entry
-            })
-            .collect();
-        stack.extend(entries.into_iter().rev());
-    }
-    order
-}
-
-/// Whether two settled rects share a line: their vertical bands
-/// overlap by more than half a line — baseline-aligned neighbors
-/// overlap by most of one, stacked rows touch at the edges at most.
-fn same_line(a: Rect, b: Rect, line: f64) -> bool {
-    a.y1.min(b.y1) - a.y0.max(b.y0) > line * 0.5
 }
 
 /// The neighboring sibling in placement order, continuing through

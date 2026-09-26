@@ -30,11 +30,13 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
+    pub(crate) navigation: Vec<
+        crate::display::widget::navigation::ViewNavigation<
+            crate::display::widget::navigation::Graph,
+        >,
+    >,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
-    /// One nominal line height at the frame's scale — the quantum
-    /// keyboard navigation reads rows with.
-    pub(crate) line: f64,
 }
 
 /// A completed frame. Installing it retains hover and dispatch together;
@@ -296,6 +298,7 @@ fn compute_hover(
         "selection handler escaped its landmark"
     );
     let crate::display::widget::frame::FrameOutput {
+        navigation,
         scroll_probes,
         renders,
         handler,
@@ -310,9 +313,9 @@ fn compute_hover(
             handler: handler.unwrap_or_else(Handler::new),
             pointer_root,
             descends: descends.into(),
+            navigation,
             view_regions: view_regions.into(),
             hover_geometry,
-            line: 14.0 * description.scale,
         },
         renders,
     }
@@ -1287,16 +1290,18 @@ mod frame_tests {
             projection::Projection::new([crate::display::partial(move |input| {
                 crate::libraries::f64::read(input.value?)?;
                 projected.set(projected.get() + 1);
-                Some(crate::display::Layout::widget(Rc::new(|_| {
-                    crate::display::widget::leaf(
-                        measured::Extent {
-                            width: 100.0,
-                            ascent: 25.0,
-                            descent: 5.0,
-                        },
-                        |_, _| {},
-                    )
-                })))
+                Some(crate::display::widget::navigation::target(
+                    crate::display::Layout::widget(Rc::new(|_| {
+                        crate::display::widget::leaf(
+                            measured::Extent {
+                                width: 100.0,
+                                ascent: 25.0,
+                                descent: 5.0,
+                            },
+                            |_, _| {},
+                        )
+                    })),
+                ))
             })]);
         EditorRunner::new(editor)
     }
@@ -2341,20 +2346,21 @@ mod frame_tests {
         }));
         let prior = Hovered::Tree(hover::Hover::Entry(7));
         runner.frame.hover = Some(prior.clone());
-        runner.frame.dispatch.line = 42.0;
+        let prior_root = Root::document();
+        runner.frame.dispatch.pointer_root = Some(prior_root.clone());
         let frame =
             runner
                 .editor
                 .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover_location());
         assert_eq!(runner.frame.hover, Some(prior));
-        assert_eq!(runner.frame.dispatch.line, 42.0);
+        assert_eq!(runner.frame.dispatch.pointer_root, Some(prior_root));
         assert!(runner.frame.dispatch.descends.is_empty());
         assert_eq!(frame.hover, None);
-        let line = frame.dispatch.line;
+        let pointer_root = frame.dispatch.pointer_root.clone();
         let descends = frame.dispatch.descends.clone();
         let paint = runner.install_frame(frame, 1.0, Size::new(300.0, 200.0));
         assert_eq!(runner.frame.hover, None);
-        assert_eq!(runner.frame.dispatch.line, line);
+        assert_eq!(runner.frame.dispatch.pointer_root, pointer_root);
         assert!(Rc::ptr_eq(&runner.frame.dispatch.descends, &descends));
         drop(paint);
     }

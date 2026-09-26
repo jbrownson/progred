@@ -165,7 +165,7 @@ than the structural summary. Edits accept complete bytes in either case;
 empty hex denotes an empty blob. Query entry and editing share the blob
 library's parser. Raw retains its compact structural blob display.
 
-Navigation landmarks contain their selection callbacks. A selected, writable
+A selected, writable
 line with no editing state uses its current projected spelling with the caret
 at the end. Rendering and input use the same default; projection does not store
 it just because the line is selected. On an editing interaction, the line control
@@ -174,12 +174,48 @@ caret, in-progress spelling, and IME state take precedence. Raw and read-only
 views do not acquire an editor from a plain selection.
 
 Ordinary selection therefore needs only a location, including after completion,
-paste, deletion, and undo. Navigation supplies its movement direction to the landmark,
-not the keyboard event (and no direction for direct selection):
-the line control explicitly seeds the start for leftward entry, while other
-entries use the default. Pointer placement also remains an explicit interaction.
+paste, deletion, and undo. A line contributes a navigation stop marked for line
+entry. Rightward travel seeds the caret at the start (entry from the left);
+other entries use the default. Pointer placement remains an explicit interaction.
 The shell does not inspect values or the render tree to infer editability.
 See [navigation](../progred/src/navigate.rs).
+
+Unhandled unmodified arrow keys become navigation requests only after focused
+controls and editing handlers decline them. A frame retains a graph of occurrence
+stops and directional links. Stops contain a selection scope and entry policy,
+not an arbitrary action; following a link can select and reveal its destination,
+not run a widget's mutation callback. Landmarks separately retain geometry and
+direct selection behavior for pointer/source selection and Select All.
+
+Projections compose this data explicitly. `navigation::scope` collects only its
+subtree's contributions; horizontal and vertical sequence combinators connect
+declared boundary exits to neighboring child entries along their axis. They
+combine stop and link declarations without mutating a routing table or inferring
+exits from missing links. After placement, contributions for each view resolve
+into one graph, collecting all stops before resolving links. Conflicting
+declarations report a diagnostic and disable the ambiguous stop or route rather
+than letting construction order choose a winner. Plain layout rows,
+columns, and `descend` do not add routing. The standard list and record helpers
+opt into sequences matching their chosen layout alternative. Their explicit
+`nav_group` wrapper makes its whole-value stop the entry point from every
+direction: incoming navigation selects the group, rather than skipping into its
+contents. Right/Down from the group enters its content; Left/Up at the respective
+content boundary returns to the group. If a child already represents that occurrence, its
+stop is reused. Named numbers explicitly compose their name
+and digit stops horizontally. Leaf helpers opt in independently; custom
+projections must choose their own composition rather than inheriting a geometric
+guess. Only placed alternatives contribute navigation.
+
+Outline composes each heading and visible body vertically, then its section list
+and trailing extras. Its outer `nav_group` owns the whole-record stop; extras use
+`record_fragment`, which supplies the record layout and field routing without
+claiming a second stop for the same record. Down visits the root, outline list,
+then its first section, before the extras. Collapsed bodies contribute no routes.
+
+Links may be directed and many-to-one. There is no automatic inverse guarantee,
+directional hysteresis, back/forward history, or Tab routing yet. Geometry is used
+only to reveal a landing. Stops identify projected occurrences, including jumped
+and computed content; navigation does not follow conjects into document paths.
 
 Line editing uses the host-supplied keyboard convention: Mac Command+Left/Right
 moves to the content's ends and Option+Left/Right moves by words. Control-based
@@ -208,8 +244,8 @@ selection, or undo history. Authored drawing colors remain document data, not
 theme colors. These styles change presentation, not projection recognition or
 source/selection policy.
 
-Cmd+A (Ctrl+A on non-Mac hosts) selects the current view's root through its navigation
-callback. With no selection, it targets the document root. Focused text fields
+Cmd+A (Ctrl+A on non-Mac hosts) selects the current view's root through its
+landmark's direct-selection callback. With no selection, it targets the document root. Focused text fields
 handle the shortcut first and select their own text.
 
 ## Completion

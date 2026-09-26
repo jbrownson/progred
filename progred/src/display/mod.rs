@@ -668,6 +668,15 @@ pub fn record_heads(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
     trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
+    widget::navigation::nav_group(record_fragment(fields, trailing))
+}
+
+/// A record-shaped fragment of a larger projection. Its fields compose their
+/// navigation, but the enclosing projection owns the whole-value stop.
+pub fn record_fragment(
+    fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
+    trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
     let fields = fields
         .into_iter()
         .map(|field| RecordField {
@@ -699,7 +708,10 @@ pub fn record_heads(
     }
     selectable_bracket(
         Delim::Brace,
-        alternatives([row(0.0, flat), col(0, 2.0, rows)]),
+        alternatives([
+            widget::navigation::scope(row(0.0, flat), widget::navigation::horizontal),
+            widget::navigation::scope(col(0, 2.0, rows), widget::navigation::vertical),
+        ]),
     )
 }
 
@@ -1044,7 +1056,7 @@ mod tests {
         let Recorded::Alternatives(forms) = child else {
             panic!("a record has responsive forms");
         };
-        let Recorded::Row { children, .. } = &forms[0] else {
+        let Recorded::Row { children, .. } = forms[0].content() else {
             panic!("the first form is flat");
         };
         let Recorded::Row {
@@ -1065,7 +1077,7 @@ mod tests {
         assert!(matches!(&inspect(&(unshared(&second[2]))),
             ProjectionCall::At { steps, .. } if *steps == [Step::Key(FIRST)]
         ));
-        let Recorded::Col { children, .. } = &forms[1] else {
+        let Recorded::Col { children, .. } = forms[1].content() else {
             panic!("the second form is a column");
         };
         let Recorded::Alternatives(first) = &children[0] else {

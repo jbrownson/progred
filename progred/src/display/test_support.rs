@@ -99,9 +99,11 @@ pub fn delimited<W, H>(
     &Recorded<W, H>,
     &widget::Widget<W, H>,
 ) {
-    match layout {
+    match layout.content() {
         Recorded::Row { gap, children, .. } if *gap == 0.0 => match children.as_slice() {
-            [Recorded::Widget(left), child, Recorded::Widget(right)] => (left, child, right),
+            [Recorded::Widget(left), child, Recorded::Widget(right)] => {
+                (left, child.content(), right)
+            }
             _ => panic!("expected two ordinary delimiter widgets around a child"),
         },
         _ => panic!("expected a delimiter row"),

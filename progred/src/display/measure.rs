@@ -68,25 +68,25 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
             widget::after_place(child, move |placement, output| after(output, placement))
         }))
     }
+    fn around(&mut self, child: Node, wrap: widget::Around<W, H>) -> Node {
+        let wrap = wrap(self.context);
+        let child = self.build.take(child.0);
+        self.push(ChoiceLayout::map(child, 0.0, wrap))
+    }
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Row);
         let children = self.children(children);
-        self.push(ChoiceLayout::aligned_row(
-            alignment,
-            gap * self.context.inputs.styles.scale,
-            children,
-        ))
+        let row =
+            ChoiceLayout::aligned_row(alignment, gap * self.context.inputs.styles.scale, children);
+        self.push(row)
     }
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Column);
         let children = self.children(children);
-        self.push(ChoiceLayout::col(
-            baseline,
-            gap * self.context.inputs.styles.scale,
-            children,
-        ))
+        let col = ChoiceLayout::col(baseline, gap * self.context.inputs.styles.scale, children);
+        self.push(col)
     }
     fn overlay(&mut self, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
