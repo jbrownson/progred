@@ -280,7 +280,7 @@ fn outline_library_tint_stops_at_the_heading() {
                     shape: Shape::RoundedRect(rect),
                     brush: Brush::Solid(color),
                     ..
-                } if *color == crate::styles::Theme::Light.palette().library_ground => {
+                } if *color == crate::styles::Theme::Light.palette().readonly_ground => {
                     vec![rect.rect()]
                 }
                 _ => vec![],

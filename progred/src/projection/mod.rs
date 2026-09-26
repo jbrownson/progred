@@ -19,7 +19,7 @@ use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::navigate::Descend;
 use crate::placed::{self, HoverPass, before, decorate};
 use crate::render;
-use crate::selection::{Selection, Stage, last_follow};
+use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use crate::styles::Styles;
 use completion::pending_view;
@@ -134,6 +134,14 @@ struct Ancestry {
     cells: HashSet<CellId>,
     /// The nearest followed definition and the start of its relative path.
     enclosing: Option<(CellId, gid::Resolution, usize)>,
+    ground: Ground,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Ground {
+    #[default]
+    Writable,
+    Readonly,
 }
 
 struct ProjectEnv<'a, 's> {
@@ -395,6 +403,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             self.projection,
             text,
             self.path,
+            self.ancestors.ground,
             steps,
             value,
             current,
@@ -409,6 +418,7 @@ fn prepare_at(
     projection: &Projection<crate::Editor>,
     tcx: &mut TextCtx,
     path: &[Step],
+    ground: Ground,
     steps: Vec<Step>,
     nested: grap::RuntimeValue,
     current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
@@ -427,7 +437,10 @@ fn prepare_at(
         default_projection.as_ref(),
         tcx,
         &path,
-        &Ancestry::default(),
+        &Ancestry {
+            ground,
+            ..Ancestry::default()
+        },
         Some(&nested),
         build,
     )
@@ -805,34 +818,31 @@ fn bind_selection(
     })
 }
 
-/// A cell projection's ground, painted only at authority
-/// TRANSITIONS: an external cell under document authority takes the
-/// library tint — no lock, just "from elsewhere" — and a
-/// document-authority cell under an external one takes its light
-/// ground back (opaque, since an alpha wash can't be undone by
-/// another wash). Runs of the same authority draw nothing, so
-/// nesting never stacks tints. The enclosing authority is the owning
-/// cell at the path's last Follow, so a cell inside a list carries
-/// its list's owner as context. Wraps outside the descend so the
-/// cell's own selection highlight draws over its ground.
-fn ground_decoration(cx: &Cx, path: &[Step], value: &grap::RuntimeValue) -> Option<(f64, Color)> {
-    let Some(cell) = value.as_cell() else {
-        return None;
-    };
-    let external = cx.sources.external(cell);
-    let path = cx.edits.source(path)?;
-    let parent_external = last_follow(&path)
-        .is_some_and(|index| matches!(path[index], Step::Follow(gid::Resolution::Library(_))));
-    if external == parent_external {
-        return None;
+fn ground(cx: &Cx, path: &[Step], value: Option<&grap::RuntimeValue>) -> Ground {
+    match cx.edits.source(path) {
+        None => Ground::Readonly,
+        Some(source) => match value.and_then(grap::RuntimeValue::as_cell) {
+            // A reference remains replaceable; the ground describes its definition.
+            Some(cell) if cx.sources.external(cell) => Ground::Readonly,
+            Some(_) => Ground::Writable,
+            None => match source.iter().rev().find_map(|step| match step {
+                Step::Follow(source) => Some(source),
+                _ => None,
+            }) {
+                Some(gid::Resolution::Library(_)) => Ground::Readonly,
+                _ => Ground::Writable,
+            },
+        },
     }
-    let scale = cx.styles.scale;
-    let color = if external {
-        cx.styles.palette.library_ground
-    } else {
-        cx.styles.palette.paper
-    };
-    Some((scale, color))
+}
+
+/// Read-only appearance; document permissions remain in the editing scope.
+fn readonly(
+    scale: f64,
+    palette: crate::styles::Palette,
+    content: Measured<HoverPass<crate::Editor>>,
+) -> Measured<HoverPass<crate::Editor>> {
+    ground_with(scale, palette.readonly_ground, content)
 }
 
 fn ground_with(
@@ -933,6 +943,13 @@ fn prepare_value(
     value: Option<&grap::RuntimeValue>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
+    let ground = ground(cx, path, value);
+    let changed_ground = (ground != ancestors.ground).then_some(ground);
+    let changed_ancestors = changed_ground.map(|ground| Ancestry {
+        ground,
+        ..ancestors.clone()
+    });
+    let ancestors = changed_ancestors.as_ref().unwrap_or(ancestors);
     let child_projection = default_projection
         .map(|partial| Projection {
             partial: partial.clone(),
@@ -960,7 +977,7 @@ fn prepare_value(
         value,
         fold_default,
     );
-    match layout {
+    let prepared = match layout {
         None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None)),
         Some(layout) => {
             let inner = prepare(
@@ -999,7 +1016,6 @@ fn prepare_value(
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
             let select = navigation_select_handler(landmark_path.clone(), cx);
-            let ground = value.and_then(|value| ground_decoration(cx, path, value));
             let target = value.map(|value| (value.clone(), cx.view.clone(), landmark_path.clone()));
             let edits = cx.edits.clone();
             let pick_edits = edits.clone();
@@ -1025,10 +1041,6 @@ fn prepare_value(
                     ),
                     None => placed,
                 };
-                let grounded = match ground {
-                    Some((scale, color)) => ground_with(scale, color, placed),
-                    None => placed,
-                };
                 match target {
                     Some((value, root, destination)) => pick_target_with(
                         landmark_path,
@@ -1036,12 +1048,23 @@ fn prepare_value(
                         root,
                         destination,
                         pick_edits,
-                        grounded,
+                        placed,
                     ),
-                    None => grounded,
+                    None => placed,
                 }
             })
         }
+    };
+    let scale = cx.styles.scale;
+    let palette = cx.styles.palette;
+    match changed_ground {
+        Some(Ground::Readonly) => ChoiceLayout::map(prepared, 0.0, move |content| {
+            readonly(scale, palette, content)
+        }),
+        Some(Ground::Writable) => ChoiceLayout::map(prepared, 0.0, move |content| {
+            ground_with(scale, palette.paper, content)
+        }),
+        None => prepared,
     }
 }
 

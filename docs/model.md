@@ -63,6 +63,11 @@ resolution context. Neither is an execution stack or global address.
 Computed values use `at` at their own displayed occurrences. They and their
 children can be selected, copied, and folded, but have no document destination
 for edits. Selecting a result does not select its producing expression.
+Computed output uses the same read-only ground as external definitions. Nested
+read-only occurrences do not stack washes; an explicit jump to writable source
+restores the paper ground. This decoration does not change edit permissions:
+those still follow the occurrence's source/conject. A reference to an external
+definition can itself still be replaced or removed from a writable document.
 
 ## Selection and editing
 
@@ -196,8 +201,8 @@ appearance at startup and on changes. Its native View menu offers Follow System
 Appearance, Light Mode, and Dark Mode; this application-wide override lasts for
 the session, including newly opened windows, and also updates window chrome.
 Other hosts default to Light; the browser host can explicitly choose either theme.
-Library authority transitions retain a faint tint; returning to document
-authority restores the same opaque paper used by the window. Changing the
+Read-only projection boundaries use a faint tint; returning to writable source
+restores the same opaque paper used by the window. Changing the
 palette rebuilds the ordinary complete frame without replacing the document,
 selection, or undo history. Authored drawing colors remain document data, not
 theme colors. These styles change presentation, not projection recognition or

@@ -235,7 +235,16 @@ fn iop_tree_at_size(size: kurbo::Size) {
     );
     eprintln!("IoP tree rebuilt frame: {:.1?}", rebuilt.frame_elapsed);
     assert_eq!(rebuilt.list.0.len(), bench.list.0.len());
-    let outer = match bench.list.0.first() {
+    let (ground, scene) = bench.list.0.split_first().expect("the pane paints");
+    assert!(matches!(
+        ground,
+        DrawCmd::Fill {
+            shape: Shape::RoundedRect(_),
+            brush: Brush::Solid(color),
+            ..
+        } if *color == crate::styles::Theme::Light.palette().readonly_ground
+    ));
+    let outer = match scene.first() {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
         _ => panic!("the scene starts with the sky fill"),
     };
@@ -281,10 +290,10 @@ fn iop_tree_at_size(size: kurbo::Size) {
     assert_eq!((extent.width, extent.height()), (size.width, size.height));
     assert_eq!(native_stats.branches, 511);
     assert_eq!(native_stats.blossoms, 7_680);
-    assert_eq!(native.0.len(), bench.list.0.len());
+    assert_eq!(native.0.len(), scene.len());
     let mut grap_svg = String::new();
     let mut native_svg = String::new();
-    write_cmds(&mut grap_svg, &bench.list.0);
+    write_cmds(&mut grap_svg, scene);
     write_cmds(&mut native_svg, &native.0);
     assert_eq!(native_svg, grap_svg);
     assert!(bench.list.0.iter().any(|command| matches!(

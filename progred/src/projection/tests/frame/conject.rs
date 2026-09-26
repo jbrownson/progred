@@ -39,6 +39,62 @@ fn command(key: Key) -> KeyboardEvent {
     }
 }
 
+fn grounds(commands: &[DrawCmd], color: Color) -> Vec<Rect> {
+    commands
+        .iter()
+        .flat_map(|command| match command {
+            DrawCmd::Clip { children, .. } => grounds(children, color),
+            DrawCmd::Fill {
+                shape: Shape::RoundedRect(rect),
+                brush: Brush::Solid(brush),
+                ..
+            } if *brush == color => vec![rect.rect()],
+            _ => vec![],
+        })
+        .collect()
+}
+
+#[test]
+fn evaluated_output_is_tinted_without_tinting_its_expression() {
+    use crate::libraries::presentation::vocabulary::RESULT;
+    let child = new_cell_id();
+    let value = Value::record([(child, Value::list([text::value("result")]))]);
+    let mut world = world(Value::record([(grap::vocabulary::EVALUATE, value)]));
+    let frame = editing_frame(&mut world, false);
+    let result = stop(&frame, &[Step::Key(RESULT)]).rect;
+    let expression = stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]).rect;
+    let drawing = settle(frame).list;
+    let tints = grounds(
+        &drawing.0,
+        crate::styles::Theme::Light.palette().readonly_ground,
+    );
+    assert_eq!(tints, [result.inset(3.0)]);
+    assert!(!tints[0].contains(expression.center()));
+}
+
+#[test]
+fn nested_computed_results_do_not_stack_readonly_tints() {
+    use crate::libraries::presentation::vocabulary::RESULT;
+    let mut world = world(Value::record([(
+        grap::vocabulary::EVALUATE,
+        Value::record([(grap::vocabulary::EVALUATE, text::value("nested"))]),
+    )]));
+    let frame = editing_frame(&mut world, false);
+    let outer = stop(&frame, &[Step::Key(RESULT)]).rect;
+    let source_result = stop(
+        &frame,
+        &[Step::Key(grap::vocabulary::EVALUATE), Step::Key(RESULT)],
+    )
+    .rect;
+    stop(&frame, &[Step::Key(RESULT), Step::Key(RESULT)]);
+    let drawing = settle(frame).list;
+    let tints = grounds(
+        &drawing.0,
+        crate::styles::Theme::Light.palette().readonly_ground,
+    );
+    assert_eq!(tints, [source_result.inset(3.0), outer.inset(3.0)]);
+}
+
 #[test]
 fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     use crate::libraries::presentation::vocabulary::RESULT;
@@ -519,6 +575,8 @@ fn explicit_jump_can_establish_a_source_below_at() {
     );
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     let path = [Step::Key(computed), Step::Key(occurrence)];
+    let jumped = stop(&frame, &path).rect;
+    let computed_rect = stop(&frame, &[Step::Key(computed)]).rect;
     assert!((stop(&frame, &path).select)(&mut world, None));
     assert!(
         world
@@ -533,6 +591,13 @@ fn explicit_jump_can_establish_a_source_below_at() {
         world.sources().resolve_path(&[Step::Key(source)]),
         Some(&text::value("changed"))
     );
+    let drawing = settle(frame).list;
+    let palette = crate::styles::Theme::Light.palette();
+    assert_eq!(
+        grounds(&drawing.0, palette.readonly_ground),
+        [computed_rect.inset(3.0)]
+    );
+    assert_eq!(grounds(&drawing.0, palette.paper), [jumped.inset(3.0)]);
 }
 
 #[test]

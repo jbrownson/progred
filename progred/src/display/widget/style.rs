@@ -116,7 +116,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_remains_legible_on_document_and_library_grounds() {
+    fn text_remains_legible_on_document_and_readonly_grounds() {
         let luminance = |color: Color| {
             color.components[..3]
                 .iter()
@@ -134,7 +134,7 @@ mod tests {
         for theme in [Theme::Light, Theme::Dark] {
             let palette = theme.palette();
             let paper = palette.paper;
-            let wash = palette.library_ground;
+            let wash = palette.readonly_ground;
             let library = Color::new(std::array::from_fn(|i| {
                 if i == 3 {
                     1.0

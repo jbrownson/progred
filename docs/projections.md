@@ -117,6 +117,13 @@ Fold captures the value's collapse default and updates only occurrence-local
 annotations; even an occurrence with no document source can copy and fold.
 Only the deletion half of cut requires a document destination.
 
+The shared `readonly` decoration uses the palette's read-only ground for computed
+output and external definitions. Preparation threads the enclosing ground through
+projection composition, including `at`, so nested results do not darken it again.
+Writable jumps restore the paper ground. Decoration and edit authority stay
+separate: the existing source/conject supplies permissions, and a reference to a
+read-only definition is still replaceable at its writable occurrence.
+
 The lambda-name partial shows `λ` when the name is missing and unselected.
 Activation selects that missing location for entry. Once selected, the partial
 declines and the ordinary empty picker takes over; only committing creates the
