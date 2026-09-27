@@ -82,6 +82,25 @@ pub enum ImeEvent {
     Commit(String),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NavigationDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl NavigationDirection {
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+        }
+    }
+}
+
 /// Input, not editor actions. Scroll and gestures retain every observed packet
 /// in order; a partially consumed batch may own its adjusted remainder.
 #[derive(Clone)]
@@ -93,6 +112,8 @@ pub enum Event<'a> {
     Scroll(Cow<'a, [PointerScrollEvent]>),
     Gesture(Cow<'a, [PointerGestureEvent]>),
     Key(&'a KeyboardEvent),
+    /// A caller translates an unclaimed directional key into navigation intent.
+    Navigate(NavigationDirection),
     Ime(&'a ImeEvent),
     ModifiersChanged(&'a Modifiers),
     /// The caller settled a different hover target. Its dispatch input

@@ -69,11 +69,7 @@ struct FrameTimes {
 }
 
 struct Bench {
-    navigation: Vec<
-        crate::display::widget::navigation::ViewNavigation<
-            crate::display::widget::navigation::Graph,
-        >,
-    >,
+    handler: puri::handler::Handler<World, crate::placed::DispatchContext<World>>,
     list: DrawList,
     descends: Vec<Descend<World>>,
     /// What the probe answered for the pass's pointer input.
@@ -110,17 +106,10 @@ fn settle_with_sources(
         hovered_trace: None,
     });
     let hover = binding.elapsed();
-    for view in &frame.navigation {
-        assert!(
-            view.navigation.issues().is_empty(),
-            "{:?}",
-            view.navigation.issues()
-        );
-    }
     #[cfg(feature = "layout-profile")]
     drop(profile);
     let mut bench = Bench {
-        navigation: frame.navigation,
+        handler: frame.handler.unwrap_or_default(),
         list: DrawList::new(),
         descends: frame.descends,
         hit,
@@ -390,6 +379,7 @@ mod focus;
 mod interaction;
 mod iop_tree_native;
 mod layout;
+mod neighbor;
 mod numbers;
 mod outline;
 mod profile;

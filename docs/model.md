@@ -87,6 +87,11 @@ annotations stay occurrence-local, while source-linked hover uses the conject.
 Line editing, gestures, completion insertion, structural paste/deletion, and
 history retain that interpretation. Undo restores the scope with the selected
 path; scopes contain no document snapshot or borrow of the editor.
+The scope stores a resolver function from occurrence path to optional document
+path. The standard boundary constructor captures the occurrence prefix,
+document starting path, conject, and enclosing fallback in that function;
+there is no separately interpreted route record. Identity scopes borrow their
+input path without allocating.
 If a projection changes what a selected occurrence means, its caller is
 responsible for clearing the selection when necessary; the editor does not
 try to repair arbitrary changes of interpretation.
@@ -174,45 +179,58 @@ caret, in-progress spelling, and IME state take precedence. Raw and read-only
 views do not acquire an editor from a plain selection.
 
 Ordinary selection therefore needs only a location, including after completion,
-paste, deletion, and undo. A line contributes a navigation stop marked for line
-entry. Rightward travel seeds the caret at the start (entry from the left);
-other entries use the default. Pointer placement remains an explicit interaction.
-The shell does not inspect values or the render tree to infer editability.
-See [navigation](../progred/src/navigate.rs).
+paste, deletion, and undo. Navigation targets receive an optional arrival
+direction. The line widget places the caret at the beginning when moving Right
+into it and at the end when moving Left; ordinary and vertical arrivals keep
+the default. This policy belongs to the widget, not navigation dispatch. Pointer
+placement remains an explicit interaction. The shell does not inspect values
+or the render tree to infer editability. See
+[navigation](../progred/src/navigate.rs).
 
-Unhandled unmodified arrow keys become navigation requests only after focused
-controls and editing handlers decline them. A frame retains a graph of occurrence
-stops and directional links. Stops contain a selection scope and entry policy,
-not an arbitrary action; following a link can select and reveal its destination,
-not run a widget's mutation callback. Landmarks separately retain geometry and
-direct selection behavior for pointer/source selection and Select All.
+Unhandled arrows, regardless of modifiers, become `Event::Navigate(direction)` after focused
+controls and editing handlers decline the raw key. These semantic events run
+through the ordinary handler chain. A frame contains only the handlers for its
+selected occurrence's available directions, not a complete navigation graph
+or special destination table. With no selection, a root navigation handler
+selects the document's root occurrence. Select All remains an explicit command.
 
-Projections compose this data explicitly. `navigation::scope` collects only its
-subtree's contributions; horizontal and vertical sequence combinators connect
-declared boundary exits to neighboring child entries along their axis. They
-combine stop and link declarations without mutating a routing table or inferring
-exits from missing links. After placement, contributions for each view resolve
-into one graph, collecting all stops before resolving links. Conflicting
-declarations report a diagnostic and disable the ambiguous stop or route rather
-than letting construction order choose a winner. Plain layout rows,
-columns, and `descend` do not add routing. The standard list and record helpers
-opt into sequences matching their chosen layout alternative. Their explicit
-`nav_group` wrapper makes its whole-value stop the entry point from every
-direction: incoming navigation selects the group, rather than skipping into its
-contents. Right/Down from the group enters its content; Left/Up at the respective
-content boundary returns to the group. If a child already represents that occurrence, its
-stop is reused. Named numbers explicitly compose their name
-and digit stops horizontally. Leaf helpers opt in independently; custom
-projections must choose their own composition rather than inheriting a geometric
-guess. Only placed alternatives contribute navigation.
+Projections connect navigation during settled placement. A sequence gives
+children directional neighbor providers, answers previous-neighbor requests
+immediately, and answers next-neighbor requests once the next child has placed.
+A child with no entry is skipped. Unanswered boundary requests go to the parent;
+the root supplies no neighbor. Only the selected occurrence requests destinations.
+A resolved destination contributes a handler selecting that occurrence with
+its existing editing/conject context.
 
-Outline composes each heading and visible body vertically, then its section list
-and trailing extras. Its outer `nav_group` owns the whole-record stop; extras use
+Plain rows, columns, and `descend` add no routing. The standard list and record
+helpers explicitly wrap the chosen presentation in navigation combinators.
+The `nav_group` used by records and unbracketed columns makes
+the whole value the entry from every direction. Right/Down from the group
+enters its content; Left/Up at the corresponding content boundary returns to
+the group. `nav_group_with_entry` lets a projection choose those entry directions;
+expanded cells and bracketed lists use
+`nav_container`: arriving selects the whole value, then Right enters its first
+child or Left its last. Leaving the contents passes straight to the enclosing
+sequence, without another whole-value stop. Up/Down from the whole value stays
+with the enclosing sequence. Empty lists stop once and then continue outward;
+empty cells stop at the reference before entering their missing contents.
+The `reading_order`
+sequence used by vertical lists supplies both Down/Up sibling movement and
+Right/Left continuation between item contents. Plain `vertical` does not wrap
+horizontal movement. A child representing the same occurrence keeps its own navigation.
+Named numbers compose their name and number horizontally. Custom projections
+choose these compositions explicitly rather than inheriting geometry rules.
+Only placed alternatives contribute.
+
+Outline composes each heading and visible body in `reading_order`, connecting
+them horizontally as well as vertically before continuing to adjacent sections.
+An outer column combines the section list and trailing extras. Its `nav_group`
+owns the whole-record stop; extras use
 `record_fragment`, which supplies the record layout and field routing without
 claiming a second stop for the same record. Down visits the root, outline list,
 then its first section, before the extras. Collapsed bodies contribute no routes.
 
-Links may be directed and many-to-one. There is no automatic inverse guarantee,
+Destinations may be asymmetric and many-to-one. There is no automatic inverse guarantee,
 directional hysteresis, back/forward history, or Tab routing yet. Geometry is used
 only to reveal a landing. Stops identify projected occurrences, including jumped
 and computed content; navigation does not follow conjects into document paths.

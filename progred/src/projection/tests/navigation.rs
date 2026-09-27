@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn navigation_direction_excludes_shortcuts_modifiers_and_releases() {
+fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases() {
     use crate::navigate::{Direction, direction};
 
     for (key, expected) in [
@@ -24,13 +24,14 @@ fn navigation_direction_excludes_shortcuts_modifiers_and_releases() {
             Modifiers::ALT,
             Modifiers::CONTROL,
             Modifiers::META,
+            Modifiers::SHIFT | Modifiers::ALT | Modifiers::CONTROL | Modifiers::META,
         ] {
             assert_eq!(
                 direction(&KeyboardEvent {
                     modifiers,
                     ..event.clone()
                 }),
-                None
+                Some(expected)
             );
         }
     }

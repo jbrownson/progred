@@ -107,8 +107,12 @@ mod tests {
     fn acceptance_does_not_require_a_state_write() {
         for accepts in [false, true] {
             let mut frame = crate::display::widget::HoverOutput::default();
-            let mut output =
-                crate::display::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
+            let mut navigation = Default::default();
+            let mut output = crate::display::widget::HoverContext::<(), ()>::new(
+                Default::default(),
+                &mut frame,
+                &mut navigation,
+            );
             scroll(1.0, move |_, delta| {
                 if accepts {
                     ScrollOutcome::with_remainder(Vec2::ZERO)
@@ -153,8 +157,12 @@ mod tests {
             ),
         ] {
             let mut frame = crate::display::widget::HoverOutput::default();
-            let mut output =
-                crate::display::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
+            let mut navigation = Default::default();
+            let mut output = crate::display::widget::HoverContext::<(), ()>::new(
+                Default::default(),
+                &mut frame,
+                &mut navigation,
+            );
             scroll(2.0, move |_, input| {
                 assert_eq!(input, expected);
                 ScrollOutcome::with_remainder(Vec2::new(input.x, input.y / 2.0))
@@ -175,9 +183,11 @@ mod tests {
     #[test]
     fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
         let mut frame = crate::display::widget::HoverOutput::default();
+        let mut navigation = Default::default();
         let mut output = crate::display::widget::HoverContext::<Vec<Vec2>, ()>::new(
             Default::default(),
             &mut frame,
+            &mut navigation,
         );
         let outer = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         scroll(2.0, |log: &mut Vec<Vec2>, delta| {

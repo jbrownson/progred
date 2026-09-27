@@ -864,23 +864,33 @@ fn list_navigation_follows_the_selected_layout_alternative() {
         (1400.0, Direction::Right, Direction::Down),
         (100.0, Direction::Down, Direction::Right),
     ] {
-        let (bench, _) = place(&doc, None, width);
+        let selection = make_selection(paths[0].clone());
+        let (bench, _) = place(&doc, Some(&selection), width);
         let mut world = crate::test_editor(doc.clone());
+        world.model.selection = Some(selection);
+        let mut input = crate::placed::DispatchContext::default();
+        assert_eq!(
+            bench
+                .handler
+                .dispatch(
+                    &mut world,
+                    puri::handler::Event::Navigate(across),
+                    &mut input
+                )
+                .handled(),
+            across == Direction::Right,
+            "vertical lists wrap horizontal traversal; horizontal lists do not invent vertical neighbors"
+        );
         assert!(
             bench
-                .navigation
-                .iter()
-                .find_map(|route| route.navigation.destination(&paths[0], across))
-                .is_none()
+                .handler
+                .dispatch(
+                    &mut world,
+                    puri::handler::Event::Navigate(along),
+                    &mut input
+                )
+                .handled()
         );
-        let arrival = bench
-            .navigation
-            .iter()
-            .find_map(|route| route.navigation.destination(&paths[0], along))
-            .expect("the list routes along its chosen layout");
-        assert!(world.model.selection.is_none(), "resolving is read-only");
-        let root = world.model.workspace.document_root().clone();
-        crate::navigate::arrive(&mut world, root, arrival, along);
         assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[1]);
     }
 }

@@ -456,8 +456,9 @@ mod tests {
     #[test]
     fn native_canvas_clip_streams_to_the_selected_interpreter() {
         let mut frame = HoverOutput::default();
+        let mut navigation = Default::default();
         let mut output: HoverContext<'_, (), ()> =
-            HoverContext::new(Default::default(), &mut frame);
+            HoverContext::new(Default::default(), &mut frame, &mut navigation);
         let clip = Rect::new(0.0, 0.0, 20.0, 10.0);
         output.render(move |canvas, _| {
             canvas.with_clip(
@@ -498,8 +499,12 @@ mod tests {
         let calls = Rc::new(std::cell::Cell::new(0));
         let during_render = calls.clone();
         let mut frame = HoverOutput::default();
-        let mut output =
-            crate::display::widget::HoverContext::<(), ()>::new(Default::default(), &mut frame);
+        let mut navigation = Default::default();
+        let mut output = crate::display::widget::HoverContext::<(), ()>::new(
+            Default::default(),
+            &mut frame,
+            &mut navigation,
+        );
         output.render(move |canvas, _| {
             for _ in 0..100 {
                 during_render.set(during_render.get() + 1);
@@ -553,7 +558,11 @@ mod tests {
                     };
                     let mut output = HoverOutput::default();
                     before(context)(
-                        &mut HoverContext::new(Default::default(), &mut output),
+                        &mut HoverContext::new(
+                            Default::default(),
+                            &mut output,
+                            &mut Default::default(),
+                        ),
                         placement,
                     );
                     assert!(output.handler.is_some());
@@ -573,7 +582,11 @@ mod tests {
                         panic!("leading callback");
                     };
                     before(context)(
-                        &mut HoverContext::new(Default::default(), &mut HoverOutput::default()),
+                        &mut HoverContext::new(
+                            Default::default(),
+                            &mut HoverOutput::default(),
+                            &mut Default::default(),
+                        ),
                         placement,
                     );
                 }

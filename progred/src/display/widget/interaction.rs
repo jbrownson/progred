@@ -131,8 +131,12 @@ mod tests {
     #[test]
     fn raw_click_uses_the_live_world_and_both_placement_rectangles() {
         let mut frame = crate::display::widget::HoverOutput::default();
-        let mut output =
-            crate::display::widget::HoverContext::<usize, ()>::new(Default::default(), &mut frame);
+        let mut navigation = Default::default();
+        let mut output = crate::display::widget::HoverContext::<usize, ()>::new(
+            Default::default(),
+            &mut frame,
+            &mut navigation,
+        );
         click(
             Rc::new(|world| {
                 *world += 1;
@@ -168,9 +172,11 @@ mod tests {
         for pick in [false, true] {
             for picking in [false, true] {
                 let mut frame = crate::display::widget::HoverOutput::default();
+                let mut navigation = Default::default();
                 let mut output = crate::display::widget::HoverContext::<usize, u32>::new(
                     Default::default(),
                     &mut frame,
+                    &mut navigation,
                 );
                 target_action(
                     7,
@@ -210,8 +216,12 @@ mod tests {
             }
         }
         let mut frame = crate::display::widget::HoverOutput::default();
-        let mut clipped =
-            crate::display::widget::HoverContext::<usize, u32>::new(Default::default(), &mut frame);
+        let mut navigation = Default::default();
+        let mut clipped = crate::display::widget::HoverContext::<usize, u32>::new(
+            Default::default(),
+            &mut frame,
+            &mut navigation,
+        );
         target_action(
             7,
             Rc::new(|_| panic!("clipped action")),

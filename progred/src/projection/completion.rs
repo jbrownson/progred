@@ -80,13 +80,9 @@ fn pending_target(
     let palette = cx.styles.palette;
     let selected = cx.selected(path.as_ref());
     let root = cx.view.clone();
-    let stop = crate::display::widget::navigation::Stop {
-        path: path.clone(),
-        entry: crate::display::widget::navigation::Entry::Value,
-        scope: edits.clone(),
-    };
+    let target = crate::display::widget::navigation::destination(path.clone(), cx);
     let child = crate::display::widget::before_place(child, move |_, output| {
-        output.navigation(crate::display::widget::navigation::Navigation::stop(stop));
+        output.navigation_target(target, selected);
     });
     let child = {
         let target = path.clone();

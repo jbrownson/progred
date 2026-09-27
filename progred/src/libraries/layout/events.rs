@@ -120,6 +120,7 @@ pub fn on_event(
                             Event::PointerCancel(event) => pointer_cancel_value(event),
                             Event::Scroll(_) | Event::Gesture(_) => unreachable!(),
                             Event::Key(event) => key_value(event, command),
+                            Event::Navigate(direction) => navigation_value(*direction),
                             Event::Ime(event) => ime_value(event),
                             Event::HoverChanged => {
                                 event_value(layout_data::vocabulary::HOVER_CHANGED, [])
@@ -148,6 +149,22 @@ fn event_value(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) 
         [(layout_data::vocabulary::EVENT_KIND, Value::Cell(kind))]
             .into_iter()
             .chain(fields),
+    )
+}
+
+fn navigation_value(direction: puri::handler::NavigationDirection) -> Value {
+    use puri::handler::NavigationDirection::*;
+    event_value(
+        layout_data::vocabulary::NAVIGATE,
+        [(
+            layout_data::vocabulary::CONTENT,
+            text::value(match direction {
+                Left => "left",
+                Right => "right",
+                Up => "up",
+                Down => "down",
+            }),
+        )],
     )
 }
 
@@ -273,6 +290,24 @@ fn pointer_cancel_value(event: &PointerInfo) -> Value {
 mod motion_tests {
     use super::*;
     use puri::handler::PointerId;
+
+    #[test]
+    fn grap_navigation_events_express_direction_without_a_physical_key() {
+        use puri::handler::NavigationDirection::*;
+        for (direction, spelling) in [(Left, "left"), (Right, "right"), (Up, "up"), (Down, "down")]
+        {
+            assert_eq!(
+                navigation_value(direction),
+                Value::record([
+                    (
+                        layout_data::vocabulary::EVENT_KIND,
+                        Value::Cell(layout_data::vocabulary::NAVIGATE)
+                    ),
+                    (layout_data::vocabulary::CONTENT, text::value(spelling)),
+                ])
+            );
+        }
+    }
 
     #[test]
     fn grap_pinch_delta_is_dimensionless_and_position_is_local() {

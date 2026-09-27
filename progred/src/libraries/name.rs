@@ -55,20 +55,17 @@ pub(crate) fn with_name(
     if !has_name && input.pending != Some(Pending::Child(step.clone())) {
         return content;
     }
-    crate::display::widget::navigation::scope(
-        row(
-            6.0,
-            [
-                descend_local(
-                    step,
-                    partial(|input| editor(input.value?).map(line_edit)),
-                    &input.default_projection,
-                ),
-                content,
-            ],
-        ),
-        crate::display::widget::navigation::horizontal,
-    )
+    crate::display::widget::navigation::horizontal(row(
+        6.0,
+        [
+            descend_local(
+                step,
+                partial(|input| editor(input.value?).map(line_edit)),
+                &input.default_projection,
+            ),
+            content,
+        ],
+    ))
 }
 
 pub(crate) fn short_id(cell: CellId) -> String {

@@ -103,7 +103,10 @@ mod tests {
         crate::display::test_support::with_context(
             &crate::display::test_support::NoProject,
             |context| before(context),
-        )(&mut HoverContext::new(input, &mut output), placement);
+        )(
+            &mut HoverContext::new(input, &mut output, &mut Default::default()),
+            placement,
+        );
         output
     }
 

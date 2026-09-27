@@ -1,7 +1,7 @@
 //! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
     container::{self, Layers},
-    navigation::{Graph, Landmark, Navigation, Select, ViewNavigation, resolve_views},
+    navigation::{Construction, Landmark, Select, Target},
     offers::Offers,
     source::{Secondary, SourceTrace},
     view::Root,
@@ -48,14 +48,20 @@ pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
     root: Option<Root>,
+    navigation: &'a mut Construction<C, H>,
 }
 
 impl<'a, C, H> HoverContext<'a, C, H> {
-    pub fn new(input: HoverInput<'a, H>, output: &'a mut HoverOutput<C, H>) -> Self {
+    pub(crate) fn new(
+        input: HoverInput<'a, H>,
+        output: &'a mut HoverOutput<C, H>,
+        navigation: &'a mut Construction<C, H>,
+    ) -> Self {
         Self {
             input,
             output,
             root: None,
+            navigation,
         }
     }
 }
@@ -104,11 +110,8 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.output.landmark_select = select.or(self.output.landmark_select.take());
     }
 
-    pub fn navigation(&mut self, navigation: Navigation) {
-        self.output.navigation.push(ViewNavigation {
-            root: None,
-            navigation,
-        });
+    pub fn navigation_target(&mut self, target: Target<C>, selected: bool) {
+        self.navigation.target(target, selected);
     }
 
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
@@ -161,6 +164,7 @@ pub struct HoverPass<C, H> {
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
+    pub(super) navigation: Construction<C, H>,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {
@@ -177,6 +181,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             root: None,
             output: HoverOutput::empty(),
             floaters: Vec::new(),
+            navigation: Construction::default(),
         }
     }
 
@@ -190,6 +195,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
                 debug_geometry: self.debug_geometry,
             },
             &mut self.output,
+            &mut self.navigation,
         );
         context.root = self.root.clone();
         step(&mut context);
@@ -213,10 +219,22 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
 
     pub fn in_view(&mut self, root: Root, content: impl FnOnce(&mut Self)) {
         let parent = self.root.replace(root.clone());
-        self.scope(content, |mut output| {
-            output.root_navigation(&root);
-            output
-        });
+        let navigation = std::mem::take(&mut self.navigation);
+        self.scope(
+            |pass| {
+                content(pass);
+                if let Some(handlers) = std::mem::take(&mut pass.navigation).finish() {
+                    pass.visit(|output| {
+                        *output.handler() = std::mem::take(output.handler()).over(handlers);
+                    });
+                }
+            },
+            |mut output| {
+                output.attribute_view(&root);
+                output
+            },
+        );
+        self.navigation = navigation;
         self.root = parent;
     }
 
@@ -229,6 +247,9 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
 
     pub fn finish(mut self) -> HoverOutput<C, H> {
         self.run_floaters();
+        if let Some(handlers) = self.navigation.finish() {
+            *self.output.handler_mut() = std::mem::take(self.output.handler_mut()).over(handlers);
+        }
         self.output
     }
 }
@@ -373,7 +394,6 @@ pub struct Effects<C, H> {
 
 /// Completed widget output: no hover work remains, and painting is optional.
 pub struct FrameOutput<C, H> {
-    pub navigation: Vec<ViewNavigation<Graph>>,
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
@@ -399,7 +419,6 @@ impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
 }
 
 pub struct HoverOutput<C, Hover> {
-    pub navigation: Vec<ViewNavigation>,
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
@@ -434,7 +453,6 @@ fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
 impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     fn empty() -> Self {
         Self {
-            navigation: Vec::new(),
             scroll_probes: Vec::new(),
             claim: None,
             hover_geometry: HoverGeometry::default(),
@@ -449,7 +467,6 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
     }
 
     fn over(mut self, above: Self) -> Self {
-        append(&mut self.navigation, above.navigation);
         append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
@@ -469,10 +486,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
 }
 
 impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
-    pub fn root_navigation(&mut self, root: &Root) {
-        for navigation in &mut self.navigation {
-            navigation.root = Some(root.clone());
-        }
+    pub fn attribute_view(&mut self, root: &Root) {
         if let Some((owner, _)) = &mut self.claim {
             *owner = Some(root.clone());
         }
@@ -512,7 +526,6 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         };
         self.after_hover.bind(Rc::new(hover), &mut effects);
         FrameOutput {
-            navigation: resolve_views(self.navigation),
             scroll_probes: self.scroll_probes,
             renders: effects.renders,
             handler: effects.handler,

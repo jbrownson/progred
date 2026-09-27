@@ -1,7 +1,8 @@
 # Examples
 
 Open these files normally to edit and save them. The Examples menu opens a fresh
-copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the drawn menu.
+copy instead; its shortcuts are Command+1…9 and Command+0 on macOS, with Ctrl
+instead of Command in the drawn menu on other platforms.
 
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
@@ -14,6 +15,18 @@ copy instead; its shortcuts are Command+1…9 on macOS and Ctrl+1…9 in the dra
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
 | 9 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
+| 0 | `navigation.gid` | Focused keyboard navigation: named numbers, nested lists, empty locations, shared occurrences, and read-only results |
+
+## Keyboard navigation
+
+Open **Examples → Keyboard Navigation** (Command+0 on macOS, Ctrl+0 otherwise).
+Down/Up move between cells in a vertical list; Right enters a cell's contents.
+Try arrows at text boundaries, moving
+into and out of cells and lists, and resizing the window to change list layout.
+The last outline section repeats the nested-list source at another occurrence;
+the shared section similarly repeats cells. Computed results can be selected
+but not edited. Empty lists/records and the bare cell exercise missing values.
+There is no directional history or geometry-based neighbor selection yet.
 
 The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
 primitives or Grap programs. Each has an editable source cell and one left-side

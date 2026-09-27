@@ -126,7 +126,11 @@ fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
             let decorate = crate::projection::source_link::decoration(source.clone())(context);
             let mut output = widget::HoverOutput::default();
             decorate(
-                &mut widget::HoverContext::new(Default::default(), &mut output),
+                &mut widget::HoverContext::new(
+                    Default::default(),
+                    &mut output,
+                    &mut Default::default(),
+                ),
                 Placement::new(rect, clip),
             );
             let frame = output.bind(widget::ResolvedHover {

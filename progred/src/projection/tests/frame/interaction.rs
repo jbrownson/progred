@@ -292,7 +292,7 @@ fn website_forest_edits_change_one_height_and_all_leaf_colors() {
         let (circle, _, transform) = &colors[0];
         let point = *transform * circle.center;
         let mut frame = editing_frame_at(&mut world, false, None, Some(point));
-        frame.root_navigation(&crate::test_root());
+        frame.attribute_view(&crate::test_root());
         let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
             panic!("leaf source hover")
         };
@@ -1017,7 +1017,7 @@ fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_cal
     let document = world.model.doc.clone();
     for point in points {
         let mut frame = editing_frame_at(&mut world, false, None, Some(point));
-        frame.root_navigation(&crate::test_root());
+        frame.attribute_view(&crate::test_root());
         let source = crate::hover::SourceTrace::InCell {
             cell: names["dot"],
             source: gid::Resolution::Document,

@@ -605,12 +605,14 @@ mod tests {
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
         let mut frame = HoverOutput::default();
+        let mut navigation = Default::default();
         let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> = HoverContext::new(
             HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
                 ..Default::default()
             },
             &mut frame,
+            &mut navigation,
         );
         let mut p = Builder::new(&mut placed, placement);
         p.handler().on_pointer_down(|log, _| {
@@ -911,12 +913,14 @@ mod tests {
     #[test]
     fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
         let mut frame = HoverOutput::default();
+        let mut navigation = Default::default();
         let mut placed: HoverContext<'_, Vec<&'static str>, Hovered> = HoverContext::new(
             HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
                 ..Default::default()
             },
             &mut frame,
+            &mut navigation,
         );
         let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
         let mut p = Builder::new(&mut placed, full);
@@ -1167,12 +1171,14 @@ mod tests {
             });
             let count = std::rc::Rc::new(std::cell::Cell::new(0));
             let mut frame = HoverOutput::default();
+            let mut navigation = Default::default();
             let mut placed: HoverContext<'_, crate::Editor, Hovered> = HoverContext::new(
                 HoverInput {
                     pointer: Some(Point::new(5.0, 5.0)),
                     ..Default::default()
                 },
                 &mut frame,
+                &mut navigation,
             );
             let mut p = Builder::new(&mut placed, placement);
             p.handler()

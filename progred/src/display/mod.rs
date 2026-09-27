@@ -709,8 +709,8 @@ pub fn record_fragment(
     selectable_bracket(
         Delim::Brace,
         alternatives([
-            widget::navigation::scope(row(0.0, flat), widget::navigation::horizontal),
-            widget::navigation::scope(col(0, 2.0, rows), widget::navigation::vertical),
+            widget::navigation::horizontal(row(0.0, flat)),
+            widget::navigation::vertical(col(0, 2.0, rows)),
         ]),
     )
 }

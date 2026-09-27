@@ -30,11 +30,6 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
-    pub(crate) navigation: Vec<
-        crate::display::widget::navigation::ViewNavigation<
-            crate::display::widget::navigation::Graph,
-        >,
-    >,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
@@ -297,8 +292,15 @@ fn compute_hover(
         output.landmark_select.is_none(),
         "selection handler escaped its landmark"
     );
+    if description.model.selection.is_none()
+        && let Some(handler) = navigate::initial_navigation(
+            description.model.workspace.document_root(),
+            &output.descends,
+        )
+    {
+        *output.handler_mut() = std::mem::take(output.handler_mut()).over(handler);
+    }
     let crate::display::widget::frame::FrameOutput {
-        navigation,
         scroll_probes,
         renders,
         handler,
@@ -313,7 +315,6 @@ fn compute_hover(
             handler: handler.unwrap_or_else(Handler::new),
             pointer_root,
             descends: descends.into(),
-            navigation,
             view_regions: view_regions.into(),
             hover_geometry,
         },

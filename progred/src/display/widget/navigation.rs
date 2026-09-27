@@ -1,128 +1,343 @@
-//! Frame-local navigation data, composed explicitly by projections.
-use super::HoverPass;
+//! Neighbors are connected during settled placement; only ordinary handlers survive.
+use super::{HoverPass, frame::DispatchContext};
 use gid::Step;
 use measured::Measured;
 use puri::Rect;
-use std::rc::Rc;
+use puri::handler::{Event, EventOutcome, Handler};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
-pub mod graph;
-pub use graph::{Graph, Navigation};
+pub use puri::handler::NavigationDirection as Direction;
+const DIRECTIONS: [Direction; 4] = [
+    Direction::Left,
+    Direction::Right,
+    Direction::Up,
+    Direction::Down,
+];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-impl Direction {
-    const ALL: [Self; 4] = [Self::Left, Self::Right, Self::Up, Self::Down];
-
-    pub fn opposite(self) -> Self {
-        match self {
-            Self::Left => Self::Right,
-            Self::Right => Self::Left,
-            Self::Up => Self::Down,
-            Self::Down => Self::Up,
-        }
-    }
-
-    fn index(self) -> usize {
-        self as usize
-    }
-}
-
-// Direct selection for pointer/source selection and Select All, not arrow routing.
+// Pointer/source selection and Select All also use these direct selection helpers.
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub enum Entry {
-    #[default]
-    Value,
-    Line,
-}
-
-#[derive(Clone)]
-pub struct Stop {
+pub struct Target<C> {
     pub path: Rc<[Step]>,
-    pub entry: Entry,
-    pub(crate) scope: crate::editing::Scope,
+    pub select: Select<C>,
 }
-
-pub struct ViewNavigation<N = Navigation> {
-    pub root: Option<super::view::Root>,
-    pub navigation: N,
-}
-
-pub(super) fn resolve_views(views: Vec<ViewNavigation>) -> Vec<ViewNavigation<Graph>> {
-    let mut grouped: Vec<(Option<super::view::Root>, Vec<Navigation>)> = Vec::new();
-    for view in views {
-        if let Some((_, parts)) = grouped.iter_mut().find(|(root, _)| *root == view.root) {
-            parts.push(view.navigation);
-        } else {
-            grouped.push((view.root, vec![view.navigation]));
+impl<C> Clone for Target<C> {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            select: self.select.clone(),
         }
     }
-    grouped
-        .into_iter()
-        .map(|(root, parts)| {
-            let navigation = Navigation::join(parts).resolve();
-            for issue in navigation.issues() {
-                eprintln!("Invalid navigation description: {issue}");
-            }
-            ViewNavigation { root, navigation }
-        })
-        .collect()
 }
 
-/// Make this projected value a stop, without changing any child routing.
-pub fn target<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
+pub(crate) fn destination(
+    path: Rc<[Step]>,
+    cx: &crate::projection::Cx<'_>,
+) -> Target<crate::Editor> {
+    let root = cx.view.clone();
+    let scope = cx.edits.clone();
+    let occurrence = path.clone();
+    Target {
+        path,
+        select: Rc::new(move |editor, _| {
+            scope
+                .open(crate::editing::Access::new(editor))
+                .select(&root, &occurrence);
+            true
+        }),
+    }
+}
+
+type Receive<T> = Box<dyn FnOnce(Option<T>)>;
+type Provider<T> = Rc<dyn Fn(Receive<T>)>;
+type Pending<T> = Rc<RefCell<[Vec<Receive<T>>; 4]>>;
+
+struct Neighbors<T>([Provider<T>; 4]);
+impl<T> Clone for Neighbors<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<T: Clone + 'static> Neighbors<T> {
+    fn root() -> Self {
+        Self(std::array::from_fn(|_| {
+            Rc::new(|receive: Receive<T>| receive(None)) as Provider<T>
+        }))
+    }
+    fn request(&self, direction: Direction, receive: Receive<T>) {
+        self.0[direction as usize](receive);
+    }
+    fn with(mut self, direction: Direction, target: T) -> Self {
+        self.0[direction as usize] = Rc::new(move |receive| receive(Some(target.clone())));
+        self
+    }
+}
+
+struct Entries<T>([Option<T>; 4]);
+impl<T: Clone> Entries<T> {
+    fn empty() -> Self {
+        Self(std::array::from_fn(|_| None))
+    }
+    fn one(target: T) -> Self {
+        Self(std::array::from_fn(|_| Some(target.clone())))
+    }
+    fn get(&self, direction: Direction) -> Option<T> {
+        self.0[direction as usize].clone()
+    }
+}
+
+struct Sequence<T> {
+    outer: Neighbors<T>,
+    forward: &'static [Direction],
+    entries: Entries<T>,
+    pending: [Vec<Receive<T>>; 4],
+}
+impl<T: Clone + 'static> Sequence<T> {
+    fn new(outer: Neighbors<T>, forward: &'static [Direction]) -> Self {
+        Self {
+            outer,
+            forward,
+            entries: Entries::empty(),
+            pending: std::array::from_fn(|_| vec![]),
+        }
+    }
+    fn begin_child(&self) -> (Neighbors<T>, Pending<T>) {
+        let mut neighbors = self.outer.clone();
+        let pending: Pending<T> = Rc::new(RefCell::new(std::array::from_fn(|_| vec![])));
+        for &forward in self.forward {
+            if let Some(previous) = self.entries.get(forward.opposite()) {
+                neighbors = neighbors.with(forward.opposite(), previous);
+            }
+            neighbors.0[forward as usize] = {
+                let pending = pending.clone();
+                Rc::new(move |receive| pending.borrow_mut()[forward as usize].push(receive))
+            };
+        }
+        (neighbors, pending)
+    }
+    fn end_child(&mut self, entries: Entries<T>, own_pending: Pending<T>) {
+        for &forward in self.forward {
+            if let Some(next) = entries.get(forward) {
+                for receive in self.pending[forward as usize].drain(..) {
+                    receive(Some(next.clone()));
+                }
+            }
+        }
+        for direction in DIRECTIONS {
+            self.pending[direction as usize]
+                .extend(own_pending.borrow_mut()[direction as usize].drain(..));
+            let slot = &mut self.entries.0[direction as usize];
+            if let Some(entry) = entries.get(direction)
+                && (slot.is_none() || matches!(direction, Direction::Left | Direction::Up))
+            {
+                *slot = Some(entry);
+            }
+        }
+    }
+    fn finish(mut self) -> Entries<T> {
+        for &forward in self.forward {
+            for receive in self.pending[forward as usize].drain(..) {
+                self.outer.request(forward, receive);
+            }
+        }
+        assert!(self.pending.iter().all(Vec::is_empty));
+        self.entries
+    }
+}
+
+/// Caller-owned construction capability. Not part of the installed frame.
+pub(crate) struct Construction<C, H> {
+    sequence: Sequence<Target<C>>,
+    handlers: Rc<RefCell<Option<Handler<C, DispatchContext<C, H>>>>>,
+    requested: Option<Rc<[Step]>>,
+    answered: Rc<Cell<usize>>,
+}
+impl<C: 'static, H: 'static> Default for Construction<C, H> {
+    fn default() -> Self {
+        Self {
+            sequence: Sequence::new(Neighbors::root(), &[]),
+            handlers: Rc::new(RefCell::new(None)),
+            requested: None,
+            answered: Rc::new(Cell::new(0)),
+        }
+    }
+}
+impl<C: 'static, H: 'static> Construction<C, H> {
+    fn request(&mut self, from: &Target<C>, neighbors: &Neighbors<Target<C>>) {
+        if let Some(path) = &self.requested {
+            // A facet and its enclosing whole-value wrapper may name the same
+            // occurrence. The inner contribution already owns its navigation.
+            assert_eq!(
+                path, &from.path,
+                "multiple selected navigation occurrences in one view"
+            );
+        } else {
+            self.requested = Some(from.path.clone());
+            for direction in DIRECTIONS {
+                let handlers = self.handlers.clone();
+                let answered = self.answered.clone();
+                let from = from.path.clone();
+                neighbors.request(
+                    direction,
+                    Box::new(move |target| {
+                        answered.set(answered.get() + 1);
+                        if let Some(target) = target.filter(|target| target.path != from) {
+                            handlers.borrow_mut().get_or_insert_with(Handler::new).on(
+                                move |world, event, _| match event {
+                                    Event::Navigate(actual) if actual == direction => {
+                                        EventOutcome::from_handled(
+                                            event,
+                                            (target.select)(world, Some(direction)),
+                                        )
+                                    }
+                                    _ => EventOutcome::decline(event),
+                                },
+                            );
+                        }
+                    }),
+                );
+            }
+        }
+    }
+    pub fn target(&mut self, target: Target<C>, selected: bool) {
+        let (neighbors, pending) = self.sequence.begin_child();
+        if selected {
+            self.request(&target, &neighbors);
+        }
+        self.sequence.end_child(Entries::one(target), pending);
+    }
+    pub fn finish(self) -> Option<Handler<C, DispatchContext<C, H>>> {
+        self.sequence.finish();
+        assert_eq!(
+            self.answered.get(),
+            if self.requested.is_some() { 4 } else { 0 },
+            "unanswered navigation request"
+        );
+        Rc::try_unwrap(self.handlers)
+            .ok()
+            .expect("navigation provider escaped construction")
+            .into_inner()
+    }
+}
+
+/// A native control supplies its entry without introducing child routing.
+pub fn target(
+    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
     super::before(
         child,
         Rc::new(|context| {
-            let stop = Stop {
-                path: Rc::from(context.path),
-                entry: Entry::Value,
-                scope: context.inputs.edits.clone(),
-            };
-            Box::new(move |output, _| output.navigation(Navigation::stop(stop)))
+            let target = destination(Rc::from(context.path), context.inputs);
+            let selected = context.inputs.selected(context.path);
+            Box::new(move |output, _| output.navigation_target(target, selected))
         }),
     )
 }
 
-pub fn horizontal(children: Vec<Navigation>) -> Navigation {
-    Navigation::sequence(children, Direction::Right)
+pub fn horizontal<C: 'static, H: 'static>(
+    child: crate::display::Layout<C, H>,
+) -> crate::display::Layout<C, H> {
+    with_navigation(child, Direction::Right)
+}
+pub fn vertical<C: 'static, H: 'static>(
+    child: crate::display::Layout<C, H>,
+) -> crate::display::Layout<C, H> {
+    with_navigation(child, Direction::Down)
 }
 
-pub fn vertical(children: Vec<Navigation>) -> Navigation {
-    Navigation::sequence(children, Direction::Down)
+/// Vertical siblings also continue horizontal traversal at their content edges.
+pub fn reading_order<C: 'static, H: 'static>(
+    child: crate::display::Layout<C, H>,
+) -> crate::display::Layout<C, H> {
+    sequence(child, &[Direction::Right, Direction::Down])
 }
 
-/// Compose only the navigation contributed by this explicitly wrapped subtree.
-pub fn scope<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-    compose: fn(Vec<Navigation>) -> Navigation,
-) -> crate::display::Layout<W, H> {
+pub fn with_navigation<C: 'static, H: 'static>(
+    child: crate::display::Layout<C, H>,
+    direction: Direction,
+) -> crate::display::Layout<C, H> {
+    sequence(
+        child,
+        match direction {
+            Direction::Right => &[Direction::Right],
+            Direction::Down => &[Direction::Down],
+            _ => panic!("sequences progress right or down"),
+        },
+    )
+}
+
+fn sequence<C: 'static, H: 'static>(
+    child: crate::display::Layout<C, H>,
+    directions: &'static [Direction],
+) -> crate::display::Layout<C, H> {
     super::around(
         child,
         Rc::new(move |_| {
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
-                    pass.scope(
+                    compose(pass, directions, None, false, |pass| inner.place_into(pass));
+                })
+            })
+        }),
+    )
+}
+
+pub fn nav_group(
+    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    nav_group_with_entry(child, [Direction::Right, Direction::Down])
+}
+
+/// Enter through the chosen directions; their opposites return to the whole.
+/// Other directions remain available to the enclosing navigation composition.
+pub fn nav_group_with_entry(
+    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+    directions: impl Into<Vec<Direction>>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    group(child, directions.into(), &[], &[])
+}
+
+/// Stop at the whole on entry; enter its contents horizontally and leave directly.
+pub fn nav_container(
+    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    group(
+        child,
+        vec![Direction::Left, Direction::Right],
+        &[Direction::Left, Direction::Right],
+        &[],
+    )
+}
+
+fn group(
+    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
+    directions: Vec<Direction>,
+    through: &'static [Direction],
+    expose_contents: &'static [Direction],
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    let directions: Rc<[Direction]> = directions.into();
+    super::around(
+        child,
+        Rc::new(move |context| {
+            let target = destination(Rc::from(context.path), context.inputs);
+            let selected = context.inputs.selected(context.path);
+            let directions = directions.clone();
+            Box::new(move |child| {
+                measured::around_into(child, move |_, inner, pass| {
+                    compose(
+                        pass,
+                        &[],
+                        Some(Group {
+                            target,
+                            enter: &directions,
+                            through,
+                            expose_contents,
+                        }),
+                        selected,
                         |pass| inner.place_into(pass),
-                        move |mut output| {
-                            let children = std::mem::take(&mut output.navigation);
-                            output.navigation.push(ViewNavigation {
-                                root: None,
-                                navigation: compose(
-                                    children.into_iter().map(|child| child.navigation).collect(),
-                                ),
-                            });
-                            output
-                        },
                     );
                 })
             })
@@ -130,39 +345,68 @@ pub fn scope<W: 'static, H: 'static>(
     )
 }
 
-/// Incoming navigation selects the group before entering its contents.
-/// Ordinary occurrence bookkeeping adds no links.
-pub fn nav_group(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    super::around(
-        child,
-        Rc::new(|context| {
-            let stop = Stop {
-                path: Rc::from(context.path),
-                entry: Entry::Value,
-                scope: context.inputs.edits.clone(),
-            };
-            Box::new(move |child| {
-                measured::around_into(child, move |_, inner, pass| {
-                    pass.scope(
-                        |pass| inner.place_into(pass),
-                        move |mut output| {
-                            let children = std::mem::take(&mut output.navigation);
-                            let nav = Navigation::join(
-                                children.into_iter().map(|n| n.navigation).collect(),
-                            );
-                            output.navigation.push(ViewNavigation {
-                                root: None,
-                                navigation: Navigation::group(stop, nav),
-                            });
-                            output
-                        },
-                    );
-                })
-            })
-        }),
-    )
+struct Group<'a, C> {
+    target: Target<C>,
+    enter: &'a [Direction],
+    through: &'a [Direction],
+    expose_contents: &'a [Direction],
+}
+
+fn compose<C: 'static, H: 'static>(
+    pass: &mut HoverPass<C, H>,
+    directions: &'static [Direction],
+    whole: Option<Group<'_, C>>,
+    selected: bool,
+    content: impl FnOnce(&mut HoverPass<C, H>),
+) {
+    let (neighbors, pending) = pass.navigation.sequence.begin_child();
+    let child_neighbors = match &whole {
+        Some(Group {
+            target,
+            enter,
+            through,
+            ..
+        }) if !selected => enter
+            .iter()
+            .filter(|direction| !through.contains(&direction.opposite()))
+            .fold(neighbors.clone(), |neighbors, direction| {
+                neighbors.with(direction.opposite(), target.clone())
+            }),
+        _ => neighbors.clone(),
+    };
+    let parent = std::mem::replace(
+        &mut pass.navigation.sequence,
+        Sequence::new(child_neighbors, directions),
+    );
+    content(pass);
+    let children = std::mem::replace(&mut pass.navigation.sequence, parent).finish();
+    let entries = if let Some(Group {
+        target,
+        enter,
+        expose_contents,
+        ..
+    }) = whole
+    {
+        if selected {
+            let mut arrival = neighbors;
+            for &direction in enter {
+                if let Some(entry) = children.get(direction) {
+                    arrival = arrival.with(direction, entry);
+                }
+            }
+            pass.navigation.request(&target, &arrival);
+        }
+        let mut entries = Entries::one(target);
+        for &direction in expose_contents {
+            if let Some(entry) = children.get(direction) {
+                entries.0[direction as usize] = Some(entry);
+            }
+        }
+        entries
+    } else {
+        children
+    };
+    pass.navigation.sequence.end_child(entries, pending);
 }
 
 pub struct Landmark<World> {
@@ -212,305 +456,143 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graph::{Issue, Link};
-    fn stop() -> (gid::Path, Navigation) {
-        let path = vec![Step::Key(gid::new_cell_id())];
-        (
-            path.clone(),
-            Navigation::stop(Stop {
-                path: Rc::from(path),
-                entry: Entry::Value,
-                scope: Default::default(),
-            }),
-        )
+
+    fn emit<T: Clone + 'static>(
+        sequence: &mut Sequence<T>,
+        body: impl FnOnce(Neighbors<T>) -> Entries<T>,
+    ) {
+        let (neighbors, pending) = sequence.begin_child();
+        let entries = body(neighbors);
+        sequence.end_child(entries, pending);
     }
 
     #[test]
-    fn nested_sequences_build_links_without_an_editor_or_callbacks() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let (c, third) = stop();
-        let (d, fourth) = stop();
-        let nav = vertical(vec![
-            horizontal(vec![first, second]),
-            horizontal(vec![third, fourth]),
-        ])
-        .resolve();
-        assert!(nav.issues().is_empty());
-        for (from, direction, to) in [
-            (&a, Direction::Right, &b),
-            (&b, Direction::Left, &a),
-            (&a, Direction::Down, &c),
-            (&b, Direction::Down, &c),
-            (&c, Direction::Up, &b),
-            (&d, Direction::Left, &c),
-        ] {
-            assert_eq!(nav.destination(from, direction).unwrap().path.as_ref(), to);
-        }
-        assert!(nav.destination(&a, Direction::Left).is_none());
-        assert!(nav.destination(&d, Direction::Down).is_none());
-    }
-
-    #[test]
-    fn irregular_links_are_directed_and_require_existing_stops() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let declarations = Navigation::new(
-            vec![],
-            vec![
-                Link::new(Rc::from(a.clone()), Direction::Up, Rc::from(b.clone())),
-                Link::new(Rc::from(a.clone()), Direction::Left, Rc::from([])),
-            ],
-            Default::default(),
-        );
-        let nav = Navigation::join(vec![
-            declarations,
-            horizontal(vec![first, Navigation::default(), second]),
-        ])
-        .resolve();
-        assert_eq!(
-            nav.destination(&a, Direction::Up).unwrap().path.as_ref(),
-            &b
-        );
-        assert!(nav.destination(&b, Direction::Down).is_none());
-        assert!(matches!(nav.issues(), [Issue::MissingStop(_)]));
-        assert!(nav.destination(&a, Direction::Left).is_none());
-        assert_eq!(
-            nav.destination(&a, Direction::Right).unwrap().path.as_ref(),
-            &b
-        );
-    }
-
-    fn leaf(nav: Navigation) -> crate::display::Layout<(), ()> {
-        crate::display::Layout::widget(Rc::new(move |_| {
-            let nav = nav.clone();
-            super::super::leaf(
-                measured::Extent {
-                    width: 10.0,
-                    ascent: 8.0,
-                    descent: 2.0,
-                },
-                move |output, _| output.navigation(nav),
-            )
-        }))
-    }
-
-    fn place(
-        layout: crate::display::Layout<(), ()>,
-        width: f64,
-    ) -> super::super::HoverOutput<(), ()> {
-        use crate::display::test_support::{NoProject, with_context};
-        use measured::choices::{ChoiceBuild, resolve_choices};
-        let mut build = ChoiceBuild::default();
-        let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
-        let measured = resolve_choices(build.finish(prepared), width, false);
-        let placement = puri::Placement::root(measured.extent.rect_at(puri::Point::ZERO));
-        super::super::frame::place(measured, placement, &Default::default())
-    }
-
-    #[test]
-    fn layout_and_landmarks_do_not_silently_choose_navigation() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        for layout in [
-            crate::display::row(0.0, [leaf(first.clone()), leaf(second.clone())]),
-            crate::display::col(0, 0.0, [leaf(first.clone()), leaf(second.clone())]),
-        ] {
-            let output = place(layout, 100.0);
-            assert_eq!(output.navigation.len(), 2);
-            for child in output.navigation {
-                let nav = child.navigation.resolve();
-                assert!(nav.destination(&a, Direction::Right).is_none());
-                assert!(nav.destination(&b, Direction::Up).is_none());
-            }
-        }
-        let measured: Measured<HoverPass<(), ()>> = landmark(
-            super::super::leaf(measured::Extent::default(), |_, _| {}),
-            Rc::from(a),
-            Rc::new(|_: &mut (), _| panic!("not an arrow action")),
-            Default::default(),
-        );
-        let output = super::super::frame::place(
-            measured,
-            puri::Placement::root(Rect::ZERO),
-            &Default::default(),
-        );
-        assert_eq!(output.descends.len(), 1);
-        assert!(output.navigation.is_empty());
-    }
-
-    #[test]
-    fn explicit_routes_follow_only_the_placed_alternative() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let layout = crate::display::alternatives([
-            scope(
-                crate::display::row(0.0, [leaf(first.clone()), leaf(second.clone())]),
-                horizontal,
-            ),
-            scope(
-                crate::display::col(0, 0.0, [leaf(first), leaf(second)]),
-                vertical,
-            ),
-        ]);
-        for (width, along, across) in [
-            (100.0, Direction::Right, Direction::Down),
-            (10.0, Direction::Down, Direction::Right),
-        ] {
-            let output = place(layout.clone(), width);
-            assert_eq!(output.navigation.len(), 1);
-            let nav = output.navigation[0].navigation.clone().resolve();
-            assert!(nav.issues().is_empty());
-            assert_eq!(nav.destination(&a, along).unwrap().path.as_ref(), &b);
-            assert!(nav.destination(&a, across).is_none());
-        }
-        // Identical horizontal geometry can deliberately carry vertical routing.
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let output = place(
-            scope(
-                crate::display::row(0.0, [leaf(first), leaf(second)]),
-                vertical,
-            ),
-            100.0,
-        );
-        let nav = output.navigation[0].navigation.clone().resolve();
-        assert_eq!(
-            nav.destination(&a, Direction::Down).unwrap().path.as_ref(),
-            &b
-        );
-        assert!(nav.destination(&a, Direction::Right).is_none());
-    }
-
-    #[test]
-    fn conflicting_links_are_rejected_independently_of_declaration_order() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let (c, third) = stop();
-        let mut links = vec![
-            Link::new(Rc::from(a.clone()), Direction::Right, Rc::from(b.clone())),
-            Link::new(Rc::from(a.clone()), Direction::Right, Rc::from(c.clone())),
-        ];
-        links.extend([
-            Link::new(Rc::from(b.clone()), Direction::Down, Rc::from(c.clone())),
-            Link::new(Rc::from(c.clone()), Direction::Up, Rc::from(b.clone())),
-        ]);
-        // Identical declarations are harmless; conflicting ones never overwrite.
-        links.push(links[0].clone());
-        for reversed in [false, true] {
-            if reversed {
-                links.reverse();
-            }
-            let nav = Navigation::join(vec![
-                Navigation::new(vec![], links.clone(), Default::default()),
-                first.clone(),
-                second.clone(),
-                third.clone(),
-            ])
-            .resolve();
-            assert!(matches!(nav.issues(), [Issue::ConflictingLink(_)]));
-            assert!(nav.destination(&a, Direction::Right).is_none());
-            assert_eq!(
-                nav.destination(&b, Direction::Down).unwrap().path.as_ref(),
-                &c
-            );
-            assert_eq!(
-                nav.destination(&c, Direction::Up).unwrap().path.as_ref(),
-                &b
-            );
-        }
-    }
-
-    #[test]
-    fn only_declared_boundary_exits_connect_to_siblings() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let interior = Navigation::new(
-            vec![Stop {
-                path: Rc::from(a.clone()),
-                entry: Entry::Value,
-                scope: Default::default(),
-            }],
-            vec![],
-            Default::default(),
-        );
-        let nav = horizontal(vec![interior, second]).resolve();
-        assert!(nav.issues().is_empty());
-        assert!(nav.destination(&a, Direction::Right).is_none());
-        assert!(nav.destination(&b, Direction::Left).is_none());
-        let group_path: Rc<[Step]> = Rc::from([]);
-        let nav = Navigation::group(
-            Stop {
-                path: group_path.clone(),
-                entry: Entry::Value,
-                scope: Default::default(),
-            },
-            first,
-        )
-        .resolve();
-        assert!(nav.issues().is_empty());
-        for direction in [Direction::Right, Direction::Down] {
-            assert_eq!(
-                nav.destination(&group_path, direction)
-                    .unwrap()
-                    .path
-                    .as_ref(),
-                &a
-            );
-            assert_eq!(
-                nav.destination(&a, direction.opposite()).unwrap().path,
-                group_path
-            );
-        }
-    }
-
-    #[test]
-    fn resolution_combines_parts_within_a_view_but_not_between_views() {
-        let (a, first) = stop();
-        let (b, second) = stop();
-        let forward = horizontal(vec![first.clone(), second.clone()]);
-        let backward = horizontal(vec![second, first]);
-        let root = super::super::view::Root::document();
-        let other = super::super::view::Root::document();
-        let views = resolve_views(vec![
-            ViewNavigation {
-                root: Some(root.clone()),
-                navigation: forward.clone(),
-            },
-            ViewNavigation {
-                root: Some(other),
-                navigation: backward,
-            },
-            ViewNavigation {
-                root: Some(root),
-                navigation: forward,
-            },
-        ]);
-        assert_eq!(views.len(), 2);
-        assert!(views.iter().all(|v| v.navigation.issues().is_empty()));
-        assert_eq!(
-            views[0]
-                .navigation
-                .destination(&a, Direction::Right)
-                .unwrap()
-                .path
-                .as_ref(),
-            &b
-        );
+    fn callbacks_forward_past_empty_children_and_nested_boundaries() {
+        let answers = Rc::new(RefCell::new(vec![]));
+        let mut outer = Sequence::new(Neighbors::root(), &[Direction::Right]);
+        emit(&mut outer, |_| Entries::one("before"));
+        emit(&mut outer, |neighbors| {
+            let mut inner = Sequence::new(neighbors, &[Direction::Right]);
+            emit(&mut inner, |neighbors| {
+                for direction in DIRECTIONS {
+                    let answers = answers.clone();
+                    neighbors.request(
+                        direction,
+                        Box::new(move |target| answers.borrow_mut().push((direction, target))),
+                    );
+                }
+                Entries::one("selected")
+            });
+            emit(&mut inner, |_| Entries::empty());
+            inner.finish()
+        });
         assert!(
-            views[1]
-                .navigation
-                .destination(&a, Direction::Right)
-                .is_none()
+            answers
+                .borrow()
+                .contains(&(Direction::Left, Some("before")))
         );
+        assert!(!answers.borrow().iter().any(|(d, _)| *d == Direction::Right));
+        emit(&mut outer, |_| Entries::empty());
+        emit(&mut outer, |_| Entries::one("after"));
+        outer.finish();
+        assert_eq!(answers.borrow().len(), 4);
+        assert!(
+            answers
+                .borrow()
+                .contains(&(Direction::Right, Some("after")))
+        );
+        assert!(answers.borrow().contains(&(Direction::Up, None)));
+        assert!(answers.borrow().contains(&(Direction::Down, None)));
+        assert_eq!(Rc::strong_count(&answers), 1);
+    }
+
+    fn target_value(id: usize, path: Rc<[Step]>) -> Target<Vec<usize>> {
+        Target {
+            path,
+            select: Rc::new(move |world, _| {
+                world.push(id);
+                true
+            }),
+        }
+    }
+
+    #[test]
+    fn reading_order_uses_each_neighbors_directional_entry() {
+        let answers = Rc::new(RefCell::new(vec![]));
+        let mut sequence = Sequence::new(Neighbors::root(), &[Direction::Right, Direction::Down]);
+        emit(&mut sequence, |neighbors| {
+            for direction in [Direction::Right, Direction::Down] {
+                let answers = answers.clone();
+                neighbors.request(
+                    direction,
+                    Box::new(move |target| {
+                        answers.borrow_mut().push((direction, target));
+                    }),
+                );
+            }
+            Entries::one("selected")
+        });
+        emit(&mut sequence, |_| Entries::empty());
+        emit(&mut sequence, |_| {
+            Entries([
+                Some("last leaf"),
+                Some("first leaf"),
+                Some("whole"),
+                Some("whole"),
+            ])
+        });
+        sequence.finish();
         assert_eq!(
-            views[1]
-                .navigation
-                .destination(&b, Direction::Right)
-                .unwrap()
-                .path
-                .as_ref(),
-            &a
+            *answers.borrow(),
+            [
+                (Direction::Right, Some("first leaf")),
+                (Direction::Down, Some("whole")),
+            ]
         );
+        assert_eq!(Rc::strong_count(&answers), 1);
+    }
+
+    #[test]
+    fn root_and_inactive_navigation_add_no_handlers() {
+        for selected in [false, true] {
+            let mut construction = Construction::<Vec<usize>, ()>::default();
+            construction.target(target_value(0, Rc::from([])), selected);
+            assert!(construction.finish().is_none());
+        }
+    }
+
+    #[test]
+    fn views_with_identical_paths_keep_independent_neighbors() {
+        let paths: [Rc<[Step]>; 2] =
+            std::array::from_fn(|_| Rc::from([Step::Key(gid::new_cell_id())]));
+        let mut pass = HoverPass::<Vec<usize>, ()>::new(&Default::default());
+        for view in 0..2 {
+            pass.in_view(super::super::view::Root::document(), |pass| {
+                compose(pass, &[Direction::Right], None, false, |pass| {
+                    for (index, path) in paths.iter().enumerate() {
+                        pass.visit(|output| {
+                            output.navigation_target(
+                                target_value(view * 10 + index, path.clone()),
+                                view == 0 && index == 0,
+                            )
+                        });
+                    }
+                });
+            });
+        }
+        let frame = pass.finish().bind(Default::default());
+        let mut visits = vec![];
+        assert!(
+            frame
+                .handler
+                .unwrap()
+                .dispatch(
+                    &mut visits,
+                    Event::Navigate(Direction::Right),
+                    &mut Default::default()
+                )
+                .handled()
+        );
+        assert_eq!(visits, [1]);
     }
 }

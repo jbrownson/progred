@@ -1,0 +1,38 @@
+{
+  "binders": {
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "outline": e6c0b2058b8468428d64576d953e2d62,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "parameters": 01d1c01271051f0d40914867a78293f0,
+    "lists": d8c06e7254dfddbb3a1279fd8abe4892,
+    "empty": 6b9f1e228c51ae6574790e7b4532dec6,
+    "shared": caa2e5392f930453fceedb62be407b61,
+    "results": 478c3d113f921a8e6a5963e9a2664cca,
+    "first": a38e3e15267eb4d82838326cf2632fcb,
+    "second": 05ab564f1a67d0c4f1507ae065abc8b1,
+    "bare": 6e56efa761e87850807c4a5a89aab7ac,
+  },
+  "cells": {
+    parameters: {name: "Text and numbers"},
+    lists: {name: "Nested lists"},
+    empty: {name: "Empty locations"},
+    shared: {name: "Shared occurrences"},
+    results: {name: "Read-only results"},
+    first: {name: "first", f64: 0x0000000000804640},
+    second: {name: "second", f64: 0x000000000000c03f},
+  },
+  "root": {
+    outline: [parameters, lists, empty, shared, results, lists],
+    parameters: [first, second, "Short text", "A longer editable text value"],
+    lists: [
+      ["A", "B", "C"],
+      ["D"],
+      ["E", ["F", "G"], "H"],
+      ["Resize the window to change this list's layout", "another long item", "last item"],
+    ],
+    empty: [[], {}, "", bare],
+    shared: [first, first, second],
+    results: {evaluate: ["Computed text", ["Nested", "result"]]},
+  },
+}

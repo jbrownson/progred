@@ -133,25 +133,41 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 `HasHandler`. The editor adds view ownership separately. Ordinary probes run in
 painting order; floating placements run afterward, outside ancestor clips.
 
-The [navigation combinators](../progred/src/display/widget/navigation.rs) compose
-frame-local descriptions: occurrence stops, directional link declarations, and
-explicit entry/exit boundaries. Parents connect those boundaries, not arbitrary
-stops without outgoing links. After placement, each view's declarations resolve
-into a graph; conflicting routes are reported and omitted, never overwritten by
-construction order. Stops
-carry selection scope and a bounded entry policy, never an arbitrary navigation
-action. The root follows a link only after raw key handlers decline the event,
-then selects and reveals its destination. Landmarks separately supply geometry
-and direct selection behavior for pointer/source selection and Select All.
+The [navigation combinators](../progred/src/display/widget/navigation.rs) connect
+neighbors during settled placement. The caller-owned construction capability
+supplies directional neighbor providers and collects each subtree's entry
+targets. A sequence answers backward requests immediately, retains forward
+receivers until the next entry is placed, and forwards unanswered boundary
+requests to its parent. The root answers no neighbor. Only the selected
+occurrence requests outgoing navigation.
 
-Plain row/column preparation and occurrence bookkeeping add no routing.
-Projections explicitly wrap their layout with `navigation::scope` and choose a
-data combinator such as `horizontal` or `vertical`; the list, record, and named
-number helpers do this. Leaf controls contribute stops. An explicit `nav_group`
-combinator supplies a whole-value entry stop before its contents. These wrappers use the generic
-`widget::around` placement boundary, not a navigation opcode in layout. Only
-placed alternatives contribute; view attribution remains a separate wrapper.
-The generic measured/Puri layers remain unaware of these editor policies.
+Each answer contributes an ordinary `Event::Navigate(direction)` handler.
+Construction providers and entry summaries are dropped before the frame is
+installed; no navigation graph or separate destination table survives. After
+raw key and editing handlers decline an arrow (with or without modifiers), the shell dispatches
+that semantic event through the same handler mechanism. The installed handler
+selects the already-determined occurrence; the shell then reveals it.
+Landmarks separately supply geometry and direct selection behavior for
+pointer/source selection and Select All.
+
+Plain rows, columns, and occurrence bookkeeping add no routing. Projections
+explicitly decorate layouts with `navigation::horizontal` or
+`navigation::vertical`; lists, records, and named numbers use these helpers.
+Leaf controls contribute targets with ordinary selection behavior. An explicit
+`nav_group` supplies whole-value entry before its contents; `nav_group_with_entry`
+chooses which directions enter and whose opposites return to the whole. Cells
+and bracketed lists use `nav_container`: stop at the
+whole value on arrival, enter its first/last child with Right/Left, and pass
+directly out of the contents at either edge. Entry exposure and boundary exit
+are independent choices in the group combinator. Vertical lists use `reading_order` to offer
+horizontal continuation between items as well as vertical sibling movement.
+Groups reuse an inner
+target when it represents the same occurrence. These wrappers use the generic
+`widget::around` placement boundary, not layout opcodes. Only chosen alternatives
+contribute; each view has independent construction. There is no geometric
+neighbor search or history. Targets receive arrival direction; text widgets
+interpret horizontal arrivals as beginning/end caret placement, while ordinary
+selection retains their default.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,
@@ -225,7 +241,7 @@ Widgets test their own geometry; Puri does not infer acceptance from state chang
 
 Progred activation, picking, and raw pointer-down handlers use that same
 front-to-back chain. The dispatch context supplies the settled hover target,
-its owning view, and navigation data explicitly for every event, including
+its owning view, and reveal geometry explicitly for every event, including
 motion, scroll, release, and IME. View wrappers hide another view's hover without
 blocking input needed by active gestures. Event acceptance controls
 propagation; it does not tell the shell to infer a domain action or gesture.

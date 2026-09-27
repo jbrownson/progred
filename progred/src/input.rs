@@ -45,7 +45,17 @@ fn keyboard(
         || editor.paste_key(event)
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
-        || navigate::keyboard(editor, &dispatch.navigation, geometry, event)
+        || navigate::keyboard(editor, geometry, event)
+        || navigate::direction(event).is_some_and(|direction| {
+            let handled = dispatch
+                .handler
+                .dispatch(editor, Event::Navigate(direction), &mut input)
+                .handled();
+            if handled {
+                geometry.reveal_selection(editor);
+            }
+            handled
+        })
 }
 
 fn queue_batch<T>(
@@ -513,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn down_selects_an_expanded_cell_before_its_name() {
+    fn selected_cell_enters_with_right_and_passes_through_on_exit() {
         use crate::libraries::name;
         use gid::{Step, Value};
         use ui_events::keyboard::NamedKey;
@@ -545,22 +555,37 @@ mod tests {
             state: KeyState::Down,
             ..Default::default()
         };
-        for path in [vec![], cell_path.clone(), name_path] {
-            assert!(runner.keyboard_event(&press(NamedKey::ArrowDown), 1.0, VIEWPORT));
-            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-        }
-        // Go back through the name's text, then back to the cell's own stop.
-        for _ in 0.."tilt".len() + 1 {
-            assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
-        }
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, cell_path.clone()));
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(!runner.keyboard_event(&press(NamedKey::ArrowDown), 1.0, VIEWPORT));
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
         assert_eq!(
             runner.editor.model.selection.as_ref().unwrap().path(),
-            cell_path
+            name_path
+        );
+        assert_eq!(
+            runner
+                .editor
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .edit()
+                .unwrap()
+                .selection_offsets(),
+            (0, 0)
+        );
+        // Both containers pass through on exit; there is no previous item.
+        assert!(!runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            name_path
         );
     }
 
     #[test]
-    fn arrows_edit_text_before_routing_and_enter_the_destination_at_the_near_edge() {
+    fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
         use ui_events::keyboard::NamedKey;
         let list = gid::Value::list([text::value("ab"), text::value("cd")]);
         let paths: Vec<_> = list
@@ -595,12 +620,62 @@ mod tests {
         assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
         let selected = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), paths[1]);
-        assert_eq!(selected.initial_line("cd").selection_offsets(), (0, 0));
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (0, 0));
         assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
         let selected = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), paths[0]);
-        // Leftward arrival uses the destination's ordinary end-of-text default.
-        assert!(selected.edit().is_none());
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (2, 2));
+    }
+
+    #[test]
+    fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
+        use puri::keyboard::CommandModifier;
+        use ui_events::keyboard::NamedKey;
+        for (command, modifiers) in [
+            (CommandModifier::Meta, Modifiers::ALT),
+            (CommandModifier::Meta, Modifiers::META),
+            (CommandModifier::Control, Modifiers::CONTROL),
+        ] {
+            let list = gid::Value::list([text::value("ab"), text::value("cd")]);
+            let paths: Vec<_> = list
+                .as_list()
+                .unwrap()
+                .keys()
+                .map(|p| vec![gid::Step::Element(p.clone())])
+                .collect();
+            let mut editor = crate::test_editor(Document {
+                root: Some(list),
+                cells: Cells::new(),
+            });
+            editor.command_modifier = command;
+            let root = editor.model.workspace.document_root().clone();
+            editor.model.selection = Some(selection::Selection::edge(&root, paths[1].clone()));
+            let mut runner = EditorRunner::new(editor);
+            runner.refresh_frame(1.0, VIEWPORT);
+            for (key, index, offset) in [
+                (NamedKey::ArrowLeft, 1, 0), // Word/line movement takes precedence.
+                (NamedKey::ArrowLeft, 0, 2), // At the boundary, navigate instead.
+                (NamedKey::ArrowRight, 1, 0),
+                (NamedKey::ArrowRight, 1, 2),
+            ] {
+                assert!(runner.keyboard_event(
+                    &KeyboardEvent {
+                        key: Key::Named(key),
+                        state: KeyState::Down,
+                        modifiers,
+                        ..Default::default()
+                    },
+                    1.0,
+                    VIEWPORT
+                ));
+                let selected = runner.editor.model.selection.as_ref().unwrap();
+                assert_eq!(selected.path(), paths[index]);
+                assert_eq!(
+                    selected.edit().unwrap().selection_offsets(),
+                    (offset, offset)
+                );
+            }
+        }
     }
 
     #[test]
@@ -638,11 +713,11 @@ mod tests {
         assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
         let selected = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), paths[1]);
-        assert_eq!(selected.initial_line("45").selection_offsets(), (0, 0));
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (0, 0));
         assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
         let selected = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), name_path);
-        assert!(selected.edit().is_none());
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (4, 4));
 
         for _ in 0.."tilt".len() {
             assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
@@ -667,7 +742,7 @@ mod tests {
         assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
         let selected = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), paths[1]);
-        assert!(selected.edit().is_none());
+        assert_eq!(selected.edit().unwrap().selection_offsets(), (2, 2));
     }
 
     #[test]

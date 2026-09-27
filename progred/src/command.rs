@@ -81,10 +81,11 @@ pub enum Example {
     Gyroid,
     Cube,
     Toolpaths,
+    Navigation,
 }
 
 impl Example {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Sample,
         Self::Grap,
         Self::IopTree,
@@ -94,6 +95,7 @@ impl Example {
         Self::Gyroid,
         Self::Cube,
         Self::Toolpaths,
+        Self::Navigation,
     ];
 
     pub fn source(self) -> &'static str {
@@ -107,6 +109,7 @@ impl Example {
             Self::Gyroid => include_str!("../../examples/fidget-gyroid.gid"),
             Self::Cube => include_str!("../../examples/fidget-cube.gid"),
             Self::Toolpaths => include_str!("../../examples/toolpaths.gid"),
+            Self::Navigation => include_str!("../../examples/navigation.gid"),
         }
     }
 }
@@ -157,6 +160,7 @@ impl Shortcut {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
+    Digit0,
     Digit1,
     Digit2,
     Digit3,
@@ -183,6 +187,7 @@ pub enum ShortcutKey {
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Digit0 => "0",
             Self::Digit1 => "1",
             Self::Digit2 => "2",
             Self::Digit3 => "3",
@@ -279,6 +284,10 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::Example(Example::Toolpaths)) => {
             item("Toolpaths", Some(Shortcut::plain(ShortcutKey::Digit9)))
         }
+        Command::App(AppCommand::Example(Example::Navigation)) => item(
+            "Keyboard Navigation",
+            Some(Shortcut::plain(ShortcutKey::Digit0)),
+        ),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]

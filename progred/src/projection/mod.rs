@@ -522,7 +522,7 @@ impl Cx<'_> {
     /// pending deliberately does not mark its parent — nothing is
     /// selected there, something is being authored inside; the
     /// pending row carries the highlight itself.
-    fn selected(&self, path: &[Step]) -> bool {
+    pub(crate) fn selected(&self, path: &[Step]) -> bool {
         self.selection.is_some_and(|current| {
             current.path() == path && current.stage(&self.sources) != Stage::Label
         })

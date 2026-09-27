@@ -149,35 +149,41 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     let path = [Step::Key(panes)];
     assert!(hidden(&world, &path));
     let f = frame(&mut world);
-    let navigation = crate::display::widget::navigation::Navigation::join(
-        f.navigation.iter().map(|n| n.navigation.clone()).collect(),
-    )
-    .resolve();
-    assert!(navigation.issues().is_empty());
-    let entry = navigation
-        .destination(&[], crate::navigate::Direction::Down)
-        .expect("the root enters its outline");
-    assert_eq!(entry.path.as_ref(), [Step::Key(OUTLINE)]);
-    let heading = navigation
-        .destination(&[Step::Key(OUTLINE)], crate::navigate::Direction::Down)
-        .unwrap();
-    assert_eq!(heading.path.as_ref(), first_heading);
-    assert_eq!(
-        navigation
-            .destination(&first_heading, crate::navigate::Direction::Up)
-            .unwrap()
-            .path
-            .as_ref(),
-        [Step::Key(OUTLINE)]
-    );
-    assert_eq!(
-        navigation
-            .destination(&[Step::Key(OUTLINE)], crate::navigate::Direction::Up)
-            .unwrap()
-            .path
-            .as_ref(),
-        []
-    );
+    for (from, direction, to) in [
+        (
+            vec![],
+            crate::navigate::Direction::Down,
+            vec![Step::Key(OUTLINE)],
+        ),
+        (
+            vec![Step::Key(OUTLINE)],
+            crate::navigate::Direction::Down,
+            first_heading.clone(),
+        ),
+        (
+            first_heading,
+            crate::navigate::Direction::Up,
+            vec![Step::Key(OUTLINE)],
+        ),
+        (
+            vec![Step::Key(OUTLINE)],
+            crate::navigate::Direction::Up,
+            vec![],
+        ),
+    ] {
+        world.model.selection = Some(make_selection(from));
+        let handlers = frame(&mut world).resolve_for_dispatch();
+        assert!(
+            handlers
+                .dispatch(
+                    &mut world,
+                    puri::handler::Event::Navigate(direction),
+                    &mut Default::default()
+                )
+                .handled()
+        );
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), to);
+    }
     stop(&f, &path);
     assert!(
         !f.descends

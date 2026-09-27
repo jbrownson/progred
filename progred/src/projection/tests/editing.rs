@@ -424,7 +424,7 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
 }
 
 #[test]
-fn rightward_entry_starts_at_the_left_while_other_entries_use_the_default() {
+fn directional_line_arrival_is_distinct_from_ordinary_selection() {
     let libraries = core_libraries();
     let doc = Document {
         root: Some(text::value("hello")),
@@ -447,19 +447,20 @@ fn rightward_entry_starts_at_the_left_while_other_entries_use_the_default() {
             .find(|target| target.path.is_empty())
             .unwrap();
         assert!((target.select)(&mut world, direction));
-        match direction {
-            Some(Direction::Right) => assert_eq!(
-                world
-                    .model
-                    .selection
-                    .as_ref()
-                    .unwrap()
-                    .edit()
-                    .unwrap()
-                    .selection_offsets(),
-                (0, 0)
-            ),
-            _ => assert!(world.model.selection.as_ref().unwrap().edit().is_none()),
+        let selected = world.model.selection.as_ref().unwrap();
+        if matches!(direction, Some(Direction::Left | Direction::Right)) {
+            let offset = if direction == Some(Direction::Right) {
+                0
+            } else {
+                5
+            };
+            assert_eq!(
+                selected.edit().unwrap().selection_offsets(),
+                (offset, offset)
+            );
+        } else {
+            assert!(selected.edit().is_none());
+            assert_eq!(selected.initial_line("hello").selection_offsets(), (5, 5));
         }
     }
 }

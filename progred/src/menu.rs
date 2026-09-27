@@ -728,6 +728,8 @@ mod tests {
             ("6", Example::Tanglecube),
             ("7", Example::Gyroid),
             ("8", Example::Cube),
+            ("9", Example::Toolpaths),
+            ("0", Example::Navigation),
         ] {
             assert_eq!(
                 shortcut(

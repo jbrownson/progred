@@ -65,7 +65,7 @@ pub fn point_update(
     ));
     let mut output = widget::HoverOutput::default();
     place(
-        &mut widget::HoverContext::new(Default::default(), &mut output),
+        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
     );
     let mut event = PointerButtonEvent {
@@ -112,6 +112,7 @@ pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::C
                 ..Default::default()
             },
             &mut output,
+            &mut Default::default(),
         ),
         placement,
     );
@@ -189,7 +190,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     });
     let mut output = widget::HoverOutput::default();
     place(
-        &mut widget::HoverContext::new(Default::default(), &mut output),
+        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
     let mut world = crate::test_editor(gid::Document {
@@ -226,7 +227,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
     });
     let mut output = widget::HoverOutput::default();
     place(
-        &mut widget::HoverContext::new(Default::default(), &mut output),
+        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
     let mut world = crate::test_editor(gid::Document {

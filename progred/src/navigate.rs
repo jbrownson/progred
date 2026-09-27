@@ -1,4 +1,4 @@
-//! Keyboard navigation over a frame's settled descends.
+//! Selection commands, arrow normalization, and revealing selected occurrences.
 
 use crate::selection::Selection;
 use crate::workspace::{Root, Target};
@@ -16,13 +16,7 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
         Key::Named(NamedKey::ArrowDown) => Some(Direction::Down),
         _ => None,
     }
-    .filter(|_| {
-        event.state.is_down()
-            && !(event.modifiers.ctrl()
-                || event.modifiers.meta()
-                || event.modifiers.alt()
-                || event.modifiers.shift())
-    })
+    .filter(|_| event.state.is_down())
 }
 
 pub use crate::display::widget::navigation::Landmark as Descend;
@@ -156,13 +150,10 @@ pub fn selection_after_delete<World>(
         })
 }
 
-/// The root translates only unclaimed keys. Routing is supplied by the chosen
-/// projection, not reconstructed from geometry or document ancestry.
+/// Handle Select All after focused controls decline the raw key. Arrow routing
+/// is supplied separately by the projection's ordinary navigation handlers.
 pub(crate) fn keyboard(
     editor: &mut crate::Editor,
-    navigation: &[crate::display::widget::navigation::ViewNavigation<
-        crate::display::widget::navigation::Graph,
-    >],
     geometry: Geometry<'_>,
     event: &KeyboardEvent,
 ) -> bool {
@@ -180,53 +171,31 @@ pub(crate) fn keyboard(
     ) {
         return geometry.arrive(editor, target, None);
     }
-    let Some(direction) = direction(event) else {
-        return false;
-    };
-    let Some(selection) = editor.model.selection.as_ref() else {
-        let root = root.clone();
-        return root_target(geometry.descends, Some(&root)).is_some_and(|target| {
-            target
-                .scope
-                .open(crate::editing::Access::new(editor))
-                .select(&root, &target.path);
-            true
-        });
-    };
-    let destination = navigation
-        .iter()
-        .filter(|route| route.root.as_ref() == Some(root))
-        .find_map(|route| route.navigation.destination(selection.path(), direction));
-    if let Some(destination) = destination {
-        arrive(editor, root.clone(), destination, direction);
-        geometry.reveal_selection(editor);
-        true
-    } else {
-        false
-    }
+    false
 }
 
-pub(crate) fn arrive(
-    editor: &mut crate::Editor,
-    root: Root,
-    stop: &crate::display::widget::navigation::Stop,
-    direction: Direction,
-) {
-    use crate::display::widget::navigation::Entry;
-    let mut edit = stop.scope.open(crate::editing::Access::new(editor));
-    if stop.entry == Entry::Line && direction == Direction::Right {
-        use crate::selection::payload::vocabulary::{ANCHOR, FOCUS};
-        edit.select_payload(
-            &root,
-            stop.path.to_vec(),
-            gid::Value::record([
-                (ANCHOR, crate::libraries::f64::value(0.0)),
-                (FOCUS, crate::libraries::f64::value(0.0)),
-            ]),
-        );
-    } else {
-        edit.select(&root, &stop.path);
-    }
+pub(crate) fn initial_navigation(
+    root: &Root,
+    descends: &[Descend<crate::Editor>],
+) -> Option<puri::handler::Handler<crate::Editor, crate::placed::DispatchContext<crate::Editor>>> {
+    let target = root_target(descends, Some(root))?;
+    let root = root.clone();
+    let path = target.path.clone();
+    let scope = target.scope.clone();
+    Some(puri::handler::Handler::from_function(
+        move |editor: &mut crate::Editor, event, _| {
+            if matches!(event, puri::handler::Event::Navigate(_))
+                && editor.model.selection.is_none()
+            {
+                scope
+                    .open(crate::editing::Access::new(editor))
+                    .select(&root, &path);
+                puri::handler::EventOutcome::accept()
+            } else {
+                puri::handler::EventOutcome::decline(event)
+            }
+        },
+    ))
 }
 
 pub fn select_all<'a, World>(

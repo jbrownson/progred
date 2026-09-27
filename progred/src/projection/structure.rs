@@ -83,7 +83,7 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
         .sources
         .resolve(cell)
         .map_or(Resolution::Document, |value| value.source);
-    crate::display::widget::navigation::nav_group(selectable_bracket(
+    crate::display::widget::navigation::nav_container(selectable_bracket(
         Delim::Paren,
         descend(Step::Follow(source), None, None),
     ))

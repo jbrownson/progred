@@ -2,7 +2,7 @@
 
 use crate::display::widget::HoverPass;
 
-use super::{Context, Direction, Select, extent, leaf};
+use super::{Context, Select, extent, leaf};
 use crate::display::{Env, Layout, TextFamily};
 use gid::Value;
 use measured::Measured;
@@ -107,33 +107,39 @@ pub fn view(
         }
     };
     let active = active.is_some();
+    let destination = super::navigation::destination(path.clone(), cx);
+    let selected = cx.selected(path.as_ref());
     if writable {
         let nav_root = root.clone();
         let nav_path = path.clone();
-        let description = line.clone();
         let nav_edits = edits.clone();
+        let nav_line = line.clone();
         let navigation: Select<crate::Editor> = Rc::new(move |world, direction| {
             let mut editor = nav_edits.open(crate::editing::Access::new(world));
             editor.select(&nav_root, &nav_path);
-            if direction == Some(Direction::Right) {
-                editor.edit_line(&nav_root, &nav_path, &description, &|edit| {
-                    edit.state.cursor_to_start();
+            if matches!(
+                direction,
+                Some(super::navigation::Direction::Left | super::navigation::Direction::Right)
+            ) {
+                editor.edit_line(&nav_root, &nav_path, &nav_line, &|edit| {
+                    match direction {
+                        Some(super::navigation::Direction::Right) => edit.state.cursor_to_start(),
+                        _ => edit.state.cursor_to_end(),
+                    }
                     true
                 });
             }
             true
         });
+        let destination = super::navigation::Target {
+            select: navigation.clone(),
+            ..destination
+        };
         let presentation = context.inputs.styles.line_presentation(&line);
         let scale = context.inputs.styles.scale as f32;
         let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
         crate::display::widget::before_place(content, move |placement: Placement, output| {
-            output.navigation(super::navigation::Navigation::stop(
-                super::navigation::Stop {
-                    path: path.clone(),
-                    entry: super::navigation::Entry::Line,
-                    scope: edits.clone(),
-                },
-            ));
+            output.navigation_target(destination, selected);
             output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
@@ -169,13 +175,7 @@ pub fn view(
         })
     } else {
         crate::display::widget::before_place(content, move |_, output| {
-            output.navigation(super::navigation::Navigation::stop(
-                super::navigation::Stop {
-                    path,
-                    entry: super::navigation::Entry::Value,
-                    scope: edits,
-                },
-            ));
+            output.navigation_target(destination, selected);
         })
     }
 }
