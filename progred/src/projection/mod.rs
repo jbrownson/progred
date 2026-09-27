@@ -818,8 +818,8 @@ fn bind_selection(
     })
 }
 
-fn ground(cx: &Cx, path: &[Step], value: Option<&grap::RuntimeValue>) -> Ground {
-    match cx.edits.source(path) {
+fn ground(cx: &Cx, source: Option<&[Step]>, value: Option<&grap::RuntimeValue>) -> Ground {
+    match source {
         None => Ground::Readonly,
         Some(source) => match value.and_then(grap::RuntimeValue::as_cell) {
             // A reference remains replaceable; the ground describes its definition.
@@ -943,7 +943,8 @@ fn prepare_value(
     value: Option<&grap::RuntimeValue>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-    let ground = ground(cx, path, value);
+    let source = cx.edits.source(path);
+    let ground = ground(cx, source.as_deref(), value);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {
         ground,
@@ -974,6 +975,7 @@ fn prepare_value(
         current_projection,
         &child_projection.partial,
         path,
+        source.as_deref(),
         value,
         fold_default,
     );
@@ -1001,8 +1003,8 @@ fn prepare_value(
                         ancestors.enclosing,
                     )
                 } else {
-                    let source = cx.edits.source(path)?;
-                    Secondary::from_path(&cx.sources, Rc::from(source.as_ref()), value.as_cell())
+                    let source = source.as_deref()?;
+                    Secondary::from_path(&cx.sources, Rc::from(source), value.as_cell())
                 };
                 let strong = cx.secondary.as_ref() == Some(&secondary);
                 Some((secondary, strong))
@@ -1068,12 +1070,14 @@ fn prepare_value(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn value_layout(
     cx: &Cx,
     projection: &Projection<crate::Editor>,
     current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
     default_projection: &crate::display::Partial<crate::Editor, Hovered>,
     path: &[Step],
+    source: Option<&[Step]>,
     value: Option<&grap::RuntimeValue>,
     fold_default: Option<bool>,
 ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
@@ -1103,7 +1107,7 @@ fn value_layout(
         default_projection: default_projection.clone(),
         value,
         scale_factor: cx.styles.scale,
-        writable: cx.edits.writable(&cx.sources, path),
+        writable: source.is_some_and(|source| crate::selection::writable_at(&cx.sources, source)),
         selection: selection.as_ref(),
         pending,
         state,

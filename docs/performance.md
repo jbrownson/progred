@@ -1,5 +1,10 @@
 # Frame performance checks
 
+The [native CAM scrolling comparison](native-scroll-profile-2026-09-26.md)
+records a modest source-frame regression since the pre-website checkpoint,
+the larger improvement from replacing the navigation graph, and a current
+full-editor CPU-frame measurement. It does not measure GPU presentation.
+
 The [multi-operation CAM rendering investigation](cam-render-profiling-2026-09-15.md)
 separates stock, tool, path, mesh and progressive-render costs, checks job reuse,
 and records expression-grouping experiments and a tested local CPU JIT fix.
