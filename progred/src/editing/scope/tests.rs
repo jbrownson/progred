@@ -61,6 +61,18 @@ fn conjects_compose_and_the_identity_scope_borrows_its_path() {
 }
 
 #[test]
+fn resolver_encapsulates_mapping_and_detached_boundaries_do_not_fall_back() {
+    let (prefix, document, outside) = (path(), path(), path());
+    let source = document.clone();
+    let custom = Scope::new(move |_| Some(Cow::Owned(source.clone())));
+    let detached = custom.detached(prefix.clone());
+    assert!(detached.source(&prefix).is_none());
+    assert_eq!(detached.source(&outside).unwrap().as_ref(), document);
+    let restored = detached.jump(prefix.clone(), outside.clone());
+    assert_eq!(restored.source(&prefix).unwrap().as_ref(), outside);
+}
+
+#[test]
 fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence() {
     let (mut editor, root, source, first, a) = fixture(text::value("before"));
     let second = path();

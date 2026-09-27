@@ -5,18 +5,27 @@ use super::*;
 use std::borrow::Cow;
 use std::rc::Rc;
 
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Scope(Option<Rc<Route>>);
+type Resolver = dyn for<'a> Fn(&'a [Step]) -> Option<Cow<'a, [Step]>>;
 
-#[derive(Debug)]
-struct Route {
-    parent: Scope,
-    occurrence: Path,
-    document: Path,
-    conject: crate::display::Conject,
+#[derive(Clone, Default)]
+pub(crate) struct Scope(Option<Rc<Resolver>>);
+
+impl std::fmt::Debug for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_none() {
+            "Scope(identity)"
+        } else {
+            "Scope(..)"
+        })
+    }
 }
 
 impl Scope {
+    pub(crate) fn new(
+        resolve: impl for<'a> Fn(&'a [Step]) -> Option<Cow<'a, [Step]>> + 'static,
+    ) -> Self {
+        Self(Some(Rc::new(resolve)))
+    }
     pub(crate) fn is_identity(&self) -> bool {
         self.0.is_none()
     }
@@ -37,12 +46,11 @@ impl Scope {
         document: Path,
         conject: crate::display::Conject,
     ) -> Self {
-        Self(Some(Rc::new(Route {
-            parent: self.clone(),
-            occurrence,
-            document,
-            conject,
-        })))
+        let parent = self.clone();
+        Self::new(move |path| match path.strip_prefix(occurrence.as_slice()) {
+            Some(rest) => conject.apply(rest, &document).map(Cow::Owned),
+            None => parent.source(path),
+        })
     }
 
     pub(crate) fn detached(&self, occurrence: Path) -> Self {
@@ -50,12 +58,9 @@ impl Scope {
     }
 
     pub(crate) fn source<'p>(&self, path: &'p [Step]) -> Option<Cow<'p, [Step]>> {
-        let Some(route) = &self.0 else {
-            return Some(Cow::Borrowed(path));
-        };
-        match path.strip_prefix(route.occurrence.as_slice()) {
-            Some(rest) => route.conject.apply(rest, &route.document).map(Cow::Owned),
-            None => route.parent.source(path),
+        match &self.0 {
+            Some(resolve) => resolve(path),
+            None => Some(Cow::Borrowed(path)),
         }
     }
 
