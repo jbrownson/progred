@@ -205,6 +205,8 @@ impl<'a> Sources<'a> {
     /// ordinary record and list structure. Writes gate separately on
     /// the cell owning the path's last Follow.
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'a Value> {
+        #[cfg(all(test, feature = "layout-profile"))]
+        let _profile = crate::display::profile::enter(crate::display::profile::Kind::SourceLookup);
         path.iter()
             .try_fold(self.root()?, |value, step| match step {
                 Step::Follow(resolution) => self.value(value.as_cell()?, resolution),

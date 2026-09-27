@@ -58,6 +58,8 @@ impl Scope {
     }
 
     pub(crate) fn source<'p>(&self, path: &'p [Step]) -> Option<Cow<'p, [Step]>> {
+        #[cfg(all(test, feature = "layout-profile"))]
+        let _profile = crate::display::profile::enter(crate::display::profile::Kind::Conject);
         match &self.0 {
             Some(resolve) => resolve(path),
             None => Some(Cow::Borrowed(path)),

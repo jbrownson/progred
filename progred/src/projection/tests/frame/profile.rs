@@ -265,6 +265,16 @@ fn cam_profile_source() -> String {
 #[test]
 #[ignore = "CAM source pane, excluding the 3D viewport"]
 fn cam_source_profile_loop() {
+    cam_source_profile(false);
+}
+
+#[test]
+#[ignore = "CAM source scrolling, excluding the 3D viewport and GPU presentation"]
+fn cam_source_scroll_profile_loop() {
+    cam_source_profile(true);
+}
+
+fn cam_source_profile(scrolling: bool) {
     let editor = crate::test_editor(fixture(&cam_profile_source()));
     let doc = &editor.model.doc;
     let (view, mut context) = ProfileView {
@@ -274,14 +284,52 @@ fn cam_source_profile_loop() {
     }
     .prepare(doc);
     profile(
-        "CAM source, 600x900 @2",
-        |_| {
-            context
-                .frame(view.frame(doc, &editor.model.workspace.document.annotations))
-                .0
+        if scrolling {
+            "CAM source scrolling, 600x900 @2"
+        } else {
+            "CAM source, 600x900 @2"
+        },
+        |index| {
+            let mut frame = view.frame(doc, &editor.model.workspace.document.annotations);
+            if scrolling {
+                // Sweep a fixed 1200-point span and back, with a fixed viewport.
+                let step = index % 240;
+                let y = if step <= 120 { step } else { 240 - step };
+                frame.origin.y -= y as f64 * 10.0 * view.scale;
+            }
+            context.frame(frame).0
         },
         |bench| assert!(!bench.list.0.is_empty()),
     );
+}
+
+#[test]
+#[ignore = "Full native CAM frame while scrolling source; records GPU commands without presenting"]
+fn cam_editor_scroll_profile_loop() {
+    let mut runner = crate::EditorRunner::new(crate::test_editor(fixture(&cam_profile_source())));
+    let size = kurbo::Size::new(1500.0, 900.0);
+    let scale = 2.0;
+    let mut samples = Vec::new();
+    for index in 0..iterations() + 5 {
+        let start = Instant::now();
+        let step = index % 240;
+        let y = if step <= 120 { step } else { 240 - step };
+        runner.editor.model.workspace.document.scroll.y = y as f64 * 10.0;
+        runner.refresh_frame(scale, size);
+        let mut output = DrawList::default();
+        puri::frame::render(runner.prepare_paint(scale, size).renders, &mut output);
+        std::hint::black_box(&output);
+        drop(output);
+        runner.frame_presented();
+        let elapsed = start.elapsed();
+        if index == 0 {
+            eprintln!("CAM full editor, 1500x900 @2, first frame {elapsed:.2?}");
+        }
+        if index >= 5 {
+            samples.push(elapsed);
+        }
+    }
+    distribution("CAM full editor source scrolling", samples.into_iter());
 }
 
 fn orbit(path: &[Step], frame: usize) -> Annotations {

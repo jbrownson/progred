@@ -55,6 +55,28 @@ fn color_picker_form_profile() {
     profile_forms("RGBA picker", color_picker_frame());
 }
 
+#[test]
+#[ignore = "CAM source allocation breakdown; instrumented, not a frame-time benchmark"]
+fn cam_source_scroll_form_profile() {
+    let doc = fixture(&cam_profile_source());
+    let (view, mut context) = ProfileView {
+        size: kurbo::Size::new(600.0, 900.0),
+        scale: 2.0,
+        root: None,
+    }
+    .prepare(&doc);
+    let annotations = Annotations::default();
+    let mut index = 0;
+    profile_forms("CAM source scrolling", || {
+        let mut frame = view.frame(&doc, &annotations);
+        let step = index % 240;
+        let y = if step <= 120 { step } else { 240 - step };
+        frame.origin.y -= y as f64 * 10.0 * view.scale;
+        index += 1;
+        context.frame(frame).0
+    });
+}
+
 fn profile_forms(name: &str, mut frame: impl FnMut() -> Bench) {
     for _ in 0..5 {
         drop(frame());

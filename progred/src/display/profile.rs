@@ -26,9 +26,12 @@ pub enum Kind {
     Hover,
     Paint,
     Disposal,
+    SourceLookup,
+    Conject,
+    Navigation,
 }
 
-pub const KINDS: [Kind; 19] = [
+pub const KINDS: [Kind; 22] = [
     Kind::Other,
     Kind::Projection,
     Kind::LineEdit,
@@ -48,6 +51,9 @@ pub const KINDS: [Kind; 19] = [
     Kind::Hover,
     Kind::Paint,
     Kind::Disposal,
+    Kind::SourceLookup,
+    Kind::Conject,
+    Kind::Navigation,
 ];
 
 #[derive(Clone, Copy, Default)]

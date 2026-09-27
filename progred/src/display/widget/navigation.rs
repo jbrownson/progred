@@ -105,6 +105,8 @@ impl<T: Clone + 'static> Sequence<T> {
         }
     }
     fn begin_child(&self) -> (Neighbors<T>, Pending<T>) {
+        #[cfg(all(test, feature = "layout-profile"))]
+        let _profile = crate::display::profile::enter(crate::display::profile::Kind::Navigation);
         let mut neighbors = self.outer.clone();
         let pending: Pending<T> = Rc::new(RefCell::new(std::array::from_fn(|_| vec![])));
         for &forward in self.forward {
@@ -119,6 +121,8 @@ impl<T: Clone + 'static> Sequence<T> {
         (neighbors, pending)
     }
     fn end_child(&mut self, entries: Entries<T>, own_pending: Pending<T>) {
+        #[cfg(all(test, feature = "layout-profile"))]
+        let _profile = crate::display::profile::enter(crate::display::profile::Kind::Navigation);
         for &forward in self.forward {
             if let Some(next) = entries.get(forward) {
                 for receive in self.pending[forward as usize].drain(..) {
