@@ -1,127 +1,195 @@
 //! Fold the chosen layout traversal into line boundaries and local neighbors.
 use super::{DIRECTIONS, DispatchContext, Event, EventOutcome, Handler, Target};
-use gid::Step;
 use measured::{Composition, RowAlignment};
-use std::{collections::HashMap, rc::Rc};
 
 struct Stop<C> {
     target: Target<C>,
     selected: bool,
 }
 
-#[derive(Default)]
-struct Neighbors {
-    left: Option<usize>,
-    right: Option<usize>,
+struct Neighbors<C> {
+    left: Option<Target<C>>,
+    right: Option<Target<C>>,
 }
 
 /// Concatenation needs only endpoints and the neighbors of a selected stop.
-/// Everything in between can be forgotten immediately.
-#[derive(Default)]
-struct Line {
-    first: Option<usize>,
-    last: Option<usize>,
-    selected: Option<Neighbors>,
-    /// A leaf or single-line value, rather than only entrances to a block.
-    has_content: bool,
+/// Everything in between is dropped as soon as it is passed.
+struct Line<C> {
+    first: Option<Target<C>>,
+    last: Option<Target<C>>,
+    selected: Option<Neighbors<C>>,
 }
 
-impl Line {
-    fn stop(stop: usize, selected: bool) -> Self {
+impl<C> Default for Line<C> {
+    fn default() -> Self {
         Self {
-            first: Some(stop),
-            last: Some(stop),
-            selected: selected.then(Neighbors::default),
-            has_content: true,
+            first: None,
+            last: None,
+            selected: None,
+        }
+    }
+}
+
+impl<C> Line<C> {
+    fn stop(stop: Stop<C>) -> Self {
+        Self {
+            first: Some(stop.target.clone()),
+            selected: stop.selected.then_some(Neighbors {
+                left: None,
+                right: None,
+            }),
+            last: Some(stop.target),
         }
     }
 
     fn append(&mut self, next: Self) {
-        if let Some(selected) = &mut self.selected {
-            selected.right = selected.right.or(next.first);
-        } else if let Some(mut selected) = next.selected {
-            selected.left = selected.left.or(self.last);
-            self.selected = Some(selected);
+        match (&mut self.selected, next.selected) {
+            (Some(selected), _) => {
+                selected.right = selected.right.take().or_else(|| next.first.clone());
+            }
+            (None, Some(mut selected)) => {
+                selected.left = selected.left.or_else(|| self.last.clone());
+                self.selected = Some(selected);
+            }
+            (None, None) => {}
         }
-        self.first = self.first.or(next.first);
-        self.last = next.last.or(self.last);
-        self.has_content |= next.has_content;
+        self.first = self.first.take().or(next.first);
+        self.last = next.last.or(self.last.take());
     }
 }
 
-/// Content rows align using the actual column baseline. Each row keeps a small
-/// sequence of block-entry/content levels, separate from that content alignment.
-/// Consecutive enclosing stops share an entry level, rather than manufacturing
-/// a separate vertical step for every wrapper around the same block.
-/// These are summaries, not a copy of the chosen layout or a list of stops.
-#[derive(Default)]
-struct Lines {
-    baseline: usize,
-    rows: Vec<Vec<Line>>,
+/// One content row. `levels` exist once a multiline block begins on this row:
+/// its entry level, then the lines it draws. Stops before the first block
+/// join its entry line; stops after it stay on the line they are drawn on.
+struct Row<C> {
+    before: Line<C>,
+    levels: Vec<Line<C>>,
 }
 
-impl Lines {
-    fn stop(stop: usize, selected: bool) -> Self {
+impl<C> Default for Row<C> {
+    fn default() -> Self {
+        Self {
+            before: Line::default(),
+            levels: Vec::new(),
+        }
+    }
+}
+
+impl<C> Row<C> {
+    fn append(&mut self, next: Self) {
+        match self.levels.last_mut() {
+            None => {
+                self.before.append(next.before);
+                self.levels = next.levels;
+            }
+            Some(drawn) => {
+                drawn.append(next.before);
+                // Blocks side by side share their entry and drawn lines.
+                let skip = self.levels.len().saturating_sub(next.levels.len());
+                self.levels.resize_with(
+                    self.levels.len().max(skip + next.levels.len()),
+                    Line::default,
+                );
+                for (level, next) in self.levels.iter_mut().skip(skip).zip(next.levels) {
+                    level.append(next);
+                }
+            }
+        }
+    }
+
+    fn lines(self) -> impl Iterator<Item = Line<C>> {
+        let mut levels = self.levels.into_iter();
+        let mut first = self.before;
+        if let Some(entry) = levels.next() {
+            first.append(entry);
+        }
+        std::iter::once(first).chain(levels)
+    }
+}
+
+/// Content rows align using the actual column baseline; block entry levels
+/// stay inside each row. These are summaries, not a copy of the layout.
+struct Lines<C> {
+    baseline: usize,
+    rows: Vec<Row<C>>,
+}
+
+impl<C> Default for Lines<C> {
+    fn default() -> Self {
         Self {
             baseline: 0,
-            rows: vec![vec![Line::stop(stop, selected)]],
+            rows: Vec::new(),
+        }
+    }
+}
+
+impl<C> Lines<C> {
+    fn stop(stop: Stop<C>) -> Self {
+        Self {
+            baseline: 0,
+            rows: vec![Row {
+                before: Line::stop(stop),
+                levels: Vec::new(),
+            }],
         }
     }
 
     fn merge_at(&mut self, next: Self, offset: usize) {
-        if next.rows.is_empty() {
-            return;
-        }
-        self.rows
-            .resize_with(self.rows.len().max(offset + next.rows.len()), Vec::new);
-        for (row, levels) in next.rows.into_iter().enumerate() {
-            let target = &mut self.rows[offset + row];
-            target.resize_with(target.len().max(levels.len()), Line::default);
-            for (target, next) in target.iter_mut().zip(levels) {
-                target.append(next);
+        if !next.rows.is_empty() {
+            self.rows
+                .resize_with(self.rows.len().max(offset + next.rows.len()), Row::default);
+            for (row, next) in self.rows[offset..].iter_mut().zip(next.rows) {
+                row.append(next);
             }
         }
     }
 
-    fn enclosed(mut self, stop: usize, selected: bool) -> Self {
-        if self.rows.is_empty() {
-            return Self::stop(stop, selected);
-        }
-        let mut entry = Line::stop(stop, selected);
-        if self.rows.len() > 1 {
-            entry.has_content = false;
-            if self.rows[0].first().is_some_and(|line| !line.has_content) {
-                entry.append(std::mem::take(&mut self.rows[0][0]));
-                self.rows[0][0] = entry;
-            } else {
-                self.rows[0].insert(0, entry);
+    /// A whole-value stop precedes its contents. Multiline contents are a
+    /// block: its stop gets an entry line, shared with directly enclosed
+    /// blocks. Single-line contents stay on their line.
+    fn enclosed(mut self, stop: Stop<C>) -> Self {
+        let multiline = self.rows.len() > 1;
+        match self.rows.first_mut() {
+            None => Self::stop(stop),
+            Some(row) => {
+                let mut entry = Line::stop(stop);
+                if !multiline && row.levels.is_empty() {
+                    entry.append(std::mem::take(&mut row.before));
+                    row.before = entry;
+                } else if row.before.first.is_none() && !row.levels.is_empty() {
+                    entry.append(std::mem::take(&mut row.levels[0]));
+                    row.levels[0] = entry;
+                } else {
+                    let mut drawn = std::mem::take(&mut row.before);
+                    if !row.levels.is_empty() {
+                        drawn.append(row.levels.remove(0));
+                    }
+                    row.levels.splice(0..0, [entry, drawn]);
+                }
+                self
             }
-        } else {
-            entry.append(std::mem::take(&mut self.rows[0][0]));
-            self.rows[0][0] = entry;
         }
-        self
     }
 
-    fn destinations(self) -> Option<[Option<usize>; 4]> {
+    fn destinations(self) -> Option<[Option<Target<C>>; 4]> {
         let (mut previous_first, mut previous_last) = (None, None);
-        let mut result: Option<[Option<usize>; 4]> = None;
+        let mut result: Option<[Option<Target<C>>; 4]> = None;
         for line in self
             .rows
             .into_iter()
-            .flatten()
+            .flat_map(Row::lines)
             .filter(|line| line.first.is_some())
         {
             if let Some([_, right, _, down]) = &mut result {
-                *right = right.or(line.first);
+                *right = right.take().or_else(|| line.first.clone());
                 *down = line.first;
                 break;
             }
             if let Some(selected) = line.selected {
                 result = Some([
-                    selected.left.or(previous_last),
+                    selected.left.or(previous_last.take()),
                     selected.right,
-                    previous_first,
+                    previous_first.take(),
                     None,
                 ]);
             }
@@ -134,19 +202,19 @@ impl Lines {
 
 /// One open row/column. Children are folded as they finish, so a long row
 /// does not retain a summary for each of its already-visited children.
-struct Accumulator {
+struct Accumulator<C> {
     composition: Composition,
     child_index: usize,
-    lines: Lines,
+    lines: Lines<C>,
 }
 
-impl Default for Accumulator {
+impl<C> Default for Accumulator<C> {
     fn default() -> Self {
         Self::new(Composition::Row(RowAlignment::Baseline))
     }
 }
 
-impl Accumulator {
+impl<C> Accumulator<C> {
     fn new(composition: Composition) -> Self {
         Self {
             composition,
@@ -155,7 +223,7 @@ impl Accumulator {
         }
     }
 
-    fn push(&mut self, child: Lines) {
+    fn push(&mut self, child: Lines<C>) {
         if self.child_index == 0 {
             self.lines = child;
             if !matches!(
@@ -175,7 +243,7 @@ impl Accumulator {
                 if baseline > self.lines.baseline && !self.lines.rows.is_empty() {
                     let offset = baseline - self.lines.baseline;
                     let length = self.lines.rows.len();
-                    self.lines.rows.resize_with(length + offset, Vec::new);
+                    self.lines.rows.resize_with(length + offset, Row::default);
                     self.lines.rows.rotate_right(offset);
                 }
                 self.lines.baseline = baseline;
@@ -201,46 +269,39 @@ impl Accumulator {
     }
 }
 
-// Canonical targets let a later declaration refine arrival behavior without
-// creating a second navigation position at the same displayed path.
 pub(crate) struct Construction<C> {
-    stops: Vec<Stop<C>>,
-    occurrences: HashMap<Rc<[Step]>, usize>,
-    current: Accumulator,
-    parents: Vec<Accumulator>,
+    current: Accumulator<C>,
+    parents: Vec<Accumulator<C>>,
+    /// Open whole-value stops; `None` marks one that refined an outer stop.
+    containers: Vec<Option<Stop<C>>>,
 }
 
 impl<C> Default for Construction<C> {
     fn default() -> Self {
         Self {
-            stops: Vec::new(),
-            occurrences: HashMap::new(),
             current: Accumulator::default(),
             parents: Vec::new(),
+            containers: Vec::new(),
         }
     }
 }
 
 impl<C: 'static> Construction<C> {
-    fn register(&mut self, target: Target<C>, selected: bool) -> Option<usize> {
-        let stop = Stop { target, selected };
-        match self.occurrences.get(&stop.target.path) {
-            Some(&index) => {
-                self.stops[index] = stop;
+    /// A repeated declaration of the innermost open whole value's occurrence
+    /// refines its arrival behavior instead of adding a second stop.
+    fn refine(&mut self, stop: Stop<C>) -> Option<Stop<C>> {
+        match self.containers.iter_mut().rev().flatten().next() {
+            Some(open) if open.target.path == stop.target.path => {
+                *open = stop;
                 None
             }
-            None => {
-                let index = self.stops.len();
-                self.occurrences.insert(stop.target.path.clone(), index);
-                self.stops.push(stop);
-                Some(index)
-            }
+            _ => Some(stop),
         }
     }
 
     pub fn target(&mut self, target: Target<C>, selected: bool) {
-        if let Some(index) = self.register(target, selected) {
-            self.current.push(Lines::stop(index, selected));
+        if let Some(stop) = self.refine(Stop { target, selected }) {
+            self.current.push(Lines::stop(stop));
         }
     }
 
@@ -251,7 +312,7 @@ impl<C: 'static> Construction<C> {
         ));
     }
 
-    fn close(&mut self) -> Lines {
+    fn close(&mut self) -> Lines<C> {
         let parent = self
             .parents
             .pop()
@@ -264,27 +325,23 @@ impl<C: 'static> Construction<C> {
         self.current.push(lines);
     }
 
-    pub fn begin_container(&mut self, target: Target<C>, selected: bool) -> Option<usize> {
-        let stop = self.register(target, selected);
+    pub fn begin_container(&mut self, target: Target<C>, selected: bool) {
+        let stop = self.refine(Stop { target, selected });
+        self.containers.push(stop);
         self.begin(Composition::Row(RowAlignment::Baseline));
-        stop
     }
 
-    pub fn end_container(&mut self, stop: Option<usize>) {
+    pub fn end_container(&mut self) {
         let lines = self.close();
-        self.current.push(match stop {
-            Some(stop) => lines.enclosed(stop, self.stops[stop].selected),
+        self.current.push(match self.containers.pop().flatten() {
+            Some(stop) => lines.enclosed(stop),
             None => lines,
         });
     }
 
     pub fn finish<H: 'static>(self) -> Option<Handler<C, DispatchContext<C, H>>> {
-        debug_assert!(self.parents.is_empty());
-        let destinations = self
-            .current
-            .lines
-            .destinations()?
-            .map(|index| index.map(|index| self.stops[index].target.clone()));
+        debug_assert!(self.parents.is_empty() && self.containers.is_empty());
+        let destinations = self.current.lines.destinations()?;
         let mut handler = Handler::new();
         handler.on(move |world, event, _| match event {
             Event::Navigate(direction) => {

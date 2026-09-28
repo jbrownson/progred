@@ -75,9 +75,9 @@ pub fn nav_group(
             let selected = context.inputs.selected(context.path);
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
-                    let parent = pass.navigation.begin_container(target, selected);
+                    pass.navigation.begin_container(target, selected);
                     inner.place_into(pass);
-                    pass.navigation.end_container(parent);
+                    pass.navigation.end_container();
                 })
             })
         }),

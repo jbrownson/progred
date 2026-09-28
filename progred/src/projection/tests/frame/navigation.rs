@@ -1133,3 +1133,94 @@ fn navigation_empty_list_stops_once_in_either_direction() {
         );
     }
 }
+
+#[test]
+fn content_after_a_multiline_block_stays_on_its_content_line() {
+    use crate::libraries::presentation::vocabulary::OUTLINE;
+    let (doc, binders) =
+        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let fields = doc.root.as_ref().unwrap().as_record().unwrap();
+    let section = |name: &str| -> Path {
+        let (position, _) = fields
+            .get(&OUTLINE)
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .iter()
+            .find(|(_, value)| value.as_cell() == Some(binders[name]))
+            .unwrap();
+        vec![
+            Step::Key(OUTLINE),
+            Step::Element(position.clone()),
+            Step::Key(binders[name]),
+        ]
+    };
+    let child = |path: &Path, steps: &[Step]| -> Path { [path.as_slice(), steps].concat() };
+    let items = |case: &str| -> Vec<Path> {
+        let block = child(&section(case), &[Step::Key(binders["block"])]);
+        fields.get(&binders[case]).unwrap()
+            .as_record()
+            .unwrap()
+            .get(&binders["block"])
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .keys()
+            .map(|position| child(&block, &[Step::Element(position.clone())]))
+            .collect()
+    };
+    let viewport = kurbo::Size::new(900.0, 2400.0);
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
+    let mut check = |from: &Path, key: NamedKey, to: &Path| {
+        runner.editor.model.selection = Some(make_selection(from.clone()));
+        runner.refresh_frame(1.0, viewport);
+        assert!(runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(key.clone()),
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            viewport
+        ));
+        assert_eq!(
+            runner.editor.model.selection.as_ref().unwrap().path(),
+            to.as_slice(),
+            "{key:?} from {from:?}"
+        );
+    };
+
+    let body = section("after_label");
+    let list = child(&body, &[Step::Key(binders["block"])]);
+    let beside = child(&body, &[Step::Key(binders["beside"])]);
+    let [first, second, _] = items("after_label").try_into().unwrap();
+    check(&list, NamedKey::ArrowRight, &first);
+    check(&list, NamedKey::ArrowDown, &first);
+    check(&first, NamedKey::ArrowRight, &beside);
+    check(&beside, NamedKey::ArrowRight, &second);
+    check(&beside, NamedKey::ArrowDown, &second);
+
+    let body = section("after_value");
+    let list = child(&body, &[Step::Key(binders["block"])]);
+    let beside = child(&body, &[Step::Key(binders["beside"])]);
+    let beside_item = {
+        let value = fields.get(&binders["after_value"]).unwrap()
+            .as_record()
+            .unwrap()
+            .get(&binders["beside"])
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        child(&beside, &[Step::Element(value)])
+    };
+    let [first, second, _] = items("after_value").try_into().unwrap();
+    check(&list, NamedKey::ArrowRight, &first);
+    check(&first, NamedKey::ArrowRight, &beside);
+    check(&beside, NamedKey::ArrowRight, &beside_item);
+    check(&beside_item, NamedKey::ArrowRight, &second);
+    check(&beside_item, NamedKey::ArrowDown, &second);
+}

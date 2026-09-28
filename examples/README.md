@@ -35,15 +35,13 @@ Also try these layout corner cases:
   Up reaches “Middle left,” and Down reaches “Below that.” Navigation follows
   declared baseline children, not painted heights or pixel distances.
 - **Label after a block:** a vertical list with “Beside the first item” to its
-  right. Select the whole list (its bracket) and press Right, then keep
-  pressing Right. The intended order is list → first item → beside → second
-  item. If Right from the list jumps straight to “Beside the first item,”
-  skipping the items, the trailing label has been hoisted onto the list's
+  right. Select the whole list (its bracket) and keep pressing Right: list →
+  first item → “Beside the first item” → second item. Content after a block
+  stays on the line it is drawn on; only content before a block joins its
   entry line. Narrow the window if the list sits inline.
 - **Single-line value after a block:** the same list with a one-item list to
-  its right. From the first item, Right should reach the small list, then its
-  item, then the second item of the stacked list. Content after a block belongs
-  with the line it is drawn on, not with the block's entry step.
+  its right. From the first item, Right reaches the small list, then its item,
+  then the second item of the stacked list.
 
 See [layout navigation](../docs/navigation.md) for the current contract.
 
