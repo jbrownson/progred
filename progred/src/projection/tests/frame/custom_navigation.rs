@@ -215,6 +215,95 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
 }
 
 #[test]
+fn expression_list_labels_are_beside_the_whole_list_not_below_its_entry() {
+    use Direction::*;
+    for callable in [control::vocabulary::ALL, control::vocabulary::DO] {
+        let expressions = Value::list([
+            text::value("sky"),
+            text::value("ground"),
+            text::value("sun"),
+        ]);
+        let items = positions(&expressions);
+        let value = ::grap::call(
+            callable.into(),
+            [(control::vocabulary::EXPRESSIONS, expressions)],
+        );
+        let mut f = Fixture::new(value, Cells::new());
+        let label = f.child([Step::Key(FUNCTION)]);
+        let list = f.child([Step::Key(control::vocabulary::EXPRESSIONS)]);
+        let item = |index: usize| -> Path {
+            list.iter()
+                .cloned()
+                .chain([Step::Element(items[index].clone())])
+                .collect()
+        };
+        for (from, direction, to) in [
+            (f.whole.clone(), Down, label.clone()),
+            (label.clone(), Up, f.whole.clone()),
+            (label.clone(), Right, list.clone()),
+            (label.clone(), Down, item(0)),
+            (list.clone(), Left, label.clone()),
+            (list.clone(), Right, item(0)),
+            (list.clone(), Down, item(0)),
+            (item(0), Down, item(1)),
+            (item(1), Down, item(2)),
+            (item(2), Down, f.after.clone()),
+        ] {
+            f.check(100.0, &from, direction, &to);
+        }
+    }
+}
+
+#[test]
+fn cells_around_expression_lists_use_the_same_vertical_entrance_policy() {
+    use Direction::*;
+    for callable in [control::vocabulary::ALL, control::vocabulary::DO] {
+        let expressions = Value::list([
+            text::value("sky"),
+            text::value("ground"),
+            text::value("sun"),
+        ]);
+        let first = positions(&expressions)[0].clone();
+        let (outer, inner) = (gid::new_cell_id(), gid::new_cell_id());
+        let mut cells = Cells::new();
+        cells.set_value(outer, inner.into());
+        cells.set_value(
+            inner,
+            ::grap::call(
+                callable.into(),
+                [(control::vocabulary::EXPRESSIONS, expressions)],
+            ),
+        );
+        let mut f = Fixture::new(outer.into(), cells);
+        let inner = f.child([Step::Follow(gid::Resolution::Document)]);
+        let call = f.child(std::iter::repeat_n(
+            Step::Follow(gid::Resolution::Document),
+            2,
+        ));
+        let child = |step| -> Path { call.iter().cloned().chain([step]).collect() };
+        let label = child(Step::Key(FUNCTION));
+        let list = child(Step::Key(control::vocabulary::EXPRESSIONS));
+        let item: Path = list.iter().cloned().chain([Step::Element(first)]).collect();
+        for (from, direction, to) in [
+            (f.whole.clone(), Right, inner.clone()),
+            (inner.clone(), Right, call.clone()),
+            (call.clone(), Right, label.clone()),
+            (label.clone(), Right, list.clone()),
+            (list.clone(), Right, item.clone()),
+            (f.whole.clone(), Down, label.clone()),
+            (inner, Down, label.clone()),
+            (call, Down, label.clone()),
+            (label.clone(), Up, f.whole.clone()),
+            (label.clone(), Down, item.clone()),
+            (list, Down, item.clone()),
+            (item, Up, label),
+        ] {
+            f.check(100.0, &from, direction, &to);
+        }
+    }
+}
+
+#[test]
 fn call_function_and_arguments_are_one_form_in_both_presentations() {
     use Direction::*;
     for (width, forward, backward) in [(1500.0, Right, Left), (90.0, Down, Up)] {
@@ -271,7 +360,7 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
 }
 
 #[test]
-fn multiline_cell_adds_an_entry_line_before_its_wrapped_function() {
+fn multiline_cell_and_its_function_share_a_vertical_entrance() {
     use Direction::*;
     let cell = gid::new_cell_id();
     let mut cells = Cells::new();
@@ -290,10 +379,13 @@ fn multiline_cell_adds_an_entry_line_before_its_wrapped_function() {
     ]);
     for (from, direction, to) in [
         (f.whole.clone(), Right, body.clone()),
-        (f.whole.clone(), Down, body.clone()),
+        (f.whole.clone(), Down, name.clone()),
         (f.whole.clone(), Up, f.before.clone()),
         (body.clone(), Left, f.whole.clone()),
-        (body, Down, name),
+        (body.clone(), Up, f.before.clone()),
+        (body.clone(), Down, name.clone()),
+        (name.clone(), Left, body),
+        (name, Up, f.whole.clone()),
     ] {
         f.check(90.0, &from, direction, &to);
     }

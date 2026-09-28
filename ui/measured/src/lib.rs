@@ -19,6 +19,9 @@ use uig::Placement;
 
 pub mod choices;
 
+#[cfg(test)]
+mod structure_tests;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RowAlignment {
     Baseline,
@@ -27,6 +30,34 @@ pub enum RowAlignment {
         baseline: usize,
     },
     Center,
+}
+
+/// The composition being placed, after choosing layout alternatives. Gaps and
+/// geometry are intentionally absent: this describes structure, not distances.
+#[derive(Clone, Copy)]
+pub enum Composition {
+    Row(RowAlignment),
+    Column { baseline: usize },
+    Overlay,
+}
+
+/// Observe the structure that actually places, without recording another tree.
+///
+/// Each callback encloses exactly its composition/child's placement. An omitted
+/// subtree emits nothing inside its child boundary; a deferred subtree emits
+/// when it is eventually placed. Empty children still have boundaries, so a
+/// column's designated baseline retains its meaning.
+/// Consumers uninterested in structure use the default, transparent methods.
+/// Implementations must run the supplied continuation once: these hooks observe
+/// composition, rather than deciding whether its contents should place.
+pub trait ObserveLayout: Sized {
+    fn layout(&mut self, _composition: Composition, children: impl FnOnce(&mut Self)) {
+        children(self);
+    }
+
+    fn layout_child(&mut self, child: impl FnOnce(&mut Self)) {
+        child(self);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -122,56 +153,69 @@ pub fn leaf_into<Out>(
     }
 }
 
-pub fn row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn row<Out: ObserveLayout + 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     row_aligned(gap, children, RowAlignment::Baseline)
 }
 
-pub fn centered_row<Out: 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn centered_row<Out: ObserveLayout + 'static>(
+    gap: f64,
+    children: Vec<Measured<Out>>,
+) -> Measured<Out> {
     row_aligned(gap, children, RowAlignment::Center)
 }
 
-fn row_aligned<Out: 'static>(
+fn row_aligned<Out: ObserveLayout + 'static>(
     gap: f64,
     children: Vec<Measured<Out>>,
     alignment: RowAlignment,
 ) -> Measured<Out> {
     let extent = row_extent(gap, alignment, children.iter().map(|child| child.extent));
-    leaf_into(extent, move |placement, out| {
-        place_row(
-            extent,
-            placement,
-            gap,
-            alignment,
-            children,
-            |child| child.extent,
-            |child, placement| place_into(child, placement, out),
-        );
+    leaf_into(extent, move |placement, out: &mut Out| {
+        out.layout(Composition::Row(alignment), |out| {
+            place_row(
+                extent,
+                placement,
+                gap,
+                alignment,
+                children,
+                |child| child.extent,
+                |child, placement| out.layout_child(|out| place_into(child, placement, out)),
+            );
+        });
     })
 }
 
-pub fn col<Out: 'static>(baseline: usize, gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn col<Out: ObserveLayout + 'static>(
+    baseline: usize,
+    gap: f64,
+    children: Vec<Measured<Out>>,
+) -> Measured<Out> {
     let extent = col_extent(baseline, gap, children.iter().map(|child| child.extent));
-    leaf_into(extent, move |placement, out| {
-        place_col(
-            placement,
-            gap,
-            children,
-            |child| child.extent,
-            |child, placement| place_into(child, placement, out),
-        );
+    leaf_into(extent, move |placement, out: &mut Out| {
+        out.layout(Composition::Column { baseline }, |out| {
+            place_col(
+                placement,
+                gap,
+                children,
+                |child| child.extent,
+                |child, placement| out.layout_child(|out| place_into(child, placement, out)),
+            );
+        });
     })
 }
 
-pub fn layers<Out: 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
+pub fn layers<Out: ObserveLayout + 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
     let extent = overlay_extent(children.iter().map(|child| child.extent));
-    leaf_into(extent, move |placement, out| {
-        place_layers(
-            extent,
-            placement,
-            children,
-            |child| child.extent,
-            |child, placement| place_into(child, placement, out),
-        );
+    leaf_into(extent, move |placement, out: &mut Out| {
+        out.layout(Composition::Overlay, |out| {
+            place_layers(
+                extent,
+                placement,
+                children,
+                |child| child.extent,
+                |child, placement| out.layout_child(|out| place_into(child, placement, out)),
+            );
+        });
     })
 }
 
@@ -469,6 +513,8 @@ pub(crate) fn padded_placement(placement: Placement, insets: Insets, child: Exte
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl<T> ObserveLayout for Vec<T> {}
 
     impl Output for Vec<Placement> {
         fn empty() -> Self {

@@ -191,7 +191,11 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                 };
                 let checks = [
                     (&body, forward, Some(&children[0])),
-                    (&children[0], backward, Some(&body)),
+                    (
+                        &children[0],
+                        backward,
+                        Some(if vertical { &paths[1] } else { &body }),
+                    ),
                     (
                         &children[0],
                         across,
@@ -210,13 +214,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     (
                         &paths[1],
                         Down,
-                        Some(if !vertical {
-                            &paths[2]
-                        } else if in_cell {
-                            &body
-                        } else {
-                            &children[0]
-                        }),
+                        Some(if !vertical { &paths[2] } else { &children[0] }),
                     ),
                     (
                         &children[0],

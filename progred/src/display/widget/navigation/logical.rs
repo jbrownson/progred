@@ -1,7 +1,7 @@
-//! Navigation from the chosen layout composition, not pixel geometry.
+//! Fold the chosen layout traversal into line boundaries and local neighbors.
 use super::{DIRECTIONS, DispatchContext, Event, EventOutcome, Handler, Target};
-use crate::display::RowAlignment;
 use gid::Step;
+use measured::{Composition, RowAlignment};
 use std::{collections::HashMap, rc::Rc};
 
 struct Stop<C> {
@@ -9,126 +9,205 @@ struct Stop<C> {
     selected: bool,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum Arrangement {
-    Row(RowAlignment),
-    Column { baseline: usize },
+#[derive(Default)]
+struct Neighbors {
+    left: Option<usize>,
+    right: Option<usize>,
 }
 
+/// Concatenation needs only endpoints and the neighbors of a selected stop.
+/// Everything in between can be forgotten immediately.
 #[derive(Default)]
-pub(crate) struct Lines {
+struct Line {
+    first: Option<usize>,
+    last: Option<usize>,
+    selected: Option<Neighbors>,
+    /// A leaf or single-line value, rather than only entrances to a block.
+    has_content: bool,
+}
+
+impl Line {
+    fn stop(stop: usize, selected: bool) -> Self {
+        Self {
+            first: Some(stop),
+            last: Some(stop),
+            selected: selected.then(Neighbors::default),
+            has_content: true,
+        }
+    }
+
+    fn append(&mut self, next: Self) {
+        if let Some(selected) = &mut self.selected {
+            selected.right = selected.right.or(next.first);
+        } else if let Some(mut selected) = next.selected {
+            selected.left = selected.left.or(self.last);
+            self.selected = Some(selected);
+        }
+        self.first = self.first.or(next.first);
+        self.last = next.last.or(self.last);
+        self.has_content |= next.has_content;
+    }
+}
+
+/// Content rows align using the actual column baseline. Each row keeps a small
+/// sequence of block-entry/content levels, separate from that content alignment.
+/// Consecutive enclosing stops share an entry level, rather than manufacturing
+/// a separate vertical step for every wrapper around the same block.
+/// These are summaries, not a copy of the chosen layout or a list of stops.
+#[derive(Default)]
+struct Lines {
     baseline: usize,
-    content_lines: usize,
-    rows: Vec<Vec<usize>>,
+    rows: Vec<Vec<Line>>,
 }
 
 impl Lines {
-    fn stop(stop: usize) -> Self {
+    fn stop(stop: usize, selected: bool) -> Self {
         Self {
             baseline: 0,
-            content_lines: 1,
-            rows: vec![vec![stop]],
+            rows: vec![vec![Line::stop(stop, selected)]],
         }
     }
 
-    fn combine(arrangement: Arrangement, children: &mut Vec<Self>, start: usize) -> Self {
-        match arrangement {
-            Arrangement::Row(alignment) => {
-                let baseline = match alignment {
-                    RowAlignment::Baseline => children[start..]
-                        .iter()
-                        .map(|child| child.baseline)
-                        .max()
-                        .unwrap_or(0),
-                    RowAlignment::Top { baseline } => children
-                        .get(start + baseline)
-                        .map_or(0, |child| child.baseline),
-                    RowAlignment::Center => 0,
-                };
-                children.drain(start..).fold(
-                    Self {
-                        baseline,
-                        ..Self::default()
-                    },
-                    |mut lines, child| {
-                        let offset = match alignment {
-                            RowAlignment::Baseline => baseline - child.baseline,
-                            RowAlignment::Top { .. } | RowAlignment::Center => 0,
-                        };
-                        lines.content_lines = lines.content_lines.max(child.content_lines);
-                        if lines.rows.is_empty() && offset == 0 {
-                            lines.rows = child.rows;
-                            return lines;
-                        }
-                        lines
-                            .rows
-                            .resize_with(lines.rows.len().max(offset + child.rows.len()), Vec::new);
-                        for (row, child) in lines.rows.iter_mut().skip(offset).zip(child.rows) {
-                            if row.is_empty() {
-                                *row = child;
-                            } else {
-                                row.extend(child);
-                            }
-                        }
-                        lines
-                    },
-                )
+    fn merge_at(&mut self, next: Self, offset: usize) {
+        if next.rows.is_empty() {
+            return;
+        }
+        self.rows
+            .resize_with(self.rows.len().max(offset + next.rows.len()), Vec::new);
+        for (row, levels) in next.rows.into_iter().enumerate() {
+            let target = &mut self.rows[offset + row];
+            target.resize_with(target.len().max(levels.len()), Line::default);
+            for (target, next) in target.iter_mut().zip(levels) {
+                target.append(next);
             }
-            Arrangement::Column { baseline } => children.drain(start..).enumerate().fold(
-                Self::default(),
-                |mut lines, (index, child)| {
-                    if index == baseline {
-                        lines.baseline = lines.rows.len() + child.baseline;
-                    }
-                    lines.content_lines += child.content_lines;
-                    if lines.rows.is_empty() {
-                        lines.rows = child.rows;
-                    } else {
-                        lines.rows.extend(child.rows);
-                    }
-                    lines
-                },
-            ),
         }
     }
 
-    fn enclosed(mut self, stop: usize) -> Self {
-        if self.content_lines > 1 {
-            self.rows.insert(0, vec![stop]);
-            self.baseline += 1;
-        } else if let Some(first) = self.rows.first_mut() {
-            first.insert(0, stop);
+    fn enclosed(mut self, stop: usize, selected: bool) -> Self {
+        if self.rows.is_empty() {
+            return Self::stop(stop, selected);
+        }
+        let mut entry = Line::stop(stop, selected);
+        if self.rows.len() > 1 {
+            entry.has_content = false;
+            if self.rows[0].first().is_some_and(|line| !line.has_content) {
+                entry.append(std::mem::take(&mut self.rows[0][0]));
+                self.rows[0][0] = entry;
+            } else {
+                self.rows[0].insert(0, entry);
+            }
         } else {
-            self = Self::stop(stop);
+            entry.append(std::mem::take(&mut self.rows[0][0]));
+            self.rows[0][0] = entry;
         }
         self
     }
 
-    fn destinations(&self, selected: usize) -> [Option<usize>; 4] {
-        let order: Vec<_> = self.rows.iter().flatten().copied().collect();
-        let index = order.iter().position(|stop| *stop == selected);
-        let row = self.rows.iter().position(|row| row.contains(&selected));
-        [
-            index
-                .and_then(|i| i.checked_sub(1))
-                .and_then(|i| order.get(i))
-                .copied(),
-            index.and_then(|i| order.get(i + 1)).copied(),
-            row.and_then(|r| r.checked_sub(1))
-                .and_then(|r| self.rows.get(r))
-                .and_then(|r| r.first())
-                .copied(),
-            row.and_then(|r| self.rows.get(r + 1))
-                .and_then(|r| r.first())
-                .copied(),
-        ]
+    fn destinations(self) -> Option<[Option<usize>; 4]> {
+        let (mut previous_first, mut previous_last) = (None, None);
+        let mut result: Option<[Option<usize>; 4]> = None;
+        for line in self
+            .rows
+            .into_iter()
+            .flatten()
+            .filter(|line| line.first.is_some())
+        {
+            if let Some([_, right, _, down]) = &mut result {
+                *right = right.or(line.first);
+                *down = line.first;
+                break;
+            }
+            if let Some(selected) = line.selected {
+                result = Some([
+                    selected.left.or(previous_last),
+                    selected.right,
+                    previous_first,
+                    None,
+                ]);
+            }
+            previous_first = line.first;
+            previous_last = line.last;
+        }
+        result
     }
 }
 
+/// One open row/column. Children are folded as they finish, so a long row
+/// does not retain a summary for each of its already-visited children.
+struct Accumulator {
+    composition: Composition,
+    child_index: usize,
+    lines: Lines,
+}
+
+impl Default for Accumulator {
+    fn default() -> Self {
+        Self::new(Composition::Row(RowAlignment::Baseline))
+    }
+}
+
+impl Accumulator {
+    fn new(composition: Composition) -> Self {
+        Self {
+            composition,
+            child_index: 0,
+            lines: Lines::default(),
+        }
+    }
+
+    fn push(&mut self, child: Lines) {
+        if self.child_index == 0 {
+            self.lines = child;
+            if !matches!(
+                self.composition,
+                Composition::Row(RowAlignment::Baseline | RowAlignment::Top { baseline: 0 })
+                    | Composition::Column { baseline: 0 }
+                    | Composition::Overlay
+            ) {
+                self.lines.baseline = 0;
+            }
+            self.child_index = 1;
+            return;
+        }
+        match self.composition {
+            Composition::Row(RowAlignment::Baseline) | Composition::Overlay => {
+                let baseline = self.lines.baseline.max(child.baseline);
+                if baseline > self.lines.baseline && !self.lines.rows.is_empty() {
+                    let offset = baseline - self.lines.baseline;
+                    let length = self.lines.rows.len();
+                    self.lines.rows.resize_with(length + offset, Vec::new);
+                    self.lines.rows.rotate_right(offset);
+                }
+                self.lines.baseline = baseline;
+                let offset = baseline - child.baseline;
+                self.lines.merge_at(child, offset);
+            }
+            Composition::Row(alignment) => {
+                if let RowAlignment::Top { baseline } = alignment {
+                    if self.child_index == baseline {
+                        self.lines.baseline = child.baseline;
+                    }
+                }
+                self.lines.merge_at(child, 0);
+            }
+            Composition::Column { baseline } => {
+                if self.child_index == baseline {
+                    self.lines.baseline = self.lines.rows.len() + child.baseline;
+                }
+                self.lines.rows.extend(child.rows);
+            }
+        }
+        self.child_index += 1;
+    }
+}
+
+// Canonical targets let a later declaration refine arrival behavior without
+// creating a second navigation position at the same displayed path.
 pub(crate) struct Construction<C> {
     stops: Vec<Stop<C>>,
     occurrences: HashMap<Rc<[Step]>, usize>,
-    children: Vec<Lines>,
+    current: Accumulator,
+    parents: Vec<Accumulator>,
 }
 
 impl<C> Default for Construction<C> {
@@ -136,7 +215,8 @@ impl<C> Default for Construction<C> {
         Self {
             stops: Vec::new(),
             occurrences: HashMap::new(),
-            children: Vec::new(),
+            current: Accumulator::default(),
+            parents: Vec::new(),
         }
     }
 }
@@ -160,45 +240,51 @@ impl<C: 'static> Construction<C> {
 
     pub fn target(&mut self, target: Target<C>, selected: bool) {
         if let Some(index) = self.register(target, selected) {
-            self.children.push(Lines::stop(index));
+            self.current.push(Lines::stop(index, selected));
         }
     }
 
-    /// Child fragments occupy a suffix of one frame-local scratch buffer.
-    pub fn begin(&self) -> usize {
-        self.children.len()
+    pub fn begin(&mut self, composition: Composition) {
+        self.parents.push(std::mem::replace(
+            &mut self.current,
+            Accumulator::new(composition),
+        ));
     }
 
-    pub fn end(&mut self, start: usize, arrangement: Arrangement) {
-        let lines = Lines::combine(arrangement, &mut self.children, start);
-        self.children.push(lines);
+    fn close(&mut self) -> Lines {
+        let parent = self
+            .parents
+            .pop()
+            .expect("balanced chosen-layout traversal");
+        std::mem::replace(&mut self.current, parent).lines
     }
 
-    pub fn begin_container(&mut self, target: Target<C>, selected: bool) -> (Option<usize>, usize) {
-        (self.register(target, selected), self.begin())
+    pub fn end(&mut self) {
+        let lines = self.close();
+        self.current.push(lines);
     }
 
-    pub fn end_container(&mut self, (stop, start): (Option<usize>, usize)) {
-        let lines = Lines::combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            &mut self.children,
-            start,
-        );
-        self.children.push(match stop {
-            Some(stop) => lines.enclosed(stop),
+    pub fn begin_container(&mut self, target: Target<C>, selected: bool) -> Option<usize> {
+        let stop = self.register(target, selected);
+        self.begin(Composition::Row(RowAlignment::Baseline));
+        stop
+    }
+
+    pub fn end_container(&mut self, stop: Option<usize>) {
+        let lines = self.close();
+        self.current.push(match stop {
+            Some(stop) => lines.enclosed(stop, self.stops[stop].selected),
             None => lines,
         });
     }
 
-    pub fn finish<H: 'static>(mut self) -> Option<Handler<C, DispatchContext<C, H>>> {
-        let selected = self.stops.iter().position(|stop| stop.selected)?;
-        let destinations = Lines::combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            &mut self.children,
-            0,
-        )
-        .destinations(selected)
-        .map(|index| index.map(|index| self.stops[index].target.clone()));
+    pub fn finish<H: 'static>(self) -> Option<Handler<C, DispatchContext<C, H>>> {
+        debug_assert!(self.parents.is_empty());
+        let destinations = self
+            .current
+            .lines
+            .destinations()?
+            .map(|index| index.map(|index| self.stops[index].target.clone()));
         let mut handler = Handler::new();
         handler.on(move |world, event, _| match event {
             Event::Navigate(direction) => {
@@ -218,211 +304,4 @@ impl<C: 'static> Construction<C> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::Direction;
-    use super::*;
-
-    fn combine(arrangement: Arrangement, mut children: Vec<Lines>) -> Lines {
-        Lines::combine(arrangement, &mut children, 0)
-    }
-
-    fn column(baseline: usize, stops: impl IntoIterator<Item = usize>) -> Lines {
-        combine(
-            Arrangement::Column { baseline },
-            stops.into_iter().map(Lines::stop).collect(),
-        )
-    }
-
-    #[test]
-    fn baseline_row_grouping_does_not_change_logical_order() {
-        let fragments = || {
-            vec![
-                column(1, [1, 2]).enclosed(0),
-                Lines::default(),
-                Lines::stop(3),
-                column(0, [4, 5, 6]),
-            ]
-        };
-        let row = Arrangement::Row(RowAlignment::Baseline);
-        let flat = combine(row, fragments());
-        for split in 0..=4 {
-            let mut children = fragments();
-            let right = children.split_off(split);
-            let grouped = combine(row, vec![combine(row, children), combine(row, right)]);
-            assert_eq!(grouped.baseline, flat.baseline);
-            assert_eq!(grouped.content_lines, flat.content_lines);
-            assert_eq!(grouped.rows, flat.rows);
-        }
-    }
-
-    #[test]
-    fn combining_a_child_preserves_earlier_siblings_in_the_scratch_buffer() {
-        let mut children = vec![Lines::stop(0), Lines::stop(1), Lines::stop(2)];
-        let child = Lines::combine(Arrangement::Column { baseline: 1 }, &mut children, 1);
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].rows, [vec![0]]);
-        children.push(child);
-        let parent = Lines::combine(Arrangement::Row(RowAlignment::Baseline), &mut children, 0);
-        assert!(children.is_empty());
-        assert_eq!(parent.rows, [vec![1], vec![0, 2]]);
-    }
-
-    #[test]
-    fn rows_align_the_declared_column_baselines() {
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![column(2, [0, 1, 2]), column(0, [3, 4])],
-        );
-        assert_eq!(lines.baseline, 2);
-        assert_eq!(lines.rows, [vec![0], vec![1], vec![2, 3], vec![4]]);
-        assert_eq!(lines.destinations(3), [Some(2), Some(4), Some(1), Some(4)]);
-    }
-
-    #[test]
-    fn column_baselines_follow_children_not_stop_counts_or_decorative_gaps() {
-        let nested = combine(
-            Arrangement::Column { baseline: 3 },
-            vec![
-                Lines::default(),
-                column(0, [0, 1]),
-                Lines::default(),
-                column(1, [2, 3]),
-            ],
-        );
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![nested, Lines::stop(4)],
-        );
-        assert_eq!(lines.baseline, 3);
-        assert_eq!(lines.rows, [vec![0], vec![1], vec![2], vec![3, 4]]);
-
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![
-                combine(
-                    Arrangement::Column { baseline: 1 },
-                    vec![Lines::stop(0), Lines::default(), Lines::stop(1)],
-                ),
-                Lines::stop(2),
-            ],
-        );
-        assert_eq!(lines.rows, [vec![0], vec![1, 2]]);
-    }
-
-    #[test]
-    fn leading_container_stops_preserve_the_contents_baseline() {
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![column(1, [1, 2]).enclosed(0), Lines::stop(3)],
-        );
-        assert_eq!(lines.baseline, 2);
-        assert_eq!(lines.rows, [vec![0], vec![1], vec![2, 3]]);
-        assert_eq!(lines.content_lines, 2);
-    }
-
-    #[test]
-    fn top_aligned_rows_keep_top_alignment_and_export_the_selected_baseline() {
-        let top = combine(
-            Arrangement::Row(RowAlignment::Top { baseline: 1 }),
-            vec![Lines::default(), column(1, [0, 1]), Lines::stop(2)],
-        );
-        assert_eq!(top.baseline, 1);
-        assert_eq!(top.rows, [vec![0, 2], vec![1]]);
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![top, Lines::stop(3)],
-        );
-        assert_eq!(lines.rows, [vec![0, 2], vec![1, 3]]);
-    }
-
-    #[test]
-    fn multiline_container_precedes_its_first_line_and_reading_order_wraps() {
-        let lines = combine(
-            Arrangement::Column { baseline: 0 },
-            vec![
-                combine(
-                    Arrangement::Row(RowAlignment::Baseline),
-                    vec![Lines::stop(1), Lines::stop(2)],
-                ),
-                Lines::stop(3),
-            ],
-        )
-        .enclosed(0);
-        assert_eq!(lines.rows, [vec![0], vec![1, 2], vec![3]]);
-        assert_eq!(lines.destinations(0), [None, Some(1), None, Some(1)]);
-        assert_eq!(lines.destinations(1), [Some(0), Some(2), Some(0), Some(3)]);
-        assert_eq!(lines.destinations(2), [Some(1), Some(3), Some(0), Some(3)]);
-    }
-
-    #[test]
-    fn single_line_containers_do_not_add_vertical_steps() {
-        let lines = combine(
-            Arrangement::Column { baseline: 0 },
-            vec![Lines::stop(2).enclosed(1).enclosed(0), Lines::stop(3)],
-        );
-        assert_eq!(lines.rows, [vec![0, 1, 2], vec![3]]);
-        assert_eq!(lines.destinations(0), [None, Some(1), None, Some(3)]);
-    }
-
-    #[test]
-    fn a_row_with_multiline_content_is_multiline_but_empty_decorations_add_no_lines() {
-        let content = combine(
-            Arrangement::Column { baseline: 0 },
-            vec![
-                Lines::default(),
-                Lines::stop(1),
-                Lines::default(),
-                Lines::stop(2),
-            ],
-        );
-        let lines = combine(
-            Arrangement::Row(RowAlignment::Baseline),
-            vec![Lines::default(), content],
-        )
-        .enclosed(0);
-        assert_eq!(lines.rows, [vec![0], vec![1], vec![2]]);
-        assert_eq!(lines.content_lines, 2);
-    }
-
-    #[test]
-    fn views_with_identical_paths_do_not_share_logical_stops() {
-        use super::super::super::{HoverInput, HoverPass, view::Root};
-        let paths: [Rc<[Step]>; 2] =
-            std::array::from_fn(|_| Rc::from([Step::Key(gid::new_cell_id())]));
-        let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput {
-            ..Default::default()
-        });
-        for view in 0..2 {
-            pass.in_view(Root::document(), |pass| {
-                for (index, path) in paths.iter().enumerate() {
-                    pass.visit(|output| {
-                        output.navigation_target(
-                            Target {
-                                path: path.clone(),
-                                select: Rc::new(move |visits, _| {
-                                    visits.push(view * 10 + index);
-                                    true
-                                }),
-                            },
-                            view == 0 && index == 0,
-                        )
-                    });
-                }
-            });
-        }
-        let mut visits = vec![];
-        assert!(
-            pass.finish()
-                .bind(Default::default())
-                .handler
-                .unwrap()
-                .dispatch(
-                    &mut visits,
-                    Event::Navigate(Direction::Right),
-                    &mut Default::default()
-                )
-                .handled()
-        );
-        assert_eq!(visits, [1]);
-    }
-}
+mod tests;

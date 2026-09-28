@@ -7,7 +7,7 @@ use puri::handler::{Event, EventOutcome, Handler};
 use std::rc::Rc;
 
 mod logical;
-pub(crate) use logical::{Arrangement, Construction};
+pub(crate) use logical::Construction;
 
 pub use puri::handler::NavigationDirection as Direction;
 const DIRECTIONS: [Direction; 4] = [
@@ -82,17 +82,6 @@ pub fn nav_group(
             })
         }),
     )
-}
-
-pub(crate) fn arranged<C: 'static, H: 'static>(
-    child: Measured<HoverPass<C, H>>,
-    arrangement: Arrangement,
-) -> Measured<HoverPass<C, H>> {
-    measured::around_into(child, move |_, inner, pass| {
-        let parent = pass.navigation.begin();
-        inner.place_into(pass);
-        pass.navigation.end(parent, arrangement);
-    })
 }
 
 pub struct Landmark<World> {

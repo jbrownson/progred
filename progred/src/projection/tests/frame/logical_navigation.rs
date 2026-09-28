@@ -130,19 +130,40 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
 }
 
 #[test]
-fn logical_example_deep_multiline_cells_each_have_an_entry_step() {
-    let (mut world, _) = example_section("deep");
+fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
+    let (mut world, binders) = example_section("deep");
+    let outline = crate::libraries::presentation::vocabulary::OUTLINE;
+    let first = positions(
+        world
+            .model
+            .doc
+            .cells
+            .value(binders["deep_inner"])
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&outline)
+            .unwrap(),
+    )[0]
+    .clone();
+    let content: Path = std::iter::repeat_n(Step::Follow(gid::Resolution::Document), 3)
+        .chain([Step::Key(outline), Step::Element(first)])
+        .collect();
     let mut path = vec![];
     world.model.selection = Some(make_selection(path.clone()));
+    // Horizontal traversal still visits each enclosing value.
     for _ in 0..3 {
         path.push(Step::Follow(gid::Resolution::Document));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, Direction::Right));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
-    for _ in 0..3 {
-        path.pop();
+    // Every enclosing value enters the same first content line vertically.
+    for depth in 0..=3 {
+        world.model.selection = Some(make_selection(path[..depth].to_vec()));
+        assert!(step(&mut world, Direction::Down));
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), content);
         assert!(step(&mut world, Direction::Up));
-        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+        assert!(world.model.selection.as_ref().unwrap().path().is_empty());
     }
 }
 
@@ -189,15 +210,22 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
         cells,
     });
     world.model.selection = Some(make_selection(path.clone()));
-    assert!(step(&mut world, Direction::Down));
+    assert!(step(&mut world, Direction::Right));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), function);
-    assert!(step(&mut world, Direction::Down));
-    assert_eq!(
-        world.model.selection.as_ref().unwrap().path(),
-        function_name
-    );
-    assert!(step(&mut world, Direction::Down));
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), body);
+    for from in [path.clone(), function] {
+        world.model.selection = Some(make_selection(from));
+        assert!(step(&mut world, Direction::Down));
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            function_name
+        );
+        assert!(step(&mut world, Direction::Up));
+        // The containing list also shares this leading wrapper-only level.
+        assert!(world.model.selection.as_ref().unwrap().path().is_empty());
+        world.model.selection = Some(make_selection(function_name.clone()));
+        assert!(step(&mut world, Direction::Down));
+        assert_eq!(world.model.selection.as_ref().unwrap().path(), body);
+    }
 }
 
 #[test]

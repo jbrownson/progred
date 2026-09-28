@@ -253,6 +253,21 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         self.output
     }
 }
+impl<C: 'static, H: 'static> measured::ObserveLayout for HoverPass<C, H> {
+    fn layout(&mut self, composition: measured::Composition, children: impl FnOnce(&mut Self)) {
+        self.navigation.begin(composition);
+        children(self);
+        self.navigation.end();
+    }
+
+    fn layout_child(&mut self, child: impl FnOnce(&mut Self)) {
+        self.navigation
+            .begin(measured::Composition::Row(measured::RowAlignment::Baseline));
+        child(self);
+        self.navigation.end();
+    }
+}
+
 impl<C: 'static, H: 'static> Layers for HoverPass<C, H> {
     fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self)) {
         self.scope(content, |output| output.clipped(placement));

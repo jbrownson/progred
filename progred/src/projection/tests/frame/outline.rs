@@ -152,22 +152,23 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     for (from, direction, to) in [
         (
             vec![],
-            crate::navigate::Direction::Down,
+            crate::navigate::Direction::Right,
             vec![Step::Key(OUTLINE)],
+        ),
+        (
+            vec![],
+            crate::navigate::Direction::Down,
+            first_heading.clone(),
         ),
         (
             vec![Step::Key(OUTLINE)],
             crate::navigate::Direction::Down,
             first_heading.clone(),
         ),
-        (
-            first_heading,
-            crate::navigate::Direction::Up,
-            vec![Step::Key(OUTLINE)],
-        ),
+        (first_heading, crate::navigate::Direction::Up, vec![]),
         (
             vec![Step::Key(OUTLINE)],
-            crate::navigate::Direction::Up,
+            crate::navigate::Direction::Left,
             vec![],
         ),
     ] {
@@ -234,13 +235,13 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             .collect::<Vec<_>>();
         let viewport = kurbo::Size::new(700.0, 600.0);
         runner.refresh_frame(1.0, viewport);
-        // Entering the first section can be reversed without following the
-        // outline's document jump or skipping its whole-list stop.
+        // Right retains the whole-list stop. Down skips that enclosing stop;
+        // Up from the first heading returns to the outermost whole value.
         for (direction, path) in [
             (NamedKey::ArrowDown, vec![]),
-            (NamedKey::ArrowDown, vec![Step::Key(OUTLINE)]),
+            (NamedKey::ArrowRight, vec![Step::Key(OUTLINE)]),
+            (NamedKey::ArrowLeft, vec![]),
             (NamedKey::ArrowDown, b_heading.clone()),
-            (NamedKey::ArrowUp, vec![Step::Key(OUTLINE)]),
             (NamedKey::ArrowUp, vec![]),
         ] {
             assert!(runner.keyboard_event(&key(Key::Named(direction)), 1.0, viewport));
@@ -250,7 +251,6 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         runner.refresh_frame(1.0, viewport);
         let mut expected = vec![
             vec![],
-            vec![Step::Key(OUTLINE)],
             b_heading.clone(),
             b_body.clone(),
             a_heading.clone(),
@@ -277,7 +277,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             .editor
             .set_collapsed(&root, &b_body, false, Some(true));
         runner.refresh_frame(1.0, viewport);
-        for path in [vec![], vec![Step::Key(OUTLINE)], b_heading, a_heading] {
+        for path in [vec![], b_heading, a_heading] {
             assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
             assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
         }

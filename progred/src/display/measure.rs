@@ -4,17 +4,7 @@ use crate::display::{FloatingPosition, Layout, Paint, RowAlignment, widget};
 use measured::choices::{ChoiceBuild, ChoiceLayout};
 use peniko::kurbo::Insets;
 use puri::Leaf;
-use widget::navigation::{self, Arrangement};
 use widget::{Context, HoverPass};
-
-fn navigation_layout<W: 'static, H: 'static>(
-    child: ChoiceLayout<HoverPass<W, H>>,
-    arrangement: Arrangement,
-) -> ChoiceLayout<HoverPass<W, H>> {
-    ChoiceLayout::map(child, 0.0, move |child| {
-        navigation::arranged(child, arrangement)
-    })
-}
 
 struct Prepare<'a, 'cx, 'fonts, W, H> {
     context: &'a mut Context<'cx, 'fonts, W, H>,
@@ -86,32 +76,17 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Row);
-        let children = self
-            .children(children)
-            .into_iter()
-            .map(|child| match alignment {
-                // Baseline rows compose associatively. An opaque child already
-                // contributes a baseline-row fragment; wrapping it again does
-                // not change the logical lines. Other alignments need each
-                // direct child's boundary, including empty decorations.
-                RowAlignment::Baseline => child,
-                _ => navigation_layout(child, Arrangement::Row(RowAlignment::Baseline)),
-            })
-            .collect();
+        let children = self.children(children);
         let row =
             ChoiceLayout::aligned_row(alignment, gap * self.context.inputs.styles.scale, children);
-        self.push(navigation_layout(row, Arrangement::Row(alignment)))
+        self.push(row)
     }
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Column);
-        let children = self
-            .children(children)
-            .into_iter()
-            .map(|child| navigation_layout(child, Arrangement::Row(RowAlignment::Baseline)))
-            .collect();
+        let children = self.children(children);
         let col = ChoiceLayout::col(baseline, gap * self.context.inputs.styles.scale, children);
-        self.push(navigation_layout(col, Arrangement::Column { baseline }))
+        self.push(col)
     }
     fn overlay(&mut self, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]

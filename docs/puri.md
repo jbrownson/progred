@@ -80,7 +80,10 @@ per-frame sharing and choice bookkeeping; `resolve_choices` returns a
 `Measured<Out>`: an extent and placement callback. The selected choice graph
 places directly, without building a second measured container tree. Plain
 measured combinators compose callbacks using the same geometry helpers, not a
-`Kind` enum. Wrappers do not interpret their output. Out-of-flow
+`Kind` enum. `ObserveLayout` exposes the chosen row/column/overlay and direct-child
+boundaries during that placement, for consumers that need structural traversal.
+It does not expose discarded alternatives or require another tree. Wrappers do
+not interpret their output. Out-of-flow
 content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
@@ -134,15 +137,19 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 painting order; floating placements run afterward, outside ancestor clips.
 
 The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
-selectable leaf and whole-value stops. Progred's ordinary row/column interpreter
-collects logical lines during the chosen placement: columns concatenate, while
-rows align the declared logical baselines. A whole-value group precedes its
-contents, on an extra leading logical line if those contents are multiline.
+selectable leaf and whole-value stops. Progred consumes the box engine's
+`ObserveLayout` traversal, folding each child into line summaries as it finishes:
+columns concatenate, while rows align the declared logical baselines. Container
+entry levels remain separate from content-line alignment, so a whole-value group
+precedes its multiline contents without displacing neighboring labels.
+Consecutive enclosing whole-value stops share a vertical entrance: Right visits
+each, Down reaches the first content line, and Up returns to the outermost stop
+on that entry level. A content stop between wrappers ends that chain.
 No deferred neighbor providers, independent navigation axes, or pixel-distance
 search remain. Puri does not know this policy; it still receives ordinary events
 and handlers.
 
-After placement, the temporary collection resolves the selected occurrence's
+After placement, the temporary summaries resolve the selected occurrence's
 four destinations. One ordinary `Event::Navigate(direction)` handler retains
 those selection callbacks; no full graph or logical layout survives in the
 installed frame. Each view has an independent collection. Raw controls and

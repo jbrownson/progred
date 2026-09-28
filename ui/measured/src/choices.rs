@@ -472,7 +472,10 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Self {
+    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Self
+    where
+        Out: crate::ObserveLayout,
+    {
         let kind = match self.kind {
             ChoiceKind::Use(id) => {
                 return shared[id]
@@ -561,7 +564,10 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn into_measured(self) -> Measured<Out> {
+    fn into_measured(self) -> Measured<Out>
+    where
+        Out: crate::ObserveLayout,
+    {
         match self.kind {
             ChoiceKind::Fixed(measured) => measured,
             _ => crate::leaf_into(self.extent, move |placement, out| {
@@ -570,36 +576,49 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn place(self, placement: uig::Placement, out: &mut Out) {
+    fn place(self, placement: uig::Placement, out: &mut Out)
+    where
+        Out: crate::ObserveLayout,
+    {
         match self.kind {
             ChoiceKind::Fixed(measured) => crate::place_into(measured, placement, out),
             ChoiceKind::Row {
                 alignment,
                 gap,
                 children,
-            } => crate::place_row(
-                self.extent,
-                placement,
+            } => out.layout(crate::Composition::Row(alignment), |out| {
+                crate::place_row(
+                    self.extent,
+                    placement,
+                    gap,
+                    alignment,
+                    children,
+                    |child| child.extent,
+                    |child, placement| out.layout_child(|out| child.place(placement, out)),
+                )
+            }),
+            ChoiceKind::Col {
+                baseline,
                 gap,
-                alignment,
                 children,
-                |child| child.extent,
-                |child, placement| child.place(placement, out),
-            ),
-            ChoiceKind::Col { gap, children, .. } => crate::place_col(
-                placement,
-                gap,
-                children,
-                |child| child.extent,
-                |child, placement| child.place(placement, out),
-            ),
-            ChoiceKind::Overlay { children } => crate::place_layers(
-                self.extent,
-                placement,
-                children,
-                |child| child.extent,
-                |child, placement| child.place(placement, out),
-            ),
+            } => out.layout(crate::Composition::Column { baseline }, |out| {
+                crate::place_col(
+                    placement,
+                    gap,
+                    children,
+                    |child| child.extent,
+                    |child, placement| out.layout_child(|out| child.place(placement, out)),
+                )
+            }),
+            ChoiceKind::Overlay { children } => out.layout(crate::Composition::Overlay, |out| {
+                crate::place_layers(
+                    self.extent,
+                    placement,
+                    children,
+                    |child| child.extent,
+                    |child, placement| out.layout_child(|out| child.place(placement, out)),
+                )
+            }),
             ChoiceKind::Pad { insets, child } => {
                 let placement = crate::padded_placement(placement, insets, child.extent);
                 child.place(placement, out);
@@ -609,7 +628,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
     }
 }
 
-pub fn resolve_choices<Out: 'static>(
+pub fn resolve_choices<Out: crate::ObserveLayout + 'static>(
     graph: ChoiceGraph<Out>,
     available: f64,
     tracing: bool,
@@ -661,6 +680,8 @@ mod choice_tests {
 
     #[derive(Debug, Default, PartialEq)]
     struct Recording(Vec<(&'static str, Placement)>);
+
+    impl crate::ObserveLayout for Recording {}
 
     impl crate::Output for Recording {
         fn empty() -> Self {
@@ -844,6 +865,8 @@ mod choice_tests {
 
     #[derive(Clone, Copy)]
     struct Output;
+
+    impl crate::ObserveLayout for Output {}
 
     impl crate::Output for Output {
         fn empty() -> Self {

@@ -19,14 +19,15 @@ Open **Examples → Keyboard Navigation** (Command+5 on macOS, Ctrl+5 otherwise)
 Arrow navigation follows the chosen layout's logical lines. Left/Right walk
 reading order, including selectable containers, and wrap to the next/previous
 line. Up/Down select the first stop on the adjacent logical line. Multiline
-containers add a leading entry line; single-line containers precede their
-contents on that same line. Text handles its own arrows before yielding at an
-edge. There is no geometric scoring or directional history.
+containers add a leading entry line, shared by consecutive enclosing containers;
+single-line containers precede their contents on that same line. Text handles
+its own arrows before yielding at an edge. There is no geometric scoring or
+directional history.
 
 Also try the three layout corner cases:
 
-- **Deep multiline containers:** each nested cell gets an entry stop before
-  its multiline contents.
+- **Deep multiline containers:** Right visits each nested cell; Down skips the
+  enclosing chain to the first content line. Up returns to the outermost cell.
 - **Side-by-side columns:** a document-authored layout interleaves the columns'
   logical rows. The values remain ordinary editable document data.
 - **Offset baselines:** the left column's last child aligns with the right
