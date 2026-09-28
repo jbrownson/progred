@@ -443,18 +443,28 @@ impl LineEditState {
                 // delete that only bites an affix is swallowed instead:
                 // absorb declines it, and handled stays true.
                 Key::Named(NamedKey::Delete) if !self.text.is_empty() => {
-                    if action_mod {
-                        drv.delete_word();
-                    } else {
-                        drv.delete();
+                    match (line_mod, word_mod) {
+                        (true, _) => {
+                            if drv.editor.raw_selection().is_collapsed() {
+                                drv.extend_selection_to_byte(hi);
+                            }
+                            drv.delete_selection();
+                        }
+                        (false, true) => drv.delete_word(),
+                        (false, false) => drv.delete(),
                     }
                     true
                 }
                 Key::Named(NamedKey::Backspace) if !self.text.is_empty() => {
-                    if action_mod {
-                        drv.backdelete_word();
-                    } else {
-                        drv.backdelete();
+                    match (line_mod, word_mod) {
+                        (true, _) => {
+                            if drv.editor.raw_selection().is_collapsed() {
+                                drv.extend_selection_to_byte(lo);
+                            }
+                            drv.delete_selection();
+                        }
+                        (false, true) => drv.backdelete_word(),
+                        (false, false) => drv.backdelete(),
                     }
                     true
                 }
@@ -1065,6 +1075,38 @@ mod tests {
     }
 
     #[test]
+    fn delete_modifiers_use_the_hosts_text_editing_convention() {
+        use crate::keyboard::CommandModifier::{Control, Meta};
+        let (mut fonts, mut layouts) = contexts();
+        let presentation = LineEditPresentation {
+            prefix: "[".into(),
+            suffix: "]".into(),
+            ..presentation()
+        };
+        for (command, modifiers, key, caret, text) in [
+            (Meta, Modifiers::META, NamedKey::Backspace, 7, " three"),
+            (Meta, Modifiers::META, NamedKey::Delete, 4, "one "),
+            (Meta, Modifiers::ALT, NamedKey::Backspace, 7, "one  three"),
+            (Meta, Modifiers::ALT, NamedKey::Delete, 4, "one  three"),
+            (Meta, Modifiers::empty(), NamedKey::Backspace, 7, "one tw three"),
+            (Control, Modifiers::CONTROL, NamedKey::Backspace, 7, "one  three"),
+            (Control, Modifiers::CONTROL, NamedKey::Delete, 4, "one  three"),
+        ] {
+            let mut state = state("one two three");
+            state.cursor_to(caret);
+            assert!(state.handle_key(
+                &presentation,
+                &mut fonts,
+                &mut layouts,
+                &mut MemoryClipboard::default(),
+                command,
+                &key_event(Key::Named(key), modifiers),
+            ));
+            assert_eq!(state.text(), text);
+        }
+    }
+
+    #[test]
     fn cursor_to_floors_to_a_char_boundary() {
         let (mut fonts, mut layouts) = contexts();
         let mut state = state("héllo");
@@ -1278,8 +1320,8 @@ mod tests {
     #[test]
     fn word_delete_stays_interior_or_declines_whole() {
         let (mut fonts, mut layouts) = contexts();
-        let action = if cfg!(target_os = "macos") {
-            Modifiers::META
+        let word = if cfg!(target_os = "macos") {
+            Modifiers::ALT
         } else {
             Modifiers::CONTROL
         };
@@ -1294,7 +1336,7 @@ mod tests {
             &mut fonts,
             &mut layouts,
             Key::Named(NamedKey::Backspace),
-            action,
+            word,
         ));
         assert_eq!(words.text(), " there");
         // KNOWN COARSENESS: leading whitespace lets the word boundary
@@ -1311,7 +1353,7 @@ mod tests {
             &mut fonts,
             &mut layouts,
             Key::Named(NamedKey::Backspace),
-            action,
+            word,
         ));
         assert_eq!(leading.text(), " hi");
     }
