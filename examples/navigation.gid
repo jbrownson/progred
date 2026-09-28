@@ -65,6 +65,11 @@
     "key": f12dea12c741fe36312750a264f3a235,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
+    "after_label": 1142d5a575a4e68a3c26f322a1ed5a29,
+    "after_value": 4f624a0e0623775debf702322c3c8a99,
+    "block_then_beside": 9b88a10d89afb98aa78ba5b60d98eeda,
+    "block": 00b29f3a5482ed976ef832dcb5864ebe,
+    "beside": bdc1d0d88c90d2c4113b31ca3edf16bd,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -76,6 +81,8 @@
     deep: {name: "Deep multiline containers"},
     side_by_side: {name: "Side-by-side columns"},
     baseline_case: {name: "Offset baselines"},
+    after_label: {name: "Label after a block"},
+    after_value: {name: "Single-line value after a block"},
     a: {name: "Left first"},
     b: {name: "Left second"},
     c: {name: "Left last"},
@@ -87,6 +94,21 @@
       outline: [checks, notes],
       checks: ["First inner item", "Second inner item"],
       notes: "Three cells enclose this multiline outline",
+    },
+    block_then_beside: {
+      name: "block then beside",
+      params: [],
+      body: {
+        function: row,
+        gap: {f64: 0x0000000000004040},
+        children: {
+          function: do,
+          expressions: [
+            {function: descend, step: {key: block}},
+            {function: descend, step: {key: beside}},
+          ],
+        },
+      },
     },
     top_columns: {
       name: "top-aligned columns",
@@ -156,7 +178,7 @@
     },
   },
   "root": {
-    outline: [workshop, forms, parameters, lists, empty, shared, results, deep, side_by_side, baseline_case, lists],
+    outline: [workshop, forms, parameters, lists, empty, shared, results, deep, side_by_side, baseline_case, after_label, after_value, lists],
     workshop: {
       outline: [dimensions, operations, inspection],
       dimensions: [
@@ -220,6 +242,24 @@
       c: "Left 3",
       d: "Right 1",
       e: "Right 2",
+    },
+    after_label: {
+      layout_program: block_then_beside,
+      block: [
+        "First item: a list long enough to stack vertically (narrow the window if it does not)",
+        "Second item of the stacked list",
+        "Third item of the stacked list",
+      ],
+      beside: "Beside the first item",
+    },
+    after_value: {
+      layout_program: block_then_beside,
+      block: [
+        "First item: a list long enough to stack vertically (narrow the window if it does not)",
+        "Second item of the stacked list",
+        "Third item of the stacked list",
+      ],
+      beside: ["Single-line list beside the first item"],
     },
     baseline_case: {
       layout_program: offset_columns,

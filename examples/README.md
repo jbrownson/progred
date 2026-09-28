@@ -24,7 +24,7 @@ single-line containers precede their contents on that same line. Text handles
 its own arrows before yielding at an edge. There is no geometric scoring or
 directional history.
 
-Also try the three layout corner cases:
+Also try these layout corner cases:
 
 - **Deep multiline containers:** Right visits each nested cell; Down skips the
   enclosing chain to the first content line. Up returns to the outermost cell.
@@ -34,6 +34,16 @@ Also try the three layout corner cases:
   column's first. From “Aligned with lower left,” Left reaches “Lower left,”
   Up reaches “Middle left,” and Down reaches “Below that.” Navigation follows
   declared baseline children, not painted heights or pixel distances.
+- **Label after a block:** a vertical list with “Beside the first item” to its
+  right. Select the whole list (its bracket) and press Right, then keep
+  pressing Right. The intended order is list → first item → beside → second
+  item. If Right from the list jumps straight to “Beside the first item,”
+  skipping the items, the trailing label has been hoisted onto the list's
+  entry line. Narrow the window if the list sits inline.
+- **Single-line value after a block:** the same list with a one-item list to
+  its right. From the first item, Right should reach the small list, then its
+  item, then the second item of the stacked list. Content after a block belongs
+  with the line it is drawn on, not with the block's entry step.
 
 See [layout navigation](../docs/navigation.md) for the current contract.
 
