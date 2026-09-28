@@ -58,14 +58,8 @@ impl FromStr for CellId {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let bytes = input.as_bytes();
-        let simple = bytes.len() == 32;
-        let hyphenated = bytes.len() == 36
-            && bytes.get(8) == Some(&b'-')
-            && bytes.get(13) == Some(&b'-')
-            && bytes.get(18) == Some(&b'-')
-            && bytes.get(23) == Some(&b'-');
-        if simple || hyphenated {
-            let mut digits = bytes.iter().copied().filter(|byte| *byte != b'-');
+        if bytes.len() == 32 {
+            let mut digits = bytes.iter().copied();
             let mut id = [0_u8; 16];
             for out in &mut id {
                 let high = digits.next().ok_or(ParseCellIdError)?;
@@ -138,18 +132,14 @@ mod tests {
             CellId::parse_str("00112233445566778899AABBCCDDEEFF"),
             Ok(id)
         );
-        assert_eq!(
-            CellId::parse_str("00112233-4455-6677-8899-aabbccddeeff"),
-            Ok(id)
-        );
-        assert!(CellId::parse_str("00112233-44556677-8899-aabbccddeeff").is_err());
+        assert!(CellId::parse_str("00112233-4455-6677-8899-aabbccddeeff").is_err());
         assert!(CellId::parse_str("00112233445566778899aabbccddeefg").is_err());
         assert_eq!(
             serde_json::to_string(&id).unwrap(),
             r#""00112233445566778899aabbccddeeff""#
         );
         assert_eq!(
-            serde_json::from_str::<CellId>(r#""00112233-4455-6677-8899-aabbccddeeff""#).unwrap(),
+            serde_json::from_str::<CellId>(r#""00112233445566778899aabbccddeeff""#).unwrap(),
             id
         );
     }

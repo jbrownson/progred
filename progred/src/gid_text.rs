@@ -39,8 +39,6 @@ enum Token {
     Binder(String),
 }
 
-/// Also accepts the hyphenated spelling older diagnostics printed, so a
-/// pasted id never silently becomes a fresh binder.
 fn as_cell_id(token: &str) -> Option<CellId> {
     CellId::parse_str(token).ok()
 }
@@ -48,7 +46,7 @@ fn as_cell_id(token: &str) -> Option<CellId> {
 fn valid_binder(token: &str) -> bool {
     let mut bytes = token.bytes();
     matches!(bytes.next(), Some(b) if b.is_ascii_alphabetic() || b == b'_')
-        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 impl Parser<'_> {
@@ -134,7 +132,7 @@ impl Parser<'_> {
         self.skip_space();
         let end = self
             .rest
-            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
             .unwrap_or(self.rest.len());
         if end == 0 {
             return Err(self.err("expected a value"));
@@ -450,7 +448,7 @@ fn quoted(s: &str) -> String {
 fn derive_binder(name: &str) -> String {
     let mut out = String::new();
     for c in name.chars() {
-        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+        if c.is_ascii_alphanumeric() || c == '_' {
             out.push(c);
         } else {
             out.push('_');
@@ -588,18 +586,8 @@ mod tests {
         let printed = print(&doc, &binders);
         assert!(printed.contains("\"florp\": "));
         assert!(printed.contains("9d2c1e10ab3440de963d02d5f4b1a5a5"));
-        // Hyphenated ids are the same cells, never fresh binders.
-        let (doc, binders) = parse_ok(
-            r#"{"root": [9d2c1e10-ab34-40de-963d-02d5f4b1a5a5, e6c0b205-8b84-6842-8d64-576d953e2d62]}"#,
-        );
-        assert!(binders.is_empty());
-        assert_eq!(
-            doc.root,
-            Some(Value::list([
-                Value::from(CellId::from_u128(0x9d2c1e10ab3440de963d02d5f4b1a5a5)),
-                Value::from(CellId::from_u128(0xe6c0b2058b8468428d64576d953e2d62)),
-            ]))
-        );
+        // A hyphenated id is neither a cell id nor a binder.
+        assert!(parse(r#"{"root": e6c0b205-8b84-6842-8d64-576d953e2d62}"#).is_err());
         // A reference to a never-defined binder is a bare cell —
         // create-on-reference at the file layer.
         let (doc, binders) = parse_ok(r#"{"root": [ghost]}"#);
