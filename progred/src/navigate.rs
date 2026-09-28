@@ -118,14 +118,12 @@ fn reveal_axis(
     scale: f64,
 ) -> f64 {
     let current = current.clamp(0.0, maximum);
-    // A visible leading edge is useful even when the target exceeds the viewport.
-    if (viewport_start..=viewport_end).contains(&start) {
-        return current;
-    }
     let mut scroll = current;
+    // Reveal the full span; the margin is a landing allowance, not a trigger.
     if end > viewport_end {
         scroll += (end + pad - viewport_end) / scale;
     }
+    // Favor the leading edge when the whole target cannot fit.
     let adjusted_start = start - (scroll - current) * scale;
     if adjusted_start < viewport_start {
         scroll += (adjusted_start - pad - viewport_start) / scale;
@@ -265,9 +263,33 @@ mod tests {
     use std::rc::Rc;
 
     #[test]
-    fn an_oversized_target_with_a_visible_leading_edge_does_not_scroll() {
+    fn reveal_moves_a_partly_visible_target_fully_into_view() {
+        assert_eq!(
+            reveal_axis(120.0, 1_000.0, 180.0, 220.0, 30.0, 200.0, 12.0, 1.0),
+            152.0
+        );
+        assert_eq!(
+            reveal_axis(120.0, 1_000.0, 10.0, 50.0, 30.0, 200.0, 12.0, 1.0),
+            88.0
+        );
+    }
+
+    #[test]
+    fn reveal_leaves_fully_visible_targets_alone_even_inside_the_margin() {
+        assert_eq!(
+            reveal_axis(120.0, 1_000.0, 30.0, 200.0, 30.0, 200.0, 12.0, 1.0),
+            120.0
+        );
+    }
+
+    #[test]
+    fn reveal_aligns_an_oversized_target_at_its_leading_edge() {
         assert_eq!(
             reveal_axis(120.0, 1_000.0, 80.0, 500.0, 30.0, 200.0, 12.0, 1.0),
+            158.0
+        );
+        assert_eq!(
+            reveal_axis(120.0, 1_000.0, 42.0, 462.0, 30.0, 200.0, 12.0, 1.0),
             120.0
         );
     }

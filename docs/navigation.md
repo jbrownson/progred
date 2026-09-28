@@ -43,6 +43,11 @@ navigation destination. Offscreen stops remain available; folded/unplaced
 contents do not contribute. Source-less computed results retain their existing
 read-only selection behavior.
 
+Revealing a destination uses its full painted rectangle, independently of its
+logical navigation position. A fully visible selection stays put; a clipped
+selection scrolls into view with a small landing margin. When it cannot fit,
+the top/left edge takes precedence. The margin is not itself a scroll trigger.
+
 Headless regressions cover multiline cell entry, single-line cells/lists,
 nested-list reading order, outline jumps, computed output, text-key precedence,
 and independent views. Selection callbacks still encapsulate the destination's

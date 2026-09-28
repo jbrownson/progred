@@ -1381,6 +1381,78 @@ mod frame_tests {
     }
 
     #[test]
+    fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
+        use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+        let mut runner = scrolling_runner(&Default::default());
+        let viewport = Size::new(500.0, 400.0);
+        runner.refresh_frame(1.0, viewport);
+        let paths: Vec<_> = runner
+            .editor
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .keys()
+            .rev()
+            .take(2)
+            .map(|position| vec![Step::Element(position.clone())])
+            .collect();
+        let [path, previous] = paths.as_slice() else {
+            panic!("expected two list items");
+        };
+        let root = runner.editor.model.workspace.document_root().clone();
+        let region = runner
+            .frame
+            .dispatch
+            .view_regions
+            .iter()
+            .find(|region| region.root == root)
+            .unwrap()
+            .rect;
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        runner.editor.model.workspace.document.scroll.y =
+            target.rect.center().y - region.y1;
+        crate::editing::select(&mut runner.editor, &root, previous);
+        runner.refresh_frame(1.0, viewport);
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
+
+        assert!(runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::ArrowDown),
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            viewport,
+        ));
+        assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+        let target = runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == path)
+            .unwrap();
+        assert!(target.rect.y0 >= region.y0 && target.rect.y1 <= region.y1);
+    }
+
+    #[test]
     fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         let projected = Rc::new(std::cell::Cell::new(0));
         let mut runner = scrolling_runner(&projected);
