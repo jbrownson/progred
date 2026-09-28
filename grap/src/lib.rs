@@ -1212,10 +1212,6 @@ impl<'a> Context<'a> {
         })
     }
 
-    fn lower(&mut self, value: &Value) -> Expression {
-        self.lower_with(value, false, None)
-    }
-
     fn lower_source(&mut self, value: &Value, root: OriginRoot) -> Expression {
         let origin = OriginId(Rc::new(OriginNode::Root(root)));
         self.lower_with(value, true, Some(origin))
@@ -1488,7 +1484,7 @@ impl<'a> Context<'a> {
         expression: &Value,
         environment: &Environment,
     ) -> Result<Value, Halt> {
-        let expression = self.lower(expression);
+        let expression = self.lower_unattributed_source(expression);
         self.eval_to_value(expression, environment)
     }
 
@@ -1497,7 +1493,7 @@ impl<'a> Context<'a> {
         expression: &Value,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        let expression = self.lower(expression);
+        let expression = self.lower_unattributed_source(expression);
         self.eval(expression, environment)
     }
 
@@ -3797,6 +3793,40 @@ mod tests {
             20,
         );
         assert_eq!(evaluation.result, blob("passed"));
+    }
+
+    #[test]
+    fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
+        let outer = new_cell_id();
+        let inner = new_cell_id();
+        let argument = new_cell_id();
+        let functions = [outer, inner];
+        let scoped = |function,
+                      context: &mut Context<'_>,
+                      call_expression: &Expression,
+                      environment: &Environment| {
+            if function == outer {
+                context.eval_value(
+                    &call(Value::from(inner), [(argument, Value::list([blob("a")]))]),
+                    environment,
+                )
+            } else {
+                let walked = context
+                    .field(call_expression, argument)
+                    .is_some_and(|list| context.elements(&list).is_some());
+                Ok(blob(if walked { "walked" } else { "opaque" }))
+            }
+        };
+        let overlay = ForeignOverlay::from_value(&functions, &scoped);
+        let foreign = ForeignFunctions::default();
+        let applied = super::apply_value_scoped(
+            &Value::from(outer),
+            [],
+            &definitions_from_parts(|_| None, &foreign),
+            &overlay,
+            20,
+        );
+        assert_eq!(applied.result, blob("walked"));
     }
 
     #[test]
