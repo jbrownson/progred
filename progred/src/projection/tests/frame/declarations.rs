@@ -205,6 +205,49 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     );
 }
 
+#[test]
+fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
+    let mut world = crate::test_editor(Document {
+        root: Some(grap::lambda([], f64::value(3.0))),
+        cells: Cells::new(),
+    });
+    let before = world.model.doc.clone();
+    let name_path = [Step::Key(name::vocabulary::NAME)];
+    let marker = editing_frame(&mut world, false)
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == name_path)
+        .unwrap()
+        .rect
+        .center();
+    let frame = editing_frame_at(&mut world, false, None, Some(marker));
+    let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
+        panic!("lambda marker hover");
+    };
+    let mut dispatch =
+        placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
+    let event = PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: PointerState {
+            position: (marker.x, marker.y).into(),
+            ..Default::default()
+        },
+    };
+    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        &mut world,
+        &event,
+        &mut dispatch,
+    ));
+    assert_eq!(world.model.selection.as_ref().unwrap().path(), name_path);
+    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(Rc::ptr_eq(&world.model.doc, &before));
+}
+
 fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     let parameters = Value::list([binder.into()]);
     let position = parameters.as_list().unwrap().keys().next().unwrap().clone();

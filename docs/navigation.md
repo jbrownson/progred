@@ -43,6 +43,11 @@ navigation destination. Offscreen stops remain available; folded/unplaced
 contents do not contribute. Source-less computed results retain their existing
 read-only selection behavior.
 
+The anonymous lambda's `λ` marker is clickable to name the function, but does not
+contribute an arrow-navigation stop. Stored names remain ordinary text stops;
+the whole lambda, parameter list, and body remain navigable. Clicking the marker
+still opens the ordinary missing-name picker.
+
 Revealing a destination uses its full painted rectangle, independently of its
 logical navigation position. A fully visible selection stays put; a clipped
 selection scrolls into view with a small landing margin. When it cannot fit,
@@ -123,5 +128,5 @@ Validation: 938 Progred tests pass (55 diagnostic tests ignored), including
 raw-key precedence, arrival direction, alternative selection, nested outlines,
 jump editing, computed results, empty containers, baseline alignment, and
 independent panes. All 70 Puri tests pass (one diagnostic test ignored), and the
-threaded WASM library check passes. The anonymous-lambda picker issue remains
-deferred; no completion policy changed in this checkpoint.
+threaded WASM library check passes. No completion policy changed in this
+checkpoint; the anonymous-marker stop was removed in a subsequent change.

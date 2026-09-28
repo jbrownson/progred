@@ -101,11 +101,8 @@ fn lambda_name(
         None => {
             input.selection.is_none().then_some(())?;
             let target = input.targets.current();
-            crate::display::projection::target(activatable(
-                faced("λ", Face::Name),
-                target.hover,
-                target.select,
-            ))
+            // Naming an anonymous lambda is clickable, not an arrow-navigation stop.
+            activatable(faced("λ", Face::Name), target.hover, target.select)
         }
     })
 }

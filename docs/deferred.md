@@ -244,11 +244,6 @@ Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
 
-An anonymous lambda's missing-name stop currently opens its ordinary completion
-picker as soon as it is selected, so Down navigates that picker instead of the
-document. The owner explicitly deferred this while landing layout navigation;
-delaying picker opening is a possible direction, not an implemented policy.
-
 ## Website as an interactive explanation
 
 The owner has registered `prog.red`. Consider developing its presentation

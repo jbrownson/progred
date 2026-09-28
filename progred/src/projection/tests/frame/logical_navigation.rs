@@ -201,6 +201,26 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
 }
 
 #[test]
+fn logical_down_enters_an_anonymous_lambda_without_opening_name_completion() {
+    let mut world = crate::test_editor(Document {
+        root: Some(grap::lambda(
+            [],
+            text::value("a long function body ".repeat(40)),
+        )),
+        cells: Cells::new(),
+    });
+    world.model.selection = Some(make_selection(vec![]));
+    for field in [grap::vocabulary::PARAMS, grap::vocabulary::BODY] {
+        assert!(step(&mut world, Direction::Down));
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            [Step::Key(field)]
+        );
+        assert!(editing_frame(&mut world, false).completion.is_none());
+    }
+}
+
+#[test]
 fn logical_down_enters_vertical_lists_but_passes_single_line_cells_and_lists() {
     for cell in [false, true] {
         let id = gid::new_cell_id();
