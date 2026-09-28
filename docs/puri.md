@@ -139,12 +139,8 @@ painting order; floating placements run afterward, outside ancestor clips.
 The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
 selectable leaf and whole-value stops. Progred consumes the box engine's
 `ObserveLayout` traversal, folding each child into line summaries as it finishes:
-columns concatenate, while rows align the declared logical baselines. Container
-entry levels remain separate from content-line alignment, so a whole-value group
-precedes its multiline contents without displacing neighboring labels.
-Consecutive enclosing whole-value stops share a vertical entrance: Right visits
-each, Down reaches the first content line, and Up returns to the outermost stop
-on that entry level. A content stop between wrappers ends that chain.
+columns concatenate, while rows align the declared logical baselines. See
+[navigation](navigation.md) for how whole values and multiline blocks join lines.
 No deferred neighbor providers, independent navigation axes, or pixel-distance
 search remain. Puri does not know this policy; it still receives ordinary events
 and handlers.
