@@ -45,6 +45,19 @@ struct Preedit {
     cursor: Option<(usize, usize)>,
 }
 
+impl Preedit {
+    /// An empty preedit is no composition; the cursor stays inside the text.
+    fn new(text: String, cursor: Option<(usize, usize)>) -> Option<Self> {
+        (!text.is_empty()).then(|| {
+            let clamp = |(a, b): (usize, usize)| (a.min(text.len()), b.min(text.len()));
+            Self {
+                cursor: cursor.map(clamp),
+                text,
+            }
+        })
+    }
+}
+
 /// An in-progress drag-selection — the pure-pass translation of
 /// pointer capture: where it started and at what click count, so each
 /// move can rebuild its word or line anchor. Anchor granularity is
@@ -231,7 +244,7 @@ impl LineEditState {
         let anchor = state.anchor;
         state.cursor_to(focus);
         state.anchor = anchor;
-        state.preedit = preedit.map(|(text, cursor)| Preedit { text, cursor });
+        state.preedit = preedit.and_then(|(text, cursor)| Preedit::new(text, cursor));
         state.drag = drag.map(|(origin, count)| Drag { origin, count });
         state
     }
@@ -494,18 +507,11 @@ impl LineEditState {
                 true
             }
             ImeEvent::Preedit(text, cursor) => {
-                if text.is_empty() {
-                    self.preedit = None;
-                } else {
-                    if self.preedit.is_none() && self.anchor != self.focus {
-                        self.replace_selection("");
-                    }
-                    let clamp = |(a, b): (usize, usize)| (a.min(text.len()), b.min(text.len()));
-                    self.preedit = Some(Preedit {
-                        text: text.clone(),
-                        cursor: cursor.map(clamp),
-                    });
+                let preedit = Preedit::new(text.clone(), *cursor);
+                if preedit.is_some() && self.preedit.is_none() && self.anchor != self.focus {
+                    self.replace_selection("");
                 }
+                self.preedit = preedit;
                 true
             }
             ImeEvent::Disabled => {
@@ -1088,9 +1094,27 @@ mod tests {
             (Meta, Modifiers::META, NamedKey::Delete, 4, "one "),
             (Meta, Modifiers::ALT, NamedKey::Backspace, 7, "one  three"),
             (Meta, Modifiers::ALT, NamedKey::Delete, 4, "one  three"),
-            (Meta, Modifiers::empty(), NamedKey::Backspace, 7, "one tw three"),
-            (Control, Modifiers::CONTROL, NamedKey::Backspace, 7, "one  three"),
-            (Control, Modifiers::CONTROL, NamedKey::Delete, 4, "one  three"),
+            (
+                Meta,
+                Modifiers::empty(),
+                NamedKey::Backspace,
+                7,
+                "one tw three",
+            ),
+            (
+                Control,
+                Modifiers::CONTROL,
+                NamedKey::Backspace,
+                7,
+                "one  three",
+            ),
+            (
+                Control,
+                Modifiers::CONTROL,
+                NamedKey::Delete,
+                4,
+                "one  three",
+            ),
         ] {
             let mut state = state("one two three");
             state.cursor_to(caret);
@@ -1704,6 +1728,19 @@ mod tests {
             1.0,
             Point::new(0.0, 5.0),
         ));
+    }
+
+    #[test]
+    fn decoded_preedits_are_normalized_like_ime_events() {
+        let (mut fonts, mut layouts) = contexts();
+        let empty = LineEditState::from_parts("ab", 1, 1, Some((String::new(), None)), None);
+        assert!(!empty.is_composing());
+        let mut state =
+            LineEditState::from_parts("ab", 1, 1, Some(("XY".into(), Some((9, 9)))), None);
+        assert!(state.is_composing());
+        state.editor(&presentation(), &mut fonts, &mut layouts, 1.0);
+        assert!(state.handle_ime(&ImeEvent::Preedit(String::new(), None)));
+        assert!(!state.is_composing());
     }
 
     #[test]
