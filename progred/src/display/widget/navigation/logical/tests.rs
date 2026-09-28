@@ -126,7 +126,7 @@ fn long_single_line_keeps_only_boundaries_and_the_selected_neighbors() {
     }
     let lines = construction.current.lines;
     assert_eq!(lines.rows.len(), 1);
-    assert!(lines.rows[0].levels.is_empty());
+    assert!(lines.rows[0].block.is_none());
     assert_eq!(
         lines.destinations().unwrap().map(|t| t.as_ref().map(index)),
         [Some(4999), Some(5001), None, None]
@@ -147,6 +147,50 @@ fn baseline_row_grouping_does_not_change_logical_order() {
     for split in 0..=children.len() {
         let (left, right) = children.split_at(split);
         let grouped = row([row(left.to_vec()), row(right.to_vec())]);
+        assert_eq!(lines(&grouped), flat);
+    }
+}
+
+fn groupings(children: &[Shape]) -> Vec<Shape> {
+    match children {
+        [child] => vec![child.clone()],
+        _ => (1..children.len())
+            .flat_map(|split| {
+                let (left, right) = children.split_at(split);
+                let rights = groupings(right);
+                groupings(left).into_iter().flat_map(move |left| {
+                    rights
+                        .clone()
+                        .into_iter()
+                        .map(move |right| row([left.clone(), right]))
+                })
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn every_grouping_of_a_row_with_unequal_blocks_navigates_the_same() {
+    let labelled = |stop: usize| {
+        enclosed(
+            stop,
+            row([
+                Stop(stop + 1),
+                enclosed(stop + 2, column(0, [stop + 3, stop + 4])),
+            ]),
+        )
+    };
+    let children = [
+        Stop(30),
+        labelled(0),
+        Stop(31),
+        enclosed(10, column(0, [11, 12])),
+        Stop(32),
+        labelled(20),
+        Stop(33),
+    ];
+    let flat = lines(&row(children.clone()));
+    for grouped in groupings(&children) {
         assert_eq!(lines(&grouped), flat);
     }
 }

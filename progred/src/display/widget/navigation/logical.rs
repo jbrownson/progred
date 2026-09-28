@@ -58,52 +58,69 @@ impl<C> Line<C> {
     }
 }
 
-/// One content row. `levels` exist once a multiline block begins on this row:
-/// its entry level, then the lines it draws. Stops before the first block
-/// join its entry line; stops after it stay on the line they are drawn on.
+/// One content row: `lead` holds the stops before its first multiline block
+/// (all of them if there is none). Stops before the first block join its entry
+/// line; stops after it stay on the line they are drawn on.
 struct Row<C> {
-    before: Line<C>,
-    levels: Vec<Line<C>>,
+    lead: Line<C>,
+    block: Option<Block<C>>,
+}
+
+/// Lines count up from the drawn line, so blocks side by side combine line by
+/// line however their row is grouped. `attach` is the entry line of the first
+/// block, which the row's lead joins.
+struct Block<C> {
+    drawn: Line<C>,
+    entries: Vec<Line<C>>,
+    attach: usize,
 }
 
 impl<C> Default for Row<C> {
     fn default() -> Self {
         Self {
-            before: Line::default(),
-            levels: Vec::new(),
+            lead: Line::default(),
+            block: None,
         }
     }
 }
 
 impl<C> Row<C> {
     fn append(&mut self, next: Self) {
-        match self.levels.last_mut() {
-            None => {
-                self.before.append(next.before);
-                self.levels = next.levels;
+        match (&mut self.block, next.block) {
+            (None, block) => {
+                self.lead.append(next.lead);
+                self.block = block;
             }
-            Some(drawn) => {
-                drawn.append(next.before);
-                // Blocks side by side share their entry and drawn lines.
-                let skip = self.levels.len().saturating_sub(next.levels.len());
-                self.levels.resize_with(
-                    self.levels.len().max(skip + next.levels.len()),
+            (Some(block), None) => block.drawn.append(next.lead),
+            (Some(block), Some(next_block)) => {
+                block.drawn.append(next.lead);
+                block.drawn.append(next_block.drawn);
+                block.entries.resize_with(
+                    block.entries.len().max(next_block.entries.len()),
                     Line::default,
                 );
-                for (level, next) in self.levels.iter_mut().skip(skip).zip(next.levels) {
-                    level.append(next);
+                for (entry, next) in block.entries.iter_mut().zip(next_block.entries) {
+                    entry.append(next);
                 }
             }
         }
     }
 
-    fn lines(self) -> impl Iterator<Item = Line<C>> {
-        let mut levels = self.levels.into_iter();
-        let mut first = self.before;
-        if let Some(entry) = levels.next() {
-            first.append(entry);
+    fn lines(self) -> Vec<Line<C>> {
+        match self.block {
+            None => vec![self.lead],
+            Some(mut block) => {
+                let mut lead = self.lead;
+                lead.append(std::mem::take(&mut block.entries[block.attach]));
+                block.entries[block.attach] = lead;
+                block
+                    .entries
+                    .into_iter()
+                    .rev()
+                    .chain([block.drawn])
+                    .collect()
+            }
         }
-        std::iter::once(first).chain(levels)
     }
 }
 
@@ -128,8 +145,8 @@ impl<C> Lines<C> {
         Self {
             baseline: 0,
             rows: vec![Row {
-                before: Line::stop(stop),
-                levels: Vec::new(),
+                lead: Line::stop(stop),
+                block: None,
             }],
         }
     }
@@ -153,18 +170,33 @@ impl<C> Lines<C> {
             None => Self::stop(stop),
             Some(row) => {
                 let mut entry = Line::stop(stop);
-                if !multiline && row.levels.is_empty() {
-                    entry.append(std::mem::take(&mut row.before));
-                    row.before = entry;
-                } else if row.before.first.is_none() && !row.levels.is_empty() {
-                    entry.append(std::mem::take(&mut row.levels[0]));
-                    row.levels[0] = entry;
-                } else {
-                    let mut drawn = std::mem::take(&mut row.before);
-                    if !row.levels.is_empty() {
-                        drawn.append(row.levels.remove(0));
+                let lead = std::mem::take(&mut row.lead);
+                match row.block.take() {
+                    None if !multiline => {
+                        entry.append(lead);
+                        row.lead = entry;
                     }
-                    row.levels.splice(0..0, [entry, drawn]);
+                    None => {
+                        row.block = Some(Block {
+                            drawn: lead,
+                            entries: vec![entry],
+                            attach: 0,
+                        })
+                    }
+                    Some(mut block) => {
+                        let first = &mut block.entries[block.attach];
+                        if lead.first.is_none() {
+                            entry.append(std::mem::take(first));
+                            *first = entry;
+                        } else {
+                            let mut joined = lead;
+                            joined.append(std::mem::take(first));
+                            *first = joined;
+                            block.entries.push(entry);
+                            block.attach = block.entries.len() - 1;
+                        }
+                        row.block = Some(block);
+                    }
                 }
                 self
             }

@@ -61,7 +61,9 @@ Each open composition folds children as they finish. A summary line keeps only
 its first and last stops and, if it holds the selection, the selection's
 immediate neighbors; intervening stops are dropped once passed. Per-line
 summaries are needed because painting visits one whole column before the next,
-while navigation interleaves their lines.
+while navigation interleaves their lines. Entry lines count up from each row's
+drawn line, and leading stops remember the first block's entry line, so
+regrouping a row's children never changes navigation.
 
 After placement the collector scans the summaries and installs one ordinary
 `Navigate` handler with four destinations. Unselected views install none. Raw
