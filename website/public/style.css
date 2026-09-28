@@ -40,7 +40,7 @@ a:focus-visible, button:focus-visible {
   outline-offset: 5px;
 }
 
-.site-header, main, footer { width: min(100% - 5rem, 70rem); margin-inline: auto; }
+.site-header, main { width: min(100% - 5rem, 70rem); margin-inline: auto; }
 .site-header {
   display: flex;
   align-items: center;
@@ -137,10 +137,9 @@ code { font-size: 0.95em; }
 .next p { max-width: 38rem; }
 .next > a { color: var(--accent); }
 .next .session-note { margin-top: 1.5rem; max-width: 42rem; }
-footer { border-top: 1px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; padding-block: 1.5rem 2.5rem; font-size: 0.8rem; color: var(--muted); }
 
 @media (max-width: 800px) {
-  .site-header, main, footer { width: calc(100% - 2.5rem); }
+  .site-header, main { width: calc(100% - 2.5rem); }
   .exercise { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; padding-block: 2.5rem; }
   .lesson-copy { max-width: 38rem; }
 }
