@@ -538,7 +538,9 @@ function remain data until explicitly evaluated.
 Cell evaluation checks lexical bindings first, then asks `Host::resolve` for one
 definition: the document's value, otherwise the first loaded library definition.
 Duplicate definitions are tolerated, not merged or composed. With no definition,
-evaluation returns missing-cell absent. A native definition's descriptive value
+evaluation returns missing-cell absent. A cell is transparent: its definition is
+evaluated where it is referenced, using the bindings in scope there, so a cell
+defined for a function body can be referenced in several places within it. A native definition's descriptive value
 is evaluated without invoking its implementation. A named foreign function
 therefore evaluates to its ordinary name record. Scoped capabilities participate
 only in calls, never ordinary reads.
