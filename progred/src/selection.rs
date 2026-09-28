@@ -840,8 +840,7 @@ pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool>
 }
 
 /// The collapse class of an already-resolved value. Projection has
-/// the ancestor cells in hand as it walks, while editor commands
-/// recover the same `in_cycle` answer from their one-off path.
+/// the ancestor cells in hand as it walks and supplies `in_cycle`.
 pub(crate) fn collapse_default_for_value(
     sources: &Sources,
     value: &grap::RuntimeValue,
