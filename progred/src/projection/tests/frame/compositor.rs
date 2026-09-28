@@ -25,12 +25,8 @@ fn cam_hover_compositor_pixels() {
     let size = kurbo::Size::new(3028.0, 1836.0);
     let scale = 2.0;
     let source = crate::command::Example::Toolpaths.source().replace(
-        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED
-            .simple()
-            .to_string(),
-        &crate::libraries::toolpath::vocabulary::PREVIEW_MESH
-            .simple()
-            .to_string(),
+        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+        &crate::libraries::toolpath::vocabulary::PREVIEW_MESH.to_string(),
     );
     let (doc, names) = crate::gid_text::parse(&source).unwrap();
     let mut editor = crate::test_editor(doc);
@@ -216,12 +212,8 @@ fn editor_compositor_profile() {
         crate::command::Example::Toolpaths,
     ] {
         let source = example.source().replace(
-            &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED
-                .simple()
-                .to_string(),
-            &crate::libraries::toolpath::vocabulary::PREVIEW_MESH
-                .simple()
-                .to_string(),
+            &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+            &crate::libraries::toolpath::vocabulary::PREVIEW_MESH.to_string(),
         );
         let (doc, _) = crate::gid_text::parse(&source).unwrap();
         let mut editor = crate::test_editor(doc);

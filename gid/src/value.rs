@@ -634,7 +634,7 @@ mod tests {
                 0x00112233445566778899aabbccddeeff,
             )))
             .unwrap(),
-            r#"{"cell":"00112233-4455-6677-8899-aabbccddeeff"}"#
+            r#"{"cell":"00112233445566778899aabbccddeeff"}"#
         );
         let record_json = serde_json::to_string(&Value::record([(label("k"), blob("v"))])).unwrap();
         assert!(record_json.contains(&label("k").to_string()));

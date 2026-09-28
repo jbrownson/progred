@@ -166,7 +166,7 @@ mod tests {
         let ids = [crate::libraries::name::ID, crate::libraries::text::ID];
         let option = ids
             .iter()
-            .map(|id| id.simple().to_string())
+            .map(|id| id.to_string())
             .collect::<Vec<_>>()
             .join(",");
         assert_eq!(

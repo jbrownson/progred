@@ -476,10 +476,7 @@ fn fidget_toolpaths_profile_loop() {
     use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
     fidget_orbit_profile(
         "toolpaths",
-        &cam_profile_source().replace(
-            &PREVIEW_REFINED.simple().to_string(),
-            &PREVIEW_MESH.simple().to_string(),
-        ),
+        &cam_profile_source().replace(&PREVIEW_REFINED.to_string(), &PREVIEW_MESH.to_string()),
     );
 }
 

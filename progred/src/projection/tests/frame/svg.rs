@@ -437,7 +437,7 @@ fn website_lesson_svg_captures() {
                             } else {
                                 ["first", "second", "third"]
                             }
-                            .map(|key| fields[key].simple().to_string())
+                            .map(|key| fields[key].to_string())
                             .join(","),
                         ),
                         editor.stack.projection,
@@ -497,11 +497,7 @@ pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text
         .unwrap(),
     );
     editor.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&format!(
-            "{},{}",
-            fields["second"].simple(),
-            fields["first"].simple()
-        )),
+        Some(&format!("{},{}", fields["second"], fields["first"])),
         editor.stack.projection,
     )
     .unwrap();
@@ -912,11 +908,7 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         .unwrap(),
     );
     editor.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&format!(
-            "{},{}",
-            fields["second"].simple(),
-            fields["first"].simple()
-        )),
+        Some(&format!("{},{}", fields["second"], fields["first"])),
         editor.stack.projection,
     )
     .unwrap();
@@ -1253,10 +1245,8 @@ pub(super) fn cam_editor(mode: CellId) -> crate::Editor {
     // Exercise each public preview using the same document, without adding a
     // renderer-selection control to the production example.
     let source = crate::command::Example::Toolpaths.source().replace(
-        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED
-            .simple()
-            .to_string(),
-        &mode.simple().to_string(),
+        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+        &mode.to_string(),
     );
     let (doc, _) = crate::gid_text::parse(&source).unwrap();
     let declarations = crate::workspace::declarations(doc.root.as_ref());

@@ -5,7 +5,7 @@ fn configure(world: &mut crate::Editor, slots: &[CellId]) {
         Some(
             &slots
                 .iter()
-                .map(|id| id.simple().to_string())
+                .map(|id| id.to_string())
                 .collect::<Vec<_>>()
                 .join(","),
         ),

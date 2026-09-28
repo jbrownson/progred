@@ -41,7 +41,8 @@ rule.
 
 ## Lexical
 
-- **cell-id literal** — exactly 32 hex characters, bare (no quotes, no hyphens).
+- **cell-id literal** — exactly 32 hex characters, bare (no quotes). The
+  legacy hyphenated spelling is read as the same cell; printing never uses it.
   Case-insensitive on read, lowercase on write. Anything violating
   length or alphabet is not a cell-id literal. (Cell ids are 16 CSPRNG bytes — not
   RFC 4122 UUIDs — and the notation's spelling reflects that.)

@@ -111,7 +111,7 @@ fn website_creation_instructions_make_values_through_the_picker() {
     world.stack.projection = crate::web_embed::tutorial_slots(
         Some(
             &["first", "second", "third"]
-                .map(|key| names[key].simple().to_string())
+                .map(|key| names[key].to_string())
                 .join(","),
         ),
         world.stack.projection,
@@ -212,7 +212,7 @@ fn website_forest_edits_change_one_height_and_all_leaf_colors() {
     world.stack.projection = crate::web_embed::tutorial_slots(
         Some(
             &["third", "first", "second"]
-                .map(|key| names[key].simple().to_string())
+                .map(|key| names[key].to_string())
                 .join(","),
         ),
         world.stack.projection,
@@ -688,7 +688,7 @@ fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
         Some(
             &slots
                 .iter()
-                .map(|id| id.simple().to_string())
+                .map(|id| id.to_string())
                 .collect::<Vec<_>>()
                 .join(","),
         ),
@@ -813,7 +813,7 @@ fn website_functions_edit_arguments_body_and_parameter_name() {
         Some(
             &slots
                 .iter()
-                .map(|id| id.simple().to_string())
+                .map(|id| id.to_string())
                 .collect::<Vec<_>>()
                 .join(","),
         ),
@@ -973,7 +973,7 @@ fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_cal
     world.stack.projection = crate::web_embed::tutorial_slots(
         Some(
             &["third", "first", "second"]
-                .map(|key| names[key].simple().to_string())
+                .map(|key| names[key].to_string())
                 .join(","),
         ),
         world.stack.projection.clone(),

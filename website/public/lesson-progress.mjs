@@ -1,39 +1,39 @@
 const fields = {
-  greeting: "60f0faf4-8244-5f9c-5d3c-d4c35d4ce902",
-  count: "bf0ca177-3113-4521-964d-0f3aa582fcb1",
-  utf8: "332529b8-ea83-a7ba-10fd-7f6d942e5016",
-  f64: "ed11fde0-3b7c-2c1b-a2fc-cc3cdba5d561",
-  element: "2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1",
-  evaluate: "acfc5e50-8812-9251-8dab-3cec77cf43ee",
-  function: "751fca43-73de-bdd0-b7e6-eb73e08d684b",
-  left: "764f6afe-17ba-14e8-1f5a-b61204be0bec",
-  right: "4f53ff25-390f-5847-2d31-a6142644dec2",
-  name: "02e56265-4d6d-0828-d3a7-559e6f75fffe",
-  params: "195b378d-0d31-d90a-b0d7-366c15346b70",
-  body: "98614386-6eda-2e2f-bf9a-b8484357a0c9",
-  key: "f12dea12-c741-fe36-3127-50a264f3a235",
-  follow: "33c6fb36-3ddc-6f13-fd05-4c68f7a37a98",
-  document: "ef62fa62-f008-c1ec-a703-89571933aba0",
+  greeting: "60f0faf482445f9c5d3cd4c35d4ce902",
+  count: "bf0ca17731134521964d0f3aa582fcb1",
+  utf8: "332529b8ea83a7ba10fd7f6d942e5016",
+  f64: "ed11fde03b7c2c1ba2fccc3cdba5d561",
+  element: "2eb44bbe78bbb0e96af4a9cbf6e949e1",
+  evaluate: "acfc5e50881292518dab3cec77cf43ee",
+  function: "751fca4373debdd0b7e6eb73e08d684b",
+  left: "764f6afe17ba14e81f5ab61204be0bec",
+  right: "4f53ff25390f58472d31a6142644dec2",
+  name: "02e562654d6d0828d3a7559e6f75fffe",
+  params: "195b378d0d31d90ab0d7366c15346b70",
+  body: "986143866eda2e2fbf9ab8484357a0c9",
+  key: "f12dea12c741fe36312750a264f3a235",
+  follow: "33c6fb363ddc6f13fd054c68f7a37a98",
+  document: "ef62fa62f008c1eca70389571933aba0",
 };
 const slots = [
-  "9940ece2-7410-c72a-5308-a544890ccc71",
-  "f717b766-d250-a7b8-6c5e-b842885c4417",
-  "5e716c07-4908-49f0-72b4-e9017dd6230d",
+  "9940ece27410c72a5308a544890ccc71",
+  "f717b766d250a7b86c5eb842885c4417",
+  "5e716c07490849f072b4e9017dd6230d",
 ];
-const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
-const sum = "201af445-eb7e-2c27-0bb5-ead10b781fc1";
-const multiply = "d6f384c4-39d9-d699-96d5-45df422efd79";
+const sharedCell = "f56d42a97558ccc8205fb4019b878945";
+const sum = "201af445eb7e2c270bb5ead10b781fc1";
+const multiply = "d6f384c439d9d69996d545df422efd79";
 const drawing = {
-  drawing: "6889fa23-5b00-2be4-c8b1-06d5f31dafbf",
-  program: "bdf60781-0b27-4ad5-b02b-d409aef34b6a",
-  fill: "1624dc97-3ec7-7902-03eb-8fd22c9d6d05",
-  shape: "fcaaadef-1498-0397-cce9-5363fc5a54f9",
-  circle: "e06a6d09-4c4f-75cd-6c1d-59ed6ed64e05",
-  x: "415def0f-a0a9-ac40-dfba-5fca4d0f8876",
-  y: "4e2dcde5-b1ab-1480-a2f1-26176dd148c7",
-  radius: "6423c35e-07d7-a4ff-5361-27d1f1d8eb53",
-  do: "b1fc4cb4-5c58-b1a6-62c4-31feef5bd140",
-  expressions: "5fab151c-006a-e148-7c28-837f2003f43c",
+  drawing: "6889fa235b002be4c8b106d5f31dafbf",
+  program: "bdf607810b274ad5b02bd409aef34b6a",
+  fill: "1624dc973ec7790203eb8fd22c9d6d05",
+  shape: "fcaaadef14980397cce95363fc5a54f9",
+  circle: "e06a6d094c4f75cd6c1d59ed6ed64e05",
+  x: "415def0fa0a9ac40dfba5fca4d0f8876",
+  y: "4e2dcde5b1ab1480a2f126176dd148c7",
+  radius: "6423c35e07d7a4ff536127d1f1d8eb53",
+  do: "b1fc4cb45c58b1a662c431feef5bd140",
+  expressions: "5fab151c006ae1487c28837f2003f43c",
 };
 
 export function lessonProgress(lesson) {
@@ -104,9 +104,9 @@ export function completedSteps(lesson, state, previous) {
     ];
   }
   if (lesson === "forest") {
-    const height = "cc32dd05-0a93-5180-4e7a-704b4d59e7ac";
-    const paint = "cb04728f-5e6a-1d93-a679-0238b5f1ce4d";
-    const rgb = "6c8a17cb-e463-186c-c8b0-7e536ccffa6b";
+    const height = "cc32dd050a9351804e7a704b4d59e7ac";
+    const paint = "cb04728f5e6a1d93a6790238b5f1ce4d";
+    const rgb = "6c8a17cbe463186cc8b07e536ccffa6b";
     const program = field(root, slots[0])?.cell;
     const fn = field(root, slots[1])?.cell;
     const contents = state?.document?.cells;

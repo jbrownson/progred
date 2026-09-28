@@ -39,10 +39,10 @@ enum Token {
     Binder(String),
 }
 
+/// Also accepts the hyphenated spelling older diagnostics printed, so a
+/// pasted id never silently becomes a fresh binder.
 fn as_cell_id(token: &str) -> Option<CellId> {
-    (token.len() == 32 && token.bytes().all(|b| b.is_ascii_hexdigit()))
-        .then(|| CellId::parse_str(token).ok())
-        .flatten()
+    CellId::parse_str(token).ok()
 }
 
 fn valid_binder(token: &str) -> bool {
@@ -148,7 +148,7 @@ impl Parser<'_> {
     /// use — create-on-reference at the file layer.
     fn token(&mut self) -> Result<Token, String> {
         let token = self.bare()?;
-        if let Some(cell) = as_cell_id(&token.to_ascii_lowercase()) {
+        if let Some(cell) = as_cell_id(token) {
             return Ok(Token::CellId(cell));
         }
         if !valid_binder(token) {
@@ -248,12 +248,12 @@ impl Parser<'_> {
                         if !valid_binder(&binder) {
                             return Err(format!("`{binder}` is not a usable binder"));
                         }
-                        if as_cell_id(&binder.to_ascii_lowercase()).is_some() {
+                        if as_cell_id(&binder).is_some() {
                             return Err(format!("`{binder}` spells a cell id, not a binder"));
                         }
                         p.eat(':')?;
                         let token = p.bare()?;
-                        let cell = as_cell_id(&token.to_ascii_lowercase()).ok_or_else(|| {
+                        let cell = as_cell_id(token).ok_or_else(|| {
                             format!("`binders` maps binders to cell-id literals, got `{token}`")
                         })?;
                         if p.binders.insert(binder.clone(), cell).is_some() {
@@ -333,7 +333,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
         .collect();
     remaining.sort();
     for cell in remaining {
-        let hex = cell.simple().to_string();
+        let hex = cell.to_string();
         let candidate = unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken);
         spell.insert(cell, candidate);
     }
@@ -346,7 +346,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
             spell.iter().map(|(cell, binder)| (binder, cell)).collect();
         table.sort();
         for (binder, cell) in table {
-            let _ = writeln!(out, "    {}: {},", quoted(binder), cell.simple());
+            let _ = writeln!(out, "    {}: {},", quoted(binder), cell);
         }
         out.push_str("  },\n");
     }
@@ -385,7 +385,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
 fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
     match spell.get(&cell) {
         Some(binder) => binder.clone(),
-        None => cell.simple().to_string(),
+        None => cell.to_string(),
     }
 }
 
@@ -463,7 +463,7 @@ fn derive_binder(name: &str) -> String {
     {
         out.insert(0, '_');
     }
-    if as_cell_id(&out.to_ascii_lowercase()).is_some() {
+    if as_cell_id(&out).is_some() {
         out.insert(0, '_');
     }
     out
@@ -588,6 +588,18 @@ mod tests {
         let printed = print(&doc, &binders);
         assert!(printed.contains("\"florp\": "));
         assert!(printed.contains("9d2c1e10ab3440de963d02d5f4b1a5a5"));
+        // Hyphenated ids are the same cells, never fresh binders.
+        let (doc, binders) = parse_ok(
+            r#"{"root": [9d2c1e10-ab34-40de-963d-02d5f4b1a5a5, e6c0b205-8b84-6842-8d64-576d953e2d62]}"#,
+        );
+        assert!(binders.is_empty());
+        assert_eq!(
+            doc.root,
+            Some(Value::list([
+                Value::from(CellId::from_u128(0x9d2c1e10ab3440de963d02d5f4b1a5a5)),
+                Value::from(CellId::from_u128(0xe6c0b2058b8468428d64576d953e2d62)),
+            ]))
+        );
         // A reference to a never-defined binder is a bare cell —
         // create-on-reference at the file layer.
         let (doc, binders) = parse_ok(r#"{"root": [ghost]}"#);

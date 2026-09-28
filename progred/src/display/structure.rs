@@ -229,7 +229,7 @@ pub(crate) fn record_label(
     let label = match input.env.name(key) {
         Some(name) => faced(name, Face::Label),
         None => {
-            let hex = key.simple().to_string();
+            let hex = key.to_string();
             faced(format!("…{}", &hex[hex.len() - 5..]), Face::Id)
         }
     };

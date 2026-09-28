@@ -25,32 +25,14 @@ impl CellId {
         &self.0
     }
 
-    pub const fn simple(self) -> SimpleCellId {
-        SimpleCellId(self)
-    }
-
     pub fn parse_str(input: &str) -> Result<Self, ParseCellIdError> {
         input.parse()
     }
 }
 
-pub struct SimpleCellId(CellId);
-
-impl fmt::Display for SimpleCellId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0.0 {
-            write!(f, "{byte:02x}")?;
-        }
-        Ok(())
-    }
-}
-
 impl fmt::Display for CellId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (index, byte) in self.0.iter().enumerate() {
-            if matches!(index, 4 | 6 | 8 | 10) {
-                write!(f, "-")?;
-            }
+        for byte in self.0 {
             write!(f, "{byte:02x}")?;
         }
         Ok(())
@@ -65,10 +47,7 @@ impl fmt::Debug for CellId {
 
 impl fmt::Display for ParseCellIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "cell id must be 32 hexadecimal digits, optionally in canonical hyphenated form"
-        )
+        write!(f, "cell id must be 32 hexadecimal digits")
     }
 }
 
@@ -154,8 +133,7 @@ mod tests {
                 0xee, 0xff,
             ]
         );
-        assert_eq!(id.simple().to_string(), "00112233445566778899aabbccddeeff");
-        assert_eq!(id.to_string(), "00112233-4455-6677-8899-aabbccddeeff");
+        assert_eq!(id.to_string(), "00112233445566778899aabbccddeeff");
         assert_eq!(
             CellId::parse_str("00112233445566778899AABBCCDDEEFF"),
             Ok(id)
@@ -168,7 +146,7 @@ mod tests {
         assert!(CellId::parse_str("00112233445566778899aabbccddeefg").is_err());
         assert_eq!(
             serde_json::to_string(&id).unwrap(),
-            r#""00112233-4455-6677-8899-aabbccddeeff""#
+            r#""00112233445566778899aabbccddeeff""#
         );
         assert_eq!(
             serde_json::from_str::<CellId>(r#""00112233-4455-6677-8899-aabbccddeeff""#).unwrap(),

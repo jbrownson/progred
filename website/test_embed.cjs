@@ -349,18 +349,18 @@ test("reset reloads only its own iframe", async () => {
 });
 
 const record = (...entries) => ({ record: entries });
-const text = (value) => record(["332529b8-ea83-a7ba-10fd-7f6d942e5016", { blob: Buffer.from(value).toString("hex") }]);
+const text = (value) => record(["332529b8ea83a7ba10fd7f6d942e5016", { blob: Buffer.from(value).toString("hex") }]);
 const number = (value) => {
   const bytes = Buffer.alloc(8);
   bytes.writeDoubleLE(value);
-  return record(["ed11fde0-3b7c-2c1b-a2fc-cc3cdba5d561", { blob: bytes.toString("hex") }]);
+  return record(["ed11fde03b7c2c1ba2fccc3cdba5d561", { blob: bytes.toString("hex") }]);
 };
 const values = (greeting, count) => ({ document: { root: record(
-  ["60f0faf4-8244-5f9c-5d3c-d4c35d4ce902", greeting],
-  ["bf0ca177-3113-4521-964d-0f3aa582fcb1", count],
+  ["60f0faf482445f9c5d3cd4c35d4ce902", greeting],
+  ["bf0ca17731134521964d0f3aa582fcb1", count],
 ) }, selection: null });
 const fruit = (...names) => ({ document: { root: { list: names.map(text) } }, selection: null });
-const sharedCell = "f56d42a9-7558-ccc8-205f-b4019b878945";
+const sharedCell = "f56d42a97558ccc8205fb4019b878945";
 const cell = (id) => ({ cell: id });
 const cells = (list, definitions) => ({ document: { root: { list }, cells: definitions }, selection: null });
 const sharedPair = [cell(sharedCell), cell(sharedCell)];
@@ -379,7 +379,7 @@ test("list quests distinguish a pending gap, inserting peaches, and selecting th
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   const state = fruit("apples", "pears", "plums");
   assert.deepEqual(completedSteps("lists", state), []);
-  const gap = { view: "document", stage: "pending", path: { list: [record(["2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1", record()])] } };
+  const gap = { view: "document", stage: "pending", path: { list: [record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()])] } };
   assert.deepEqual(completedSteps("lists", { ...state, selection: gap }), ["gap"]);
   assert.deepEqual(completedSteps("lists", { ...state, selection: { ...gap, stage: "value" } }), []);
   assert.deepEqual(completedSteps("lists", fruit("apples", "peaches", "plums")), []);
@@ -431,7 +431,7 @@ test("removal and restoration have separate checkmarks and both reset", async ()
   const restoration = page.tasks.find((task) => task.dataset.task === "restore");
   send(1, { ...fruit("apples", "pears", "plums"), selection: {
     view: "document", stage: "pending",
-    path: { list: [record(["2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1", record()])] },
+    path: { list: [record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()])] },
   } });
   send(1, { ...fruit("apples", "peaches", "pears", "plums"), selection: {
     view: "document", stage: "value", path: { list: [] }, source_path: { list: [] },
@@ -537,11 +537,11 @@ test("the cells checklist completes through sharing, latches, and resets indepen
   assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
 });
 
-const grapInput = "4df73aa7-950e-afc6-5d50-d9c6ceca0721";
+const grapInput = "4df73aa7950eafc65d50d9c6ceca0721";
 const slots = [
-  "9940ece2-7410-c72a-5308-a544890ccc71",
-  "f717b766-d250-a7b8-6c5e-b842885c4417",
-  "5e716c07-4908-49f0-72b4-e9017dd6230d",
+  "9940ece27410c72a5308a544890ccc71",
+  "f717b766d250a7b86c5eb842885c4417",
+  "5e716c07490849f072b4e9017dd6230d",
 ];
 const stacked = (items, definitions) => ({
   document: {
@@ -554,11 +554,11 @@ const removeSlot = (state, index) => {
   state.document.root.record = state.document.root.record.filter(([id]) => id !== slots[index]);
 };
 const grapState = (argument = 2, input = 3) => stacked(
-  [cell(grapInput), ...["201af445-eb7e-2c27-0bb5-ead10b781fc1", "d6f384c4-39d9-d699-96d5-45df422efd79"].map((fn, index) => record(
-    ["acfc5e50-8812-9251-8dab-3cec77cf43ee", record(
-      ["751fca43-73de-bdd0-b7e6-eb73e08d684b", cell(fn)],
-      ["764f6afe-17ba-14e8-1f5a-b61204be0bec", cell(grapInput)],
-      ["4f53ff25-390f-5847-2d31-a6142644dec2", number(index === 0 ? argument : 2)],
+  [cell(grapInput), ...["201af445eb7e2c270bb5ead10b781fc1", "d6f384c439d9d69996d545df422efd79"].map((fn, index) => record(
+    ["acfc5e50881292518dab3cec77cf43ee", record(
+      ["751fca4373debdd0b7e6eb73e08d684b", cell(fn)],
+      ["764f6afe17ba14e81f5ab61204be0bec", cell(grapInput)],
+      ["4f53ff25390f58472d31a6142644dec2", number(index === 0 ? argument : 2)],
     )],
   ))],
   { [grapInput]: number(input) },
@@ -617,26 +617,26 @@ test("Grap progress latches through undo and resets without touching earlier les
   assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
 });
 
-const scaleFunction = "27b02645-cf74-e4db-930f-7ace768a0aaf";
-const scaleParameter = "a6ea8f49-8dc1-9d41-294f-9610ac9e8eed";
+const scaleFunction = "27b02645cf74e4db930f7ace768a0aaf";
+const scaleParameter = "a6ea8f498dc19d41294f9610ac9e8eed";
 const functionsState = ({ argument = 3, factor = 2, name = "x" } = {}) => stacked(
   [cell(scaleFunction), ...[argument, 5].map((value) => record(
-    ["acfc5e50-8812-9251-8dab-3cec77cf43ee", record(
-      ["751fca43-73de-bdd0-b7e6-eb73e08d684b", cell(scaleFunction)],
+    ["acfc5e50881292518dab3cec77cf43ee", record(
+      ["751fca4373debdd0b7e6eb73e08d684b", cell(scaleFunction)],
       [scaleParameter, number(value)],
     )],
   ))],
   {
     [scaleFunction]: record(
-      ["02e56265-4d6d-0828-d3a7-559e6f75fffe", text("scale")],
-      ["195b378d-0d31-d90a-b0d7-366c15346b70", { list: [cell(scaleParameter)] }],
-      ["98614386-6eda-2e2f-bf9a-b8484357a0c9", record(
-        ["751fca43-73de-bdd0-b7e6-eb73e08d684b", cell("d6f384c4-39d9-d699-96d5-45df422efd79")],
-        ["764f6afe-17ba-14e8-1f5a-b61204be0bec", cell(scaleParameter)],
-        ["4f53ff25-390f-5847-2d31-a6142644dec2", number(factor)],
+      ["02e562654d6d0828d3a7559e6f75fffe", text("scale")],
+      ["195b378d0d31d90ab0d7366c15346b70", { list: [cell(scaleParameter)] }],
+      ["986143866eda2e2fbf9ab8484357a0c9", record(
+        ["751fca4373debdd0b7e6eb73e08d684b", cell("d6f384c439d9d69996d545df422efd79")],
+        ["764f6afe17ba14e81f5ab61204be0bec", cell(scaleParameter)],
+        ["4f53ff25390f58472d31a6142644dec2", number(factor)],
       )],
     ),
-    [scaleParameter]: record(["02e56265-4d6d-0828-d3a7-559e6f75fffe", text(name)]),
+    [scaleParameter]: record(["02e562654d6d0828d3a7559e6f75fffe", text(name)]),
   },
 );
 
@@ -693,24 +693,24 @@ test("function progress latches through undo and resets only its own lesson", as
 });
 
 const drawingIds = {
-  fn: "c1ae4281-e689-9b6a-268b-c154fe127b7b",
-  program: "d4ebfe96-3093-8281-1fa2-1c889be44f53",
-  function: "751fca43-73de-bdd0-b7e6-eb73e08d684b",
-  params: "195b378d-0d31-d90a-b0d7-366c15346b70",
-  body: "98614386-6eda-2e2f-bf9a-b8484357a0c9",
-  drawing: "6889fa23-5b00-2be4-c8b1-06d5f31dafbf",
-  programField: "bdf60781-0b27-4ad5-b02b-d409aef34b6a",
-  fill: "1624dc97-3ec7-7902-03eb-8fd22c9d6d05",
-  shape: "fcaaadef-1498-0397-cce9-5363fc5a54f9",
-  circle: "e06a6d09-4c4f-75cd-6c1d-59ed6ed64e05",
-  x: "415def0f-a0a9-ac40-dfba-5fca4d0f8876",
-  y: "4e2dcde5-b1ab-1480-a2f1-26176dd148c7",
-  radius: "6423c35e-07d7-a4ff-5361-27d1f1d8eb53",
-  do: "b1fc4cb4-5c58-b1a6-62c4-31feef5bd140",
-  expressions: "5fab151c-006a-e148-7c28-837f2003f43c",
-  key: "f12dea12-c741-fe36-3127-50a264f3a235",
-  follow: "33c6fb36-3ddc-6f13-fd05-4c68f7a37a98",
-  document: "ef62fa62-f008-c1ec-a703-89571933aba0",
+  fn: "c1ae4281e6899b6a268bc154fe127b7b",
+  program: "d4ebfe96309382811fa21c889be44f53",
+  function: "751fca4373debdd0b7e6eb73e08d684b",
+  params: "195b378d0d31d90ab0d7366c15346b70",
+  body: "986143866eda2e2fbf9ab8484357a0c9",
+  drawing: "6889fa235b002be4c8b106d5f31dafbf",
+  programField: "bdf607810b274ad5b02bd409aef34b6a",
+  fill: "1624dc973ec7790203eb8fd22c9d6d05",
+  shape: "fcaaadef14980397cce95363fc5a54f9",
+  circle: "e06a6d094c4f75cd6c1d59ed6ed64e05",
+  x: "415def0fa0a9ac40dfba5fca4d0f8876",
+  y: "4e2dcde5b1ab1480a2f126176dd148c7",
+  radius: "6423c35e07d7a4ff536127d1f1d8eb53",
+  do: "b1fc4cb45c58b1a662c431feef5bd140",
+  expressions: "5fab151c006ae1487c28837f2003f43c",
+  key: "f12dea12c741fe36312750a264f3a235",
+  follow: "33c6fb363ddc6f13fd054c68f7a37a98",
+  document: "ef62fa62f008c1eca70389571933aba0",
 };
 const drawingState = ({ x = 60, radius = 24 } = {}) => {
   const d = drawingIds;
@@ -753,9 +753,9 @@ test("creation steps require each value in its own slot, not merely a selection"
 test("opening scene checks one tree's height, shared paint, and a source occurrence", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   const d = drawingIds;
-  const height = "cc32dd05-0a93-5180-4e7a-704b4d59e7ac";
-  const paint = "cb04728f-5e6a-1d93-a679-0238b5f1ce4d";
-  const rgb = "6c8a17cb-e463-186c-c8b0-7e536ccffa6b";
+  const height = "cc32dd050a9351804e7a704b4d59e7ac";
+  const paint = "cb04728f5e6a1d93a6790238b5f1ce4d";
+  const rgb = "6c8a17cbe463186cc8b07e536ccffa6b";
   const scene = (h = 60, color = "548b64") => stacked([
     cell(d.program), cell(d.fn), record([d.drawing, record([d.programField, cell(d.program)])]),
   ], {
@@ -768,7 +768,7 @@ test("opening scene checks one tree's height, shared paint, and a source occurre
   const state = scene(100, "cc7733");
   state.selection = drawingSource();
   state.selection.source_path.list[0] = record([d.key, cell(slots[1])]);
-  state.selection.source_path.list.push(record([d.key, cell(d.expressions)]), record(["2eb44bbe-78bb-b0e9-6af4-a9cbf6e949e1", record()]));
+  state.selection.source_path.list.push(record([d.key, cell(d.expressions)]), record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()]));
   assert.deepEqual(completedSteps("forest", state), ["height", "color", "source"]);
   state.selection.source_path.list.pop();
   assert.deepEqual(completedSteps("forest", state), ["height", "color"]);

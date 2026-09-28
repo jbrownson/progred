@@ -40,13 +40,12 @@ impl OrbitProfile {
             toolpath::vocabulary as t,
         };
         let source = Example::Toolpaths.source().replace(
-            &t::PREVIEW_REFINED.simple().to_string(),
+            &t::PREVIEW_REFINED.to_string(),
             &if refined {
                 t::PREVIEW_REFINED
             } else {
                 t::PREVIEW_MESH
             }
-            .simple()
             .to_string(),
         );
         let (doc, names) = crate::gid_text::parse(&source).unwrap();
