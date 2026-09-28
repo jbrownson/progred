@@ -3,7 +3,9 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::{Face, Layout, Partial, ProjectionInput, overlay_value, row, subscript};
+use crate::display::{
+    Face, Layout, Partial, ProjectionInput, activatable, overlay_value, row, subscript,
+};
 use crate::libraries::{Library, line_edit, name};
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
@@ -132,9 +134,10 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         ),
         representation,
     );
+    let target = input.targets.current();
+    let line = activatable(line, target.hover.clone(), target.select);
     let line = if number.scrubbable() {
         let original = original.clone();
-        let target = input.targets.current();
         on_scrub(
             line,
             target.hover,

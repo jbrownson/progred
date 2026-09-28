@@ -48,36 +48,57 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
 }
 
 #[test]
-fn numeric_scrubbing_does_not_extend_to_the_name() {
+fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
     for number in [f64::value(45.0), f32::value(45.0), u64::value(45)] {
-        for name_contact in [true, false] {
+        for (contact, pick) in [
+            ("name", true),
+            ("digits", true),
+            ("representation", true),
+            ("representation", false),
+        ] {
+            let name_contact = contact == "name";
+            let scrub = pick && !name_contact;
             let value = crate::display::overlay_value(&number, name::record("tilt", []));
+            let cell = new_cell_id();
+            let number_path = vec![Step::Follow(gid::Resolution::Document)];
+            let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
+            let mut cells = Cells::new();
+            cells.set_value(cell, value.clone());
             let mut world = crate::test_editor(Document {
-                root: Some(value.clone()),
-                cells: Cells::new(),
+                root: Some(cell.into()),
+                cells,
             });
             let frame = editing_frame(&mut world, false);
             let path = if name_contact {
-                vec![Step::Key(name::vocabulary::NAME)]
+                name_path.clone()
             } else {
-                vec![]
+                number_path.clone()
             };
             let rect = frame
                 .descends
                 .iter()
-                .find(|d| d.path.as_ref() == [Step::Key(name::vocabulary::NAME)])
+                .find(|d| d.path.as_ref() == name_path)
                 .unwrap()
                 .rect;
-            let point = if name_contact {
-                rect.center()
-            } else {
-                Point::new(rect.x1 + 8.0, rect.center().y)
+            let number_rect = frame
+                .descends
+                .iter()
+                .find(|d| d.path.as_ref() == number_path)
+                .unwrap()
+                .rect;
+            let point = match contact {
+                "name" => rect.center(),
+                "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
+                _ => Point::new(number_rect.x1 - 0.5, number_rect.y1 - 0.5),
             };
             let frame = editing_frame_at(&mut world, false, None, Some(point));
-            let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
-                panic!("direct hover")
+            let Some((_, Claim::Direct(hovered))) = frame.claim.as_ref() else {
+                panic!("direct hover on {contact}")
             };
-            assert_eq!(*hovered, Hovered::Tree(Hover::Value(Rc::from(path))));
+            assert_eq!(
+                *hovered,
+                Hovered::Tree(Hover::Value(Rc::from(path.clone())))
+            );
             let mut dispatch =
                 placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
             frame.resolve_for_dispatch().dispatch_pointer_down_with(
@@ -91,17 +112,26 @@ fn numeric_scrubbing_does_not_extend_to_the_name() {
                     },
                     state: PointerState {
                         position: (point.x, point.y).into(),
-                        modifiers: Modifiers::META | Modifiers::CONTROL,
+                        modifiers: if pick {
+                            Modifiers::META | Modifiers::CONTROL
+                        } else {
+                            Modifiers::empty()
+                        },
                         ..Default::default()
                     },
                 },
                 &mut dispatch,
             );
-            assert_eq!(world.gesture.is_some(), !name_contact);
+            assert_eq!(world.gesture.is_some(), scrub, "{contact}");
+            if !name_contact {
+                assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+            }
+            assert_eq!(world.model.doc.cells.value(cell), Some(&value));
             world.advance_gesture(&[Point::new(point.x + 48.0, point.y)]);
-            let edited = world.model.doc.root.as_ref().unwrap();
+            assert_eq!(world.model.doc.root, Some(cell.into()));
+            let edited = world.model.doc.cells.value(cell).unwrap();
             assert_eq!(name::read(edited), Some("tilt"));
-            assert_eq!(*edited == value, name_contact);
+            assert_eq!(*edited == value, !scrub);
         }
     }
 }
