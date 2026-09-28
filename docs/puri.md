@@ -133,48 +133,37 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 `HasHandler`. The editor adds view ownership separately. Ordinary probes run in
 painting order; floating placements run afterward, outside ancestor clips.
 
-The [navigation combinators](../progred/src/display/widget/navigation.rs) connect
-neighbors during settled placement. The caller-owned construction capability
-supplies directional neighbor providers and collects each subtree's entry
-targets. A sequence answers backward requests immediately, retains forward
-receivers until the next entry is placed, and forwards unanswered boundary
-requests to its parent. The root answers no neighbor. Only the selected
-occurrence requests outgoing navigation.
+The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
+selectable leaf and whole-value stops. Progred's ordinary row/column interpreter
+collects logical lines during the chosen placement: columns concatenate, while
+rows align the declared logical baselines. A whole-value group precedes its
+contents, on an extra leading logical line if those contents are multiline.
+No deferred neighbor providers, independent navigation axes, or pixel-distance
+search remain. Puri does not know this policy; it still receives ordinary events
+and handlers.
 
-Each answer contributes an ordinary `Event::Navigate(direction)` handler.
-Construction providers and entry summaries are dropped before the frame is
-installed; no navigation graph or separate destination table survives. After
-raw key and editing handlers decline an arrow (with or without modifiers), the shell dispatches
-that semantic event through the same handler mechanism. The installed handler
-selects the already-determined occurrence; the shell then reveals it.
-Landmarks separately supply geometry and direct selection behavior for
-pointer/source selection and Select All.
+After placement, the temporary collection resolves the selected occurrence's
+four destinations. One ordinary `Event::Navigate(direction)` handler retains
+those selection callbacks; no full graph or logical layout survives in the
+installed frame. Each view has an independent collection. Raw controls and
+editing handlers get first refusal of arrows, including modified arrows; only
+an unhandled key becomes Navigate. The shell reveals the resulting selection
+using existing landmarks.
 
-Plain rows, columns, and occurrence bookkeeping add no routing. Projections
-explicitly decorate layouts with `navigation::horizontal` or
-`navigation::vertical`; lists, records, and named numbers use these helpers.
-Leaf controls contribute targets with ordinary selection behavior. An explicit
-`nav_group` puts the whole-value stop at the leading edge of its contents.
-The chosen navigation sequence declares the flow alongside its directional
-entries: Right for horizontal, Down for vertical. Transparent wrappers, including
-cells, inherit this declaration; leaf contents default to horizontal. This is
-explicit presentation policy, not a guess from measured dimensions. Backward
-boundary callbacks wait until child placement has supplied that declaration.
-Forward arrival selects the whole, forward movement enters the first child,
-and leaving the last child continues outside. Backward arrival reaches the last
-child, backing out of the first selects the whole, and backward movement from
-the whole exits. The perpendicular axis defers to the parent, and perpendicular
-arrival selects the whole container. The same policy applies to records, lists,
-and cells. Vertical sequences additionally connect unclaimed Right/Left movement
-between rows. Down remains their primary flow, and horizontal wrapping preserves
-the arrival direction (including text's beginning/end caret placement).
-Groups reuse an inner
-target when it represents the same occurrence. These wrappers use the generic
-`widget::around` placement boundary, not layout opcodes. Only chosen alternatives
-contribute; each view has independent construction. There is no geometric
-neighbor search or history. Targets receive arrival direction; text widgets
-interpret horizontal arrivals as beginning/end caret placement, while ordinary
-selection retains their default.
+Left/Right visit stops in logical reading order and wrap between lines. Up/Down
+visit the first stop on the adjacent logical line. Arrival direction reaches
+the destination widget: text uses beginning/end caret placement for Right/Left,
+and ordinary defaults for vertical arrival. There is no directional history.
+Landmarks separately retain geometry and direct selection behavior for
+pointer/source selection and Select All. Stops through `jump` keep their editing
+context; `at` results remain read-only.
+
+The [projection helpers](../progred/src/display/projection.rs) now only declare
+whole-value/leaf stops and compose common inline-or-indented head/body layouts.
+They use the ordinary layout functions, with no navigation-specific row/column
+wrappers. `group(content)` uses the generic `widget::around` placement boundary,
+not a layout opcode. See [layout navigation](navigation.md) for the precise
+logical-line policy, tests, and current limitations.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,

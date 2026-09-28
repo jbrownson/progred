@@ -28,10 +28,9 @@ pub enum Kind {
     Disposal,
     SourceLookup,
     Conject,
-    Navigation,
 }
 
-pub const KINDS: [Kind; 22] = [
+pub const KINDS: [Kind; 21] = [
     Kind::Other,
     Kind::Projection,
     Kind::LineEdit,
@@ -53,7 +52,6 @@ pub const KINDS: [Kind; 22] = [
     Kind::Disposal,
     Kind::SourceLookup,
     Kind::Conject,
-    Kind::Navigation,
 ];
 
 #[derive(Clone, Copy, Default)]

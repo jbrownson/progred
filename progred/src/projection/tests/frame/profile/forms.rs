@@ -77,6 +77,25 @@ fn cam_source_scroll_form_profile() {
     });
 }
 
+#[test]
+#[ignore = "Layout navigation allocation count on Cmd+9 source"]
+fn navigation_allocation_profile() {
+    let doc = fixture(&cam_profile_source());
+    let (view, mut context) = ProfileView {
+        size: kurbo::Size::new(600.0, 900.0),
+        scale: 2.0,
+        root: None,
+    }
+    .prepare(&doc);
+    let annotations = Annotations::default();
+    let selection = make_selection(vec![]);
+    profile_forms("Layout navigation", || {
+        let mut frame = view.frame(&doc, &annotations);
+        frame.selection = Some(&selection);
+        context.frame(frame).0
+    });
+}
+
 fn profile_forms(name: &str, mut frame: impl FnMut() -> Bench) {
     for _ in 0..5 {
         drop(frame());

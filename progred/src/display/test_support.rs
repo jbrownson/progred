@@ -226,7 +226,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
 
 pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> ProjectionCall<W, H> {
     let recorder = Recorder(RefCell::new(ProjectionCall::Other));
-    if let Recorded::Program(program) = record(layout) {
+    if let Recorded::Program(program) = record(layout).content() {
         with_context(&recorder, |context| {
             program(context, &mut ChoiceBuild::default());
         });

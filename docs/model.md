@@ -194,47 +194,45 @@ selected occurrence's available directions, not a complete navigation graph
 or special destination table. With no selection, a root navigation handler
 selects the document's root occurrence. Select All remains an explicit command.
 
-Projections connect navigation during settled placement. A sequence gives
-children directional neighbor providers, answers previous-neighbor requests
-immediately, and answers next-neighbor requests once the next child has placed.
-A child with no entry is skipped. Unanswered boundary requests go to the parent;
-the root supplies no neighbor. Only the selected occurrence requests destinations.
-A resolved destination contributes a handler selecting that occurrence with
-its existing editing/conject context.
+Projections declare selectable stops; the chosen layout determines their order.
+During placement, ordinary columns concatenate logical lines and rows align
+their children's logical baselines. No pixel coordinates, measured heights, or
+distance thresholds choose destinations. Padding and inert decorations add no
+stops or lines. Only placed alternatives contribute.
 
-Plain rows, columns, and `descend` add no routing. The standard list and record
-helpers explicitly wrap the chosen presentation in navigation combinators.
-Containers put their whole-value stop at the leading edge of their flow:
-`previous ↔ whole ↔ first child ↔ … ↔ last child ↔ next`.
-`nav_group` uses the flow explicitly declared by its chosen content presentation:
-Right/Left for horizontal, Down/Up for vertical. Forward movement from the whole
-enters; backward arrival reaches the last child, and backing out of the first
-child reaches the whole. The perpendicular axis defers to the parent, with
-arrival selecting the whole container. Cells inherit their contents' declared
-flow, so a horizontal cell in a vertical list still leaves Up/Down to the list.
-Leaves default to horizontal. Empty lists stop once and continue outward; empty
-cells have both a reference stop and a missing-content stop. No arrival-side
-state is stored. Vertical sequences also connect unclaimed Right/Left movement
-between rows, without changing their primary Down/Up flow. Wrapping preserves
-the horizontal arrival direction, so text receives Right at its beginning and
-Left at its end; it is not a synthesized Down/Up event.
-A child representing the same occurrence keeps its own navigation.
-Named numbers compose their name and number horizontally. Custom projections
-choose these compositions explicitly rather than inheriting geometry rules.
-Only placed alternatives contribute.
+`display::projection::group(content)` adds the whole-value stop before its
+contents. Multiline contents put that stop on an additional leading logical
+line; single-line contents keep it on the same line. The added entry line
+does not itself make enclosing single-line contents multiline. Cells, lists,
+records, and custom forms use this same rule. `group_hug` combines a selectable
+whole with inline/indented head-body alternatives; ordinary `row` and `col`
+need no navigation-specific counterpart.
 
-Outline composes each heading and visible body vertically before continuing to
-adjacent sections.
-An outer column combines the section list and trailing extras. Its `nav_group`
-owns the whole-record stop; extras use
-`record_fragment`, which supplies the record layout and field routing without
-claiming a second stop for the same record. Down visits the root, outline list,
-then its first section, before the extras. Collapsed bodies contribute no routes.
+Left/Right traverse all stops in logical reading order, wrapping between lines.
+Up/Down select the first stop of the adjacent logical line. Thus Down enters a
+multiline cell or list before its first content line, while passing over a
+single-line container to the next line. Different painted heights do not change
+this logical order. Center-aligned rows currently combine top-first. No retained
+column, directional history, geometric tie-breaking, or Tab routing is present.
 
-Destinations may be asymmetric and many-to-one. There is no automatic inverse guarantee,
-directional hysteresis, back/forward history, or Tab routing yet. Geometry is used
-only to reveal a landing. Stops identify projected occurrences, including jumped
-and computed content; navigation does not follow conjects into document paths.
+A call groups its function and argument fields together. Its arguments use
+`record_fragment_with`, arranging fields without another whole-call stop.
+An outline groups its heading and body in a column, then composes sections and
+extras vertically. Extras use `record_fragment` so they do not add a second
+root-record stop. Empty lists stop once; empty cells offer both the reference and
+the missing contents. A leaf facet can supply its widget-specific selection
+callback at the same occurrence as an enclosing whole-value stop without
+adding another navigation stop. Punctuation and other inert decoration do not
+declare separate stops.
+
+Each pane builds its own temporary collection of stops and logical lines.
+After placement, it retains only the current selection's four destinations in
+an ordinary navigation handler and drops the collection. Destinations preserve
+the existing occurrence path and editing/conject context: jumps remain editable,
+and computed children remain read-only. Navigation never resolves document paths
+to choose a destination. Landmarks separately provide geometry for revealing a
+landing, pointer/source selection, and Select All. See
+[layout navigation](navigation.md) for examples and the checkpoint measurements.
 
 Line editing uses the host-supplied keyboard convention: Mac Command+Left/Right
 moves to the content's ends and Option+Left/Right moves by words. Control-based

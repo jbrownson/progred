@@ -90,17 +90,6 @@ pub enum NavigationDirection {
     Down,
 }
 
-impl NavigationDirection {
-    pub fn opposite(self) -> Self {
-        match self {
-            Self::Left => Self::Right,
-            Self::Right => Self::Left,
-            Self::Up => Self::Down,
-            Self::Down => Self::Up,
-        }
-    }
-}
-
 /// Input, not editor actions. Scroll and gestures retain every observed packet
 /// in order; a partially consumed batch may own its adjusted remainder.
 #[derive(Clone)]

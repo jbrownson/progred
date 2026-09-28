@@ -1,8 +1,9 @@
-# Selection-focused neighbor callbacks — experiment
+# Selection-focused neighbor callbacks — superseded experiment
 
-Status: integrated into production after the initial test-only experiment.
+Status: replaced by layout-derived navigation on 2026-09-27.
 The former graph implementation is checkpointed in `bafda915`. Current contracts
-are in `model.md` and `puri.md`; this report records the experiment and migration.
+are in [navigation](../navigation.md), [model](../model.md), and [Puri](../puri.md).
+This report records the earlier experiment and migration, not the current API.
 
 ## Question
 
@@ -193,6 +194,11 @@ layouts, and editing the same shared cell through repeated nested outline jumps.
 The application was not launched; the interaction still needs hands-on review.
 
 ## Presentation-directed flow
+
+This trial was superseded by explicit container directions. Child entry summaries
+no longer carry flow; each list/record alternative chooses its boundary directly,
+and cells always choose horizontal navigation. See [the current contract](../model.md#selection-and-editing)
+and `display::projection` for the implementation.
 
 Standard records, lists, and cells now share `nav_group`. Horizontal sequences
 declare Right as forward; vertical sequences declare Down. Their transient

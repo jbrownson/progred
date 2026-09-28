@@ -371,6 +371,7 @@ mod completion;
 #[cfg(not(target_arch = "wasm32"))]
 mod compositor;
 mod conject;
+mod custom_navigation;
 mod declarations;
 mod drawing;
 mod fidget_cube;
@@ -379,7 +380,8 @@ mod focus;
 mod interaction;
 mod iop_tree_native;
 mod layout;
-mod neighbor;
+mod logical_navigation;
+mod navigation;
 mod numbers;
 mod outline;
 mod profile;

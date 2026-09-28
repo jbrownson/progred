@@ -47,7 +47,7 @@ pub(crate) fn with_name(
     >,
     content: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
 ) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    use crate::display::{Pending, descend_local, line_edit, partial, row};
+    use crate::display::{Pending, descend_local, line_edit, partial};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
         .value
@@ -55,7 +55,7 @@ pub(crate) fn with_name(
     if !has_name && input.pending != Some(Pending::Child(step.clone())) {
         return content;
     }
-    crate::display::widget::navigation::horizontal(row(
+    crate::display::row(
         6.0,
         [
             descend_local(
@@ -65,7 +65,7 @@ pub(crate) fn with_name(
             ),
             content,
         ],
-    ))
+    )
 }
 
 pub(crate) fn short_id(cell: CellId) -> String {

@@ -91,10 +91,12 @@ puri::frame::render(runner.prepare_paint(scale, viewport).renders, canvas);
 let redraw = runner.frame_presented();
 ```
 
-Navigation stops are declared by projection/widget functions; placement only
-supplies their rectangles. A control's arrival override is consumed by its
-nearest navigation landmark. Discarded alternatives contribute no navigation,
-hover, handlers, or painting.
+Navigation stops are declared by projection/widget functions. The chosen
+row/column placements combine them into logical lines; after placement only
+the selected occurrence's destinations remain in an ordinary navigation handler.
+Landmarks separately retain rectangles for selection and reveal. A control's
+arrival override is consumed by its nearest landmark. Discarded alternatives
+contribute no navigation, hover, handlers, or painting. See [navigation](navigation.md).
 
 `compute_hover` owns the whole hover stage: probing, preserving the prior target
 during a press, attributing the winner, and binding the continuations. It returns

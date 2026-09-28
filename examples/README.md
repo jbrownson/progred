@@ -15,25 +15,31 @@ instead of Command in the drawn menu on other platforms.
 | 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
 | 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
 | 9 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
-| 0 | `navigation.gid` | Focused keyboard navigation: named numbers, nested lists, empty locations, shared occurrences, and read-only results |
+| 0 | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 ## Keyboard navigation
 
 Open **Examples → Keyboard Navigation** (Command+0 on macOS, Ctrl+0 otherwise).
-Down/Up move between cells in a vertical list; Right enters a cell's contents.
-Try arrows at text boundaries, moving
-into and out of cells and lists, and resizing the window to change list layout.
-The last outline section repeats the nested-list source at another occurrence;
-the shared section similarly repeats cells. Computed results can be selected
-but not edited. Empty lists/records and the bare cell exercise missing values.
-There is no directional history or geometry-based neighbor selection yet.
 
-The torus, tanglecube, and gyroid documents contain literal Fidget data, not Rust geometry
-primitives or Grap programs. Each has an editable source cell and one left-side
-viewport referring to that cell. The viewport fills its pane; drag to orbit and
-scroll to zoom. Separate documents make it possible to compare one render at a
-time at the same pane size. Complexity here describes the field and surface,
-not a guarantee of increasing frame times at every camera angle.
+Arrow navigation follows the chosen layout's logical lines. Left/Right walk
+reading order, including selectable containers, and wrap to the next/previous
+line. Up/Down select the first stop on the adjacent logical line. Multiline
+containers add a leading entry line; single-line containers precede their
+contents on that same line. Text handles its own arrows before yielding at an
+edge. There is no geometric scoring or directional history.
+
+Also try the three layout corner cases:
+
+- **Deep multiline containers:** each nested cell gets an entry stop before
+  its multiline contents.
+- **Side-by-side columns:** a document-authored layout interleaves the columns'
+  logical rows. The values remain ordinary editable document data.
+- **Offset baselines:** the left column's last child aligns with the right
+  column's first. From “Aligned with lower left,” Left reaches “Lower left,”
+  Up reaches “Middle left,” and Down reaches “Below that.” Navigation follows
+  declared baseline children, not painted heights or pixel distances.
+
+See [layout navigation](../docs/navigation.md) for the current contract.
 
 ## Fields
 

@@ -239,11 +239,15 @@ an operation/orientation/tool taxonomy on programs.
 
 ## Keyboard navigation and list reordering
 
-The requested keyboard-navigation pass remains pending, including moving a list
-item with a modifier-plus-arrow shortcut. The projection should determine the
-meaningful direction rather than assuming every list is horizontal or vertical.
-Cmd+Up/Down currently fold/unfold, so the exact shortcut policy still needs a
-decision. The new range controls also remain pointer/touch-only.
+Ordinary arrows now use [layout-derived navigation](navigation.md). Placeholder
+Tab navigation, grow-selection commands, directional history, and moving a list
+item with a modifier-plus-arrow shortcut remain separate decisions. The range
+controls also remain pointer/touch-only.
+
+An anonymous lambda's missing-name stop currently opens its ordinary completion
+picker as soon as it is selected, so Down navigates that picker instead of the
+document. The owner explicitly deferred this while landing layout navigation;
+delaying picker opening is a possible direction, not an implemented policy.
 
 ## Website as an interactive explanation
 

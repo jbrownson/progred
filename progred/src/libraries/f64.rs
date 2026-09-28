@@ -8,6 +8,7 @@ use gid::Value;
 use gid::{CellId, Cells, Step};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
+use crate::display::projection::group;
 use crate::display::{Delim, Layout, ProjectionInput, overlay_value, row, selectable_bracket};
 #[cfg(test)]
 use ::grap;
@@ -142,7 +143,7 @@ pub fn binary_display(
     let precedence = precedence(function.as_cell()?)?;
     let left = fields.field(vocabulary::LEFT)?;
     let right = fields.field(vocabulary::RIGHT)?;
-    Some(row(
+    Some(group(row(
         6.0,
         [
             operand(
@@ -163,7 +164,7 @@ pub fn binary_display(
                 &input.default_projection,
             ),
         ],
-    ))
+    )))
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -567,6 +568,8 @@ mod tests {
         let Recorded::Row { children, .. } = binary_display(&projection_input(&product))
             .unwrap()
             .record()
+            .content()
+            .clone()
         else {
             panic!("binary notation is a row")
         };
@@ -725,7 +728,7 @@ mod tests {
         let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
         let sum = call(vocabulary::SUM, value(1.0), product);
         let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
-        let Recorded::Row { children, .. } = layout.record() else {
+        let Recorded::Row { children, .. } = layout.record().content().clone() else {
             panic!("binary notation is a row");
         };
         assert!(matches!(&inspect(&(&children[0])),
@@ -754,7 +757,7 @@ mod tests {
             value(3.0),
         );
         let layout = binary_display(&projection_input(&(&product).into())).unwrap();
-        let Recorded::Row { children, .. } = layout.record() else {
+        let Recorded::Row { children, .. } = layout.record().content().clone() else {
             panic!("binary notation is a row");
         };
         crate::display::test_support::delimited(&children[0]);

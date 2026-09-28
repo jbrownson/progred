@@ -15,6 +15,9 @@ The 2026-09-04 cleanup preserved snapshots from commit `7da4bb0`:
 - [Grap/projection notes](projections-notes.md), including language proposals
   and the removed wasm experiment.
 
+The [neighbor callback navigation experiment](navigation-neighbor-experiment-2026-09-26.md)
+records the implementation replaced by logical-layout navigation on 2026-09-27.
+
 The [Roc comparison notes](roc-notes.md) retain the former porting backlog
 as proposals rather than current tasks.
 

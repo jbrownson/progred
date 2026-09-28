@@ -48,14 +48,14 @@ pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
     root: Option<Root>,
-    navigation: &'a mut Construction<C, H>,
+    navigation: &'a mut Construction<C>,
 }
 
 impl<'a, C, H> HoverContext<'a, C, H> {
     pub(crate) fn new(
         input: HoverInput<'a, H>,
         output: &'a mut HoverOutput<C, H>,
-        navigation: &'a mut Construction<C, H>,
+        navigation: &'a mut Construction<C>,
     ) -> Self {
         Self {
             input,
@@ -164,7 +164,7 @@ pub struct HoverPass<C, H> {
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
-    pub(super) navigation: Construction<C, H>,
+    pub(super) navigation: Construction<C>,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {

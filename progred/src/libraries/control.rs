@@ -8,9 +8,10 @@ use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
+use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
-    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, centered_row, col,
-    descend_path_local, dim, faced, hug, record_with, row, shared,
+    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, col, descend_path_local,
+    dim, faced, record_with, row, shared,
 };
 #[cfg(test)]
 use ::grap;
@@ -546,7 +547,7 @@ pub fn match_display(
             ),
         ],
     );
-    Some(hug(
+    Some(group_hug(
         head,
         descend_path_local(
             [Step::Key(vocabulary::CASES)],
@@ -610,8 +611,8 @@ fn case_display(
         .targets
         .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
     let arrow = activatable(dim("→"), expression_target.hover, expression_target.select);
-    Some(hug(
-        centered_row(
+    Some(group_hug(
+        crate::display::centered_row(
             6.0,
             [
                 pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection),
@@ -673,7 +674,7 @@ pub fn bindings_display(
                 expression_target.hover,
                 expression_target.select,
             ));
-            Some(alternatives([
+            Some(group(alternatives([
                 row(
                     4.0,
                     [
@@ -691,15 +692,15 @@ pub fn bindings_display(
                         hug(in_marker, expression, 4.0, 20.0),
                     ],
                 ),
-            ]))
+            ])))
         }
-        BindingForm::Where => Some(alternatives([
+        BindingForm::Where => Some(group(alternatives([
             row(
                 4.0,
                 [expression.clone(), function.clone(), bindings.clone()],
             ),
             col(0, 2.0, [expression, hug(function, bindings, 4.0, 20.0)]),
-        ])),
+        ]))),
     }
 }
 
@@ -727,8 +728,8 @@ fn binding_display(
     fields.field(vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
     let equals = activatable(dim("="), value_target.hover, value_target.select);
-    Some(hug(
-        centered_row(6.0, [left, equals]),
+    Some(group_hug(
+        crate::display::centered_row(6.0, [left, equals]),
         crate::libraries::grap::expression_path(
             [Step::Key(vocabulary::VALUE)],
             &input.default_projection,
@@ -743,7 +744,7 @@ fn quote_marker(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let target = input.targets.current();
-        activatable(dim("\""), target.hover, target.select)
+        crate::display::projection::target(activatable(dim("\""), target.hover, target.select))
     })
 }
 
@@ -764,13 +765,13 @@ pub fn quote_display(
         crate::display::runtime_partial(quote_marker),
         &input.default_projection,
     );
-    Some(row(
+    Some(group(row(
         2.0,
         [
             marker,
             crate::display::descend_path([Step::Key(::grap::vocabulary::EXPRESSION)]),
         ],
-    ))
+    )))
 }
 
 /// Unquote marks an expression embedded in a quoted template. Its prefix
@@ -782,7 +783,7 @@ pub fn unquote_display(
     input.pending.is_none().then_some(())?;
     fields.field(vocabulary::UNQUOTE)?;
     let target = input.targets.current();
-    Some(row(
+    Some(group(row(
         2.0,
         [
             activatable(dim("`"), target.hover, target.select),
@@ -791,7 +792,7 @@ pub fn unquote_display(
                 &input.default_projection,
             ),
         ],
-    ))
+    )))
 }
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
@@ -812,7 +813,7 @@ fn expression_list_display(
     (function.as_cell()? == callable).then_some(())?;
     let expressions = fields.field(vocabulary::EXPRESSIONS)?;
     expressions.list_len()?;
-    Some(row(
+    Some(group(row(
         4.0,
         [
             crate::libraries::grap::shallow_path(
@@ -827,7 +828,7 @@ fn expression_list_display(
                 &input.default_projection,
             ),
         ],
-    ))
+    )))
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
@@ -1139,6 +1140,8 @@ mod tests {
             do_display(&relative_projection_input(&(&expression).into()))
                 .expect("coherent do projection")
                 .record()
+                .content()
+                .clone()
         else {
             panic!("do is its marker followed by a list")
         };
@@ -1280,7 +1283,7 @@ mod tests {
         let expression = blob("body");
         let quoted = quote_call(expression.clone());
         let layout = quote_display(&projection_input(&(&quoted).into())).unwrap();
-        let Recorded::Row { children, .. } = &layout.record() else {
+        let Recorded::Row { children, .. } = &layout.record().content().clone() else {
             panic!("quote is an inline prefix");
         };
         let [marker, body] = children.as_slice() else {
@@ -1304,6 +1307,9 @@ mod tests {
         let marker =
             quote_marker(&projection_input(&Value::from(vocabulary::QUOTE).into())).unwrap();
         let Recorded::Before { child, .. } = marker.record() else {
+            panic!("the marker contributes its navigation target");
+        };
+        let Recorded::Before { child, .. } = *child else {
             panic!("the marker claims hover");
         };
         let Recorded::Before { child, .. } = *child else {
@@ -1729,13 +1735,13 @@ mod tests {
         let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
         let let_layout = bindings_display(&relative_projection_input(&(&let_call).into())).unwrap();
-        let Recorded::Alternatives(let_options) = let_layout.record() else {
+        let Recorded::Alternatives(let_options) = let_layout.record().content().clone() else {
             panic!("let has responsive forms");
         };
         let Recorded::Row {
             children: let_children,
             ..
-        } = &let_options[0]
+        } = let_options[0].content()
         else {
             panic!("flat let first");
         };
@@ -1770,13 +1776,13 @@ mod tests {
 
         let where_layout =
             bindings_display(&relative_projection_input(&(&where_call).into())).unwrap();
-        let Recorded::Alternatives(where_options) = where_layout.record() else {
+        let Recorded::Alternatives(where_options) = where_layout.record().content().clone() else {
             panic!("where has responsive forms");
         };
-        let Recorded::Row { children, .. } = &where_options[0] else {
+        let Recorded::Row { children, .. } = where_options[0].content() else {
             panic!("flat where first");
         };
-        let Recorded::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = children[0].content() else {
             panic!("where starts with its body");
         };
         assert!(matches!(&inspect(&(child.as_ref())),
@@ -1790,20 +1796,20 @@ mod tests {
         let binder = new_cell_id();
         let binding = bind_clause(binder, blob("value"));
         let layout = binding_display(&relative_projection_input(&(&binding).into())).unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("a binding has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("a flat binding first");
         };
-        let Recorded::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = children[0].content() else {
             panic!("a binding shares its pattern and equals");
         };
         let Recorded::Row {
             alignment: crate::display::RowAlignment::Center,
             children,
             ..
-        } = child.as_ref()
+        } = child.content()
         else {
             panic!("a binding head is vertically centered");
         };
@@ -1827,10 +1833,10 @@ mod tests {
             ],
         );
         let layout = match_display(&projection_input(&(&expression).into())).unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("match has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("flat match first");
         };
         let mut arms = &children[1];
@@ -1858,19 +1864,19 @@ mod tests {
             .and_then(|cases| cases.values().next())
             .expect("the standard list contains its cases");
         let case = case_display(&relative_projection_input(&case.into())).unwrap();
-        let Recorded::Alternatives(options) = case.record() else {
+        let Recorded::Alternatives(options) = case.record().content().clone() else {
             panic!("a case has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("a flat case is a row");
         };
-        let Recorded::Shared { child, .. } = &children[0] else {
+        let Recorded::Shared { child, .. } = children[0].content() else {
             panic!("a case shares its head");
         };
-        let Recorded::Row { children, .. } = child.as_ref() else {
+        let Recorded::Row { children, .. } = child.content() else {
             panic!("a case head contains its pattern and arrow");
         };
-        let Recorded::Before { child, .. } = &children[1] else {
+        let Recorded::Before { child, .. } = children[1].content() else {
             panic!("the arrow claims the case hover");
         };
         assert_eq!(

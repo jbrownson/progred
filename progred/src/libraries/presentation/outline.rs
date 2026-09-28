@@ -1,8 +1,8 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
-use crate::display::widget::navigation::{nav_group, vertical};
-use crate::display::{self as d, Layout, ProjectionInput};
+use crate::display::projection::group;
+use crate::display::{self as d, Layout, ProjectionInput, col};
 use crate::frame::Hovered;
 use gid::{CellId, Path, Step, Value};
 use std::rc::Rc;
@@ -57,7 +57,7 @@ pub(super) fn display(
                 })
             }
         });
-        nav_group(vertical(d::col(
+        group(col(
             0,
             24.0,
             [d::col(
@@ -70,7 +70,7 @@ pub(super) fn display(
             )]
             .into_iter()
             .chain(footer.clone()),
-        )))
+        ))
         .measure(context, build)
     })))
 }
@@ -109,13 +109,13 @@ fn section(
     Layout::program(Rc::new(move |context, build| {
         let path: Path = context.path.iter().cloned().chain(steps.clone()).collect();
         let (_, visible) = visibility(context.inputs, &path, value.as_ref());
-        vertical(d::col(
+        col(
             0,
             8.0,
             [heading.clone()]
                 .into_iter()
                 .chain(visible.then(|| d::pad(18.0, body.clone()))),
-        ))
+        )
         .measure(context, build)
     }))
 }

@@ -1,4 +1,4 @@
-//! Navigation through real projections and the ordinary event chain.
+//! Layout navigation through real projections and the ordinary event chain.
 use super::*;
 use crate::display::{self as d, widget::navigation as nav};
 use nav::Direction;
@@ -7,10 +7,10 @@ fn sample_projection() -> Projection<World> {
     Projection::new([d::runtime_partial(|input| {
         if let Some(items) = d::structure::list_items(input, None) {
             let items: Vec<_> = items.into_iter().map(|(_, layout)| layout).collect();
-            Some(nav::nav_group(d::alternatives([
-                nav::horizontal(d::row(8.0, items.clone())),
-                nav::vertical(d::col(0, 8.0, items)),
-            ])))
+            Some(d::alternatives([
+                nav::nav_group(d::row(8.0, items.clone())),
+                nav::nav_group(d::col(0, 8.0, items)),
+            ]))
         } else {
             crate::libraries::text::display(input)
         }
@@ -61,15 +61,15 @@ fn fixture(wide: bool) -> (World, Vec<Path>) {
 }
 
 #[test]
-fn neighbor_destinations_follow_nested_container_boundaries_and_chosen_layout() {
+fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout() {
     use Direction::*;
     for wide in [false, true] {
         let (mut world, paths) = fixture(wide);
         let projection = sample_projection();
         let expected = if wide {
             [
-                [None, None, None, Some(1)],
-                [None, Some(2), Some(0), Some(4)],
+                [None, Some(1), None, Some(1)],
+                [Some(0), Some(2), Some(0), Some(4)],
                 [Some(1), Some(3), Some(0), Some(4)],
                 [Some(2), Some(4), Some(0), Some(4)],
                 [Some(3), None, Some(1), None],
@@ -110,7 +110,7 @@ fn neighbor_destinations_follow_nested_container_boundaries_and_chosen_layout() 
 }
 
 #[test]
-fn neighbor_standard_containers_follow_their_displayed_axis_including_cell_contents() {
+fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
     use Direction::*;
     for record in [false, true] {
         for in_cell in [false, true] {
@@ -189,16 +189,34 @@ fn neighbor_standard_containers_follow_their_displayed_axis_including_cell_conte
                 } else {
                     (Right, Left, Up)
                 };
-                let entry = if in_cell { &body } else { &children[0] };
                 let checks = [
-                    (&paths[1], forward, Some(entry)),
-                    (entry, backward, Some(&paths[1])),
-                    (&children[0], across, Some(&paths[0])),
-                    (&paths[1], across, Some(&paths[0])),
+                    (&body, forward, Some(&children[0])),
+                    (&children[0], backward, Some(&body)),
+                    (
+                        &children[0],
+                        across,
+                        Some(if vertical { &body } else { &paths[0] }),
+                    ),
+                    (
+                        &paths[1],
+                        if in_cell { Up } else { across },
+                        Some(&paths[0]),
+                    ),
                     (
                         &paths[1],
                         Right,
-                        Some(if vertical { &paths[2] } else { entry }),
+                        Some(if in_cell { &body } else { &children[0] }),
+                    ),
+                    (
+                        &paths[1],
+                        Down,
+                        Some(if !vertical {
+                            &paths[2]
+                        } else if in_cell {
+                            &body
+                        } else {
+                            &children[0]
+                        }),
                     ),
                     (
                         &children[0],
@@ -241,7 +259,7 @@ fn neighbor_standard_containers_follow_their_displayed_axis_including_cell_conte
 }
 
 #[test]
-fn neighbor_raw_text_has_first_refusal_and_successors_need_no_paint() {
+fn navigation_raw_text_has_first_refusal_and_successors_need_no_paint() {
     let (mut world, paths) = fixture(false);
     world.model.selection = Some(make_selection(paths[2].clone()));
     // These are consecutive dispatches, each against a freshly placed frame.
@@ -290,7 +308,7 @@ fn neighbor_raw_text_has_first_refusal_and_successors_need_no_paint() {
 }
 
 #[test]
-fn neighbor_arrival_through_jump_retains_editing_context() {
+fn navigation_arrival_through_jump_retains_editing_context() {
     let source = new_cell_id();
     let first = new_cell_id();
     let second = new_cell_id();
@@ -304,13 +322,13 @@ fn neighbor_arrival_through_jump_retains_editing_context() {
         let projection = Projection::new([
             d::runtime_partial(move |input| {
                 input.value?.field(source)?;
-                Some(nav::nav_group(nav::horizontal(d::row(
+                Some(nav::nav_group(d::row(
                     8.0,
                     [
                         d::jump([Step::Key(first)], [Step::Key(source)]),
                         d::jump([Step::Key(second)], [Step::Key(source)]),
                     ],
-                ))))
+                )))
             }),
             ordinary.partial,
         ]);
@@ -348,7 +366,7 @@ fn neighbor_arrival_through_jump_retains_editing_context() {
 }
 
 #[test]
-fn neighbor_runner_installs_successor_handlers_before_the_next_key_without_paint() {
+fn navigation_runner_installs_successor_handlers_before_the_next_key_without_paint() {
     let (mut world, paths) = fixture(false);
     world.stack.projection = sample_projection();
     let mut runner = crate::EditorRunner::new(world);
@@ -373,7 +391,7 @@ fn neighbor_runner_installs_successor_handlers_before_the_next_key_without_paint
 }
 
 #[test]
-fn neighbor_named_number_hands_off_from_name_at_text_boundary() {
+fn navigation_named_number_hands_off_from_name_at_text_boundary() {
     let mut world = crate::test_editor(Document {
         root: Some(d::overlay_value(
             &f64::value(45.0),
@@ -410,7 +428,7 @@ fn neighbor_named_number_hands_off_from_name_at_text_boundary() {
 }
 
 #[test]
-fn neighbor_example_projects_and_navigates_without_an_app_window() {
+fn navigation_example_projects_and_navigates_without_an_app_window() {
     let (doc, _) = crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
     let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
     let viewport = kurbo::Size::new(900.0, 600.0);
@@ -466,7 +484,7 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
 }
 
 #[test]
-fn neighbor_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
+fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
     let (doc, binders) =
         crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
@@ -586,7 +604,7 @@ fn neighbor_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
 }
 
 #[test]
-fn neighbor_outline_connects_heading_and_body_before_adjacent_sections() {
+fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
     let (doc, binders) =
         crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
@@ -684,7 +702,7 @@ fn neighbor_outline_connects_heading_and_body_before_adjacent_sections() {
 }
 
 #[test]
-fn neighbor_example_cells_leave_vertical_navigation_to_the_list() {
+fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
     let (mut world, cells) = navigation_example_cells();
     let name: Path = cells[0]
         .iter()
@@ -721,7 +739,7 @@ fn neighbor_example_cells_leave_vertical_navigation_to_the_list() {
 }
 
 #[test]
-fn neighbor_horizontal_row_wrapping_preserves_text_arrival_direction() {
+fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
     let root = Value::list([text::value("abc"), text::value("de")]);
     let paths: Vec<Path> = positions(&root)
         .into_iter()
@@ -768,7 +786,7 @@ fn neighbor_horizontal_row_wrapping_preserves_text_arrival_direction() {
 }
 
 #[test]
-fn neighbor_example_cells_use_horizontal_contents_and_vertical_siblings() {
+fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     let (mut world, cells) = navigation_example_cells();
     let number = |cell: &Path| -> Path {
         cell.iter()
@@ -828,7 +846,7 @@ fn neighbor_example_cells_use_horizontal_contents_and_vertical_siblings() {
 }
 
 #[test]
-fn neighbor_empty_cell_stops_before_entering_missing_contents() {
+fn navigation_empty_cell_stops_before_entering_missing_contents() {
     let outer = Value::list([
         text::value("before"),
         Value::Cell(gid::new_cell_id()),
@@ -892,7 +910,7 @@ fn neighbor_empty_cell_stops_before_entering_missing_contents() {
 }
 
 #[test]
-fn neighbor_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
+fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     let root = Value::list([text::value("first"), text::value("second")]);
     let paths: Vec<_> = positions(&root)
         .into_iter()
@@ -904,7 +922,9 @@ fn neighbor_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     });
     let ordinary = sample_projection();
     let projection = Projection::new([
-        d::runtime_partial(|input| crate::libraries::text::display(input).map(nav::nav_group)),
+        d::runtime_partial(|input| {
+            crate::libraries::text::display(input).map(|child| nav::nav_group(child))
+        }),
         ordinary.partial,
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
@@ -923,7 +943,7 @@ fn neighbor_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
 }
 
 #[test]
-fn neighbor_example_lists_leave_vertical_navigation_to_the_outer_list() {
+fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
     let (doc, binders) =
         crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
@@ -1019,7 +1039,7 @@ fn neighbor_example_lists_leave_vertical_navigation_to_the_outer_list() {
 }
 
 #[test]
-fn neighbor_nested_list_has_one_leading_stop_in_both_directions() {
+fn navigation_nested_list_has_one_leading_stop_in_both_directions() {
     let inner = Value::list([text::value("F"), text::value("G")]);
     let inner_positions = positions(&inner);
     let outer = Value::list([text::value("E"), inner, text::value("H")]);
@@ -1080,7 +1100,7 @@ fn neighbor_nested_list_has_one_leading_stop_in_both_directions() {
 }
 
 #[test]
-fn neighbor_empty_list_stops_once_in_either_direction() {
+fn navigation_empty_list_stops_once_in_either_direction() {
     let outer = Value::list([text::value("before"), Value::list([]), text::value("after")]);
     let paths: Vec<_> = positions(&outer)
         .into_iter()

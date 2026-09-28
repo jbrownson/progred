@@ -50,13 +50,13 @@ pub(crate) fn tutorial_slots(
             }
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
-                    crate::display::col(
+                    crate::display::projection::group(crate::display::col(
                         0,
                         16.0,
                         slots
                             .iter()
                             .map(|key| crate::display::descend(Step::Key(*key), None, None)),
-                    )
+                    ))
                 })
             })))
         }

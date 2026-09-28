@@ -62,19 +62,20 @@ fn number(n: f32) -> Value {
 fn unshared(
     layout: &Recorded<crate::Editor, crate::frame::Hovered>,
 ) -> &Recorded<crate::Editor, crate::frame::Hovered> {
-    match layout {
+    match layout.content() {
         Recorded::Shared { child, .. } => unshared(child),
-        _ => layout,
+        _ => layout.content(),
     }
 }
 
 #[test]
 fn operands_keep_their_paths_and_operator_targets_the_expression() {
     let sum = binary(SUM, number(1.0), number(2.0));
-    let Recorded::Alternatives(options) = field(&input(&sum)).unwrap().record() else {
+    let Recorded::Alternatives(options) = field(&input(&sum)).unwrap().record().content().clone()
+    else {
         panic!()
     };
-    let Recorded::Row { children, .. } = &options[0] else {
+    let Recorded::Row { children, .. } = options[0].content() else {
         panic!()
     };
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
@@ -176,14 +177,15 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
 fn coordinates_are_shallow_and_names_remain_editable_data() {
     let axis = node(AXIS, X.into());
     assert!(
-        matches!((field(&input(&axis))).map(|layout| inspect(&layout)), Some(ProjectionCall::Descend { step, projection: Some(_), .. })
+        matches!(inspect(&field(&input(&axis)).unwrap()), ProjectionCall::Descend { step, projection: Some(_), .. }
         if step == Step::Key(AXIS))
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
-    let Recorded::Alternatives(options) = field(&input(&named)).unwrap().record() else {
+    let Recorded::Alternatives(options) = field(&input(&named)).unwrap().record().content().clone()
+    else {
         panic!()
     };
-    let Recorded::Row { children, .. } = &options[0] else {
+    let Recorded::Row { children, .. } = options[0].content() else {
         panic!()
     };
     let Recorded::Row { children: head, .. } = unshared(&children[0]) else {

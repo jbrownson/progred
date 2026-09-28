@@ -7,10 +7,12 @@ use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
+use crate::display::projection::{group, group_hug};
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
     RecordField, ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
-    descend_path_local, dim, faced, hug, pad, record_with, row, selectable_bracket, shared, slot,
+    descend_path_local, dim, faced, pad, record_fragment_with, row, selectable_bracket, shared,
+    slot,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -57,7 +59,7 @@ pub(crate) fn shallow_cell_with(
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
     let target = input.targets.current();
-    Some(crate::display::widget::navigation::target(activatable(
+    Some(crate::display::projection::target(activatable(
         decorate(faced(name, Face::Name)),
         target.hover,
         target.select,
@@ -69,14 +71,14 @@ fn declaration_cell(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
-    Some(selectable_bracket(
+    Some(group(selectable_bracket(
         Delim::Paren,
         descend_local(
             Step::Follow(definition.source),
             crate::display::partial(declaration_name),
             &input.default_projection,
         ),
-    ))
+    )))
 }
 
 fn declaration_name(
@@ -99,7 +101,11 @@ fn lambda_name(
         None => {
             input.selection.is_none().then_some(())?;
             let target = input.targets.current();
-            activatable(faced("λ", Face::Name), target.hover, target.select)
+            crate::display::projection::target(activatable(
+                faced("λ", Face::Name),
+                target.hover,
+                target.select,
+            ))
         }
     })
 }
@@ -260,7 +266,7 @@ pub(crate) fn call_with_function(
         function_projection.unwrap_or_else(|| crate::display::runtime_partial(shallow_cell)),
         &input.default_projection,
     );
-    let arguments = record_with(
+    let arguments = record_fragment_with(
         fields
             .record_keys()?
             .into_iter()
@@ -291,7 +297,7 @@ pub(crate) fn call_with_function(
         },
         trailing,
     );
-    Some(hug(function, arguments, 0.0, 20.0))
+    Some(group_hug(function, arguments, 0.0, 20.0))
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
@@ -322,7 +328,7 @@ pub fn lambda_display(
     );
     let arrow = activatable(dim("→"), body_target.hover, body_target.select);
     let head = row(3.0, [lambda, params, arrow]);
-    Some(hug(
+    Some(group_hug(
         head,
         expression_descend(Step::Key(BODY), &input.default_projection),
         6.0,
@@ -347,7 +353,7 @@ pub fn value_display(
         &input.default_projection,
     );
     let target = input.targets.at([Step::Key(VALUE)]);
-    Some(hug(
+    Some(group_hug(
         row(
             3.0,
             [name, activatable(dim("="), target.hover, target.select)],
@@ -365,7 +371,10 @@ pub fn ffi_display(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let ffi = input.value?.field(FFI)?;
     ffi.as_cell()?;
-    Some(shallow_path([Step::Key(FFI)], &input.default_projection))
+    Some(group(shallow_path(
+        [Step::Key(FFI)],
+        &input.default_projection,
+    )))
 }
 
 pub fn evaluate_display(
@@ -392,10 +401,10 @@ pub fn evaluate_display(
         )],
         &result,
     ));
-    Some(alternatives([
+    Some(group(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
         col(0, 2.0, [row(6.0, [expression, shaft]), pad(20.0, result)]),
-    ]))
+    ])))
 }
 
 fn evaluate_foreign(
@@ -772,7 +781,8 @@ mod tests {
         env: &dyn Env,
         value: &Value,
     ) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-        project_runtime(evaluate_display, &input(env, value)).map(|layout| layout.record())
+        project_runtime(evaluate_display, &input(env, value))
+            .map(|layout| layout.record().content().clone())
     }
 
     #[test]
@@ -811,7 +821,9 @@ mod tests {
                 let declaration =
                     declaration_cell(&input(&env, &cell).with_value(Some(&(&cell).into())))
                         .unwrap()
-                        .record();
+                        .record()
+                        .content()
+                        .clone();
                 let (_, child, _) = crate::display::test_support::delimited(&declaration);
                 let ProjectionCall::Descend {
                     step,
@@ -1105,10 +1117,10 @@ mod tests {
     fn unshared(
         mut layout: &Recorded<crate::Editor, crate::frame::Hovered>,
     ) -> &Recorded<crate::Editor, crate::frame::Hovered> {
-        while let Recorded::Shared { child, .. } = layout {
+        while let Recorded::Shared { child, .. } = layout.content() {
             layout = child.as_ref();
         }
-        layout
+        layout.content()
     }
 
     fn arms(
@@ -1117,10 +1129,10 @@ mod tests {
         &Recorded<crate::Editor, crate::frame::Hovered>,
         &Recorded<crate::Editor, crate::frame::Hovered>,
     ) {
-        let Recorded::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.content() else {
             panic!("expected alternatives");
         };
-        let Some(Recorded::Row { children, .. }) = options.first() else {
+        let Some(Recorded::Row { children, .. }) = options.first().map(Recorded::content) else {
             panic!("expected a row first");
         };
         assert_eq!(children.len(), 3);
@@ -1130,10 +1142,10 @@ mod tests {
     fn argument_order(
         layout: &impl Recordable<crate::Editor, crate::frame::Hovered>,
     ) -> Vec<CellId> {
-        let Recorded::Alternatives(call_options) = layout.record() else {
+        let Recorded::Alternatives(call_options) = layout.record().content().clone() else {
             panic!("call has responsive forms");
         };
-        let Recorded::Row { children, .. } = &call_options[0] else {
+        let Recorded::Row { children, .. } = call_options[0].content() else {
             panic!("flat call first");
         };
         let (_, child, _) = crate::display::test_support::delimited(unshared(&children[1]));
@@ -1147,7 +1159,7 @@ mod tests {
             .iter()
             .step_by(2)
             .map(|argument| {
-                let Recorded::Row { children, .. } = argument else {
+                let Recorded::Row { children, .. } = argument.content() else {
                     panic!("argument has a label and value");
                 };
                 let ProjectionCall::Descend { step, .. } = &inspect(&(unshared(&children[2])))
@@ -1180,12 +1192,12 @@ mod tests {
     #[test]
     fn wrapped_evaluation_keeps_the_arrow_with_its_source_and_indents_the_result() {
         let layout = projected(&env(), &wrapper(Value::from(vec![0]), [])).unwrap();
-        let Recorded::Alternatives(options) = layout else {
+        let Recorded::Alternatives(options) = layout.content() else {
             panic!("evaluation has responsive forms");
         };
         let Recorded::Row {
             children: inline, ..
-        } = &options[0]
+        } = options[0].content()
         else {
             panic!("inline evaluation");
         };
@@ -1193,18 +1205,18 @@ mod tests {
             baseline: 0,
             children: wrapped,
             ..
-        } = &options[1]
+        } = options[1].content()
         else {
             panic!("wrapped evaluation uses its source baseline");
         };
-        let Recorded::Row { children: head, .. } = &wrapped[0] else {
+        let Recorded::Row { children: head, .. } = wrapped[0].content() else {
             panic!("source and arrow stay on the same line");
         };
         let Recorded::Pad {
             left,
             child: result,
             ..
-        } = &wrapped[1]
+        } = wrapped[1].content()
         else {
             panic!("result is indented below the source");
         };
@@ -1233,7 +1245,7 @@ mod tests {
                     [(new_cell_id(), Value::from(vec![2]))]
                 ),
             ),
-            Some(Recorded::Alternatives(_))
+            Some(layout) if matches!(layout.content(), Recorded::Alternatives(_))
         ));
     }
 
@@ -1272,10 +1284,10 @@ mod tests {
             ),
         )
         .unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("call has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("flat call first");
         };
         assert!(matches!(&inspect(&(unshared(&children[0]))),
@@ -1293,10 +1305,10 @@ mod tests {
         let argument = new_cell_id();
         let call = ::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]);
         let layout = project_runtime(call_display, &relative_input(&env(), &call)).unwrap();
-        let Recorded::Alternatives(call_options) = layout.record() else {
+        let Recorded::Alternatives(call_options) = layout.record().content().clone() else {
             panic!("call has responsive forms");
         };
-        let Recorded::Row { children, .. } = &call_options[0] else {
+        let Recorded::Row { children, .. } = call_options[0].content() else {
             panic!("flat call first");
         };
         let (left, child, right) = crate::display::test_support::delimited(unshared(&children[1]));
@@ -1316,7 +1328,7 @@ mod tests {
         let Recorded::Row { children, .. } = argument_options[0].content() else {
             panic!("flat arguments first");
         };
-        let Recorded::Row { children, .. } = &children[0] else {
+        let Recorded::Row { children, .. } = children[0].content() else {
             panic!("argument has a label and value");
         };
         let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
@@ -1470,10 +1482,10 @@ mod tests {
         let parameter = new_cell_id();
         let definition = ::grap::lambda([parameter], Value::from(parameter));
         let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("lambda has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("flat lambda first");
         };
         let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
@@ -1550,10 +1562,10 @@ mod tests {
             ],
         );
         let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("lambda has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("flat lambda first");
         };
         let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
@@ -1607,10 +1619,10 @@ mod tests {
             [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
         );
         let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
-        let Recorded::Alternatives(options) = layout.record() else {
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
             panic!("lambda has responsive forms");
         };
-        let Recorded::Row { children, .. } = &options[0] else {
+        let Recorded::Row { children, .. } = options[0].content() else {
             panic!("flat lambda first");
         };
         let Recorded::Row { children: head, .. } = unshared(&children[0]) else {

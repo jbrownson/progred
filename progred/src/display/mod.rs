@@ -17,6 +17,7 @@ pub use conject::Conject;
 mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
 pub mod profile;
+pub mod projection;
 #[cfg(test)]
 pub mod recording;
 pub mod structure;
@@ -643,23 +644,52 @@ pub fn record<'a>(
 /// responsive forms but not in sorting the stored fields.
 pub fn record_with<T>(
     fields: impl IntoIterator<Item = (CellId, T)>,
-    mut order: impl FnMut(&CellId, &CellId) -> Ordering,
-    mut field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
+    order: impl FnMut(&CellId, &CellId) -> Ordering,
+    field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
     trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let mut fields = fields.into_iter().collect::<Vec<_>>();
-    fields.sort_by(|(left, _), (right, _)| order(left, right));
     record_heads(
-        fields
-            .into_iter()
-            .map(|(key, value)| field(key, value))
+        ordered_record_fields(fields, order, field)
             .chain(trailing)
-            .map(|field| RecordField {
-                label: row(0.0, [field.label, dim(":")]),
-                value: field.value,
-            }),
+            .map(record_colon),
         [],
     )
+}
+
+/// Ordered fields without a whole-value stop; the enclosing form owns it.
+pub fn record_fragment_with<T>(
+    fields: impl IntoIterator<Item = (CellId, T)>,
+    order: impl FnMut(&CellId, &CellId) -> Ordering,
+    field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
+    trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    record_fragment(
+        ordered_record_fields(fields, order, field)
+            .chain(trailing)
+            .map(record_colon),
+        [],
+    )
+}
+
+fn ordered_record_fields<T>(
+    fields: impl IntoIterator<Item = (CellId, T)>,
+    mut order: impl FnMut(&CellId, &CellId) -> Ordering,
+    mut field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
+) -> impl Iterator<Item = RecordField<crate::Editor, crate::frame::Hovered>> {
+    let mut fields = fields.into_iter().collect::<Vec<_>>();
+    fields.sort_by(|(left, _), (right, _)| order(left, right));
+    fields
+        .into_iter()
+        .map(move |(key, value)| field(key, value))
+}
+
+fn record_colon(
+    field: RecordField<crate::Editor, crate::frame::Hovered>,
+) -> RecordField<crate::Editor, crate::frame::Hovered> {
+    RecordField {
+        label: row(0.0, [field.label, dim(":")]),
+        value: field.value,
+    }
 }
 
 /// Shared record geometry. Heads already include punctuation and its
@@ -668,7 +698,11 @@ pub fn record_heads(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
     trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    widget::navigation::nav_group(record_fragment(fields, trailing))
+    let [horizontal, vertical] = record_forms(fields, trailing);
+    selectable_bracket(
+        Delim::Brace,
+        projection::group(alternatives([horizontal, vertical])),
+    )
 }
 
 /// A record-shaped fragment of a larger projection. Its fields compose their
@@ -677,6 +711,13 @@ pub fn record_fragment(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
     trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
+    selectable_bracket(Delim::Brace, alternatives(record_forms(fields, trailing)))
+}
+
+fn record_forms(
+    fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
+    trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
+) -> [Layout<crate::Editor, crate::frame::Hovered>; 2] {
     let fields = fields
         .into_iter()
         .map(|field| RecordField {
@@ -696,7 +737,7 @@ pub fn record_fragment(
     }
     let mut rows = fields
         .into_iter()
-        .map(|field| hug(field.label, field.value, 6.0, 20.0))
+        .map(|field| projection::hug(field.label, field.value, 6.0, 20.0))
         .collect::<Vec<_>>();
     for tail in trailing {
         let tail = shared(tail);
@@ -706,27 +747,7 @@ pub fn record_fragment(
         flat.push(tail.clone());
         rows.push(tail);
     }
-    selectable_bracket(
-        Delim::Brace,
-        alternatives([
-            widget::navigation::horizontal(row(0.0, flat)),
-            widget::navigation::vertical(col(0, 2.0, rows)),
-        ]),
-    )
-}
-
-pub fn hug<World: 'static, Hover: Clone + 'static>(
-    head: Layout<World, Hover>,
-    child: Layout<World, Hover>,
-    gap: f64,
-    tab: f64,
-) -> Layout<World, Hover> {
-    let head = shared(head);
-    let child = shared(child);
-    alternatives([
-        row(gap, [head.clone(), child.clone()]),
-        col(0, 2.0, [head, pad(tab, child)]),
-    ])
+    [row(0.0, flat), col(0, 2.0, rows)]
 }
 
 /// Share one projected child between mutually exclusive alternatives.
@@ -1061,7 +1082,7 @@ mod tests {
         };
         let Recorded::Row {
             children: first, ..
-        } = &children[0]
+        } = children[0].content()
         else {
             panic!("a flat field keeps its label and value together");
         };
@@ -1070,7 +1091,7 @@ mod tests {
         ));
         let Recorded::Row {
             children: second, ..
-        } = &children[2]
+        } = children[2].content()
         else {
             panic!("a flat field keeps its label and value together");
         };
@@ -1080,12 +1101,12 @@ mod tests {
         let Recorded::Col { children, .. } = forms[1].content() else {
             panic!("the second form is a column");
         };
-        let Recorded::Alternatives(first) = &children[0] else {
+        let Recorded::Alternatives(first) = children[0].content() else {
             panic!("a column field may break after its label");
         };
         let Recorded::Row {
             children: inline, ..
-        } = &first[0]
+        } = first[0].content()
         else {
             panic!("a field first stays inline");
         };
@@ -1094,7 +1115,7 @@ mod tests {
         ));
         let Recorded::Col {
             children: broken, ..
-        } = &first[1]
+        } = first[1].content()
         else {
             panic!("a field may put its value below its label");
         };

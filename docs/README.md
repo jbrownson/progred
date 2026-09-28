@@ -43,8 +43,9 @@ review. [Historical notes](history/README.md) preserve earlier models and
 proposals separately; they are not required reading for ordinary changes.
 [Layout continuations](layout-continuations.md) describes the box/widget
 boundary, the frame stages, and their verification.
-[Neighbor callback experiment](navigation-neighbor-experiment-2026-09-26.md)
-records the initial experiment and its integration into ordinary event dispatch.
+[Layout navigation](navigation.md) describes logical-line navigation and its
+checkpoint measurements. The superseded [neighbor callback experiment](history/navigation-neighbor-experiment-2026-09-26.md)
+is preserved as history.
 
 [Performance checks](performance.md) describes the shared headless frame harness
 and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
