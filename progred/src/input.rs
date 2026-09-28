@@ -523,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_cell_enters_with_right_and_passes_through_on_exit() {
+    fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
         use crate::libraries::name;
         use gid::{Step, Value};
         use ui_events::keyboard::NamedKey;
@@ -576,12 +576,24 @@ mod tests {
                 .selection_offsets(),
             (0, 0)
         );
-        // Both containers pass through on exit; there is no previous item.
-        assert!(!runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        // Backward traversal visits the cell, then its enclosing list.
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
         assert_eq!(
             runner.editor.model.selection.as_ref().unwrap().path(),
-            name_path
+            cell_path
         );
+        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        assert!(
+            runner
+                .editor
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .path()
+                .is_empty()
+        );
+        assert!(!runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
     }
 
     #[test]

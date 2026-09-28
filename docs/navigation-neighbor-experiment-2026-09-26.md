@@ -169,11 +169,61 @@ Unclaimed arrows normalize to navigation regardless of modifiers; text editing
 and explicit shortcuts retain first refusal. The release Progred library suite
 passes 914 tests, with 53 intentionally ignored.
 
-## Next policy trial — not implemented
+## Single leading-edge policy trial
 
-The latest discussion favors a single whole-container stop at the start of its
-flow: `previous ↔ whole ↔ first child ↔ … ↔ last child ↔ next`. Backward entry
-would reach the last child, and backing out of the first child would select the
-whole. This replaces the current whole-on-arrival-from-either-side behavior.
-Bracketed and unbracketed lists should share the policy. No edge-position state
-or navigation history is needed for this proposed traversal.
+Containers now use a single whole-container stop at the start of their flow:
+`previous ↔ whole ↔ first child ↔ … ↔ last child ↔ next`. Backward entry
+reaches the last child, and backing out of the first child selects the whole.
+This replaces the whole-on-arrival-from-either-side behavior. The shared group
+combinator derives backward entry from the chosen forward directions; it no
+longer needs separate through/expose-contents parameters. Cells and bracketed
+lists choose Right; records and unbracketed columns choose Right/Down.
+No edge-position state or navigation history is needed.
+
+Cmd+0 now starts with a workshop plan containing nested outlines, operation
+records, nested pass lists, shared dimensions, and an editable calculation with
+a computed read-only result. The small isolated cases remain underneath.
+Try walking through the dimensions, entering an operation's passes, and backing
+out again; resize the window to exercise alternate layouts. This is a policy
+trial for hands-on review, not a universal law for custom projections.
+
+Verification: the release Progred library suite passes 915 tests (55 ignored).
+Regressions cover both traversal directions, empty containers, alternative
+layouts, and editing the same shared cell through repeated nested outline jumps.
+The application was not launched; the interaction still needs hands-on review.
+
+## Presentation-directed flow
+
+Standard records, lists, and cells now share `nav_group`. Horizontal sequences
+declare Right as forward; vertical sequences declare Down. Their transient
+entry summary carries that declaration through wrappers, including cell follows.
+Only the chosen layout alternative contributes. The whole-value stop follows
+that axis; perpendicular movement defers to the parent, and perpendicular
+arrival selects the whole. A leaf defaults to horizontal. Backward boundary
+requests wait for child placement to reveal the chosen flow, using the existing
+construction-time callback mechanism. No geometry heuristic or retained state
+is involved.
+
+Vertical lists and outline sections no longer add horizontal row wrapping.
+The obsolete separate cell policy and dual-axis group entry helper are removed.
+The focused regression matrix checks horizontal/vertical records and lists,
+both directly and wrapped in cells, against actual chosen layout geometry and
+dispatched navigation. Cmd+0 includes a cell-wrapped finishing operation to
+exercise this interactively.
+
+Verification: the release Progred library suite passes 916 tests (55 ignored).
+
+## Horizontal row wrapping trial
+
+Vertical sequences now offer secondary Right/Left sibling connections while
+retaining Down as their primary flow. This uses the existing multidirectional
+sequence providers, not a shell-level fallback from Right to Down. A selected
+vertical container still enters with Down; unclaimed horizontal movement inside
+a row continues to the adjacent row. Text keeps horizontal arrival semantics:
+Right enters at the beginning, Left at the end. No navigation history or geometry
+inference is added.
+
+Verification: the release Progred library suite passes 917 tests (55 ignored).
+The row-wrapping regression dispatches raw arrow keys, verifies horizontal caret
+arrivals versus ordinary vertical selection, and checks that navigation does not
+edit the document. Cell-to-cell wrapping and layout alternatives are covered too.

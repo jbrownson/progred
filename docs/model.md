@@ -204,26 +204,27 @@ its existing editing/conject context.
 
 Plain rows, columns, and `descend` add no routing. The standard list and record
 helpers explicitly wrap the chosen presentation in navigation combinators.
-The `nav_group` used by records and unbracketed columns makes
-the whole value the entry from every direction. Right/Down from the group
-enters its content; Left/Up at the corresponding content boundary returns to
-the group. `nav_group_with_entry` lets a projection choose those entry directions;
-expanded cells and bracketed lists use
-`nav_container`: arriving selects the whole value, then Right enters its first
-child or Left its last. Leaving the contents passes straight to the enclosing
-sequence, without another whole-value stop. Up/Down from the whole value stays
-with the enclosing sequence. Empty lists stop once and then continue outward;
-empty cells stop at the reference before entering their missing contents.
-The `reading_order`
-sequence used by vertical lists supplies both Down/Up sibling movement and
-Right/Left continuation between item contents. Plain `vertical` does not wrap
-horizontal movement. A child representing the same occurrence keeps its own navigation.
+Containers put their whole-value stop at the leading edge of their flow:
+`previous ↔ whole ↔ first child ↔ … ↔ last child ↔ next`.
+`nav_group` uses the flow explicitly declared by its chosen content presentation:
+Right/Left for horizontal, Down/Up for vertical. Forward movement from the whole
+enters; backward arrival reaches the last child, and backing out of the first
+child reaches the whole. The perpendicular axis defers to the parent, with
+arrival selecting the whole container. Cells inherit their contents' declared
+flow, so a horizontal cell in a vertical list still leaves Up/Down to the list.
+Leaves default to horizontal. Empty lists stop once and continue outward; empty
+cells have both a reference stop and a missing-content stop. No arrival-side
+state is stored. Vertical sequences also connect unclaimed Right/Left movement
+between rows, without changing their primary Down/Up flow. Wrapping preserves
+the horizontal arrival direction, so text receives Right at its beginning and
+Left at its end; it is not a synthesized Down/Up event.
+A child representing the same occurrence keeps its own navigation.
 Named numbers compose their name and number horizontally. Custom projections
 choose these compositions explicitly rather than inheriting geometry rules.
 Only placed alternatives contribute.
 
-Outline composes each heading and visible body in `reading_order`, connecting
-them horizontally as well as vertically before continuing to adjacent sections.
+Outline composes each heading and visible body vertically before continuing to
+adjacent sections.
 An outer column combines the section list and trailing extras. Its `nav_group`
 owns the whole-record stop; extras use
 `record_fragment`, which supplies the record layout and field routing without

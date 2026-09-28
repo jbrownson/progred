@@ -1,7 +1,7 @@
 //! Structural projection combinators. Child overrides apply at each
 //! immediate child; recursion is a choice made by that projection.
 
-use super::widget::navigation::{nav_group, reading_order};
+use super::widget::navigation::{nav_group, vertical};
 use super::*;
 
 pub fn list(
@@ -34,7 +34,7 @@ pub(crate) fn list_column_with(
     Some(nav_group(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
     } else {
-        reading_order(col(
+        vertical(col(
             1,
             0.0,
             list_with(input, &items, item, |before, after| {
@@ -160,11 +160,11 @@ pub fn list_layout(
         |_, item| item,
         |before, after| list_gap(4.0, before, after),
     );
-    Some(widget::navigation::nav_container(selectable_bracket(
+    Some(widget::navigation::nav_group(selectable_bracket(
         Delim::Bracket,
         alternatives([
             widget::navigation::horizontal(row(0.0, horizontal)),
-            widget::navigation::reading_order(col(1, 0.0, vertical)),
+            widget::navigation::vertical(col(1, 0.0, vertical)),
         ]),
     )))
 }

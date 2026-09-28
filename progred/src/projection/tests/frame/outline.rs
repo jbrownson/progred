@@ -260,16 +260,15 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         if with_extras {
             expected.push(vec![Step::Key(extra)]);
         }
-        for path in expected {
+        for path in &expected {
             assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
             assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
         }
-        if with_extras {
+        // Including the extras boundary: backward travel re-enters the last
+        // child, rather than skipping the outline's contents to its whole stop.
+        for path in expected.iter().rev().skip(1) {
             assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowUp)), 1.0, viewport));
-            assert_eq!(
-                runner.editor.model.selection.as_ref().unwrap().path(),
-                [Step::Key(OUTLINE)]
-            );
+            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
         }
         // Collapsed bodies contribute no stops; moving onto a heading doesn't
         // run its pointer activation handler or unfold it.

@@ -154,13 +154,20 @@ Plain rows, columns, and occurrence bookkeeping add no routing. Projections
 explicitly decorate layouts with `navigation::horizontal` or
 `navigation::vertical`; lists, records, and named numbers use these helpers.
 Leaf controls contribute targets with ordinary selection behavior. An explicit
-`nav_group` supplies whole-value entry before its contents; `nav_group_with_entry`
-chooses which directions enter and whose opposites return to the whole. Cells
-and bracketed lists use `nav_container`: stop at the
-whole value on arrival, enter its first/last child with Right/Left, and pass
-directly out of the contents at either edge. Entry exposure and boundary exit
-are independent choices in the group combinator. Vertical lists use `reading_order` to offer
-horizontal continuation between items as well as vertical sibling movement.
+`nav_group` puts the whole-value stop at the leading edge of its contents.
+The chosen navigation sequence declares the flow alongside its directional
+entries: Right for horizontal, Down for vertical. Transparent wrappers, including
+cells, inherit this declaration; leaf contents default to horizontal. This is
+explicit presentation policy, not a guess from measured dimensions. Backward
+boundary callbacks wait until child placement has supplied that declaration.
+Forward arrival selects the whole, forward movement enters the first child,
+and leaving the last child continues outside. Backward arrival reaches the last
+child, backing out of the first selects the whole, and backward movement from
+the whole exits. The perpendicular axis defers to the parent, and perpendicular
+arrival selects the whole container. The same policy applies to records, lists,
+and cells. Vertical sequences additionally connect unclaimed Right/Left movement
+between rows. Down remains their primary flow, and horizontal wrapping preserves
+the arrival direction (including text's beginning/end caret placement).
 Groups reuse an inner
 target when it represents the same occurrence. These wrappers use the generic
 `widget::around` placement boundary, not layout opcodes. Only chosen alternatives

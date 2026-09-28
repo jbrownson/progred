@@ -68,19 +68,19 @@ fn neighbor_destinations_follow_nested_container_boundaries_and_chosen_layout() 
         let projection = sample_projection();
         let expected = if wide {
             [
-                [None, Some(1), None, Some(1)],
-                [Some(0), Some(2), Some(0), Some(2)],
-                [Some(1), Some(3), Some(1), Some(4)],
-                [Some(2), None, Some(1), Some(4)],
-                [Some(0), None, Some(1), None],
+                [None, None, None, Some(1)],
+                [None, Some(2), Some(0), Some(4)],
+                [Some(1), Some(3), Some(0), Some(4)],
+                [Some(2), Some(4), Some(0), Some(4)],
+                [Some(3), None, Some(1), None],
             ]
         } else {
             [
-                [None, Some(1), None, Some(1)],
-                [Some(0), Some(2), Some(0), Some(2)],
-                [Some(1), Some(3), Some(1), None],
-                [Some(2), Some(4), Some(1), None],
-                [Some(1), None, Some(0), None],
+                [None, Some(1), None, None],
+                [Some(0), Some(2), None, None],
+                [Some(1), Some(3), None, None],
+                [Some(2), Some(4), None, None],
+                [Some(3), None, None, None],
             ]
         };
         for (from, destinations) in expected.iter().enumerate() {
@@ -104,6 +104,137 @@ fn neighbor_destinations_follow_nested_container_boundaries_and_chosen_layout() 
                     world.model.selection.as_ref().unwrap().path(),
                     paths[to.unwrap_or(from)]
                 );
+            }
+        }
+    }
+}
+
+#[test]
+fn neighbor_standard_containers_follow_their_displayed_axis_including_cell_contents() {
+    use Direction::*;
+    for record in [false, true] {
+        for in_cell in [false, true] {
+            for vertical in [false, true] {
+                let (wrapper, a, b, cell) =
+                    (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
+                let mut cells = Cells::new();
+                cells.set_value(a, name::record("A", []));
+                cells.set_value(b, name::record("B", []));
+                let first = text::value(if vertical {
+                    "long ".repeat(100)
+                } else {
+                    "first".into()
+                });
+                let container = if record {
+                    Value::record([(a, first), (b, text::value("last"))])
+                } else {
+                    Value::list([first, text::value("last")])
+                };
+                let child_steps = if record {
+                    vec![Step::Key(a), Step::Key(b)]
+                } else {
+                    positions(&container)
+                        .into_iter()
+                        .map(Step::Element)
+                        .collect()
+                };
+                let item = if in_cell {
+                    cells.set_value(cell, container);
+                    Value::Cell(cell)
+                } else {
+                    container
+                };
+                let siblings = Value::list([text::value("before"), item, text::value("after")]);
+                let paths: Vec<Path> = positions(&siblings)
+                    .into_iter()
+                    .map(|p| vec![Step::Key(wrapper), Step::Element(p)])
+                    .collect();
+                let body: Path = paths[1]
+                    .iter()
+                    .cloned()
+                    .chain(in_cell.then_some(Step::Follow(gid::Resolution::Document)))
+                    .collect();
+                let children: Vec<Path> = child_steps
+                    .into_iter()
+                    .map(|step| body.iter().cloned().chain([step]).collect())
+                    .collect();
+                let mut world = crate::test_editor(Document {
+                    root: Some(Value::record([(wrapper, siblings)])),
+                    cells,
+                });
+                let ordinary = world.stack.projection.partial.clone();
+                let projection = Projection::new([
+                    d::runtime_partial(move |input| {
+                        input.value?.field(wrapper)?;
+                        Some(d::descend(
+                            Step::Key(wrapper),
+                            Some(d::structure::list_column(8.0, None)),
+                            None,
+                        ))
+                    }),
+                    ordinary,
+                ]);
+                let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+                let rect = |path: &Path| {
+                    frame
+                        .descends
+                        .iter()
+                        .find(|stop| stop.path.as_ref() == path)
+                        .unwrap()
+                        .rect
+                };
+                assert_eq!(rect(&children[1]).y0 > rect(&children[0]).y1, vertical);
+                let (forward, backward, across) = if vertical {
+                    (Down, Up, Left)
+                } else {
+                    (Right, Left, Up)
+                };
+                let entry = if in_cell { &body } else { &children[0] };
+                let checks = [
+                    (&paths[1], forward, Some(entry)),
+                    (entry, backward, Some(&paths[1])),
+                    (&children[0], across, Some(&paths[0])),
+                    (&paths[1], across, Some(&paths[0])),
+                    (
+                        &paths[1],
+                        Right,
+                        Some(if vertical { &paths[2] } else { entry }),
+                    ),
+                    (
+                        &children[0],
+                        Down,
+                        Some(if vertical { &children[1] } else { &paths[2] }),
+                    ),
+                    (
+                        &paths[2],
+                        Up,
+                        Some(if vertical { &children[1] } else { &paths[1] }),
+                    ),
+                ];
+                let before = world.model.doc.clone();
+                for (from, direction, to) in checks {
+                    world.model.selection = Some(make_selection(from.clone()));
+                    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+                    let handled = frame
+                        .resolve_for_dispatch()
+                        .dispatch(
+                            &mut world,
+                            puri::handler::Event::Navigate(direction),
+                            &mut Default::default(),
+                        )
+                        .handled();
+                    assert_eq!(
+                        handled,
+                        to.is_some(),
+                        "record={record}, cell={in_cell}, vertical={vertical}, {direction:?}"
+                    );
+                    assert_eq!(
+                        world.model.selection.as_ref().unwrap().path(),
+                        to.unwrap_or(from),
+                        "record={record}, cell={in_cell}, vertical={vertical}, {direction:?}"
+                    );
+                    assert!(Rc::ptr_eq(&world.model.doc, &before));
+                }
             }
         }
     }
@@ -299,7 +430,8 @@ fn neighbor_example_projects_and_navigates_without_an_app_window() {
 
 fn navigation_example_cells() -> (World, Vec<Path>) {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) =
+        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let (section_position, section) = fields
         .get(&OUTLINE)
@@ -307,7 +439,7 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
         .as_list()
         .unwrap()
         .iter()
-        .next()
+        .find(|(_, value)| value.as_cell() == Some(binders["parameters"]))
         .unwrap();
     let section = section.as_cell().unwrap();
     let prefix = vec![
@@ -334,6 +466,126 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
 }
 
 #[test]
+fn neighbor_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
+    use crate::libraries::presentation::vocabulary::OUTLINE;
+    let (doc, binders) =
+        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let root = doc.root.as_ref().unwrap();
+    let field = |value: &Value, key| value.as_record().unwrap().get(&key).unwrap().clone();
+    let section = |value: &Value, key, occurrence| -> Path {
+        let outline = field(value, OUTLINE);
+        let (position, _) = outline
+            .as_list()
+            .unwrap()
+            .iter()
+            .filter(|(_, value)| value.as_cell() == Some(key))
+            .nth(occurrence)
+            .unwrap();
+        vec![
+            Step::Key(OUTLINE),
+            Step::Element(position.clone()),
+            Step::Key(key),
+        ]
+    };
+    let workshop = field(root, binders["workshop"]);
+    let inspection = field(&workshop, binders["inspection"]);
+    let checks = field(&inspection, binders["checks"]);
+    let check_positions = positions(&checks);
+    let prefix: Path = section(root, binders["workshop"], 0)
+        .into_iter()
+        .chain(section(&workshop, binders["inspection"], 0))
+        .collect();
+    let document = doc.clone();
+    // The same checks are projected twice, inside two nested outline jumps.
+    for occurrence in 0..2 {
+        let body: Path = prefix
+            .iter()
+            .cloned()
+            .chain(section(&inspection, binders["checks"], occurrence))
+            .collect();
+        let heading = body[..body.len() - 1].to_vec();
+        let first: Path = body
+            .iter()
+            .cloned()
+            .chain([Step::Element(check_positions[0].clone())])
+            .collect();
+        let cell: Path = body
+            .iter()
+            .cloned()
+            .chain([Step::Element(check_positions[1].clone())])
+            .collect();
+        let name: Path = cell
+            .iter()
+            .cloned()
+            .chain([
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(name::vocabulary::NAME),
+            ])
+            .collect();
+        let mut world = crate::test_editor(document.clone());
+        let before = world.model.doc.clone();
+        world.model.selection = Some(make_selection(heading.clone()));
+        for (direction, path) in [
+            (Direction::Down, &body),
+            (Direction::Down, &first),
+            (Direction::Down, &cell),
+            (Direction::Right, &name),
+        ] {
+            let frame = editing_frame(&mut world, false);
+            assert!(
+                frame
+                    .resolve_for_dispatch()
+                    .dispatch(
+                        &mut world,
+                        puri::handler::Event::Navigate(direction),
+                        &mut Default::default()
+                    )
+                    .handled()
+            );
+            assert_eq!(world.model.selection.as_ref().unwrap().path(), *path);
+        }
+        let source = vec![
+            Step::Key(binders["workshop"]),
+            Step::Key(binders["inspection"]),
+            Step::Key(binders["checks"]),
+            Step::Element(check_positions[1].clone()),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(name::vocabulary::NAME),
+        ];
+        assert_eq!(
+            world
+                .model
+                .selection
+                .as_ref()
+                .unwrap()
+                .scope()
+                .source(&name)
+                .unwrap()
+                .as_ref(),
+            source
+        );
+        assert!(Rc::ptr_eq(&world.model.doc, &before));
+        let frame = editing_frame(&mut world, false);
+        assert!(frame.resolve_for_dispatch().dispatch_key(
+            &mut world,
+            &KeyboardEvent {
+                key: Key::Character("X".into()),
+                state: KeyState::Down,
+                ..Default::default()
+            }
+        ));
+        assert_eq!(
+            field(
+                world.model.doc.cells.value(binders["width"]).unwrap(),
+                name::vocabulary::NAME
+            ),
+            text::value("Xwidth")
+        );
+        assert_eq!(world.model.doc.root, document.root);
+    }
+}
+
+#[test]
 fn neighbor_outline_connects_heading_and_body_before_adjacent_sections() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
     let (doc, binders) =
@@ -356,9 +608,16 @@ fn neighbor_outline_connects_heading_and_body_before_adjacent_sections() {
         })
         .collect();
     let lists = fields.get(&binders["lists"]).unwrap().as_list().unwrap();
+    let list_sections: Vec<_> = sections
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, body))| body.last() == Some(&Step::Key(binders["lists"])))
+        .map(|(index, _)| index)
+        .collect();
+    let first_lists = list_sections[0];
     let (last_list_position, last_list) = lists.iter().next_back().unwrap();
     let last_item_position = last_list.as_list().unwrap().keys().next_back().unwrap();
-    let last_text: Path = sections[1]
+    let last_text: Path = sections[first_lists]
         .1
         .iter()
         .cloned()
@@ -392,21 +651,33 @@ fn neighbor_outline_connects_heading_and_body_before_adjacent_sections() {
             }
         };
         // Include the repeated "Nested lists" section: occurrences remain distinct.
-        for index in [1, 5] {
+        for &index in &list_sections {
             walk(
                 &sections[index].0,
                 &[
-                    (NamedKey::ArrowRight, &sections[index].1),
-                    (NamedKey::ArrowLeft, &sections[index].0),
+                    (NamedKey::ArrowDown, &sections[index].1),
+                    (NamedKey::ArrowUp, &sections[index].0),
                 ],
             );
         }
+        let last_list: Path = sections[first_lists]
+            .1
+            .iter()
+            .cloned()
+            .chain([Step::Element(last_list_position.clone())])
+            .collect();
         walk(
             &last_text,
             &[
-                (NamedKey::ArrowRight, &sections[2].0),
-                (NamedKey::ArrowLeft, &sections[1].1),
-                (NamedKey::ArrowLeft, &sections[1].0),
+                (NamedKey::ArrowDown, &sections[first_lists + 1].0),
+                (
+                    NamedKey::ArrowUp,
+                    if width == 900.0 {
+                        &last_list
+                    } else {
+                        &last_text
+                    },
+                ),
             ],
         );
     }
@@ -450,7 +721,54 @@ fn neighbor_example_cells_leave_vertical_navigation_to_the_list() {
 }
 
 #[test]
-fn neighbor_example_horizontal_traversal_crosses_cells_without_parent_loops() {
+fn neighbor_horizontal_row_wrapping_preserves_text_arrival_direction() {
+    let root = Value::list([text::value("abc"), text::value("de")]);
+    let paths: Vec<Path> = positions(&root)
+        .into_iter()
+        .map(|p| vec![Step::Element(p)])
+        .collect();
+    let mut world = crate::test_editor(Document {
+        root: Some(root),
+        cells: Cells::new(),
+    });
+    world.stack.projection = Projection::new([
+        d::structure::list_column(8.0, None),
+        world.stack.projection.partial.clone(),
+    ]);
+    world.model.selection = Some(make_selection(paths[0].clone()));
+    let document = world.model.doc.clone();
+    let mut runner = crate::EditorRunner::new(world);
+    let viewport = kurbo::Size::new(900.0, 600.0);
+    runner.refresh_frame(1.0, viewport);
+    // The ordinary initial caret is at the end. Wrapping must preserve the
+    // horizontal arrival, rather than turning Right into a Down event.
+    for (key, row, offset) in [
+        (NamedKey::ArrowRight, 1, Some(0)),
+        (NamedKey::ArrowLeft, 0, Some(3)),
+        // Down uses the widget's ordinary default, with no explicit caret.
+        (NamedKey::ArrowDown, 1, None),
+    ] {
+        assert!(runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(key),
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            viewport,
+        ));
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selection.path(), paths[row]);
+        assert_eq!(
+            selection.edit().map(|line| line.selection_offsets()),
+            offset.map(|n| (n, n))
+        );
+        assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+    }
+}
+
+#[test]
+fn neighbor_example_cells_use_horizontal_contents_and_vertical_siblings() {
     let (mut world, cells) = navigation_example_cells();
     let number = |cell: &Path| -> Path {
         cell.iter()
@@ -496,11 +814,17 @@ fn neighbor_example_horizontal_traversal_crosses_cells_without_parent_loops() {
     step(NamedKey::ArrowRight, number(&cells[0]), Some(2));
     step(NamedKey::ArrowRight, cells[1].clone(), None);
     step(NamedKey::ArrowRight, name(&cells[1]), Some(0));
-    step(NamedKey::ArrowLeft, cells[0].clone(), None);
+    step(NamedKey::ArrowLeft, cells[1].clone(), None);
     step(NamedKey::ArrowLeft, number(&cells[0]), Some(2));
     step(NamedKey::ArrowLeft, number(&cells[0]), Some(1));
     step(NamedKey::ArrowLeft, number(&cells[0]), Some(0));
     step(NamedKey::ArrowLeft, name(&cells[0]), Some(5));
+    for offset in (0..5).rev() {
+        step(NamedKey::ArrowLeft, name(&cells[0]), Some(offset));
+    }
+    step(NamedKey::ArrowLeft, cells[0].clone(), None);
+    step(NamedKey::ArrowDown, cells[1].clone(), None);
+    step(NamedKey::ArrowUp, cells[0].clone(), None);
 }
 
 #[test]
@@ -543,7 +867,12 @@ fn neighbor_empty_cell_stops_before_entering_missing_contents() {
             .cloned()
             .chain([Step::Follow(gid::Resolution::Document)])
             .collect();
-        for expected in [&paths[1], &contents] {
+        let stops = if start == 0 {
+            [&paths[1], &contents]
+        } else {
+            [&contents, &paths[1]]
+        };
+        for expected in stops {
             assert!(runner.keyboard_event(
                 &KeyboardEvent {
                     key: Key::Named(direction.clone()),
@@ -690,7 +1019,7 @@ fn neighbor_example_lists_leave_vertical_navigation_to_the_outer_list() {
 }
 
 #[test]
-fn neighbor_nested_list_stops_on_entry_and_passes_through_on_exit() {
+fn neighbor_nested_list_has_one_leading_stop_in_both_directions() {
     let inner = Value::list([text::value("F"), text::value("G")]);
     let inner_positions = positions(&inner);
     let outer = Value::list([text::value("E"), inner, text::value("H")]);
@@ -724,11 +1053,11 @@ fn neighbor_nested_list_stops_on_entry_and_passes_through_on_exit() {
         (NamedKey::ArrowRight, &g, Some(0)),
         (NamedKey::ArrowRight, &g, Some(1)),
         (NamedKey::ArrowRight, &h, Some(0)),
-        (NamedKey::ArrowLeft, &list, None),
         (NamedKey::ArrowLeft, &g, Some(1)),
         (NamedKey::ArrowLeft, &g, Some(0)),
         (NamedKey::ArrowLeft, &f, Some(1)),
         (NamedKey::ArrowLeft, &f, Some(0)),
+        (NamedKey::ArrowLeft, &list, None),
         (NamedKey::ArrowLeft, &e, Some(1)),
     ] {
         assert!(runner.keyboard_event(

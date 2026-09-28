@@ -76,16 +76,25 @@ impl<T: Clone + 'static> Neighbors<T> {
     }
 }
 
-struct Entries<T>([Option<T>; 4]);
+struct Entries<T> {
+    targets: [Option<T>; 4],
+    flow: Option<Direction>,
+}
 impl<T: Clone> Entries<T> {
     fn empty() -> Self {
-        Self(std::array::from_fn(|_| None))
+        Self {
+            targets: std::array::from_fn(|_| None),
+            flow: None,
+        }
     }
     fn one(target: T) -> Self {
-        Self(std::array::from_fn(|_| Some(target.clone())))
+        Self {
+            targets: std::array::from_fn(|_| Some(target.clone())),
+            flow: None,
+        }
     }
     fn get(&self, direction: Direction) -> Option<T> {
-        self.0[direction as usize].clone()
+        self.targets[direction as usize].clone()
     }
 }
 
@@ -100,7 +109,10 @@ impl<T: Clone + 'static> Sequence<T> {
         Self {
             outer,
             forward,
-            entries: Entries::empty(),
+            entries: Entries {
+                flow: forward.first().copied(),
+                ..Entries::empty()
+            },
             pending: std::array::from_fn(|_| vec![]),
         }
     }
@@ -123,6 +135,7 @@ impl<T: Clone + 'static> Sequence<T> {
     fn end_child(&mut self, entries: Entries<T>, own_pending: Pending<T>) {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Navigation);
+        self.entries.flow = self.entries.flow.or(entries.flow);
         for &forward in self.forward {
             if let Some(next) = entries.get(forward) {
                 for receive in self.pending[forward as usize].drain(..) {
@@ -133,7 +146,7 @@ impl<T: Clone + 'static> Sequence<T> {
         for direction in DIRECTIONS {
             self.pending[direction as usize]
                 .extend(own_pending.borrow_mut()[direction as usize].drain(..));
-            let slot = &mut self.entries.0[direction as usize];
+            let slot = &mut self.entries.targets[direction as usize];
             if let Some(entry) = entries.get(direction)
                 && (slot.is_none() || matches!(direction, Direction::Left | Direction::Up))
             {
@@ -252,13 +265,6 @@ pub fn vertical<C: 'static, H: 'static>(
     with_navigation(child, Direction::Down)
 }
 
-/// Vertical siblings also continue horizontal traversal at their content edges.
-pub fn reading_order<C: 'static, H: 'static>(
-    child: crate::display::Layout<C, H>,
-) -> crate::display::Layout<C, H> {
-    sequence(child, &[Direction::Right, Direction::Down])
-}
-
 pub fn with_navigation<C: 'static, H: 'static>(
     child: crate::display::Layout<C, H>,
     direction: Direction,
@@ -267,7 +273,8 @@ pub fn with_navigation<C: 'static, H: 'static>(
         child,
         match direction {
             Direction::Right => &[Direction::Right],
-            Direction::Down => &[Direction::Down],
+            // Primary flow stays vertical; unclaimed horizontal movement wraps rows.
+            Direction::Down => &[Direction::Down, Direction::Right],
             _ => panic!("sequences progress right or down"),
         },
     )
@@ -292,119 +299,75 @@ fn sequence<C: 'static, H: 'static>(
 pub fn nav_group(
     child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
 ) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    nav_group_with_entry(child, [Direction::Right, Direction::Down])
-}
-
-/// Enter through the chosen directions; their opposites return to the whole.
-/// Other directions remain available to the enclosing navigation composition.
-pub fn nav_group_with_entry(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-    directions: impl Into<Vec<Direction>>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    group(child, directions.into(), &[], &[])
-}
-
-/// Stop at the whole on entry; enter its contents horizontally and leave directly.
-pub fn nav_container(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    group(
-        child,
-        vec![Direction::Left, Direction::Right],
-        &[Direction::Left, Direction::Right],
-        &[],
-    )
-}
-
-fn group(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-    directions: Vec<Direction>,
-    through: &'static [Direction],
-    expose_contents: &'static [Direction],
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    let directions: Rc<[Direction]> = directions.into();
+    // The selected presentation supplies the flow; a leaf defaults to horizontal.
     super::around(
         child,
         Rc::new(move |context| {
             let target = destination(Rc::from(context.path), context.inputs);
             let selected = context.inputs.selected(context.path);
-            let directions = directions.clone();
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
-                    compose(
-                        pass,
-                        &[],
-                        Some(Group {
-                            target,
-                            enter: &directions,
-                            through,
-                            expose_contents,
-                        }),
-                        selected,
-                        |pass| inner.place_into(pass),
-                    );
+                    compose(pass, &[], Some(target), selected, |pass| {
+                        inner.place_into(pass)
+                    });
                 })
             })
         }),
     )
 }
 
-struct Group<'a, C> {
-    target: Target<C>,
-    enter: &'a [Direction],
-    through: &'a [Direction],
-    expose_contents: &'a [Direction],
-}
-
 fn compose<C: 'static, H: 'static>(
     pass: &mut HoverPass<C, H>,
     directions: &'static [Direction],
-    whole: Option<Group<'_, C>>,
+    whole: Option<Target<C>>,
     selected: bool,
     content: impl FnOnce(&mut HoverPass<C, H>),
 ) {
     let (neighbors, pending) = pass.navigation.sequence.begin_child();
-    let child_neighbors = match &whole {
-        Some(Group {
-            target,
-            enter,
-            through,
-            ..
-        }) if !selected => enter
-            .iter()
-            .filter(|direction| !through.contains(&direction.opposite()))
-            .fold(neighbors.clone(), |neighbors, direction| {
-                neighbors.with(direction.opposite(), target.clone())
-            }),
-        _ => neighbors.clone(),
-    };
+    // The child's chosen alternative declares its flow during placement. Only
+    // backward boundary answers need to wait for that declaration.
+    let boundary: Option<Pending<Target<C>>> = (whole.is_some() && !selected)
+        .then(|| Rc::new(RefCell::new(std::array::from_fn(|_| vec![]))));
+    let mut child_neighbors = neighbors.clone();
+    if let Some(boundary) = &boundary {
+        for direction in [Direction::Left, Direction::Up] {
+            let boundary = boundary.clone();
+            child_neighbors.0[direction as usize] = Rc::new(move |receive| {
+                boundary.borrow_mut()[direction as usize].push(receive);
+            });
+        }
+    }
     let parent = std::mem::replace(
         &mut pass.navigation.sequence,
         Sequence::new(child_neighbors, directions),
     );
     content(pass);
     let children = std::mem::replace(&mut pass.navigation.sequence, parent).finish();
-    let entries = if let Some(Group {
-        target,
-        enter,
-        expose_contents,
-        ..
-    }) = whole
-    {
+    let entries = if let Some(target) = whole {
+        let forward = children.flow.unwrap_or(Direction::Right);
+        let backward = forward.opposite();
+        if let Some(boundary) = boundary {
+            for direction in [Direction::Left, Direction::Up] {
+                for receive in boundary.borrow_mut()[direction as usize].drain(..) {
+                    if direction == backward {
+                        receive(Some(target.clone()));
+                    } else {
+                        neighbors.request(direction, receive);
+                    }
+                }
+            }
+        }
         if selected {
             let mut arrival = neighbors;
-            for &direction in enter {
-                if let Some(entry) = children.get(direction) {
-                    arrival = arrival.with(direction, entry);
-                }
+            if let Some(entry) = children.get(forward) {
+                arrival = arrival.with(forward, entry);
             }
             pass.navigation.request(&target, &arrival);
         }
         let mut entries = Entries::one(target);
-        for &direction in expose_contents {
-            if let Some(entry) = children.get(direction) {
-                entries.0[direction as usize] = Some(entry);
-            }
+        entries.flow = Some(forward);
+        if let Some(entry) = children.get(backward) {
+            entries.targets[backward as usize] = Some(entry);
         }
         entries
     } else {
@@ -537,13 +500,14 @@ mod tests {
             Entries::one("selected")
         });
         emit(&mut sequence, |_| Entries::empty());
-        emit(&mut sequence, |_| {
-            Entries([
+        emit(&mut sequence, |_| Entries {
+            targets: [
                 Some("last leaf"),
                 Some("first leaf"),
                 Some("whole"),
                 Some("whole"),
-            ])
+            ],
+            flow: Some(Direction::Right),
         });
         sequence.finish();
         assert_eq!(

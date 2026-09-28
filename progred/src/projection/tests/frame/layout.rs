@@ -879,8 +879,13 @@ fn list_navigation_follows_the_selected_layout_alternative() {
                 )
                 .handled(),
             across == Direction::Right,
-            "vertical lists wrap horizontal traversal; horizontal lists do not invent vertical neighbors"
+            "vertical rows offer horizontal wrapping without changing their primary flow"
         );
+        assert_eq!(
+            world.model.selection.as_ref().unwrap().path(),
+            paths[if across == Direction::Right { 1 } else { 0 }]
+        );
+        world.model.selection = Some(make_selection(paths[0].clone()));
         assert!(
             bench
                 .handler
