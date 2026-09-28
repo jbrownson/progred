@@ -94,8 +94,9 @@ The scene explicitly sequences separate sky, ground, sun, and forest calls using
 the control library's `all`. It evaluates each expression in order and retains
 all results, including absents, so an incomplete inserted call does not suppress
 later drawing. Inside `forest`, `for each` consumes a streaming `range` and the
-forest calculates each tree's position and size. Individual trees do not take
-the forest's count. The sun follows an arc across the sky with the slider, independently
+forest calculates each tree's position and size. Fractional counts round up only
+for iteration; spacing and growth still use the original count. Individual trees
+do not take the forest's count. The sun follows an arc across the sky with the slider, independently
 of the tree growth rate. The editable sky, ground, and sun colors are ordinary color
 arguments too. `drawing with controls` is an ordinary Grap helper over `with controls`
 and `draw`, keeping the canvas dimensions and callback wrapping out of the visible

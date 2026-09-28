@@ -627,9 +627,12 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
     );
     let mut previous = frames.pop().unwrap();
     for (parameter, value) in [
+        ("count", f64::value(4.25)),
+        ("count", f64::value(4.75)),
         ("count", f64::value(4.0)),
         ("rate", f64::value(1.5)),
         ("leaves", color::value(Color::from_rgb8(220, 90, 40))),
+        ("count", f64::value(0.0)),
     ] {
         let mut doc = (*runner.editor.model.doc).clone();
         fn edit_call(source: &Value, function: CellId, field: CellId, value: &Value) -> Value {
@@ -664,7 +667,11 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         runner.editor.model.doc = Rc::new(doc);
         let changed = render(&mut runner);
         if parameter == "count" {
-            assert_eq!(changed.len(), 13, "four trees plus the sun");
+            assert_eq!(
+                changed.len(),
+                1 + 3 * f64::read(&value).unwrap().ceil() as usize,
+                "sun plus trees for each integer index below the requested count"
+            );
         }
         assert_ne!(
             previous[1..],

@@ -25,6 +25,7 @@
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "cases": a9aadcb44755963498c743fa114f0f00,
+    "ceil": e1ddb3a620b61117d3873c163f603488,
     "circle": e06a6d094c4f75cd6c1d59ed6ed64e05,
     "close": adf2742dbde1b09b03e1fc649f5e1f58,
     "controls": b9d3424b750ee1fbba4df638d995e236,
@@ -670,7 +671,10 @@
     params: [age, count, rate, leaves, trunk],
     body: {
       function: for_each,
-      items: {function: sequence_range, sequence_count: count},
+      items: {
+        function: sequence_range,
+        sequence_count: {function: ceil, operand: count}
+      },
       action: {
         params: [item],
         body: {
