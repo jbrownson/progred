@@ -378,19 +378,10 @@ fn image(bench: &Bench) -> ImageData {
     images.into_iter().next().unwrap()
 }
 
-fn fidget_orbit_profile(example: Example) {
+fn fidget_orbit_profile(name: &str, source: &str) {
     // This canary records deferred mesh draws; GPU composition is measured by
     // compositor::mesh::cam_mesh_roundtrip_profile. CPU validation is untimed.
-    let source = if example == Example::Toolpaths {
-        use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
-        cam_profile_source().replace(
-            &PREVIEW_REFINED.simple().to_string(),
-            &PREVIEW_MESH.simple().to_string(),
-        )
-    } else {
-        example.source().to_owned()
-    };
-    let doc = fixture(&source);
+    let doc = fixture(source);
     let path = first_viewport(&doc);
     let view = ProfileView {
         size: kurbo::Size::new(400.0, 600.0),
@@ -423,7 +414,7 @@ fn fidget_orbit_profile(example: Example) {
     let changed = std::cell::Cell::new(false);
     profile(
         &format!(
-            "{example:?} orbit frame construction, 400x600 @2 viewport including controls; mesh rasterization excluded"
+            "{name} orbit frame construction, 400x600 @2 viewport including controls; mesh rasterization excluded"
         ),
         |index| {
             let annotations = camera_path
@@ -452,37 +443,44 @@ fn fidget_orbit_profile(example: Example) {
 #[test]
 #[ignore]
 fn fidget_orbit_profile_loop() {
-    fidget_orbit_profile(Example::Fidget);
+    fidget_orbit_profile("spheres", crate::test_examples::SPHERES);
 }
 
 #[test]
 #[ignore]
 fn fidget_torus_profile_loop() {
-    fidget_orbit_profile(Example::Torus);
+    fidget_orbit_profile("torus", crate::test_examples::TORUS);
 }
 
 #[test]
 #[ignore]
 fn fidget_tanglecube_profile_loop() {
-    fidget_orbit_profile(Example::Tanglecube);
+    fidget_orbit_profile("tanglecube", crate::test_examples::TANGLECUBE);
 }
 
 #[test]
 #[ignore]
 fn fidget_gyroid_profile_loop() {
-    fidget_orbit_profile(Example::Gyroid);
+    fidget_orbit_profile("gyroid", crate::test_examples::GYROID);
 }
 
 #[test]
 #[ignore]
 fn fidget_cube_profile_loop() {
-    fidget_orbit_profile(Example::Cube);
+    fidget_orbit_profile("cube", crate::test_examples::CUBE);
 }
 
 #[test]
 #[ignore]
 fn fidget_toolpaths_profile_loop() {
-    fidget_orbit_profile(Example::Toolpaths);
+    use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
+    fidget_orbit_profile(
+        "toolpaths",
+        &cam_profile_source().replace(
+            &PREVIEW_REFINED.simple().to_string(),
+            &PREVIEW_MESH.simple().to_string(),
+        ),
+    );
 }
 
 #[test]
@@ -520,14 +518,8 @@ fn cam_controls_profile_loop() {
 #[test]
 fn complex_fidget_examples_render_visible_surfaces() {
     let side = 64;
-    for example in [
-        Example::Fidget,
-        Example::Torus,
-        Example::Tanglecube,
-        Example::Gyroid,
-        Example::Cube,
-    ] {
-        let doc = fixture(example.source());
+    for (name, source) in crate::test_examples::FIDGET {
+        let doc = fixture(source);
         let view = ProfileView {
             size: kurbo::Size::new(side as f64, side as f64),
             scale: 1.0,
@@ -545,13 +537,13 @@ fn complex_fidget_examples_render_visible_surfaces() {
             .count();
         assert!(
             covered > side as usize && covered < (side * side / 2) as usize,
-            "{example:?}: {covered} covered pixels"
+            "{name}: {covered} covered pixels"
         );
         let pixels = || image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0);
-        if example == Example::Fidget {
+        if name == "spheres" {
             assert!(pixels().any(|p| p[2] > p[0]), "blue shell");
             assert!(pixels().any(|p| p[0] > p[2]), "gold sphere");
-        } else if example == Example::Cube {
+        } else if name == "cube" {
             assert!(pixels().all(|p| p[2] > p[0]), "cyan cube");
         }
     }

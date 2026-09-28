@@ -409,7 +409,7 @@ Standalone mesh and progressive implicit functions remain available. The raster
 API's explicit `Passes` choice retains the multi-resolution sequence for comparison
 without adding a render-mode control to the example.
 
-Command+9's example uses this refined preview with a Model / Stock radio group,
+Command+4's example uses this refined preview with a Model / Stock radio group,
 a playback slider and a stack
 of grouping-range sliders: 504 paths (6,588
 segments), with a blue reference cube when stock is disabled and a 3,000,000-fuel
@@ -507,7 +507,7 @@ validation errors. The preview translates invalid geometry to ordinary absents.
 
 Without `stock`, the stock bounds draw a wire envelope. With that field, its
 record supplies an opaque `color`. The preview's ordinary `mesh depth` determines
-the stock mesh resolution too. Command+9 starts with a one-inch cube, bounded
+the stock mesh resolution too. Command+4 starts with a one-inch cube, bounded
 by −0.5…0.5 on all three axes, so the two operations carve six indents and twelve chamfers
 without first removing an oversized stock allowance.
 Stock replaces the reference solid while enabled, avoiding coplanar surfaces
@@ -564,7 +564,7 @@ instructions including 794 loads/stores; at 1.0 it has 53,228 instructions
 including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
 both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
 valid on this backend. A further native submission of this known-unsupported
-program was deliberately avoided. Command+9's implicit refinement uses the explicit
+program was deliberately avoided. Command+4's implicit refinement uses the explicit
 software path; GPU implicit CAM was blocked by that missing implementation.
 No GPU timeout was added. The later [GPU spill experiment](fidget-gpu-experiment-2026-09-16.md)
 implements spill instructions behind an opt-in build feature, but is not used by

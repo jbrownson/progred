@@ -117,15 +117,15 @@ fn pointer_switches_open_menus_but_does_not_open_closed_ones() {
         Hover::Item(Command::App(AppCommand::Example(Example::IopTree))),
     );
     move_to(&mut runner, item);
-    assert_eq!(runner.editor.menu.cursor(), Some(2));
+    assert_eq!(runner.editor.menu.cursor(), Some(1));
     key(
         &mut runner,
         Key::Named(NamedKey::ArrowDown),
         Modifiers::empty(),
     );
-    assert_eq!(runner.editor.menu.cursor(), Some(3));
-    move_to(&mut runner, item + (1.0, 0.0));
     assert_eq!(runner.editor.menu.cursor(), Some(2));
+    move_to(&mut runner, item + (1.0, 0.0));
+    assert_eq!(runner.editor.menu.cursor(), Some(1));
     click(&mut runner, examples);
     assert_eq!(runner.editor.menu.open(), None);
 }

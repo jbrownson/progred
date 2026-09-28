@@ -1,10 +1,12 @@
 # Rhino-derived fidget cube
 
-The editable model is [fidget-cube.gid](../examples/fidget-cube.gid), available
-as Examples → Fidget cube (Command+8 / Ctrl+8). Its source is a no-argument Grap
+The editable model is in [fidget-shapes.gid](../examples/fidget-shapes.gid), available
+as Examples → Fidget Shapes (Command+3 / Ctrl+3). The cube is the last list item.
+The standalone [fidget-cube.gid](../examples/fidget-cube.gid) remains a regression
+and performance fixture. Its source is a no-argument Grap
 function; the body constructs ordinary Fidget fields through existing library
 functions. There is no cube primitive in the evaluator or Fidget adapter.
-Its pane now uses the [mesh viewport](fidget-mesh.md) at depth 5. The implicit
+Its inline preview uses [mesh rendering](fidget-mesh.md) at depth 5. The implicit
 model is unchanged; `preview 3d` remains available for voxel-rendered comparison.
 
 ## Reference

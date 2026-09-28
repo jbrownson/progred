@@ -17,7 +17,7 @@ pass; they do not validate this larger scene. The stock tape is now confirmed
 to contain 794 loads/stores at 35% playback and 12,914 at completion; the pinned
 GPU interpreter and simplifier leave the corresponding `OP_MEM` unimplemented.
 Do not resubmit this unsupported program to the GPU merely to repeat the stall.
-Command+9 explicitly uses software implicit rendering in the general background
+Command+4 explicitly uses software implicit rendering in the general background
 executor. `editor_toolpath_implicit_async_svg_captures` verifies this path under
 the build sandbox; native implicit GPU support needs an upstream fix.
 See [toolpaths](toolpaths.md#playback).

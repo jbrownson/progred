@@ -183,7 +183,7 @@ model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
 both missed thin intersections and wrong-face normals but does not eliminate
 them. See the [tool-rim diagnostics](performance.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
-Command+9 now uses a retained mesh as the immediate camera-dependent fallback
+Command+4 now uses a retained mesh as the immediate camera-dependent fallback
 while current implicit images refine it. That removes the need to finish an
 obsolete coarse implicit image just to provide orbit feedback. Standalone
 implicit previews still cancel even their first stage on new input. Revisit

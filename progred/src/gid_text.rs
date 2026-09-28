@@ -944,19 +944,16 @@ mod checked_in_files {
     #[test]
     fn complex_fidget_examples_are_fixed_points_without_orphans() {
         use crate::command::Example;
-        for example in [
-            Example::Torus,
-            Example::Tanglecube,
-            Example::Gyroid,
-            Example::Cube,
-            Example::Toolpaths,
-        ] {
-            let (doc, binders) = parse(example.source()).expect("the example parses");
-            assert_eq!(print(&doc, &binders), example.source(), "{example:?}");
+        for (name, source) in crate::test_examples::FIDGET.into_iter().chain([
+            ("shapes", Example::Fidget.source()),
+            ("toolpaths", Example::Toolpaths.source()),
+        ]) {
+            let (doc, binders) = parse(source).expect("the example parses");
+            assert_eq!(print(&doc, &binders), source, "{name}");
             let reached = root_reachable_cells(&doc);
             assert!(
                 doc.cells.cells().all(|cell| reached.contains(cell)),
-                "{example:?}"
+                "{name}"
             );
         }
     }

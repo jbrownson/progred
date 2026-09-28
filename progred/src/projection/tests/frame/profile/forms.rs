@@ -78,7 +78,7 @@ fn cam_source_scroll_form_profile() {
 }
 
 #[test]
-#[ignore = "Layout navigation allocation count on Cmd+9 source"]
+#[ignore = "Layout navigation allocation count on Toolpaths source"]
 fn navigation_allocation_profile() {
     let doc = fixture(&cam_profile_source());
     let (view, mut context) = ProfileView {

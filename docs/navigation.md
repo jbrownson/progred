@@ -54,7 +54,7 @@ and independent views. Selection callbacks still encapsulate the destination's
 editing context and widget-specific arrival behavior; this change does not
 introduce a separate selection representation.
 
-Cmd+0 includes document-authored two-column layouts, both first-baseline-aligned
+Cmd+5 includes document-authored two-column layouts, both first-baseline-aligned
 and last-left/first-right-baseline-aligned, plus three nested cells around a
 multiline outline. Headless tests exercise these same stored Grap layout
 programs and confirm that their `descend` targets remain editable. The offset

@@ -718,18 +718,13 @@ mod tests {
     }
 
     #[test]
-    fn number_shortcuts_open_examples_in_menu_order() {
+    fn example_shortcuts_follow_menu_order() {
         for (digit, example) in [
-            ("1", Example::Sample),
-            ("2", Example::Grap),
-            ("3", Example::IopTree),
-            ("4", Example::Fidget),
-            ("5", Example::Torus),
-            ("6", Example::Tanglecube),
-            ("7", Example::Gyroid),
-            ("8", Example::Cube),
-            ("9", Example::Toolpaths),
-            ("0", Example::Navigation),
+            ("1", Example::Grap),
+            ("2", Example::IopTree),
+            ("3", Example::Fidget),
+            ("4", Example::Toolpaths),
+            ("5", Example::Navigation),
         ] {
             assert_eq!(
                 shortcut(
@@ -737,6 +732,19 @@ mod tests {
                     puri::keyboard::CommandModifier::Control
                 ),
                 Some(Command::App(AppCommand::Example(example)))
+            );
+        }
+    }
+
+    #[test]
+    fn removed_example_shortcuts_are_unclaimed() {
+        for digit in ["0", "6", "7", "8", "9"] {
+            assert_eq!(
+                shortcut(
+                    &key(digit, Modifiers::CONTROL),
+                    puri::keyboard::CommandModifier::Control
+                ),
+                None
             );
         }
     }

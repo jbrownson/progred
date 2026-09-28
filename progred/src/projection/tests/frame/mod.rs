@@ -375,6 +375,7 @@ mod custom_navigation;
 mod declarations;
 mod drawing;
 mod fidget_cube;
+mod fidget_shapes;
 mod fidget_source;
 mod focus;
 mod interaction;

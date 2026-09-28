@@ -1,25 +1,20 @@
 # Examples
 
 Open these files normally to edit and save them. The Examples menu opens a fresh
-copy instead; its shortcuts are Command+1…9 and Command+0 on macOS, with Ctrl
-instead of Command in the drawn menu on other platforms.
+copy instead. Use Command plus the number below on macOS, or Ctrl on other
+platforms. Examples are numbered consecutively in menu order.
 
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
-| 1 | `sample.gid` | Basic data and projections |
-| 2 | `grap-demo.gid` | Grap evaluation |
-| 3 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
-| 4 | `fidget.gid` | Blue cutaway sphere and a separate gold sphere in one colored scene |
-| 5 | `fidget-torus.gid` | Smooth torus: a small arithmetic field |
-| 6 | `fidget-tanglecube.gid` | Polynomial surface with several handles |
-| 7 | `fidget-gyroid.gid` | Dense trigonometric lattice clipped to a sphere |
-| 8 | `fidget-cube.gid` | Rhino-derived fidget cube: concave quadratic faces and planar chamfers |
-| 9 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
-| 0 | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
+| 1 | `grap-demo.gid` | Grap evaluation |
+| 2 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
+| 3 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube; inline source and previews |
+| 4 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
+| 5 | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 ## Keyboard navigation
 
-Open **Examples → Keyboard Navigation** (Command+0 on macOS, Ctrl+0 otherwise).
+Open **Examples → Keyboard Navigation** (Command+5 on macOS, Ctrl+5 otherwise).
 
 Arrow navigation follows the chosen layout's logical lines. Left/Right walk
 reading order, including selectable containers, and wrap to the next/previous
@@ -40,6 +35,19 @@ Also try the three layout corner cases:
   declared baseline children, not painted heights or pixel distances.
 
 See [layout navigation](../docs/navigation.md) for the current contract.
+
+## Fidget shapes
+
+**Examples → Fidget Shapes** (Command+3 / Ctrl+3) is an ordinary list of five
+examples. Each item contains the editable shape definition and an `evaluate`
+call displaying its preview. There is no separate pane or chooser; scroll to
+another shape, or fold its source using the ordinary editor controls. The full
+machining example remains separate at Command+4 / Ctrl+4.
+
+The original `fidget.gid`, `fidget-torus.gid`, `fidget-tanglecube.gid`,
+`fidget-gyroid.gid`, and `fidget-cube.gid` files remain as stable fixtures for
+rendering regressions and historical performance comparisons. They and
+`sample.gid` can still be opened as files, but are no longer separate menu items.
 
 ## Fields
 
@@ -63,22 +71,22 @@ also call their constructors when generating these same data structures.
 
 ## Fidget cube
 
-`fidget-cube.gid` contains a no-argument Grap function which constructs ordinary
-Fidget arithmetic. Its `where` bindings expose the Rhino defaults: size `1`,
+The cube entry in `fidget-shapes.gid` contains a no-argument Grap function which
+constructs ordinary Fidget arithmetic. Its `where` bindings expose the Rhino defaults: size `1`,
 chamfer `0.1`, and control-point depth `0.5`. The resulting face-center depression
 is `0.125`, not `0.5`. Edit or scrub those constants in the source.
 
-The left viewport calls the function and wraps its result in a cyan scene object
+The inline preview calls the function and wraps its result in a cyan scene object
 for `preview mesh` at mesh depth 5. The cube function itself still returns an ordinary field.
 Its explicit bounds are −0.6…0.6, in the same model units; no geometry scaling
 or cube-specific Rust primitive is involved. Orbit and zoom work normally, with
 fresh CPU meshing on every frame and GPU triangle drawing on native platforms.
-Expand `panes` to change `mesh depth` or use `preview 3d` for comparison.
+Edit the inline call to change `mesh depth` or use `preview 3d` for comparison.
 See [the mesh viewport](../docs/fidget-mesh.md) for parameters and limitations.
 See [the geometry derivation](../docs/fidget-cube.md) for correspondence to the
 Rhino surfaces, parameter limitations, and what is not yet a CAM model.
 
-Colors are editable RGB values in the documents. The small Fidget example uses
+Colors are editable RGB values in the documents. The cutaway-spheres entry uses
 Grap quote/unquote to combine two fields in `{scene: [{field, color}, ...]}`;
 they retain separate colors while sharing depth testing and lighting. This
 first color interface is opaque only, not a transparency or texture system.

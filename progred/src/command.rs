@@ -72,42 +72,27 @@ pub enum AppCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Example {
-    Sample,
     Grap,
     IopTree,
     Fidget,
-    Torus,
-    Tanglecube,
-    Gyroid,
-    Cube,
     Toolpaths,
     Navigation,
 }
 
 impl Example {
-    pub const ALL: [Self; 10] = [
-        Self::Sample,
+    pub const ALL: [Self; 5] = [
         Self::Grap,
         Self::IopTree,
         Self::Fidget,
-        Self::Torus,
-        Self::Tanglecube,
-        Self::Gyroid,
-        Self::Cube,
         Self::Toolpaths,
         Self::Navigation,
     ];
 
     pub fn source(self) -> &'static str {
         match self {
-            Self::Sample => include_str!("../../examples/sample.gid"),
             Self::Grap => include_str!("../../examples/grap-demo.gid"),
             Self::IopTree => include_str!("../../examples/iop-tree.gid"),
-            Self::Fidget => include_str!("../../examples/fidget.gid"),
-            Self::Torus => include_str!("../../examples/fidget-torus.gid"),
-            Self::Tanglecube => include_str!("../../examples/fidget-tanglecube.gid"),
-            Self::Gyroid => include_str!("../../examples/fidget-gyroid.gid"),
-            Self::Cube => include_str!("../../examples/fidget-cube.gid"),
+            Self::Fidget => include_str!("../../examples/fidget-shapes.gid"),
             Self::Toolpaths => include_str!("../../examples/toolpaths.gid"),
             Self::Navigation => include_str!("../../examples/navigation.gid"),
         }
@@ -160,16 +145,11 @@ impl Shortcut {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
-    Digit0,
     Digit1,
     Digit2,
     Digit3,
     Digit4,
     Digit5,
-    Digit6,
-    Digit7,
-    Digit8,
-    Digit9,
     D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -187,16 +167,11 @@ pub enum ShortcutKey {
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Digit0 => "0",
             Self::Digit1 => "1",
             Self::Digit2 => "2",
             Self::Digit3 => "3",
             Self::Digit4 => "4",
             Self::Digit5 => "5",
-            Self::Digit6 => "6",
-            Self::Digit7 => "7",
-            Self::Digit8 => "8",
-            Self::Digit9 => "9",
             Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -256,37 +231,22 @@ pub fn spec(command: Command) -> Spec {
             },
             None,
         ),
-        Command::App(AppCommand::Example(Example::Sample)) => {
-            item("Sample", Some(Shortcut::plain(ShortcutKey::Digit1)))
-        }
         Command::App(AppCommand::Example(Example::Grap)) => {
-            item("Grap Demo", Some(Shortcut::plain(ShortcutKey::Digit2)))
+            item("Grap Demo", Some(Shortcut::plain(ShortcutKey::Digit1)))
         }
         Command::App(AppCommand::Example(Example::IopTree)) => item(
             "Inventing on Principle Tree",
-            Some(Shortcut::plain(ShortcutKey::Digit3)),
+            Some(Shortcut::plain(ShortcutKey::Digit2)),
         ),
         Command::App(AppCommand::Example(Example::Fidget)) => {
-            item("Fidget", Some(Shortcut::plain(ShortcutKey::Digit4)))
-        }
-        Command::App(AppCommand::Example(Example::Torus)) => {
-            item("Torus", Some(Shortcut::plain(ShortcutKey::Digit5)))
-        }
-        Command::App(AppCommand::Example(Example::Tanglecube)) => {
-            item("Tanglecube", Some(Shortcut::plain(ShortcutKey::Digit6)))
-        }
-        Command::App(AppCommand::Example(Example::Gyroid)) => {
-            item("Gyroid sphere", Some(Shortcut::plain(ShortcutKey::Digit7)))
-        }
-        Command::App(AppCommand::Example(Example::Cube)) => {
-            item("Fidget cube", Some(Shortcut::plain(ShortcutKey::Digit8)))
+            item("Fidget Shapes", Some(Shortcut::plain(ShortcutKey::Digit3)))
         }
         Command::App(AppCommand::Example(Example::Toolpaths)) => {
-            item("Toolpaths", Some(Shortcut::plain(ShortcutKey::Digit9)))
+            item("Toolpaths", Some(Shortcut::plain(ShortcutKey::Digit4)))
         }
         Command::App(AppCommand::Example(Example::Navigation)) => item(
             "Keyboard Navigation",
-            Some(Shortcut::plain(ShortcutKey::Digit0)),
+            Some(Shortcut::plain(ShortcutKey::Digit5)),
         ),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),

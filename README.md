@@ -85,14 +85,15 @@ for another Ctrl+C. Restarting this development loop discards unsaved changes.
 ### A first tour
 
 Use the **Examples** menu to open a fresh example. On native macOS its shortcuts
-are Command+1…9; the drawn menu on other hosts uses Ctrl+1…9.
+are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
 
 | Start with | Shortcut | What to try |
 | --- | --- | --- |
-| Inventing on Principle Tree | 3 | Change a number and watch the drawing update |
-| Fidget Cube | 8 | Orbit the model and edit its size, chamfer, or face depth |
-| Toolpaths | 9 | Move the slider to inspect cuts into the stock |
-| Sample / Grap Demo | 1 / 2 | Explore the data model and language constructs |
+| Grap Demo | 1 | Explore the data model and language constructs |
+| Inventing on Principle Tree | 2 | Change a number and watch the drawing update |
+| Fidget Shapes | 3 | Orbit the shapes and edit their parameters, including the cube |
+| Toolpaths | 4 | Move the slider to inspect cuts into the stock |
+| Keyboard Navigation | 5 | Try arrow navigation through nested structures |
 
 - Click numbers to edit them, or **Command-drag** to scrub: horizontal movement
   changes the value; moving upward makes adjustments coarser, downward finer.
@@ -108,7 +109,7 @@ Examples replace the current document after the desktop's unsaved-changes
 confirmation. New Document does the same; New Window opens another window.
 These replace-in-place shortcuts are development conveniences.
 
-See the [example guide](examples/README.md) for all nine documents, rendering
+See the [example guide](examples/README.md) for the five menu examples, rendering
 options, and the geometry behind them. Heavy CAM views are best tried natively;
 high-quality implicit refinement can take time and still has rendering artifacts.
 

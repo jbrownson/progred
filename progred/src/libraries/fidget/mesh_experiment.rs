@@ -6,7 +6,7 @@ use fidget_engine::mesh::{Mesh, Octree, Settings};
 use std::{collections::BTreeMap, fmt::Write as _, path::Path, time::Instant};
 
 fn cube_preview() -> VolumePreview {
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Cube.source()).unwrap();
+    let (doc, _) = crate::gid_text::parse(crate::test_examples::CUBE).unwrap();
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
         doc: &doc,

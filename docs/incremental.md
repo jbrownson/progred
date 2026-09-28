@@ -276,7 +276,7 @@ Puri widget, composed as an overlay without changing layout or hover.
 
 ### Mesh fallback with implicit refinement
 
-`preview paths refined` (Command+9) composes those native mesh and image recipes
+`preview paths refined` (Command+4) composes those native mesh and image recipes
 over **one** recorded Grap evaluation. One settings input describes the current
 scene, playback, appearance, camera, and image size. A derived memo removes the
 camera and image size for mesh generation; equal derived settings retain the

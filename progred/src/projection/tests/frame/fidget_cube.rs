@@ -1,9 +1,8 @@
 use super::*;
-use crate::command::Example;
 use crate::libraries::{control, f32};
 
 fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
-    let (mut doc, names) = crate::gid_text::parse(Example::Cube.source()).unwrap();
+    let (mut doc, names) = crate::gid_text::parse(crate::test_examples::CUBE).unwrap();
     let id = names["cube"];
     let mut definition = doc.cells.value(id).unwrap().clone();
     for (name, value) in [

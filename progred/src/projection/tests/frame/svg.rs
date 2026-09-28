@@ -285,7 +285,7 @@ fn write_clipped_cmds(out: &mut String, cmds: &[DrawCmd], next_id: &mut usize) {
     }
 }
 
-fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
+pub(super) fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
     let (bench, extent) = place(doc, selection, width);
     let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
     write_svg(&bench.list, width, height, out_path);
@@ -1048,12 +1048,12 @@ fn drawn_menu_svg_captures() {
 #[ignore = "writes full-editor captures, including Fidget rasterization"]
 fn editor_svg_captures() {
     use crate::command::Example;
-    for (example, file) in [
-        (Example::Fidget, "editor_fidget.svg"),
-        (Example::Cube, "editor_fidget_cube.svg"),
-        (Example::Toolpaths, "editor_toolpaths.svg"),
+    for (source, file) in [
+        (Example::Fidget.source(), "editor_fidget.svg"),
+        (crate::test_examples::CUBE, "editor_fidget_cube.svg"),
+        (Example::Toolpaths.source(), "editor_toolpaths.svg"),
     ] {
-        let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
+        let (doc, _) = crate::gid_text::parse(source).unwrap();
         render_editor(
             crate::test_editor(doc),
             kurbo::Size::new(1200.0, 900.0),
@@ -1065,7 +1065,7 @@ fn editor_svg_captures() {
 #[test]
 #[ignore = "writes a full-editor capture of the mesh viewport"]
 fn editor_mesh_svg_capture() {
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Cube.source()).unwrap();
+    let (doc, _) = crate::gid_text::parse(crate::test_examples::CUBE).unwrap();
     render_editor(
         crate::test_editor(doc),
         kurbo::Size::new(1200.0, 900.0),
@@ -1582,14 +1582,13 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
 
 #[test]
 fn svg_bench_renders_fidget_source() {
-    use crate::command::Example;
-    for (example, file) in [
-        (Example::Torus, "fidget_torus.svg"),
-        (Example::Tanglecube, "fidget_tanglecube.svg"),
-        (Example::Gyroid, "fidget_gyroid.svg"),
-        (Example::Cube, "fidget_cube.svg"),
+    for (source, file) in [
+        (crate::test_examples::TORUS, "fidget_torus.svg"),
+        (crate::test_examples::TANGLECUBE, "fidget_tanglecube.svg"),
+        (crate::test_examples::GYROID, "fidget_gyroid.svg"),
+        (crate::test_examples::CUBE, "fidget_cube.svg"),
     ] {
-        let (doc, _) = crate::gid_text::parse(example.source()).unwrap();
+        let (doc, _) = crate::gid_text::parse(source).unwrap();
         render(&doc, None, 560.0, file);
     }
 }
