@@ -236,9 +236,6 @@ fn apply_border_projection(
         return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
     };
     let projection = context.eval(projection, environment)?;
-    // The captured projection used to be embedded as syntax in this wrapper's
-    // body. Interpret that syntax here too, without reifying native closures.
-    let projection = context.eval_runtime_code(&projection, environment)?;
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
         return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
     };
