@@ -3,7 +3,7 @@
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
-use crate::editor::{Editor, EditorRunner, RenderState};
+use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frame::Paint;
 use crate::input::PendingPaint;
@@ -54,20 +54,6 @@ use winit::platform::web::{WindowAttributesExtWebSys, WindowExtWebSys};
 #[cfg(target_os = "linux")]
 use winit::platform::x11::WindowAttributesExtX11;
 use winit::window::{Window, WindowId};
-
-/// The action a discard confirmation gates. One at a time per window:
-/// requests while its sheet is up are dropped.
-pub(crate) enum AfterDiscard {
-    /// Close this window; while quitting, the chain then advances.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    CloseWindow,
-    Replace {
-        doc: gid::Document,
-        binders: gid_text::Binders,
-    },
-    #[cfg(target_arch = "wasm32")]
-    Quit,
-}
 
 /// Process-wide state: the GPU, the shared caches, and the editors.
 pub(crate) struct App {

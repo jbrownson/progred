@@ -1,6 +1,5 @@
 //! One window's editor and its per-window execution state.
 
-use crate::app::AfterDiscard;
 use crate::clipboard::SystemTextClipboard;
 use crate::command::{Command, DocCommand};
 use crate::frame::FrameState;
@@ -54,6 +53,20 @@ pub(crate) enum RenderState {
         window: Arc<Window>,
     },
     Suspended(Option<Arc<Window>>),
+}
+
+/// The action a discard confirmation gates. One at a time per window:
+/// requests while its sheet is up are dropped.
+pub(crate) enum AfterDiscard {
+    /// Close this window; while quitting, the chain then advances.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    CloseWindow,
+    Replace {
+        doc: gid::Document,
+        binders: gid_text::Binders,
+    },
+    #[cfg(target_arch = "wasm32")]
+    Quit,
 }
 
 /// One window editing one document: its own CellId universe, model,
