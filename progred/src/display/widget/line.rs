@@ -77,15 +77,11 @@ pub fn view(
             let line = line.clone();
             let edits = edits.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
-                widget.install(output, placement, move |world, operation| {
+                output.line_edit(widget, placement, move |world, operation| {
                     edits
                         .open(crate::editing::Access::new(world))
                         .edit_line(&root, &path, &line, operation)
                 });
-                if let Some(area) = widget.input_area(placement) {
-                    output.input_area(area);
-                }
-                output.render(move |canvas, _| widget.draw(canvas, placement));
             })
         }
         None => {

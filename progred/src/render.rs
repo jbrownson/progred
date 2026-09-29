@@ -21,7 +21,7 @@ pub fn text_edit<C: 'static>(
     with: impl Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool + Clone + 'static,
 ) -> Measured<HoverPass<C>> {
     let edit = puri::edit::text_edit(description, tcx);
-    placed::leaf(metrics_extent(edit.metrics()), move |p, placement| {
-        edit.place(p, placement, with)
+    crate::display::widget::leaf(metrics_extent(edit.metrics()), move |output, placement| {
+        output.line_edit(edit, placement, with)
     })
 }

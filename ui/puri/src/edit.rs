@@ -607,6 +607,7 @@ pub struct LineEdit {
     editor_baseline: f64,
     selection: Vec<Rect>,
     cursor: Option<Rect>,
+    composition: Option<Rect>,
     selection_brush: Brush,
     cursor_brush: Brush,
     focused: bool,
@@ -645,15 +646,16 @@ impl LineEdit {
         }
     }
 
-    /// While focused, the caret at `placement`, in its coordinates: where
-    /// the platform places composition candidates.
+    /// While focused, the area at `placement`, in its coordinates, that
+    /// platform composition candidates should keep clear: the preedit, or
+    /// the caret with some context. It exists even while a preedit hides
+    /// the caret.
     pub fn input_area(&self, placement: Placement) -> Option<Rect> {
-        self.cursor.map(|cursor| {
-            cursor
-                + Vec2::new(
-                    placement.rect.x0,
-                    placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
-                )
+        self.composition.map(|area| {
+            area + Vec2::new(
+                placement.rect.x0,
+                placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
+            )
         })
     }
 
@@ -834,6 +836,10 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
             })
         })
         .flatten();
+    let composition = focused.then(|| {
+        let area = editor.ime_cursor_area();
+        Rect::new(area.x0, area.y0, area.x1, area.y1)
+    });
     LineEdit {
         text,
         metrics,
@@ -844,6 +850,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
         editor_baseline,
         selection,
         cursor,
+        composition,
         selection_brush: style.selection.clone(),
         cursor_brush: style.cursor.clone(),
         focused,
@@ -1548,14 +1555,27 @@ mod tests {
             ))
         };
         let area = focused.input_area(at(20.0, 30.0)).unwrap();
-        assert_eq!(area.width(), 1.5);
-        assert!(area.height() > 0.0);
-        assert!(area.x0 > 20.0);
+        assert!(area.width() > 0.0 && area.height() > 0.0);
         assert_eq!(
             focused.input_area(at(25.0, 40.0)),
             Some(area + Vec2::new(5.0, 10.0))
         );
         assert_eq!(unfocused.input_area(at(20.0, 30.0)), None);
+        // A preedit without a cursor hides the caret, but composition
+        // still has its area.
+        let composing = LineEditState::from_parts("ab", 1, 1, Some(("XY".to_string(), None)), None);
+        let hidden = text_edit(
+            LineEditDescription {
+                state: &composing,
+                focused: true,
+                presentation: presentation(),
+                style: &style,
+                placeholder: None,
+            },
+            &mut tcx,
+        );
+        assert!(hidden.geometry().cursor.is_none());
+        assert!(hidden.input_area(at(20.0, 30.0)).is_some());
     }
 
     #[test]

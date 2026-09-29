@@ -110,8 +110,20 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.output.landmark_select = Some((path, select));
     }
 
-    pub fn input_area(&mut self, area: Rect) {
-        self.output.input_area = Some(area);
+    /// Place a line editor: its input handlers, the composition area the
+    /// platform needs while it is focused, and its paint. Every editable
+    /// line goes through here so none can omit the composition area.
+    pub fn line_edit(
+        &mut self,
+        edit: puri::edit::LineEdit,
+        placement: Placement,
+        with: impl Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool + Clone + 'static,
+    ) {
+        edit.install(self, placement, with);
+        if let Some(area) = edit.input_area(placement) {
+            self.output.input_area = Some(area);
+        }
+        self.render(move |canvas, _| edit.draw(canvas, placement));
     }
 
     pub fn navigation_stop(&mut self, path: std::rc::Rc<[gid::Step]>, selected: bool) {

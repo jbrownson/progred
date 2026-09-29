@@ -883,6 +883,18 @@ mod tests {
     }
 
     #[test]
+    fn a_picker_query_offers_a_composition_area() {
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: None,
+            cells: Cells::new(),
+        }));
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert!(runner.frame.input_area.is_some());
+    }
+
+    #[test]
     fn focus_loss_ends_ime_composition_without_changing_committed_text() {
         let mut runner = EditorRunner::new(crate::test_editor(Document {
             root: Some(text::value("hello")),
