@@ -47,7 +47,8 @@ pub fn functions() -> ForeignFunctions {
                 .filter(|radius| radius.is_finite() && *radius >= 0.0)
                 .map(value)
                 .unwrap_or_else(|| absent::with_reason(vocabulary::INVALID_RADIUS)))
-        }),
+        })
+        .tracked(),
     )
 }
 

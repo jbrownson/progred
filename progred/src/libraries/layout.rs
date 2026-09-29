@@ -1068,16 +1068,19 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             ForeignFunctions::default()
                 .register(
                     vocabulary::LAYOUT_PROGRAM,
-                    ForeignFunction::new(scope::program),
+                    ForeignFunction::new(scope::program).tracked(),
                 )
                 .register(
                     vocabulary::DRAWING,
-                    ForeignFunction::new(drawing_projection),
+                    ForeignFunction::new(drawing_projection).tracked(),
                 )
-                .register(vocabulary::BORDER, ForeignFunction::new(border_projection))
+                .register(
+                    vocabulary::BORDER,
+                    ForeignFunction::new(border_projection).tracked(),
+                )
                 .register(
                     APPLY_BORDER_PROJECTION,
-                    ForeignFunction::new(apply_border_projection),
+                    ForeignFunction::new(apply_border_projection).tracked(),
                 ),
         ),
         crate::display::runtime_partial(display),

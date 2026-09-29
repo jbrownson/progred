@@ -200,6 +200,7 @@ fn unary_function(marker: CellId) -> ForeignFunction {
         };
         Ok(unary(marker, operand))
     })
+    .tracked()
 }
 
 fn binary_function(marker: CellId) -> ForeignFunction {
@@ -212,6 +213,7 @@ fn binary_function(marker: CellId) -> ForeignFunction {
         };
         Ok(binary(marker, left, right))
     })
+    .tracked()
 }
 
 fn radial_function(spelling: &str, squared_distance: Value) -> Value {
@@ -362,19 +364,19 @@ pub fn functions() -> ForeignFunctions {
     )
     .register(
         vocabulary::TRANSLATE,
-        ForeignFunction::from_value(translate_function),
+        ForeignFunction::from_value(translate_function).tracked(),
     )
     .register(
         vocabulary::PREVIEW,
-        ForeignFunction::from_value(preview_function),
+        ForeignFunction::from_value(preview_function).tracked(),
     )
     .register(
         vocabulary::PREVIEW_3D,
-        ForeignFunction::from_value(preview_3d_function),
+        ForeignFunction::from_value(preview_3d_function).tracked(),
     )
     .register(
         vocabulary::PREVIEW_MESH,
-        ForeignFunction::from_value(mesh::preview),
+        ForeignFunction::from_value(mesh::preview).tracked(),
     )
 }
 

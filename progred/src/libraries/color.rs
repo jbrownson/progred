@@ -347,7 +347,8 @@ fn functions() -> ForeignFunctions {
                         input.clone(),
                     )
                 }))
-        }),
+        })
+        .tracked(),
     )
 }
 

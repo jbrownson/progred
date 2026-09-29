@@ -430,7 +430,7 @@ fn evaluate_foreign(
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
-        ForeignFunction::new(evaluate_foreign),
+        ForeignFunction::new(evaluate_foreign).tracked(),
     )
 }
 

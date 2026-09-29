@@ -665,27 +665,33 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         .register(WITH_CONTROLS, ForeignFunction::new(constructor).tracked())
         .register(
             SLIDER,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         )
         .register(
             UPDATE,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         )
         .register(
             RADIO,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         )
         .register(
             TREE_RANGE,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         )
         .register(
             TREE_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         )
         .register(
             TREE_PROGRAM_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED))),
+            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                .tracked(),
         );
     Library::named(
         ID,
