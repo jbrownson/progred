@@ -8,7 +8,7 @@ use crate::display::{
 };
 use crate::libraries::{Library, absent, line_edit, logic, name};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
@@ -235,21 +235,33 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         }
     }
 
+    /// Each call site finds its operand expressions once; its stage only
+    /// evaluates them.
     fn binary(self, operation: impl Fn(N, N) -> RuntimeValue + 'static) -> ForeignFunction {
-        ForeignFunction::new(move |context, call, environment| {
-            let Some(left) = context.field(call, vocabulary::LEFT) else {
-                return Ok(context.missing_runtime_argument(vocabulary::LEFT));
+        let operation = Rc::new(operation);
+        ForeignFunction::staged(move |context, call| {
+            let missing = |cell| -> Stage {
+                Rc::new(move |context, _| Ok(context.missing_runtime_argument(cell)))
             };
-            let Some(right) = context.field(call, vocabulary::RIGHT) else {
-                return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
-            };
-            let left = (self.eval)(context, left, environment)?;
-            let right = (self.eval)(context, right, environment)?;
-            Ok(match (left, right) {
-                (Some(left), Some(right)) => operation(left, right),
-                (None, _) => absent::with_reason(self.left_not).into(),
-                (_, None) => absent::with_reason(self.right_not).into(),
-            })
+            match (
+                context.field(call, vocabulary::LEFT),
+                context.field(call, vocabulary::RIGHT),
+            ) {
+                (Some(left), Some(right)) => {
+                    let operation = operation.clone();
+                    Rc::new(move |context, environment| {
+                        let left = (self.eval)(context, left.clone(), environment)?;
+                        let right = (self.eval)(context, right.clone(), environment)?;
+                        Ok(match (left, right) {
+                            (Some(left), Some(right)) => operation(left, right),
+                            (None, _) => absent::with_reason(self.left_not).into(),
+                            (_, None) => absent::with_reason(self.right_not).into(),
+                        })
+                    })
+                }
+                (None, _) => missing(vocabulary::LEFT),
+                (_, None) => missing(vocabulary::RIGHT),
+            }
         })
         .tracked()
     }
@@ -450,8 +462,18 @@ mod tests {
     fn every_convention_updates_a_missing_location_from_text() {
         use crate::libraries::{f32, f64, text, u64};
         for (library, update, spelling, expected) in [
-            (f64::library(), f64::vocabulary::UPDATE, "2.5", f64::value(2.5)),
-            (f32::library(), f32::vocabulary::UPDATE, "2.5", f32::value(2.5)),
+            (
+                f64::library(),
+                f64::vocabulary::UPDATE,
+                "2.5",
+                f64::value(2.5),
+            ),
+            (
+                f32::library(),
+                f32::vocabulary::UPDATE,
+                "2.5",
+                f32::value(2.5),
+            ),
             (u64::library(), u64::vocabulary::UPDATE, "2", u64::value(2)),
         ] {
             let call = ::grap::call(
