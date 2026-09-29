@@ -339,7 +339,7 @@ impl LineEditState {
         presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
-        _clipboard: &mut dyn TextClipboard,
+        clipboard: &mut dyn TextClipboard,
         command_modifier: crate::keyboard::CommandModifier,
         event: &KeyboardEvent,
     ) -> bool {
@@ -367,12 +367,6 @@ impl LineEditState {
         let handled = {
             let mut drv = editor.driver(fonts, layouts);
             match &event.key {
-                #[cfg(any(
-                    target_os = "windows",
-                    target_os = "macos",
-                    target_os = "linux",
-                    target_arch = "wasm32"
-                ))]
                 // Copy and cut handle only when text is actually
                 // selected: with nothing to copy they decline, so the
                 // caller can interpret the chord (structural copy of
@@ -383,16 +377,16 @@ impl LineEditState {
                     let selected = drv.editor.selected_text().map(str::to_owned);
                     match (c.to_lowercase().as_str(), selected) {
                         ("c", Some(text)) => {
-                            _clipboard.set_text(&text);
+                            clipboard.set_text(&text);
                             true
                         }
                         ("x", Some(text)) => {
-                            _clipboard.set_text(&text);
+                            clipboard.set_text(&text);
                             drv.delete_selection();
                             true
                         }
                         ("v", _) => {
-                            if let Some(text) = _clipboard.get_text() {
+                            if let Some(text) = clipboard.get_text() {
                                 drv.insert_or_replace_selection(&text);
                             }
                             true
