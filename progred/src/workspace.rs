@@ -392,30 +392,25 @@ impl Workspace {
         }
     }
 
-    pub fn side(&self, root: &Root) -> Option<Side> {
-        self.left
-            .panes
-            .iter()
-            .any(|pane| pane.view.root == *root)
-            .then_some(Side::Left)
-            .or_else(|| {
-                self.right
-                    .panes
-                    .iter()
-                    .any(|pane| pane.view.root == *root)
-                    .then_some(Side::Right)
-            })
-    }
-
-    pub fn can_move(&self, root: &Root, direction: Move) -> bool {
-        let Some((side, column, index)) = [Side::Left, Side::Right].into_iter().find_map(|side| {
+    /// The side column holding the pane `root`, and its index there.
+    fn pane(&self, root: &Root) -> Option<(Side, &Column, usize)> {
+        [Side::Left, Side::Right].into_iter().find_map(|side| {
             let column = self.column(side);
             column
                 .panes
                 .iter()
                 .position(|pane| pane.view.root == *root)
                 .map(|index| (side, column, index))
-        }) else {
+        })
+    }
+
+    #[cfg(test)]
+    pub fn side(&self, root: &Root) -> Option<Side> {
+        self.pane(root).map(|(side, ..)| side)
+    }
+
+    pub fn can_move(&self, root: &Root, direction: Move) -> bool {
+        let Some((side, column, index)) = self.pane(root) else {
             return false;
         };
         match direction {

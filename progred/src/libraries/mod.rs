@@ -90,12 +90,6 @@ pub(crate) fn test_apply(
     ::grap::apply_value(function, arguments, &test_host(resolve, foreign), fuel)
 }
 
-#[derive(Clone, Copy)]
-pub struct LocatedValue<'a> {
-    pub library: gid::CellId,
-    pub value: &'a gid::Value,
-}
-
 #[derive(Clone, Default)]
 pub struct Definitions {
     entries: Rc<Vec<(gid::CellId, Definition)>>,
@@ -290,6 +284,7 @@ impl Libraries {
             .map(|(_, definitions)| definitions)
     }
 
+    #[cfg(test)]
     pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
         self.entries
             .iter()
@@ -310,14 +305,6 @@ impl Libraries {
             })
     }
 
-    pub fn values(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedValue<'_>> {
-        self.definitions(cell)
-            .map(|(library, definition)| LocatedValue {
-                library,
-                value: definition.value(),
-            })
-    }
-
     #[cfg(test)]
     pub fn foreign_sources(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
         self.entries
@@ -327,13 +314,11 @@ impl Libraries {
             })
     }
 
-    pub fn contributors(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
-        self.definitions(cell).map(|(library, _)| library)
-    }
-
     #[cfg(test)]
     pub fn first_value(&self, cell: gid::CellId) -> Option<&gid::Value> {
-        self.values(cell).next().map(|definition| definition.value)
+        self.definitions(cell)
+            .next()
+            .map(|(_, definition)| definition.value())
     }
 
     pub fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
@@ -453,8 +438,8 @@ mod tests {
 
         assert_eq!(
             libraries
-                .values(SHARED_CELL)
-                .map(|definition| (definition.library, definition.value.clone()))
+                .definitions(SHARED_CELL)
+                .map(|(library, definition)| (library, definition.value().clone()))
                 .collect::<Vec<_>>(),
             [
                 (LEFT_LIBRARY, Value::from(b"left".to_vec())),
@@ -527,8 +512,8 @@ mod tests {
         )]);
         assert_eq!(
             libraries
-                .values(SHARED_FUNCTION)
-                .map(|entry| entry.value)
+                .definitions(SHARED_FUNCTION)
+                .map(|(_, definition)| definition.value())
                 .collect::<Vec<_>>(),
             [&name]
         );
@@ -539,7 +524,10 @@ mod tests {
             [LEFT_LIBRARY]
         );
         assert_eq!(
-            libraries.contributors(SHARED_FUNCTION).collect::<Vec<_>>(),
+            libraries
+                .definitions(SHARED_FUNCTION)
+                .map(|(library, _)| library)
+                .collect::<Vec<_>>(),
             [LEFT_LIBRARY]
         );
         assert_eq!(
@@ -750,8 +738,8 @@ mod tests {
         );
         assert_eq!(
             libraries
-                .values(SHARED_CELL)
-                .map(|definition| definition.library)
+                .definitions(SHARED_CELL)
+                .map(|(library, _)| library)
                 .collect::<Vec<_>>(),
             [LEFT_LIBRARY, RIGHT_LIBRARY]
         );

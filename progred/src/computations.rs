@@ -88,6 +88,7 @@ impl Computations {
         self.roots.get((view.clone(), path.to_vec()), create)
     }
 
+    #[cfg(test)]
     pub fn evaluate(&self, view: &Root, path: &[Step], expression: &Value, fuel: usize) -> Value {
         self.evaluate_runtime(view, path, &expression.into(), fuel, None)
             .into_value()
@@ -146,6 +147,7 @@ impl Computations {
             .unwrap_or_else(|error| grap::memo::failure(error).into())
     }
 
+    #[cfg(test)]
     pub fn apply(
         &self,
         view: &Root,
