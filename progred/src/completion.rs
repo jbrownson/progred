@@ -14,20 +14,34 @@ use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
+/// Labels can only be cells; any value completes a value.
 fn activation(
     kind: CompletionKind,
     value: Value,
     on_commit: Option<Continuation>,
 ) -> Option<Rc<dyn Fn(&mut crate::Editor)>> {
-    match kind {
-        CompletionKind::Value => Some(Rc::new(move |world| {
-            crate::editing::commit_value(world, value.clone(), on_commit.clone())
-        })),
-        CompletionKind::Field => value.as_cell().map(|cell| {
+    match value.as_cell() {
+        Some(cell) => Some(cell_activation(kind, cell, on_commit)),
+        None => (kind == CompletionKind::Value).then(|| {
             Rc::new(move |world: &mut crate::Editor| {
-                crate::editing::commit_label(world, cell, None, on_commit.clone())
+                crate::editing::commit_value(world, value.clone(), on_commit.clone())
             }) as Rc<dyn Fn(&mut crate::Editor)>
         }),
+    }
+}
+
+fn cell_activation(
+    kind: CompletionKind,
+    cell: CellId,
+    on_commit: Option<Continuation>,
+) -> Rc<dyn Fn(&mut crate::Editor)> {
+    match kind {
+        CompletionKind::Value => Rc::new(move |world| {
+            crate::editing::commit_value(world, cell.into(), on_commit.clone())
+        }),
+        CompletionKind::Field => {
+            Rc::new(move |world| crate::editing::commit_label(world, cell, None, on_commit.clone()))
+        }
     }
 }
 
@@ -50,20 +64,22 @@ fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
     })
 }
 
+/// Labels can only be cells; an offer advertising another value is not one.
 fn completion_entry(
     sources: &Sources,
     offer: Completion,
     kind: CompletionKind,
 ) -> Option<Entry<crate::Editor>> {
-    if kind == CompletionKind::Field
-        && offer
+    (kind == CompletionKind::Value
+        || offer
             .preview
             .as_ref()
-            .is_some_and(|value| value.as_cell().is_none())
-    {
-        return None;
-    }
-    Some(Entry {
+            .is_none_or(|value| value.as_cell().is_some()))
+    .then(|| entry(sources, offer))
+}
+
+fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
+    Entry {
         display: completion_text(sources, &offer.display),
         detail: offer
             .detail
@@ -73,7 +89,7 @@ fn completion_entry(
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
         activate: offer.activate,
-    })
+    }
 }
 
 fn value_entry(
@@ -283,13 +299,11 @@ pub(crate) fn completion_entries_with(
                 }),
             }
         }
-        CompletionKind::Value => completion_entry(
+        CompletionKind::Value => entry(
             sources,
             blob.map(blob::completion)
                 .unwrap_or_else(|| text::completion(spelling)),
-            kind,
-        )
-        .unwrap(),
+        ),
     };
     let reference_selection = if labels {
         crate::libraries::selection::pending_at(&[])
@@ -313,17 +327,18 @@ pub(crate) fn completion_entries_with(
             let source = definition
                 .map(|value| value.source)
                 .or_else(|| sources.contributors(cell).next());
-            let mut entry = value_entry(
-                name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
-                source.map(|source| source_name(sources, source)),
-                Value::from(cell),
-                reference_selection.clone(),
-                kind,
-            )
-            .unwrap();
-            if name.is_none() {
-                entry.face = Face::Id;
-            }
+            let entry = Entry {
+                display: name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
+                detail: source.map(|source| source_name(sources, source)),
+                matches: Vec::new(),
+                face: if name.is_some() {
+                    Face::Label
+                } else {
+                    Face::Id
+                },
+                source: Some(cell),
+                activate: cell_activation(kind, cell, Some(reference_selection.clone())),
+            };
             (entry, name.is_some(), sources.external(cell))
         })
         .partition(|(_, _, external)| !*external);
