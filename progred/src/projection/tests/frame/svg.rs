@@ -419,7 +419,7 @@ fn website_lesson_svg_captures() {
                     doc.clone(),
                     crate::stack::load_selected(libraries).unwrap(),
                 );
-                if matches!(name, "grap" | "functions" | "drawing" | "forest" | "create") {
+                if matches!(name, "grap" | "functions" | "drawing" | "forest") {
                     editor.stack.projection = crate::web_embed::tutorial_slots(
                         Some(
                             &if matches!(name, "drawing" | "forest") {
