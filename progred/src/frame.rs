@@ -338,21 +338,21 @@ impl Editor {
         // Stepping from the clamped position keeps the first tick
         // responsive when a resize left the stored offset out of
         // bounds.
-        let (next, outcome) = scroll_offset(
-            self.model
-                .workspace
-                .view(&root)
-                .expect("a retained view is live")
-                .scroll,
-            update,
-            scale,
-            viewport,
-            Vec2::new(max_scroll_x, max_scroll),
-        );
-        if let Some(view) = self.model.workspace.view_mut(&root) {
-            view.scroll = next;
+        // A retained handler can outlive its view; decline rather than panic.
+        match self.model.workspace.view_mut(&root) {
+            Some(view) => {
+                let (next, outcome) = scroll_offset(
+                    view.scroll,
+                    update,
+                    scale,
+                    viewport,
+                    Vec2::new(max_scroll_x, max_scroll),
+                );
+                view.scroll = next;
+                outcome
+            }
+            None => ScrollOutcome::pass(update),
         }
-        outcome
     }
 
     fn sync_views(&mut self) {
@@ -898,6 +898,27 @@ mod frame_tests {
     const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
 
     #[test]
+    fn scrolling_a_view_that_no_longer_exists_declines() {
+        use ui_events::pointer::{PointerInfo, PointerScrollEvent, PointerType};
+        let mut editor = crate::test_editor(Document {
+            root: Some(Value::record([])),
+            cells: Cells::new(),
+        });
+        let gone = crate::workspace::Root::pane(vec![Step::Key(gid::new_cell_id())]);
+        let event = PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
+            state: Default::default(),
+        };
+        let outcome = editor.scroll_view(gone, &event, 1.0, Size::new(100.0, 100.0), 50.0, 0.0);
+        assert!(!outcome.handled());
+    }
+
+    #[test]
     fn source_hover_conjects_the_occurrence_in_its_own_view() {
         let field = gid::new_cell_id();
         let occurrence: Rc<[Step]> = Rc::from([Step::Key(gid::new_cell_id())]);
@@ -1419,8 +1440,7 @@ mod frame_tests {
             .iter()
             .find(|target| target.path.as_ref() == path)
             .unwrap();
-        runner.editor.model.workspace.document.scroll.y =
-            target.rect.center().y - region.y1;
+        runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
         crate::editing::select(&mut runner.editor, &root, previous);
         runner.refresh_frame(1.0, viewport);
         let target = runner
