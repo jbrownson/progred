@@ -79,11 +79,7 @@ pub(crate) fn viewport_runtime_output(
     let value = match fields.get(&vocabulary::PREPARE) {
         Some(prepare) => {
             let fuel = match fields.get(&layout::vocabulary::FUEL) {
-                Some(value) => {
-                    let fuel = f64::read(value)?;
-                    (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64)
-                        .then_some(fuel as usize)?
-                }
+                Some(value) => layout::fuel(f64::read(value)?)?,
                 None => ::grap::DEFAULT_FUEL,
             };
             let prepared =
@@ -113,18 +109,16 @@ pub fn display(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let expression = input.value?.field(vocabulary::RENDER)?;
     let evaluated = (|| {
-        let fuel = expression.field(layout::vocabulary::FUEL)?.as_f64()?;
+        let fuel = layout::fuel(expression.field(layout::vocabulary::FUEL)?.as_f64()?)?;
         let expression = expression.field(::grap::vocabulary::EXPRESSION)?;
-        (fuel >= 0.0 && fuel.fract() == 0.0 && fuel <= usize::MAX as f64).then(|| {
-            input.env.evaluate_runtime_memo(
-                &expression,
-                fuel as usize,
-                &[
-                    Step::Key(vocabulary::RENDER),
-                    Step::Key(::grap::vocabulary::EXPRESSION),
-                ],
-            )
-        })
+        Some(input.env.evaluate_runtime_memo(
+            &expression,
+            fuel,
+            &[
+                Step::Key(vocabulary::RENDER),
+                Step::Key(::grap::vocabulary::EXPRESSION),
+            ],
+        ))
     })();
     let result = evaluated.unwrap_or_else(|| {
         input.env.evaluate_runtime_memo(

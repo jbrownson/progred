@@ -639,15 +639,14 @@ fn decode_with(
         let ascent = read_nonnegative(content.field(vocabulary::ASCENT)?.as_value())?;
         let descent = read_nonnegative(content.field(vocabulary::DESCENT)?.as_value())?;
         if let Some(program) = content.field(vocabulary::PROGRAM) {
-            let fuel = read_nonnegative(content.field(vocabulary::FUEL)?.as_value())?;
-            (fuel.fract() == 0.0).then_some(())?;
+            let fuel = fuel(read_number(content.field(vocabulary::FUEL)?.as_value())?)?;
             return Some(crate::display::drawing_program(
                 crate::display::widget::Extent {
                     width,
                     ascent,
                     descent,
                 },
-                fuel as usize,
+                fuel,
                 program.clone(),
             ));
         }
@@ -708,6 +707,12 @@ fn children(
 
 fn read_number(value: &Value) -> Option<f64> {
     f64_convention::read(value).filter(|number| number.is_finite())
+}
+
+/// An explicit evaluation allowance: a nonnegative whole number of steps.
+pub(crate) fn fuel(number: f64) -> Option<usize> {
+    (number >= 0.0 && number.fract() == 0.0 && number <= usize::MAX as f64)
+        .then_some(number as usize)
 }
 
 fn read_nonnegative(value: &Value) -> Option<f64> {

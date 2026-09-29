@@ -323,10 +323,9 @@ fn operation(
             if width < 0.0 || ascent < 0.0 || descent < 0.0 {
                 return Err(invalid(function));
             }
-            let fuel = number!(FUEL, Some(::grap::DEFAULT_FUEL as f64));
-            if fuel < 0.0 || fuel.fract() != 0.0 || fuel > usize::MAX as f64 {
+            let Some(fuel) = super::fuel(number!(FUEL, Some(::grap::DEFAULT_FUEL as f64))) else {
                 return Err(invalid(function));
-            }
+            };
             let program = context.eval(need!(context.field(call, PROGRAM)), environment)?;
             crate::display::drawing_program(
                 crate::display::widget::Extent {
@@ -334,7 +333,7 @@ fn operation(
                     ascent,
                     descent,
                 },
-                fuel as usize,
+                fuel,
                 program,
             )
         }
