@@ -5,22 +5,56 @@ use puri::handler::Handler;
 
 pub trait ResolveForDispatch<C, H> {
     fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>>;
+    /// The handler with the frame's landmarks, as the shell dispatches it.
+    fn resolve_with_context(
+        self,
+    ) -> (
+        Handler<C, widget::frame::DispatchContext<C, H>>,
+        widget::frame::DispatchContext<C, H>,
+    );
+    /// Dispatch an arrow's navigation as the shell does.
+    fn navigate(self, world: &mut C, direction: widget::Direction) -> bool;
 }
 
 impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverOutput<C, H> {
     fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>> {
+        self.resolve_with_context().0
+    }
+
+    fn resolve_with_context(
+        self,
+    ) -> (
+        Handler<C, widget::frame::DispatchContext<C, H>>,
+        widget::frame::DispatchContext<C, H>,
+    ) {
         let hovered = self.claim.as_ref().and_then(|(_, claim)| match claim {
             puri::hover::Claim::Direct(target) | puri::hover::Claim::Extended(target) => {
                 Some(target.clone())
             }
             puri::hover::Claim::Occludes => None,
         });
-        self.bind(widget::frame::ResolvedHover {
+        let frame = self.bind(widget::frame::ResolvedHover {
             hovered,
             ..Default::default()
-        })
-        .handler
-        .expect("resolved frame handler")
+        });
+        (
+            frame.handler.expect("resolved frame handler"),
+            widget::frame::DispatchContext {
+                descends: frame.descends.into(),
+                ..Default::default()
+            },
+        )
+    }
+
+    fn navigate(self, world: &mut C, direction: widget::Direction) -> bool {
+        let (handler, mut context) = self.resolve_with_context();
+        handler
+            .dispatch(
+                world,
+                puri::handler::Event::Navigate(direction),
+                &mut context,
+            )
+            .handled()
     }
 }
 

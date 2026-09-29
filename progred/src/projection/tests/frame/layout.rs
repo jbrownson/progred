@@ -868,7 +868,10 @@ fn list_navigation_follows_the_selected_layout_alternative() {
         let (bench, _) = place(&doc, Some(&selection), width);
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = Some(selection);
-        let mut input = crate::placed::DispatchContext::default();
+        let mut input = crate::placed::DispatchContext {
+            descends: bench.descends.clone().into(),
+            ..Default::default()
+        };
         assert_eq!(
             bench
                 .handler

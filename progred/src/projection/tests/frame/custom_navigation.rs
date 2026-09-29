@@ -59,7 +59,10 @@ impl Fixture {
                 .dispatch(
                     &mut self.world,
                     puri::handler::Event::Navigate(direction),
-                    &mut Default::default()
+                    &mut crate::placed::DispatchContext {
+                        descends: frame.descends.clone().into(),
+                        ..Default::default()
+                    }
                 )
                 .handled(),
             "{direction:?} from {from:?}"
@@ -487,14 +490,7 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
         world.model.selection = Some(make_selection(from.clone()));
         let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
         assert!(
-            frame
-                .resolve_for_dispatch()
-                .dispatch(
-                    &mut world,
-                    puri::handler::Event::Navigate(direction),
-                    &mut Default::default()
-                )
-                .handled(),
+            frame.navigate(&mut world, direction),
             "{direction:?} from {from:?}"
         );
         assert_eq!(world.model.selection.as_ref().unwrap().path(), to);

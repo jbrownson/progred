@@ -20,28 +20,10 @@ const DIRECTIONS: [Direction; 4] = [
 // Pointer/source selection and Select All also use these direct selection helpers.
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 
-pub struct Target<C> {
-    pub path: Rc<[Step]>,
-    pub select: Select<C>,
-}
-impl<C> Clone for Target<C> {
-    fn clone(&self) -> Self {
-        Self {
-            path: self.path.clone(),
-            select: self.select.clone(),
-        }
-    }
-}
-
-pub(crate) fn destination(
-    path: Rc<[Step]>,
-    cx: &crate::projection::Cx<'_>,
-) -> Target<crate::Editor> {
-    let select = crate::projection::select_handler(path.clone(), cx);
-    Target {
-        path,
-        select: Rc::new(move |editor, _| select(editor)),
-    }
+/// Plain arrival at an occurrence: select it, whatever the direction.
+pub(crate) fn arrival(path: Rc<[Step]>, cx: &crate::projection::Cx<'_>) -> Select<crate::Editor> {
+    let select = crate::projection::select_handler(path, cx);
+    Rc::new(move |editor, _| select(editor))
 }
 
 /// A native control supplies its entry without introducing child routing.
@@ -51,9 +33,9 @@ pub fn target(
     super::before(
         child,
         Rc::new(|context| {
-            let target = destination(Rc::from(context.path), context.inputs);
+            let path: Rc<[Step]> = Rc::from(context.path);
             let selected = context.inputs.selected(context.path);
-            Box::new(move |output, _| output.navigation_target(target, selected))
+            Box::new(move |output, _| output.navigation_stop(path, selected))
         }),
     )
 }
@@ -64,11 +46,11 @@ pub fn nav_group(
     super::around(
         child,
         Rc::new(move |context| {
-            let target = destination(Rc::from(context.path), context.inputs);
+            let path: Rc<[Step]> = Rc::from(context.path);
             let selected = context.inputs.selected(context.path);
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
-                    pass.navigation.begin_container(target, selected);
+                    pass.navigation.begin_container(path, selected);
                     inner.place_into(pass);
                     pass.navigation.end_container();
                 })

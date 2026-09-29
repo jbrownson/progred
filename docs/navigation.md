@@ -1,6 +1,6 @@
 # Layout-derived keyboard navigation
 
-Projections declare selectable stops and their selection callbacks. While the
+Projections declare selectable stops by occurrence path. While the
 chosen layout alternative is placed, the collector folds those stops into
 temporary line summaries. No coordinates, distances, or measured-height
 thresholds choose destinations. Selection paths, conjects, and editing
@@ -40,8 +40,8 @@ to the outermost stop. A stop before the block, such as a function label, ends
 that sharing. An enclosing stop always begins the topmost entry line, so it
 precedes a deeper block that sits beside its first one.
 
-Repeated declarations of the innermost open whole value's occurrence refine its
-arrival behavior instead of adding a second stop.
+A repeated declaration of the innermost open whole value's occurrence is the
+same stop, not a second one.
 
 ## Arrow policy
 
@@ -67,7 +67,11 @@ drawn line, and leading stops remember the first block's entry line, so
 regrouping a row's children never changes navigation.
 
 After placement the collector scans the summaries and installs one ordinary
-`Navigate` handler with four destinations. Unselected views install none. Raw
+`Navigate` handler with four destination paths. Unselected views install none.
+An arrow arrives through the destination's landmark in that view, the same
+landmark that reveals it: the landmark owns selecting the occurrence, including
+a line field placing its caret at the edge the arrow came from. A stop without a
+landmark declines rather than selecting something that cannot be revealed. Raw
 text/picker handlers get the first chance at keyboard events, and the shell
 reveals the destination. Offscreen stops remain available; folded or unplaced
 contents do not contribute. Source-less computed results keep their read-only

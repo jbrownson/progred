@@ -1,26 +1,33 @@
 //! Fold the chosen layout traversal into line boundaries and local neighbors.
-use super::{DIRECTIONS, DispatchContext, Event, EventOutcome, Handler, Target};
+use super::super::view::Root;
+use super::{DIRECTIONS, DispatchContext, Event, EventOutcome, Handler};
+use gid::Step;
 use measured::{Composition, RowAlignment};
+use std::rc::Rc;
 
-struct Stop<C> {
-    target: Target<C>,
+/// A stop names its occurrence; arriving there is the occurrence's landmark's
+/// job, resolved when an arrow key is pressed.
+type Occurrence = Rc<[Step]>;
+
+struct Stop {
+    path: Occurrence,
     selected: bool,
 }
 
-struct Neighbors<C> {
-    left: Option<Target<C>>,
-    right: Option<Target<C>>,
+struct Neighbors {
+    left: Option<Occurrence>,
+    right: Option<Occurrence>,
 }
 
 /// Concatenation needs only endpoints and the neighbors of a selected stop.
 /// Everything in between is dropped as soon as it is passed.
-struct Line<C> {
-    first: Option<Target<C>>,
-    last: Option<Target<C>>,
-    selected: Option<Neighbors<C>>,
+struct Line {
+    first: Option<Occurrence>,
+    last: Option<Occurrence>,
+    selected: Option<Neighbors>,
 }
 
-impl<C> Default for Line<C> {
+impl Default for Line {
     fn default() -> Self {
         Self {
             first: None,
@@ -30,15 +37,15 @@ impl<C> Default for Line<C> {
     }
 }
 
-impl<C> Line<C> {
-    fn stop(stop: Stop<C>) -> Self {
+impl Line {
+    fn stop(stop: Stop) -> Self {
         Self {
-            first: Some(stop.target.clone()),
+            first: Some(stop.path.clone()),
             selected: stop.selected.then_some(Neighbors {
                 left: None,
                 right: None,
             }),
-            last: Some(stop.target),
+            last: Some(stop.path),
         }
     }
 
@@ -61,21 +68,21 @@ impl<C> Line<C> {
 /// One content row: `lead` holds the stops before its first multiline block
 /// (all of them if there is none). Stops before the first block join its entry
 /// line; stops after it stay on the line they are drawn on.
-struct Row<C> {
-    lead: Line<C>,
-    block: Option<Block<C>>,
+struct Row {
+    lead: Line,
+    block: Option<Block>,
 }
 
 /// Lines count up from the drawn line, so blocks side by side combine line by
 /// line however their row is grouped. `attach` is the entry line of the first
 /// block, which the row's lead joins.
-struct Block<C> {
-    drawn: Line<C>,
-    entries: Vec<Line<C>>,
+struct Block {
+    drawn: Line,
+    entries: Vec<Line>,
     attach: usize,
 }
 
-impl<C> Default for Row<C> {
+impl Default for Row {
     fn default() -> Self {
         Self {
             lead: Line::default(),
@@ -84,7 +91,7 @@ impl<C> Default for Row<C> {
     }
 }
 
-impl<C> Row<C> {
+impl Row {
     fn append(&mut self, next: Self) {
         match (&mut self.block, next.block) {
             (None, block) => {
@@ -106,7 +113,7 @@ impl<C> Row<C> {
         }
     }
 
-    fn lines(self) -> Vec<Line<C>> {
+    fn lines(self) -> Vec<Line> {
         match self.block {
             None => vec![self.lead],
             Some(mut block) => {
@@ -126,12 +133,12 @@ impl<C> Row<C> {
 
 /// Content rows align using the actual column baseline; block entry levels
 /// stay inside each row. These are summaries, not a copy of the layout.
-struct Lines<C> {
+struct Lines {
     baseline: usize,
-    rows: Vec<Row<C>>,
+    rows: Vec<Row>,
 }
 
-impl<C> Default for Lines<C> {
+impl Default for Lines {
     fn default() -> Self {
         Self {
             baseline: 0,
@@ -140,8 +147,8 @@ impl<C> Default for Lines<C> {
     }
 }
 
-impl<C> Lines<C> {
-    fn stop(stop: Stop<C>) -> Self {
+impl Lines {
+    fn stop(stop: Stop) -> Self {
         Self {
             baseline: 0,
             rows: vec![Row {
@@ -164,7 +171,7 @@ impl<C> Lines<C> {
     /// A whole-value stop precedes its contents. Multiline contents are a
     /// block: its stop begins the topmost entry line, which it shares with
     /// directly enclosed blocks. Single-line contents stay on their line.
-    fn enclosed(mut self, stop: Stop<C>) -> Self {
+    fn enclosed(mut self, stop: Stop) -> Self {
         let multiline = self.rows.len() > 1;
         match self.rows.first_mut() {
             None => Self::stop(stop),
@@ -205,9 +212,9 @@ impl<C> Lines<C> {
         }
     }
 
-    fn destinations(self) -> Option<[Option<Target<C>>; 4]> {
+    fn destinations(self) -> Option<[Option<Occurrence>; 4]> {
         let (mut previous_first, mut previous_last) = (None, None);
-        let mut result: Option<[Option<Target<C>>; 4]> = None;
+        let mut result: Option<[Option<Occurrence>; 4]> = None;
         for line in self
             .rows
             .into_iter()
@@ -236,19 +243,19 @@ impl<C> Lines<C> {
 
 /// One open row/column. Children are folded as they finish, so a long row
 /// does not retain a summary for each of its already-visited children.
-struct Accumulator<C> {
+struct Accumulator {
     composition: Composition,
     child_index: usize,
-    lines: Lines<C>,
+    lines: Lines,
 }
 
-impl<C> Default for Accumulator<C> {
+impl Default for Accumulator {
     fn default() -> Self {
         Self::new(Composition::Row(RowAlignment::Baseline))
     }
 }
 
-impl<C> Accumulator<C> {
+impl Accumulator {
     fn new(composition: Composition) -> Self {
         Self {
             composition,
@@ -257,7 +264,7 @@ impl<C> Accumulator<C> {
         }
     }
 
-    fn push(&mut self, child: Lines<C>) {
+    fn push(&mut self, child: Lines) {
         if self.child_index == 0 {
             self.lines = child;
             if !matches!(
@@ -303,14 +310,14 @@ impl<C> Accumulator<C> {
     }
 }
 
-pub(crate) struct Construction<C> {
-    current: Accumulator<C>,
-    parents: Vec<Accumulator<C>>,
+pub(crate) struct Construction {
+    current: Accumulator,
+    parents: Vec<Accumulator>,
     /// Open whole-value stops; `None` marks one that refined an outer stop.
-    containers: Vec<Option<Stop<C>>>,
+    containers: Vec<Option<Stop>>,
 }
 
-impl<C> Default for Construction<C> {
+impl Default for Construction {
     fn default() -> Self {
         Self {
             current: Accumulator::default(),
@@ -320,12 +327,12 @@ impl<C> Default for Construction<C> {
     }
 }
 
-impl<C: 'static> Construction<C> {
+impl Construction {
     /// A repeated declaration of the innermost open whole value's occurrence
-    /// refines its arrival behavior instead of adding a second stop.
-    fn refine(&mut self, stop: Stop<C>) -> Option<Stop<C>> {
+    /// is the same stop, not a second one.
+    fn refine(&mut self, stop: Stop) -> Option<Stop> {
         match self.containers.iter_mut().rev().flatten().next() {
-            Some(open) if open.target.path == stop.target.path => {
+            Some(open) if open.path == stop.path => {
                 *open = stop;
                 None
             }
@@ -333,8 +340,8 @@ impl<C: 'static> Construction<C> {
         }
     }
 
-    pub fn target(&mut self, target: Target<C>, selected: bool) {
-        if let Some(stop) = self.refine(Stop { target, selected }) {
+    pub fn stop(&mut self, path: Occurrence, selected: bool) {
+        if let Some(stop) = self.refine(Stop { path, selected }) {
             self.current.push(Lines::stop(stop));
         }
     }
@@ -346,7 +353,7 @@ impl<C: 'static> Construction<C> {
         ));
     }
 
-    fn close(&mut self) -> Lines<C> {
+    fn close(&mut self) -> Lines {
         let parent = self
             .parents
             .pop()
@@ -359,8 +366,8 @@ impl<C: 'static> Construction<C> {
         self.current.push(lines);
     }
 
-    pub fn begin_container(&mut self, target: Target<C>, selected: bool) {
-        let stop = self.refine(Stop { target, selected });
+    pub fn begin_container(&mut self, path: Occurrence, selected: bool) {
+        let stop = self.refine(Stop { path, selected });
         self.containers.push(stop);
         self.begin(Composition::Row(RowAlignment::Baseline));
     }
@@ -373,23 +380,37 @@ impl<C: 'static> Construction<C> {
         });
     }
 
-    pub fn finish<H: 'static>(self) -> Option<Handler<C, DispatchContext<C, H>>> {
+    /// Arrows arrive at a destination through that occurrence's landmark in
+    /// this view, which owns its selection and any direction-aware arrival.
+    pub fn finish<C: 'static, H: 'static>(
+        self,
+        view: Option<Root>,
+    ) -> Option<Handler<C, DispatchContext<C, H>>> {
         debug_assert!(self.parents.is_empty() && self.containers.is_empty());
         let destinations = self.current.lines.destinations()?;
         let mut handler = Handler::new();
-        handler.on(move |world, event, _| match event {
-            Event::Navigate(direction) => {
-                let target = DIRECTIONS
-                    .iter()
-                    .position(|d| *d == direction)
-                    .and_then(|index| destinations[index].as_ref());
-                EventOutcome::from_handled(
-                    event,
-                    target.is_some_and(|target| (target.select)(world, Some(direction))),
-                )
-            }
-            _ => EventOutcome::decline(event),
-        });
+        handler.on(
+            move |world, event, input: &mut DispatchContext<C, H>| match event {
+                Event::Navigate(direction) => {
+                    let arrive = DIRECTIONS
+                        .iter()
+                        .position(|d| *d == direction)
+                        .and_then(|index| destinations[index].as_ref())
+                        .and_then(|path| {
+                            input
+                                .descends
+                                .iter()
+                                .find(|landmark| landmark.root == view && landmark.path == *path)
+                        })
+                        .map(|landmark| landmark.select.clone());
+                    EventOutcome::from_handled(
+                        event,
+                        arrive.is_some_and(|arrive| arrive(world, Some(direction))),
+                    )
+                }
+                _ => EventOutcome::decline(event),
+            },
+        );
         Some(handler)
     }
 }

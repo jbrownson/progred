@@ -77,13 +77,16 @@ fn pending_target(
     let palette = cx.styles.palette;
     let selected = cx.selected(path.as_ref());
     let select = super::select_handler(path.clone(), cx);
-    let target = crate::display::widget::navigation::destination(path.clone(), cx);
-    let arrive = target.select.clone();
+    let stop = path.clone();
     let child = crate::display::widget::before_place(child, move |_, output| {
-        output.navigation_target(target, selected);
+        output.navigation_stop(stop, selected);
     });
-    let child =
-        crate::display::widget::navigation::landmark(child, path.clone(), arrive, cx.edits.clone());
+    let child = crate::display::widget::navigation::landmark(
+        child,
+        path.clone(),
+        crate::display::widget::navigation::arrival(path.clone(), cx),
+        cx.edits.clone(),
+    );
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);
         let highlight_path = path.clone();

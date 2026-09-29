@@ -107,7 +107,6 @@ pub fn view(
         }
     };
     let active = active.is_some();
-    let destination = super::navigation::destination(path.clone(), cx);
     let selected = cx.selected(path.as_ref());
     if writable {
         let nav_root = root.clone();
@@ -131,15 +130,13 @@ pub fn view(
             }
             true
         });
-        let destination = super::navigation::Target {
-            select: navigation.clone(),
-            ..destination
-        };
+        let stop = path.clone();
         let presentation = context.inputs.styles.line_presentation(&line);
         let scale = context.inputs.styles.scale as f32;
         let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
         crate::display::widget::before_place(content, move |placement: Placement, output| {
-            output.navigation_target(destination, selected);
+            // Arriving from the left or right places the caret at that edge.
+            output.navigation_stop(stop.clone(), selected);
             output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
@@ -175,7 +172,7 @@ pub fn view(
         })
     } else {
         crate::display::widget::before_place(content, move |_, output| {
-            output.navigation_target(destination, selected);
+            output.navigation_stop(path, selected);
         })
     }
 }

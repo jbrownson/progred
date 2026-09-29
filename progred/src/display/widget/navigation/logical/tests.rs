@@ -26,22 +26,19 @@ fn enclosed(stop: usize, child: Shape) -> Shape {
     Enclosed(stop, Box::new(child))
 }
 
-fn target(stop: usize) -> Target<()> {
-    Target {
-        path: Rc::from([Step::Key(CellId::from_u128(stop as u128))]),
-        select: Rc::new(|_, _| true),
-    }
+fn path(stop: usize) -> Rc<[Step]> {
+    Rc::from([Step::Key(CellId::from_u128(stop as u128))])
 }
 
-fn index(target: &Target<()>) -> usize {
-    match target.path.as_ref() {
+fn index(path: &Rc<[Step]>) -> usize {
+    match path.as_ref() {
         [Step::Key(cell)] => u128::from_be_bytes(*cell.as_bytes()) as usize,
         _ => unreachable!(),
     }
 }
 
-fn build(shape: &Shape, selected: usize, construction: &mut Construction<()>) {
-    let layout = |composition, children: &[Shape], construction: &mut Construction<()>| {
+fn build(shape: &Shape, selected: usize, construction: &mut Construction) {
+    let layout = |composition, children: &[Shape], construction: &mut Construction| {
         construction.begin(composition);
         for child in children {
             construction.begin(Composition::Row(RowAlignment::Baseline));
@@ -52,7 +49,7 @@ fn build(shape: &Shape, selected: usize, construction: &mut Construction<()>) {
     };
     match shape {
         Empty => {}
-        Stop(stop) => construction.target(target(*stop), *stop == selected),
+        Stop(stop) => construction.stop(path(*stop), *stop == selected),
         Row(alignment, children) => layout(Composition::Row(*alignment), children, construction),
         Column(baseline, children) => layout(
             Composition::Column {
@@ -62,7 +59,7 @@ fn build(shape: &Shape, selected: usize, construction: &mut Construction<()>) {
             construction,
         ),
         Enclosed(stop, child) => {
-            construction.begin_container(target(*stop), *stop == selected);
+            construction.begin_container(path(*stop), *stop == selected);
             build(child, selected, construction);
             construction.end_container();
         }
@@ -122,7 +119,7 @@ fn lines(shape: &Shape) -> Vec<Vec<usize>> {
 fn long_single_line_keeps_only_boundaries_and_the_selected_neighbors() {
     let mut construction = Construction::default();
     for stop in 0..10_000 {
-        construction.target(target(stop), stop == 5000);
+        construction.stop(path(stop), stop == 5000);
     }
     let lines = construction.current.lines;
     assert_eq!(lines.rows.len(), 1);
@@ -358,66 +355,78 @@ fn a_row_with_multiline_content_is_multiline_but_empty_decorations_add_no_lines(
 }
 
 #[test]
-fn a_repeated_declaration_refines_its_open_whole_value_instead_of_adding_a_stop() {
-    let arrived = Rc::new(std::cell::Cell::new(false));
+fn a_repeated_declaration_is_the_same_stop() {
     let mut construction = Construction::default();
-    construction.target(target(0), false);
-    construction.begin_container(target(1), false);
-    let refined = arrived.clone();
-    construction.target(
-        Target {
-            select: Rc::new(move |_, _| {
-                refined.set(true);
-                true
-            }),
-            ..target(1)
-        },
-        false,
-    );
-    construction.target(target(2), true);
+    construction.stop(path(0), false);
+    construction.begin_container(path(1), false);
+    construction.stop(path(1), true);
+    construction.stop(path(2), false);
     construction.end_container();
-    let [left, ..] = construction.current.lines.destinations().unwrap();
-    let left = left.unwrap();
-    assert_eq!(index(&left), 1);
-    assert!((left.select)(&mut (), None));
-    assert!(arrived.get());
+    assert_eq!(
+        construction
+            .current
+            .lines
+            .destinations()
+            .unwrap()
+            .map(|path| path.as_ref().map(index)),
+        [Some(0), Some(2), None, None]
+    );
 }
 
 #[test]
-fn views_with_identical_paths_do_not_share_logical_stops() {
+fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     use super::super::super::{HoverInput, HoverPass, view::Root};
+    use super::super::Landmark;
     let paths: [Rc<[Step]>; 2] = std::array::from_fn(|_| Rc::from([Step::Key(gid::new_cell_id())]));
+    let views = [
+        Root::document(),
+        Root::pane(vec![Step::Key(gid::new_cell_id())]),
+    ];
     let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput {
         ..Default::default()
     });
-    for view in 0..2 {
-        pass.in_view(Root::document(), |pass| {
+    for (view, root) in views.into_iter().enumerate() {
+        pass.in_view(root, |pass| {
             for (index, path) in paths.iter().enumerate() {
                 pass.visit(|output| {
-                    output.navigation_target(
-                        Target {
-                            path: path.clone(),
-                            select: Rc::new(move |visits, _| {
-                                visits.push(view * 10 + index);
-                                true
-                            }),
-                        },
-                        view == 0 && index == 0,
-                    )
+                    output.navigation_stop(path.clone(), view == 0 && index == 0);
+                    output.output.descends.push(Landmark {
+                        root: None,
+                        path: path.clone(),
+                        rect: Default::default(),
+                        select: Rc::new(move |visits: &mut Vec<usize>, _| {
+                            visits.push(view * 10 + index);
+                            true
+                        }),
+                        scope: Default::default(),
+                    });
                 });
             }
         });
     }
+    let frame = pass.finish().bind(Default::default());
+    let handler = frame.handler.unwrap();
     let mut visits = vec![];
+    // Without the destination's landmark there is nothing to arrive through.
     assert!(
-        pass.finish()
-            .bind(Default::default())
-            .handler
-            .unwrap()
+        !handler
             .dispatch(
                 &mut visits,
                 Event::Navigate(Direction::Right),
                 &mut Default::default()
+            )
+            .handled()
+    );
+    let mut dispatch = crate::display::widget::frame::DispatchContext {
+        descends: frame.descends.into(),
+        ..Default::default()
+    };
+    assert!(
+        handler
+            .dispatch(
+                &mut visits,
+                Event::Navigate(Direction::Right),
+                &mut dispatch
             )
             .handled()
     );

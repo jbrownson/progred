@@ -173,13 +173,13 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
         ),
     ] {
         world.model.selection = Some(make_selection(from));
-        let handlers = frame(&mut world).resolve_for_dispatch();
+        let (handlers, mut context) = frame(&mut world).resolve_with_context();
         assert!(
             handlers
                 .dispatch(
                     &mut world,
                     puri::handler::Event::Navigate(direction),
-                    &mut Default::default()
+                    &mut context
                 )
                 .handled()
         );

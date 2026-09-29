@@ -87,14 +87,7 @@ fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout(
             for (direction, to) in [Left, Right, Up, Down].into_iter().zip(destinations) {
                 world.model.selection = Some(make_selection(paths[from].clone()));
                 let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-                let handled = frame
-                    .resolve_for_dispatch()
-                    .dispatch(
-                        &mut world,
-                        puri::handler::Event::Navigate(direction),
-                        &mut Default::default(),
-                    )
-                    .handled();
+                let handled = frame.navigate(&mut world, direction);
                 assert_eq!(
                     handled,
                     to.is_some(),
@@ -231,14 +224,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                 for (from, direction, to) in checks {
                     world.model.selection = Some(make_selection(from.clone()));
                     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-                    let handled = frame
-                        .resolve_for_dispatch()
-                        .dispatch(
-                            &mut world,
-                            puri::handler::Event::Navigate(direction),
-                            &mut Default::default(),
-                        )
-                        .handled();
+                    let handled = frame.navigate(&mut world, direction);
                     assert_eq!(
                         handled,
                         to.is_some(),
@@ -283,7 +269,7 @@ fn navigation_raw_text_has_first_refusal_and_successors_need_no_paint() {
             state: KeyState::Down,
             ..Default::default()
         };
-        let handlers = frame.resolve_for_dispatch();
+        let (handlers, mut context) = frame.resolve_with_context();
         let handled = handlers.dispatch_key(&mut world, &event);
         assert_eq!(handled, raw_handles);
         if !handled {
@@ -293,7 +279,7 @@ fn navigation_raw_text_has_first_refusal_and_successors_need_no_paint() {
                     .dispatch(
                         &mut world,
                         puri::handler::Event::Navigate(direction),
-                        &mut Default::default()
+                        &mut context
                     )
                     .handled()
             );
@@ -334,16 +320,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
         frame
     };
     let frame = build(&mut world);
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch(
-                &mut world,
-                puri::handler::Event::Navigate(Direction::Right),
-                &mut Default::default()
-            )
-            .handled()
-    );
+    assert!(frame.navigate(&mut world, Direction::Right));
     assert_eq!(
         world.model.selection.as_ref().unwrap().path(),
         [Step::Key(second)]
@@ -548,16 +525,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             (Direction::Right, &name),
         ] {
             let frame = editing_frame(&mut world, false);
-            assert!(
-                frame
-                    .resolve_for_dispatch()
-                    .dispatch(
-                        &mut world,
-                        puri::handler::Event::Navigate(direction),
-                        &mut Default::default()
-                    )
-                    .handled()
-            );
+            assert!(frame.navigate(&mut world, direction));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), *path);
         }
         let source = vec![
@@ -927,16 +895,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch(
-                &mut world,
-                puri::handler::Event::Navigate(Direction::Left),
-                &mut Default::default()
-            )
-            .handled()
-    );
+    assert!(frame.navigate(&mut world, Direction::Left));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[0]);
 }
 
@@ -1158,7 +1117,9 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
     let child = |path: &Path, steps: &[Step]| -> Path { [path.as_slice(), steps].concat() };
     let items = |case: &str| -> Vec<Path> {
         let block = child(&section(case), &[Step::Key(binders["block"])]);
-        fields.get(&binders[case]).unwrap()
+        fields
+            .get(&binders[case])
+            .unwrap()
             .as_record()
             .unwrap()
             .get(&binders["block"])
@@ -1204,7 +1165,9 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
     let list = child(&body, &[Step::Key(binders["block"])]);
     let beside = child(&body, &[Step::Key(binders["beside"])]);
     let beside_item = {
-        let value = fields.get(&binders["after_value"]).unwrap()
+        let value = fields
+            .get(&binders["after_value"])
+            .unwrap()
             .as_record()
             .unwrap()
             .get(&binders["beside"])

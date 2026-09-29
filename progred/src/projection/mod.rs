@@ -978,8 +978,7 @@ fn prepare_value(
             let root = cx.view.clone();
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
-            let select =
-                crate::display::widget::navigation::destination(landmark_path.clone(), cx).select;
+            let select = crate::display::widget::navigation::arrival(landmark_path.clone(), cx);
             let target =
                 value.map(|value| (value.clone(), select_handler(landmark_path.clone(), cx)));
             let edits = cx.edits.clone();

@@ -2,14 +2,7 @@ use super::*;
 use crate::display::widget::navigation::Direction;
 
 fn step(world: &mut World, direction: Direction) -> bool {
-    editing_frame(world, false)
-        .resolve_for_dispatch()
-        .dispatch(
-            world,
-            puri::handler::Event::Navigate(direction),
-            &mut Default::default(),
-        )
-        .handled()
+    editing_frame(world, false).navigate(world, direction)
 }
 
 /// Exercise the actual document-authored layouts, not Rust substitutes for them.

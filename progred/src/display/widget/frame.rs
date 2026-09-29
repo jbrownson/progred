@@ -1,7 +1,7 @@
 //! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
     container::{self, Layers},
-    navigation::{Construction, Landmark, Select, Target},
+    navigation::{Construction, Landmark, Select},
     offers::Offers,
     source::{Secondary, SourceTrace},
     view::Root,
@@ -48,14 +48,14 @@ pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
     root: Option<Root>,
-    navigation: &'a mut Construction<C>,
+    navigation: &'a mut Construction,
 }
 
 impl<'a, C, H> HoverContext<'a, C, H> {
     pub(crate) fn new(
         input: HoverInput<'a, H>,
         output: &'a mut HoverOutput<C, H>,
-        navigation: &'a mut Construction<C>,
+        navigation: &'a mut Construction,
     ) -> Self {
         Self {
             input,
@@ -110,8 +110,8 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.output.landmark_select = select.or(self.output.landmark_select.take());
     }
 
-    pub fn navigation_target(&mut self, target: Target<C>, selected: bool) {
-        self.navigation.target(target, selected);
+    pub fn navigation_stop(&mut self, path: std::rc::Rc<[gid::Step]>, selected: bool) {
+        self.navigation.stop(path, selected);
     }
 
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
@@ -164,7 +164,7 @@ pub struct HoverPass<C, H> {
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
-    pub(super) navigation: Construction<C>,
+    pub(super) navigation: Construction,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {
@@ -223,7 +223,9 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         self.scope(
             |pass| {
                 content(pass);
-                if let Some(handlers) = std::mem::take(&mut pass.navigation).finish() {
+                if let Some(handlers) =
+                    std::mem::take(&mut pass.navigation).finish(Some(root.clone()))
+                {
                     pass.visit(|output| {
                         *output.handler() = std::mem::take(output.handler()).over(handlers);
                     });
@@ -247,7 +249,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
 
     pub fn finish(mut self) -> HoverOutput<C, H> {
         self.run_floaters();
-        if let Some(handlers) = self.navigation.finish() {
+        if let Some(handlers) = std::mem::take(&mut self.navigation).finish(self.root.clone()) {
             *self.output.handler_mut() = std::mem::take(self.output.handler_mut()).over(handlers);
         }
         self.output

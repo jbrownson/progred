@@ -150,8 +150,8 @@ and handlers.
 
 After placement, the temporary summaries resolve the selected occurrence's
 four destinations. One ordinary `Event::Navigate(direction)` handler retains
-those selection callbacks; no full graph or logical layout survives in the
-installed frame. Each view has an independent collection. Raw controls and
+their paths and arrives through each destination's landmark; no full graph or
+logical layout survives in the installed frame. Each view has an independent collection. Raw controls and
 editing handlers get first refusal of arrows, including modified arrows; only
 an unhandled key becomes Navigate. The shell reveals the resulting selection
 using existing landmarks.
