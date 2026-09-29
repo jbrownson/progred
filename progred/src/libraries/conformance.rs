@@ -218,10 +218,7 @@ fn callable_record_patterns_are_transparent_to_lowering() {
         } else {
             contents
         };
-        for pattern in [
-            Value::record([]),
-            Value::record([(field, contents)]),
-        ] {
+        for pattern in [Value::record([]), Value::record([(field, contents)])] {
             let cases = Value::list([
                 Value::record([
                     (control::vocabulary::PATTERN, pattern),
