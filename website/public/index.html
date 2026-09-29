@@ -67,55 +67,21 @@
 
       <section class="exercise" id="values" aria-labelledby="values-title">
         <div class="lesson-copy">
-          <h2 id="values-title">Values</h2>
+          <h2 id="values-title">Values, not text</h2>
+          <p>Programs are made of values: text, numbers, lists. You edit them directly, so there’s no syntax to get wrong.</p>
           <ol class="quests">
-            <li data-task="greeting"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click inside <strong>Hello, world!</strong> and change the greeting.</span></li>
-            <li data-task="count"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the count from <strong>3</strong> to another number.</span></li>
+            <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Rename the <strong>planet</strong>: click inside <strong>Mars</strong> and type a new name.</span></li>
+            <li data-task="moons"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Give it a different number of <strong>moons</strong>.</span></li>
+            <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a color: click the comma between two colors, type <code>"blue"</code> including the quotes, and press <kbd>Enter</kbd>.</span></li>
+            <li data-task="remove"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Remove a color: erase its text with <kbd>Backspace</kbd>, then press <kbd>Backspace</kbd> once more.</span></li>
+            <li data-task="restore"><span class="task-marker" aria-hidden="true">5</span><span><span class="task-status visually-hidden">Not yet completed: </span>Bring it back with <kbd data-command-key>Ctrl</kbd> + <kbd>Z</kbd>.</span></li>
           </ol>
-          <p class="aside">You’re editing values, not source text.</p>
+          <p class="aside">Quotes make text and digits make a number: each value knows what kind it is.</p>
         </div>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/values.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=values-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Editable greeting and count" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/values.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=values-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="An editable planet record" loading="lazy"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the values example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-      </section>
-
-      <section class="exercise" id="create" aria-labelledby="create-title">
-        <div class="lesson-copy">
-          <h2 id="create-title">Start from empty</h2>
-          <ol class="quests">
-            <li data-task="number"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the first empty box, type <strong>42</strong>, and press <kbd>Enter</kbd> to create a number.</span></li>
-            <li data-task="text"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the second box, type <code>"hello"</code> including the quotes, and press <kbd>Enter</kbd> to create text.</span></li>
-            <li data-task="list"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the third box and type <code>[</code> to create a list. Press <kbd data-command-key>Ctrl</kbd> + <kbd>Enter</kbd> to open a space inside it, type <strong>7</strong>, then press <kbd>Enter</kbd> to add the item.</span></li>
-          </ol>
-        </div>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/create.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=create-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d" title="Make something from nothing." loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the create example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-      </section>
-
-      <section class="exercise" id="lists" aria-labelledby="lists-title">
-        <div class="lesson-copy">
-          <h2 id="lists-title">Lists</h2>
-          <ol class="quests">
-            <li data-task="gap"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a comma to open a space between two items.</span></li>
-            <li data-task="insert"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Type <code>"peaches"</code>, including the quotes, then press <kbd>Enter</kbd> to insert it.</span></li>
-            <li data-task="select-list"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a square bracket to select the whole list.</span></li>
-            <li data-task="remove"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click inside an item and erase its text with Backspace. One more Backspace removes the empty item from the list.</span></li>
-            <li data-task="restore"><span class="task-marker" aria-hidden="true">5</span><span><span class="task-status visually-hidden">Not yet completed: </span>Press <kbd data-command-key>Ctrl</kbd> + <kbd>Z</kbd> to undo the removal and bring the item back.</span></li>
-          </ol>
-        </div>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/lists.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=lists-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915" title="Editable list of fruit" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the list example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset the planet example">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
@@ -123,15 +89,15 @@
 
       <section class="exercise" id="cells" aria-labelledby="cells-title">
         <div class="lesson-copy">
-          <h2 id="cells-title">Cells</h2>
-          <p>Two references to one value. Edit either one.</p>
+          <h2 id="cells-title">One value, many places</h2>
+          <p>A cell holds a value once. Every reference to it, shown in parentheses, is the same value.</p>
           <ol class="quests">
-            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>7</strong>. Watch the other one change too.</span></li>
-            <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click a comma and type <code>(</code> to create a new cell. Click the empty box inside it, type <strong>11</strong>, then press <kbd>Enter</kbd>.</span></li>
-            <li data-task="link"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click another comma to open a space. Hold <kbd data-command-key>Ctrl</kbd> and click a parenthesis around your new cell—not the number—to put another reference there.</span></li>
-            <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its new partner changes too; the original pair stays separate.</span></li>
+            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>7</strong>. Both change, because they’re one cell.</span></li>
+            <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make your own cell: click a comma and type <code>(</code>. Click the empty box inside it, type <strong>11</strong>, and press <kbd>Enter</kbd>.</span></li>
+            <li data-task="link"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Reference it again: click another comma, then hold <kbd data-command-key>Ctrl</kbd> and click a parenthesis around your new cell.</span></li>
+            <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its partner follows; the 7s don’t.</span></li>
           </ol>
-          <p class="aside">Parentheses select the reference; the inside edits its contents.</p>
+          <p class="aside">Parentheses select the reference; the inside edits the shared value.</p>
         </div>
         <div class="editor-example">
           <iframe src="./editor/?document=../lessons/cells.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=cells-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Two references to one editable cell" loading="lazy"></iframe>
@@ -144,12 +110,15 @@
 
       <section class="exercise" id="grap" aria-labelledby="grap-title">
         <div class="lesson-copy">
-          <h2 id="grap-title">Grap</h2>
-          <p>Expressions on the left, results on the right. The parenthesized numbers share a cell.</p>
+          <h2 id="grap-title">Calculations</h2>
+          <p>Calculations are values too, and each one shows its live result. Both use the parenthesized <strong>3</strong>, a shared cell.</p>
           <ol class="quests">
-            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the <strong>2 after +</strong> to <strong>4</strong>. The sum becomes 7; the multiplication stays at 6.</span></li>
-            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change any parenthesized <strong>3</strong> to <strong>5</strong>. All three references update. After the first step, the results become 9 and 10.</span></li>
+            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the <strong>2</strong> after <strong>+</strong>. Only the sum changes.</span></li>
+            <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the shared <strong>3</strong>. Every calculation using it updates.</span></li>
+            <li data-task="equal"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the sum and the product equal.</span></li>
+            <li data-task="hundred"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the product exactly <strong>100</strong>.</span></li>
           </ol>
+          <p class="aside">There’s no run button. Every result is always current.</p>
         </div>
         <div class="editor-example">
           <iframe src="./editor/?document=../lessons/grap.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
@@ -163,13 +132,14 @@
       <section class="exercise" id="functions" aria-labelledby="functions-title">
         <div class="lesson-copy">
           <h2 id="functions-title">Functions</h2>
-          <p><strong>scale</strong> multiplies its input by 2. Each call supplies its own <strong>x</strong>.</p>
+          <p>A function is a calculation with a hole in it. <strong>scale</strong> multiplies its <strong>x</strong> by 2, and each call fills in its own <strong>x</strong>.</p>
           <ol class="quests">
-            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the first call’s <strong>3</strong> to <strong>4</strong>. Its result becomes 8; the other stays at 10.</span></li>
-            <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the function definition, change the multiplier <strong>2</strong> to <strong>3</strong>. After the first step, both results update to 12 and 15.</span></li>
-            <li data-task="rename"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click <strong>x</strong> inside the definition’s parameter list and rename it to <strong>amount</strong>. Its uses and the call labels change too; the results stay the same.</span></li>
+            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the first call’s <strong>3</strong>. Only its result changes.</span></li>
+            <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the definition, change the multiplier <strong>2</strong>. Both results follow.</span></li>
+            <li data-task="rename"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click <strong>x</strong> in the definition’s parameter list and give it a new name. Its uses and the call labels change too; the results don’t.</span></li>
+            <li data-task="nest"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Put a call inside a call: in the second call, erase the <strong>5</strong> and press <kbd>Backspace</kbd> once more. Click the empty box, type <code>scale</code>, press <kbd>Enter</kbd>, and give the inner call a number.</span></li>
           </ol>
-          <p class="aside">References use identity, not spelling. Renaming keeps them connected.</p>
+          <p class="aside">References use identity, not spelling, so renaming keeps them connected.</p>
         </div>
         <div class="editor-example">
           <iframe src="./editor/?document=../lessons/functions.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=functions-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Editable function definition and two evaluated calls" loading="lazy"></iframe>
@@ -182,12 +152,13 @@
 
       <section class="exercise" id="drawing" aria-labelledby="drawing-title">
         <div class="lesson-copy">
-          <h2 id="drawing-title">Drawing</h2>
-          <p><strong>dot</strong> draws a circle at <strong>x</strong>. <strong>do</strong> runs the two calls in order.</p>
+          <h2 id="drawing-title">Pictures are code</h2>
+          <p>A picture is another view of code. <strong>dot</strong> draws a circle at <strong>x</strong>, and <strong>do</strong> runs its calls in order.</p>
           <ol class="quests">
-            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the first <strong>dot</strong> call under <strong>do</strong>, change <strong>60</strong> to <strong>80</strong>. Only the left circle moves.</span></li>
-            <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the function definition, change <strong>radius</strong> from <strong>24</strong> to <strong>36</strong>. Both circles grow.</span></li>
-            <li data-task="source"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click either circle to select the <strong>fill</strong> call that drew it.</span></li>
+            <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Move the first dot: change its <strong>60</strong>. Only that dot moves.</span></li>
+            <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the <strong>dot</strong> definition, change the <strong>radius</strong>. Both dots change.</span></li>
+            <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a dot: click the comma between the two <strong>dot</strong> calls, type <code>dot</code>, press <kbd>Enter</kbd>, and give it an x like <strong>200</strong>.</span></li>
+            <li data-task="source"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click any circle. The code that drew it is selected.</span></li>
           </ol>
           <p class="aside">Inspired by Bret Victor’s <a href="https://worrydream.com/#!/InventingOnPrinciple">Inventing on Principle</a>.</p>
         </div>
@@ -195,6 +166,26 @@
           <iframe src="./editor/?document=../lessons/drawing.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=drawing-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two live circles and their editable drawing program" loading="lazy"></iframe>
           <div class="editor-actions">
             <button type="button" class="reset" aria-label="Reset the drawing example">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+      </section>
+
+      <section class="exercise" id="forest" aria-labelledby="forest-title">
+        <div class="lesson-copy">
+          <h2 id="forest-title">Put it together</h2>
+          <p>Three trees from one shared recipe: <strong>tree</strong> draws a trunk and a canopy at <strong>x</strong> with a <strong>height</strong>.</p>
+          <ol class="quests">
+            <li data-task="height"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make one tree taller: change the <strong>height</strong> in one <strong>tree</strong> call. Only that tree grows.</span></li>
+            <li data-task="color"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the green swatch in the <strong>tree</strong> definition and pick a new color. Every tree changes.</span></li>
+            <li data-task="plant"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a tree: click a comma between two <strong>tree</strong> calls, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x. Then click its empty height and give it one too.</span></li>
+          </ol>
+          <p class="aside">That’s every idea in the forest at the top of the page. Scroll up and see how much you can read now.</p>
+        </div>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/forest.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=forest-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees drawn from one shared recipe" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset the forest example">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>

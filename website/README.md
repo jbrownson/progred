@@ -66,21 +66,23 @@ The page opens with a growing forest. A slider scrubs growth forward or backward
 the visible `drawing with controls` call connects it to a forest function with editable
 tree count, growth rate, leaf color, and trunk color. Drawing and controls use existing
 libraries; all forest geometry is ordinary Grap in the same document.
-Seven exercises then build up the ideas: editing a
-text/number record, creating values from empty slots, inserting into a list,
-creating and sharing cells, live Grap calculations, editing a function and its
-calls, then drawing with a shared function.
+Six exercises then build up the ideas, each opening with the idea it teaches
+and ending on the step that demonstrates it: values edited directly (a planet
+record with a list), one value shared through cells, live calculations with two
+puzzles, functions (including a call nested in a call), pictures as views of
+code (including adding a call), and a three-tree finale combining them.
 All use the real editor without its application menu, and explicitly select
 `wheel=auto` so scrolling over an exercise scrolls its overflowing document or
 completion popup when possible, and otherwise scrolls the website. The full-page
 editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
-for the values, creation, and cells exercises, and just name/text/blob for the list exercise.
-The Grap and functions exercises add Grap and absent to the numeric set.
-The drawing lesson adds control, color, and layout and credits Bret Victor's
-Inventing on Principle. The opening forest adds controls, presentation, logic,
-list, and sequence to the drawing set, without loading Fidget or toolpath libraries.
-Creation, Grap, functions, and drawing use `tutorial-slots`, listing three record-field
+for the values and cells exercises.
+The calculations and functions exercises add Grap and absent to the numeric set.
+The drawing lesson and the tree finale add control, color, and layout; the
+drawing lesson credits Bret Victor's Inventing on Principle. The opening forest
+adds controls, presentation, logic, list, and sequence to the drawing set,
+without loading Fidget or toolpath libraries.
+Calculations, functions, drawing, and the finale use `tutorial-slots`, listing three record-field
 identities in display order. An entry-only projection stacks those fields without labels or insertion
 gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
 refilling it writes the same field. Nested values use the ordinary projection
@@ -136,17 +138,15 @@ The instructions check off when the actual document or selection satisfies
 the step. Achievements stay checked through later edits and undo; Reset clears
 only that exercise's checklist. There is no persistence or analytics. The
 predicates live in `public/lesson-progress.mjs`, not in the editor.
-The fourth list step, removing an item, checks for a decrease from the previous observed
-list length, including four items back to three after the insertion exercise.
-Erasing an item's text alone does not count. It checks the outcome, so undoing
-an insertion counts as removal too. Like the other steps, it counts toward
-completion and stays checked through Undo until Reset.
-Restoring the removed item is a separate fifth step. It checks that the list
-grows back to a previously observed state after a removal, including undoing
-the whole text-erasing run. Merely inserting a different item does not count.
-These checks observe results rather than keystrokes: manually recreating that
-same list also counts. The small list snapshots are discarded on restoration
-or Reset.
+
+The values lesson edits a planet record: its name, its number of moons, and a
+list of colors. Adding a color through a comma counts once the list grows.
+Removing a color checks for a decrease from the previous observed list length;
+erasing an item's text alone does not count. Restoring it is a separate step
+that checks the list grows back to a previously observed state after a removal,
+including undoing the whole text-erasing run. Inserting a different color does
+not count. These checks observe results rather than keystrokes, and the small
+list snapshots are discarded on restoration or Reset.
 
 The cells lesson starts with two references to one numeric cell. It checks for
 editing that shared definition, creating a different cell containing 11,
@@ -156,40 +156,41 @@ numbers. Repeated independent numbers don't count as sharing. The instructions
 use the ordinary `(` constructor and Cmd/Ctrl-click picking; creating a cell selects
 the reference, so the user then clicks its empty contents to fill it.
 
-The Grap lesson uses one unnamed numeric cell in two calculations: addition
-and multiplication. The same cell also appears on its own. Users first edit a
-literal argument, changing only one result, then edit the shared cell through
-any reference, changing both. Its checks inspect the stored calls, shared cell
-identity, and numeric contents; the website does not evaluate Grap. The editor
-performs the actual evaluations and projects their read-only results. Native
-interaction tests cover both kinds of edits. Named numbers and bindings are
-not introduced here.
+The calculations lesson (`grap`) uses one unnamed numeric cell in two
+calculations: addition and multiplication. The same cell also appears on its
+own. Users edit a literal argument, changing only one result, then the shared
+cell, changing both. Two puzzles follow: make the sum and product equal, then
+make the product exactly 100. The checks compute those from the stored numbers;
+the editor performs the actual evaluations and projects their read-only results.
 
 The functions lesson starts with a named `scale` function, one parameter `x`,
-and two evaluated calls. Its three checks cover changing one argument, changing
-the function's multiplier, and renaming the parameter to `amount`. Parameter
-uses and argument labels share the same cell identity; names don't implement
-binding. This uses ordinary Grap lambdas and calls, not a lesson-specific FFI.
-The checklist checks the stored recipe, argument values, and parameter name;
-native interaction tests exercise the actual editing and evaluation, including
-unchanged results after renaming. Constructing a function from scratch is left
-for a later exercise.
+and two evaluated calls. Its checks cover changing the first call's argument,
+changing the function's multiplier, renaming the parameter, and nesting a call to
+`scale` in the second call's argument. Emptying that argument leaves the declared
+parameter as an ordinary empty picker, where typing `scale` offers the call.
+Parameter uses and argument labels share the same cell identity; names don't
+implement binding. Native interaction tests exercise the actual editing and
+evaluation, including unchanged results after renaming and the nested result.
 
 The drawing lesson uses an ordinary `dot(x)` function that calls `fill`, a `do`
 program calling it twice, and a drawing of that same program. Users move one
-circle by editing its call, enlarge both by editing the shared radius, then
-Cmd/Ctrl-click either circle to select the `fill` call that produced it. Existing
-source tracing also links hover in both directions. Its checklist uses the same
-document/selection notifications, not a new drawing or hover API. Selecting the
-source directly also satisfies that outcome-based check. Headless interaction
-tests inspect the actual painted circles after edits and pick both instances
-back to their shared source. The drawing slot appears above the two source slots.
+circle by editing its call, enlarge both by editing the shared radius, add a third
+call through the comma between the calls, then Cmd/Ctrl-click any circle to select
+the `fill` call that produced it. Existing source tracing also links hover in
+both directions. The drawing slot appears above the two source slots.
+
+The finale reuses `forest.gid`: a `tree(x, height)` function called three times.
+Its checks cover changing an original tree's height (matched by that tree's `x`,
+so planting between trees doesn't count), recoloring the shared canopy paint, and
+planting a fourth tree with both arguments. A new call opens its first argument;
+its height is then its own empty picker. Headless interaction tests perform each
+authoring step: the nested call, the third dot, and the fourth tree.
 
 An embed is an ordinary editor URL:
 
 ```html
 <iframe src="./editor/?document=../lessons/values.gid&menu=hidden&wheel=auto&threads=1&observe=values-0"
-        title="Editable greeting and count" loading="lazy"></iframe>
+        title="An editable planet record" loading="lazy"></iframe>
 ```
 
 The actual lesson URLs also include `libraries`, a comma-separated list of

@@ -38,10 +38,7 @@ fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {
 
 #[test]
 fn empty_tutorial_slots_stay_visible_in_a_short_embed() {
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/create.gid"
-    ))
-    .unwrap();
+    let (doc, names) = crate::gid_text::parse(EMPTY_SLOTS).unwrap();
     let slots = [names["first"], names["second"], names["third"]];
     let mut editor = crate::test_editor(doc);
     editor.drawn_menu = false;

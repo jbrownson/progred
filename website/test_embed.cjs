@@ -266,14 +266,12 @@ async function lessonPage(platform = "Linux x86_64") {
   const { lessonProgress } = await import("./public/lesson-progress.mjs");
   const messageListeners = [];
   const tasksByLesson = {
-    values: ["greeting", "count"],
-    lists: ["gap", "insert", "select-list", "remove", "restore"],
+    values: ["rename", "moons", "add", "remove", "restore"],
     cells: ["shared-edit", "create", "link", "linked-edit"],
-    grap: ["argument", "shared-edit"],
-    functions: ["argument", "body", "rename"],
-    drawing: ["argument", "body", "source"],
-    forest: ["height", "color", "source"],
-    create: ["number", "text", "list"],
+    grap: ["argument", "shared-edit", "equal", "hundred"],
+    functions: ["argument", "body", "rename", "nest"],
+    drawing: ["argument", "body", "add", "source"],
+    forest: ["height", "color", "plant"],
     "growing-forest": [],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
@@ -355,122 +353,98 @@ const number = (value) => {
   bytes.writeDoubleLE(value);
   return record(["ed11fde03b7c2c1ba2fccc3cdba5d561", { blob: bytes.toString("hex") }]);
 };
-const values = (greeting, count) => ({ document: { root: record(
-  ["60f0faf482445f9c5d3cd4c35d4ce902", greeting],
-  ["bf0ca17731134521964d0f3aa582fcb1", count],
+const planet = (name = text("Mars"), moons = number(2), colors = ["red", "orange"]) => ({ document: { root: record(
+  ["6655e4ba9e8ae76706056e0b8edf94f0", name],
+  ["6122302fdbe3db3624731717321b94a1", moons],
+  ["c785948e50c854a7c89bf6c4a4bdf4fc", { list: colors.map(text) }],
 ) }, selection: null });
-const fruit = (...names) => ({ document: { root: { list: names.map(text) } }, selection: null });
+const palette = (...colors) => planet(text("Mars"), number(2), colors);
 const sharedCell = "f56d42a97558ccc8205fb4019b878945";
 const cell = (id) => ({ cell: id });
 const cells = (list, definitions) => ({ document: { root: { list }, cells: definitions }, selection: null });
 const sharedPair = [cell(sharedCell), cell(sharedCell)];
 
-test("value quests need changed, valid values rather than selections or missing fields", async () => {
+test("planet quests need changed, valid values rather than selections or missing fields", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
-  assert.deepEqual(completedSteps("values", values(text("Hello, world!"), number(3))), []);
-  assert.deepEqual(completedSteps("values", values(text("Hello, editor!"), number(5))), ["greeting", "count"]);
-  assert.deepEqual(completedSteps("values", values(text(""), number(0))), ["greeting", "count"]);
-  assert.deepEqual(completedSteps("values", values(record(), number(NaN))), []);
-  assert.deepEqual(completedSteps("values", values(record(), number(Infinity))), []);
+  assert.deepEqual(completedSteps("values", planet()), []);
+  assert.deepEqual(completedSteps("values", planet(text("Venus"), number(5))), ["rename", "moons"]);
+  assert.deepEqual(completedSteps("values", planet(text(""), number(0))), ["rename", "moons"]);
+  assert.deepEqual(completedSteps("values", planet(record(), number(NaN))), []);
+  assert.deepEqual(completedSteps("values", planet(record(), number(Infinity))), []);
+  assert.deepEqual(completedSteps("values", palette("red", "blue", "orange")), ["add"]);
   assert.deepEqual(completedSteps("values", { document: { root: null } }), []);
-});
-
-test("list quests distinguish a pending gap, inserting peaches, and selecting the root", async () => {
-  const { completedSteps } = await import("./public/lesson-progress.mjs");
-  const state = fruit("apples", "pears", "plums");
-  assert.deepEqual(completedSteps("lists", state), []);
-  const gap = { view: "document", stage: "pending", path: { list: [record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()])] } };
-  assert.deepEqual(completedSteps("lists", { ...state, selection: gap }), ["gap"]);
-  assert.deepEqual(completedSteps("lists", { ...state, selection: { ...gap, stage: "value" } }), []);
-  assert.deepEqual(completedSteps("lists", fruit("apples", "peaches", "plums")), []);
-  assert.deepEqual(completedSteps("lists", fruit("apples", "peaches", "pears", "plums")), ["insert"]);
-  const root = { view: "document", stage: "value", path: { list: [] }, source_path: { list: [] } };
-  assert.deepEqual(completedSteps("lists", { ...state, selection: root }), ["select-list"]);
-  assert.deepEqual(completedSteps("lists", { ...state, selection: { ...root, view: { pane: {} } } }), []);
-  assert.deepEqual(completedSteps("lists", { ...state, selection: { ...root, source_path: null } }), []);
 });
 
 test("achievements latch through undo, stay independent, and ignore stale or unrelated messages", async () => {
   const { exercises, send } = await lessonPage();
-  const success = values(text("Changed"), number(10));
+  const success = planet(text("Venus"), number(5), ["red", "blue", "orange"]);
   const page = exercises[0];
+  const done = () => page.tasks.filter(t => t.classes.has("completed")).length;
   send(0, success, { origin: "https://elsewhere.example" });
   send(0, success, { source: {} });
   assert.equal(page.tasks[0].classes.has("completed"), false);
   send(0, success);
   assert.equal(page.tasks[0].marker.textContent, "✓");
-  assert.ok(page.tasks.every(t => t.classes.has("completed")));
+  assert.equal(done(), 3);
   assert.equal(exercises[1].tasks[0].classes.has("completed"), false);
-  send(0, values(text("Hello, world!"), number(3)));
-  assert.equal(page.tasks[0].classes.has("completed"), true);
+  send(0, planet(text("Mars"), number(2), ["red", "blue", "orange"]));
+  assert.equal(done(), 3);
   page.listeners.click();
-  assert.equal(page.tasks[0].classes.has("completed"), false);
-  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+  assert.equal(done(), 0);
   send(0, success, { data: { type: "progred:change", channel: "values-0", state: success } });
   assert.equal(page.tasks[0].classes.has("completed"), false);
   send(0, success);
   assert.equal(page.tasks[0].classes.has("completed"), true);
 });
 
-test("removal observes a shrinking list, not empty text or a missing root", async () => {
+test("removal observes a shrinking color list, not empty text or a missing root", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
-  const original = fruit("apples", "pears", "plums");
-  assert.deepEqual(completedSteps("lists", original), []);
-  assert.deepEqual(completedSteps("lists", fruit("apples", "", "plums"), original), []);
-  assert.deepEqual(completedSteps("lists", fruit("apples", "plums"), original), ["remove"]);
-  assert.deepEqual(completedSteps("lists", original, fruit("apples", "peaches", "pears", "plums")), ["remove"]);
-  assert.deepEqual(completedSteps("lists", { document: { root: null } }, original), []);
-  assert.deepEqual(completedSteps("lists", original, { document: { root: null } }), []);
-  assert.deepEqual(completedSteps("lists", original, fruit("apples", "plums")), []);
+  const original = palette("red", "blue", "orange");
+  assert.deepEqual(completedSteps("values", original), ["add"]);
+  assert.deepEqual(completedSteps("values", palette("red", "", "orange"), original), ["add"]);
+  assert.deepEqual(completedSteps("values", palette("red", "orange"), original), ["remove"]);
+  assert.deepEqual(completedSteps("values", { document: { root: null } }, original), []);
+  assert.deepEqual(completedSteps("values", original, { document: { root: null } }), ["add"]);
+  assert.deepEqual(completedSteps("values", original, palette("red", "orange")), ["add"]);
 });
 
 test("removal and restoration have separate checkmarks and both reset", async () => {
   const { exercises, send } = await lessonPage();
-  const page = exercises[1];
+  const page = exercises[0];
   const removal = page.tasks.find((task) => task.dataset.task === "remove");
   const restoration = page.tasks.find((task) => task.dataset.task === "restore");
-  send(1, { ...fruit("apples", "pears", "plums"), selection: {
-    view: "document", stage: "pending",
-    path: { list: [record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()])] },
-  } });
-  send(1, { ...fruit("apples", "peaches", "pears", "plums"), selection: {
-    view: "document", stage: "value", path: { list: [] }, source_path: { list: [] },
-  } });
-  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 3);
-  send(1, fruit("apples", "peache", "pears", "plums"));
-  send(1, fruit("apples", "", "pears", "plums"));
-  send(1, fruit("apples", "pears", "plums"));
+  send(0, palette("red", "orange"));
+  send(0, palette("red", "blue", "orange"));
+  send(0, palette("red", "blu", "orange"));
+  send(0, palette("red", "", "orange"));
+  send(0, palette("red", "orange"));
   assert.equal(removal.marker.textContent, "✓");
   assert.equal(restoration.classes.has("completed"), false);
-  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 4);
-  send(1, fruit("apples", "peaches", "pears", "plums"));
-  assert.equal(removal.marker.textContent, "✓");
+  send(0, palette("red", "blue", "orange"));
   assert.equal(restoration.marker.textContent, "✓");
-  assert.ok(page.tasks.every(t => t.classes.has("completed")));
-  send(1, fruit("apples", "pears", "plums"));
+  send(0, palette("red", "orange"));
   assert.equal(restoration.marker.textContent, "✓");
   page.listeners.click();
-  send(1, fruit("apples", "pears", "plums"));
+  send(0, palette("red", "orange"));
   assert.equal(removal.marker.textContent, 4);
   assert.equal(removal.classes.has("completed"), false);
   assert.equal(restoration.classes.has("completed"), false);
-  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(1, fruit("apples", "peaches", "pears", "plums"));
+  send(0, palette("red", "blue", "orange"));
   assert.equal(restoration.classes.has("completed"), false);
 });
 
 test("restoration needs a previously seen list after removal, not an unrelated edit or insertion", async () => {
   const { lessonProgress } = await import("./public/lesson-progress.mjs");
-  const observe = lessonProgress("lists");
-  const original = fruit("apples", "pears", "plums");
+  const observe = lessonProgress("values");
+  const original = palette("red", "blue", "orange");
   observe(original);
-  observe(fruit("apples", "peaches", "plums"));
+  observe(palette("red", "green", "orange"));
   assert.equal(observe(original).has("restore"), false);
-  observe(fruit("apples", "plums"));
-  assert.equal(observe(fruit("apples", "bananas", "plums")).has("restore"), false);
+  observe(palette("red", "orange"));
+  assert.equal(observe(palette("red", "violet", "orange")).has("restore"), false);
   observe({ document: { root: null } });
   assert.equal(observe(original).has("restore"), false);
-  observe(fruit("apples", "plums"));
+  observe(palette("red", "orange"));
   assert.equal(observe(original).has("restore"), true);
 });
 
@@ -514,27 +488,27 @@ test("editing the new pair counts only after both references already exist", asy
 
 test("the cells checklist completes through sharing, latches, and resets independently", async () => {
   const { exercises, send } = await lessonPage();
-  const page = exercises[2];
+  const page = exercises[1];
   const original = cells(sharedPair, { [sharedCell]: number(7) });
-  send(2, original);
+  send(1, original);
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(2, cells(sharedPair, { [sharedCell]: number(8) }));
+  send(1, cells(sharedPair, { [sharedCell]: number(8) }));
   const definitions = { [sharedCell]: number(8), new: number(11) };
-  send(2, cells([...sharedPair, cell("new")], definitions));
+  send(1, cells([...sharedPair, cell("new")], definitions));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
   const paired = [...sharedPair, cell("new"), cell("new")];
-  send(2, cells(paired, definitions));
+  send(1, cells(paired, definitions));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 3);
-  send(2, cells(paired, { ...definitions, new: number(12) }));
+  send(1, cells(paired, { ...definitions, new: number(12) }));
   assert.ok(page.tasks.every(t => t.classes.has("completed")));
   assert.equal(exercises[0].tasks.filter(t => t.classes.has("completed")).length, 0);
-  assert.equal(exercises[1].tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(2, original);
+  assert.equal(exercises[2].tasks.filter(t => t.classes.has("completed")).length, 0);
+  send(1, original);
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
-  send(0, values(text("Changed"), number(10)));
+  send(0, planet(text("Venus")));
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
+  assert.equal(exercises[0].tasks.filter(t => t.classes.has("completed")).length, 1);
 });
 
 const grapInput = "4df73aa7950eafc65d50d9c6ceca0721";
@@ -553,30 +527,34 @@ const items = (state) => slots.map((slot) => state.document.root.record.find(([i
 const removeSlot = (state, index) => {
   state.document.root.record = state.document.root.record.filter(([id]) => id !== slots[index]);
 };
-const grapState = (argument = 2, input = 3) => stacked(
+const grapState = (argument = 2, input = 3, multiplier = 2) => stacked(
   [cell(grapInput), ...["201af445eb7e2c270bb5ead10b781fc1", "d6f384c439d9d69996d545df422efd79"].map((fn, index) => record(
     ["acfc5e50881292518dab3cec77cf43ee", record(
       ["751fca4373debdd0b7e6eb73e08d684b", cell(fn)],
       ["764f6afe17ba14e81f5ab61204be0bec", cell(grapInput)],
-      ["4f53ff25390f58472d31a6142644dec2", number(index === 0 ? argument : 2)],
+      ["4f53ff25390f58472d31a6142644dec2", number(index === 0 ? argument : multiplier)],
     )],
   ))],
   { [grapInput]: number(input) },
 );
 
-test("Grap quests distinguish literal arguments from the shared input", async () => {
+test("Grap quests distinguish literal arguments, the shared input, and the puzzles", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   assert.deepEqual(completedSteps("grap", grapState()), []);
   assert.deepEqual(completedSteps("grap", grapState(4)), ["argument"]);
   assert.deepEqual(completedSteps("grap", grapState(2, 5)), ["shared-edit"]);
   assert.deepEqual(completedSteps("grap", grapState(4, 5)), ["argument", "shared-edit"]);
+  // 2 + 2 equals 2 × 2; 50 × 2 is 100.
+  assert.deepEqual(completedSteps("grap", grapState(2, 2)), ["shared-edit", "equal"]);
+  assert.deepEqual(completedSteps("grap", grapState(2, 50)), ["shared-edit", "hundred"]);
+  assert.deepEqual(completedSteps("grap", grapState(2, 3, 34)), []);
   assert.deepEqual(completedSteps("grap", grapState(NaN, 3)), []);
   assert.deepEqual(completedSteps("grap", grapState(2, Infinity)), []);
   assert.deepEqual(completedSteps("grap", grapState(4, NaN)), []);
   assert.deepEqual(completedSteps("grap", { document: { root: null } }), []);
   const missing = grapState(4, 5);
   removeSlot(missing, 2);
-  assert.deepEqual(completedSteps("grap", missing), ["argument"]);
+  assert.deepEqual(completedSteps("grap", missing), []);
   const unrelated = grapState();
   unrelated.document.root.record.push(["extra", number(4)]);
   assert.deepEqual(completedSteps("grap", unrelated), []);
@@ -602,30 +580,32 @@ test("Grap sharing requires references to the same resolved numeric cell", async
 
 test("Grap progress latches through undo and resets without touching earlier lessons", async () => {
   const { exercises, send } = await lessonPage();
-  const page = exercises[3];
-  send(3, grapState());
+  const page = exercises[2];
+  send(2, grapState());
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(3, grapState(4));
+  send(2, grapState(4));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
-  send(3, grapState(4, 5));
+  send(2, grapState(4, 5));
+  send(2, grapState(2, 2));
+  send(2, grapState(2, 50));
   assert.ok(page.tasks.every(t => t.classes.has("completed")));
-  send(3, grapState());
+  send(2, grapState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
-  send(0, values(text("Changed"), number(10)));
+  send(0, planet(text("Venus")));
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  assert.ok(exercises[0].tasks.every(t => t.classes.has("completed")));
+  assert.equal(exercises[0].tasks.filter(t => t.classes.has("completed")).length, 1);
 });
 
 const scaleFunction = "27b02645cf74e4db930f7ace768a0aaf";
 const scaleParameter = "a6ea8f498dc19d41294f9610ac9e8eed";
-const functionsState = ({ argument = 3, factor = 2, name = "x" } = {}) => stacked(
-  [cell(scaleFunction), ...[argument, 5].map((value) => record(
-    ["acfc5e50881292518dab3cec77cf43ee", record(
-      ["751fca4373debdd0b7e6eb73e08d684b", cell(scaleFunction)],
-      [scaleParameter, number(value)],
-    )],
-  ))],
+const scaleCall = (argument) => record(
+  ["751fca4373debdd0b7e6eb73e08d684b", cell(scaleFunction)],
+  [scaleParameter, argument],
+);
+const functionsState = ({ argument = 3, factor = 2, name = "x", nested = false } = {}) => stacked(
+  [cell(scaleFunction), ...[number(argument), nested ? scaleCall(number(5)) : number(5)].map((value) =>
+    record(["acfc5e50881292518dab3cec77cf43ee", scaleCall(value)]))],
   {
     [scaleFunction]: record(
       ["02e562654d6d0828d3a7559e6f75fffe", text("scale")],
@@ -640,17 +620,20 @@ const functionsState = ({ argument = 3, factor = 2, name = "x" } = {}) => stacke
   },
 );
 
-test("function quests distinguish arguments, the body, and a parameter rename", async () => {
+test("function quests distinguish arguments, the body, a parameter rename, and nesting", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   assert.deepEqual(completedSteps("functions", functionsState()), []);
   assert.deepEqual(completedSteps("functions", functionsState({ argument: 4 })), ["argument"]);
   assert.deepEqual(completedSteps("functions", functionsState({ factor: 3 })), ["body"]);
   assert.deepEqual(completedSteps("functions", functionsState({ name: "amount" })), ["rename"]);
-  assert.deepEqual(completedSteps("functions", functionsState({ argument: 4, factor: 3, name: "amount" })), ["argument", "body", "rename"]);
+  assert.deepEqual(completedSteps("functions", functionsState({ nested: true })), ["nest"]);
+  assert.deepEqual(completedSteps("functions", functionsState({ argument: 4, factor: 3, name: "amount", nested: true })),
+    ["argument", "body", "rename", "nest"]);
   for (const invalid of [NaN, Infinity]) {
-    assert.deepEqual(completedSteps("functions", functionsState({ argument: invalid, factor: 3 })), []);
+    assert.deepEqual(completedSteps("functions", functionsState({ argument: invalid, factor: 3 })), ["body"]);
     assert.deepEqual(completedSteps("functions", functionsState({ factor: invalid, name: "amount" })), []);
   }
+  assert.deepEqual(completedSteps("functions", functionsState({ name: "" })), []);
   assert.deepEqual(completedSteps("functions", { document: { root: null } }), []);
 });
 
@@ -659,15 +642,16 @@ test("function achievements require the shown definition and its connected calls
   for (const disconnect of [
     (state) => { delete state.document.cells[scaleFunction]; },
     (state) => { removeSlot(state, 0); },
-    (state) => { removeSlot(state, 2); },
     (state) => { state.document.cells[scaleFunction].record[1][1].list.push(cell("other")); },
     (state) => { state.document.cells[scaleFunction].record[2][1].record[1][1] = cell("other"); },
-    (state) => { items(state)[1].record[0][1].record[0][1] = cell("other"); },
   ]) {
-    const state = functionsState({ argument: 4, factor: 3, name: "amount" });
+    const state = functionsState({ argument: 4, factor: 3, name: "amount", nested: true });
     disconnect(state);
     assert.deepEqual(completedSteps("functions", state), []);
   }
+  const otherFunction = functionsState({ argument: 4 });
+  items(otherFunction)[1].record[0][1].record[0][1] = cell("other");
+  assert.deepEqual(completedSteps("functions", otherFunction), []);
   const renamedFunction = functionsState();
   renamedFunction.document.cells[scaleFunction].record[0][1] = text("amount");
   assert.deepEqual(completedSteps("functions", renamedFunction), []);
@@ -675,21 +659,21 @@ test("function achievements require the shown definition and its connected calls
 
 test("function progress latches through undo and resets only its own lesson", async () => {
   const { exercises, send } = await lessonPage();
-  const page = exercises[4];
-  send(4, functionsState());
+  const page = exercises[3];
+  send(3, functionsState());
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(4, functionsState({ argument: 4 }));
+  send(3, functionsState({ argument: 4 }));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
-  send(4, functionsState({ argument: 4, factor: 3 }));
+  send(3, functionsState({ argument: 4, factor: 3 }));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
-  send(4, functionsState({ argument: 4, factor: 3, name: "amount" }));
+  send(3, functionsState({ argument: 4, factor: 3, name: "amount", nested: true }));
   assert.ok(page.tasks.every(t => t.classes.has("completed")));
-  send(4, functionsState());
+  send(3, functionsState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
-  send(3, grapState(4, 5));
+  send(2, grapState(4, 5));
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  assert.ok(exercises[3].tasks.every(t => t.classes.has("completed")));
+  assert.equal(exercises[2].tasks.filter(t => t.classes.has("completed")).length, 2);
 });
 
 const drawingIds = {
@@ -712,7 +696,7 @@ const drawingIds = {
   follow: "33c6fb363ddc6f13fd054c68f7a37a98",
   document: "ef62fa62f008c1eca70389571933aba0",
 };
-const drawingState = ({ x = 60, radius = 24 } = {}) => {
+const drawingState = ({ x = 60, radius = 24, dots = [160] } = {}) => {
   const d = drawingIds;
   return stacked([
     cell(d.fn), cell(d.program), record([d.drawing, record([d.programField, cell(d.program)])]),
@@ -723,7 +707,7 @@ const drawingState = ({ x = 60, radius = 24 } = {}) => {
         [d.x, cell(d.x)], [d.y, number(50)], [d.radius, number(radius)],
       )])])],
     ),
-    [d.program]: record([d.function, cell(d.do)], [d.expressions, { list: [x, 160].map((value) =>
+    [d.program]: record([d.function, cell(d.do)], [d.expressions, { list: [x, ...dots].map((value) =>
       record([d.function, cell(d.fn)], [d.x, number(value)])) }]),
   });
 };
@@ -735,56 +719,43 @@ const drawingSource = () => ({
   ] },
 });
 
-test("creation steps require each value in its own slot, not merely a selection", async () => {
-  const { completedSteps, lessonProgress } = await import("./public/lesson-progress.mjs");
-  assert.deepEqual(completedSteps("create", stacked([])), []);
-  assert.deepEqual(completedSteps("create", stacked([number(42), text("hello"), { list: [number(7)] }])), ["number", "text", "list"]);
-  assert.deepEqual(completedSteps("create", stacked([text("42"), number(42), { list: [text("7")] }])), []);
-  const observe = lessonProgress("create");
-  observe(stacked([number(42)]));
-  assert.deepEqual([...observe(stacked([]))], ["number"]);
-  const { exercises, send } = await lessonPage();
-  send(7, stacked([number(42), text("hello"), { list: [number(7)] }]));
-  assert.ok(exercises[7].tasks.every(t => t.classes.has("completed")));
-  exercises[7].listeners.click();
-  assert.equal(exercises[7].tasks.filter(t => t.classes.has("completed")).length, 0);
-});
-
-test("opening scene checks one tree's height, shared paint, and a source occurrence", async () => {
+test("finale checks one original tree's height, shared paint, and a planted tree", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   const d = drawingIds;
   const height = "cc32dd050a9351804e7a704b4d59e7ac";
   const paint = "cb04728f5e6a1d93a6790238b5f1ce4d";
   const rgb = "6c8a17cbe463186cc8b07e536ccffa6b";
-  const scene = (h = 60, color = "548b64") => stacked([
+  const trees = [[40, 60], [128, 90], [216, 72]];
+  const scene = (list = trees, color = "548b64") => stacked([
     cell(d.program), cell(d.fn), record([d.drawing, record([d.programField, cell(d.program)])]),
   ], {
-    [d.program]: record([d.expressions, { list: [h, 90, 72].map((h) => record([d.function, cell(d.fn)], [height, number(h)])) }]),
+    [d.program]: record([d.expressions, { list: list.map(([x, h]) =>
+      record([d.function, cell(d.fn)], [d.x, number(x)], [height, number(h)])) }]),
     [d.fn]: record([d.body, record([d.expressions, { list: [record(), record([d.function, cell(d.fill)], [paint, record([rgb, { blob: color }])])] }])]),
   });
   assert.deepEqual(completedSteps("forest", scene()), []);
-  assert.deepEqual(completedSteps("forest", scene(100, "cc7733")), ["height", "color"]);
-  assert.deepEqual(completedSteps("forest", scene(NaN, "bad")), []);
-  const state = scene(100, "cc7733");
-  state.selection = drawingSource();
-  state.selection.source_path.list[0] = record([d.key, cell(slots[1])]);
-  state.selection.source_path.list.push(record([d.key, cell(d.expressions)]), record(["2eb44bbe78bbb0e96af4a9cbf6e949e1", record()]));
-  assert.deepEqual(completedSteps("forest", state), ["height", "color", "source"]);
-  state.selection.source_path.list.pop();
-  assert.deepEqual(completedSteps("forest", state), ["height", "color"]);
+  assert.deepEqual(completedSteps("forest", scene([[40, 100], [128, 90], [216, 72]], "cc7733")), ["height", "color"]);
+  // Planting between trees shifts positions without counting as a height change.
+  const planted = [[40, 60], [80, 50], [128, 90], [216, 72]];
+  assert.deepEqual(completedSteps("forest", scene(planted)), ["plant"]);
+  assert.deepEqual(completedSteps("forest", scene([[40, 60], [80, NaN], [128, 90], [216, 72]])), []);
+  assert.deepEqual(completedSteps("forest", scene([[40, NaN], [128, 90], [216, 72]], "bad")), []);
+  const state = scene(planted);
   removeSlot(state, 2);
   assert.deepEqual(completedSteps("forest", state), []);
 });
 
-test("drawing quests distinguish one call's argument, shared radius, and source selection", async () => {
+test("drawing quests distinguish one call's argument, shared radius, a new dot, and source selection", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   assert.deepEqual(completedSteps("drawing", drawingState()), []);
   assert.deepEqual(completedSteps("drawing", drawingState({ x: 80 })), ["argument"]);
   assert.deepEqual(completedSteps("drawing", drawingState({ radius: 36 })), ["body"]);
+  assert.deepEqual(completedSteps("drawing", drawingState({ dots: [200, 160] })), ["add"]);
+  assert.deepEqual(completedSteps("drawing", drawingState({ dots: [NaN, 160] })), []);
   assert.deepEqual(completedSteps("drawing", { ...drawingState(), selection: drawingSource() }), ["source"]);
   assert.deepEqual(completedSteps("drawing", { document: { root: null } }), []);
   for (const invalid of [NaN, Infinity]) {
-    assert.deepEqual(completedSteps("drawing", drawingState({ x: invalid, radius: 36 })), []);
+    assert.deepEqual(completedSteps("drawing", drawingState({ x: invalid, radius: 36 })), ["body"]);
     assert.deepEqual(completedSteps("drawing", drawingState({ x: 80, radius: invalid })), []);
   }
   assert.deepEqual(completedSteps("drawing", drawingState({ x: 80, radius: 0 })), []);
@@ -823,19 +794,19 @@ test("source achievement requires the fill call, not its parent, argument, or an
 
 test("drawing progress latches through undo and resets independently", async () => {
   const { exercises, send } = await lessonPage();
-  const page = exercises[5];
-  send(5, drawingState());
+  const page = exercises[4];
+  send(4, drawingState());
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  send(5, drawingState({ x: 80 }));
+  send(4, drawingState({ x: 80 }));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 1);
-  send(5, drawingState({ x: 80, radius: 36 }));
+  send(4, drawingState({ x: 80, radius: 36 }));
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 2);
-  send(5, { ...drawingState({ x: 80, radius: 36 }), selection: drawingSource() });
+  send(4, { ...drawingState({ x: 80, radius: 36, dots: [200, 160] }), selection: drawingSource() });
   assert.ok(page.tasks.every(t => t.classes.has("completed")));
-  send(5, drawingState());
+  send(4, drawingState());
   assert.equal(page.tasks.every((task) => task.classes.has("completed")), true);
-  send(3, grapState(4, 5));
+  send(2, grapState(4, 5));
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
-  assert.ok(exercises[3].tasks.every(t => t.classes.has("completed")));
+  assert.equal(exercises[2].tasks.filter(t => t.classes.has("completed")).length, 2);
 });

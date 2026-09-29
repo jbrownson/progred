@@ -2,7 +2,7 @@ use super::*;
 use crate::libraries::f64 as f64_convention;
 
 #[test]
-fn website_values_use_ordinary_text_and_number_editing() {
+fn website_values_lesson_edits_text_numbers_and_a_list() {
     let (doc, names) = crate::gid_text::parse(include_str!(
         "../../../../../website/public/lessons/values.gid"
     ))
@@ -18,37 +18,94 @@ fn website_values_use_ordinary_text_and_number_editing() {
         ])
         .unwrap(),
     );
-    for (field, typed) in [("greeting", " Welcome!"), ("count", "5")] {
-        let frame = editing_frame(&mut world, false);
-        let target = frame
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == [Step::Key(names[field])])
-            .unwrap();
-        assert!((target.select)(&mut world, None));
+    let field = |world: &crate::Editor, name: &str| {
+        world
+            .model
+            .doc
+            .root
+            .as_ref()
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&names[name])
+            .cloned()
+            .unwrap()
+    };
+    let colors = |world: &crate::Editor| {
+        field(world, "colors")
+            .as_list()
+            .unwrap()
+            .values()
+            .filter_map(text::read)
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    let key = |world: &mut crate::Editor, key: Key| {
         assert!(
-            editing_frame(&mut world, false)
+            editing_frame(world, false)
                 .resolve_for_dispatch()
                 .dispatch_key(
-                    &mut world,
+                    world,
                     &KeyboardEvent {
-                        key: Key::Character(typed.into()),
+                        key,
                         state: KeyState::Down,
                         ..Default::default()
                     },
                 )
         );
+    };
+
+    replace_text(&mut world, &[Step::Key(names["planet"])], "Venus");
+    assert_eq!(text::read(&field(&world, "planet")), Some("Venus"));
+    replace_text(&mut world, &[Step::Key(names["moons"])], "5");
+    assert_eq!(f64_convention::read(&field(&world, "moons")), Some(5.0));
+
+    // A comma between two colors opens a space for a new one.
+    let frame = editing_frame(&mut world, false);
+    let items: Vec<_> = frame
+        .descends
+        .iter()
+        .filter(|d| matches!(d.path.as_ref(), [Step::Key(key), Step::Element(_)] if *key == names["colors"]))
+        .map(|d| d.rect)
+        .collect();
+    let point = Point::new((items[0].x1 + items[1].x0) / 2.0, items[0].center().y);
+    let frame = editing_frame_at(&mut world, false, None, Some(point));
+    let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+        panic!("comma hover")
+    };
+    let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+    let mut event = press(point.x, false);
+    event.state.position.y = point.y;
+    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        &mut world,
+        &event,
+        &mut dispatch
+    ));
+    key(&mut world, Key::Character("\"blue\"".into()));
+    key(&mut world, Key::Named(NamedKey::Enter));
+    assert_eq!(colors(&world), ["red", "blue", "orange"]);
+
+    // Erasing a color's text and one more Backspace removes it; undo restores it.
+    let first = field(&world, "colors")
+        .as_list()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let frame = editing_frame(&mut world, false);
+    let target = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == [Step::Key(names["colors"]), Step::Element(first.clone())])
+        .unwrap();
+    assert!((target.select)(&mut world, None));
+    for _ in 0.."red".len() + 1 {
+        key(&mut world, Key::Named(NamedKey::Backspace));
     }
-    let fields = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
-    assert_eq!(
-        text::read(fields.get(&names["greeting"]).unwrap()),
-        Some("Hello, world! Welcome!")
-    );
-    assert_eq!(
-        f64_convention::read(fields.get(&names["count"]).unwrap()),
-        Some(35.0)
-    );
-    assert_ne!(world.model.doc.root, doc.root);
+    assert_eq!(colors(&world), ["blue", "orange"]);
+    assert!(world.model.step_history(true));
+    assert_eq!(colors(&world), ["red", "blue", "orange"]);
 }
 
 #[test]
@@ -94,11 +151,8 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
 }
 
 #[test]
-fn website_creation_instructions_make_values_through_the_picker() {
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/create.gid"
-    ))
-    .unwrap();
+fn empty_slots_make_values_through_the_picker() {
+    let (doc, names) = crate::gid_text::parse(EMPTY_SLOTS).unwrap();
     let mut world = crate::test_editor_with_stack(
         doc,
         crate::stack::load_selected(&[
@@ -324,11 +378,8 @@ fn website_forest_edits_change_one_height_and_all_leaf_colors() {
 }
 
 #[test]
-fn website_list_instructions_insert_through_a_comma_and_select_the_whole_list() {
-    let (doc, _) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/lists.gid"
-    ))
-    .unwrap();
+fn list_insertion_through_a_comma_and_whole_list_selection() {
+    let (doc, _) = crate::gid_text::parse(FRUIT).unwrap();
     let mut world = crate::test_editor_with_stack(
         doc,
         crate::stack::load_selected(&[
@@ -1674,4 +1725,273 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         );
         assert!(world.gesture.is_none());
     }
+}
+
+fn lesson_world(
+    file: &str,
+    libraries: &[CellId],
+    slots: [&str; 3],
+) -> (crate::Editor, crate::gid_text::Binders) {
+    let (doc, names) = crate::gid_text::parse(file).unwrap();
+    let mut world =
+        crate::test_editor_with_stack(doc, crate::stack::load_selected(libraries).unwrap());
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&slots.map(|slot| names[slot].to_string()).join(",")),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    (world, names)
+}
+
+fn type_keys(world: &mut crate::Editor, keys: &str) {
+    for key in keys
+        .chars()
+        .map(|c| Key::Character(c.to_string().into()))
+        .chain([Key::Named(NamedKey::Enter)])
+    {
+        assert!(
+            editing_frame(world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    world,
+                    &KeyboardEvent {
+                        key,
+                        state: KeyState::Down,
+                        ..Default::default()
+                    },
+                )
+        );
+    }
+}
+
+fn select_occurrence(world: &mut crate::Editor, path: &[Step]) {
+    let frame = editing_frame(world, false);
+    let target = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == path)
+        .unwrap();
+    assert!((target.select)(world, None));
+}
+
+/// Click the separator between a list's first two items, as the lessons instruct.
+fn click_between(world: &mut crate::Editor, list: &[Step], positions: &[gid::Position]) {
+    let frame = editing_frame(world, false);
+    let [first, second] = [0, 1].map(|index| {
+        let path = [list, &[Step::Element(positions[index].clone())]].concat();
+        frame
+            .descends
+            .iter()
+            .find(|d| d.path.as_ref() == path.as_slice())
+            .unwrap()
+            .rect
+    });
+    let point = if (second.y0 - first.y0).abs() < 2.0 {
+        Point::new((first.x1 + second.x0) / 2.0, first.center().y)
+    } else {
+        Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0)
+    };
+    let frame = editing_frame_at(world, false, None, Some(point));
+    let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+        panic!("separator hover")
+    };
+    let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+    let mut event = press(point.x, false);
+    event.state.position.y = point.y;
+    assert!(
+        frame
+            .resolve_for_dispatch()
+            .dispatch_pointer_down_with(world, &event, &mut dispatch)
+    );
+}
+
+fn program_calls(world: &crate::Editor, program: CellId) -> Vec<Value> {
+    world
+        .model
+        .doc
+        .cells
+        .value(program)
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&crate::libraries::control::vocabulary::EXPRESSIONS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .values()
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn website_functions_nest_a_call_in_an_emptied_argument() {
+    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use grap::vocabulary::EVALUATE;
+    let (mut world, names) = lesson_world(
+        include_str!("../../../../../website/public/lessons/functions.gid"),
+        &[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ],
+        ["first", "second", "third"],
+    );
+    let slots = [names["first"], names["second"], names["third"]];
+    let argument = [
+        Step::Key(slots[1]),
+        Step::Key(EVALUATE),
+        Step::Key(names["x"]),
+    ];
+    select_occurrence(&mut world, &argument);
+    for _ in 0..2 {
+        assert!(
+            editing_frame(&mut world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(
+                    &mut world,
+                    &KeyboardEvent {
+                        key: Key::Named(NamedKey::Backspace),
+                        state: KeyState::Down,
+                        ..Default::default()
+                    },
+                )
+        );
+    }
+    // The emptied argument stays visible as the parameter's empty box.
+    select_occurrence(&mut world, &argument);
+    type_keys(&mut world, "scale");
+    type_keys(&mut world, "3");
+    assert_eq!(results(&world, &slots), [12.0, 10.0]);
+}
+
+#[test]
+fn website_drawing_adds_a_third_dot_between_the_calls() {
+    use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
+    let (mut world, names) = lesson_world(
+        include_str!("../../../../../website/public/lessons/drawing.gid"),
+        &[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+            control::ID,
+            color::ID,
+            layout::ID,
+        ],
+        ["third", "first", "second"],
+    );
+    let list = [
+        Step::Key(names["second"]),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(control::vocabulary::EXPRESSIONS),
+    ];
+    let positions: Vec<_> = world
+        .model
+        .doc
+        .cells
+        .value(names["two_dots"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&control::vocabulary::EXPRESSIONS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    click_between(&mut world, &list, &positions);
+    type_keys(&mut world, "dot");
+    type_keys(&mut world, "200");
+    let calls = program_calls(&world, names["two_dots"]);
+    assert_eq!(calls.len(), 3);
+    assert!(calls.iter().any(|call| {
+        let call = call.as_record().unwrap();
+        call.get(&grap::vocabulary::FUNCTION) == Some(&Value::from(names["dot"]))
+            && call.get(&names["x"]).and_then(f64::read) == Some(200.0)
+    }));
+}
+
+#[test]
+fn website_forest_plants_a_fourth_tree() {
+    use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
+    let (mut world, names) = lesson_world(
+        include_str!("../../../../../website/public/lessons/forest.gid"),
+        &[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            color::ID,
+            control::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+            layout::ID,
+        ],
+        ["third", "first", "second"],
+    );
+    let list = [
+        Step::Key(names["first"]),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(control::vocabulary::EXPRESSIONS),
+    ];
+    let positions: Vec<_> = world
+        .model
+        .doc
+        .cells
+        .value(names["forest"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&control::vocabulary::EXPRESSIONS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    click_between(&mut world, &list, &positions);
+    type_keys(&mut world, "tree");
+    type_keys(&mut world, "180");
+    // The new call's height is its own empty box.
+    let new = world
+        .model
+        .doc
+        .cells
+        .value(names["forest"])
+        .unwrap()
+        .as_record()
+        .unwrap()
+        .get(&control::vocabulary::EXPRESSIONS)
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .find(|position| !positions.contains(position))
+        .unwrap()
+        .clone();
+    select_occurrence(
+        &mut world,
+        &[
+            list.as_slice(),
+            &[Step::Element(new), Step::Key(names["height"])],
+        ]
+        .concat(),
+    );
+    type_keys(&mut world, "50");
+    let calls = program_calls(&world, names["forest"]);
+    assert_eq!(calls.len(), 4);
+    assert!(calls.iter().any(|call| {
+        let call = call.as_record().unwrap();
+        call.get(&names["x"]).and_then(f64::read) == Some(180.0)
+            && call.get(&names["height"]).and_then(f64::read) == Some(50.0)
+    }));
 }

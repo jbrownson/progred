@@ -244,6 +244,19 @@ fn write_with(
     )
 }
 
+/// Three unnamed record slots, empty until filled.
+const EMPTY_SLOTS: &str = r#"{
+  "binders": {
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "third": 5e716c07490849f072b4e9017dd6230d,
+  },
+  "cells": {},
+  "root": {},
+}"#;
+
+const FRUIT: &str = r#"{"root": ["apples", "pears", "plums"]}"#;
+
 fn key(s: &str) -> Step {
     Step::Key(crate::test_values::label(s))
 }

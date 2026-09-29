@@ -1,6 +1,7 @@
 const fields = {
-  greeting: "60f0faf482445f9c5d3cd4c35d4ce902",
-  count: "bf0ca17731134521964d0f3aa582fcb1",
+  planet: "6655e4ba9e8ae76706056e0b8edf94f0",
+  moons: "6122302fdbe3db3624731717321b94a1",
+  colors: "c785948e50c854a7c89bf6c4a4bdf4fc",
   utf8: "332529b8ea83a7ba10fd7f6d942e5016",
   f64: "ed11fde03b7c2c1ba2fccc3cdba5d561",
   element: "2eb44bbe78bbb0e96af4a9cbf6e949e1",
@@ -36,17 +37,22 @@ const drawing = {
   expressions: "5fab151c006ae1487c28837f2003f43c",
 };
 
+// The planet's colors: the list the values lesson removes from and restores.
+function colors(state) {
+  return field(state?.document?.root, fields.colors)?.list;
+}
+
 export function lessonProgress(lesson) {
   const completed = new Set();
   const seenLists = new Set();
   let previous;
   return (state) => {
     for (const step of completedSteps(lesson, state, previous)) completed.add(step);
-    const list = state?.document?.root?.list;
-    if (lesson === "lists" && Array.isArray(list) && !completed.has("restore")) {
+    const list = colors(state);
+    if (lesson === "values" && Array.isArray(list) && !completed.has("restore")) {
       const snapshot = JSON.stringify(list);
       // Undo may restore the whole text-editing run, not just the last empty item.
-      if (completed.has("remove") && list.length > previous?.document?.root?.list?.length
+      if (completed.has("remove") && list.length > colors(previous)?.length
           && seenLists.has(snapshot)) {
         completed.add("restore");
         seenLists.clear();
@@ -96,17 +102,12 @@ function references(list) {
 // Checks describe achievements; the page retains them until this exercise resets.
 export function completedSteps(lesson, state, previous) {
   const root = state?.document?.root;
-  if (lesson === "create") {
-    return [
-      ...(number(field(root, slots[0])) === 42 ? ["number"] : []),
-      ...(text(field(root, slots[1])) === "hello" ? ["text"] : []),
-      ...(field(root, slots[2])?.list?.some((value) => number(value) === 7) ? ["list"] : []),
-    ];
-  }
   if (lesson === "forest") {
     const height = "cc32dd050a9351804e7a704b4d59e7ac";
     const paint = "cb04728f5e6a1d93a6790238b5f1ce4d";
     const rgb = "6c8a17cbe463186cc8b07e536ccffa6b";
+    // The original trees, by x: their starting heights.
+    const planted = new Map([[40, 60], [128, 90], [216, 72]]);
     const program = field(root, slots[0])?.cell;
     const fn = field(root, slots[1])?.cell;
     const contents = state?.document?.cells;
@@ -116,43 +117,28 @@ export function completedSteps(lesson, state, previous) {
     const color = bytes(field(field(leaves, paint), rgb));
     if (typeof fn !== "string" || typeof program !== "string"
         || field(field(field(root, slots[2]), drawing.drawing), drawing.program)?.cell !== program
-        || calls?.length !== 3
+        || !Array.isArray(calls) || calls.length < 3
         || !calls.every((call) => field(call, fields.function)?.cell === fn)
         || field(leaves, fields.function)?.cell !== drawing.fill) return [];
-    const selection = state.selection;
-    const path = selection?.source_path?.list;
+    const sizes = calls.map((call) => [number(field(call, drawing.x)), number(field(call, height))]);
     return [
-      ...(number(field(calls[0], height)) === 100
-        && number(field(calls[1], height)) === 90 && number(field(calls[2], height)) === 72 ? ["height"] : []),
+      ...(sizes.some(([x, size]) => planted.has(x) && Number.isFinite(size) && size !== planted.get(x))
+        ? ["height"] : []),
       ...(color?.length === 3 && color.some((byte, i) => byte !== [0x54, 0x8b, 0x64][i]) ? ["color"] : []),
-      ...(selection?.view === "document" && selection.stage === "value" && path?.length === 5
-        && field(path[0], fields.key)?.cell === slots[1]
-        && field(path[1], fields.follow)?.cell === fields.document
-        && field(path[2], fields.key)?.cell === fields.body
-        && field(path[3], fields.key)?.cell === drawing.expressions
-        && field(path[4], fields.element) ? ["source"] : []),
+      ...(calls.length >= 4 && sizes.every(([x, size]) => Number.isFinite(x) && Number.isFinite(size))
+        ? ["plant"] : []),
     ];
   }
   if (lesson === "values") {
-    const greeting = text(field(root, fields.greeting));
-    const count = number(field(root, fields.count));
+    const planet = text(field(root, fields.planet));
+    const moons = number(field(root, fields.moons));
+    const list = colors(state);
+    const before = colors(previous);
     return [
-      ...(greeting !== undefined && greeting !== "Hello, world!" ? ["greeting"] : []),
-      ...(Number.isFinite(count) && count !== 3 ? ["count"] : []),
-    ];
-  }
-  if (lesson === "lists" && Array.isArray(root?.list)) {
-    const selection = state.selection;
-    const path = selection?.path?.list;
-    const inDocument = selection?.view === "document";
-    return [
-      ...(inDocument && selection.stage === "pending" && path?.length === 1
-        && field(path[0], fields.element) ? ["gap"] : []),
-      ...(root.list.length > 3 && root.list.some((value) => text(value) === "peaches") ? ["insert"] : []),
-      ...(inDocument && selection.stage === "value" && path?.length === 0
-        && selection.source_path?.list?.length === 0 ? ["select-list"] : []),
-      ...(Array.isArray(previous?.document?.root?.list)
-        && root.list.length < previous.document.root.list.length ? ["remove"] : []),
+      ...(planet !== undefined && planet !== "Mars" ? ["rename"] : []),
+      ...(Number.isFinite(moons) && moons !== 2 ? ["moons"] : []),
+      ...(Array.isArray(list) && list.length > 2 ? ["add"] : []),
+      ...(Array.isArray(list) && Array.isArray(before) && list.length < before.length ? ["remove"] : []),
     ];
   }
   if (lesson === "cells" && Array.isArray(root?.list)) {
@@ -184,11 +170,16 @@ export function completedSteps(lesson, state, previous) {
       && Number.isFinite(number(field(value, fields.right))));
     const addition = call(sum);
     const multiplication = call(multiply);
+    if (!addition || !multiplication || input(addition) !== input(multiplication)
+        || !items.some((value) => value?.cell === input(addition))) return [];
+    const x = number(contents[input(addition)]);
+    const total = x + number(field(addition, fields.right));
+    const product = x * number(field(multiplication, fields.right));
     return [
-      ...(number(field(addition, fields.right)) === 4 ? ["argument"] : []),
-      ...(addition && multiplication && input(addition) === input(multiplication)
-        && items.some((value) => value?.cell === input(addition))
-        && number(contents[input(addition)]) === 5 ? ["shared-edit"] : []),
+      ...(number(field(addition, fields.right)) !== 2 ? ["argument"] : []),
+      ...(x !== 3 ? ["shared-edit"] : []),
+      ...(total === product ? ["equal"] : []),
+      ...(product === 100 ? ["hundred"] : []),
     ];
   }
   if (lesson === "functions") {
@@ -205,12 +196,15 @@ export function completedSteps(lesson, state, previous) {
         || field(body, fields.left)?.cell !== parameter || !Number.isFinite(factor)) return [];
     const calls = items.map((item) => field(item, fields.evaluate))
       .filter((call) => field(call, fields.function)?.cell === fn);
-    const inputs = calls.map((call) => number(field(call, parameter)));
-    if (inputs.length !== 2 || !inputs.every(Number.isFinite)) return [];
+    const name = text(field(contents?.[parameter], fields.name));
+    const firstCall = field(items[1], fields.evaluate);
+    const first = field(firstCall, fields.function)?.cell === fn
+      ? number(field(firstCall, parameter)) : undefined;
     return [
-      ...(inputs.includes(4) && inputs.includes(5) ? ["argument"] : []),
-      ...(factor === 3 ? ["body"] : []),
-      ...(text(field(contents?.[parameter], fields.name)) === "amount" ? ["rename"] : []),
+      ...(Number.isFinite(first) && first !== 3 ? ["argument"] : []),
+      ...(factor !== 2 ? ["body"] : []),
+      ...(name && name !== "x" ? ["rename"] : []),
+      ...(calls.some((call) => field(field(call, parameter), fields.function)?.cell === fn) ? ["nest"] : []),
     ];
   }
   if (lesson === "drawing") {
@@ -232,15 +226,15 @@ export function completedSteps(lesson, state, previous) {
         || !Number.isFinite(radius) || radius <= 0
         || !Number.isFinite(number(field(circle, drawing.y)))
         || field(contents?.[program], fields.function)?.cell !== drawing.do
-        || calls?.length !== 2
-        || !calls.every((call) => field(call, fields.function)?.cell === fn
-          && Number.isFinite(number(field(call, drawing.x))))) return [];
+        || !Array.isArray(calls) || calls.length < 2
+        || !calls.every((call) => field(call, fields.function)?.cell === fn)) return [];
+    const positions = calls.map((call) => number(field(call, drawing.x)));
     const selection = state.selection;
     const path = selection?.source_path?.list;
     return [
-      ...(number(field(calls[0], drawing.x)) === 80
-        && number(field(calls[1], drawing.x)) === 160 ? ["argument"] : []),
-      ...(radius === 36 ? ["body"] : []),
+      ...(Number.isFinite(positions[0]) && positions[0] !== 60 ? ["argument"] : []),
+      ...(radius !== 24 ? ["body"] : []),
+      ...(calls.length >= 3 && positions.every(Number.isFinite) ? ["add"] : []),
       ...(selection?.view === "document" && selection.stage === "value" && path?.length === 3
         && field(path[0], fields.key)?.cell === slots[0]
         && field(path[1], fields.follow)?.cell === fields.document

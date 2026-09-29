@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn reports_pending_selection_and_committed_value_at_the_same_path() {
         let mut editor = crate::test_editor(
-            crate::gid_text::parse(include_str!("../../website/public/lessons/lists.gid"))
+            crate::gid_text::parse(r#"{"root": ["apples", "pears", "plums"]}"#)
                 .unwrap()
                 .0,
         );

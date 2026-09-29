@@ -357,19 +357,9 @@ fn website_lesson_svg_captures() {
             ][..],
         ),
         (
-            "create",
-            include_str!("../../../../../website/public/lessons/create.gid"),
-            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
-        ),
-        (
             "values",
             include_str!("../../../../../website/public/lessons/values.gid"),
             &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
-        ),
-        (
-            "lists",
-            include_str!("../../../../../website/public/lessons/lists.gid"),
-            &[name::ID, text::ID, blob::ID][..],
         ),
         (
             "cells",

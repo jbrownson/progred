@@ -741,7 +741,6 @@ mod checked_in_files {
             include_str!("../../website/public/lessons/forest.gid"),
             include_str!("../../website/public/lessons/growing-forest.gid"),
             include_str!("../../website/public/lessons/drawing.gid"),
-            include_str!("../../website/public/lessons/create.gid"),
         ] {
             let (doc, _) = parse(source).unwrap();
             let reached = root_reachable_cells(&doc);
@@ -751,24 +750,24 @@ mod checked_in_files {
             parse(include_str!("../../website/public/lessons/values.gid")).unwrap();
         let root = doc.root.as_ref().unwrap().as_record().unwrap();
         assert_eq!(
-            crate::libraries::text::read(root.get(&binders["greeting"]).unwrap()),
-            Some("Hello, world!")
+            crate::libraries::text::read(root.get(&binders["planet"]).unwrap()),
+            Some("Mars")
         );
         assert_eq!(
-            crate::libraries::f64::read(root.get(&binders["count"]).unwrap()),
-            Some(3.0)
+            crate::libraries::f64::read(root.get(&binders["moons"]).unwrap()),
+            Some(2.0)
+        );
+        assert_eq!(
+            root.get(&binders["colors"])
+                .and_then(Value::as_list)
+                .map(|colors| colors
+                    .values()
+                    .filter_map(crate::libraries::text::read)
+                    .collect::<Vec<_>>()),
+            Some(vec!["red", "orange"])
         );
         let reached = root_reachable_cells(&doc);
         assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
-        let (doc, _) = parse(include_str!("../../website/public/lessons/lists.gid")).unwrap();
-        let items = doc.root.as_ref().unwrap().as_list().unwrap();
-        assert_eq!(
-            items
-                .values()
-                .filter_map(crate::libraries::text::read)
-                .collect::<Vec<_>>(),
-            ["apples", "pears", "plums"]
-        );
         let (doc, binders) = parse(include_str!("../../website/public/lessons/cells.gid")).unwrap();
         assert_eq!(
             doc.root,
