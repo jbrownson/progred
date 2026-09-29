@@ -89,7 +89,13 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
         pass.scope(
             |pass| inner.place_into(pass),
             move |mut output| {
-                let select = output.landmark_select.take().unwrap_or(select);
+                let select = match output.landmark_select.take() {
+                    Some((at, arrive)) if at == path => arrive,
+                    stray => {
+                        debug_assert!(stray.is_none(), "arrival override at another occurrence");
+                        select
+                    }
+                };
                 output.descends.push(Landmark {
                     root: None,
                     path,

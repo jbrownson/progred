@@ -410,10 +410,13 @@ mod tests {
                     state.push("key");
                     true
                 });
-                output.on_arrival(Some(Rc::new(|state, _| {
-                    state.push("select");
-                    true
-                })));
+                output.on_arrival(
+                    Rc::from([]),
+                    Rc::new(|state, _| {
+                        state.push("select");
+                        true
+                    }),
+                );
             },
         );
         assert!(calls.borrow().is_empty());
@@ -432,7 +435,7 @@ mod tests {
             Some(puri::hover::Claim::Direct(7))
         );
         let mut canvas = DrawList::new();
-        let select = output.landmark_select.take().unwrap();
+        let (_, select) = output.landmark_select.take().unwrap();
         let output = output.bind(ResolvedHover {
             hovered: Some(7),
             ..Default::default()

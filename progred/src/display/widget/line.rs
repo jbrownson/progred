@@ -137,7 +137,7 @@ pub fn view(
         crate::display::widget::before_place(content, move |placement: Placement, output| {
             output.navigation_stop(stop.clone(), selected);
             // Arriving from the left or right places the caret at that edge.
-            output.on_arrival(Some(navigation));
+            output.on_arrival(stop.clone(), navigation);
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
             }

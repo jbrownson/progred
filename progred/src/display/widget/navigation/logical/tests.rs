@@ -407,16 +407,6 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     let frame = pass.finish().bind(Default::default());
     let handler = frame.handler.unwrap();
     let mut visits = vec![];
-    // Without the destination's landmark there is nothing to arrive through.
-    assert!(
-        !handler
-            .dispatch(
-                &mut visits,
-                Event::Navigate(Direction::Right),
-                &mut Default::default()
-            )
-            .handled()
-    );
     let mut dispatch = crate::display::widget::frame::DispatchContext {
         descends: frame.descends.into(),
         ..Default::default()

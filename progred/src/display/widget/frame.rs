@@ -106,8 +106,8 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         });
     }
 
-    pub fn on_arrival(&mut self, select: Option<Select<C>>) {
-        self.output.landmark_select = select.or(self.output.landmark_select.take());
+    pub fn on_arrival(&mut self, path: std::rc::Rc<[gid::Step]>, select: Select<C>) {
+        self.output.landmark_select = Some((path, select));
     }
 
     pub fn navigation_stop(&mut self, path: std::rc::Rc<[gid::Step]>, selected: bool) {
@@ -445,10 +445,10 @@ pub struct HoverOutput<C, Hover> {
     pub handler: Option<Handler<C, DispatchContext<C, Hover>>>,
     pub descends: Vec<Landmark<C>>,
     pub view_regions: Vec<ViewRegion>,
-    /// A projected control may override how the nearest enclosing
-    /// navigation landmark is selected. The landmark consumes this
-    /// while assembling this frame, so it never leaks into an ancestor.
-    pub landmark_select: Option<Select<C>>,
+    /// A projected control may override how its occurrence's landmark is
+    /// selected. The nearest enclosing landmark consumes this while
+    /// assembling this frame, so it never leaks into an ancestor.
+    pub landmark_select: Option<(std::rc::Rc<[gid::Step]>, Select<C>)>,
     pub completion: Option<Offers<C>>,
     pub after_hover: AfterHover<ResolvedHover<Hover>, Effects<C, Hover>>,
 }

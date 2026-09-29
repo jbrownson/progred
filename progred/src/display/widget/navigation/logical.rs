@@ -397,10 +397,12 @@ impl Construction {
                         .position(|d| *d == direction)
                         .and_then(|index| destinations[index].as_ref())
                         .and_then(|path| {
-                            input
+                            let landmark = input
                                 .descends
                                 .iter()
-                                .find(|landmark| landmark.root == view && landmark.path == *path)
+                                .find(|landmark| landmark.root == view && landmark.path == *path);
+                            debug_assert!(landmark.is_some(), "navigation stop without a landmark");
+                            landmark
                         })
                         .map(|landmark| landmark.select.clone());
                     EventOutcome::from_handled(
