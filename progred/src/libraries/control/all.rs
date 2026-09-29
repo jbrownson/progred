@@ -12,11 +12,10 @@ pub(super) fn evaluate(
     let Some(elements) = context.elements(&expressions) else {
         return Ok(absent::with_reason(control::INVALID_EXPRESSIONS).into());
     };
-    elements
-        .iter()
-        .map(|expression| context.eval(expression.clone(), environment))
-        .collect::<Result<Vec<_>, _>>()
-        .map(RuntimeValue::list)
+    super::try_map_sized(elements, |expression| {
+        context.eval(expression.clone(), environment)
+    })
+    .map(RuntimeValue::list)
 }
 
 #[cfg(test)]
