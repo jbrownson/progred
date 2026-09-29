@@ -29,6 +29,7 @@ pub fn hover_highlight<P: Canvas + ?Sized>(
     );
 }
 
+#[derive(Clone)]
 pub struct Styles {
     pub palette: Palette,
     pub label: TextStyle,

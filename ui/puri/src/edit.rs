@@ -78,6 +78,7 @@ pub struct LineEditState {
     drag: Option<Drag>,
 }
 
+#[derive(Clone)]
 pub struct EditStyle {
     pub selection: Brush,
     pub cursor: Brush,

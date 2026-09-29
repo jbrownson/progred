@@ -15,41 +15,22 @@ use puri::draw::{Canvas, DrawList};
 use std::cell::{LazyCell, RefCell};
 use std::rc::Rc;
 
-struct Faces {
-    name: Brush,
-    string: Brush,
-    dim: Brush,
-    label: Brush,
-    id: Brush,
-    accent_wash: Brush,
-    ink: Brush,
-}
+/// Drawings record after the frame's style borrow ends, so they keep a copy.
+struct Faces(crate::styles::Styles);
 
 impl Faces {
     fn new(styles: &crate::styles::Styles) -> Self {
-        Self {
-            name: styles.name.brush.clone(),
-            string: styles.string.brush.clone(),
-            dim: styles.dim.brush.clone(),
-            label: styles.label.brush.clone(),
-            id: styles.id.brush.clone(),
-            accent_wash: styles.accent_wash.brush.clone(),
-            ink: styles.ink.brush.clone(),
-        }
+        Self(styles.clone())
     }
 
     fn resolve(&self, paint: crate::display::Paint) -> Brush {
         match paint {
             crate::display::Paint::Brush(brush) => brush,
-            crate::display::Paint::Face(face) => match face {
-                crate::display::Face::Name => self.name.clone(),
-                crate::display::Face::String => self.string.clone(),
-                crate::display::Face::Dim => self.dim.clone(),
-                crate::display::Face::Label => self.label.clone(),
-                crate::display::Face::Id => self.id.clone(),
-                crate::display::Face::AccentWash => self.accent_wash.clone(),
-                crate::display::Face::Ink => self.ink.clone(),
-            },
+            crate::display::Paint::Face(face) => {
+                crate::display::widget::style::face_style(&self.0, face)
+                    .brush
+                    .clone()
+            }
         }
     }
 }
