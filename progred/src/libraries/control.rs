@@ -586,7 +586,7 @@ fn pattern_binder(
                 label: activatable(
                     match input.env.name(key) {
                         Some(name) => faced(name, Face::Label),
-                        None => faced(name::short_id(key), Face::Id),
+                        None => faced(crate::identity::short_id(key), Face::Id),
                     },
                     target.hover,
                     target.select,

@@ -228,10 +228,7 @@ pub(crate) fn record_label(
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     let label = match input.env.name(key) {
         Some(name) => faced(name, Face::Label),
-        None => {
-            let hex = key.to_string();
-            faced(format!("…{}", &hex[hex.len() - 5..]), Face::Id)
-        }
+        None => faced(crate::identity::short_id(key), Face::Id),
     };
     let target = input.targets.at([Step::Key(key)]);
     let head = row(0.0, [label, dim(":")]);

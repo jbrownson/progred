@@ -2,7 +2,7 @@
 //! The live `evaluate` projection is separate from evaluator syntax: a host
 //! that never loads it never gives that field evaluation behavior.
 
-use crate::libraries::name::short_id;
+use crate::identity::short_id;
 use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 

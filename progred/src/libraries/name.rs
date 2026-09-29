@@ -68,11 +68,6 @@ pub(crate) fn with_name(
     )
 }
 
-pub(crate) fn short_id(cell: CellId) -> String {
-    let hex = cell.to_string();
-    format!("…{}", &hex[hex.len() - 5..])
-}
-
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));

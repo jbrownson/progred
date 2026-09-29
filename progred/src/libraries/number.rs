@@ -79,7 +79,7 @@ fn with_representation<V>(
                     .env
                     .name(representation)
                     .map(str::to_owned)
-                    .unwrap_or_else(|| name::short_id(representation)),
+                    .unwrap_or_else(|| crate::identity::short_id(representation)),
                 Face::Dim,
             ),
         ],

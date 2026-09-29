@@ -128,7 +128,7 @@ pub(super) fn field(
         let target = input.targets.current();
         let (spelling, face) = match input.env.name(marker) {
             Some(name) => (name.to_owned(), Face::Label),
-            None => (name::short_id(marker), Face::Id),
+            None => (crate::identity::short_id(marker), Face::Id),
         };
         let operator = activatable(faced(spelling, face), target.hover, target.select);
         let fields = content.as_record()?;
