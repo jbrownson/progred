@@ -359,9 +359,9 @@ fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
     let View::Implicit(image, _) = &*view else {
         panic!("replacement image")
     };
-    let image = &image.as_ref().as_ref().unwrap();
-    assert!(!image.stale && !image.pending);
-    let image = &image.image.as_ref().unwrap().image;
+    let image = image.as_ref().unwrap();
+    assert!(!image.pending);
+    let image = &image.frame.image;
     assert_eq!((image.width, image.height), (48, 64));
     assert!(f.queue.lock().unwrap().is_empty());
 }
@@ -511,7 +511,7 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
     let View::Implicit(next_image, next_geometry) = &*moved else {
         panic!("model should stay ready")
     };
-    assert!(Rc::ptr_eq(image, next_image));
+    assert!(same_frame(image, next_image));
     assert!(!Rc::ptr_eq(geometry, next_geometry));
     assert!(
         f.queue.lock().unwrap().is_empty(),
@@ -525,7 +525,12 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
     let View::Implicit(styled_image, _) = &*styled else {
         panic!("model should stay ready")
     };
-    assert!(Rc::ptr_eq(image, styled_image));
+    assert!(same_frame(image, styled_image));
     assert!(f.queue.lock().unwrap().is_empty());
     assert_eq!(f.runs.get(), 1);
+}
+
+/// Reusing the rendered frame, not re-rendering an equal one.
+fn same_frame(a: &Outcome<Refinement>, b: &Outcome<Refinement>) -> bool {
+    matches!((a, b), (Ok(a), Ok(b)) if std::sync::Arc::ptr_eq(&a.frame.depth, &b.frame.depth))
 }

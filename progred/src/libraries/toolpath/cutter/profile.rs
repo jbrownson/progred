@@ -471,6 +471,9 @@ impl Tool {
 
 /// Sweep a continuous-radius polyline, capping only its two outer ends.
 fn sweep_outline(points: &[Point], a: Point3, b: Point3, axis: Axis) -> Result<Tree, InvalidPath> {
+    let (Some(first), Some(last)) = (points.first(), points.last()) else {
+        return Err(InvalidPath::CoordinateRange);
+    };
     let mut field: Option<Tree> = None;
     for pair in points.windows(2) {
         let next = frustum(pair[0], pair[1], a, b, axis)?;
@@ -485,8 +488,8 @@ fn sweep_outline(points: &[Point], a: Point3, b: Point3, axis: Axis) -> Result<T
     let z = axis.basis()[2];
     let along = (Tree::x() - a[0]) * z.x + (Tree::y() - a[1]) * z.y + (Tree::z() - a[2]) * z.z;
     let dz = z.dot(&(nalgebra::Vector3::from(b) - nalgebra::Vector3::from(a)));
-    let bottom = points[0].axial as f32 + dz.min(0.0);
-    let top = points.last().unwrap().axial as f32 + dz.max(0.0);
+    let bottom = first.axial as f32 + dz.min(0.0);
+    let top = last.axial as f32 + dz.max(0.0);
     if [bottom, top].into_iter().all(f32::is_finite) {
         Ok(field.max(bottom - along.clone()).max(along - top))
     } else {

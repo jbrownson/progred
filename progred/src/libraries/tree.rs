@@ -191,9 +191,7 @@ impl Sink for Collector {
         let (source, parent) = self.parents.pop().expect("balanced group interpretation");
         let children = std::mem::replace(&mut self.items, parent);
         let items = RuntimeValue::list(children.iter().map(|child| child.items.clone()));
-        let children = items
-            .list_positions()
-            .unwrap()
+        let children = gid::position::spread(children.len())
             .into_iter()
             .zip(
                 children
@@ -231,11 +229,10 @@ fn collect(
     if result.is_absent() {
         Ok(Err(result))
     } else {
-        let mut sink = sink.borrow_mut();
-        Ok(if sink.items.len() == 1 {
-            Ok(sink.items.pop().unwrap())
-        } else {
-            Err(absent::with_reason(INVALID_OUTPUT).into())
+        let items = std::mem::take(&mut sink.borrow_mut().items);
+        Ok(match <[Built; 1]>::try_from(items) {
+            Ok([built]) => Ok(built),
+            Err(_) => Err(absent::with_reason(INVALID_OUTPUT).into()),
         })
     }
 }

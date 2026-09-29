@@ -176,10 +176,12 @@ impl Parser<'_> {
             .as_bytes()
             .chunks(2)
             .map(|pair| {
-                u8::from_str_radix(std::str::from_utf8(pair).expect("hex is ascii"), 16)
-                    .expect("checked hex")
+                std::str::from_utf8(pair)
+                    .ok()
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
             })
-            .collect();
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| "a blob holds hex digits".to_string())?;
         self.rest = &self.rest[end..];
         Ok(bytes)
     }

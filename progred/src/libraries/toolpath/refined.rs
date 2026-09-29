@@ -50,9 +50,16 @@ enum View {
         Option<incremental::background::Progress>,
     ),
     Implicit(
-        Rc<Outcome<implicit::computation::ViewImage>>,
+        Outcome<Refinement>,
         Rc<Outcome<mesh::computation::ViewGeometry>>,
     ),
+}
+
+/// A current implicit image, ready to refine the mesh.
+struct Refinement {
+    frame: fidget::raster::Frame,
+    pending: bool,
+    progress: Option<incremental::background::Progress>,
 }
 
 impl Computation {
@@ -119,11 +126,19 @@ impl Computation {
                     return Ok(View::Mesh(geometry, None));
                 }
                 Ok(match image.as_ref() {
-                    Ok(image) if image.stale || image.image.is_none() => {
-                        View::Mesh(geometry, image.progress)
-                    }
+                    Ok(image) => match (&image.image, image.stale) {
+                        (Some(frame), false) => View::Implicit(
+                            Ok(Refinement {
+                                frame: frame.clone(),
+                                pending: image.pending,
+                                progress: image.progress,
+                            }),
+                            geometry,
+                        ),
+                        _ => View::Mesh(geometry, image.progress),
+                    },
                     // A current error is a result too; don't hide it behind old geometry.
-                    _ => View::Implicit(image, geometry),
+                    Err(error) => View::Implicit(Err(error.clone()), geometry),
                 })
             },
             |_, _| false,
@@ -204,16 +219,12 @@ pub(super) fn display(
                     Ok(implicit::progress_bar(image, *progress))
                 }
                 View::Implicit(image, geometry) => {
-                    let image = image.as_ref().as_ref().map_err(Clone::clone)?;
-                    let data = image
-                        .image
-                        .as_ref()
-                        .expect("only current images refine the mesh");
+                    let image = image.as_ref().map_err(Clone::clone)?;
                     let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
                     let drawing = fidget::mesh::drawing_surface(
                         &geometry.geometry,
                         Some(fidget::mesh::Surface {
-                            frame: data.clone(),
+                            frame: image.frame.clone(),
                             mesh_start: geometry.surface_start,
                         }),
                         &model,

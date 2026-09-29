@@ -128,27 +128,24 @@ impl<Key: Clone + Ord> Selection<Key> {
         } else {
             children(tree, 0).collect()
         };
-        while !frontier.is_empty() {
-            let selected = match intent.get(level) {
-                Some(Intent::Between { first, last }) => {
-                    let start = frontier.partition_point(|(node, _)| node.key < *first);
-                    let end = frontier.partition_point(|(node, _)| node.key <= *last);
-                    if start < end {
-                        start..end
-                    } else {
-                        0..frontier.len()
-                    }
-                }
-                _ => 0..frontier.len(),
+        while let Some(all) = RangeSlider::new(frontier.len(), 0..frontier.len()) {
+            let slider = match intent.get(level) {
+                Some(Intent::Between { first, last }) => RangeSlider::new(
+                    frontier.len(),
+                    frontier.partition_point(|(node, _)| node.key < *first)
+                        ..frontier.partition_point(|(node, _)| node.key <= *last),
+                )
+                .unwrap_or(all),
+                _ => all,
             };
-            let nodes = &frontier[selected.clone()];
+            let nodes = &frontier[slider.selected.clone()];
             if let (Some((_, first)), Some((last, offset))) = (nodes.first(), nodes.last()) {
                 leaves = *first..offset + last.leaves;
             }
             let height = nodes.iter().map(|(node, _)| node.height).max().unwrap_or(0);
             rows.push(Row {
                 level,
-                slider: RangeSlider::new(frontier.len(), selected).unwrap(),
+                slider,
                 items: frontier
                     .iter()
                     .map(|(node, offset)| Item {
