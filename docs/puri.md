@@ -17,8 +17,9 @@ text and cross-frame editing state; `LineEditDescription` supplies font, paint,
 affixes, focus, placeholder, and chrome for this description. `EditCtx` supplies
 mutable state, Parley contexts, a clipboard capability, and the host's command
 modifier at dispatch. A WebAssembly host chooses that modifier from the browser's
-platform rather than the compilation target. The
-focused editor emits a caret rectangle for the platform IME.
+platform rather than the compilation target. IME events reach the focused
+editor, but no host enables platform IME or reports a caret rectangle to it
+yet, so composed input (dead keys, CJK) does not arrive.
 
 The caller runs each `EditOperation` with that `EditCtx` rather than lending
 the editor out to a handler. This lets the caller finish the state/service
