@@ -85,7 +85,8 @@ fn website_values_lesson_edits_text_numbers_and_a_list() {
     key(&mut world, Key::Named(NamedKey::Enter));
     assert_eq!(colors(&world), ["red", "blue", "orange"]);
 
-    // Erasing a color's text and one more Backspace removes it; undo restores it.
+    // Double-clicking a color selects the word; Backspace erases it and one
+    // more Backspace removes the empty item. Undo restores it.
     let first = field(&world, "colors")
         .as_list()
         .unwrap()
@@ -93,14 +94,31 @@ fn website_values_lesson_edits_text_numbers_and_a_list() {
         .next()
         .unwrap()
         .clone();
-    let frame = editing_frame(&mut world, false);
-    let target = frame
+    let color = [Step::Key(names["colors"]), Step::Element(first)];
+    let point = editing_frame(&mut world, false)
         .descends
         .iter()
-        .find(|d| d.path.as_ref() == [Step::Key(names["colors"]), Step::Element(first.clone())])
-        .unwrap();
-    assert!((target.select)(&mut world, None));
-    for _ in 0.."red".len() + 1 {
+        .find(|d| d.path.as_ref() == color)
+        .unwrap()
+        .rect
+        .center();
+    for count in [1, 2] {
+        let frame = editing_frame_at(&mut world, false, None, Some(point));
+        let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+            panic!("color hover")
+        };
+        let mut dispatch =
+            placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+        let mut event = press(point.x, false);
+        event.state.position.y = point.y;
+        event.state.count = count;
+        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+            &mut world,
+            &event,
+            &mut dispatch
+        ));
+    }
+    for _ in 0..2 {
         key(&mut world, Key::Named(NamedKey::Backspace));
     }
     assert_eq!(colors(&world), ["blue", "orange"]);
