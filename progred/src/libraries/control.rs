@@ -122,26 +122,35 @@ fn replace_unquotes(
         {
             return context.eval(unquote.clone(), environment);
         }
-        return fields
-            .iter()
-            .map(|(field, value)| {
-                Ok((
-                    *field,
-                    replace_unquotes(value.clone(), context, environment)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, Halt>>()
-            .map(RuntimeValue::record);
+        return try_map_sized(fields, |(field, value)| {
+            Ok((
+                *field,
+                replace_unquotes(value.clone(), context, environment)?,
+            ))
+        })
+        .map(RuntimeValue::record);
     }
     if let Some(elements) = context.elements(&expression) {
-        return elements
-            .iter()
-            .map(|value| replace_unquotes(value.clone(), context, environment))
-            .collect::<Result<Vec<_>, Halt>>()
-            .map(RuntimeValue::list);
+        return try_map_sized(elements, |value| {
+            replace_unquotes(value.clone(), context, environment)
+        })
+        .map(RuntimeValue::list);
     }
     let value = context.value(&expression).clone();
     replace_unquotes_value(&value, context, environment)
+}
+
+/// Collecting through `Result` loses the length hint, and quoted templates
+/// sit on hot paths, so the output is sized up front.
+fn try_map_sized<T, U>(
+    items: &[T],
+    mut map: impl FnMut(&T) -> Result<U, Halt>,
+) -> Result<Vec<U>, Halt> {
+    let mut mapped = Vec::with_capacity(items.len());
+    for item in items {
+        mapped.push(map(item)?);
+    }
+    Ok(mapped)
 }
 
 fn replace_unquotes_value(
@@ -411,7 +420,6 @@ fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
     let Some(elements) = cases.list_values() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
-    let mut mismatches = Vec::new();
     for case in elements {
         let (Some(pattern), Some(expression)) = (
             case.field(vocabulary::PATTERN),
@@ -426,13 +434,22 @@ fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
                     bindings,
                 };
             }
-            Ok(None) => mismatches.push(pattern_mismatch(&pattern.to_value())),
+            Ok(None) => {}
             Err(InvalidBinder) => {
                 return Selection::Invalid(vocabulary::INVALID_BINDER);
             }
         }
     }
-    Selection::NoMatch(mismatches)
+    // Built only when nothing matched: most calls fail some cases first.
+    Selection::NoMatch(
+        cases
+            .list_values()
+            .into_iter()
+            .flatten()
+            .filter_map(|case| case.field(vocabulary::PATTERN))
+            .map(|pattern| pattern_mismatch(&pattern.to_value()))
+            .collect(),
+    )
 }
 
 fn pattern_mismatch(pattern: &Value) -> Value {
