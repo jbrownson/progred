@@ -218,13 +218,12 @@ fn transform(
     expression: grap::Expression,
     environment: &grap::Environment,
 ) -> Result<Option<Affine>, grap::Halt> {
-    let Some(operation_count) = context.elements(&expression).map(<[_]>::len) else {
+    let Some(operations) = context.elements(&expression) else {
         let value = context.eval_to_value(expression, environment)?;
         return Ok(layout_data::read_transform(&value));
     };
     let mut transform = Affine::IDENTITY;
-    for index in 0..operation_count {
-        let operation = context.elements(&expression).unwrap()[index].clone();
+    for operation in operations {
         if let Some(point) = context.field(&operation, layout_data::vocabulary::TRANSLATE) {
             let (Some(x), Some(y)) = (
                 context.field(&point, layout_data::vocabulary::X),

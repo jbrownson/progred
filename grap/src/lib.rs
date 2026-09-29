@@ -1436,9 +1436,14 @@ impl<'a> Context<'a> {
     /// Capture the active source call chain. Calls without a source are skipped,
     /// not assigned a fabricated path. Repeated captures share live prefixes.
     pub fn call_trace(&mut self) -> Option<CallTrace> {
-        let start = self.calls.iter().rposition(|call| call.captured.is_some());
-        let mut caller = start.and_then(|index| self.calls[index].captured.clone().unwrap());
-        for index in start.map_or(0, |index| index + 1)..self.calls.len() {
+        let (start, mut caller) = self
+            .calls
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(index, call)| Some((index + 1, call.captured.clone()?)))
+            .unwrap_or((0, None));
+        for index in start..self.calls.len() {
             let expression = self.calls[index].expression.clone();
             let origin = match self.call_origins.get(&expression) {
                 Some(origin) => origin.clone(),
@@ -1544,6 +1549,10 @@ impl<'a> Context<'a> {
     }
 
     /// Decode GID bindings into a shared lexical environment.
+    pub fn empty_environment(&self) -> Environment {
+        Environment::with_indices(self.indices.clone())
+    }
+
     pub fn environment(&self, value: &Value) -> Option<Environment> {
         let fields = value.as_record()?;
         Some(

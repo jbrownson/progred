@@ -63,8 +63,7 @@ fn range_tail(context: &mut Context, count: f64, index: f64) -> RuntimeValue {
         Value::from(RANGE_STEP),
         [(COUNT, f64::value(count)), (INDEX, f64::value(index))],
     );
-    let empty = context.environment(&Value::record([])).unwrap();
-    context.closure_value([], body, &empty)
+    context.closure_value([], body, &context.empty_environment())
 }
 
 fn range_step(

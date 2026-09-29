@@ -9,14 +9,12 @@ pub(super) fn evaluate(
     let Some(expressions) = context.field(call, control::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(control::EXPRESSIONS));
     };
-    let Some(count) = context.elements(&expressions).map(<[_]>::len) else {
+    let Some(elements) = context.elements(&expressions) else {
         return Ok(absent::with_reason(control::INVALID_EXPRESSIONS).into());
     };
-    (0..count)
-        .map(|index| {
-            let expression = context.elements(&expressions).unwrap()[index].clone();
-            context.eval(expression, environment)
-        })
+    elements
+        .iter()
+        .map(|expression| context.eval(expression.clone(), environment))
         .collect::<Result<Vec<_>, _>>()
         .map(RuntimeValue::list)
 }

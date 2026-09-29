@@ -85,13 +85,12 @@ fn do_foreign(
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    let Some(count) = context.elements(&expressions).map(<[_]>::len) else {
+    let Some(elements) = context.elements(&expressions) else {
         return Ok(absent::with_reason(vocabulary::INVALID_EXPRESSIONS).into());
     };
     let mut result = None;
-    for index in 0..count {
-        let expression = context.elements(&expressions).unwrap()[index].clone();
-        let value = context.eval(expression, environment)?;
+    for expression in elements {
+        let value = context.eval(expression.clone(), environment)?;
         if value.is_absent() {
             return Ok(value);
         }
@@ -116,30 +115,30 @@ fn replace_unquotes(
     context: &mut Context,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(field_count) = context.fields(&expression).map(<[_]>::len) {
-        let unquote = context.fields(&expression).and_then(|fields| {
-            fields
-                .iter()
-                .find(|(field, _)| *field == vocabulary::UNQUOTE)
-                .map(|(_, unquote)| unquote.clone())
-        });
-        if let Some(unquote) = unquote {
-            return context.eval(unquote, environment);
+    if let Some(fields) = context.fields(&expression) {
+        if let Some((_, unquote)) = fields
+            .iter()
+            .find(|(field, _)| *field == vocabulary::UNQUOTE)
+        {
+            return context.eval(unquote.clone(), environment);
         }
-        let mut replaced = Vec::with_capacity(field_count);
-        for index in 0..field_count {
-            let (field, value) = context.fields(&expression).unwrap()[index].clone();
-            replaced.push((field, replace_unquotes(value, context, environment)?));
-        }
-        return Ok(RuntimeValue::record(replaced));
+        return fields
+            .iter()
+            .map(|(field, value)| {
+                Ok((
+                    *field,
+                    replace_unquotes(value.clone(), context, environment)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Halt>>()
+            .map(RuntimeValue::record);
     }
-    if let Some(element_count) = context.elements(&expression).map(<[_]>::len) {
-        let mut replaced = Vec::with_capacity(element_count);
-        for index in 0..element_count {
-            let value = context.elements(&expression).unwrap()[index].clone();
-            replaced.push(replace_unquotes(value, context, environment)?);
-        }
-        return Ok(RuntimeValue::list(replaced));
+    if let Some(elements) = context.elements(&expression) {
+        return elements
+            .iter()
+            .map(|value| replace_unquotes(value.clone(), context, environment))
+            .collect::<Result<Vec<_>, Halt>>()
+            .map(RuntimeValue::list);
     }
     let value = context.value(&expression).clone();
     replace_unquotes_value(&value, context, environment)
@@ -412,6 +411,7 @@ fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
     let Some(elements) = cases.list_values() else {
         return Selection::Invalid(vocabulary::INVALID_CASES);
     };
+    let mut mismatches = Vec::new();
     for case in elements {
         let (Some(pattern), Some(expression)) = (
             case.field(vocabulary::PATTERN),
@@ -426,20 +426,13 @@ fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
                     bindings,
                 };
             }
-            Ok(None) => {}
+            Ok(None) => mismatches.push(pattern_mismatch(&pattern.to_value())),
             Err(InvalidBinder) => {
                 return Selection::Invalid(vocabulary::INVALID_BINDER);
             }
         }
     }
-    Selection::NoMatch(
-        cases
-            .list_values()
-            .unwrap()
-            .filter_map(|case| case.field(vocabulary::PATTERN))
-            .map(|pattern| pattern_mismatch(&pattern.to_value()))
-            .collect(),
-    )
+    Selection::NoMatch(mismatches)
 }
 
 fn pattern_mismatch(pattern: &Value) -> Value {
