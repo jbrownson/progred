@@ -178,7 +178,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
 fn runtime_record_keys_and_membership_match_all_gid_shapes() {
     let metadata = new_cell_id();
     let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
-    let decorated_number = Value::record([
+    let decorated_number = gid::Record::from_iter([
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (metadata, Value::from(vec![9])),
     ]);
@@ -194,6 +194,19 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         RuntimeValue::from(Value::from(vec![1, 2])),
     ] {
         let keys = value.record_keys();
+        let answers = [
+            value.as_blob().is_some(),
+            value.as_cell().is_some(),
+            value.list_positions().is_some(),
+            keys.is_some(),
+        ];
+        assert_eq!(answers.iter().filter(|answer| **answer).count(), 1);
+        match value.shape() {
+            crate::Shape::Blob(bytes) => assert_eq!(value.as_blob(), Some(bytes)),
+            crate::Shape::Cell(cell) => assert_eq!(value.as_cell(), Some(cell)),
+            crate::Shape::List(positions) => assert_eq!(value.list_positions(), Some(positions)),
+            crate::Shape::Record(fields) => assert_eq!(keys, Some(fields)),
+        }
         for key in [
             metadata,
             crate::f64::F64,
@@ -256,7 +269,7 @@ fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
 #[test]
 fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
-    let source = Value::record([
+    let source = gid::Record::from_iter([
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);

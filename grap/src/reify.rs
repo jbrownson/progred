@@ -42,6 +42,7 @@ impl Reify {
             RuntimeValueKind::F64(value) => value
                 .original
                 .clone()
+                .map(Value::Record)
                 .unwrap_or_else(|| crate::f64::value(value.number)),
             RuntimeValueKind::Record(fields) => self
                 .share(Some(Shared::Record(Rc::as_ptr(fields))), |this| {
