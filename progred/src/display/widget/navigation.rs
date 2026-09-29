@@ -37,17 +37,10 @@ pub(crate) fn destination(
     path: Rc<[Step]>,
     cx: &crate::projection::Cx<'_>,
 ) -> Target<crate::Editor> {
-    let root = cx.view.clone();
-    let scope = cx.edits.clone();
-    let occurrence = path.clone();
+    let select = crate::projection::select_handler(path.clone(), cx);
     Target {
         path,
-        select: Rc::new(move |editor, _| {
-            scope
-                .open(crate::editing::Access::new(editor))
-                .select(&root, &occurrence);
-            true
-        }),
+        select: Rc::new(move |editor, _| select(editor)),
     }
 }
 

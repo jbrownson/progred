@@ -256,25 +256,6 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         self.cx.sources.evaluate_with_fuel(expression, fuel)
     }
 
-    fn evaluate_memo(&self, expression: &Value, fuel: usize) -> Value {
-        match self.cx.computations {
-            Some(computations) => computations.evaluate(self.cx.view, self.path, expression, fuel),
-            None => self.evaluate_with_fuel(expression, fuel),
-        }
-    }
-
-    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
-        match self.cx.computations {
-            Some(computations) => {
-                computations.apply(self.cx.view, self.path, function, arguments, fuel)
-            }
-            None => {
-                grap::apply_value(function, arguments.iter().cloned(), &self.cx.sources, fuel)
-                    .result
-            }
-        }
-    }
-
     fn name(&self, cell: CellId) -> Option<&str> {
         self.cx.name(cell)
     }
@@ -455,29 +436,17 @@ fn tree_hovered(hover: &placed::ResolvedHover) -> Option<&Hover> {
     }
 }
 
+/// Select `path` in this view, interpreted through this occurrence's scope.
 pub(crate) fn select_handler(
     path: SharedPath,
     cx: &Cx,
 ) -> crate::display::ActionHandler<crate::Editor> {
     let root = cx.view.clone();
-    let destination = path;
     let edits = cx.edits.clone();
     Rc::new(move |world| {
         edits
             .open(crate::editing::Access::new(world))
-            .select(&root, &destination);
-        true
-    })
-}
-
-fn navigation_select_handler(path: SharedPath, cx: &Cx) -> crate::navigate::Select<crate::Editor> {
-    let root = cx.view.clone();
-    let destination = path;
-    let edits = cx.edits.clone();
-    Rc::new(move |world, _| {
-        edits
-            .open(crate::editing::Access::new(world))
-            .select(&root, &destination);
+            .select(&root, &path);
         true
     })
 }
@@ -488,19 +457,11 @@ fn projection_target(
     steps: Vec<Step>,
 ) -> crate::display::ProjectionTarget<crate::Editor, Hovered> {
     let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
-    let root = cx.view.clone();
-    let destination = path.clone();
-    let edits = cx.edits.clone();
-    let payload_root = root.clone();
-    let payload_destination = destination.clone();
-    let payload_edits = edits.clone();
+    let payload_root = cx.view.clone();
+    let payload_destination = path.clone();
+    let payload_edits = cx.edits.clone();
     crate::display::ProjectionTarget {
-        select: Rc::new(move |world| {
-            edits
-                .open(crate::editing::Access::new(world))
-                .select(&root, &destination);
-            true
-        }),
+        select: select_handler(path.clone(), cx),
         select_with: Rc::new(move |world, payload| {
             payload_edits
                 .open(crate::editing::Access::new(world))
@@ -543,10 +504,10 @@ impl Cx<'_> {
 
     /// The label query of a new field being authored on the record at
     /// `path`.
-    pub(crate) fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
+    pub(crate) fn pending_edge_under(&self, path: &[Step]) -> Option<&LineEditState> {
         let current = self.selection?;
         (current.path() == path && current.stage(&self.sources) == Stage::Label)
-            .then(|| Some((current.edit()?, current.choice())))
+            .then(|| current.edit())
             .flatten()
     }
 }
@@ -1017,10 +978,11 @@ fn prepare_value(
             let root = cx.view.clone();
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
-            let select = navigation_select_handler(landmark_path.clone(), cx);
-            let target = value.map(|value| (value.clone(), cx.view.clone(), landmark_path.clone()));
+            let select =
+                crate::display::widget::navigation::destination(landmark_path.clone(), cx).select;
+            let target =
+                value.map(|value| (value.clone(), select_handler(landmark_path.clone(), cx)));
             let edits = cx.edits.clone();
-            let pick_edits = edits.clone();
             ChoiceLayout::map(inner, 0.0, move |inner| {
                 let placed = descend_landmark_with(
                     palette,
@@ -1044,14 +1006,7 @@ fn prepare_value(
                     None => placed,
                 };
                 match target {
-                    Some((value, root, destination)) => pick_target_with(
-                        landmark_path,
-                        value,
-                        root,
-                        destination,
-                        pick_edits,
-                        placed,
-                    ),
+                    Some((value, select)) => pick_target_with(landmark_path, value, select, placed),
                     None => placed,
                 }
             })
@@ -1127,19 +1082,15 @@ fn value_layout(
 fn pick_target_with(
     path: SharedPath,
     value: grap::RuntimeValue,
-    root: crate::workspace::Root,
-    destination: SharedPath,
-    edits: crate::editing::Scope,
+    select: crate::display::ActionHandler<crate::Editor>,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
-        let path = path.clone();
         let value = value.clone();
+        let select = select.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
             if !world.pick_identity(value.to_value()) {
-                edits
-                    .open(crate::editing::Access::new(world))
-                    .select(&root, &destination);
+                select(world);
             }
             true
         });

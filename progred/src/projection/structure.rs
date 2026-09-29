@@ -21,7 +21,7 @@ pub fn of(
     input: &ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
 ) -> View {
     if let Some(bytes) = value.as_blob() {
-        selectable(cx, id(blob_text(bytes)), path, value, true)
+        selectable(cx, id(blob_text(bytes)), path, value)
     } else if let Some(cell) = value.as_cell() {
         cell_layout(cx, cell)
     } else if let Some(list) = crate::display::structure::list_layout(input, None) {
@@ -74,7 +74,6 @@ pub(super) fn collapsed_layout(
         selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
         path,
         value,
-        true,
     ))
 }
 
@@ -89,13 +88,7 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
     ))
 }
 
-fn selectable(
-    cx: &Cx,
-    child: View,
-    path: &[Step],
-    value: &grap::RuntimeValue,
-    claim_hover: bool,
-) -> View {
+fn selectable(cx: &Cx, child: View, path: &[Step], value: &grap::RuntimeValue) -> View {
     let path: Rc<[Step]> = Rc::from(path);
     let target = Hovered::Tree(Hover::Value(path.clone()));
     let child = crate::display::projection::target(child);
@@ -104,11 +97,7 @@ fn selectable(
         target,
         select_handler(path.clone(), cx),
     );
-    if claim_hover {
-        on_hover(clicked, Hovered::Tree(Hover::Value(path)))
-    } else {
-        clicked
-    }
+    on_hover(clicked, Hovered::Tree(Hover::Value(path)))
 }
 
 fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {

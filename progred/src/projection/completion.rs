@@ -39,9 +39,7 @@ pub(crate) fn control(
         crate::display::CompletionKind::Field => context
             .inputs
             .pending_edge_under(context.path)
-            .map(|(query, _)| {
-                label_query(context.inputs, context.text, context.path, query, provider)
-            })
+            .map(|query| label_query(context.inputs, context.text, context.path, query, provider))
             .unwrap_or_else(|| text(context.text, "…", &context.inputs.styles.dim)),
     }
 }
@@ -75,32 +73,17 @@ fn pending_target(
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
     let path: SharedPath = Rc::from(path);
-    let edits = cx.edits.clone();
     let scale = cx.styles.scale;
     let palette = cx.styles.palette;
     let selected = cx.selected(path.as_ref());
-    let root = cx.view.clone();
+    let select = super::select_handler(path.clone(), cx);
     let target = crate::display::widget::navigation::destination(path.clone(), cx);
+    let arrive = target.select.clone();
     let child = crate::display::widget::before_place(child, move |_, output| {
         output.navigation_target(target, selected);
     });
-    let child = {
-        let target = path.clone();
-        let root = root.clone();
-        let edits = edits.clone();
-        let scope = edits.clone();
-        crate::display::widget::navigation::landmark(
-            child,
-            path.clone(),
-            Rc::new(move |ctx, _| {
-                edits
-                    .open(crate::editing::Access::new(ctx))
-                    .select(&root, &target);
-                true
-            }),
-            scope,
-        )
-    };
+    let child =
+        crate::display::widget::navigation::landmark(child, path.clone(), arrive, cx.edits.clone());
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);
         let highlight_path = path.clone();
@@ -115,13 +98,9 @@ fn pending_target(
             }
         });
         hover_claim(p, placement, Hover::Value(path.clone()));
-        let target = path.clone();
-        let root = root.clone();
-        p.activate(Hovered::Tree(Hover::Value(target.clone())), move |ctx| {
-            edits
-                .open(crate::editing::Access::new(ctx))
-                .select(&root, &target);
-            true
+        let select = select.clone();
+        p.activate(Hovered::Tree(Hover::Value(path.clone())), move |ctx| {
+            select(ctx)
         });
     })
 }
