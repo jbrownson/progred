@@ -50,8 +50,8 @@ clearance, or a safe machining plan.**
   viewport uses a mesh while implicit images refine in the background.
 
 macOS is the primary development platform. There are also Linux and browser
-hosts, plus an early native iPad port. They do not yet have feature or performance
-parity: in particular, the browser currently runs expensive jobs synchronously.
+hosts. They do not yet have feature or performance parity: in particular, the
+browser currently runs expensive jobs synchronously.
 
 ## Try it
 
@@ -113,7 +113,7 @@ See the [example guide](examples/README.md) for the five menu examples, renderin
 options, and the geometry behind them. Heavy CAM views are best tried natively;
 high-quality implicit refinement can take time and still has rendering artifacts.
 
-### Browser, Linux, and iPad
+### Browser and Linux
 
 To build the browser version **on macOS**, use the same dependency-fetch step,
 install the `wasm32-unknown-unknown` target for stable Rust, and have a
@@ -131,10 +131,8 @@ On Linux, `make run` uses the native launcher and performs a regular locked
 Cargo build; **the Linux build is not sandboxed**. The macOS `sandbox-*` commands
 do not apply there.
 
-The native iPad host is `ios/Progred.xcodeproj`; its Xcode build includes the Rust
-build. It remains a feasibility port with input and document-management gaps.
-See [platform notes](docs/platforms.md) before trying it. visionOS is deferred,
-not an implemented port.
+An earlier iPad feasibility port has been removed; see the
+[platform notes](docs/platforms.md). visionOS is deferred, not an implemented port.
 
 ## How it fits together
 

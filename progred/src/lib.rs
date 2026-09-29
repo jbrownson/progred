@@ -12,8 +12,6 @@ mod filter;
 mod frame;
 mod gesture;
 mod gid_text;
-#[cfg(target_os = "ios")]
-mod gpu;
 #[cfg(test)]
 mod grap_examples;
 mod history;
@@ -80,8 +78,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use web_time::Instant;
 
-#[cfg(target_os = "ios")]
-use gpu::{RenderContext, RenderSurface};
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
@@ -95,7 +91,7 @@ use ui_events::pointer::{
     PointerUpdate,
 };
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "ios")))]
+#[cfg(not(target_arch = "wasm32"))]
 use vello::util::{RenderContext, RenderSurface};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -143,7 +139,7 @@ pub(crate) enum AfterDiscard {
         doc: gid::Document,
         binders: gid_text::Binders,
     },
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    #[cfg(target_arch = "wasm32")]
     Quit,
 }
 
@@ -175,7 +171,7 @@ pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 pub(crate) struct SystemTextClipboard;
 
-#[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
+#[cfg(any(test, target_arch = "wasm32"))]
 #[derive(Default)]
 pub(crate) struct SystemTextClipboard {
     text: Option<String>,
@@ -199,7 +195,7 @@ impl TextClipboard for SystemTextClipboard {
     }
 }
 
-#[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
+#[cfg(any(test, target_arch = "wasm32"))]
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
         self.text.clone()
@@ -300,17 +296,17 @@ pub(crate) struct App {
     /// Each editor holds its own (cheap) clone, so a window can later
     /// filter or extend its libraries independently; this master copy
     /// seeds new editors.
-    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) stack: stack::Stack<Editor>,
     /// The font database master; editors hold cheap clones over the
     /// same shared font data.
-    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fonts: FontContext,
     #[cfg(target_os = "macos")]
     pub(crate) native_menu: native_menu::Menu,
     #[cfg(target_os = "macos")]
     pub(crate) appearance: Option<winit::window::Theme>,
-    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
     pub(crate) drawn_menu: bool,
@@ -378,7 +374,7 @@ pub(crate) struct Editor {
     gesture: Option<gesture::Active<Editor>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
-    #[cfg_attr(any(target_arch = "wasm32", target_os = "ios"), allow(dead_code))]
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
@@ -538,7 +534,7 @@ fn new_editor(
         text_cache: puri::text::TextCache::default(),
         #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
         text_clipboard: SystemTextClipboard,
-        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32"))]
         text_clipboard: SystemTextClipboard::default(),
         stack,
         model: Model::new(doc),
@@ -1191,7 +1187,7 @@ impl App {
             WindowEvent::CloseRequested => {
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
                 self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
-                #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+                #[cfg(target_arch = "wasm32")]
                 self.request_discard(event_loop, index, AfterDiscard::Quit);
             }
 
@@ -1353,7 +1349,7 @@ pub fn run() {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let doc_path = std::env::args().nth(1).map(PathBuf::from).map(canonical);
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    #[cfg(target_arch = "wasm32")]
     let doc_path: Option<PathBuf> = None;
     // A given-but-missing path is a new document there; no path is
     // untitled until the first save asks. A file that exists but does
@@ -1377,7 +1373,7 @@ pub fn run() {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    #[cfg(target_arch = "wasm32")]
     let drawn_menu = platform::DRAWN_MENU;
     run_document(
         doc,
@@ -1458,12 +1454,6 @@ fn run_document(
         .expect("Couldn't run event loop");
     #[cfg(target_arch = "wasm32")]
     web_input::spawn(app, event_loop);
-}
-
-#[cfg(target_os = "ios")]
-#[unsafe(no_mangle)]
-pub extern "C" fn progred_start() {
-    run();
 }
 
 impl Editor {
@@ -1952,7 +1942,7 @@ impl App {
             }
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Quit => self.begin_quit(event_loop),
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+            #[cfg(target_arch = "wasm32")]
             AppCommand::Quit => {
                 if let Some(index) = self.focused_index() {
                     self.request_discard(event_loop, index, AfterDiscard::Quit);
@@ -2074,8 +2064,6 @@ impl App {
                 });
             });
         }
-        #[cfg(target_os = "ios")]
-        self.proceed(event_loop, index, then);
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
@@ -2097,7 +2085,7 @@ impl App {
                     self.sync_menus(index);
                 }
             }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+            #[cfg(target_arch = "wasm32")]
             AfterDiscard::Quit => event_loop.exit(),
         }
     }

@@ -552,7 +552,7 @@ a fold ends the gesture.
 The platform supplies persistence and clipboard capabilities. macOS uses its
 native atomic write API. Linux writes a unique sibling temporary file,
 synchronizes it, renames it over the destination, and synchronizes the parent
-directory. Browser and iOS capabilities differ; see
+directory. Browser capabilities differ; see
 [persistence](../progred/src/text_store.rs) and [platform notes](platforms.md).
 
 Frame construction, dispatch order, hover, and clipping are described in

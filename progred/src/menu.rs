@@ -43,7 +43,7 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
 
 pub fn definition() -> Vec<Menu> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
-    #[cfg(any(target_arch = "wasm32", target_os = "ios"))]
+    #[cfg(target_arch = "wasm32")]
     let file_entries = vec![Entry::Command(C::App(A::New))];
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let file_entries = vec![

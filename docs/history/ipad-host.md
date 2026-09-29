@@ -1,0 +1,54 @@
+# iPad host (removed 2026-09-29)
+
+The native iPad host was a feasibility prototype. It was removed on 2026-09-29
+because iPad work was deferred indefinitely; the Xcode project (`ios/`),
+`tools/build-ipad`, and the iOS rendering module remain in Git history before
+that removal. These are its platform notes as of removal.
+
+
+The native host is a retained feasibility prototype. Further iPad work is
+deferred while the macOS and Linux editor matures. Its build explicitly requests
+a static library; desktop and browser builds use ordinary Rust library output.
+
+The native host builds Progred as
+an `aarch64-apple-ios` static library; a minimal Xcode application calls its
+exported entry point, after which Winit owns the UIKit lifecycle and WGPU/Vello
+renders through Metal.
+
+Install the Rust targets once:
+
+```sh
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+```
+
+Open `ios/Progred.xcodeproj`, select an Apple development team and a simulator
+or paired iPad, then use Xcode's ordinary Run button. Its first build phase
+builds the Rust static library for the selected SDK through the repository's
+Seatbelt wrapper; Xcode then compiles the tiny Objective-C entry point, links,
+signs, installs, and launches the application. Cargo still performs its normal
+incremental check on every Xcode build, so Rust changes need no separate build
+step. The generated archive is an explicit input to Xcode's library build
+phase. Rust-only changes relink the host without recompiling its Objective-C
+entry point; no generated header or archive hash is involved.
+
+Earlier notes report rendering and touch input on iPad hardware, and a
+simulator failure when Vello requests indirect buffers unsupported by that
+wgpu backend. They reference an upstream
+[wgpu change](https://github.com/gfx-rs/wgpu/pull/10189). The 2026-09-04 cleanup
+verified device/simulator builds and incremental linking, without launching
+either app; those runtime reports still need direct testing.
+
+`make build-ipad` and `make build-ipad-device` remain useful for unsigned CI or
+command-line builds of the simulator and device forms. They use the same Xcode
+build phase and therefore the same sandboxed Rust build.
+
+The first host deliberately embeds the existing examples instead of adding
+file management. Its clipboard is in-memory. Touch, Pencil-as-touch, and
+indirect pointer events arrive through Winit; hardware-keyboard support awaits
+testing, while the software keyboard still requires a UIKit text-input bridge.
+Until a native discard prompt exists, switching documents in an edited iPad
+session discards the in-memory document directly.
+
+After initial pairing and enabling Developer Mode, Xcode can deploy development
+builds to an iPad over the local network. Rebuilding and refreshing the browser
+version should remain the faster hot-tub iteration path.

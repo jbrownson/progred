@@ -215,7 +215,7 @@ impl Editor {
                 }
             })
             .is_ok();
-        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32"))]
         {
             self.text_clipboard.text = Some(text);
             self.text_clipboard.structure = structural.then(|| value.clone());
@@ -233,7 +233,7 @@ impl Editor {
                 .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
             return selection::from_structure(&bytes);
         }
-        #[cfg(any(test, target_arch = "wasm32", target_os = "ios"))]
+        #[cfg(any(test, target_arch = "wasm32"))]
         self.text_clipboard.structure.clone()
     }
 

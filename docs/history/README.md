@@ -20,6 +20,9 @@ records the implementation replaced by logical-layout navigation on 2026-09-27.
 The [layout navigation measurements](navigation-layout-2026-09.md) record
 timings and prototype notes for the collector revisions that followed.
 
+The [iPad host notes](ipad-host.md) describe the feasibility port removed on
+2026-09-29.
+
 The [Roc comparison notes](roc-notes.md) retain the former porting backlog
 as proposals rather than current tasks.
 

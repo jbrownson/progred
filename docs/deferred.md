@@ -316,7 +316,6 @@ fields in the Fidget language or merely hide their completions.
 
 ### Additional ports
 
-The iOS host remains a feasibility prototype. Further product work is deferred
-while macOS/Linux mature. See [platform notes](platforms.md) for its current
-build path and limitations. Older visionOS and language-extension ideas remain
+The iPad feasibility host was removed while macOS/Linux mature; its notes are in
+[history](history/ipad-host.md). Older visionOS and language-extension ideas remain
 uncommitted possibilities in the historical notes.
