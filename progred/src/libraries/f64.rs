@@ -2,10 +2,10 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use crate::libraries::{Library, absent, line_edit, logic, name, number};
+use crate::libraries::{Library, absent, logic, name, number};
 #[cfg(test)]
 use gid::Value;
-use gid::{CellId, Cells, Step};
+use gid::{CellId, Step};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
 use crate::display::projection::group;
@@ -13,9 +13,7 @@ use crate::display::{Delim, Layout, ProjectionInput, overlay_value, row, selecta
 #[cfg(test)]
 use ::grap;
 use ::grap::vocabulary::FUNCTION;
-use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
-};
+use ::grap::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -83,13 +81,6 @@ impl number::Scrubbable for f64 {
             format!("{self:.decimal_places$}")
         }
     }
-}
-
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let number = input.value?.as_f64()?;
-    number::layout(input, number, vocabulary::F64, value)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -167,109 +158,71 @@ pub fn binary_display(
     )))
 }
 
-pub fn functions() -> ForeignFunctions {
-    ForeignFunctions::default()
-        .register(
-            vocabulary::UPDATE,
-            ForeignFunction::from_value(|context, call, environment| {
-                let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
-                    return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
-                };
-                let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-                    return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
-                };
-                let current = context.eval_to_value(current, environment)?;
-                let input = context.eval_to_value(input, environment)?;
-                Ok(crate::libraries::text::read(&input)
-                    .and_then(|text| number::edit(text, Some(&current), value))
-                    .unwrap_or_else(|| {
-                        ::grap::absent::with_detail(
-                            vocabulary::INVALID_INPUT,
-                            line_edit::vocabulary::INPUT,
-                            input.clone(),
-                        )
-                    }))
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::SUM,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, |left, right| left + right)
-            })
-            .tracked(),
-        )
-        .register(
+pub(crate) fn convention() -> number::Convention<f64> {
+    number::Convention {
+        name: "f64",
+        tag: vocabulary::F64,
+        update: vocabulary::UPDATE,
+        left_not: vocabulary::LEFT_NOT_F64,
+        right_not: vocabulary::RIGHT_NOT_F64,
+        invalid_input: vocabulary::INVALID_INPUT,
+        encode: value,
+        runtime: RuntimeValue::f64,
+        read: RuntimeValue::as_f64,
+        eval: |context, expression, environment| context.eval_f64(expression, environment),
+    }
+}
+
+fn parts() -> number::Parts {
+    use number::Operation::{Arithmetic, Comparison};
+    let mut parts = convention().parts([
+        (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
+        (
             vocabulary::MULTIPLY,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, |left, right| left * right)
-            })
-            .tracked(),
-        )
-        .register(
+            "*",
+            Arithmetic(|left, right| left * right),
+        ),
+        (
             vocabulary::SUBTRACT,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, |left, right| left - right)
-            })
-            .tracked(),
-        )
-        .register(
+            "-",
+            Arithmetic(|left, right| left - right),
+        ),
+        (
             vocabulary::DIVIDE,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, |left, right| left / right)
+            "/",
+            Arithmetic(|left, right| left / right),
+        ),
+        (vocabulary::MIN, "min", Arithmetic(f64::min)),
+        (vocabulary::MAX, "max", Arithmetic(f64::max)),
+        (vocabulary::HYPOT, "hypot", Arithmetic(f64::hypot)),
+        (
+            vocabulary::LESS,
+            "<",
+            Comparison(|left, right| left < right),
+        ),
+        (
+            vocabulary::EQUAL,
+            "==",
+            Comparison(|left, right| left == right),
+        ),
+    ]);
+    for (cell, operation) in [
+        (vocabulary::SIN, f64::sin as fn(f64) -> f64),
+        (vocabulary::COS, f64::cos),
+        (vocabulary::FLOOR, f64::floor),
+        (vocabulary::CEIL, f64::ceil),
+    ] {
+        parts.functions = parts.functions.register(
+            cell,
+            ForeignFunction::new(move |context, call, environment| {
+                unary(context, call, environment, operation)
             })
             .tracked(),
-        )
-        .register(
-            vocabulary::SIN,
-            ForeignFunction::new(|context, call, environment| {
-                unary(context, call, environment, f64::sin)
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::COS,
-            ForeignFunction::new(|context, call, environment| {
-                unary(context, call, environment, f64::cos)
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::FLOOR,
-            ForeignFunction::new(|context, call, environment| {
-                unary(context, call, environment, f64::floor)
-            })
-            .tracked(),
-        )
+        );
+    }
+    parts.functions = parts
+        .functions
         .register(vocabulary::LERP, ForeignFunction::new(lerp).tracked())
-        .register(
-            vocabulary::MIN,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, f64::min)
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::MAX,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, f64::max)
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::CEIL,
-            ForeignFunction::new(|context, call, environment| {
-                unary(context, call, environment, f64::ceil)
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::HYPOT,
-            ForeignFunction::new(|context, call, environment| {
-                binary(context, call, environment, f64::hypot)
-            })
-            .tracked(),
-        )
         .register(
             vocabulary::IS_FINITE,
             ForeignFunction::new(|context, call, environment| {
@@ -278,25 +231,46 @@ pub fn functions() -> ForeignFunctions {
                 })
             })
             .tracked(),
-        )
-        .register(
-            vocabulary::LESS,
-            ForeignFunction::new(|context, call, environment| {
-                binary_value(context, call, environment, |left, right| {
-                    RuntimeValue::from_value(logic::value(left < right))
-                })
-            })
-            .tracked(),
-        )
-        .register(
-            vocabulary::EQUAL,
-            ForeignFunction::new(|context, call, environment| {
-                binary_value(context, call, environment, |left, right| {
-                    RuntimeValue::from_value(logic::value(left == right))
-                })
-            })
-            .tracked(),
-        )
+        );
+    for (cell, name) in [
+        (vocabulary::SIN, "sin"),
+        (vocabulary::COS, "cos"),
+        (vocabulary::FLOOR, "floor"),
+        (vocabulary::CEIL, "ceil"),
+        (vocabulary::IS_FINITE, "is finite"),
+        (vocabulary::LERP, "lerp"),
+        (vocabulary::START, "start"),
+        (vocabulary::END, "end"),
+        (vocabulary::AMOUNT, "amount"),
+    ] {
+        parts.cells.set_value(cell, name::record(name, []));
+    }
+    for (cell, name) in [
+        (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
+        (vocabulary::START_NOT_F64, "start is not f64"),
+        (vocabulary::END_NOT_F64, "end is not f64"),
+        (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
+    ] {
+        parts.cells.set_value(cell, absent::named_reason(name));
+    }
+    parts.cells.set_value(
+        vocabulary::PI,
+        overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
+    );
+    parts.calls.extend([
+        vocabulary::SIN,
+        vocabulary::COS,
+        vocabulary::FLOOR,
+        vocabulary::CEIL,
+        vocabulary::IS_FINITE,
+        vocabulary::LERP,
+    ]);
+    parts
+}
+
+#[cfg(test)]
+pub fn functions() -> ::grap::ForeignFunctions {
+    parts().functions
 }
 
 fn lerp(
@@ -321,38 +295,6 @@ fn lerp(
         (None, _, _) => absent::with_reason(vocabulary::START_NOT_F64).into(),
         (_, None, _) => absent::with_reason(vocabulary::END_NOT_F64).into(),
         (_, _, None) => absent::with_reason(vocabulary::AMOUNT_NOT_F64).into(),
-    })
-}
-
-fn binary(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(f64, f64) -> f64,
-) -> Result<RuntimeValue, Halt> {
-    binary_value(context, call, environment, |left, right| {
-        RuntimeValue::f64(operation(left, right))
-    })
-}
-
-fn binary_value(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(f64, f64) -> RuntimeValue,
-) -> Result<RuntimeValue, Halt> {
-    let Some(left) = context.field(call, vocabulary::LEFT) else {
-        return Ok(context.missing_runtime_argument(vocabulary::LEFT));
-    };
-    let Some(right) = context.field(call, vocabulary::RIGHT) else {
-        return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
-    };
-    let left = context.eval_f64(left, environment)?;
-    let right = context.eval_f64(right, environment)?;
-    Ok(match (left, right) {
-        (Some(left), Some(right)) => operation(left, right),
-        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64).into(),
-        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F64).into(),
     })
 }
 
@@ -383,90 +325,22 @@ fn unary_value(
 }
 
 pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    number::completions(query, vocabulary::F64, value)
+    convention().completions(query)
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
-    let mut cells = Cells::new();
-    for (cell, name) in [
-        (vocabulary::F64, "f64"),
-        (vocabulary::UPDATE, "f64 update"),
-        (vocabulary::SUM, "+"),
-        (vocabulary::MULTIPLY, "*"),
-        (vocabulary::SUBTRACT, "-"),
-        (vocabulary::DIVIDE, "/"),
-        (vocabulary::SIN, "sin"),
-        (vocabulary::COS, "cos"),
-        (vocabulary::LESS, "<"),
-        (vocabulary::EQUAL, "=="),
-        (vocabulary::FLOOR, "floor"),
-        (vocabulary::MIN, "min"),
-        (vocabulary::MAX, "max"),
-        (vocabulary::CEIL, "ceil"),
-        (vocabulary::HYPOT, "hypot"),
-        (vocabulary::IS_FINITE, "is finite"),
-        (vocabulary::LERP, "lerp"),
-        (vocabulary::START, "start"),
-        (vocabulary::END, "end"),
-        (vocabulary::AMOUNT, "amount"),
-    ] {
-        cells.set_value(cell, name::record(name, []));
-    }
-    for (cell, name) in [
-        (vocabulary::LEFT_NOT_F64, "left is not f64"),
-        (vocabulary::RIGHT_NOT_F64, "right is not f64"),
-        (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
-        (vocabulary::START_NOT_F64, "start is not f64"),
-        (vocabulary::END_NOT_F64, "end is not f64"),
-        (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
-        (vocabulary::INVALID_INPUT, "invalid f64 input"),
-    ] {
-        cells.set_value(cell, absent::named_reason(name));
-    }
-    cells.set_value(
-        vocabulary::PI,
-        overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
-    );
-    Library::named(
+    convention().library(
         ID,
-        "f64",
-        crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::compose_partials([
-            crate::display::runtime_partial(binary_display),
-            number::calls(
-                vocabulary::F64,
-                &[
-                    vocabulary::SUM,
-                    vocabulary::MULTIPLY,
-                    vocabulary::SUBTRACT,
-                    vocabulary::DIVIDE,
-                    vocabulary::SIN,
-                    vocabulary::COS,
-                    vocabulary::LESS,
-                    vocabulary::EQUAL,
-                    vocabulary::FLOOR,
-                    vocabulary::MIN,
-                    vocabulary::MAX,
-                    vocabulary::CEIL,
-                    vocabulary::HYPOT,
-                    vocabulary::IS_FINITE,
-                    vocabulary::LERP,
-                ],
-            ),
-            crate::display::runtime_partial(display),
-        ]),
+        parts(),
+        [crate::display::runtime_partial(binary_display)],
     )
-    .with_completions(|request| {
-        (request.scope == crate::display::CompletionScope::Everything
-            && request.kind == crate::display::CompletionKind::Value)
-            .then(|| completions(request.query))
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::display::recording::{Recordable, Recorded};
+    use crate::libraries::line_edit;
 
     use crate::display::test_support::{ProjectionCall, inspect};
     use gid::new_cell_id;
@@ -528,17 +402,17 @@ mod tests {
             (
                 vocabulary::F64,
                 3.5_f64.to_le_bytes().to_vec(),
-                display as Project,
+                (|input| convention().display(input)) as Project,
             ),
             (
                 crate::libraries::f32::vocabulary::F32,
                 3.5_f32.to_le_bytes().to_vec(),
-                crate::libraries::f32::display,
+                |input| crate::libraries::f32::convention().display(input),
             ),
             (
                 crate::libraries::u64::vocabulary::U64,
                 42_u64.to_le_bytes().to_vec(),
-                crate::libraries::u64::display,
+                |input| crate::libraries::u64::convention().display(input),
             ),
         ] {
             let number = RuntimeValue::record([
@@ -550,7 +424,11 @@ mod tests {
             let invalid = RuntimeValue::record([(field, Value::from(vec![0]).into())]);
             assert!(project(&projection_input(&invalid)).is_none());
         }
-        assert!(display(&projection_input(&RuntimeValue::f64(3.5))).is_some());
+        assert!(
+            convention()
+                .display(&projection_input(&RuntimeValue::f64(3.5)))
+                .is_some()
+        );
     }
 
     #[test]

@@ -1,11 +1,9 @@
 //! An open u64 record convention with the stock editable projection.
 
-use crate::libraries::{Library, absent, line_edit, logic, name, number};
-use gid::{CellId, Cells, Value};
+use crate::libraries::{Library, absent, number};
+use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
-use crate::display::{Layout, ProjectionInput};
-use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -30,7 +28,7 @@ pub fn value(value: u64) -> Value {
 }
 
 pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    number::completions(query, vocabulary::U64, value)
+    convention().completions(query)
 }
 
 pub fn read(value: &Value) -> Option<u64> {
@@ -69,164 +67,85 @@ impl number::Scrubbable for u64 {
     }
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let bytes = input.value?.field(vocabulary::U64)?;
-    let number = u64::from_le_bytes(bytes.as_blob()?.try_into().ok()?);
-    number::layout(input, number, vocabulary::U64, value)
-}
-
-fn update(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<Value, Halt> {
-    let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
-        return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
-    };
-    let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-        return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
-    };
-    let current = context.eval_to_value(current, environment)?;
-    let input = context.eval_to_value(input, environment)?;
-    Ok(crate::libraries::text::read(&input)
-        .and_then(|text| number::edit(text, Some(&current), value))
-        .unwrap_or_else(|| {
-            ::grap::absent::with_detail(
-                vocabulary::INVALID_INPUT,
-                line_edit::vocabulary::INPUT,
-                input.clone(),
-            )
-        }))
-}
-
-fn binary(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(u64, u64) -> Value,
-) -> Result<Value, Halt> {
-    let Some(left) = context.field(call, number::vocabulary::LEFT) else {
-        return Ok(context.missing_argument(number::vocabulary::LEFT));
-    };
-    let Some(right) = context.field(call, number::vocabulary::RIGHT) else {
-        return Ok(context.missing_argument(number::vocabulary::RIGHT));
-    };
-    let left = read(&context.eval_to_value(left, environment)?);
-    let right = read(&context.eval_to_value(right, environment)?);
-    Ok(match (left, right) {
-        (Some(left), Some(right)) => operation(left, right),
-        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_U64),
-        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_U64),
-    })
+pub(crate) fn convention() -> number::Convention<u64> {
+    number::Convention {
+        name: "u64",
+        tag: vocabulary::U64,
+        update: vocabulary::UPDATE,
+        left_not: vocabulary::LEFT_NOT_U64,
+        right_not: vocabulary::RIGHT_NOT_U64,
+        invalid_input: vocabulary::INVALID_INPUT,
+        encode: value,
+        runtime: |number| value(number).into(),
+        read: |value| {
+            Some(u64::from_le_bytes(
+                value.field(vocabulary::U64)?.as_blob()?.try_into().ok()?,
+            ))
+        },
+        eval: |context, expression, environment| {
+            Ok(read(&context.eval_to_value(expression, environment)?))
+        },
+    }
 }
 
 /// Unsigned arithmetic has no representable overflow or division by
 /// zero, so those outcomes are absents rather than wrapped bits.
-fn checked(operation: fn(u64, u64) -> Option<u64>, failure: CellId) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        binary(context, call, environment, |left, right| {
-            operation(left, right)
-                .map(value)
-                .unwrap_or_else(|| absent::with_reason(failure))
-        })
-    })
-    .tracked()
-}
-
-fn comparison(operation: fn(u64, u64) -> bool) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        binary(context, call, environment, |left, right| {
-            logic::value(operation(left, right))
-        })
-    })
-    .tracked()
-}
-
-fn functions() -> ForeignFunctions {
-    [
+fn parts() -> number::Parts {
+    use number::Operation::{Checked, Comparison};
+    let mut parts = convention().parts([
         (
             vocabulary::SUM,
-            checked(u64::checked_add, vocabulary::OVERFLOW),
+            "+",
+            Checked(u64::checked_add, vocabulary::OVERFLOW),
         ),
         (
             vocabulary::SUBTRACT,
-            checked(u64::checked_sub, vocabulary::OVERFLOW),
+            "-",
+            Checked(u64::checked_sub, vocabulary::OVERFLOW),
         ),
         (
             vocabulary::MULTIPLY,
-            checked(u64::checked_mul, vocabulary::OVERFLOW),
+            "*",
+            Checked(u64::checked_mul, vocabulary::OVERFLOW),
         ),
         (
             vocabulary::DIVIDE,
-            checked(u64::checked_div, vocabulary::DIVISION_BY_ZERO),
+            "/",
+            Checked(u64::checked_div, vocabulary::DIVISION_BY_ZERO),
         ),
-        (vocabulary::LESS, comparison(|left, right| left < right)),
-        (vocabulary::EQUAL, comparison(|left, right| left == right)),
-    ]
-    .into_iter()
-    .fold(
-        ForeignFunctions::default().register(
-            vocabulary::UPDATE,
-            ForeignFunction::from_value(update).tracked(),
+        (
+            vocabulary::LESS,
+            "<",
+            Comparison(|left, right| left < right),
         ),
-        |functions, (cell, function)| functions.register(cell, function),
-    )
-}
-
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::U64, "u64"),
-        (vocabulary::UPDATE, "u64 update"),
-        (vocabulary::SUM, "+"),
-        (vocabulary::SUBTRACT, "-"),
-        (vocabulary::MULTIPLY, "*"),
-        (vocabulary::DIVIDE, "/"),
-        (vocabulary::LESS, "<"),
-        (vocabulary::EQUAL, "=="),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
+        (
+            vocabulary::EQUAL,
+            "==",
+            Comparison(|left, right| left == right),
+        ),
+    ]);
     for (cell, reason) in [
-        (vocabulary::LEFT_NOT_U64, "left is not u64"),
-        (vocabulary::RIGHT_NOT_U64, "right is not u64"),
-        (vocabulary::INVALID_INPUT, "invalid u64 input"),
         (vocabulary::OVERFLOW, "u64 overflow"),
         (vocabulary::DIVISION_BY_ZERO, "division by zero"),
     ] {
-        cells.set_value(cell, absent::named_reason(reason));
+        parts.cells.set_value(cell, absent::named_reason(reason));
     }
-    Library::named(
-        ID,
-        "u64",
-        crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::compose_partials([
-            number::calls(
-                vocabulary::U64,
-                &[
-                    vocabulary::SUM,
-                    vocabulary::SUBTRACT,
-                    vocabulary::MULTIPLY,
-                    vocabulary::DIVIDE,
-                    vocabulary::LESS,
-                    vocabulary::EQUAL,
-                ],
-            ),
-            crate::display::runtime_partial(display),
-        ]),
-    )
-    .with_completions(|request| {
-        (request.scope == crate::display::CompletionScope::Everything
-            && request.kind == crate::display::CompletionKind::Value)
-            .then(|| completions(request.query))
-    })
+    parts
+}
+
+#[cfg(test)]
+fn functions() -> ::grap::ForeignFunctions {
+    parts().functions
+}
+
+pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+    convention().library(ID, parts(), std::iter::empty())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::{line_edit, logic, name};
     use ::grap;
     use gid::new_cell_id;
 

@@ -2,12 +2,11 @@
 //! single precision. It remains ordinary GID data and ordinary Grap
 //! library behavior.
 
-use crate::libraries::{Library, absent, line_edit, logic, name, number};
-use gid::{CellId, Cells, Value};
+use crate::libraries::{Library, name, number};
+use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf8daecede6e48de724408cfb0e3090f8);
-use crate::display::{Layout, ProjectionInput};
-use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use ::grap::{Context, Environment, Expression, ForeignFunction, Halt};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -31,7 +30,7 @@ pub fn value(number: f32) -> Value {
 }
 
 pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    number::completions(query, vocabulary::F32, value)
+    convention().completions(query)
 }
 
 pub fn read(value: &Value) -> Option<f32> {
@@ -71,66 +70,25 @@ impl number::Scrubbable for f32 {
     }
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let bytes = input.value?.field(vocabulary::F32)?;
-    let number = f32::from_le_bytes(bytes.as_blob()?.try_into().ok()?);
-    number::layout(input, number, vocabulary::F32, value)
-}
-
-fn update(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<Value, Halt> {
-    let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-        return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
-    };
-    let current = context
-        .field(&call, line_edit::vocabulary::CURRENT)
-        .map(|current| context.eval_to_value(current, environment))
-        .transpose()?;
-    let input = context.eval_to_value(input, environment)?;
-    Ok(crate::libraries::text::read(&input)
-        .and_then(|text| number::edit(text, current.as_ref(), value))
-        .unwrap_or_else(|| {
-            ::grap::absent::with_detail(
-                vocabulary::INVALID_INPUT,
-                line_edit::vocabulary::INPUT,
-                input.clone(),
-            )
-        }))
-}
-
-fn binary(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(f32, f32) -> Value,
-) -> Result<Value, Halt> {
-    let Some(left) = context.field(call, number::vocabulary::LEFT) else {
-        return Ok(context.missing_argument(number::vocabulary::LEFT));
-    };
-    let Some(right) = context.field(call, number::vocabulary::RIGHT) else {
-        return Ok(context.missing_argument(number::vocabulary::RIGHT));
-    };
-    let left = read(&context.eval_to_value(left, environment)?);
-    let right = read(&context.eval_to_value(right, environment)?);
-    Ok(match (left, right) {
-        (Some(left), Some(right)) => operation(left, right),
-        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F32),
-        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F32),
-    })
-}
-
-fn arithmetic(operation: fn(f32, f32) -> f32) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        binary(context, call, environment, |left, right| {
-            value(operation(left, right))
-        })
-    })
-    .tracked()
+pub(crate) fn convention() -> number::Convention<f32> {
+    number::Convention {
+        name: "f32",
+        tag: vocabulary::F32,
+        update: vocabulary::UPDATE,
+        left_not: vocabulary::LEFT_NOT_F32,
+        right_not: vocabulary::RIGHT_NOT_F32,
+        invalid_input: vocabulary::INVALID_INPUT,
+        encode: value,
+        runtime: |number| value(number).into(),
+        read: |value| {
+            Some(f32::from_le_bytes(
+                value.field(vocabulary::F32)?.as_blob()?.try_into().ok()?,
+            ))
+        },
+        eval: |context, expression, environment| {
+            Ok(read(&context.eval_to_value(expression, environment)?))
+        },
+    }
 }
 
 fn from_f64(
@@ -153,90 +111,59 @@ fn from_f64(
         }))
 }
 
-fn comparison(operation: fn(f32, f32) -> bool) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        binary(context, call, environment, |left, right| {
-            logic::value(operation(left, right))
-        })
-    })
-    .tracked()
+fn parts() -> number::Parts {
+    use number::Operation::{Arithmetic, Comparison};
+    let mut parts = convention().parts([
+        (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
+        (
+            vocabulary::SUBTRACT,
+            "-",
+            Arithmetic(|left, right| left - right),
+        ),
+        (
+            vocabulary::MULTIPLY,
+            "*",
+            Arithmetic(|left, right| left * right),
+        ),
+        (
+            vocabulary::DIVIDE,
+            "/",
+            Arithmetic(|left, right| left / right),
+        ),
+        (
+            vocabulary::LESS,
+            "<",
+            Comparison(|left, right| left < right),
+        ),
+        (
+            vocabulary::EQUAL,
+            "==",
+            Comparison(|left, right| left == right),
+        ),
+    ]);
+    parts
+        .cells
+        .set_value(vocabulary::FROM_F64, name::record("f32 from f64", []));
+    parts.functions = parts.functions.register(
+        vocabulary::FROM_F64,
+        ForeignFunction::from_value(from_f64).tracked(),
+    );
+    parts
 }
 
-pub fn functions() -> ForeignFunctions {
-    [
-        (vocabulary::SUM, arithmetic(|left, right| left + right)),
-        (vocabulary::SUBTRACT, arithmetic(|left, right| left - right)),
-        (vocabulary::MULTIPLY, arithmetic(|left, right| left * right)),
-        (vocabulary::DIVIDE, arithmetic(|left, right| left / right)),
-        (vocabulary::LESS, comparison(|left, right| left < right)),
-        (vocabulary::EQUAL, comparison(|left, right| left == right)),
-    ]
-    .into_iter()
-    .fold(
-        ForeignFunctions::default()
-            .register(
-                vocabulary::UPDATE,
-                ForeignFunction::from_value(update).tracked(),
-            )
-            .register(
-                vocabulary::FROM_F64,
-                ForeignFunction::from_value(from_f64).tracked(),
-            ),
-        |functions, (cell, function)| functions.register(cell, function),
-    )
+#[cfg(test)]
+pub fn functions() -> ::grap::ForeignFunctions {
+    parts().functions
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::F32, "f32"),
-        (vocabulary::FROM_F64, "f32 from f64"),
-        (vocabulary::UPDATE, "f32 update"),
-        (vocabulary::SUM, "+"),
-        (vocabulary::SUBTRACT, "-"),
-        (vocabulary::MULTIPLY, "*"),
-        (vocabulary::DIVIDE, "/"),
-        (vocabulary::LESS, "<"),
-        (vocabulary::EQUAL, "=="),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    for (cell, reason) in [
-        (vocabulary::LEFT_NOT_F32, "left is not f32"),
-        (vocabulary::RIGHT_NOT_F32, "right is not f32"),
-        (vocabulary::INVALID_INPUT, "invalid f32 input"),
-    ] {
-        cells.set_value(cell, absent::named_reason(reason));
-    }
-    Library::named(
-        ID,
-        "f32",
-        crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::compose_partials([
-            number::calls(
-                vocabulary::F32,
-                &[
-                    vocabulary::SUM,
-                    vocabulary::SUBTRACT,
-                    vocabulary::MULTIPLY,
-                    vocabulary::DIVIDE,
-                    vocabulary::LESS,
-                    vocabulary::EQUAL,
-                ],
-            ),
-            crate::display::runtime_partial(display),
-        ]),
-    )
-    .with_completions(|request| {
-        (request.scope == crate::display::CompletionScope::Everything
-            && request.kind == crate::display::CompletionKind::Value)
-            .then(|| completions(request.query))
-    })
+    convention().library(ID, parts(), std::iter::empty())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libraries::{absent, line_edit, logic};
     use gid::new_cell_id;
 
     fn call(function: CellId, left: Value, right: Value) -> Value {

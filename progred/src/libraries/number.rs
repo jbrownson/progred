@@ -6,7 +6,10 @@
 use crate::display::{
     Face, Layout, Partial, ProjectionInput, activatable, overlay_value, row, subscript,
 };
-use crate::libraries::{Library, line_edit, name};
+use crate::libraries::{Library, absent, line_edit, logic, name};
+use ::grap::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+};
 use gid::{CellId, Cells, Value};
 use std::fmt::Display;
 use std::rc::Rc;
@@ -96,8 +99,9 @@ pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate:
 
 pub(crate) fn calls(
     representation: CellId,
-    operations: &'static [CellId],
+    operations: impl Into<Rc<[CellId]>>,
 ) -> Partial<crate::Editor, crate::frame::Hovered> {
+    let operations = operations.into();
     let function_projection = operation(representation);
     crate::display::runtime_partial(move |input| {
         let function = input
@@ -107,6 +111,172 @@ pub(crate) fn calls(
         operations.contains(&function).then_some(())?;
         crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
     })
+}
+
+/// One numeric convention's identity and encodings. Each representation
+/// keeps its own cells and operations; this generates the plumbing they
+/// would otherwise each repeat.
+#[derive(Clone, Copy)]
+pub(crate) struct Convention<N> {
+    pub name: &'static str,
+    pub tag: CellId,
+    pub update: CellId,
+    pub left_not: CellId,
+    pub right_not: CellId,
+    pub invalid_input: CellId,
+    pub encode: fn(N) -> Value,
+    pub runtime: fn(N) -> RuntimeValue,
+    pub read: fn(&RuntimeValue) -> Option<N>,
+    /// Evaluate an operand read as this number, with any accelerated path.
+    pub eval: fn(&mut Context, Expression, &Environment) -> Result<Option<N>, Halt>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Operation<N> {
+    Arithmetic(fn(N, N) -> N),
+    /// Fails with the given reason instead of producing a result.
+    Checked(fn(N, N) -> Option<N>, CellId),
+    Comparison(fn(N, N) -> bool),
+}
+
+/// A convention's generated cells, functions, and projected call forms,
+/// which a representation extends with its own before assembling.
+pub(crate) struct Parts {
+    pub cells: Cells,
+    pub functions: ForeignFunctions,
+    pub calls: Vec<CellId>,
+}
+
+impl<N: Scrubbable + std::str::FromStr> Convention<N> {
+    pub fn parts(
+        self,
+        operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
+    ) -> Parts {
+        let mut cells = Cells::new();
+        cells.set_value(self.tag, name::record(self.name, []));
+        cells.set_value(
+            self.update,
+            name::record(format!("{} update", self.name), []),
+        );
+        for (cell, reason) in [
+            (self.left_not, format!("left is not {}", self.name)),
+            (self.right_not, format!("right is not {}", self.name)),
+            (self.invalid_input, format!("invalid {} input", self.name)),
+        ] {
+            cells.set_value(cell, absent::named_reason(reason));
+        }
+        operations.into_iter().fold(
+            Parts {
+                cells,
+                functions: ForeignFunctions::default()
+                    .register(self.update, self.update_function()),
+                calls: Vec::new(),
+            },
+            |mut parts, (cell, spelling, operation)| {
+                parts.cells.set_value(cell, name::record(spelling, []));
+                parts.functions = parts.functions.register(cell, self.operation(operation));
+                parts.calls.push(cell);
+                parts
+            },
+        )
+    }
+
+    pub fn library(
+        self,
+        id: CellId,
+        parts: Parts,
+        before: impl IntoIterator<Item = Partial<crate::Editor, crate::frame::Hovered>>,
+    ) -> Library<crate::Editor, crate::frame::Hovered> {
+        let Parts {
+            cells,
+            functions,
+            calls: operations,
+        } = parts;
+        Library::named(
+            id,
+            self.name,
+            crate::libraries::Definitions::from_parts(cells, functions),
+            crate::display::compose_partials(before.into_iter().chain([
+                calls(self.tag, operations),
+                crate::display::runtime_partial(move |input| self.display(input)),
+            ])),
+        )
+        .with_completions(move |request| {
+            (request.scope == crate::display::CompletionScope::Everything
+                && request.kind == crate::display::CompletionKind::Value)
+                .then(|| self.completions(request.query))
+        })
+    }
+
+    pub fn display(
+        self,
+        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
+    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        layout(input, (self.read)(input.value?)?, self.tag, self.encode)
+    }
+
+    pub fn completions(self, query: &str) -> Vec<crate::display::Completion> {
+        completions(query, self.tag, self.encode)
+    }
+
+    fn operation(self, operation: Operation<N>) -> ForeignFunction {
+        match operation {
+            Operation::Arithmetic(apply) => {
+                self.binary(move |left, right| (self.runtime)(apply(left, right)))
+            }
+            Operation::Checked(apply, failure) => self.binary(move |left, right| {
+                apply(left, right)
+                    .map(self.runtime)
+                    .unwrap_or_else(|| absent::with_reason(failure).into())
+            }),
+            Operation::Comparison(apply) => {
+                self.binary(move |left, right| logic::value(apply(left, right)).into())
+            }
+        }
+    }
+
+    fn binary(self, operation: impl Fn(N, N) -> RuntimeValue + 'static) -> ForeignFunction {
+        ForeignFunction::new(move |context, call, environment| {
+            let Some(left) = context.field(call, vocabulary::LEFT) else {
+                return Ok(context.missing_runtime_argument(vocabulary::LEFT));
+            };
+            let Some(right) = context.field(call, vocabulary::RIGHT) else {
+                return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
+            };
+            let left = (self.eval)(context, left, environment)?;
+            let right = (self.eval)(context, right, environment)?;
+            Ok(match (left, right) {
+                (Some(left), Some(right)) => operation(left, right),
+                (None, _) => absent::with_reason(self.left_not).into(),
+                (_, None) => absent::with_reason(self.right_not).into(),
+            })
+        })
+        .tracked()
+    }
+
+    /// Text from a line control. A missing location has no current value.
+    fn update_function(self) -> ForeignFunction {
+        ForeignFunction::from_value(move |context, call, environment| {
+            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
+                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
+            };
+            let current = context
+                .field(call, line_edit::vocabulary::CURRENT)
+                .map(|current| context.eval_to_value(current, environment))
+                .transpose()?;
+            let input = context.eval_to_value(input, environment)?;
+            Ok(crate::libraries::text::read(&input)
+                .and_then(|text| edit(text, current.as_ref(), self.encode))
+                .unwrap_or_else(|| {
+                    ::grap::absent::with_detail(
+                        self.invalid_input,
+                        line_edit::vocabulary::INPUT,
+                        input.clone(),
+                    )
+                }))
+        })
+        .tracked()
+    }
 }
 
 pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
@@ -275,6 +445,26 @@ pub(crate) fn rounded(value: f64, step: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_convention_updates_a_missing_location_from_text() {
+        use crate::libraries::{f32, f64, text, u64};
+        for (library, update, spelling, expected) in [
+            (f64::library(), f64::vocabulary::UPDATE, "2.5", f64::value(2.5)),
+            (f32::library(), f32::vocabulary::UPDATE, "2.5", f32::value(2.5)),
+            (u64::library(), u64::vocabulary::UPDATE, "2", u64::value(2)),
+        ] {
+            let call = ::grap::call(
+                update.into(),
+                [(line_edit::vocabulary::INPUT, text::value(spelling))],
+            );
+            let functions = library.functions();
+            assert_eq!(
+                crate::libraries::test_evaluate(&call, |_| None, &functions, 20).result,
+                expected
+            );
+        }
+    }
 
     #[test]
     fn numeric_completions_offer_zero_for_empty_queries_but_not_invalid_numbers() {
