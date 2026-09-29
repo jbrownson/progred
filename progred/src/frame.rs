@@ -3,6 +3,7 @@
 //! caller's choice, so a silent mint never draws.
 
 use crate::hover;
+use crate::input::PendingPaint;
 use crate::menu;
 use crate::model::Model;
 use crate::navigate;
@@ -11,7 +12,7 @@ use crate::projection;
 use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
-use crate::{Editor, EditorRunner, PendingPaint, content_viewport};
+use crate::{Editor, EditorRunner, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::{Brush, Color};
@@ -1697,7 +1698,8 @@ mod frame_tests {
                 ));
             } else {
                 runner.update_frame(1.0, viewport, |editor, dispatch, _| {
-                    editor.run_doc_command(crate::DocCommand::Undo, dispatch.geometry(1.0));
+                    editor
+                        .run_doc_command(crate::command::DocCommand::Undo, dispatch.geometry(1.0));
                     FrameDisposition::Remint
                 });
             }

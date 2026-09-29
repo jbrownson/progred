@@ -444,7 +444,7 @@ fn website_lesson_svg_captures() {
                     )
                     .unwrap();
                 }
-                editor.font_cx = crate::bundled_font_context();
+                editor.font_cx = crate::fonts::bundled_font_context();
                 editor.palette = theme.palette();
                 editor.drawn_menu = false;
                 render_editor(
@@ -501,7 +501,7 @@ pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text
         editor.stack.projection,
     )
     .unwrap();
-    editor.font_cx = crate::bundled_font_context();
+    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }
@@ -912,7 +912,7 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         editor.stack.projection,
     )
     .unwrap();
-    editor.font_cx = crate::bundled_font_context();
+    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }

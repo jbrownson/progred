@@ -10,7 +10,8 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::platform::web::EventLoopExtWebSys;
 use winit::window::WindowId;
 
-use crate::{App, UserEvent};
+use crate::UserEvent;
+use crate::app::App;
 
 thread_local! {
     static APP: RefCell<Weak<RefCell<App>>> = const { RefCell::new(Weak::new()) };
@@ -103,7 +104,7 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
         let viewport = kurbo::Size::new(size.width as f64, size.height as f64);
         let flushed = runner.flush_pending_continuous();
         let focus_changed =
-            runner.focus_changed(crate::browser_editor_focused(&window), scale, viewport);
+            runner.focus_changed(crate::web::browser_editor_focused(&window), scale, viewport);
         let modifiers_changed = runner.editor.modifiers != modifiers;
         if modifiers_changed {
             runner.modifiers_changed(modifiers, scale, viewport);

@@ -1,13 +1,90 @@
 use crate::frame::{Dispatch, frame_disposition};
 #[cfg(test)]
 use crate::selection;
-use crate::{Editor, EditorRunner, PendingGesture, PendingPointer, PendingScroll, navigate};
+use crate::{Editor, EditorRunner, navigate, placed};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
 use std::borrow::Cow;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyboardEvent, Modifiers};
-use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType};
+use ui_events::pointer::{
+    PointerEvent, PointerGestureEvent, PointerScrollEvent, PointerType, PointerUpdate,
+};
+use winit::event::WindowEvent;
+
+pub(crate) struct PendingPaint {
+    pub(crate) scale: f64,
+    pub(crate) viewport: Size,
+    pub(crate) renders: Vec<placed::Render>,
+}
+
+pub(crate) type PendingScroll = PendingBatch<PointerScrollEvent>;
+pub(crate) type PendingGesture = PendingBatch<PointerGestureEvent>;
+
+pub(crate) struct PendingBatch<T> {
+    pub(crate) events: Vec<T>,
+    pub(crate) scale: f64,
+    pub(crate) viewport: Size,
+}
+
+pub(crate) struct PendingPointer {
+    pub(crate) event: PointerUpdate,
+    pub(crate) start: Point,
+    pub(crate) scale: f64,
+    pub(crate) viewport: Size,
+}
+
+impl PendingPointer {
+    pub(crate) fn merge(&mut self, mut next: Self) -> Result<(), Self> {
+        if self.scale == next.scale
+            && self.viewport == next.viewport
+            && self.event.pointer == next.event.pointer
+            && self.event.current.buttons == next.event.current.buttons
+            && self.event.current.modifiers == next.event.current.modifiers
+        {
+            self.event.coalesced.push(std::mem::replace(
+                &mut self.event.current,
+                next.event.current,
+            ));
+            self.event.coalesced.append(&mut next.event.coalesced);
+            self.event.predicted = next.event.predicted;
+            Ok(())
+        } else {
+            Err(next)
+        }
+    }
+}
+
+pub(crate) fn continuous_input(event: &WindowEvent) -> bool {
+    matches!(
+        event,
+        WindowEvent::MouseWheel { .. }
+            | WindowEvent::CursorMoved { .. }
+            | WindowEvent::PinchGesture {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            }
+            | WindowEvent::RotationGesture {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            }
+            | WindowEvent::Touch(winit::event::Touch {
+                phase: winit::event::TouchPhase::Moved,
+                ..
+            })
+    )
+}
+
+impl<T> PendingBatch<T> {
+    pub(crate) fn merge(&mut self, mut next: Self) -> Result<(), Self> {
+        if self.scale == next.scale && self.viewport == next.viewport {
+            self.events.append(&mut next.events);
+            Ok(())
+        } else {
+            Err(next)
+        }
+    }
+}
 
 pub(super) fn pointer_position(event: &PointerEvent) -> Option<Point> {
     match event {

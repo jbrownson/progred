@@ -67,12 +67,12 @@ impl OrbitProfile {
             .cloned()
             .chain([Step::Key(libraries::presentation::vocabulary::RESULT)])
             .collect();
-        let mut editor = crate::new_editor(
+        let mut editor = crate::editor::new_editor(
             crate::styles::Theme::Light.palette(),
             crate::modifiers::native(),
             true,
             stack,
-            crate::font_context(),
+            crate::fonts::font_context(),
             doc,
             None,
             Default::default(),

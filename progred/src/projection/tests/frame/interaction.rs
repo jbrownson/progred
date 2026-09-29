@@ -85,7 +85,9 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
             };
             assert_eq!(
                 crate::menu::shortcut(&undo, command),
-                expected.then_some(crate::Command::Doc(crate::DocCommand::Undo))
+                expected.then_some(crate::command::Command::Doc(
+                    crate::command::DocCommand::Undo
+                ))
             );
         }
     }

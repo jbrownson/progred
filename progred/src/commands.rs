@@ -1,8 +1,8 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
-#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-use crate::CLIPBOARD_FORMAT;
 use crate::Editor;
+#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+use crate::clipboard::CLIPBOARD_FORMAT;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
