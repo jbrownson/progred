@@ -862,6 +862,27 @@ mod tests {
     }
 
     #[test]
+    fn only_a_focused_text_edit_offers_a_composition_area() {
+        let mut runner = EditorRunner::new(crate::test_editor(Document {
+            root: Some(text::value("hello")),
+            cells: Cells::new(),
+        }));
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert_eq!(runner.frame.input_area, None);
+        let root = runner.editor.model.workspace.document_root().clone();
+        runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
+        runner.refresh_frame(1.0, VIEWPORT);
+        let area = runner
+            .frame
+            .input_area
+            .expect("editing text offers a composition area");
+        let viewport = Rect::from_origin_size(Point::ZERO, VIEWPORT);
+        assert!(area.height() > 0.0 && area.intersect(viewport) == area);
+        assert!(runner.focus_changed(false, 1.0, VIEWPORT));
+        assert_eq!(runner.frame.input_area, None);
+    }
+
+    #[test]
     fn focus_loss_ends_ime_composition_without_changing_committed_text() {
         let mut runner = EditorRunner::new(crate::test_editor(Document {
             root: Some(text::value("hello")),

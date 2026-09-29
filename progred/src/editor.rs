@@ -18,7 +18,7 @@ use crate::{
     command, computations, gesture, gid_text, menu, navigate, selection, sources, stack, styles,
     timers, workspace,
 };
-use kurbo::{Point, Size};
+use kurbo::{Point, Rect, Size};
 use peniko::Brush;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -33,6 +33,7 @@ use ui_events_winit::WindowEventReducer;
 use vello::util::RenderSurface;
 #[cfg(target_arch = "wasm32")]
 use web_sys::HtmlCanvasElement;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::WindowEvent;
 use winit::window::{CursorIcon, Window, WindowId};
 
@@ -143,6 +144,8 @@ pub(crate) struct EditorRunner {
     /// Handlers receive earlier samples in `PointerUpdate::coalesced`
     /// and the latest in `current`, including during a drag.
     pub(crate) pending_pointer: Option<PendingPointer>,
+    /// The composition area last given to the window; `None` leaves IME off.
+    input_area: Option<Rect>,
 }
 
 impl EditorRunner {
@@ -154,6 +157,7 @@ impl EditorRunner {
             pending_scroll: None,
             pending_gesture: None,
             pending_pointer: None,
+            input_area: None,
         }
     }
 
@@ -165,11 +169,26 @@ impl EditorRunner {
             && !matches!(event, WindowEvent::RedrawRequested)
     }
 
-    pub(crate) fn sync_cursor(&mut self, window: &Window) {
+    /// Mirror the installed frame into the window state the platform owns:
+    /// the pointer cursor, and whether and where text composition happens.
+    pub(crate) fn sync_window(&mut self, window: &Window) {
         let next = cursor_icon(self.frame.hover.as_ref());
         if next != self.cursor_icon {
             window.set_cursor(next);
             self.cursor_icon = next;
+        }
+        let area = self.frame.input_area;
+        if area != self.input_area {
+            if area.is_some() != self.input_area.is_some() {
+                window.set_ime_allowed(area.is_some());
+            }
+            if let Some(area) = area {
+                window.set_ime_cursor_area(
+                    PhysicalPosition::new(area.x0, area.y0),
+                    PhysicalSize::new(area.width(), area.height()),
+                );
+            }
+            self.input_area = area;
         }
     }
 
@@ -186,6 +205,7 @@ impl EditorRunner {
             pending_gesture,
             pending_pointer,
             cursor_icon: _,
+            input_area: _,
         } = self;
         *frame = FrameState::default();
         *pending_scroll = None;
@@ -199,7 +219,7 @@ impl EditorRunner {
                 window.scale_factor(),
                 Size::new(size.width as f64, size.height as f64),
             );
-            self.sync_cursor(&window);
+            self.sync_window(&window);
             window.request_redraw();
         }
     }

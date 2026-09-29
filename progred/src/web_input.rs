@@ -112,7 +112,7 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
         // IME-owned keys must not execute shortcuts or insert preedit text.
         let handled = !key.is_composing && runner.keyboard_event(&key, scale, viewport);
         if handled || flushed || focus_changed || modifiers_changed {
-            runner.sync_cursor(&window);
+            runner.sync_window(&window);
             window.request_redraw();
         }
         handled

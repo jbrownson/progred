@@ -119,7 +119,7 @@ impl ApplicationHandler<UserEvent> for App {
                             Size::new(size.width as f64, size.height as f64),
                         );
                     }
-                    runner.sync_cursor(&window);
+                    runner.sync_window(&window);
                     window.request_redraw();
                 }
             }
@@ -203,7 +203,7 @@ impl ApplicationHandler<UserEvent> for App {
                             window.scale_factor(),
                             Size::new(f64::from(size.width), f64::from(size.height)),
                         );
-                        runner.sync_cursor(&window);
+                        runner.sync_window(&window);
                         window.request_redraw();
                     }
                 }
@@ -511,7 +511,7 @@ impl App {
                 window.scale_factor(),
                 Size::new(size.width as f64, size.height as f64),
             );
-            runner.sync_cursor(&window);
+            runner.sync_window(&window);
             window.request_redraw();
         }
     }
@@ -931,7 +931,7 @@ impl App {
 
         let viewport = Size::new(width as f64, height as f64);
         let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
-        runner.sync_cursor(&window);
+        runner.sync_window(&window);
         let mut paint = Paint::default();
         puri::frame::render(renders, &mut paint);
         let layers = paint.finish();
@@ -1023,7 +1023,7 @@ impl App {
 
         let viewport = Size::new(width as f64, height as f64);
         let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
-        runner.sync_cursor(&window);
+        runner.sync_window(&window);
         let presented = self
             .web_renderer
             .render(width, height, runner.editor.palette.paper, |canvas| {

@@ -23,7 +23,7 @@ use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
 use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout};
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Point, Rect, Vec2};
 use parley::Layout;
 use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
@@ -643,6 +643,18 @@ impl LineEdit {
                 .collect(),
             cursor: self.cursor.map(|rect| translate(rect, cursor_y)),
         }
+    }
+
+    /// While focused, the caret at `placement`, in its coordinates: where
+    /// the platform places composition candidates.
+    pub fn input_area(&self, placement: Placement) -> Option<Rect> {
+        self.cursor.map(|cursor| {
+            cursor
+                + Vec2::new(
+                    placement.rect.x0,
+                    placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
+                )
+        })
     }
 
     /// Draw and register this description at its caller-supplied
@@ -1497,6 +1509,53 @@ mod tests {
         assert!(selection.width() > caret.width());
         assert_eq!(caret.width(), 1.5);
         assert!(caret.height() > 0.0);
+    }
+
+    #[test]
+    fn a_focused_editor_reports_its_caret_for_composition() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut cache = crate::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let state = state("abc").with_cursor_at_end();
+        let style = EditStyle {
+            selection: Brush::default(),
+            cursor: Brush::default(),
+        };
+        let [focused, unfocused] = [true, false].map(|focused| {
+            text_edit(
+                LineEditDescription {
+                    state: &state,
+                    focused,
+                    presentation: presentation(),
+                    style: &style,
+                    placeholder: None,
+                },
+                &mut tcx,
+            )
+        });
+        let metrics = focused.metrics();
+        let at = |x: f64, y: f64| {
+            Placement::root(Rect::new(
+                x,
+                y,
+                x + metrics.width,
+                y + metrics.ascent + metrics.descent,
+            ))
+        };
+        let area = focused.input_area(at(20.0, 30.0)).unwrap();
+        assert_eq!(area.width(), 1.5);
+        assert!(area.height() > 0.0);
+        assert!(area.x0 > 20.0);
+        assert_eq!(
+            focused.input_area(at(25.0, 40.0)),
+            Some(area + Vec2::new(5.0, 10.0))
+        );
+        assert_eq!(unfocused.input_area(at(20.0, 30.0)), None);
     }
 
     #[test]

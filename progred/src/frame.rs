@@ -42,6 +42,7 @@ pub(crate) struct Frame {
     pub(crate) hover: Option<Hovered>,
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render>,
+    pub(crate) input_area: Option<Rect>,
 }
 
 #[derive(Default)]
@@ -49,6 +50,7 @@ pub(crate) struct FrameState {
     pub(crate) hover: Option<Hovered>,
     pub(crate) dispatch: Dispatch,
     pub(crate) pending_paint: Option<PendingPaint>,
+    pub(crate) input_area: Option<Rect>,
     notified_hover: Option<(Option<Root>, Hovered)>,
     hover_awaits_paint: bool,
 }
@@ -308,6 +310,7 @@ fn compute_hover(
         descends,
         view_regions,
         hover_geometry,
+        input_area,
     } = output.bind(resolved);
     Frame {
         scroll_probes,
@@ -320,6 +323,7 @@ fn compute_hover(
             hover_geometry,
         },
         renders,
+        input_area,
     }
 }
 
@@ -494,6 +498,7 @@ impl EditorRunner {
             hover,
             dispatch,
             renders,
+            input_area,
         } = frame;
         #[cfg(target_arch = "wasm32")]
         crate::web_scroll::install(scroll_probes, scale);
@@ -501,6 +506,7 @@ impl EditorRunner {
         drop(scroll_probes);
         self.frame.hover = hover;
         self.frame.dispatch = dispatch;
+        self.frame.input_area = input_area;
         PendingPaint {
             scale,
             viewport,

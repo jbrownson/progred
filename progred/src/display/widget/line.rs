@@ -82,6 +82,9 @@ pub fn view(
                         .open(crate::editing::Access::new(world))
                         .edit_line(&root, &path, &line, operation)
                 });
+                if let Some(area) = widget.input_area(placement) {
+                    output.input_area(area);
+                }
                 output.render(move |canvas, _| widget.draw(canvas, placement));
             })
         }

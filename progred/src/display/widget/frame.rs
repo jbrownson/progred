@@ -110,6 +110,10 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.output.landmark_select = Some((path, select));
     }
 
+    pub fn input_area(&mut self, area: Rect) {
+        self.output.input_area = Some(area);
+    }
+
     pub fn navigation_stop(&mut self, path: std::rc::Rc<[gid::Step]>, selected: bool) {
         self.navigation.stop(path, selected);
     }
@@ -417,6 +421,7 @@ pub struct FrameOutput<C, H> {
     pub descends: Vec<Landmark<C>>,
     pub view_regions: Vec<ViewRegion>,
     pub hover_geometry: HoverGeometry<H>,
+    pub input_area: Option<Rect>,
 }
 
 impl<C: 'static, H: 'static> Default for Effects<C, H> {
@@ -450,6 +455,8 @@ pub struct HoverOutput<C, Hover> {
     /// assembling this frame, so it never leaks into an ancestor.
     pub landmark_select: Option<(std::rc::Rc<[gid::Step]>, Select<C>)>,
     pub completion: Option<Offers<C>>,
+    /// The focused text editor's caret, for platform text composition.
+    pub input_area: Option<Rect>,
     pub after_hover: AfterHover<ResolvedHover<Hover>, Effects<C, Hover>>,
 }
 
@@ -479,6 +486,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             view_regions: Vec::new(),
             landmark_select: None,
             completion: None,
+            input_area: None,
             after_hover: AfterHover::default(),
         }
     }
@@ -497,6 +505,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.completion = above.completion.or(self.completion);
+        self.input_area = above.input_area.or(self.input_area);
         self.after_hover.append(above.after_hover);
         self
     }
@@ -549,6 +558,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             descends: self.descends,
             view_regions: self.view_regions,
             hover_geometry: self.hover_geometry,
+            input_area: self.input_area,
         }
     }
 }
