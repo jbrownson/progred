@@ -30,10 +30,13 @@ the current frame then found plain waste:
 | Quoted templates sized up front again (`0e08bbb9`, a same-day regression) | recovered 0.8 ms |
 | Expression-keyed caches hashed by address instead of SipHash | 31.4 ms |
 | `let` frames reserved for their bindings before binding | 30.7 ms |
+| Numeric operations staged: operands found once per call site | 30.0 ms |
+| Variable slots resolved when references compile | 29.5 ms |
 
 Reserving a frame for a `let` evaluated without one measured within noise and
-was not kept. The remaining leaders are by design: frame-walk variable
-lookup, live foreign-scope resolution, and per-call argument field reads.
+was not kept. The remaining leaders are by design: the frame walk in variable
+lookup, live foreign-scope resolution, and argument reads in unstaged
+built-ins.
 
 ## CAM pane resizing — 2026-09-18
 
