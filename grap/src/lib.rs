@@ -1671,7 +1671,7 @@ impl<'a> Context<'a> {
             context.at_call(call.clone(), |context| {
                 if let Some(cell) = function_cell
                     && environment.get_runtime(cell).is_none()
-                    && context.transient_foreign_target(cell).is_none()
+                    && context.foreign_target_cell(cell).is_none()
                 {
                     return context.call_cell(cell, &call, environment, &target);
                 }
@@ -1681,10 +1681,8 @@ impl<'a> Context<'a> {
                             context.burn()?;
                             match environment.get_runtime(cell) {
                                 Some(value) => context.lower_runtime(value.clone()),
-                                None => match context.foreign_target_cell(cell) {
-                                    Some(_) => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
-                                    None => context.eval_cell(cell, environment)?,
-                                },
+                                // Ordinary cells took the direct path above.
+                                None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
                             }
                         }
                         None => context.eval(function.clone(), environment)?,
@@ -1819,7 +1817,7 @@ impl<'a> Context<'a> {
                 return Some(self.eval_grap_call(closure.clone(), call, environment, plan));
             }
             RuntimeValueKind::Foreign(cell) => {
-                return Some(match self.transient_foreign_target(*cell) {
+                return Some(match self.foreign_target_cell(*cell) {
                     Some(foreign) => self.call_foreign_staged(&foreign, call, environment, stages),
                     None => self.call_cell(*cell, call, environment, &RefCell::new(None)),
                 });
@@ -1835,7 +1833,7 @@ impl<'a> Context<'a> {
                         .as_cell()
                         .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
                     if let Some(cell) = cell
-                        && self.transient_foreign_target(cell).is_none()
+                        && self.foreign_target_cell(cell).is_none()
                     {
                         let target = RefCell::new(None);
                         return Some(self.call_cell(cell, call, environment, &target));
@@ -1964,10 +1962,6 @@ impl<'a> Context<'a> {
                 .is_some_and(|overlay| overlay.handles(cell))
                 .then_some(ResolvedForeign::Scoped(cell))
         })
-    }
-
-    fn transient_foreign_target(&self, cell: CellId) -> Option<ResolvedForeign> {
-        self.foreign_target_cell(cell)
     }
 
     fn scoped_foreign_target(&self, cell: CellId) -> Option<ResolvedForeign> {
@@ -2169,7 +2163,7 @@ impl<'a> Context<'a> {
                 }
                 RuntimeValueKind::Foreign(cell) => {
                     let call = runtime_call(RuntimeValue::from(ffi(*cell)), arguments);
-                    match context.transient_foreign_target(*cell) {
+                    match context.foreign_target_cell(*cell) {
                         Some(foreign) => {
                             context.call_foreign(&foreign, &call, &callable.environment)
                         }
@@ -2187,7 +2181,7 @@ impl<'a> Context<'a> {
                         .as_cell()
                         .or_else(|| value.field(vocabulary::FFI)?.as_cell());
                     match target {
-                        Some(cell) if context.transient_foreign_target(cell).is_none() => {
+                        Some(cell) if context.foreign_target_cell(cell).is_none() => {
                             let call = runtime_call(callable.value.clone(), arguments);
                             context.call_cell(
                                 cell,
@@ -2245,7 +2239,7 @@ impl<'a> Context<'a> {
         let arguments = arguments.into_iter().collect();
         let environment = Environment::with_indices(self.indices.clone());
         if let Some(cell) = function.as_cell()
-            && self.transient_foreign_target(cell).is_none()
+            && self.foreign_target_cell(cell).is_none()
         {
             return self.apply_cell(cell, function.clone(), arguments, &environment);
         }
@@ -2342,7 +2336,7 @@ impl<'a> Context<'a> {
         }
         let foreign = match &callable.0 {
             RuntimeValueKind::Foreign(cell) => {
-                if let Some(foreign) = self.transient_foreign_target(*cell) {
+                if let Some(foreign) = self.foreign_target_cell(*cell) {
                     Some(foreign)
                 } else {
                     return Some(self.apply_cell(
@@ -2358,7 +2352,7 @@ impl<'a> Context<'a> {
                     .as_cell()
                     .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
                 if let Some(cell) = cell
-                    && self.transient_foreign_target(cell).is_none()
+                    && self.foreign_target_cell(cell).is_none()
                 {
                     return Some(self.apply_cell(
                         cell,
