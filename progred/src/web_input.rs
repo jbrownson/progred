@@ -54,15 +54,14 @@ impl ApplicationHandler<UserEvent> for SharedApp {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
     let mut modifiers = Modifiers::empty();
+    // Lock keys are toggles, not held modifiers, and pointer input never
+    // reports them; including them made every key look like a modifier change.
     for (name, flag) in [
         ("Shift", Modifiers::SHIFT),
         ("Control", Modifiers::CONTROL),
         ("Alt", Modifiers::ALT),
         ("Meta", Modifiers::META),
         ("AltGraph", Modifiers::ALT_GRAPH),
-        ("CapsLock", Modifiers::CAPS_LOCK),
-        ("NumLock", Modifiers::NUM_LOCK),
-        ("ScrollLock", Modifiers::SCROLL_LOCK),
     ] {
         modifiers.set(flag, event.get_modifier_state(name));
     }
