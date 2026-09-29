@@ -230,6 +230,7 @@ impl Recording {
     }
 
     /// Cutting distance only: starts carry no implicit rapid or linking motion.
+    #[cfg(test)]
     pub fn length(&self) -> Result<f64, InvalidPath> {
         let length = self.segments().map(|(a, b, _)| distance(a, b)).sum::<f64>();
         length
@@ -239,6 +240,7 @@ impl Recording {
     }
 
     /// Emit complete and upcoming segments, splitting the segment at the cursor.
+    #[cfg(test)]
     pub fn playback<E: From<InvalidPath>>(
         &self,
         progress: f64,
@@ -249,6 +251,7 @@ impl Recording {
 
     /// Earlier parts are complete, selected parts follow the cursor, and later
     /// parts aren't visited. Thus focusing doesn't reset the workpiece history.
+    #[cfg(test)]
     pub fn playback_parts<E: From<InvalidPath>>(
         &self,
         progress: f64,

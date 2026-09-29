@@ -263,6 +263,7 @@ fn run_document(
         #[cfg(target_os = "macos")]
         appearance: None,
         proxy: proxy.clone(),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         drawn_menu,
         focused: None,
         #[cfg(any(target_os = "macos", target_os = "linux"))]

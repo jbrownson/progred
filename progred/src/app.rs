@@ -83,6 +83,7 @@ pub(crate) struct App {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) drawn_menu: bool,
     pub(crate) editors: Vec<EditorRunner>,
     /// The window whose editor application-level commands target.
@@ -753,12 +754,6 @@ impl App {
             }
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Quit => self.begin_quit(event_loop),
-            #[cfg(target_arch = "wasm32")]
-            AppCommand::Quit => {
-                if let Some(index) = self.focused_index() {
-                    self.request_discard(event_loop, index, AfterDiscard::Quit);
-                }
-            }
             AppCommand::Example(example) => match gid_text::parse(example.source()) {
                 Ok((doc, binders)) => self.new_document(event_loop, doc, binders),
                 Err(error) => panic!("built-in example failed to parse: {error}"),

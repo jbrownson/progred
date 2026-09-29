@@ -64,6 +64,7 @@ pub enum AppCommand {
     /// Close the focused window.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Close,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Quit,
     #[cfg(target_os = "macos")]
     Appearance(Option<winit::window::Theme>),
@@ -155,6 +156,7 @@ pub enum ShortcutKey {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     O,
     P,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Q,
     R,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -177,6 +179,7 @@ impl ShortcutKey {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::O => "O",
             Self::P => "P",
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::Q => "Q",
             Self::R => "R",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -221,6 +224,7 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::Open) => item("Open…", Some(Shortcut::plain(ShortcutKey::O))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Close) => item("Close", Some(Shortcut::plain(ShortcutKey::W))),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Quit) => item("Quit", Some(Shortcut::plain(ShortcutKey::Q))),
         #[cfg(target_os = "macos")]
         Command::App(AppCommand::Appearance(theme)) => toggle(
