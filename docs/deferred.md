@@ -277,6 +277,21 @@ direct-over-extended claim priority, clipping, and nested-floater ordering, and
 check identical hover, paint, and dispatch results. This is a deferred experiment,
 not a decision to reverse traversal or add caching.
 
+## Text input beyond plain typing
+
+Native macOS IME is enabled while a text field is edited; dead keys and
+interrupted composition were checked by hand on 2026-09-29. Left open, to take
+up only when text entry becomes a focus:
+
+- The macOS emoji and symbols picker inserts nothing. winit 0.30 forwards an
+  `insertText` only while composition text is marked, and the picker inserts
+  directly; opening it may also read as focus loss, which clears the edit.
+  Needs a winit change first.
+- The browser host enables no IME. Its keys arrive through the page's own
+  keyboard bridge, so composition would need browser composition events.
+- CJK composition and candidate placement, Linux IME, and AltGr characters in
+  Windows browsers are implemented but unverified.
+
 ## Platform work
 
 ### Fidget constant fields on the GPU — verify adopted upstream fix
