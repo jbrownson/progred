@@ -102,24 +102,6 @@ impl Model {
         }
     }
 
-    #[cfg(test)]
-    pub fn collapse(
-        &mut self,
-        libraries: &Libraries,
-        root: &workspace::Root,
-        path: &[Step],
-        closed: Option<bool>,
-    ) -> bool {
-        let sources = crate::sources::Sources {
-            doc: &self.doc,
-            libraries,
-        };
-        let Some(default) = selection::collapse_default(&sources, path) else {
-            return false;
-        };
-        self.set_collapsed(root, path, default, closed)
-    }
-
     pub(crate) fn set_collapsed(
         &mut self,
         root: &workspace::Root,
@@ -306,11 +288,11 @@ mod tests {
         let mut model = model();
         let root = model.workspace.document_root().clone();
         select(&mut model, &root, vec![]);
-        assert!(!model.collapse(&Libraries::default(), &root, &[], Some(false)));
+        assert!(!model.set_collapsed(&root, &[], false, Some(false)));
         assert!(!model.history.can_undo());
         edit(&mut model, 2);
         let edited = model.doc.clone();
-        assert!(model.collapse(&Libraries::default(), &root, &[], None));
+        assert!(model.set_collapsed(&root, &[], false, None));
         assert!(Rc::ptr_eq(&model.doc, &edited));
         model.mark_saved();
         assert!(model.step_history(true));
@@ -331,7 +313,7 @@ mod tests {
             false
         ));
         assert!(!model.dirty());
-        assert!(model.collapse(&Libraries::default(), &root, &[], Some(false)));
+        assert!(model.set_collapsed(&root, &[], false, Some(false)));
         assert!(!model.dirty());
     }
 
@@ -359,7 +341,7 @@ mod tests {
         let first_root = model.workspace.left.panes[0].view.root.clone();
         let second_root = model.workspace.left.panes[1].view.root.clone();
         select(&mut model, &first_root, first.1.clone());
-        assert!(model.collapse(&Libraries::default(), &first_root, &first.1, None));
+        assert!(model.set_collapsed(&first_root, &first.1, false, None));
         assert!(!model.dirty());
         let before = model.snapshot();
         assert!(selection::delete_edge(
@@ -400,7 +382,7 @@ mod tests {
     fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
         let mut model = model();
         let root = model.workspace.document_root().clone();
-        assert!(model.collapse(&Libraries::default(), &root, &[], None));
+        assert!(model.set_collapsed(&root, &[], false, None));
         let state = gid::new_cell_id();
         model
             .workspace
@@ -536,7 +518,7 @@ mod tests {
         type_text(&mut model, "abc");
         model.mark_saved();
         type_text(&mut model, "abcd");
-        assert!(model.collapse(&libraries, &root, &[], None));
+        assert!(model.set_collapsed(&root, &[], false, None));
         type_text(&mut model, "abcde");
         assert!(model.step_history(true));
         assert_eq!(spelling(&model), "abcd");

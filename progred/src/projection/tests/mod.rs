@@ -13,8 +13,7 @@ use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge, pending_follow,
-    pending_insert, pending_into, pending_value, resolve_query, set_collapse, set_value,
-    to_clipboard, toggle_collapse,
+    pending_insert, pending_into, pending_value, resolve_query, set_value, to_clipboard,
 };
 use gid::Position;
 use gid::{Cells, Document, new_cell_id};
@@ -243,14 +242,6 @@ fn write_with(
         selected,
         &crate::libraries::line_edit::native(update),
     )
-}
-
-fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {
-    toggle_collapse(sources, collapse, path)
-}
-
-fn set_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step], closed: bool) -> bool {
-    set_collapse(sources, collapse, path, closed)
 }
 
 fn key(s: &str) -> Step {

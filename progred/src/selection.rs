@@ -1,8 +1,6 @@
 //! Selection, collapse, and the writes they drive. Selection paths name
 //! projected occurrences; their conject locates document data for mutations.
 
-#[cfg(test)]
-use crate::annotations::{self, Annotations};
 use crate::libraries::{Libraries, blob, text};
 use crate::sources::Sources;
 use crate::spine;
@@ -789,54 +787,6 @@ pub fn set_value(
         }
         None => false,
     }
-}
-
-/// Toggle the collapse override for the value at `path`. Declines
-/// unless there is something to collapse — a cell with a value, or a
-/// nonempty list or record.
-#[cfg(test)]
-pub fn toggle_collapse(sources: &Sources, annotations: &mut Annotations, path: &[Step]) -> bool {
-    match collapse_default(sources, path) {
-        Some(default) => {
-            let next = !annotations::collapsed(annotations, path, default);
-            annotations::set_collapsed(annotations, path, default, next);
-            true
-        }
-        None => false,
-    }
-}
-
-/// The directional twin: close or open the value at `path` — the fold
-/// axis of keyboard navigation. Returns whether the state changed.
-#[cfg(test)]
-pub fn set_collapse(
-    sources: &Sources,
-    annotations: &mut Annotations,
-    path: &[Step],
-    closed: bool,
-) -> bool {
-    match collapse_default(sources, path) {
-        Some(default) if annotations::collapsed(annotations, path, default) != closed => {
-            annotations::set_collapsed(annotations, path, default, closed);
-            true
-        }
-        _ => false,
-    }
-}
-
-/// The default collapse for the value at `path` — collapsed inside a
-/// cycle, expanded otherwise — or `None` when there is nothing to
-/// collapse.
-#[cfg(test)]
-pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
-    let value = sources.resolve_path(path)?;
-    let in_cycle = value.as_cell().is_some_and(|cell| {
-        (0..path.len())
-            .filter(|end| matches!(path[*end], Step::Follow(_)))
-            .filter_map(|end| sources.resolve_path(&path[..end]).and_then(Value::as_cell))
-            .any(|ancestor| ancestor == cell)
-    });
-    collapse_default_for_value(sources, &value.clone().into(), in_cycle)
 }
 
 /// The collapse class of an already-resolved value. Projection has

@@ -345,39 +345,6 @@ fn record_combinator_chooses_a_projection_for_each_field() {
 }
 
 #[test]
-fn cycles_collapse_by_default_and_expand_turn_by_turn() {
-    // A: { next: A } — the re-entry at [Follow, next] repeats the
-    // root value.
-    let a = new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(
-        a,
-        Value::record([(crate::test_values::label("next"), Value::from(a))]),
-    );
-    let doc = Document {
-        root: Some(Value::from(a)),
-        cells,
-    };
-    let lib = core_libraries();
-    let sources = src(&doc, &lib);
-    let mut collapse = Annotations::default();
-    let reentry = vec![Step::Follow(gid::Resolution::Document), key("next")];
-    // Space's toggle expands the default-collapsed re-entry.
-    assert!(toggle_fold(&sources, &mut collapse, &reentry));
-    assert!(!crate::annotations::collapsed(&collapse, &reentry, true));
-    // The next turn defaults collapsed at its own deeper path and
-    // expands the same way — follow the cycle as far as wanted.
-    let deeper: Vec<Step> = reentry.iter().chain(reentry.iter()).cloned().collect();
-    assert!(crate::annotations::collapsed(&collapse, &deeper, true));
-    assert!(toggle_fold(&sources, &mut collapse, &deeper));
-    assert!(!crate::annotations::collapsed(&collapse, &deeper, true));
-    // Toggling back restores the default (the override is sparse).
-    assert!(toggle_fold(&sources, &mut collapse, &deeper));
-    assert!(crate::annotations::collapsed(&collapse, &deeper, true));
-    assert!(collapse.at(&deeper).is_none());
-}
-
-#[test]
 fn runtime_fold_classification_matches_stored_data() {
     use grap::RuntimeValue as Runtime;
     let doc = Document {
@@ -431,43 +398,6 @@ fn runtime_fold_classification_matches_stored_data() {
             expected,
         );
     }
-}
-
-#[test]
-fn any_valued_cell_and_any_container_collapse() {
-    let lib = core_libraries();
-    let (doc, _) = doc_of(vec![(
-        crate::test_values::label("kind"),
-        crate::test_values::text("building"),
-    )]);
-    let sources = src(&doc, &lib);
-    let mut collapse = Annotations::default();
-    // A plain (non-cycle) cell collapses to ( … ) via the same
-    // toggle.
-    assert!(toggle_fold(&sources, &mut collapse, &[]));
-    assert!(crate::annotations::collapsed(&collapse, &[], false));
-    // Its record collapses too — layout never enters into it, so
-    // inline literals toggle exactly like block forms.
-    assert!(toggle_fold(
-        &sources,
-        &mut collapse,
-        &[Step::Follow(gid::Resolution::Document)]
-    ));
-    assert!(crate::annotations::collapsed(
-        &collapse,
-        &[Step::Follow(gid::Resolution::Document)],
-        false
-    ));
-    // A valueless location declines.
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
-    assert!(!toggle_fold(
-        &src(&empty, &lib),
-        &mut collapse,
-        &[] as &[Step]
-    ));
 }
 
 #[test]

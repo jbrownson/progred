@@ -378,6 +378,7 @@ mod fidget_cube;
 mod fidget_shapes;
 mod fidget_source;
 mod focus;
+mod folds;
 mod interaction;
 mod iop_tree_native;
 mod layout;

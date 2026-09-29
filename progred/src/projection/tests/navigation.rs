@@ -111,23 +111,3 @@ fn command_a_selects_the_current_views_root() {
         );
     }
 }
-
-#[test]
-fn set_collapse_is_directional_and_stays_sparse() {
-    let lib = core_libraries();
-    let (doc, _) = doc_of(vec![(
-        crate::test_values::label("a"),
-        crate::test_values::text("1"),
-    )]);
-    let sources = src(&doc, &lib);
-    let mut collapse = Annotations::default();
-    assert!(set_fold(&sources, &mut collapse, &[], true));
-    assert!(!set_fold(&sources, &mut collapse, &[], true));
-    assert!(set_fold(&sources, &mut collapse, &[], false));
-    assert!(!set_fold(&sources, &mut collapse, &[], false));
-    // Matching the default stores nothing.
-    assert!(collapse.at(&[]).is_none());
-    // A leaf has nothing to fold.
-    let leaf = vec![Step::Follow(gid::Resolution::Document), key("a")];
-    assert!(!set_fold(&sources, &mut collapse, &leaf, true));
-}
