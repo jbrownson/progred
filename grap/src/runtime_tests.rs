@@ -941,3 +941,33 @@ fn runtime_results_distinguish_a_returned_absent_from_a_halt() {
     assert!(!halted.completed);
     assert_eq!(returned.result.into_value(), halted.result.into_value());
 }
+
+#[test]
+fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
+    let argument = new_cell_id();
+    let receiver = host(vec![]);
+    let closure = evaluate(
+        &lambda(
+            [vocabulary::FUNCTION, argument],
+            vocabulary::FUNCTION.into(),
+        ),
+        &receiver,
+        100,
+    )
+    .result;
+    let seven = || [(argument, RuntimeValue::f64(7.0))];
+    let expression = RuntimeValue::record([
+        (vocabulary::FUNCTION, closure.clone()),
+        (argument, RuntimeValue::f64(7.0)),
+    ]);
+    let results = [
+        evaluate_runtime_at(&expression, None, &receiver, 100),
+        context(&receiver, None, 100).conclude(|context| context.apply(&closure, seven())),
+        apply_expression(&closure, seven(), &receiver, 100),
+    ];
+    for result in &results {
+        assert!(result.completed);
+        assert!(result.result.same_result(&closure));
+        assert_eq!(result.remaining_fuel, results[0].remaining_fuel);
+    }
+}

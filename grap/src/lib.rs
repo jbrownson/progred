@@ -2182,25 +2182,7 @@ impl<'a> Context<'a> {
             let arguments: Vec<_> = arguments.into_iter().collect();
             match &callable.value.0 {
                 RuntimeValueKind::Closure(closure) => {
-                    let mut bound = Vec::with_capacity(closure.params.len());
-                    for parameter in closure.params.iter() {
-                        let value = if parameter.cell == vocabulary::FUNCTION {
-                            callable.value.clone()
-                        } else {
-                            let Some((_, value)) =
-                                arguments.iter().find(|(cell, _)| *cell == parameter.cell)
-                            else {
-                                return Ok(context.missing_runtime_argument(parameter.cell));
-                            };
-                            context.lower_runtime(value.clone())
-                        };
-                        context.burn()?;
-                        bound.push((parameter.cell, value));
-                    }
-                    context.eval(
-                        closure.body.clone(),
-                        &closure.environment.extended_runtime(bound),
-                    )
+                    context.call_closure(closure.clone(), &callable.value, &arguments)
                 }
                 RuntimeValueKind::Foreign(cell) => {
                     let call = runtime_call(RuntimeValue::from(ffi(*cell)), arguments);
@@ -2277,6 +2259,8 @@ impl<'a> Context<'a> {
         function: &RuntimeValue,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
+        // The call itself, as a call expression would charge it.
+        self.burn()?;
         let arguments = arguments.into_iter().collect();
         let environment = Environment::with_indices(self.indices.clone());
         if let Some(cell) = function.as_cell()
@@ -2352,6 +2336,32 @@ impl<'a> Context<'a> {
         })
     }
 
+    /// Host calls bind argument values as a call expression binds its
+    /// evaluated arguments: one step each, and a `function` parameter
+    /// receives the callee itself.
+    fn call_closure(
+        &mut self,
+        closure: Closure,
+        callable: &RuntimeValue,
+        arguments: &[(CellId, RuntimeValue)],
+    ) -> Result<RuntimeValue, Halt> {
+        let mut bound = Vec::with_capacity(closure.params.len());
+        for parameter in closure.params.iter() {
+            let value = if parameter.cell == vocabulary::FUNCTION {
+                callable.clone()
+            } else {
+                let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter.cell)
+                else {
+                    return Ok(self.missing_runtime_argument(parameter.cell));
+                };
+                self.lower_runtime(value.clone())
+            };
+            self.burn()?;
+            bound.push((parameter.cell, value));
+        }
+        self.eval(closure.body, &closure.environment.extended_runtime(bound))
+    }
+
     fn try_apply_callable(
         &mut self,
         callable: RuntimeValue,
@@ -2359,21 +2369,7 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Option<Result<RuntimeValue, Halt>> {
         if let Some(closure) = self.runtime_closure(&callable) {
-            let bound: Result<Vec<_>, CellId> = closure
-                .params
-                .iter()
-                .map(|parameter| {
-                    arguments
-                        .iter()
-                        .find(|(cell, _)| *cell == parameter.cell)
-                        .map(|(_, value)| (parameter.cell, self.lower_runtime(value.clone())))
-                        .ok_or(parameter.cell)
-                })
-                .collect();
-            return Some(match bound {
-                Ok(bound) => self.eval(closure.body, &closure.environment.extended_runtime(bound)),
-                Err(cell) => Ok(RuntimeValue::from_value(self.missing_argument(cell))),
-            });
+            return Some(self.call_closure(closure, &callable, arguments));
         }
         let foreign = match &callable.0 {
             RuntimeValueKind::Foreign(cell) => {
