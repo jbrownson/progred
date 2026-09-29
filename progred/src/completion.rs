@@ -396,11 +396,6 @@ pub(crate) fn completion_entries_with(
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
-    // Expanding adds the universal list to the suggested one, which already
-    // contains some of the same offers; each keeps its suggested position.
-    let mut seen = std::collections::HashSet::new();
-    entries
-        .retain(|entry| seen.insert((entry.display.clone(), entry.detail.clone(), entry.source)));
     (entries, true)
 }
 

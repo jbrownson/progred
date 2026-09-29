@@ -765,21 +765,6 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
     assert!(entries.iter().any(|entry| entry.source == Some(unrelated)));
     assert!(entries.iter().any(|entry| entry.source == Some(callable)));
     assert!(entries.iter().any(|entry| entry.display == "name"));
-    assert_eq!(entries[0].source, Some(parameter));
-    for query in ["", "2.5", "new"] {
-        let mut expanded =
-            crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
-        expanded.set_completion_view(0.0, 0, true);
-        let entries = projected_completion_entries(&document, &expanded);
-        let mut seen = std::collections::HashSet::new();
-        for entry in &entries {
-            assert!(
-                seen.insert((&entry.display, &entry.detail, entry.source)),
-                "{query:?} offers {:?} twice",
-                entry.display
-            );
-        }
-    }
 
     for (query, expected) in [
         ("cloud", grap::call(callable.into(), [])),
