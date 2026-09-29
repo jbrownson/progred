@@ -20,6 +20,12 @@ records the implementation replaced by logical-layout navigation on 2026-09-27.
 The [layout navigation measurements](navigation-layout-2026-09.md) record
 timings and prototype notes for the collector revisions that followed.
 
+Line controls were once implemented in Grap. That work showed Grap controls can
+use shaped geometry, generic events, and scoped site/selection capabilities,
+but duplicating Puri's editor composition there had reached diminishing
+returns, so text and numbers moved to the stock native line widget. (Recorded
+from AGENTS.md on 2026-09-29.)
+
 The [iPad host notes](ipad-host.md) describe the feasibility port removed on
 2026-09-29.
 

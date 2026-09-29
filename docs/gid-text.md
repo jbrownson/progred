@@ -9,9 +9,9 @@ intermediate representation from which the native binary format will be
 compiled. Binders, textual layout, and parser leniencies exist only at
 this bridge.
 
-No version field, migration branch, or compatibility reader exists while
-these text fixtures remain internal to the repository; model changes
-update the parser and checked-in fixtures together.
+No version field, migration branch, or compatibility reader exists, and
+none should be added, while these text fixtures remain internal to the
+repository; model changes update the parser and checked-in fixtures together.
 
 ## Doctrine: saving canonicalizes
 

@@ -14,22 +14,31 @@ origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
 Progred's [libraries module](../progred/src/libraries/mod.rs) contains conceptual libraries
-as modules: names, text, f64, control, Grap's self-description, geometry,
-presentation, layout, and other domains. A `Library` carries definitions and
-one partial projection. A library with several forms composes them with
-`compose_partials`: first success wins, and the empty composition declines.
+as modules alongside their editor-facing widgets: names, text, f64, control,
+Grap, geometry, presentation, layout, and other domains. The built-in
+`libraries::grap` module owns Grap's self-description, the `evaluate` Rust
+function, and Grap's projection; geometry and CAD concepts remain separate
+libraries. Nothing in this representation requires Rust FFIs, so
+editor-authored libraries can later lower into it. A `Library` carries
+definitions and one partial projection. A library with several forms composes
+them with `compose_partials`: first success wins, and the empty composition
+declines.
 The editor composes these library projections in load order above its one
 total structural fallback. `Libraries` keeps an insertion-ordered unique map
-keyed by stable library identities supplied externally. Repeating a library
-identity replaces its entire contribution in place before composition.
+keyed by stable random library identities supplied externally; the identity is
+not a field inside the library. Loaded libraries are read-only. Repeating a
+library identity replaces its entire contribution in place before composition.
+Loading is an explicit editor operation, not an FFI or reserved-cell discovery.
 
 Each library stores one sorted definition table. An entry is either an ordinary
 `Value` or a shared native definition containing its descriptive `Value` and Rust
 implementation. Reading uses the description; calling uses the implementation.
 The built-in builders join their data and function declarations once, when
-constructing this table. An unnamed native definition has an empty record as
-its description. The library's own name record is an ordinary definition under
-its library identity, so references and name lookup need no metadata side channel.
+constructing this table; they are not separate lookup registries. A repeated
+definition replaces the prior entry. An unnamed native definition has an empty
+record as its description. The library's own name record is an ordinary
+definition under its library identity, so references and name lookup need no
+metadata side channel.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
@@ -39,14 +48,18 @@ Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
 provider decisions about that request. Documents
-currently contribute no installed libraries or projections. A Grap function
-stored in a document is ordinary reachable data; it is not discovered as
-configuration through a reserved cell address.
+currently contribute no library cells, foreign functions, or projections. A Grap
+function stored in a document is ordinary reachable data; configuration is never
+discovered through a reserved cell address or other data outside ordinary root
+reachability. A future document-local library mechanism needs an explicit design
+whose configuration and definitions are reachable from root.
 
 Library labels are once-minted random `CellId`s. Their readable names are
 ordinary GID facts, not identifiers derived from names. Text is an open
 `{utf8: blob}` convention; f64 is an open `{f64: eight-byte-blob}` convention.
-Additional fields do not invalidate a recognized facet.
+Additional fields do not invalidate a recognized facet, so a line projection
+still recognizes text or f64 and a more specific wrapper (for example a unit
+around f64) can defer to that facet.
 
 ## Projection composition
 
@@ -56,9 +69,11 @@ Ordinary projection/evaluation remains uncached. Foreign functions opt into
 tracked reads; unknown calls and unrecorded effects prevent reuse.
 
 Normal display uses one composition of ordered partial functions, followed
-by a total structural fallback. A partial can decline; malformed shapes must
-remain accessible through a later projection or Raw. Raw uses the structural
-fallback alone. Specific domain projections precede general ones. Libraries
+by a total structural fallback. A partial checks its preconditions and fails
+closed by declining; malformed shapes must remain accessible through a later
+projection or Raw. Raw uses the structural fallback alone: the same `Layout`
+language, total rather than `Option`. Specific domain projections precede
+general ones. Libraries
 contribute these functions explicitly; composition does not depend on registering
 them under a shared cell identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
@@ -67,15 +82,24 @@ Recognition checks the fields a partial uses, not the absence of unrelated
 fields. Extra metadata may remain unshown in a compact projection; Raw exposes
 the stored record. Missing or malformed required contents decline normally,
 without reserving the record or blocking later partials. Explicit mutually
-exclusive tags within a convention still reject conflicts. Active field
-insertion can use the general presentation to keep its picker visible.
+exclusive tags within a convention still reject conflicts, and lossless
+serialization checks remain. Records are identified by required positive
+evidence and stay open unless a domain explicitly defines a closed shape.
+Active field insertion can use the general presentation to keep its picker
+visible.
 
 [`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and
 selection targets. Its `default_projection` is one composed partial function,
-passed explicitly through recursion. A partial returns a `Layout<World, Hover>`
-program that calls the layout builder with box operations, Puri leaves, and
-opaque widget/preparation functions.
+passed explicitly through recursion rather than buried in display context. A
+partial returns a `Layout<World, Hover>` program that calls the layout builder
+with box operations, Puri leaves, and opaque widget/preparation functions.
+`Layout` is a reusable program over the object-safe `Builder` interface, not an
+enum. The production builder prepares one choice graph; after alternative
+selection that graph invokes placement callbacks directly. `Measured` is only an
+extent plus a one-shot placement function, never a second container tree.
+Structural recording is a separate interpreter used only by tests. There is no
+parallel Progred drawing language.
 
 `at`/`descend`/`jump` accept independent optional replacements
 for the projection at their target and the default passed to descendants.
@@ -102,13 +126,15 @@ use the same `at` combinator, with a `Key(presentation::RESULT)` occurrence
 step distinguishing the result from its producing expression. This is a
 projection path, not a fabricated field or writable document location.
 
-Partials receive `Option<&Value>`: `None` means a missing location, not a GID
+The composed partial interface receives `Option<&RuntimeValue>`; `partial`
+adapts GID-oriented projections to `Option<&Value>`, while `runtime_partial`
+retains lowered children and callbacks. `None` means a missing location, not a GID
 absent or an empty string. `descend` offers the resolved value or its absence to
 the chosen partial; if it declines, the fallback renders structure for `Some`
 or the standard empty picker for `None`. There is no separate `missing` parameter
 and no fabricated value. A missing value at a real source remains writable;
-having no source is distinct and does not offer document editing. Selection
-identity always belongs to the displayed occurrence.
+having no source is distinct and does not offer document editing. Selection,
+navigation, and annotations always belong to the displayed occurrence.
 
 The common preparation boundary for `descend`, `at`, and `jump` supplies
 selected-value copy/cut and fold handlers below the projected widget's own
@@ -186,7 +212,11 @@ sites. Without a valid text name, the partial declines and the cell projects
 deeply, keeping its parentheses and editable definition. This is a presentation
 choice, not an inference about lexical bindings or their runtime values.
 Compound forms choose their own children; inert containers, declaration
-metadata, and quoted data use the normal deep structural fallback. In lambda parameters, direct
+metadata, and quoted data use the normal deep structural fallback, and local
+use-site overrides do not leak into them. `descend_path` preserves the child's
+stored path while selecting its projection functions; Grap display uses this
+explicit composition rather than teaching the raw structural fallback about
+Grap. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
 unquoted line editor at the real `Follow` → `name` path. This contextual
@@ -199,7 +229,8 @@ lambda's declared parameter order when available, then the ordinary order for
 extra fields. Missing declared arguments appear as ordinary editable empty slots
 at their real field paths; they remain absent from the document until edited.
 An active missing argument stays in its declared position rather than gaining a
-second trailing row. This is a raw definition lookup, not evaluation of the callable.
+second trailing row. This is a raw definition lookup, not evaluation of the
+callable, so computed callables and FFIs use the ordinary order.
 Numeric libraries decorate their math calls' function references with the same
 representation subscript used by literals. Both names come from definitions;
 the decorated label still selects the call's `function` field. A comparison's
@@ -239,14 +270,24 @@ conflicting operation tags decline; translation keeps its explicit named
 parameters. These are source projections only, independent of the opt-in
 rendered viewport.
 
-`{evaluate: expression}` is a Grap-library projection convention, not evaluator
-syntax. It shows the stored expression, an arrow, and the returned value from
-its own read-only `at` occurrence. When wrapped, the arrow stays with the stored
+`{evaluate: expression}` is a Grap-library value partial, not evaluator syntax
+or a field hook in the structural walk. The evaluator never observes the field;
+a host that never loads the projection never sees it. It shows the stored
+expression at its real `…/evaluate` path, a dim `→` that selects the whole
+record, and the returned value from its own read-only `at` occurrence, all in
+one group. When wrapped, the arrow stays with the stored
 expression and the result is indented underneath. Result children are ordinary
-navigation stops and can be copied and folded independently. A result containing
+navigation stops and can be copied and folded independently. An absent result
+projects like any other computed value. Recognition is open like text and f64:
+other fields do not block it, and an earlier partial in the composition wins if
+several match. Raw shows only the stored record. A result containing
 another `evaluate` field can invoke that projection again with an ordinary fresh
-evaluation allowance. Ordinary call-shaped values elsewhere remain editable data
-until explicitly evaluated.
+evaluation allowance. Ordinary call-shaped values elsewhere, including returned
+ones, remain editable data until explicitly evaluated.
+
+The separate `grap` field is ordinary library vocabulary saying its contents
+belong to the Grap domain. It requests no evaluation and has no projection; the
+Grap library only offers it as a suggested root field and a root template.
 
 The presentation library offers an opt-in interpreter for
 `{value: source, projection: function}`. Pane views try it only at entry,
@@ -354,7 +395,8 @@ before choices resolve. Shared children prepare once per frame, and only chosen
 placement continuations contribute interaction and ink.
 
 Puri leaves carry text or canvas drawing operations. They do not acquire
-selection paths, document editing rules, names, or completion providers.
+selection paths, document editing rules, names, completion providers or
+queries, or event policy. Their text is shaped at lowering.
 The stock [line widget](../progred/src/display/widget/line.rs) is an ordinary native
 function. Text and number projections supply its spelling, affixes, and
 conversion callback; `Layout::widget` carries the resulting measurement
@@ -419,8 +461,9 @@ the unused displacement use Puri's `ScrollOutcome`, independently of writes.
 Document scrolling and widget scrolling share the same conversion of pixel,
 line, and page input and its remainder. The conversion knows no document state.
 
-Callbacks receive mutable world state at dispatch; no projection-action enum
-or central reducer sits between a callback and its operation. Generic Grap
+Callbacks become Puri handlers and receive mutable world state at dispatch; no
+projection-action enum or central reducer sits between a callback and its
+operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)
 creates temporary selection/annotation capabilities in the current document
 and view. `site path` exposes the actual projection path through the
@@ -520,8 +563,11 @@ Grap recognizes these shapes through its vocabulary cells:
 {ffi: function-cell}
 ```
 
-Evaluating a lambda captures its lexical environment in a callable value.
-Grap-defined calls evaluate every declared argument before the body. Argument
+Evaluating an untagged `{params, body}` lambda captures its lexical environment
+in a callable value; materialized, it is `{closure: {params, body, environment}}`
+with the environment as an ordinary GID record. Grap-defined calls are strict,
+evaluating every declared argument before the body. Effects are explicit
+foreign calls and scoped capabilities, as in event handlers. Argument
 labels are cell identities, so reusing a library parameter cell is meaningful;
 its display name does not participate in binding. The ordered parameter list
 is the current representation, not a settled general pattern language.
@@ -537,7 +583,12 @@ function remain data until explicitly evaluated.
 
 Cell evaluation checks lexical bindings first, then asks `Host::resolve` for one
 definition: the document's value, otherwise the first loaded library definition.
-Duplicate definitions are tolerated, not merged or composed. With no definition,
+Duplicate definitions are tolerated, not merged, composed, or overloaded. Names
+and structural display use the same selected definition; duplicate indicators
+and inspection UI are [deferred](deferred.md#duplicate-definition-inspection).
+A stored `Follow` names the document or a stable library identity, never an
+ordinal into the loaded stack, so loading or reordering libraries cannot
+silently retarget editor state. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
 defined for a function body can be referenced in several places within it. A native definition's descriptive value
@@ -589,8 +640,12 @@ must mark their observable writes and keep their effects local; external I/O
 is not reversible through this facility. Fuel is never restored.
 
 Rust foreign functions receive raw call fields, the calling environment, and
-a live evaluation context. They choose which operands to evaluate and in what
-environment. Strict arithmetic evaluates all its operands; control functions
+a live evaluation context. They may inspect, return, forward, or evaluate those
+raw expressions, in the calling environment or an explicitly derived one. The
+environment becomes a GID record only when Rust explicitly hands it to Grap.
+Semantic failure is an ordinary absent value; the host `Result` only propagates
+evaluator halts such as exhausted fuel. Strict arithmetic evaluates all its
+operands; control functions
 can evaluate only the chosen branch. Blobs, lists, and unrecognized records
 are inert: the evaluator does not search ordinary containers for expressions.
 A function's returned value is not evaluated again.
@@ -607,6 +662,8 @@ state and does not clamp a nested render's requested budget. In particular,
 an endlessly self-reproducing projection can still hang the editor. Preventing
 all such loops is not a contract of the current fuel mechanism. Preview meshes,
 images, and display errors do not carry unused evaluator fuel through rendering.
+Unused fuel is not propagated through projected values, rendering results, or
+errors, and cross-projection budget clamps are not added to close loopholes.
 
 ## Control functions and absents
 
@@ -663,7 +720,8 @@ The [control library](../progred/src/libraries/control.rs) supplies structural m
 and quote/unquote as ordinary Rust functions using that evaluator interface.
 `match` evaluates its subject once, then tries ordered cases. Record patterns
 are open; list patterns are exact and ordered; `{bind: cell}` captures a value.
-Repeated binders require equal captures. Only the selected expression runs,
+Repeated binders require equal captures, and a final binder is the ordinary
+catch-all. Only the selected expression runs,
 in the caller's environment extended by captures. Its absent result is final,
 not a request to try another case. There is no implicit match-subject binding.
 
@@ -690,6 +748,13 @@ Raw still exposes them. Active field insertion falls back to the full record/cal
 display. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
+The control library likewise projects a `match` call with a subject and a
+case list as ordered `pattern → expression` cases, and projects `{bind: cell}`
+distinctly within patterns. Each arrow targets its expression the way a field
+head targets its value. A malformed call declines to the general Grap-call or
+structural projection; a malformed case declines to the ordinary element
+projection, so every value stays exposed.
+
 Semantic failure is an open GID record:
 
 ```text
@@ -708,7 +773,9 @@ An unmatched `match` preserves one mismatch unchanged or combines several as
 `{absent: no-alternative, causes: [...]}`. This is an ordinary absent, not an
 implicit request to try another function definition. A handler using `match`
 can explicitly decline with a final catch-all case. A selected expression's
-result remains definitive within that match.
+result remains definitive within that match. Absence composition belongs only
+to such explicit ordered-choice operations, not to cell lookup; the evaluator
+accumulates no ambient failure trace.
 
 Fuel exhaustion halts immediately; at the public boundary it is still an absent
 value, with `Evaluation.completed` recording that execution did not finish.
@@ -719,9 +786,14 @@ Drawing-source origins are separate from failures.
 ## Equivalent host representations
 
 The runtime can carry unboxed f64 values and containers with lowered children.
-The f64 encoder/decoder live with the runtime carrier and are re-exported by
-the f64 library. They accelerate an ordinary convention without adding numeric
-syntax or new GID primitives. An enriched source number retains its original
+Numbers stay unboxed through calls, containers, and environments until a
+generic boundary asks for `Value`. The f64 encoder/decoder live with the runtime
+carrier and are re-exported by the f64 library, which still owns its functions,
+projections, and absences. They accelerate an ordinary convention without
+adding numeric syntax or new GID primitives. Privileged knowledge of a library
+convention is an accelerator only, never a capability: each such library must
+remain expressible externally, evaluating correctly at reduced speed, and reads to
+Grap as an ordinary library. An enriched source number retains its original
 value so a pass-through preserves unrelated fields. Public `evaluate` and
 `apply` return `Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
 `Evaluation::into_value`) explicitly materializes GID; the `*_value` entry

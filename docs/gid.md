@@ -8,7 +8,9 @@ from text.
 The logical model currently consists of:
 
 - opaque 128-bit cell identities;
-- values made from cell references, blobs, lists, and records;
+- values made from cell references, blobs, lists, and records. Cell
+  references and blobs are the only atoms, and record labels are always cell
+  identities;
 - a direct cell-identity-to-value table, where an absent entry is a bare cell;
 - documents containing one optional root value and their cell table;
 - stable list positions and traversal steps used while manipulating a document;
@@ -16,9 +18,19 @@ The logical model currently consists of:
   whose value it crosses. Duplicate definitions across sources are tolerated,
   but ordinary lookup selects one; they are not implicit composition.
 
-Names, UTF-8 text, numbers, Grap, and CAD concepts are open
-conventions or libraries embedded in GID values. They are not primitive
-GID forms.
+Names, UTF-8 text, numbers, Grap (including its tagged absence values), and
+CAD concepts are open conventions or libraries embedded in GID values. They
+are not primitive GID forms. UTF-8 text, for example, is the open
+`libraries::text` record convention over a blob.
+
+A `CellId` is not an RFC 4122 UUID: all 128 bits are random, with no version
+or variant fields. Every textual spelling, including `Display` and
+human-readable Serde, is 32 lowercase hex digits with no hyphenated form;
+binary Serde uses the 16 bytes. Well-known library cell IDs are once-minted
+random identities, never names or hashes of names; their readable names are
+ordinary `libraries::name` facts. Mint a fixed identity from 16 unmodified
+OS-CSPRNG bytes (`new_cell_id`, or `openssl rand -hex 16` for a source
+literal), never from a UUID generator.
 
 The Rust implementation shares record, list, and blob storage across clones.
 Blobs wrap `Arc<Vec<u8>>`: construction takes ownership of the existing byte
@@ -44,4 +56,5 @@ import/export notation. It exists for hand authoring, Git, debugging,
 LLM tooling, and other text-bound systems while Progred's own authoring
 matures. Its binders, parser leniencies, and textual layout are not GID
 semantics. Checked-in `*.gid` files are fixtures for that bridge;
-`.gid` is reserved for the future native representation.
+`.gid` is reserved for the future native representation. When that lands, it
+takes over the extension and the bridge moves aside.

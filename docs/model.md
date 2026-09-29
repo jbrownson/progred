@@ -117,7 +117,8 @@ conject; a source-less value can be copied but not deleted.
 Ordinary selection does not initialize editing state. Its role is derived from
 the current location: a writable missing value uses the pending picker, while
 an existing value is selected normally. An explicit pending or label payload
-can still request those modes. The picker renders an empty query by default and
+can still request those modes intentionally, but no caller needs one as setup.
+The picker renders an empty query by default without writing selection state and
 materializes its editor only on input; query, caret, choice, scroll, and expansion
 state are optional. This applies to empty roots, bare-cell definitions, missing
 record fields, and inserted list positions, without a special selection callback
@@ -132,6 +133,7 @@ and `{follow: document}` or `{follow: {library: cell}}`. Decoding checks each
 step and the canonical list-position bytes. Encoding a position does not
 extend its lifetime: loading a document still regenerates its list positions.
 
+Generic Grap handlers receive GID events and caller-supplied capabilities.
 Site and selection access are scoped foreign calls. `site path` returns the
 projected site's document path; `selection get` reads the selection payload
 there. `selection set` takes an explicit `path` and `value`, interpreted in
@@ -149,7 +151,11 @@ with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and conversion callback.
 The current line handler owns the callback; selection retains neither a Rust
-callback nor a Grap callable. Progred's [line control](../progred/src/projection/line_control.rs)
+callback nor a Grap callable. The line is the stock native widget function
+carried by `Layout::widget`; layout has no line-editor constructor or interpreter
+arm. The editor supplies current state and scoped editing capabilities, then
+incorporates the widget's render closures, handlers, hover claim, and navigation
+transition. Progred's [line control](../progred/src/projection/line_control.rs)
 runs an editing operation, then converts only when the accepted operation changed
 the text. The callback receives the live value and spelling; `None` declines a
 write. An equal result does not rewrite the document. Invalid intermediate text
@@ -268,12 +274,16 @@ handle the shortcut first and select their own text.
 ## Completion
 
 The projection rendering a pending value or label explicitly requests
-completion and may supply a lazy vocabulary. Only the active picker asks the
+completion and may supply a lazy vocabulary. Completion is an ordinary native
+widget function; its explicit kind and provider arguments go to a scoped app
+adapter returning the same measured widget output as other projections. No
+provider is hidden in traversal context. Only the active picker asks the
 provider for offers. Each request includes the query, field/value kind,
-suggestion/Everything scope, Raw mode, source-qualified path, and read-only path and cell
-lookups, plus lazy enumeration of defined cells. Cell lookup exposes the selected
-definition's value, source, and whether it has a native implementation, without
-evaluating it.
+suggestion/Everything scope, Raw mode (so providers can omit interactions whose
+presentation needs a library projection), source-qualified path, and read-only
+path and cell lookups, plus lazy enumeration of defined cells. Cell lookup
+exposes the selected definition's value, source, and whether it has a native
+implementation, without evaluating it.
 The path names a missing value or the record receiving a new label. A local
 projection provider takes precedence; otherwise library providers contribute
 in library order. `None` leaves the vocabulary unspecified, while `Some([])`
@@ -328,7 +338,9 @@ references, including function values, named constants, and library vocabulary.
 Root templates and root field suggestions are ordinary library providers
 checking the path, not separate editor hooks. The name library offers the query
 as text at a name field, including an empty string and optional surrounding
-quotes. Expanding the picker still allows other values. Fidget uses the same interface
+quotes. A missing-name marker, such as an anonymous lambda's, only selects that
+name location; the name library's offer supplies its text. Expanding the picker
+still allows other values. Fidget uses the same interface
 for shape expressions, parameter labels, and f32 parameter values, including
 through cell references, source-list items, and existing Grap constructor calls.
 Shape templates open their first missing parameter
@@ -407,11 +419,13 @@ inventing a placeholder value. Offers that mint identities construct their
 value on activation, so reusing an offer creates independent cells.
 `panes` remains an independent root field suggestion.
 
-The placed frame retains the exact visible offers. Each offer has an activation
+The placed frame retains the exact visible offers, so hover and commit never
+reconstruct a different list. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.
-The reusable Puri widget shapes and draws rows. Progred's
+The reusable `puri-widgets` completion widget shapes and draws rows. Progred's
 [native card widget](../progred/src/display/widget/completion.rs) composes navigation,
-interaction, and the shared scroll container. Its caller supplies state and
+interaction, and the shared column and scroll container; the row widget has no
+scroll viewport of its own. Its caller supplies state and
 activation callbacks; the widget knows nothing about paths, insertion, or Grap.
 The editor owns document operations, query state, and popup placement. See
 [offer construction](../progred/src/completion.rs) and
@@ -422,7 +436,9 @@ the query, and includes the card's stroke when keeping it within the viewport.
 
 A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion
-also happens when pressing Down on the selected `…` row. Expansion keeps the
+also happens when pressing Down on the selected `…` row. The expanded list keeps
+the provider's offers first and adds universal atoms, constructors, and cell
+search; the `…` row disappears. Expansion keeps the
 selected index, clamped to the available rows. Changing the query filters the
 expanded list and resets selection and scroll; expansion lasts for that picker.
 Returning to an older query does not restore an old choice. A new picker starts
@@ -462,8 +478,10 @@ its size, scroll, and projection mode carry across, while path-keyed folds reset
 not workspace configuration. The document's normal projection shows this
 declaration as editable data. At pane entry, including through cell definitions,
 the view tries the presentation library's declaration interpreter first. Nested
-values and computed results use the normal projection, so declarations inside
-them remain data. Raw shows the structural data in either view. See
+values, computed results, and the source shown after an absent result use the
+normal projection, so declarations inside them remain data. This pane-entry
+following is separate from explicit local or scoped projection composition.
+Raw shows the structural data in either view. See
 [projection composition](projections.md#projection-composition).
 
 An assigned-size pane uses `{value: source, viewport: function}` instead. The
