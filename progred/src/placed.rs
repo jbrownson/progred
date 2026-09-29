@@ -248,15 +248,9 @@ pub fn on_key<C: 'static>(
     })
 }
 
-/// A scroll viewport over `child`: placed at the viewport rect, it
-/// shifts the child up-left by `offset` inside a clip. The caller
-/// owns and clamps the offset. Pointer-down and scroll gate on the
-/// viewport (starts stay inside it); motion, release, and keys pass
-/// unbounded so active gestures and the focused editor keep working
-/// outside.
-/// A scroll viewport tagged as an editor view. The settled region is frame
-/// output, not retained widget state; input and keyboard reveal use
-/// it to update the same caller-owned view.
+/// A scroll viewport, tagged as an editor view when it has an owner. The
+/// settled region is frame output, not retained widget state; input and
+/// keyboard reveal use it to update the same caller-owned view.
 pub fn scrolled_at<C: 'static>(
     child: Measured<HoverPass<C>>,
     offset: Vec2,

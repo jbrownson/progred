@@ -2,8 +2,7 @@
 //! structural value compared by content; identity is a cell, a minted
 //! 128-bit id whose current value lives in the `Cells` table. Values are
 //! finite trees; the graph lives in the links. One canonical spelling
-//! per value, owned by the constructors. See `docs/model.md`, Data
-//! Layer v3.
+//! per value, owned by the constructors. See `docs/gid.md`.
 
 use crate::blob::Blob;
 use crate::cell_id::CellId;
@@ -408,16 +407,18 @@ impl fmt::Display for Value {
     }
 }
 
-/// A projection path step: into a record field, into a list element,
-/// or through a link to one of the cell's resolved values. A step that no
-/// longer resolves is the stale-path class the editor already
-/// tolerates.
+/// The source a followed cell resolves through: the document or a loaded
+/// library, named by stable identity rather than load order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Resolution {
     Document,
     Library(CellId),
 }
 
+/// A projection path step: into a record field, into a list element,
+/// or through a link to one of the cell's resolved values. A step that no
+/// longer resolves is the stale-path class the editor already
+/// tolerates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Step {
     Key(CellId),

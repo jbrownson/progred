@@ -45,8 +45,8 @@ impl Cells {
         self.data.iter()
     }
 
-    /// Left-biased per cell: an existing document or earlier library
-    /// value wins and previously unseen library values arrive.
+    /// Left-biased per cell: existing values are kept and only cells
+    /// absent here are added. Not how definitions resolve; see `Host::resolve`.
     pub fn merge(&mut self, other: Cells) {
         for (cell, value) in other.data {
             if !self.data.contains_key(&cell) {
