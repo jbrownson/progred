@@ -740,6 +740,38 @@ struct CellIndex(usize);
 #[derive(Debug, Default)]
 struct FoldHasher(u64);
 
+/// Expressions hash by node address. Addresses are aligned and clustered,
+/// so a folded multiply spreads them; SipHash would only add per-lookup cost
+/// to every evaluation step.
+#[derive(Default)]
+struct AddressHasher(u64);
+
+impl std::hash::Hasher for AddressHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0_u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(word));
+        }
+    }
+
+    fn write_u64(&mut self, word: u64) {
+        let product = u128::from(self.0 ^ word) * 0x9e37_79b9_7f4a_7c15;
+        self.0 = (product as u64) ^ ((product >> 64) as u64);
+    }
+
+    fn write_usize(&mut self, word: usize) {
+        self.write_u64(word as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+type ByNode<V> =
+    std::collections::HashMap<Expression, V, std::hash::BuildHasherDefault<AddressHasher>>;
+
 impl std::hash::Hasher for FoldHasher {
     fn write(&mut self, bytes: &[u8]) {
         for chunk in bytes.chunks(8) {
@@ -1092,10 +1124,10 @@ pub struct Context<'a> {
     effects: u64,
     remaining_fuel: usize,
     resolving: Vec<CellId>,
-    compiled: std::collections::HashMap<Expression, Thunk>,
-    data_runtime: std::collections::HashMap<Expression, RuntimeValue>,
+    compiled: ByNode<Thunk>,
+    data_runtime: ByNode<RuntimeValue>,
     calls: Vec<ActiveCall>,
-    call_origins: std::collections::HashMap<Expression, Option<Rc<SourceOrigin>>>,
+    call_origins: ByNode<Option<Rc<SourceOrigin>>>,
     cell_states: Vec<CellState>,
     indices: CellIndices,
 }
