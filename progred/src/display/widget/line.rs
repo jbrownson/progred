@@ -135,8 +135,8 @@ pub fn view(
         let scale = context.inputs.styles.scale as f32;
         let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
         crate::display::widget::before_place(content, move |placement: Placement, output| {
-            // Arriving from the left or right places the caret at that edge.
             output.navigation_stop(stop.clone(), selected);
+            // Arriving from the left or right places the caret at that edge.
             output.on_arrival(Some(navigation));
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
