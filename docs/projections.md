@@ -81,10 +81,11 @@ while presentation declarations can apply ordinary Grap callables.
 Recognition checks the fields a partial uses, not the absence of unrelated
 fields. Extra metadata may remain unshown in a compact projection; Raw exposes
 the stored record. Missing or malformed required contents decline normally,
-without reserving the record or blocking later partials. Explicit mutually
-exclusive tags within a convention still reject conflicts. Records are
-identified by required positive evidence and stay open unless a domain
-explicitly defines a closed shape.
+without reserving the record or blocking later partials. A convention whose
+tags are mutually exclusive settles a record carrying several of them its own
+way: layout decoding takes the first tag in a fixed precedence and ignores the
+rest, while Fidget shapes decline. Records are identified by required positive
+evidence and stay open unless a domain explicitly defines a closed shape.
 Active field insertion can use the general presentation to keep its picker
 visible.
 
