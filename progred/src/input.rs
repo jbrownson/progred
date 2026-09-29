@@ -1,9 +1,7 @@
 use crate::frame::{Dispatch, frame_disposition};
 #[cfg(test)]
 use crate::selection;
-use crate::{
-    Editor, EditorRunner, PendingBatch, PendingGesture, PendingPointer, PendingScroll, navigate,
-};
+use crate::{Editor, EditorRunner, PendingGesture, PendingPointer, PendingScroll, navigate};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, ImeEvent};
 use std::borrow::Cow;
@@ -58,16 +56,18 @@ fn keyboard(
         })
 }
 
-fn queue_batch<T>(
-    slot: &mut Option<PendingBatch<T>>,
-    next: PendingBatch<T>,
-) -> Option<PendingBatch<T>> {
+/// Merge `next` into the pending batch, or return the batch it cannot join.
+fn queue<T>(
+    slot: &mut Option<T>,
+    next: T,
+    merge: impl FnOnce(&mut T, T) -> Result<(), T>,
+) -> Option<T> {
     match slot.take() {
         None => {
             *slot = Some(next);
             None
         }
-        Some(mut pending) => match pending.merge(next) {
+        Some(mut pending) => match merge(&mut pending, next) {
             Ok(()) => {
                 *slot = Some(pending);
                 None
@@ -119,25 +119,6 @@ impl EditorRunner {
                 self.pointer_event(&event, scale, viewport);
             }
             true
-        }
-    }
-
-    fn queue_pointer(&mut self, next: PendingPointer) -> Option<PendingPointer> {
-        match self.pending_pointer.take() {
-            None => {
-                self.pending_pointer = Some(next);
-                None
-            }
-            Some(mut pending) => match pending.merge(next) {
-                Ok(()) => {
-                    self.pending_pointer = Some(pending);
-                    None
-                }
-                Err(next) => {
-                    self.pending_pointer = Some(next);
-                    Some(pending)
-                }
-            },
         }
     }
 
@@ -205,13 +186,14 @@ impl EditorRunner {
                 if let Some(pending) = self.pending_gesture.take() {
                     self.dispatch_gesture_batch(pending);
                 }
-                if let Some(pending) = queue_batch(
+                if let Some(pending) = queue(
                     &mut self.pending_scroll,
                     PendingScroll {
                         events: vec![event.clone()],
                         scale,
                         viewport,
                     },
+                    PendingScroll::merge,
                 ) {
                     self.dispatch_scroll_batch(pending);
                 }
@@ -223,25 +205,30 @@ impl EditorRunner {
                 if let Some(pending) = self.pending_scroll.take() {
                     self.dispatch_scroll_batch(pending);
                 }
-                if let Some(pending) = queue_batch(
+                if let Some(pending) = queue(
                     &mut self.pending_gesture,
                     PendingGesture {
                         events: vec![event.clone()],
                         scale,
                         viewport,
                     },
+                    PendingGesture::merge,
                 ) {
                     self.dispatch_gesture_batch(pending);
                 }
                 true
             }
             PointerEvent::Move(event) => {
-                if let Some(pending) = self.queue_pointer(PendingPointer {
-                    event: event.clone(),
-                    start: previous_cursor,
-                    scale,
-                    viewport,
-                }) {
+                if let Some(pending) = queue(
+                    &mut self.pending_pointer,
+                    PendingPointer {
+                        event: event.clone(),
+                        start: previous_cursor,
+                        scale,
+                        viewport,
+                    },
+                    PendingPointer::merge,
+                ) {
                     self.dispatch_pointer_batch(&pending);
                 }
                 self.editor.cursor = Point::new(event.current.position.x, event.current.position.y);
