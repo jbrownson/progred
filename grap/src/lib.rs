@@ -1131,6 +1131,7 @@ enum Form {
     Lambda {
         parameters: LambdaParameters,
         body: Expression,
+        fields: Record,
     },
 }
 
@@ -1139,6 +1140,18 @@ enum LambdaParameters {
     Valid(Rc<[Parameter]>),
     Malformed,
     Invalid(Value),
+}
+
+impl LambdaParameters {
+    /// `None` when the parameters are not a list; otherwise the parameter
+    /// cells, or the first entry that is not one.
+    fn parse(parameters: Option<Result<Vec<Parameter>, Value>>) -> Self {
+        match parameters {
+            None => Self::Malformed,
+            Some(Ok(parameters)) => Self::Valid(parameters.into()),
+            Some(Err(parameter)) => Self::Invalid(parameter),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -1236,8 +1249,8 @@ impl<'a> Context<'a> {
                 original: Some(value),
                 ..
             }) => self.lower_with(value, true, origin),
-            RuntimeValueKind::Record(fields) => {
-                let fields: Vec<_> = fields
+            RuntimeValueKind::Record(record) => {
+                let fields: Vec<_> = record
                     .iter()
                     .map(|(key, value)| {
                         let child = self.child_origin(origin.clone(), gid::Step::Key(*key));
@@ -1250,23 +1263,22 @@ impl<'a> Context<'a> {
                     value.field(vocabulary::PARAMS),
                     lowered_field(&fields, vocabulary::BODY),
                 ) {
-                    let parameters = match params.list_values() {
-                        None => LambdaParameters::Malformed,
-                        Some(values) => {
-                            match values
+                    Form::Lambda {
+                        parameters: LambdaParameters::parse(params.list_values().map(|values| {
+                            values
                                 .map(|v| {
                                     v.as_cell()
                                         .map(|cell| Parameter { cell })
                                         .ok_or_else(|| v.to_value())
                                 })
-                                .collect::<Result<Vec<_>, _>>()
-                            {
-                                Ok(params) => LambdaParameters::Valid(params.into()),
-                                Err(value) => LambdaParameters::Invalid(value),
-                            }
-                        }
-                    };
-                    Form::Lambda { parameters, body }
+                                .collect()
+                        })),
+                        body,
+                        fields: record
+                            .iter()
+                            .map(|(key, value)| (*key, value.to_value()))
+                            .collect(),
+                    }
                 } else if let Some(value) = lowered_field(&fields, vocabulary::VALUE) {
                     Form::Value(value)
                 } else {
@@ -1323,79 +1335,60 @@ impl<'a> Context<'a> {
         let mut lowered_elements = None;
         let form = match value {
             Value::Cell(cell) => Form::Cell(*cell),
-            Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
-                let fields: Vec<_> = fields
-                    .iter()
-                    .map(|(field, value)| {
-                        let child = self.child_origin(origin.clone(), gid::Step::Key(*field));
-                        (*field, self.lower_with(value, descend_data, child))
-                    })
-                    .collect();
-                let function = lowered_field(&fields, vocabulary::FUNCTION)
-                    .expect("the source record contains a function field");
-                lowered_fields = Some(fields);
-                Form::Call { function }
-            }
-            Value::Record(fields)
-                if fields.contains_key(&vocabulary::PARAMS)
-                    && fields.contains_key(&vocabulary::BODY) =>
-            {
-                let parameters = match fields.get(&vocabulary::PARAMS).unwrap().as_list() {
-                    None => LambdaParameters::Malformed,
-                    Some(parameters) => {
-                        let mut parsed = Vec::with_capacity(parameters.len());
-                        let mut invalid = None;
-                        for parameter in parameters.values() {
-                            match parameter.as_cell() {
-                                Some(cell) => parsed.push(Parameter { cell }),
-                                None => {
-                                    invalid = Some(parameter.clone());
-                                    break;
-                                }
-                            }
-                        }
-                        match invalid {
-                            Some(parameter) => LambdaParameters::Invalid(parameter),
-                            None => LambdaParameters::Valid(parsed.into()),
-                        }
-                    }
-                };
-                Form::Lambda {
-                    parameters,
-                    body: {
-                        let child =
-                            self.child_origin(origin.clone(), gid::Step::Key(vocabulary::BODY));
-                        self.lower_with(fields.get(&vocabulary::BODY).unwrap(), descend_data, child)
-                    },
-                }
-            }
-            Value::Record(fields) if fields.contains_key(&vocabulary::VALUE) => {
-                let fields: Vec<_> = fields
-                    .iter()
-                    .map(|(field, value)| {
-                        let child = self.child_origin(origin.clone(), gid::Step::Key(*field));
-                        (*field, self.lower_with(value, descend_data, child))
-                    })
-                    .collect();
-                let value = lowered_field(&fields, vocabulary::VALUE)
-                    .expect("the source record contains a value field");
-                lowered_fields = Some(fields);
-                Form::Value(value)
-            }
             Value::Record(fields) => {
-                if descend_data {
-                    lowered_fields = Some(
-                        fields
-                            .iter()
-                            .map(|(field, value)| {
-                                let child =
-                                    self.child_origin(origin.clone(), gid::Step::Key(*field));
-                                (*field, self.lower_with(value, true, child))
-                            })
-                            .collect(),
-                    );
+                let lower_field = |this: &mut Self, field: CellId, value: &Value| {
+                    let child = this.child_origin(origin.clone(), gid::Step::Key(field));
+                    this.lower_with(value, descend_data, child)
+                };
+                // Lower every field, reusing an already lowered head.
+                let lower_all = |this: &mut Self, head: Option<(CellId, &Expression)>| {
+                    fields
+                        .iter()
+                        .map(|(field, value)| match head {
+                            Some((label, lowered)) if label == *field => (*field, lowered.clone()),
+                            _ => (*field, lower_field(this, *field, value)),
+                        })
+                        .collect::<Vec<_>>()
+                };
+                match (
+                    fields.get(&vocabulary::FUNCTION),
+                    fields
+                        .get(&vocabulary::PARAMS)
+                        .zip(fields.get(&vocabulary::BODY)),
+                    fields.get(&vocabulary::VALUE),
+                ) {
+                    (Some(function), _, _) => {
+                        let function = lower_field(self, vocabulary::FUNCTION, function);
+                        lowered_fields =
+                            Some(lower_all(self, Some((vocabulary::FUNCTION, &function))));
+                        Form::Call { function }
+                    }
+                    (None, Some((params, body)), _) => Form::Lambda {
+                        parameters: LambdaParameters::parse(params.as_list().map(|list| {
+                            list.values()
+                                .map(|v| {
+                                    v.as_cell()
+                                        .map(|cell| Parameter { cell })
+                                        .ok_or_else(|| v.clone())
+                                })
+                                .collect()
+                        })),
+                        body: lower_field(self, vocabulary::BODY, body),
+                        fields: fields.clone(),
+                    },
+                    (None, None, Some(value)) => {
+                        let value = lower_field(self, vocabulary::VALUE, value);
+                        lowered_fields = Some(lower_all(self, Some((vocabulary::VALUE, &value))));
+                        Form::Value(value)
+                    }
+                    // Data records keep their children only when data is descended.
+                    (None, None, None) => {
+                        if descend_data {
+                            lowered_fields = Some(lower_all(self, None));
+                        }
+                        Form::Data
+                    }
                 }
-                Form::Data
             }
             Value::List(elements) => {
                 if descend_data {
@@ -1637,33 +1630,34 @@ impl<'a> Context<'a> {
                 thunk(move |context, environment| context.eval(value.clone(), environment))
             }
             Form::Call { function } => self.compile_call(&expression, function),
-            Form::Lambda { parameters, body } => {
-                let fields = self.value(&expression).as_record().unwrap().clone();
-                match parameters {
-                    LambdaParameters::Valid(params) => thunk(move |_, environment| {
-                        Ok(RuntimeValue::new(RuntimeValueKind::Closure(Closure {
-                            fields: fields.clone(),
-                            params: params.clone(),
-                            body: body.clone(),
-                            environment: environment.clone(),
-                        })))
-                    }),
-                    LambdaParameters::Malformed => thunk(move |_, _| {
-                        Ok(RuntimeValue::from_value(absent::with_detail(
-                            absent::MALFORMED_LAMBDA,
-                            absent::VALUE,
-                            Value::record(fields.clone()),
-                        )))
-                    }),
-                    LambdaParameters::Invalid(parameter) => thunk(move |_, _| {
-                        Ok(RuntimeValue::from_value(absent::with_detail(
-                            absent::INVALID_PARAMETER,
-                            absent::VALUE,
-                            parameter.clone(),
-                        )))
-                    }),
-                }
-            }
+            Form::Lambda {
+                parameters,
+                body,
+                fields,
+            } => match parameters {
+                LambdaParameters::Valid(params) => thunk(move |_, environment| {
+                    Ok(RuntimeValue::new(RuntimeValueKind::Closure(Closure {
+                        fields: fields.clone(),
+                        params: params.clone(),
+                        body: body.clone(),
+                        environment: environment.clone(),
+                    })))
+                }),
+                LambdaParameters::Malformed => thunk(move |_, _| {
+                    Ok(RuntimeValue::from_value(absent::with_detail(
+                        absent::MALFORMED_LAMBDA,
+                        absent::VALUE,
+                        Value::record(fields.clone()),
+                    )))
+                }),
+                LambdaParameters::Invalid(parameter) => thunk(move |_, _| {
+                    Ok(RuntimeValue::from_value(absent::with_detail(
+                        absent::INVALID_PARAMETER,
+                        absent::VALUE,
+                        parameter.clone(),
+                    )))
+                }),
+            },
         }
     }
 
