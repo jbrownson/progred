@@ -34,7 +34,12 @@ the current frame then found plain waste:
 | Variable slots resolved when references compile | 29.5 ms |
 
 Reserving a frame for a `let` evaluated without one measured within noise and
-was not kept. The remaining leaders are by design: the frame walk in variable
+was not kept. Two more were measured and reverted: storing each node's compiled
+closure in the node instead of the address-hashed map (within noise once the
+hash was cheap; the evaluation must still own the closures, since some capture
+their own node), and restoring the never-bound skip lost in the runtime-value
+work (0.9 ms slower: marking every parameter binding now costs more than the
+skipped frame walks save). The remaining leaders are by design: the frame walk in variable
 lookup, live foreign-scope resolution, and argument reads in unstaged
 built-ins.
 
