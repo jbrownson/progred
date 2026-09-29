@@ -376,7 +376,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                             choices[*id] = preferred.len();
                             let accommodating_width =
                                 accommodating.select(choices, shared, available);
-                            preferred.iter().enumerate().rev().fold(
+                            let width = preferred.iter().enumerate().rev().fold(
                                 accommodating_width,
                                 |best_width, (index, option)| {
                                     if option.widths.preferred <= best_width {
@@ -386,11 +386,52 @@ impl<Out: 'static> ChoiceLayout<Out> {
                                         best_width
                                     }
                                 },
-                            )
+                            );
+                            // Exploring the accommodating form may have
+                            // narrowed children it shares with the winner.
+                            if let Some(option) = preferred.get(choices[*id]) {
+                                option.prefer(choices, shared);
+                            }
+                            width
                         }
                     }
                 }
             },
+        }
+    }
+
+    /// Settle this form at its preferred width: every nested alternative
+    /// takes its first form.
+    fn prefer(&self, choices: &mut [usize], shared: &[Option<Self>]) {
+        match &self.kind {
+            ChoiceKind::Fixed(_) => {}
+            ChoiceKind::Use(id) => {
+                if let Some(child) = &shared[*id] {
+                    child.prefer(choices, shared);
+                }
+            }
+            ChoiceKind::Map { child, .. } | ChoiceKind::Pad { child, .. } => {
+                child.prefer(choices, shared)
+            }
+            ChoiceKind::Row { children, .. }
+            | ChoiceKind::Col { children, .. }
+            | ChoiceKind::Overlay { children } => {
+                for child in children {
+                    child.prefer(choices, shared);
+                }
+            }
+            ChoiceKind::Attached {
+                trigger, content, ..
+            } => {
+                trigger.prefer(choices, shared);
+                content.prefer(choices, shared);
+            }
+            ChoiceKind::Alternatives { id, options } => {
+                choices[*id] = 0;
+                if let Some(first) = options.first() {
+                    first.prefer(choices, shared);
+                }
+            }
         }
     }
 
@@ -825,6 +866,37 @@ mod choice_tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn a_preferred_form_chosen_after_exploring_the_fallback_keeps_its_natural_children() {
+        let mut build = ChoiceBuild::default();
+        let shared = |build: &mut ChoiceBuild<Recording>| {
+            build.shared(7, |build| {
+                build.alternatives(vec![recording("wide", 100.0), recording("narrow", 60.0)])
+            })
+        };
+        let inline = shared(&mut build);
+        let padded = shared(&mut build);
+        let root = build.alternatives(vec![
+            ChoiceLayout::aligned_row(
+                crate::RowAlignment::Baseline,
+                0.0,
+                vec![recording("prefix", 10.0), inline],
+            ),
+            ChoiceLayout::pad(Insets::new(50.0, 0.0, 0.0, 0.0), padded),
+        ]);
+        let layout = resolve_choices(build.finish(root), 100.0, false);
+        assert_eq!(layout.extent.width, 110.0);
+        let placement = Placement::new(
+            layout.extent.rect_at(Point::ORIGIN),
+            Rect::new(0.0, 0.0, 200.0, 200.0),
+        );
+        let Recording(out) = crate::place(layout, placement);
+        assert_eq!(
+            out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+            ["prefix", "wide"]
+        );
     }
 
     #[test]

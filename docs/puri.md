@@ -71,7 +71,10 @@ Wrappers pad, overlay, or decorate the result.
 [`measured::choices`](../ui/measured/src/choices.rs) settles
 ordered alternatives over already measured leaves. The first preferred form
 whose natural width fits wins; otherwise the last form accommodates the
-available width. Selection does not reshape text or rerun projections.
+available width, unless an earlier form's natural width is no wider than that
+accommodation, in which case the earlier form wins at its natural width. A form
+chosen at its natural width places every nested alternative in its first form.
+Selection does not reshape text or rerun projections.
 Shared layout nodes belong to this one frame and are consumed by the selected
 form.
 
