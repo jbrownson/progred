@@ -71,8 +71,8 @@ pub enum Divider {
 }
 
 #[derive(Clone)]
-pub struct ViewPlacement {
-    pub root: Root,
+pub struct ViewPlacement<'a> {
+    pub view: &'a View,
     pub rect: Rect,
 }
 
@@ -83,8 +83,8 @@ pub struct DividerPlacement {
     pub rect: Rect,
 }
 
-pub struct Geometry {
-    pub views: Vec<ViewPlacement>,
+pub struct Geometry<'a> {
+    pub views: Vec<ViewPlacement<'a>>,
     pub dividers: Vec<DividerPlacement>,
 }
 
@@ -340,15 +340,16 @@ impl Workspace {
     }
 
     pub fn toggle_projection(&mut self, selected: Option<&Root>) {
-        let root = selected
-            .filter(|root| self.view(root).is_some())
-            .cloned()
-            .unwrap_or_else(|| self.document.root.clone());
-        let view = self.view_mut(&root).expect("a live workspace root");
-        view.projection = match view.projection {
-            Projection::Standard => Projection::Raw,
-            Projection::Raw => Projection::Standard,
-        };
+        fn toggle(view: &mut View) {
+            view.projection = match view.projection {
+                Projection::Standard => Projection::Raw,
+                Projection::Raw => Projection::Standard,
+            };
+        }
+        match selected.and_then(|root| self.view_mut(root)) {
+            Some(view) => toggle(view),
+            None => toggle(&mut self.document),
+        }
     }
 
     /// Reconcile pane occurrences with their transient view state.
@@ -407,15 +408,16 @@ impl Workspace {
     }
 
     pub fn can_move(&self, root: &Root, direction: Move) -> bool {
-        let Some(side) = self.side(root) else {
+        let Some((side, column, index)) = [Side::Left, Side::Right].into_iter().find_map(|side| {
+            let column = self.column(side);
+            column
+                .panes
+                .iter()
+                .position(|pane| pane.view.root == *root)
+                .map(|index| (side, column, index))
+        }) else {
             return false;
         };
-        let column = self.column(side);
-        let index = column
-            .panes
-            .iter()
-            .position(|pane| pane.view.root == *root)
-            .expect("the pane is in its column");
         match direction {
             Move::Up => index > 0,
             Move::Down => index + 1 < column.panes.len(),
@@ -527,7 +529,7 @@ impl Workspace {
         self.dragging.take().is_some()
     }
 
-    pub fn geometry(&self, size: Size, scale: f64) -> Geometry {
+    pub fn geometry(&self, size: Size, scale: f64) -> Geometry<'_> {
         let divider = scale.max(1.0);
         let left_present = !self.left.panes.is_empty();
         let right_present = !self.right.panes.is_empty();
@@ -576,7 +578,7 @@ impl Workspace {
         let document_width = widths[width_index];
         width_index += 1;
         views.push(ViewPlacement {
-            root: self.document.root.clone(),
+            view: &self.document,
             rect: Rect::new(x, 0.0, x + document_width, size.height),
         });
         x += document_width;
@@ -712,13 +714,13 @@ fn allocate(weights: &[f64], total: f64, minimum: f64) -> Vec<f64> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn column_geometry(
-    column: &Column,
+fn column_geometry<'a>(
+    column: &'a Column,
     side: Side,
     rect: Rect,
     divider: f64,
     scale: f64,
-    views: &mut Vec<ViewPlacement>,
+    views: &mut Vec<ViewPlacement<'a>>,
     dividers: &mut Vec<DividerPlacement>,
 ) {
     let usable = (rect.height() - divider * column.panes.len().saturating_sub(1) as f64).max(0.0);
@@ -727,7 +729,7 @@ fn column_geometry(
     let mut y = rect.y0;
     for (index, (pane, height)) in column.panes.iter().zip(heights).enumerate() {
         views.push(ViewPlacement {
-            root: pane.view.root.clone(),
+            view: &pane.view,
             rect: Rect::new(rect.x0, y, rect.x1, y + height),
         });
         y += height;
@@ -950,7 +952,7 @@ mod tests {
         let left_width = geometry
             .views
             .iter()
-            .find(|placed| placed.root == upper)
+            .find(|placed| placed.view.root == upper)
             .unwrap()
             .rect
             .width();
@@ -980,13 +982,13 @@ mod tests {
         let document = geometry
             .views
             .iter()
-            .find(|placed| placed.root == document)
+            .find(|placed| placed.view.root == document)
             .unwrap();
         assert_eq!((document.rect.y0, document.rect.y1), (0.0, 600.0));
         let left: Vec<_> = geometry
             .views
             .iter()
-            .filter(|placed| workspace.side(&placed.root) == Some(Side::Left))
+            .filter(|placed| workspace.side(&placed.view.root) == Some(Side::Left))
             .collect();
         assert_eq!(left.len(), 2);
         assert_eq!(left[0].rect.height(), left[1].rect.height());

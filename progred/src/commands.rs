@@ -44,16 +44,27 @@ impl Editor {
         definition: Option<Value>,
         on_commit: Option<crate::site::Continuation>,
     ) -> bool {
-        let Some(selection) = self.model.selection.as_ref() else {
+        let Some((root, scope)) = self
+            .model
+            .selection
+            .as_ref()
+            .map(|selection| (selection.root().clone(), selection.scope().clone()))
+        else {
             return false;
         };
-        let root = selection.root().clone();
-        let scope = selection.scope().clone();
-        let Some(view) = self.model.workspace.view(&root) else {
+        let before = self.model.snapshot();
+        let model = &mut self.model;
+        let libraries = &self.stack.libraries;
+        let (Some(selection), Some(view)) =
+            (model.selection.as_ref(), model.workspace.view_mut(&root))
+        else {
             return false;
         };
         let Some(prepared) = crate::completion::prepare(
-            &self.sources(),
+            &sources::Sources {
+                doc: &model.doc,
+                libraries,
+            },
             selection,
             &view.annotations,
             value,
@@ -62,24 +73,26 @@ impl Editor {
         ) else {
             return false;
         };
-        if prepared.document_changed {
-            let before = self.model.snapshot();
-            self.model.doc = prepared.document;
-            self.model.history.record(before);
-            self.refresh_title();
+        let document_changed = prepared.document_changed;
+        if document_changed {
+            model.doc = prepared.document;
+            model.history.record(before);
         }
         crate::site::install_scoped(
             prepared.effects,
             &sources::Sources {
-                doc: &self.model.doc,
-                libraries: &self.stack.libraries,
+                doc: &model.doc,
+                libraries,
             },
             &root,
             scope,
             &prepared.path,
-            &mut self.model.workspace.view_mut(&root).unwrap().annotations,
-            &mut self.model.selection,
+            &mut view.annotations,
+            &mut model.selection,
         );
+        if document_changed {
+            self.refresh_title();
+        }
         true
     }
 

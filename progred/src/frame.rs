@@ -664,10 +664,7 @@ fn project_workspace(
         |_, _| {},
     );
     for placed_view in geometry.views {
-        let view = model
-            .workspace
-            .view(&placed_view.root)
-            .expect("workspace geometry only names live views");
+        let view = placed_view.view;
         let rect = placed_view.rect;
         let child = project_workspace_view(
             model,
