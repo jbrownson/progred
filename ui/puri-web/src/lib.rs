@@ -55,6 +55,16 @@ impl WebCanvas {
         match brush {
             Brush::Solid(color) => Style::Color(css(color.components)),
             Brush::Gradient(gradient) => {
+                // A deterministic rendering for gradients Canvas cannot draw.
+                let first_stop = || {
+                    Style::Color(
+                        gradient
+                            .stops
+                            .first()
+                            .map(|stop| css(stop.color.to_alpha_color::<Srgb>().components))
+                            .unwrap_or_else(|| "rgba(0,0,0,0)".to_string()),
+                    )
+                };
                 let canvas = match gradient.kind {
                     GradientKind::Linear(linear) => self.0.create_linear_gradient(
                         linear.start.x,
@@ -62,29 +72,21 @@ impl WebCanvas {
                         linear.end.x,
                         linear.end.y,
                     ),
-                    GradientKind::Radial(radial) => self
-                        .0
-                        .create_radial_gradient(
-                            radial.start_center.x,
-                            radial.start_center.y,
-                            radial.start_radius.into(),
-                            radial.end_center.x,
-                            radial.end_center.y,
-                            radial.end_radius.into(),
-                        )
-                        .unwrap(),
+                    // Canvas rejects negative radii.
+                    GradientKind::Radial(radial) => match self.0.create_radial_gradient(
+                        radial.start_center.x,
+                        radial.start_center.y,
+                        radial.start_radius.into(),
+                        radial.end_center.x,
+                        radial.end_center.y,
+                        radial.end_radius.into(),
+                    ) {
+                        Ok(canvas) => canvas,
+                        Err(_) => return first_stop(),
+                    },
                     // Sweep gradients are not yet part of Progred's display
-                    // vocabulary. Preserve a deterministic rendering if one
-                    // arrives through Rust directly.
-                    GradientKind::Sweep(_) => {
-                        return Style::Color(
-                            gradient
-                                .stops
-                                .first()
-                                .map(|stop| css(stop.color.to_alpha_color::<Srgb>().components))
-                                .unwrap_or_else(|| "rgba(0,0,0,0)".to_string()),
-                        );
-                    }
+                    // vocabulary, but may arrive through Rust directly.
+                    GradientKind::Sweep(_) => return first_stop(),
                 };
                 for stop in gradient.stops.iter() {
                     let color = css(stop.color.to_alpha_color::<Srgb>().components);
