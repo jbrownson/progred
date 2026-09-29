@@ -82,9 +82,9 @@ Recognition checks the fields a partial uses, not the absence of unrelated
 fields. Extra metadata may remain unshown in a compact projection; Raw exposes
 the stored record. Missing or malformed required contents decline normally,
 without reserving the record or blocking later partials. Explicit mutually
-exclusive tags within a convention still reject conflicts, and lossless
-serialization checks remain. Records are identified by required positive
-evidence and stay open unless a domain explicitly defines a closed shape.
+exclusive tags within a convention still reject conflicts. Records are
+identified by required positive evidence and stay open unless a domain
+explicitly defines a closed shape.
 Active field insertion can use the general presentation to keep its picker
 visible.
 
