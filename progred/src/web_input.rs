@@ -66,6 +66,11 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
     ] {
         modifiers.set(flag, event.get_modifier_state(name));
     }
+    // Windows browsers report AltGr as Ctrl+Alt as well; its characters are
+    // text, not Ctrl chords.
+    if modifiers.contains(Modifiers::ALT_GRAPH) {
+        modifiers.remove(Modifiers::CONTROL);
+    }
     let key = KeyboardEvent {
         state: if event.type_() == "keyup" {
             KeyState::Up
