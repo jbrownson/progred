@@ -296,14 +296,25 @@ impl Libraries {
             .map(|(id, definitions)| (*id, definitions))
     }
 
-    pub fn values(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedValue<'_>> {
+    /// Each loaded library's definition of `cell`, in load order.
+    pub fn definitions(
+        &self,
+        cell: gid::CellId,
+    ) -> impl Iterator<Item = (gid::CellId, &Definition)> + '_ {
         self.entries
             .iter()
             .filter_map(move |(library, definitions)| {
-                definitions.value(cell).map(|value| LocatedValue {
-                    library: *library,
-                    value,
-                })
+                definitions
+                    .get(cell)
+                    .map(|definition| (*library, definition))
+            })
+    }
+
+    pub fn values(&self, cell: gid::CellId) -> impl Iterator<Item = LocatedValue<'_>> {
+        self.definitions(cell)
+            .map(|(library, definition)| LocatedValue {
+                library,
+                value: definition.value(),
             })
     }
 
@@ -317,9 +328,7 @@ impl Libraries {
     }
 
     pub fn contributors(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
-        self.entries
-            .iter()
-            .filter_map(move |(library, definitions)| definitions.get(cell).map(|_| *library))
+        self.definitions(cell).map(|(library, _)| library)
     }
 
     #[cfg(test)]
@@ -328,12 +337,9 @@ impl Libraries {
     }
 
     pub fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
-        self.entries.iter().find_map(move |(source, definitions)| {
-            definitions
-                .get(cell)
-                .cloned()
-                .map(|target| (gid::Resolution::Library(*source), target))
-        })
+        self.definitions(cell)
+            .next()
+            .map(|(library, definition)| (gid::Resolution::Library(library), definition.clone()))
     }
 
     pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {

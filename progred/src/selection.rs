@@ -363,7 +363,7 @@ pub(crate) fn writable_at(sources: &Sources, path: &[Step]) -> bool {
             Step::Follow(resolution) => sources
                 .resolve_path(&path[..index])
                 .and_then(Value::as_cell)
-                .is_some_and(|cell| sources.writable(cell, &resolution)),
+                .is_some_and(|_| crate::sources::writable(&resolution)),
             Step::Key(_) | Step::Element(_) => false,
         },
         None => true,
@@ -388,7 +388,7 @@ pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, path: &[Step])
                 sources
                     .resolve_path(parent)
                     .and_then(Value::as_cell)
-                    .filter(|cell| sources.writable(*cell, resolution))
+                    .filter(|_| crate::sources::writable(resolution))
                     .filter(|cell| doc.cells.value(*cell).is_some())
             };
             match cell {
@@ -410,7 +410,7 @@ pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, path: &[Step])
                         Step::Follow(resolution) => sources
                             .resolve_path(&path[..index])
                             .and_then(Value::as_cell)
-                            .filter(|cell| sources.writable(*cell, &resolution))
+                            .filter(|_| crate::sources::writable(&resolution))
                             .and_then(|cell| {
                                 spine::without(
                                     sources.value(cell, &resolution)?,
@@ -768,7 +768,7 @@ pub fn set_value(
                 Step::Follow(resolution) => sources
                     .resolve_path(&path[..index])
                     .and_then(Value::as_cell)
-                    .filter(|cell| sources.writable(*cell, &resolution))
+                    .filter(|_| crate::sources::writable(&resolution))
                     .and_then(|cell| {
                         spine::set(sources.value(cell, &resolution), &path[index + 1..], value)
                             .map(|rebuilt| (Some(cell), rebuilt))

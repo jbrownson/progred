@@ -13,6 +13,22 @@ pub struct LocatedValue<'a> {
     pub value: &'a Value,
 }
 
+/// One source's definition of a cell.
+#[derive(Clone, Copy)]
+enum Contribution<'a> {
+    Document(&'a Value),
+    Library(&'a grap::Definition),
+}
+
+impl<'a> Contribution<'a> {
+    fn value(self) -> &'a Value {
+        match self {
+            Self::Document(value) => value,
+            Self::Library(definition) => definition.value(),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Sources<'a> {
     pub doc: &'a Document,
@@ -137,25 +153,33 @@ impl crate::display::Env for Sources<'_> {
 }
 
 impl<'a> Sources<'a> {
-    pub fn definition(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'a>> {
+    /// Every definition of `cell` in lookup order: the document's, then each
+    /// library's in load order. Ordinary lookup takes the first.
+    fn definitions(&self, cell: CellId) -> impl Iterator<Item = (Resolution, Contribution<'a>)> {
+        let libraries = self.libraries;
         self.doc
             .cells
             .value(cell)
-            .map(|value| crate::display::ResolvedCell {
-                source: Resolution::Document,
-                value,
-                native: false,
-            })
-            .or_else(|| {
-                self.libraries.iter().find_map(|(library, definitions)| {
-                    definitions
-                        .get(cell)
-                        .map(|definition| crate::display::ResolvedCell {
-                            source: Resolution::Library(library),
-                            value: definition.value(),
-                            native: matches!(definition, grap::Definition::Foreign(_)),
-                        })
-                })
+            .map(|value| (Resolution::Document, Contribution::Document(value)))
+            .into_iter()
+            .chain(libraries.definitions(cell).map(|(library, definition)| {
+                (
+                    Resolution::Library(library),
+                    Contribution::Library(definition),
+                )
+            }))
+    }
+
+    pub fn definition(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'a>> {
+        self.definitions(cell)
+            .next()
+            .map(|(source, contribution)| crate::display::ResolvedCell {
+                source,
+                value: contribution.value(),
+                native: matches!(
+                    contribution,
+                    Contribution::Library(grap::Definition::Foreign(_))
+                ),
             })
     }
 
@@ -170,27 +194,15 @@ impl<'a> Sources<'a> {
     }
 
     pub fn contributors(&self, cell: CellId) -> impl Iterator<Item = Resolution> + '_ {
-        self.doc
-            .cells
-            .value(cell)
-            .map(|_| Resolution::Document)
-            .into_iter()
-            .chain(self.libraries.contributors(cell).map(Resolution::Library))
+        self.definitions(cell).map(|(source, _)| source)
     }
 
     pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
-        self.doc
-            .cells
-            .value(cell)
-            .map(|value| LocatedValue {
-                source: Resolution::Document,
-                value,
+        self.definitions(cell)
+            .map(|(source, contribution)| LocatedValue {
+                source,
+                value: contribution.value(),
             })
-            .into_iter()
-            .chain(self.libraries.values(cell).map(|value| LocatedValue {
-                source: Resolution::Library(value.library),
-                value: value.value,
-            }))
     }
 
     pub fn resolve(&self, cell: CellId) -> Option<LocatedValue<'a>> {
@@ -231,22 +243,29 @@ impl<'a> Sources<'a> {
     /// The library is authoritative only when it supplies the value
     /// and the document does not. A bare cell remains writable.
     pub fn external(&self, cell: CellId) -> bool {
-        self.doc.cells.value(cell).is_none() && self.libraries.values(cell).next().is_some()
+        matches!(
+            self.definitions(cell).next(),
+            Some((Resolution::Library(_), _))
+        )
     }
+}
 
-    pub fn writable(&self, _cell: CellId, resolution: &Resolution) -> bool {
-        matches!(resolution, Resolution::Document)
-    }
+/// Only the document's own definitions are editable; libraries are read-only.
+pub fn writable(resolution: &Resolution) -> bool {
+    matches!(resolution, Resolution::Document)
 }
 
 impl grap::Host for Sources<'_> {
     fn resolve(&self, cell: CellId) -> Option<(Resolution, grap::Definition)> {
-        self.doc
-            .cells
-            .value(cell)
-            .cloned()
-            .map(|value| (Resolution::Document, grap::Definition::Value(value)))
-            .or_else(|| self.libraries.resolve(cell))
+        self.definitions(cell).next().map(|(source, contribution)| {
+            (
+                source,
+                match contribution {
+                    Contribution::Document(value) => grap::Definition::Value(value.clone()),
+                    Contribution::Library(definition) => definition.clone(),
+                },
+            )
+        })
     }
 }
 
@@ -570,13 +589,12 @@ mod tests {
             libraries: &libraries,
         };
         assert!(sources.external(lib_cell));
-        assert!(!sources.writable(
-            lib_cell,
-            &Resolution::Library(libraries.iter().next().unwrap().0)
-        ));
+        assert!(!writable(&Resolution::Library(
+            libraries.iter().next().unwrap().0
+        )));
         assert!(!sources.external(doc_cell));
         assert!(!sources.external(bare));
-        assert!(sources.writable(bare, &Resolution::Document));
+        assert!(writable(&Resolution::Document));
 
         cells.set_value(lib_cell, crate::test_values::text("mine"));
         let doc = doc_of(cells);
@@ -585,11 +603,10 @@ mod tests {
             libraries: &libraries,
         };
         assert!(!sources.external(lib_cell));
-        assert!(sources.writable(lib_cell, &Resolution::Document));
-        assert!(!sources.writable(
-            lib_cell,
-            &Resolution::Library(libraries.iter().next().unwrap().0)
-        ));
+        assert!(writable(&Resolution::Document));
+        assert!(!writable(&Resolution::Library(
+            libraries.iter().next().unwrap().0
+        )));
     }
 
     #[test]
