@@ -873,6 +873,21 @@ impl Environment {
         self.get_index(index)
     }
 
+    /// `index` is `cell`'s slot in `indices`, resolved when the reference
+    /// was compiled; an environment built over another table looks it up.
+    fn get_at(
+        &self,
+        indices: &CellIndices,
+        cell: CellId,
+        index: CellIndex,
+    ) -> Option<&RuntimeValue> {
+        if Rc::ptr_eq(&self.indices, indices) {
+            self.get_index(index)
+        } else {
+            self.get_runtime(cell)
+        }
+    }
+
     fn get_index(&self, index: CellIndex) -> Option<&RuntimeValue> {
         let mut frame = self.frame.as_deref();
         while let Some(current) = frame {
@@ -1710,8 +1725,9 @@ impl<'a> Context<'a> {
                     .insert(expression.clone(), value.clone());
                 Ok(value)
             }),
-            Form::Cell(index) => {
-                thunk(move |context, environment| context.eval_cell(index, environment))
+            Form::Cell(cell) => {
+                let index = cell_index(&self.indices, cell);
+                thunk(move |context, environment| context.eval_cell_at(cell, index, environment))
             }
             Form::Value(value) => {
                 thunk(move |context, environment| context.eval(value.clone(), environment))
@@ -1751,7 +1767,7 @@ impl<'a> Context<'a> {
     fn compile_call(&mut self, call: &Expression, function: Expression) -> Thunk {
         let call = call.clone();
         let function_cell = match &function.0.form {
-            Form::Cell(index) => Some(*index),
+            Form::Cell(cell) => Some((*cell, cell_index(&self.indices, *cell))),
             _ => None,
         };
         let plan: RefCell<Option<CallPlan>> = RefCell::new(None);
@@ -1759,17 +1775,17 @@ impl<'a> Context<'a> {
         let target: RefCell<Option<Rc<PreparedCallTarget>>> = RefCell::new(None);
         thunk(move |context, environment| {
             context.at_call(call.clone(), |context| {
-                if let Some(cell) = function_cell
-                    && environment.get_runtime(cell).is_none()
+                if let Some((cell, index)) = function_cell
+                    && environment.get_at(&context.indices, cell, index).is_none()
                     && context.foreign_target_cell(cell).is_none()
                 {
                     return context.call_cell(cell, &call, environment, &target);
                 }
                 context.checked_call(|context| {
                     let callable = match function_cell {
-                        Some(cell) => {
+                        Some((cell, index)) => {
                             context.burn()?;
-                            match environment.get_runtime(cell) {
+                            match environment.get_at(&context.indices, cell, index) {
                                 Some(value) => context.lower_runtime(value.clone()),
                                 // Ordinary cells took the direct path above.
                                 None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
@@ -1988,12 +2004,16 @@ impl<'a> Context<'a> {
         self.missing_argument(cell).into()
     }
 
-    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Result<RuntimeValue, Halt> {
-        if let Some(value) = environment.get_runtime(cell) {
+    fn eval_cell_at(
+        &mut self,
+        cell: CellId,
+        index: CellIndex,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        if let Some(value) = environment.get_at(&self.indices, cell, index) {
             let value = value.clone();
             return Ok(self.lower_runtime(value));
         }
-        let index = cell_index(&self.indices, cell);
         match self.host.resolve(cell) {
             None => Ok(RuntimeValue::from_value(absent::with_detail(
                 absent::MISSING_CELL,
