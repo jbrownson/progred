@@ -190,9 +190,33 @@ fn every_grouping_of_a_row_with_unequal_blocks_navigates_the_same() {
         Stop(33),
     ];
     let flat = lines(&row(children.clone()));
+    let wrapped = |shape: Shape| enclosed(40, shape);
+    let labelled_wrapped = |shape: Shape| row([Stop(41), enclosed(40, shape)]);
+    let (flat_wrapped, flat_labelled) = (
+        lines(&wrapped(row(children.clone()))),
+        lines(&labelled_wrapped(row(children.clone()))),
+    );
     for grouped in groupings(&children) {
         assert_eq!(lines(&grouped), flat);
+        assert_eq!(lines(&wrapped(grouped.clone())), flat_wrapped);
+        assert_eq!(lines(&labelled_wrapped(grouped)), flat_labelled);
     }
+}
+
+#[test]
+fn an_enclosing_stop_precedes_a_deeper_block_beside_its_first_block() {
+    let deeper = enclosed(
+        4,
+        enclosed(5, row([Stop(6), enclosed(7, column(0, [8, 9]))])),
+    );
+    let shape = enclosed(0, row([enclosed(1, column(0, [2, 3])), deeper.clone()]));
+    assert_eq!(
+        lines(&shape),
+        [vec![0, 4, 5], vec![1, 6, 7], vec![2, 8], vec![3, 9]]
+    );
+    // A label before the container still precedes it on the same line.
+    let labelled = row([Stop(10), shape]);
+    assert_eq!(lines(&labelled)[0], [10, 0, 4, 5]);
 }
 
 #[test]

@@ -162,8 +162,8 @@ impl<C> Lines<C> {
     }
 
     /// A whole-value stop precedes its contents. Multiline contents are a
-    /// block: its stop gets an entry line, shared with directly enclosed
-    /// blocks. Single-line contents stay on their line.
+    /// block: its stop begins the topmost entry line, which it shares with
+    /// directly enclosed blocks. Single-line contents stay on their line.
     fn enclosed(mut self, stop: Stop<C>) -> Self {
         let multiline = self.rows.len() > 1;
         match self.rows.first_mut() {
@@ -184,17 +184,19 @@ impl<C> Lines<C> {
                         })
                     }
                     Some(mut block) => {
-                        let first = &mut block.entries[block.attach];
-                        if lead.first.is_none() {
-                            entry.append(std::mem::take(first));
-                            *first = entry;
-                        } else {
+                        // A label stays beside the first block; the enclosing
+                        // stop precedes everything, even a deeper later block.
+                        if lead.first.is_some() {
+                            let first = &mut block.entries[block.attach];
                             let mut joined = lead;
                             joined.append(std::mem::take(first));
                             *first = joined;
-                            block.entries.push(entry);
-                            block.attach = block.entries.len() - 1;
+                            block.entries.push(Line::default());
                         }
+                        block.attach = block.entries.len() - 1;
+                        let top = &mut block.entries[block.attach];
+                        entry.append(std::mem::take(top));
+                        *top = entry;
                         row.block = Some(block);
                     }
                 }

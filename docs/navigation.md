@@ -37,7 +37,8 @@ list → first item → label → second item. Blocks side by side share their e
 line. Directly enclosed blocks share one entry line too: Right visits each
 whole-value stop, Down enters the first drawn line, and Up from there returns
 to the outermost stop. A stop before the block, such as a function label, ends
-that sharing.
+that sharing. An enclosing stop always begins the topmost entry line, so it
+precedes a deeper block that sits beside its first one.
 
 Repeated declarations of the innermost open whole value's occurrence refine its
 arrival behavior instead of adding a second stop.
