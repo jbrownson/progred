@@ -921,6 +921,25 @@ impl Environment {
         );
     }
 
+    /// Make room for `additional` in-place bindings. A shared frame is
+    /// copied once at its final size instead of at its current one and
+    /// then grown binding by binding.
+    pub fn reserve(&mut self, additional: usize) {
+        if let Some(frame) = &mut self.frame {
+            match Rc::get_mut(frame) {
+                Some(frame) => frame.bindings.reserve(additional),
+                None => {
+                    let mut bindings = Vec::with_capacity(frame.bindings.len() + additional);
+                    bindings.extend(frame.bindings.iter().cloned());
+                    *frame = Rc::new(EnvironmentFrame {
+                        parent: frame.parent.clone(),
+                        bindings,
+                    });
+                }
+            }
+        }
+    }
+
     fn push_indexed(&mut self, bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>) {
         match &mut self.frame {
             Some(frame) => {

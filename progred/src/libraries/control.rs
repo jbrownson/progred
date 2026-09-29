@@ -337,6 +337,7 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 // burn-invisible.
                 context.burn()?;
                 let mut environment = environment.clone();
+                environment.reserve(bindings.len());
                 for binding in bindings {
                     match binding {
                         CompiledBinding::Malformed(reason) => {
