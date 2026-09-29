@@ -50,7 +50,14 @@ pub fn list_items(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)>> {
-    let mut positions = input.value?.list_positions()?;
+    Some(list_items_at(input, input.value?.list_positions()?, child))
+}
+
+fn list_items_at(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    mut positions: Vec<gid::Position>,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)> {
     if let Some(Pending::Child(Step::Element(position))) = &input.pending
         && !positions.contains(position)
     {
@@ -58,19 +65,17 @@ pub fn list_items(
         positions.sort();
     }
     let child = child.map(|p| compose_partials([p, input.default_projection.clone()]));
-    Some(
-        positions
-            .into_iter()
-            .map(|position| {
-                let layout = shared(descend(
-                    Step::Element(position.clone()),
-                    child.clone(),
-                    None,
-                ));
-                (position, layout)
-            })
-            .collect(),
-    )
+    positions
+        .into_iter()
+        .map(|position| {
+            let layout = shared(descend(
+                Step::Element(position.clone()),
+                child.clone(),
+                None,
+            ));
+            (position, layout)
+        })
+        .collect()
 }
 
 /// One interleaved presentation of `list_items` for this input. The caller
@@ -139,7 +144,15 @@ pub fn list_layout(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let items = list_items(input, child)?;
+    Some(list_layout_at(input, input.value?.list_positions()?, child))
+}
+
+pub fn list_layout_at(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    positions: Vec<gid::Position>,
+    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    let items = list_items_at(input, positions, child);
     let horizontal = list_with(
         input,
         &items,
@@ -160,10 +173,10 @@ pub fn list_layout(
         |_, item| item,
         |before, after| list_gap(4.0, before, after),
     );
-    Some(selectable_bracket(
+    selectable_bracket(
         Delim::Bracket,
         group(alternatives([row(0.0, horizontal), col(1, 0.0, vertical)])),
-    ))
+    )
 }
 
 #[cfg(test)]
@@ -177,18 +190,33 @@ pub fn record_layout(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let keys = record_keys(input)?;
-    Some(record_heads(
-        keys.into_iter()
+    Some(record_layout_at(input, input.value?.record_keys()?, child))
+}
+
+pub fn record_layout_at(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    keys: Vec<CellId>,
+    child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    record_heads(
+        ordered_keys(input, keys)
+            .into_iter()
             .map(|key| record_field(input, key, child(key))),
         pending_field(input),
-    ))
+    )
 }
 
 pub(crate) fn record_keys(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Vec<CellId>> {
-    let mut keys = input.value?.record_keys()?;
+    Some(ordered_keys(input, input.value?.record_keys()?))
+}
+
+/// Display order, including a pending new field.
+fn ordered_keys(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    mut keys: Vec<CellId>,
+) -> Vec<CellId> {
     if let Some(Pending::Child(Step::Key(key))) = &input.pending
         && !keys.contains(key)
     {
@@ -202,7 +230,7 @@ pub(crate) fn record_keys(
             (None, None) => left.cmp(right),
         },
     );
-    Some(keys)
+    keys
 }
 
 pub(crate) fn record_field(

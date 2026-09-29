@@ -20,15 +20,15 @@ pub fn of(
     value: &grap::RuntimeValue,
     input: &ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
 ) -> View {
-    if let Some(bytes) = value.as_blob() {
-        selectable(cx, id(blob_text(bytes)), path, value)
-    } else if let Some(cell) = value.as_cell() {
-        cell_layout(cx, cell)
-    } else if let Some(list) = crate::display::structure::list_layout(input, None) {
-        list
-    } else {
-        // Every runtime value has one of GID's four structural shapes.
-        crate::display::structure::record_layout(input, |_| None).unwrap()
+    match value.shape() {
+        grap::Shape::Blob(bytes) => selectable(cx, id(blob_text(bytes)), path, value),
+        grap::Shape::Cell(cell) => cell_layout(cx, cell),
+        grap::Shape::List(positions) => {
+            crate::display::structure::list_layout_at(input, positions, None)
+        }
+        grap::Shape::Record(keys) => {
+            crate::display::structure::record_layout_at(input, keys, |_| None)
+        }
     }
 }
 
