@@ -16,6 +16,25 @@ for meshing and other platforms.
 The opt-in [Fidget meshing experiment](fidget-meshing-2026-09-13.md) measures
 CPU triangle generation from the cube document, independently of frame rendering.
 
+## IoP picture: evaluator waste — 2026-09-29
+
+Interleaved release runs of `iop_tree_profile_loop` (best of four rounds, same
+machine) tracked the uncached IoP picture back to 24.2 ms on 2026-09-08. It rose
+to 26.7 ms by 2026-09-14 and to 36.5 ms across the 2026-09-19–23 runtime-value
+work; those steps were accepted as simplifications and not revisited. Sampling
+the current frame then found plain waste:
+
+| Change | IoP picture |
+| --- | --- |
+| Before | 36.7 ms |
+| Quoted templates sized up front again (`0e08bbb9`, a same-day regression) | recovered 0.8 ms |
+| Expression-keyed caches hashed by address instead of SipHash | 31.4 ms |
+| `let` frames reserved for their bindings before binding | 30.7 ms |
+
+Reserving a frame for a `let` evaluated without one measured within noise and
+was not kept. The remaining leaders are by design: frame-walk variable
+lookup, live foreign-scope resolution, and per-call argument field reads.
+
 ## CAM pane resizing — 2026-09-18
 
 The divider drag exposed a misplaced computation boundary: the viewport's
