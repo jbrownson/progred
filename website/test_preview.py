@@ -27,10 +27,10 @@ class LauncherTests(unittest.TestCase):
         (self.editor / "pkg/progred_bg.wasm").write_bytes(b"\0asm")
         (self.editor / "pkg/progred.js").write_text("// generated editor")
 
-    def test_existing_editor_is_reused_without_running_a_build(self):
+    def test_existing_editor_is_reused_without_running_a_build_only_when_asked(self):
         self.built_files()
         with patch("preview.subprocess.run") as build, patch("builtins.print"):
-            self.assertEqual(prepare_editor(self.root), self.editor)
+            self.assertEqual(prepare_editor(self.root, reuse=True), self.editor)
             build.assert_not_called()
 
     def test_missing_either_generated_file_builds_with_the_repository_workflow(self):
@@ -39,13 +39,13 @@ class LauncherTests(unittest.TestCase):
                 self.built_files()
                 (self.editor / "pkg" / missing).unlink()
                 with patch("preview.subprocess.run", side_effect=lambda *a, **k: self.built_files()) as build, patch("builtins.print"):
-                    self.assertEqual(prepare_editor(self.root), self.editor)
+                    self.assertEqual(prepare_editor(self.root, reuse=True), self.editor)
                     build.assert_called_once_with(["make", "build-web"], cwd=self.root, check=True)
 
-    def test_explicit_rebuild_does_not_reuse_existing_files(self):
+    def test_ordinary_launch_builds_even_with_existing_files(self):
         self.built_files()
         with patch("preview.subprocess.run") as build, patch("builtins.print"):
-            prepare_editor(self.root, rebuild=True)
+            prepare_editor(self.root)
             build.assert_called_once_with(["make", "build-web"], cwd=self.root, check=True)
 
     def test_incomplete_build_is_not_served(self):
@@ -53,7 +53,7 @@ class LauncherTests(unittest.TestCase):
             with self.assertRaisesRegex(FileNotFoundError, "required editor files"):
                 prepare_editor(self.root)
 
-    def test_failed_rebuild_does_not_open_or_serve_an_old_build(self):
+    def test_failed_build_does_not_open_or_serve_an_old_build(self):
         self.built_files()
         with patch("preview.REPOSITORY", self.root), \
              patch("preview.subprocess.run", side_effect=subprocess.CalledProcessError(2, ["make", "build-web"])), \
@@ -61,7 +61,7 @@ class LauncherTests(unittest.TestCase):
              patch("preview.webbrowser.open") as browser, \
              patch("builtins.print"), patch("sys.stderr"):
             with self.assertRaises(SystemExit) as raised:
-                main(["--rebuild"])
+                main([])
             self.assertEqual(raised.exception.code, 1)
             server.assert_not_called()
             browser.assert_not_called()
@@ -77,7 +77,7 @@ class LauncherTests(unittest.TestCase):
                 server = server_type.return_value
                 server.server_port = 8123
                 main(["--port", "8123", *options])
-                build.assert_not_called()
+                build.assert_called_once_with(["make", "build-web"], cwd=self.root, check=True)
                 self.assertEqual(server_type.call_args.args[0], ("127.0.0.1", 8123))
                 server.serve_forever.assert_called_once_with()
                 self.assertEqual(output.call_args.args, ("\nhttp://127.0.0.1:8123/",))
@@ -93,7 +93,7 @@ class LauncherTests(unittest.TestCase):
              patch("preview.webbrowser.open") as browser, patch("builtins.print") as output:
             server = server_type.return_value
             server.serve_forever.side_effect = KeyboardInterrupt
-            main([])
+            main(["--no-build"])
             self.assertEqual(output.call_args.args, ("\nPreview stopped.",))
             server.__exit__.assert_called_once()
             browser.assert_not_called()
@@ -106,7 +106,7 @@ class LauncherTests(unittest.TestCase):
                  patch("preview.ThreadingHTTPServer") as server_type, \
                  patch("preview.webbrowser.open") as browser, \
                  patch("builtins.print"):
-                main(["--no-open", *options])
+                main(["--no-open", "--no-build", *options])
                 self.assertEqual(server_type.call_args.args[0], ("127.0.0.1", port))
                 browser.assert_not_called()
 
@@ -117,7 +117,7 @@ class LauncherTests(unittest.TestCase):
              patch("preview.webbrowser.open") as browser, \
              patch("builtins.print"), patch("sys.stderr"):
             with self.assertRaises(SystemExit) as raised:
-                main([])
+                main(["--no-build"])
             self.assertEqual(raised.exception.code, 1)
             server.assert_called_once()
             browser.assert_not_called()

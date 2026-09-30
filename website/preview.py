@@ -61,16 +61,18 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def prepare_editor(repository, rebuild=False):
+def prepare_editor(repository, reuse=False):
+    """Build the browser editor, which Cargo makes quick when nothing changed.
+    `reuse` keeps existing generated files, building only when they're missing."""
     editor = repository / "web"
     required = [editor / "pkg/progred_bg.wasm", editor / "pkg/progred.js"]
-    if rebuild or not all(path.is_file() for path in required):
-        print("Building Progred's browser editor…", flush=True)
-        subprocess.run(["make", "build-web"], cwd=repository, check=True)
-        if not all(path.is_file() for path in required):
-            raise FileNotFoundError("The browser build did not produce the required editor files.")
-    else:
-        print("Using the existing browser editor. Use --rebuild after editor code changes.", flush=True)
+    if reuse and all(path.is_file() for path in required):
+        print("Using the existing browser editor without checking for changes.", flush=True)
+        return editor
+    print("Building Progred's browser editor (quick when nothing changed)…", flush=True)
+    subprocess.run(["make", "build-web"], cwd=repository, check=True)
+    if not all(path.is_file() for path in required):
+        raise FileNotFoundError("The browser build did not produce the required editor files.")
     return editor
 
 
@@ -82,14 +84,17 @@ def main(argv=None):
     browser.add_argument("--no-open", action="store_false", dest="open_browser",
                          help="Only show the link (the default)")
     parser.set_defaults(open_browser=False)
-    parser.add_argument("--rebuild", action="store_true", help="Rebuild the browser editor before opening")
+    parser.add_argument("--no-build", action="store_true", dest="reuse",
+                        help="Reuse the existing browser editor instead of building changes")
+    # Launches always build now; the old flag remains accepted.
+    parser.add_argument("--rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"Local port (default: {DEFAULT_PORT}; 0 chooses a free one)")
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
         parser.error("--port must be between 0 and 65535")
     try:
-        editor = prepare_editor(REPOSITORY, args.rebuild)
+        editor = prepare_editor(REPOSITORY, args.reuse)
     except (OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Could not prepare the browser editor: {error}\n")
     handler = partial(

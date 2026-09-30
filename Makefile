@@ -16,7 +16,7 @@ help:
 	@echo "  make dev          Rebuild after app exit or Ctrl+C (alias: dev-native)"
 	@echo "  make build-web    Build the browser app"
 	@echo "  make build-website  Build the publishable website into target/website"
-	@echo "  make website      Serve the local website and show its link (ARGS=--rebuild to rebuild)"
+	@echo "  make website      Serve the local website and show its link (builds editor changes first)"
 	@echo "  make run-web      Build and serve the browser app on port 8080"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo
@@ -76,6 +76,10 @@ sandbox-test:
 sandbox-app:
 	@./tools/build-macos-app
 
+# Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary.
 sandbox-web:
 	./tools/sandbox-cargo web-threaded build --release --bin progred -p progred
-	wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm
+	@wasm=target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm; \
+	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \
+		wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred "$$wasm"; \
+	fi

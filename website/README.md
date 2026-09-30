@@ -18,11 +18,13 @@ It doesn't launch a browser unless requested with `make website ARGS=--open`.
 The server must remain running; after stopping it or restarting the computer,
 start it again. There is no background service or automatic login startup.
 
-The launcher reuses the existing browser editor. If its generated files are
-missing, it first builds them using the repository's isolated Cargo workflow;
-that first build can take a while. After changing Rust editor code, use
-`make website ARGS=--rebuild` (or `website/Preview.command --rebuild`). Reuse is
-explicit, not a source-freshness check: ordinary launches don't compile changes.
+Each launch first builds the browser editor with the repository's isolated
+Cargo workflow, so Rust editor changes are always included. Cargo skips the
+work when nothing changed (about a second), and `wasm-bindgen` reruns only
+when the compiled editor is newer than its generated files. The very first
+build can take a while. `--no-build` reuses the existing generated files
+without checking for changes, building only if they're missing. Restart the
+launcher to pick up editor changes; website files only need a browser refresh.
 
 The browser build uses `nightly-2026-08-27` with `rust-src` and `llvm-tools`,
 and `wasm-bindgen-cli` matching the locked `wasm-bindgen` version. It rebuilds
@@ -42,7 +44,7 @@ and JavaScript imports need HTTP rather than a `file://` origin, and the threade
 editor needs the isolation headers provided by the local server.
 
 `python3 website/preview.py` is the same launcher without the shell wrapper.
-`--rebuild` requests a build even when files exist. `--open` also opens the default
+`--open` also opens the default
 browser (`--no-open` explicitly retains the default link-only behavior), and
 `--port 8082` requests another port. An occupied port is an explicit
 error, not a silent change of address. Use `--port 0` to ask the operating system
