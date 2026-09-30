@@ -927,7 +927,33 @@ fn read_point(value: &Value) -> Option<Point> {
 pub fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    scope::display(input).or_else(|| decode_with(input.value?, &|| input.targets.current()))
+    scope::display(input)
+        .or_else(|| evaluated_literal(input))
+        .or_else(|| decode_with(input.value?, &|| input.targets.current()))
+}
+
+/// Drawing evaluates a literal rect's or circle's coordinates, and a
+/// transform's operands, as Grap expressions, so they read like any
+/// argument: a parameter there is its name, not its cell.
+fn evaluated_literal(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let expression = || crate::display::runtime_partial(crate::libraries::grap::expression);
+    match input.value?.record_keys()?.as_slice() {
+        [kind @ (vocabulary::RECT | vocabulary::CIRCLE | vocabulary::TRANSLATE)] => {
+            crate::display::structure::record_layout(input, |key| {
+                (key == *kind).then(|| {
+                    crate::display::runtime_partial(move |input| {
+                        crate::display::structure::record_layout(input, |_| Some(expression()))
+                    })
+                })
+            })
+        }
+        [vocabulary::ROTATE] => {
+            crate::display::structure::record_layout(input, |_| Some(expression()))
+        }
+        _ => None,
+    }
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
