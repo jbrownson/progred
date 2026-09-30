@@ -8,12 +8,12 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-native run-macos run-linux install-linux unsupported-native-platform dev dev-native build-web build-website website run-web web serve-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev build-web build-website website run-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
 
 help:
 	@echo "Development:"
-	@echo "  make run          Run the native app once (alias: run-native)"
-	@echo "  make dev          Rebuild after app exit or Ctrl+C (alias: dev-native)"
+	@echo "  make run          Run the native app once"
+	@echo "  make dev          Rebuild after app exit or Ctrl+C"
 	@echo "  make build-web    Build the browser app"
 	@echo "  make build-website  Build the publishable website into target/website"
 	@echo "  make website      Serve the local website and show its link (builds editor changes first)"
@@ -22,9 +22,7 @@ help:
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
 
-run: run-native
-
-run-native: $(NATIVE_RUN_TARGET)
+run: $(NATIVE_RUN_TARGET)
 
 run-macos: sandbox-app
 	@/usr/bin/open -W -n target/sandbox/app/Progred.app
@@ -39,9 +37,7 @@ unsupported-native-platform:
 	@echo "native Progred is not supported on $(UNAME_S)" >&2
 	@exit 1
 
-dev: dev-native
-
-dev-native:
+dev:
 	@./tools/dev-native $(ARGS)
 
 build-web: sandbox-web
@@ -56,11 +52,6 @@ website:
 run-web:
 	@echo "Open Progred: http://127.0.0.1:8080/editor/"
 	@python3 website/preview.py --no-open --port 8080
-
-# Compatibility aliases.
-web: build-web
-
-serve-web: run-web
 
 sandbox-fetch:
 	./tools/sandbox-cargo fetch

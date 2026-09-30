@@ -86,8 +86,6 @@ def main(argv=None):
     parser.set_defaults(open_browser=False)
     parser.add_argument("--no-build", action="store_true", dest="reuse",
                         help="Reuse the existing browser editor instead of building changes")
-    # Launches always build now; the old flag remains accepted.
-    parser.add_argument("--rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"Local port (default: {DEFAULT_PORT}; 0 chooses a free one)")
     args = parser.parse_args(argv)
