@@ -23,7 +23,7 @@ const layers = [
     id: "numbers",
     label: "Numbers",
     libraries: ["c46d010325d3a1ec0f2a84dd3a9570ae", "1fdb573a2c56a7063546c195318214bc"],
-    off: "Numbers were the f64 library reading eight bytes under its key. The little <strong>f64</strong> was its signature; without it, <code>7<sub class="tag">f64</sub></code> is <code>{…5d561: 0x0000000000001c40}</code>, the eight bytes of 7.0, least significant first.",
+    off: "Numbers were the f64 library reading eight bytes under its key. The little <strong>f64</strong> was its signature; without it, <code>7<sub class=\"tag\">f64</sub></code> is <code>{…5d561: 0x0000000000001c40}</code>, the eight bytes of 7.0, least significant first.",
   },
 ];
 // Libraries this page never peels: names, text, and hex editing.
