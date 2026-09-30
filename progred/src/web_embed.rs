@@ -105,6 +105,12 @@ pub(crate) fn tutorial_slots(
                     plain,
                 ])
             });
+            // Whatever the libraries leave undrawn, a named cell still reads as
+            // its name rather than inlining its definition.
+            let full_inside = crate::display::compose_partials([
+                projection.partial().clone(),
+                crate::display::runtime_partial(named_reference),
+            ]);
             let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
@@ -113,7 +119,11 @@ pub(crate) fn tutorial_slots(
                         16.0,
                         slots.iter().map(|(key, level)| {
                             let view = match level {
-                                Level::Full => crate::display::descend(Step::Key(*key), None, None),
+                                Level::Full => crate::display::descend(
+                                    Step::Key(*key),
+                                    None,
+                                    Some(full_inside.clone()),
+                                ),
                                 Level::Plain => crate::display::descend(
                                     Step::Key(*key),
                                     plain.clone(),
@@ -147,8 +157,8 @@ pub(crate) fn tutorial_slots(
     }
 }
 
-/// Inside a plain slot, a named cell reads as its name, so a call shows
-/// which function it calls instead of inlining the definition.
+/// Inside a slot, a named cell no library draws reads as its name, so a
+/// call shows which function it calls instead of inlining the definition.
 fn named_reference(
     input: &crate::display::ProjectionInput<
         '_,

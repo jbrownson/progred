@@ -2331,3 +2331,33 @@ fn swapping_libraries_keeps_the_document_and_selection() {
         "without it, the same value is a record holding bytes"
     );
 }
+
+#[test]
+fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
+    use crate::libraries::{blob, number};
+    use grap::vocabulary::FUNCTION;
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/functions.gid"
+    ))
+    .unwrap();
+    let mut stack =
+        crate::stack::load_selected(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]).unwrap();
+    stack.projection =
+        crate::web_embed::tutorial_slots(Some(&names["second"].to_string()), stack.projection)
+            .unwrap();
+    let mut world = crate::test_editor_with_stack(doc, stack);
+    let frame = editing_frame(&mut world, false);
+    let callee = [
+        Step::Key(names["second"]),
+        Step::Key(grap::vocabulary::EVALUATE),
+        Step::Key(FUNCTION),
+    ];
+    assert!(frame.descends.iter().any(|d| d.path.as_ref() == callee));
+    assert!(
+        !frame
+            .descends
+            .iter()
+            .any(|d| d.path.len() > callee.len() && d.path.starts_with(&callee)),
+        "the call shows (scale), not scale's whole definition"
+    );
+}
