@@ -178,6 +178,26 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             #[cfg(target_arch = "wasm32")]
+            UserEvent::LibrariesChanged(ids) => match crate::web::stack(&ids) {
+                Ok(stack) => {
+                    for runner in &mut self.editors {
+                        if let RenderState::Active { window, .. } = &runner.editor.state {
+                            let window = window.clone();
+                            let size = window.inner_size();
+                            runner.stack_changed(
+                                stack.clone(),
+                                window.scale_factor(),
+                                Size::new(size.width as f64, size.height as f64),
+                            );
+                            window.request_redraw();
+                        } else {
+                            runner.editor.replace_stack(stack.clone());
+                        }
+                    }
+                }
+                Err(error) => web_sys::console::error_1(&error.into()),
+            },
+            #[cfg(target_arch = "wasm32")]
             UserEvent::BrowserFocusChanged => {
                 if let Some(runner) = self.editors.first_mut()
                     && let RenderState::Active { window, .. } = &runner.editor.state

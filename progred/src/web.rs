@@ -43,6 +43,31 @@ pub fn browser_modifiers_changed(shift: bool, control: bool, alt: bool, meta: bo
     });
 }
 
+thread_local! {
+    /// The page's tutorial slots, reapplied to every library stack it chooses.
+    static TUTORIAL_SLOTS: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+pub(crate) fn stack(libraries: &str) -> Result<crate::stack::Stack<crate::Editor>, String> {
+    let mut stack = web_embed::libraries(Some(libraries))?;
+    stack.projection = TUTORIAL_SLOTS
+        .with(|slots| web_embed::tutorial_slots(slots.borrow().as_deref(), stack.projection))?;
+    Ok(stack)
+}
+
+/// Replace the editor's libraries, keeping its document and selection.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_libraries(libraries: &str) -> Result<(), wasm_bindgen::JsValue> {
+    stack(libraries).map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(UserEvent::LibrariesChanged(libraries.to_owned()));
+        }
+    });
+    Ok(())
+}
+
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
     let palette = theme
@@ -84,6 +109,7 @@ pub fn start_editor(
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     stack.projection = web_embed::tutorial_slots(tutorial_slots.as_deref(), stack.projection)
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    TUTORIAL_SLOTS.with(|slots| *slots.borrow_mut() = tutorial_slots);
     run_document(
         doc,
         binders,

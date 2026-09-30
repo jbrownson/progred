@@ -77,12 +77,16 @@
         if (!isTheme(theme)) throw new Error("theme must be 'light' or 'dark'");
         let ready = false;
         document.documentElement.dataset.theme = theme;
+        let libraries = params.get("libraries") ?? undefined;
         window.addEventListener("message", (event) => {
-          if (event.origin === location.origin && event.source === window.parent
-              && event.data?.type === "progred:theme" && isTheme(event.data.theme)) {
+          if (event.origin !== location.origin || event.source !== window.parent) return;
+          if (event.data?.type === "progred:theme" && isTheme(event.data.theme)) {
             theme = event.data.theme;
             document.documentElement.dataset.theme = theme;
             if (ready) wasm.set_theme(theme);
+          } else if (event.data?.type === "progred:libraries" && typeof event.data.libraries === "string") {
+            libraries = event.data.libraries;
+            if (ready) wasm.set_libraries(libraries);
           }
         });
         const canvas = document.querySelector("#progred");
@@ -118,7 +122,7 @@
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
         };
         wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
-          params.get("libraries") ?? undefined, params.get("tutorial-slots") ?? undefined,
+          libraries, params.get("tutorial-slots") ?? undefined,
           commandIsMeta(navigator.platform), theme);
         forwardModifiers(canvas, window, wasm.browser_modifiers_changed);
         routeKeyboard(canvas, wasm.browser_keyboard);

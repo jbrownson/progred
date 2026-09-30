@@ -599,6 +599,16 @@ impl Editor {
     /// Replace document-owned state, retaining the window and its platform
     /// resources. In particular, the input reducer still knows the physical
     /// pointer position and held modifiers; old gestures do not survive.
+    /// Libraries decide how everything is drawn and what cells resolve to,
+    /// so a new stack keeps the document, selection, and folds but discards
+    /// gestures and memoized work computed under the old one.
+    #[cfg(any(target_arch = "wasm32", test))]
+    pub(crate) fn replace_stack(&mut self, stack: stack::Stack<Editor>) {
+        self.finish_gesture();
+        self.computations.reset();
+        self.stack = stack;
+    }
+
     pub(crate) fn replace_document(
         &mut self,
         doc: gid::Document,

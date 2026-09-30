@@ -2284,3 +2284,50 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
     // A slot showing the definition itself still opens it.
     assert!(opened(&[Step::Key(names["third"])]));
 }
+
+#[test]
+fn swapping_libraries_keeps_the_document_and_selection() {
+    use crate::libraries::{blob, number};
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/model.gid"
+    ))
+    .unwrap();
+    let slots = format!("{}", names["first"]);
+    let stack_of = |libraries: &[CellId]| {
+        let mut stack = crate::stack::load_selected(libraries).unwrap();
+        stack.projection =
+            crate::web_embed::tutorial_slots(Some(&slots), stack.projection).unwrap();
+        stack
+    };
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        stack_of(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]),
+    );
+    let planet = [
+        Step::Key(names["first"]),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(names["planet"]),
+    ];
+    let bytes: Vec<Step> = [&planet[..], &[Step::Key(text::vocabulary::UTF8)]].concat();
+    select_occurrence(&mut world, &planet);
+    assert!(
+        !editing_frame(&mut world, false)
+            .descends
+            .iter()
+            .any(|d| d.path.as_ref() == bytes.as_slice()),
+        "the text library draws the planet as a line of text"
+    );
+    let document = world.model.doc.clone();
+    let mut runner = crate::EditorRunner::new(world);
+    runner.stack_changed(stack_of(&[blob::ID]), 1.0, kurbo::Size::new(620.0, 400.0));
+    let world = &mut runner.editor;
+    assert!(Rc::ptr_eq(&world.model.doc, &document));
+    assert_eq!(world.model.selection.as_ref().unwrap().path(), planet);
+    assert!(
+        editing_frame(world, false)
+            .descends
+            .iter()
+            .any(|d| d.path.as_ref() == bytes.as_slice()),
+        "without it, the same value is a record holding bytes"
+    );
+}
