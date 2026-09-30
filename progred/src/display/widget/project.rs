@@ -35,4 +35,15 @@ pub trait Project<World, Hover> {
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
+    /// Descend showing the child as Raw does: no value projections and no
+    /// naming convention, whatever the enclosing view shows.
+    #[cfg(any(test, target_arch = "wasm32"))]
+    fn descend_raw(
+        &self,
+        text: &mut TextCtx,
+        build: &mut ChoiceBuild<HoverPass<World, Hover>>,
+        step: Step,
+    ) -> ChoiceLayout<HoverPass<World, Hover>> {
+        self.descend(text, build, std::slice::from_ref(&step), None, None)
+    }
 }

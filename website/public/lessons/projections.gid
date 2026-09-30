@@ -1,0 +1,26 @@
+{
+  "binders": {
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "sum": 201af445eb7e2c270bb5ead10b781fc1,
+    "calculation": 623ada768cddc2cd6ea3d7870ca13c2c,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "third": 5e716c07490849f072b4e9017dd6230d,
+  },
+  "cells": {
+    calculation: {evaluate: {
+      function: sum,
+      left: {f64: 0x0000000000000840},
+      right: {f64: 0x0000000000000040},
+    }},
+  },
+  "root": {
+    first: calculation,
+    second: calculation,
+    third: calculation,
+  },
+}

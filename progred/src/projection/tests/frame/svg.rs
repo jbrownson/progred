@@ -367,6 +367,19 @@ fn website_lesson_svg_captures() {
             &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
         ),
         (
+            "projections",
+            include_str!("../../../../../website/public/lessons/projections.gid"),
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                number::ID,
+                f64::ID,
+                grap::ID,
+            ][..],
+        ),
+        (
             "grap",
             include_str!("../../../../../website/public/lessons/grap.gid"),
             &[
@@ -419,15 +432,20 @@ fn website_lesson_svg_captures() {
                     doc.clone(),
                     crate::stack::load_selected(libraries).unwrap(),
                 );
-                if matches!(name, "grap" | "functions" | "drawing" | "forest") {
+                if matches!(
+                    name,
+                    "projections" | "grap" | "functions" | "drawing" | "forest"
+                ) {
                     editor.stack.projection = crate::web_embed::tutorial_slots(
                         Some(
                             &if matches!(name, "drawing" | "forest") {
-                                ["third", "first", "second"]
+                                [("third", ""), ("first", ""), ("second", "")]
+                            } else if name == "projections" {
+                                [("first", ""), ("second", ":plain"), ("third", ":raw")]
                             } else {
-                                ["first", "second", "third"]
+                                [("first", ""), ("second", ""), ("third", "")]
                             }
-                            .map(|key| fields[key].to_string())
+                            .map(|(key, level)| format!("{}{level}", fields[key]))
                             .join(","),
                         ),
                         editor.stack.projection,

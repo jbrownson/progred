@@ -78,6 +78,11 @@ impl<World: 'static> Projection<World> {
 
     /// Prepend a partial at entry, following cells to their definitions.
     /// Its children and computed results use the ordinary projection.
+    #[cfg(any(test, target_arch = "wasm32"))]
+    pub(crate) fn partial(&self) -> &crate::display::Partial<World, Hovered> {
+        &self.partial
+    }
+
     pub fn with_entry(self, partial: crate::display::Partial<World, Hovered>) -> Self {
         Self {
             entry: Some(partial),
@@ -324,6 +329,31 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             steps,
             current,
             default,
+            build,
+        )
+    }
+    #[cfg(any(test, target_arch = "wasm32"))]
+    fn descend_raw(
+        &self,
+        text: &mut TextCtx,
+        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+        step: Step,
+    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
+        let cx = Cx {
+            raw: true,
+            ..self.cx.clone()
+        };
+        let nothing = crate::display::partial(|_| None);
+        prepare_descend_path(
+            &cx,
+            self.projection,
+            text,
+            self.path,
+            self.ancestors,
+            self.value,
+            std::slice::from_ref(&step),
+            Some(nothing.clone()),
+            Some(nothing),
             build,
         )
     }

@@ -24,6 +24,16 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>
     }
 }
 
+/// How a tutorial slot draws its value: with every loaded library's
+/// projections, plainly (names, text, and numbers read as themselves while
+/// calls stay records), or as Raw draws it. Several slots can show one shared cell at different levels.
+#[derive(Clone, Copy)]
+enum Level {
+    Full,
+    Plain,
+    Raw,
+}
+
 pub(crate) fn tutorial_slots(
     ids: Option<&str>,
     projection: crate::projection::Projection<Editor>,
@@ -33,29 +43,64 @@ pub(crate) fn tutorial_slots(
         Some(ids) => {
             let slots = ids
                 .split(',')
-                .map(|id| {
-                    id.trim()
-                        .parse::<gid::CellId>()
+                .map(|entry| {
+                    let (id, level) = match entry.trim().split_once(':') {
+                        None => (entry.trim(), Level::Full),
+                        Some((id, "plain")) => (id, Level::Plain),
+                        Some((id, "raw")) => (id, Level::Raw),
+                        Some((_, level)) => {
+                            return Err(format!("Unknown tutorial slot level {level:?}"));
+                        }
+                    };
+                    id.parse::<gid::CellId>()
+                        .map(|id| (id, level))
                         .map_err(|error| format!("Invalid tutorial slot {id:?}: {error}"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             if slots
                 .iter()
-                .copied()
+                .map(|(id, _)| *id)
                 .collect::<std::collections::HashSet<_>>()
                 .len()
                 != slots.len()
             {
                 return Err("Tutorial slots must be distinct".into());
             }
+            let plain = slots
+                .iter()
+                .any(|(_, level)| matches!(level, Level::Plain))
+                .then(|| {
+                    // Names, text, and numbers read as themselves; calls,
+                    // including arithmetic, stay records.
+                    crate::stack::load_selected(&[
+                        crate::libraries::name::ID,
+                        crate::libraries::text::ID,
+                        crate::libraries::blob::ID,
+                    ])
+                    .map(|stack| {
+                        crate::display::compose_partials([
+                            stack.projection.partial().clone(),
+                            crate::display::runtime_partial(|input| {
+                                crate::libraries::f64::convention().display(input)
+                            }),
+                        ])
+                    })
+                })
+                .transpose()?;
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
                     crate::display::projection::group(crate::display::col(
                         0,
                         16.0,
-                        slots
-                            .iter()
-                            .map(|key| crate::display::descend(Step::Key(*key), None, None)),
+                        slots.iter().map(|(key, level)| match level {
+                            Level::Full => crate::display::descend(Step::Key(*key), None, None),
+                            Level::Plain => crate::display::descend(
+                                Step::Key(*key),
+                                plain.clone(),
+                                plain.clone(),
+                            ),
+                            Level::Raw => crate::display::descend_raw(Step::Key(*key)),
+                        }),
                     ))
                 })
             })))
@@ -152,13 +197,19 @@ mod tests {
             "first",
             "9940ece27410c72a5308a544890ccc71,",
             "9940ece27410c72a5308a544890ccc71,9940ece27410c72a5308a544890ccc71",
+            "9940ece27410c72a5308a544890ccc71,9940ece27410c72a5308a544890ccc71:raw",
+            "9940ece27410c72a5308a544890ccc71:fancy",
+            "9940ece27410c72a5308a544890ccc71:",
         ] {
             assert!(tutorial_slots(Some(ids), Default::default()).is_err());
         }
         assert!(tutorial_slots(None, Default::default()).is_ok());
-        assert!(
-            tutorial_slots(Some("9940ece27410c72a5308a544890ccc71"), Default::default()).is_ok()
-        );
+        for ids in [
+            "9940ece27410c72a5308a544890ccc71",
+            "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw",
+        ] {
+            assert!(tutorial_slots(Some(ids), Default::default()).is_ok());
+        }
     }
 
     #[test]

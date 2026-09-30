@@ -273,6 +273,7 @@ async function lessonPage(platform = "Linux x86_64") {
     drawing: ["argument", "body", "add", "source"],
     forest: ["height", "color", "plant"],
     "growing-forest": [],
+    projections: ["full", "plain", "raw"],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
@@ -809,4 +810,54 @@ test("drawing progress latches through undo and resets independently", async () 
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
   assert.equal(exercises[2].tasks.filter(t => t.classes.has("completed")).length, 2);
+});
+
+const calculation = "623ada768cddc2cd6ea3d7870ca13c2c";
+const views = (right, index, rest = []) => ({
+  document: {
+    root: record(...slots.map((slot) => [slot, cell(calculation)])),
+    cells: { [calculation]: record(["acfc5e50881292518dab3cec77cf43ee", record(
+      ["751fca4373debdd0b7e6eb73e08d684b", cell("201af445eb7e2c270bb5ead10b781fc1")],
+      ["764f6afe17ba14e81f5ab61204be0bec", number(3)],
+      ["4f53ff25390f58472d31a6142644dec2", number(right)],
+    )]) },
+  },
+  selection: index === undefined ? null : { view: "document", stage: "value", path: { list: [
+    record([drawingIds.key, cell(slots[index])]),
+    record([drawingIds.follow, cell(drawingIds.document)]),
+    record([drawingIds.key, cell("acfc5e50881292518dab3cec77cf43ee")]),
+    record([drawingIds.key, cell("4f53ff25390f58472d31a6142644dec2")]),
+    ...rest,
+  ] } },
+});
+
+test("projection quests credit an edit to the view that made it, and finding the number in raw", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("projections", views(2)), []);
+  assert.deepEqual(completedSteps("projections", views(4, 0), views(2, 0)), ["full"]);
+  assert.deepEqual(completedSteps("projections", views(4, 1), views(2, 1)), ["plain"]);
+  // Selecting without editing is not an edit.
+  assert.deepEqual(completedSteps("projections", views(4, 0), views(4, 0)), []);
+  assert.deepEqual(completedSteps("projections", views(2, 2)), ["raw"]);
+  assert.deepEqual(completedSteps("projections", views(2, 2, [record([drawingIds.key, cell("ed11fde03b7c2c1ba2fccc3cdba5d561")])])), ["raw"]);
+  const elsewhere = views(2, 2);
+  elsewhere.selection.path.list.pop();
+  assert.deepEqual(completedSteps("projections", elsewhere), []);
+  const separate = views(2, 2);
+  separate.document.root.record[1][1] = cell("other");
+  assert.deepEqual(completedSteps("projections", separate), []);
+  assert.deepEqual(completedSteps("projections", { document: { root: null } }), []);
+});
+
+test("projection progress latches and resets independently", async () => {
+  const { exercises, send } = await lessonPage();
+  const index = exercises.findIndex((exercise) => exercise.id === "projections");
+  const page = exercises[index];
+  send(index, views(2, 0));
+  send(index, views(4, 0));
+  send(index, views(5, 1));
+  send(index, views(5, 2));
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
+  page.listeners.click();
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
 });

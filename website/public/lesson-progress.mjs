@@ -129,6 +129,23 @@ export function completedSteps(lesson, state, previous) {
         ? ["plant"] : []),
     ];
   }
+  if (lesson === "projections") {
+    const calculation = field(root, slots[0])?.cell;
+    const right = (at) => number(field(field(at?.document?.cells?.[calculation], fields.evaluate), fields.right));
+    if (typeof calculation !== "string"
+        || !slots.every((slot) => field(root, slot)?.cell === calculation)) return [];
+    const selection = state.selection;
+    const path = selection?.view === "document" ? selection.path?.list : undefined;
+    const inView = (index) => field(path?.[0], fields.key)?.cell === slots[index];
+    const [now, before] = [right(state), right(previous)];
+    // An edit counts in the view whose selection made it.
+    const edited = Number.isFinite(now) && Number.isFinite(before) && now !== before;
+    return [
+      ...(edited && inView(0) ? ["full"] : []),
+      ...(edited && inView(1) ? ["plain"] : []),
+      ...(inView(2) && path.some((step) => field(step, fields.key)?.cell === fields.right) ? ["raw"] : []),
+    ];
+  }
   if (lesson === "values") {
     const planet = text(field(root, fields.planet));
     const moons = number(field(root, fields.moons));

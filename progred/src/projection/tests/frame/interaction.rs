@@ -2013,3 +2013,72 @@ fn website_forest_plants_a_fourth_tree() {
             && call.get(&names["height"]).and_then(f64::read) == Some(50.0)
     }));
 }
+
+#[test]
+fn website_projections_edit_one_calculation_through_any_view() {
+    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use grap::vocabulary::EVALUATE;
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/projections.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ])
+        .unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&format!(
+            "{},{}:plain,{}:raw",
+            names["first"], names["second"], names["third"]
+        )),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    let right = |slot: &str| {
+        [
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(EVALUATE),
+            Step::Key(f64::vocabulary::RIGHT),
+        ]
+    };
+    let stored = |world: &crate::Editor| {
+        world
+            .model
+            .doc
+            .cells
+            .value(names["calculation"])
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&EVALUATE)
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&f64::vocabulary::RIGHT)
+            .and_then(f64::read)
+    };
+    // Every view places the one stored number, so each can select it.
+    let frame = editing_frame(&mut world, false);
+    for slot in ["first", "second", "third"] {
+        assert!(
+            frame
+                .descends
+                .iter()
+                .any(|d| d.path.as_ref() == right(slot))
+        );
+    }
+    replace_text(&mut world, &right("first"), "4");
+    assert_eq!(stored(&world), Some(4.0));
+    replace_text(&mut world, &right("second"), "6");
+    assert_eq!(stored(&world), Some(6.0));
+}

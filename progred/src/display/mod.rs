@@ -775,6 +775,16 @@ pub fn descend<World: 'static, Hover: 'static>(
     }))
 }
 
+/// Descend into one child shown as Raw shows it.
+#[cfg(any(test, target_arch = "wasm32"))]
+pub fn descend_raw<World: 'static, Hover: 'static>(step: Step) -> Layout<World, Hover> {
+    Layout::program(Rc::new(move |context, build| {
+        context
+            .project
+            .descend_raw(context.text, build, step.clone())
+    }))
+}
+
 /// Descend through stored structure without projecting intermediate containers.
 pub fn descend_path<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,

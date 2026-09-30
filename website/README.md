@@ -84,7 +84,9 @@ adds controls, presentation, logic, list, and sequence to the drawing set,
 without loading Fidget or toolpath libraries.
 Calculations, functions, drawing, and the finale use `tutorial-slots`, listing three record-field
 identities in display order. An entry-only projection stacks those fields without labels or insertion
-gaps. Deleting a value leaves its slot visible as the ordinary empty picker;
+gaps. An identity may carry a level: `:plain` draws that slot with only names,
+text, and numbers read as themselves (calls stay records), and `:raw` draws it as
+Raw does, without names. Several slots can show one shared cell at different levels. Deleting a value leaves its slot visible as the ordinary empty picker;
 refilling it writes the same field. Nested values use the ordinary projection
 and editing behavior. This is tutorial host configuration, not document syntax
 or a library construct. Without the option, the record displays normally.
@@ -147,6 +149,14 @@ that checks the list grows back to a previously observed state after a removal,
 including undoing the whole text-erasing run. Inserting a different color does
 not count. These checks observe results rather than keystrokes, and the small
 list snapshots are discarded on restoration or Reset.
+
+The projections lesson, right after values, answers "if a program isn't text,
+what do you see?" Three slots reference one shared calculation cell, drawn fully
+(`3 + 2 → 5`), plainly (`{evaluate: {function: +, left: 3, right: 2}}`), and
+raw (identities and bytes). An edit counts in the view whose selection made it:
+changing the number on top, then in the middle; the last step selects that
+number in the raw view. This lesson is being tried alongside the others and
+doesn't replace any yet.
 
 The cells lesson starts with two references to one numeric cell. It checks for
 editing that shared definition, creating a different cell containing 11,
