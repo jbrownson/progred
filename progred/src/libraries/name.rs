@@ -36,6 +36,26 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
     })
 }
 
+/// Whether a record's name is text it can be read and edited as.
+pub(crate) fn named(value: &::grap::RuntimeValue) -> bool {
+    value
+        .field(vocabulary::NAME)
+        .is_some_and(|name| text::read(&name.to_value()).is_some())
+}
+
+/// The stored name at `steps`, edited in place.
+pub(crate) fn label(
+    steps: impl Into<Vec<gid::Step>>,
+) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    crate::display::descend_path_with_projection(
+        steps,
+        Some(crate::display::partial(|input| {
+            editor(input.value?).map(crate::display::line_edit)
+        })),
+        None,
+    )
+}
+
 /// Explicitly include the stored name beside a facet's own presentation.
 /// This is decoration, not a binding or a record field/value pair.
 pub(crate) fn with_name(
