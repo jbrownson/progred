@@ -336,7 +336,7 @@ fn drawing_frame(
         completions: None,
         sources: Sources { doc, libraries },
         raw: false,
-        fold_references: false,
+        fold_references: crate::projection::FoldReferences::None,
         annotations: &annotations,
         styles: &styles,
         selection: None,

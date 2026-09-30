@@ -17,7 +17,7 @@ const layers = [
     id: "calculations",
     label: "Calculations",
     libraries: ["f7735b90f6826b25c350a8fd83af8c47", "ec17915df2d42377574dc90f22500fe2", "7b0fa421250c1b5c8a78a3a95b172cb6", "0ad8124ba821acd5fbf2c868371e1492", "f76a2ef341541a5c955fc23094e2df52", "873c68ac371dbbb98a4f198546d60241"],
-    off: "Grap, the language, is a library. Without it, the editor doesn't know that a record with a <code>function</code> key is a call, or that a record with <code>params</code> and a <code>body</code> is a function. Everything is still here, as plain records. Names in parentheses, like <code>(forest)</code>, are functions this document defines; short codes like <code>…d684b</code> are keys owned by libraries that aren't loaded anymore, such as Grap's own <code>function</code> key.",
+    off: "Grap, the language, is a library. Without it, the editor doesn't know that a record with a <code>function</code> key is a call, or that a record with <code>params</code> and a <code>body</code> is a function. Everything is still here, as plain records. A named cell like <code>(forest {…})</code> is a function this document defines, folded; click its <code>{…}</code> to open it. Short codes like <code>…d684b</code> are keys owned by libraries that aren't loaded anymore, such as Grap's own <code>function</code> key.",
   },
   {
     id: "numbers",

@@ -46,4 +46,17 @@ pub trait Project<World, Hover> {
     ) -> ChoiceLayout<HoverPass<World, Hover>> {
         self.descend(text, build, std::slice::from_ref(&step), None, None)
     }
+    /// Descend into a tutorial slot, where named definitions inside start
+    /// folded wherever no projection draws them.
+    #[cfg(any(test, target_arch = "wasm32"))]
+    fn descend_slot(
+        &self,
+        text: &mut TextCtx,
+        build: &mut ChoiceBuild<HoverPass<World, Hover>>,
+        step: Step,
+        current: Option<Partial<World, Hover>>,
+        default: Option<Partial<World, Hover>>,
+    ) -> ChoiceLayout<HoverPass<World, Hover>> {
+        self.descend(text, build, std::slice::from_ref(&step), current, default)
+    }
 }
