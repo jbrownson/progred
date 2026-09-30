@@ -126,6 +126,14 @@ strong { font-weight: 600; }
 iframe { display: block; width: 100%; height: 19rem; border: 1px solid var(--border); border-radius: 4px; background: var(--editor); }
 #drawing iframe { height: 24rem; }
 #model iframe { height: 16rem; }
+.story .showcase iframe { height: 21rem; }
+#dot iframe { height: 10rem; }
+#copies iframe, #recipe iframe { height: 11.5rem; }
+#trunks iframe { height: 20rem; }
+#ladder iframe { height: 15rem; }
+#heights iframe { height: 22rem; }
+#growth iframe { height: 25rem; }
+#counted iframe { height: 26rem; }
 .showcase iframe { height: 42.75rem; }
 kbd { font: inherit; font-size: 0.9em; border: 1px solid var(--border); border-bottom-width: 2px; padding: 0.05em 0.3em; border-radius: 3px; white-space: nowrap; }
 code { font-size: 0.95em; }

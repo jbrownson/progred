@@ -22,6 +22,20 @@ const slots = [
   "5e716c07490849f072b4e9017dd6230d",
 ];
 const sharedCell = "f56d42a97558ccc8205fb4019b878945";
+// The story page's cells; every version of its forest shares them.
+const story = {
+  program: "1aef3dfdbc27183833ef29bbecaccd95",
+  recipe: "e93553d9cfad696bf6be0c3618c48858",
+  calls: "46cea6ad72d7e838236fcf490ac3695e",
+  x: "2bd03b91a3ab695c54a71efafcb10115",
+  height: "f747026de922fb0f01823df377de5cb6",
+  growth: "ad17c2a7379b9ae003d76e833ec41be7",
+  count: "97da2489d387944d9a468658328e130d",
+  forestCall: "0245b1a17b29143ad4b1c25d57922a06",
+  baseSlot: "8ec6740fa565a2b3b0348132d030d03b",
+  rect: "bb5e62c1b300b1e8c2484a0f4879a1fe",
+  subtract: "08d1ebc7fd4ce62efec9671f73e9b645",
+};
 const sum = "201af445eb7e2c270bb5ead10b781fc1";
 const multiply = "d6f384c439d9d69996d545df422efd79";
 const drawing = {
@@ -107,6 +121,7 @@ function references(list) {
 // Checks describe achievements; the page retains them until this exercise resets.
 export function completedSteps(lesson, state, previous) {
   const root = state?.document?.root;
+  if (lesson in storySteps) return storySteps[lesson](state);
   if (lesson === "forest") {
     const height = "cc32dd050a9351804e7a704b4d59e7ac";
     const paint = "cb04728f5e6a1d93a6790238b5f1ce4d";
@@ -279,3 +294,79 @@ export function completedSteps(lesson, state, previous) {
   }
   return [];
 }
+
+function circle(fill) {
+  return field(field(fill, drawing.shape), drawing.circle);
+}
+
+function sourceIn(state, slot, length) {
+  const path = state?.selection?.source_path?.list;
+  return path?.length === length && field(path[0], fields.key)?.cell === slot;
+}
+
+function selectedUnder(state, slot, key) {
+  const path = selectedPath(state);
+  return field(path?.[0], fields.key)?.cell === slot
+    && path.some((step) => field(step, fields.key)?.cell === key);
+}
+
+function storyCalls(state) {
+  return field(state?.document?.cells?.[story.calls], drawing.expressions)?.list;
+}
+
+const storySteps = {
+  dot(state) {
+    const x = number(field(circle(state?.document?.cells?.[story.program]), drawing.x));
+    return [
+      ...(sourceIn(state, slots[0], 2) ? ["pick"] : []),
+      ...(Number.isFinite(x) && x !== 60 ? ["scrub"] : []),
+    ];
+  },
+  copies(state) {
+    const dots = field(state?.document?.cells?.[story.program], drawing.expressions)?.list;
+    return Array.isArray(dots) && dots.length >= 2
+      && dots.every((dot) => number(field(circle(dot), drawing.radius)) > 24) ? ["bigger"] : [];
+  },
+  recipe(state) {
+    const body = field(state?.document?.cells?.[story.recipe], fields.body);
+    return [
+      ...(number(field(circle(body), drawing.radius)) > 24 ? ["bigger"] : []),
+      ...(sourceIn(state, slots[0], 3) ? ["pick"] : []),
+    ];
+  },
+  trunks(state) {
+    const name = text(field(state?.document?.cells?.[story.recipe], fields.name));
+    return name && name !== "dot" ? ["rename"] : [];
+  },
+  ladder(state) {
+    return [
+      ...(selectedUnder(state, slots[0], story.x) ? ["top"] : []),
+      ...(selectedUnder(state, story.baseSlot, story.x) ? ["bottom"] : []),
+    ];
+  },
+  heights(state) {
+    const leaves = field(field(state?.document?.cells?.[story.recipe], fields.body), drawing.expressions)?.list?.[1];
+    const y = field(circle(leaves), drawing.y);
+    return [
+      ...(field(y, fields.function)?.cell === story.subtract
+        && Math.abs(number(field(y, fields.right)) - 90) <= 3 ? ["fit"] : []),
+    ];
+  },
+  growth(state) {
+    const growth = number(state?.document?.cells?.[story.growth]);
+    const calls = storyCalls(state);
+    return [
+      ...(Number.isFinite(growth) && growth !== 1 ? ["shrink"] : []),
+      ...(Array.isArray(calls) && calls.length > 3
+        && calls.every((call) => Number.isFinite(number(field(call, story.x)))) ? ["plant"] : []),
+    ];
+  },
+  counted(state) {
+    const count = number(field(state?.document?.cells?.[story.forestCall], story.count));
+    return [
+      ...(Number.isFinite(count) && count !== 7 ? ["count"] : []),
+      ...(state?.selection?.source_path?.list?.length > 2
+        && field(state.selection.source_path.list[0], fields.key)?.cell === slots[0] ? ["pick"] : []),
+    ];
+  },
+};

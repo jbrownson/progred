@@ -900,3 +900,30 @@ test("model progress latches and resets independently", async () => {
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
 });
+
+test("story checks follow the forest's shared cells", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const recipe = "e93553d9cfad696bf6be0c3618c48858";
+  const named = (name) => ({ document: { root: record(), cells: { [recipe]: record(
+    ["02e562654d6d0828d3a7559e6f75fffe", text(name)],
+  ) } } });
+  assert.deepEqual(completedSteps("trunks", named("dot")), []);
+  assert.deepEqual(completedSteps("trunks", named("tree")), ["rename"]);
+
+  const growth = "ad17c2a7379b9ae003d76e833ec41be7";
+  const calls = "46cea6ad72d7e838236fcf490ac3695e";
+  const x = "2bd03b91a3ab695c54a71efafcb10115";
+  const forest = (value, xs) => ({ document: { root: record(), cells: {
+    [growth]: number(value),
+    [calls]: record(["5fab151c006ae1487c28837f2003f43c", { list: xs.map((at) => record([x, number(at)])) }]),
+  } } });
+  assert.deepEqual(completedSteps("growth", forest(1, [40, 128, 216])), []);
+  assert.deepEqual(completedSteps("growth", forest(0.5, [40, 128, 216])), ["shrink"]);
+  assert.deepEqual(completedSteps("growth", forest(1, [40, 128, 216, 260])), ["plant"]);
+
+  const call = "0245b1a17b29143ad4b1c25d57922a06";
+  const count = "97da2489d387944d9a468658328e130d";
+  const counted = (value) => ({ document: { root: record(), cells: { [call]: record([count, number(value)]) } } });
+  assert.deepEqual(completedSteps("counted", counted(7)), []);
+  assert.deepEqual(completedSteps("counted", counted(12)), ["count"]);
+});

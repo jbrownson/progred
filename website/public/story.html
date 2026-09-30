@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Build a forest in Progred, an editor where programs are structure you see through projections, one step at a time." />
+    <title>Progred — how the forest was made</title>
+    <link rel="icon" href="./editor/icon.svg" />
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./lessons.js"></script>
+    <script type="module" src="./appearance.js"></script>
+    <script type="module" src="./github.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="./" aria-label="progred — projectional graph editor, home">
+        <img src="./logo.svg" alt="" width="56" height="56" />
+        <span class="wordmark-copy">
+          <span class="wordmark-name">progred</span>
+          <span class="wordmark-subtitle"><em>pro</em>jectional <em>gr</em>aph <em>ed</em>itor</span>
+        </span>
+      </a>
+      <nav class="site-actions" aria-label="Website">
+        <button type="button" id="theme-toggle" role="switch" aria-checked="false" aria-label="Dark mode" title="Switch to dark mode">
+          <span class="theme-track" aria-hidden="true">
+            <svg class="theme-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z" />
+            </svg>
+          </span>
+        </button>
+        <div class="social-links">
+          <a class="social-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
+            <span class="social-badge">
+              <!-- Zulip, Apache-2.0; see zulip-LICENSE.txt. Background removed; mark uses currentColor. -->
+              <svg viewBox="206 185 361 403" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" />
+              </svg>
+            </span>
+          </a>
+          <a class="social-link github-link" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener" aria-label="View progred on GitHub" title="progred on GitHub">
+            <span class="social-badge">
+              <!-- GitHub Octicons, MIT; see octicons-LICENSE.txt. -->
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656" />
+              </svg>
+              <span id="github-count" hidden></span>
+            </span>
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="story">
+      <section class="exercise showcase" id="growing" aria-label="A growing forest">
+        <p class="lede"><strong>This forest is a program.</strong> Drag the slider and it grows.</p>
+        <p class="lede">Progred is an editor where a program is structure, not text. What you see are drawings of that structure, and you can edit through any of them. This forest started as a single dot. Below, you’ll rebuild it step by step, strip it down to the records it’s made of, and end with a forest of your own.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,666ba40b81028e32c78bdc1665d6c3a9,d22b834154d60b1df228f9bb4d3c13de,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417" title="A growing forest: drag the slider" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+      </section>
+
+      <section class="exercise" id="dot" aria-labelledby="dot-title">
+        <h2 id="dot-title">A dot</h2>
+        <p>This is the entire program: fill a circle with a color. The picture and the code are two drawings of the same thing, and each knows about the other.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/dot.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=dot-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="One circle and the program that draws it" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click the dot. Its code is selected.</span></li>
+          <li data-task="scrub"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and drag the <strong>60</strong> left and right. The dot slides as you drag, because 60 is a number you’re holding, not two characters.</span></li>
+        </ol>
+
+      </section>
+
+      <section class="exercise" id="copies" aria-labelledby="copies-title">
+        <h2 id="copies-title">Two dots</h2>
+        <p>One dot isn’t a forest. Here are two, written out in full. The square brackets hold a list, and <code>all</code> draws everything in it.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/copies.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=copies-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two circles drawn by two copies of the same code" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="bigger"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make both dots bigger.</span></li>
+        </ol>
+        <p class="aside">That took two edits for one idea, and a forest would take fifty.</p>
+      </section>
+
+      <section class="exercise" id="recipe" aria-labelledby="recipe-title">
+        <h2 id="recipe-title">One recipe</h2>
+        <p>So the dot becomes a recipe, a <strong>function</strong>. <code>dot</code> takes an <strong>x</strong> and fills in the rest, and each <code>dot{x: …}</code> below it is a call that supplies one. The → reads as “gives”.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/recipe.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=recipe-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two circles drawn by one recipe" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="bigger"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make both dots bigger again. It’s one edit now.</span></li>
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click a dot. This time you land inside <code>dot</code>, on the <code>fill</code> that painted it. A click finds the deepest code on screen that drew what you clicked.</span></li>
+        </ol>
+        <p class="aside">If you use Figma: <code>dot</code> is a main component, and each call is an instance.</p>
+      </section>
+
+      <section class="exercise" id="trunks" aria-labelledby="trunks-title">
+        <h2 id="trunks-title">Dots become trees</h2>
+        <p>The recipe got a trunk and green leaves, and every dot became a tree at once. But now the name is wrong.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/trunks.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=trunks-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two trees drawn by a recipe still called dot" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the recipe, click <strong>dot</strong> and rename it to <strong>tree</strong>.</span></li>
+        </ol>
+        <p class="aside">Every call now says <strong>tree</strong>. Nothing was searched and replaced. So what is a call, if it doesn’t contain the name?</p>
+      </section>
+
+      <section class="exercise" id="ladder" aria-labelledby="ladder-title">
+        <h2 id="ladder-title">What a tree really is</h2>
+        <p>Here are the same two calls, drawn three ways. Everything on screen is drawn by the editor’s <strong>libraries</strong>, plug-ins that each know how to draw one kind of thing: calls, numbers, names. Each view below has fewer of them, and each drawing is a <strong>projection</strong> of the same program. You can edit through any of them.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/ladder.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,8ec6740fa565a2b3b0348132d030d03b:raw&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=ladder-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two tree calls drawn three ways" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="top"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the <strong>60</strong> in the top view. It lights up in all three.</span></li>
+          <li data-task="bottom"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Now find it in the bottom view and click it there.</span></li>
+        </ol>
+        <p class="aside">At the bottom nothing is interpreted. A call is a <strong>record</strong>, values filed under keys, and its keys are identities: <code>…10115</code> is x, and the word <strong>x</strong> is a label drawn on top. <code>0x…4e40</code> is your 60, stored as the eight bytes of a floating-point number, and <code>(…)</code> is the recipe, folded; click the dots to open it. The call points at the recipe by identity, which is why renaming was safe. Everything in Progred is built from four things: records <code>{ }</code>, lists <code>[ ]</code>, bytes <code>0x…</code>, and cells <code>( )</code>, values with an identity of their own.</p>
+      </section>
+
+      <section class="exercise" id="heights" aria-labelledby="heights-title">
+        <h2 id="heights-title">Taller and shorter</h2>
+        <p>A forest where every tree is the same height looks like a fence. So the recipe got a <strong>height</strong>. The trunks follow it, but the leaves still sit at <code>160 - 60</code>, where a 60-tall tree’s leaves go. (y counts down from the top, and the ground is at 160.)</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/heights.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=heights-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees whose leaves ignore their height" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="fit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and drag the <strong>60</strong> in the leaves’ <code>160 - 60</code> until the middle tree’s leaves sit on its trunk.</span></li>
+        </ol>
+        <p class="aside">Now the other two are wrong. No single number fits trees of different heights: each tree’s leaves need what its trunk uses, its own <strong>height</strong>. In the next step, they have it.</p>
+      </section>
+
+      <section class="exercise" id="growth" aria-labelledby="growth-title">
+        <h2 id="growth-title">Growing together</h2>
+        <p>The leaves now sit at <code>160 - height</code>, like the trunks, so each tree computes its own, the way a spreadsheet formula does. To make the forest grow, every tree’s height has to follow one shared number. The parentheses around each <strong>1</strong> mark a <strong>cell</strong>, a value with its own identity. All three calls point at the same one, the way formulas point at a spreadsheet cell.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/growth.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=growth-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees whose heights share one growth value" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="shrink"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change any of the <strong>1</strong>s to <strong>0.5</strong>, or hold <kbd data-command-key>Ctrl</kbd> and drag it. Every tree shrinks at once.</span></li>
+          <li data-task="plant"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a fourth tree by hand: click between the last two <code>tree</code> lines, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x and a height.</span></li>
+        </ol>
+        <p class="aside">Parameters have identities too: <code>(x)</code> and <code>(height)</code> are what each call’s labels point at, which is how the rename worked.</p>
+      </section>
+
+      <section class="exercise" id="counted" aria-labelledby="counted-title">
+        <h2 id="counted-title">A forest</h2>
+        <p>Now imagine planting fifty. So the forest counts them out instead. <code>forest</code> takes a <strong>tree count</strong> and a <strong>growth</strong>, and <code>for each</code> runs a small recipe once per tree. <code>λ</code> marks a recipe without a name, written right where it’s used; <strong>item</strong> is which tree it is, and <code>sin</code> gives each one its own height.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/story/counted.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=counted-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492" title="A counted forest and the program that plants it" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="count"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Set the tree count to 12.</span></li>
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click any tree. You land in code you can read now.</span></li>
+        </ol>
+        <p class="aside">The forest at the top of the page is the same idea, with a sky, a sun, and a slider driving its growth.</p>
+      </section>
+
+      <section class="next" aria-label="More">
+        <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a>
+        <p class="session-note">This is a prototype of a new tutorial. Edits aren’t saved when you reload.</p>
+      </section>
+    </main>
+
+  </body>
+</html>
