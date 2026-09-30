@@ -4,7 +4,7 @@ const { once } = require("node:events");
 const { chromium } = require("playwright");
 
 (async () => {
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open"], {
+  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {
     stdio: ["ignore", "pipe", "inherit"],
   });
   let browser;
@@ -13,7 +13,7 @@ const { chromium } = require("playwright");
       let output = "";
       server.stdout.on("data", (chunk) => {
         output += chunk;
-        const match = output.match(/Progred website: (http:\/\/\S+)/);
+        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
         if (match) resolve(match[1]);
       });
       server.once("error", reject);

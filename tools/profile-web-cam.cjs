@@ -10,7 +10,7 @@ const { chromium } = require("playwright");
   const controls = process.argv[5] === "controls";
   const threads = Number(process.argv[6] ?? 8);
   const pkg = process.argv[7] ?? "profile-pkg";
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open"], {
+  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {
     stdio: ["ignore", "pipe", "inherit"],
   });
   let browser;
@@ -19,7 +19,7 @@ const { chromium } = require("playwright");
       let output = "";
       server.stdout.on("data", (chunk) => {
         output += chunk;
-        const match = output.match(/Progred website: (http:\/\/\S+)/);
+        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
         if (match) resolve(match[1]);
       });
       server.once("error", reject);

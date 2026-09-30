@@ -39,14 +39,14 @@ async function workerProfiler(browser) {
 (async () => {
   const query = process.argv[2] ?? "position=0.5";
   const label = process.argv[3] ?? "baseline";
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open"], { stdio: ["ignore", "pipe", "ignore"] });
+  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], { stdio: ["ignore", "pipe", "ignore"] });
   let browser;
   try {
     const url = await new Promise((resolve, reject) => {
       let output = "";
       server.stdout.on("data", chunk => {
         output += chunk;
-        const match = output.match(/Progred website: (http:\/\/\S+)/);
+        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
         if (match) resolve(match[1]);
       });
       server.once("error", reject);

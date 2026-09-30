@@ -8,16 +8,16 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev build-web build-website website run-web sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web run-website build-web build-website sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app
 
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C"
-	@echo "  make build-web    Build the browser app"
-	@echo "  make build-website  Build the publishable website into target/website"
-	@echo "  make website      Serve the local website and show its link (builds editor changes first)"
-	@echo "  make run-web      Build and serve the browser app on port 8080"
+	@echo "  make run-web      Serve the editor in a browser on port 8080"
+	@echo "  make run-website  Serve the website with its lessons on port 8081"
+	@echo "  make build-web    Build the browser editor (the servers build it first)"
+	@echo "  make build-website  Package the publishable website into target/website"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
@@ -40,12 +40,10 @@ unsupported-native-platform:
 dev:
 	@./tools/dev-native $(ARGS)
 
-build-web: sandbox-web
-
 build-website: build-web
 	python3 -B website/package.py
 
-website:
+run-website:
 	@./website/Preview.command $(ARGS)
 
 # The launcher builds editor changes before serving.
@@ -69,7 +67,7 @@ sandbox-app:
 	@./tools/build-macos-app
 
 # Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary.
-sandbox-web:
+build-web:
 	./tools/sandbox-cargo web-threaded build --release --bin progred -p progred
 	@wasm=target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm; \
 	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \

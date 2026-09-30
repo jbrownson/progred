@@ -5,7 +5,7 @@ there is no separate demo implementation, framework, or hosting dependency.
 
 ## Open it
 
-On macOS, double-click **Preview.command** in Finder, or run `make website`
+On macOS, double-click **Preview.command** in Finder, or run `make run-website`
 from the repository root. It starts a loopback-only web server and leaves the
 URL as the last line in the terminal. Open that link in whichever browser you
 want. Leave the terminal running; Control+C stops the server. Website and lesson
@@ -14,7 +14,7 @@ visible with the URL repeated below them, so ordinary browsing doesn't bury it.
 
 The local address is always <http://127.0.0.1:8081/>. Closing a browser tab does
 not stop the server: reopen that link in Safari, Chrome, or another browser.
-It doesn't launch a browser unless requested with `make website ARGS=--open`.
+It doesn't launch a browser unless requested with `make run-website ARGS=--open`.
 The server must remain running; after stopping it or restarting the computer,
 start it again. There is no background service or automatic login startup.
 

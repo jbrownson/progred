@@ -13,7 +13,7 @@ make sandbox-check
 make sandbox-build
 make sandbox-test
 make sandbox-app
-make sandbox-web
+make build-web
 ```
 
 The usual native development command is:
@@ -63,7 +63,7 @@ tripwire. Ordinary `cargo build`, `check`, `test`, and `run` commands stop at a
 compiler wrapper instead of compiling dependency code, use a deliberately
 separate target directory, and default Cargo to offline mode. This applies in
 new terminals and automated coding sessions because Cargo discovers the file
-from the repository itself. `make build-web` also delegates to `sandbox-web`.
+from the repository itself. `make build-web` runs the browser build through the same wrapper.
 
 The tripwire also blocks Cargo operations such as full dependency metadata
 resolution when Cargo probes the compiler. Use `./tools/sandbox-cargo
