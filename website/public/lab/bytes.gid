@@ -1,0 +1,30 @@
+{
+  "binders": {
+    "mystery": 943e201cc29ffeab65f530351000dedc,
+    "raw": 8f041a1185f53ecf4e4219effb1d32bc,
+    "utf8": 332529b8ea83a7ba10fd7f6d942e5016,
+    "rgba": f77aef58bcc71dd838f089adc650e2d4,
+    "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "render": 37cda4bdea0091349e305951564fbdf1,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+    "third": 5e716c07490849f072b4e9017dd6230d,
+    "fourth": 8ec6740fa565a2b3b0348132d030d03b,
+    "fifth": 24f6d8a4161e69ebc99c0aa4591beb43,
+  },
+  "cells": {
+    raw: 0x4f50454e,
+  },
+  "root": {
+    first: raw,
+    second: {render: {function: quote, expression: {mystery: {unquote: raw}}}},
+    third: {render: {function: quote, expression: {utf8: {unquote: raw}}}},
+    fourth: {render: {function: quote, expression: {rgba: {unquote: raw}}}},
+    fifth: {render: {function: quote, expression: {f32: {unquote: raw}}}},
+  },
+}

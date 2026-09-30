@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Switch off the libraries that draw a program, one layer at a time, then open the doors to what's underneath." />
+    <title>Progred — peel the forest</title>
+    <link rel="icon" href="../editor/icon.svg" />
+    <link rel="stylesheet" href="../style.css" />
+    <script type="module" src="../lessons.js"></script>
+    <script type="module" src="./peel.js"></script>
+    <link rel="stylesheet" href="./lab.css" />
+    <script type="module" src="../appearance.js"></script>
+    <script type="module" src="../github.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="../" aria-label="progred — projectional graph editor, home">
+        <img src="../logo.svg" alt="" width="56" height="56" />
+        <span class="wordmark-copy">
+          <span class="wordmark-name">progred</span>
+          <span class="wordmark-subtitle"><em>pro</em>jectional <em>gr</em>aph <em>ed</em>itor</span>
+        </span>
+      </a>
+      <nav class="site-actions" aria-label="Website">
+        <button type="button" id="theme-toggle" role="switch" aria-checked="false" aria-label="Dark mode" title="Switch to dark mode">
+          <span class="theme-track" aria-hidden="true">
+            <svg class="theme-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z" />
+            </svg>
+          </span>
+        </button>
+        <div class="social-links">
+          <a class="social-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
+            <span class="social-badge">
+              <!-- Zulip, Apache-2.0; see zulip-LICENSE.txt. Background removed; mark uses currentColor. -->
+              <svg viewBox="206 185 361 403" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" />
+              </svg>
+            </span>
+          </a>
+          <a class="social-link github-link" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener" aria-label="View progred on GitHub" title="progred on GitHub">
+            <span class="social-badge">
+              <!-- GitHub Octicons, MIT; see octicons-LICENSE.txt. -->
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656" />
+              </svg>
+              <span id="github-count" hidden></span>
+            </span>
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="story lab">
+<section class="exercise" id="peel" aria-label="Opening">
+<p class="lede"><strong>Progred is an editor where a program isn’t text.</strong> It’s structure: records, lists, bytes, and cells, stored as they are. Everything you see is a drawing of that structure, made by libraries. That one decision changes a lot, and this page takes it apart.</p>
+<p class="lede">This forest is a program. Drag its slider to grow it; hold <kbd data-command-key>Ctrl</kbd> and click a tree to find the code that drew it. Then take the libraries away, one layer at a time, and watch what’s underneath.</p>
+<div class="editor-example" id="peel-editor"><iframe src="../editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,7b0fa421250c1b5c8a78a3a95b172cb6,f76a2ef341541a5c955fc23094e2df52,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy" style="height:38rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
+<p id="peel-caption" class="peel-caption" aria-live="polite"></p>
+<p class="aside"><strong>Try:</strong> before you peel, click the <strong>7</strong><sub class="tag">f64</sub> after <em>tree count</em>. Then peel all the way down. It stays selected the whole time, while its drawing changes from 7<sub class="tag">f64</sub> to eight bytes.</p>
+<p class="aside">The rest of this page opens the doors the peel walks past.</p>
+</section>
+<section class="exercise" id="cells" aria-labelledby="cells-title"><h2 id="cells-title">Door 1: what the parentheses mean</h2>
+<p>Parentheses mark a <strong>cell</strong>: a value with its own identity, stored once, that any number of places can point to. Cells, records, lists, and bytes are the only things Progred builds in. Functions are cells, their parameters are cells, and so is anything you share. Here, all three trees point at one <code>(1<sub class="tag">f64</sub>)</code>.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lessons/story/growth.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees sharing one growth cell" loading="lazy" style="height:26rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> click one <code>(1<sub class="tag">f64</sub>)</code>; the other two light up, because it’s one value. Change it to 0.5. Then look at the recipe: <code>(x)</code> and <code>(height)</code> are cells too, and every call’s labels point at them.</p>
+</section>
+<section class="exercise" id="names" aria-labelledby="names-title"><h2 id="names-title">Door 2: names are labels</h2>
+<p>A cell’s name is only a fact stored about it: <code>{name: "x"}</code>. Calls don’t contain the word; they point at the cell. In the base view below, the call’s key is the cell’s identity, <code>…10115</code>: a random 128-bit id minted when the cell was created. Identities aren’t content hashes, so two cells with the same contents, or the same name, stay two different things.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lab/names.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d:raw&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="A recipe, its calls, and the calls in the base view" loading="lazy" style="height:22rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> in the recipe, click <strong>x</strong> and rename it. Every call’s label follows. The base view doesn’t change at all.</p>
+</section>
+<section class="exercise" id="bytes" aria-labelledby="bytes-title"><h2 id="bytes-title">Door 3: the same bytes, read four ways</h2>
+<p>Text, numbers, and colors aren’t built in either. Each is a library that recognizes bytes filed under a key it owns. Below, one cell holds four bytes, and four views file a copy under different keys: one no library knows, the text library’s, the color library’s, and the f32 library’s.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lab/bytes.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f8daecede6e48de724408cfb0e3090f8,f7735b90f6826b25c350a8fd83af8c47,d22b834154d60b1df228f9bb4d3c13de" title="Four bytes read as raw data, text, a color, and a number" loading="lazy" style="height:13rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> click the bytes at the top and type new hex digits: every reading follows. Give it only three bytes, and the text still reads, but the color and the f32 decline and show you the record instead, because three bytes isn’t their convention.</p>
+</section>
+<section class="exercise" id="f64" aria-labelledby="f64-title"><h2 id="f64-title">Door 4: what the little f64 means</h2>
+<p>The subscript on a number is the name of the key it sits under: <strong>f64</strong> means a 64-bit float, one of several number libraries. The subscript on an operator names whose arithmetic it is. There’s an f64 <code>+</code>, an f32 <code>+</code>, a u64 <code>+</code>, and a Fidget <code>+</code> that builds shapes instead of numbers. When you write a call, you pick one, and the tag is that choice, remembered.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lab/numbers.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f8daecede6e48de724408cfb0e3090f8,b7212cd0aed055a7a2fbe4036b7f3e51,f7735b90f6826b25c350a8fd83af8c47,5ccd78c1d555d14f55996f549d69f58a,d22b834154d60b1df228f9bb4d3c13de,ec17915df2d42377574dc90f22500fe2" title="One sum in f64 and f32, a u64 overflow, a mismatch, and a Fidget shape" loading="lazy" style="height:34rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> compare 0.1 + 0.2 in f64 and f32. A float doesn’t stand for one exact number but for a small range of them, and the editor writes the shortest decimal inside that range. In f64 the sum lands on the float just above the one for 0.3, and the shortest decimal in its range takes seventeen digits. In f32 the sum lands on the same float as 0.3, so it prints as 0.3. Drag the shape to turn it, and change a radius. Only f64 draws its calls between their operands; the f32 and u64 calls show what every call is underneath, a record.</p>
+</section>
+<section class="exercise" id="unfinished" aria-labelledby="unfinished-title"><h2 id="unfinished-title">Door 5: programs run before they’re finished</h2>
+<p>A call with a missing argument, or the wrong kind of value, doesn’t stop the program. It returns an <strong>absent</strong>: a value that says what’s missing and why, which the rest of the program can pass along or handle. <code>or default</code> is an ordinary function that recovers from one. The forest’s slider relies on it: before you touch the slider there’s no control state, and <code>or default</code> supplies 0.65<sub class="tag">f64</sub>.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lab/unfinished.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="A function, its calls, and the values they return when unfinished" loading="lazy" style="height:16rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> fill the empty <code>x</code>, and its absent becomes a number. Change 3 to a piece of text and read the reason. Nothing ever refuses your edit while you’re in the middle of it.</p>
+</section>
+<section class="exercise" id="views" aria-labelledby="views-title"><h2 id="views-title">Door 6: views are programs</h2>
+<p>Every drawing you peeled off was a library’s view: a function from a value to a drawing. You can write one in Grap, Progred’s language, and keep it in the same document as your data. This one draws planets.</p>
+<div class="editor-example"><iframe src="../editor/?document=../lab/views.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,7b0fa421250c1b5c8a78a3a95b172cb6,f76a2ef341541a5c955fc23094e2df52,0ad8124ba821acd5fbf2c868371e1492" title="A planet, its drawing, and the view written in Grap" loading="lazy" style="height:30rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+<p class="aside"><strong>Try:</strong> change <code>moons</code> to 5. Then change the planet’s color inside <code>planet drawing</code>. (For now a Grap view draws a read-only picture next to the data; editing through it is future work.)</p>
+</section>
+<section class="next" aria-label="More"><p class="session-note">Lab prototype. What Progred builds in: records, lists, bytes, cells, and identity. Everything else on this page is a library. Edits aren’t saved.</p></section>
+    </main>
+
+  </body>
+</html>
