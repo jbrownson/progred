@@ -68,9 +68,11 @@ The page opens with a growing forest. A slider scrubs growth forward or backward
 the visible `drawing with controls` call connects it to a forest function with editable
 tree count, growth rate, leaf color, and trunk color. Drawing and controls use existing
 libraries; all forest geometry is ordinary Grap in the same document.
-Six exercises then build up the ideas, each opening with the idea it teaches
-and ending on the step that demonstrates it: values edited directly (a planet
-record with a list), one value shared through cells, live calculations with two
+Eight exercises then build up the ideas in one reading column (a paragraph,
+the editor, its steps, then an aside), each ending on the step that demonstrates
+its idea: values edited directly (a planet record with a list), projections
+(one calculation drawn three ways), what everything is made of (the planet in
+the base projection), one value shared through cells, live calculations with two
 puzzles, functions (including a call nested in a call), pictures as views of
 code (including adding a call), and a three-tree finale combining them.
 All use the real editor without its application menu, and explicitly select
@@ -78,7 +80,7 @@ All use the real editor without its application menu, and explicitly select
 completion popup when possible, and otherwise scrolls the website. The full-page
 editor keeps its ordinary wheel scrolling and zooming.
 Each iframe explicitly selects its libraries: name/text/blob plus number/f64
-for the values and cells exercises.
+for the values, model, and cells exercises.
 The calculations and functions exercises add Grap and absent to the numeric set.
 The drawing lesson and the tree finale add control, color, and layout; the
 drawing lesson credits Bret Victor's Inventing on Principle. The opening forest
@@ -157,8 +159,15 @@ what do you see?" Three slots reference one shared calculation cell, drawn fully
 (`3 + 2 → 5`), plainly (`{evaluate: {function: +, left: 3, right: 2}}`), and
 raw (identities and bytes). An edit counts in the view whose selection made it:
 changing the number on top, then in the middle; the last step selects that
-number in the raw view. This lesson is being tried alongside the others and
-doesn't replace any yet.
+number in the raw view. Every slot view that isn't fully drawn carries a
+caption naming what drew it, so the views explain themselves.
+
+The model lesson (`model`) shows the planet again, fully drawn above and in the
+base projection below, both referencing one cell. Its prose names the four
+building blocks: records, lists, bytes, and cells. Renaming the planet and
+adding a color count from the document; the last step counts a selection in the
+base view inside the planet key's entry, which the editor also highlights in
+the top view.
 
 The cells lesson starts with two references to one numeric cell. It checks for
 editing that shared definition, creating a different cell containing 11,

@@ -89,6 +89,11 @@ function number(value) {
   return data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined;
 }
 
+function selectedPath(state) {
+  const selection = state?.selection;
+  return selection?.view === "document" ? selection.path?.list : undefined;
+}
+
 function references(list) {
   const counts = new Map();
   for (const value of list ?? []) {
@@ -129,13 +134,27 @@ export function completedSteps(lesson, state, previous) {
         ? ["plant"] : []),
     ];
   }
+  if (lesson === "model") {
+    const planet = field(root, slots[0])?.cell;
+    const contents = state?.document?.cells?.[planet];
+    const name = text(field(contents, fields.planet));
+    const list = field(contents, fields.colors)?.list;
+    const path = selectedPath(state);
+    if (typeof planet !== "string" || field(root, slots[1])?.cell !== planet) return [];
+    return [
+      ...(name !== undefined && name !== "Mars" ? ["rename"] : []),
+      ...(Array.isArray(list) && list.length > 2 && list.every((color) => text(color) !== undefined)
+        ? ["add"] : []),
+      ...(field(path?.[0], fields.key)?.cell === slots[1]
+        && path.some((step) => field(step, fields.key)?.cell === fields.planet) ? ["key"] : []),
+    ];
+  }
   if (lesson === "projections") {
     const calculation = field(root, slots[0])?.cell;
     const right = (at) => number(field(field(at?.document?.cells?.[calculation], fields.evaluate), fields.right));
     if (typeof calculation !== "string"
         || !slots.every((slot) => field(root, slot)?.cell === calculation)) return [];
-    const selection = state.selection;
-    const path = selection?.view === "document" ? selection.path?.list : undefined;
+    const path = selectedPath(state);
     const inView = (index) => field(path?.[0], fields.key)?.cell === slots[index];
     const [now, before] = [right(state), right(previous)];
     // An edit counts in the view whose selection made it.

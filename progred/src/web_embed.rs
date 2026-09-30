@@ -39,9 +39,9 @@ impl Level {
     /// explain themselves without the surrounding page.
     fn caption(self) -> &'static str {
         match self {
-            Level::Full => "Projected by every library",
-            Level::Plain => "Projected by names, text, and numbers only",
-            Level::Raw => "Raw: nothing projected",
+            Level::Full => "Drawn by every library",
+            Level::Plain => "Drawn by names, text, and numbers only",
+            Level::Raw => "The base projection: no libraries",
         }
     }
 }

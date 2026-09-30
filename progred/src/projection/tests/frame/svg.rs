@@ -367,6 +367,11 @@ fn website_lesson_svg_captures() {
             &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
         ),
         (
+            "model",
+            include_str!("../../../../../website/public/lessons/model.gid"),
+            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
+        ),
+        (
             "projections",
             include_str!("../../../../../website/public/lessons/projections.gid"),
             &[
@@ -434,19 +439,21 @@ fn website_lesson_svg_captures() {
                 );
                 if matches!(
                     name,
-                    "projections" | "grap" | "functions" | "drawing" | "forest"
+                    "model" | "projections" | "grap" | "functions" | "drawing" | "forest"
                 ) {
+                    let slots: &[(&str, &str)] = match name {
+                        "drawing" | "forest" => &[("third", ""), ("first", ""), ("second", "")],
+                        "projections" => &[("first", ""), ("second", ":plain"), ("third", ":raw")],
+                        "model" => &[("first", ""), ("second", ":raw")],
+                        _ => &[("first", ""), ("second", ""), ("third", "")],
+                    };
                     editor.stack.projection = crate::web_embed::tutorial_slots(
                         Some(
-                            &if matches!(name, "drawing" | "forest") {
-                                [("third", ""), ("first", ""), ("second", "")]
-                            } else if name == "projections" {
-                                [("first", ""), ("second", ":plain"), ("third", ":raw")]
-                            } else {
-                                [("first", ""), ("second", ""), ("third", "")]
-                            }
-                            .map(|(key, level)| format!("{}{level}", fields[key]))
-                            .join(","),
+                            &slots
+                                .iter()
+                                .map(|(key, level)| format!("{}{level}", fields[*key]))
+                                .collect::<Vec<_>>()
+                                .join(","),
                         ),
                         editor.stack.projection,
                     )

@@ -245,7 +245,7 @@ class AssetTests(unittest.TestCase):
         assets = Assets()
         assets.feed((REPOSITORY / "website/public/index.html").read_text())
         self.assertEqual(assets.external_scripts, [])
-        self.assertEqual(len(assets.frames), 8)
+        self.assertEqual(len(assets.frames), 9)
         documents = []
         for frame in assets.frames:
             self.assertTrue(frame["title"])
@@ -282,6 +282,10 @@ class AssetTests(unittest.TestCase):
             if forest:
                 self.assertEqual(params["tutorial-slots"], ["f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71"])
                 self.assertNotIn("observe", params)
+            elif params["document"] == ["../lessons/model.gid"]:
+                self.assertEqual(params["tutorial-slots"], [
+                    "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:raw"
+                ])
             elif params["document"] == ["../lessons/projections.gid"]:
                 self.assertEqual(params["tutorial-slots"], [
                     "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw"
@@ -297,7 +301,7 @@ class AssetTests(unittest.TestCase):
             self.assertTrue((REPOSITORY / "website/public" / document.lstrip("/")).is_file())
             documents.append(document)
         self.assertEqual(len(set(documents)), len(documents))
-        self.assertEqual(set(documents), {"/lessons/growing-forest.gid", "/lessons/values.gid", "/lessons/projections.gid", "/lessons/cells.gid", "/lessons/grap.gid", "/lessons/functions.gid", "/lessons/drawing.gid", "/lessons/forest.gid"})
+        self.assertEqual(set(documents), {"/lessons/growing-forest.gid", "/lessons/values.gid", "/lessons/projections.gid", "/lessons/model.gid", "/lessons/cells.gid", "/lessons/grap.gid", "/lessons/functions.gid", "/lessons/drawing.gid", "/lessons/forest.gid"})
         for path in assets.paths:
             with self.subTest(path=path):
                 self.assertFalse(urlsplit(path).scheme)

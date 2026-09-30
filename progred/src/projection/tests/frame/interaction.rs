@@ -2082,3 +2082,85 @@ fn website_projections_edit_one_calculation_through_any_view() {
     replace_text(&mut world, &right("second"), "6");
     assert_eq!(stored(&world), Some(6.0));
 }
+
+#[test]
+fn website_model_edits_show_through_the_base_projection() {
+    use crate::libraries::{blob, number};
+    let (doc, names) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/model.gid"
+    ))
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]).unwrap(),
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&format!("{},{}:raw", names["first"], names["second"])),
+        world.stack.projection.clone(),
+    )
+    .unwrap();
+    let at = |slot: &str, key: &str| {
+        [
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names[key]),
+        ]
+    };
+    let field = |world: &crate::Editor, key: &str| {
+        world
+            .model
+            .doc
+            .cells
+            .value(names["world"])
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .get(&names[key])
+            .cloned()
+            .unwrap()
+    };
+    replace_text(&mut world, &at("first", "planet"), "Venus");
+    assert_eq!(text::read(&field(&world, "planet")), Some("Venus"));
+
+    let colors = field(&world, "colors")
+        .as_list()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    click_between(&mut world, &at("first", "colors"), &colors);
+    type_keys(&mut world, "\"blue\"");
+    assert_eq!(
+        field(&world, "colors")
+            .as_list()
+            .unwrap()
+            .values()
+            .filter_map(text::read)
+            .collect::<Vec<_>>(),
+        ["red", "blue", "orange"]
+    );
+
+    // The key label left of the planet's bytes selects inside that entry.
+    let frame = editing_frame(&mut world, false);
+    let bytes = frame
+        .descends
+        .iter()
+        .find(|d| d.path.as_ref() == at("second", "planet"))
+        .unwrap()
+        .rect;
+    let point = Point::new(bytes.x0 - 24.0, bytes.center().y);
+    let frame = editing_frame_at(&mut world, false, None, Some(point));
+    let (_, Claim::Direct(hover)) = frame.claim.as_ref().unwrap() else {
+        panic!("key hover")
+    };
+    let mut dispatch = placed::DispatchContext::new(Some(crate::test_root()), Some(hover.clone()));
+    let mut event = press(point.x, false);
+    event.state.position.y = point.y;
+    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        &mut world,
+        &event,
+        &mut dispatch
+    ));
+    let path = world.model.selection.as_ref().unwrap().path().to_vec();
+    assert!(path.starts_with(&at("second", "planet")), "{path:?}");
+}

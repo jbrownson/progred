@@ -274,6 +274,7 @@ async function lessonPage(platform = "Linux x86_64") {
     forest: ["height", "color", "plant"],
     "growing-forest": [],
     projections: ["full", "plain", "raw"],
+    model: ["rename", "add", "key"],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
@@ -857,6 +858,44 @@ test("projection progress latches and resets independently", async () => {
   send(index, views(4, 0));
   send(index, views(5, 1));
   send(index, views(5, 2));
+  assert.ok(page.tasks.every(t => t.classes.has("completed")));
+  page.listeners.click();
+  assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
+});
+
+const world = "05bcece72b133b42300b7629fd3f402d";
+const modelState = (name = "Mars", colors = ["red", "orange"], at) => ({
+  document: {
+    root: record([slots[0], cell(world)], [slots[1], cell(world)]),
+    cells: { [world]: planet(text(name), number(2), colors).document.root },
+  },
+  selection: at === undefined ? null : { view: "document", stage: "value", path: { list: [
+    record([drawingIds.key, cell(slots[at])]),
+    record([drawingIds.follow, cell(drawingIds.document)]),
+    record([drawingIds.key, cell("6655e4ba9e8ae76706056e0b8edf94f0")]),
+  ] } },
+});
+
+test("model quests follow the planet through both views and find its key in the base one", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("model", modelState()), []);
+  assert.deepEqual(completedSteps("model", modelState("Venus")), ["rename"]);
+  assert.deepEqual(completedSteps("model", modelState("Mars", ["red", "blue", "orange"])), ["add"]);
+  assert.deepEqual(completedSteps("model", modelState("Mars", ["red", "orange"], 0)), []);
+  assert.deepEqual(completedSteps("model", modelState("Mars", ["red", "orange"], 1)), ["key"]);
+  const separate = modelState("Venus");
+  separate.document.root.record[1][1] = cell("other");
+  assert.deepEqual(completedSteps("model", separate), []);
+  assert.deepEqual(completedSteps("model", { document: { root: null } }), []);
+});
+
+test("model progress latches and resets independently", async () => {
+  const { exercises, send } = await lessonPage();
+  const index = exercises.findIndex((exercise) => exercise.id === "model");
+  const page = exercises[index];
+  send(index, modelState("Venus"));
+  send(index, modelState("Venus", ["red", "blue", "orange"], 1));
+  send(index, modelState());
   assert.ok(page.tasks.every(t => t.classes.has("completed")));
   page.listeners.click();
   assert.equal(page.tasks.filter(t => t.classes.has("completed")).length, 0);
