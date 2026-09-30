@@ -115,17 +115,15 @@ high-quality implicit refinement can take time and still has rendering artifacts
 
 ### Browser and Linux
 
-To build the browser version **on macOS**, use the same dependency-fetch step,
-install the `wasm32-unknown-unknown` target for stable Rust, and have a
-`wasm-bindgen` CLI matching the version in `Cargo.lock` available on `PATH`.
-Then run:
+To build the browser version **on macOS**, set up the pinned nightly toolchain
+and `wasm-bindgen` CLI described in [`web/README.md`](web/README.md). Then run:
 
 ```sh
-make serve-web
+make run-web
 ```
 
-Open `http://localhost:8080`, or this machine's LAN address from another device
-on the same network. The development server listens on all network interfaces.
+It builds any editor changes, then serves `http://127.0.0.1:8080/editor/` on
+this machine only; the server does not listen on other network interfaces.
 
 On Linux, `make run` uses the native launcher and performs a regular locked
 Cargo build; **the Linux build is not sandboxed**. The macOS `sandbox-*` commands

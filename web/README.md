@@ -3,7 +3,7 @@
 From the repository root:
 
 ```sh
-make serve-web
+make run-web
 ```
 
 Open `http://127.0.0.1:8080/editor/` on this machine.

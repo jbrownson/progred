@@ -52,7 +52,8 @@ build-website: build-web
 website:
 	@./website/Preview.command $(ARGS)
 
-run-web: build-web
+# The launcher builds editor changes before serving.
+run-web:
 	@echo "Open Progred: http://127.0.0.1:8080/editor/"
 	@python3 website/preview.py --no-open --port 8080
 
