@@ -27,11 +27,23 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>
 /// How a tutorial slot draws its value: with every loaded library's
 /// projections, plainly (names, text, and numbers read as themselves while
 /// calls stay records), or as Raw draws it. Several slots can show one shared cell at different levels.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Level {
     Full,
     Plain,
     Raw,
+}
+
+impl Level {
+    /// Shown above each slot when slots differ in level, so the views
+    /// explain themselves without the surrounding page.
+    fn caption(self) -> &'static str {
+        match self {
+            Level::Full => "Projected by every library",
+            Level::Plain => "Projected by names, text, and numbers only",
+            Level::Raw => "Raw: nothing projected",
+        }
+    }
 }
 
 pub(crate) fn tutorial_slots(
@@ -87,19 +99,40 @@ pub(crate) fn tutorial_slots(
                     })
                 })
                 .transpose()?;
+            let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
                     crate::display::projection::group(crate::display::col(
                         0,
                         16.0,
-                        slots.iter().map(|(key, level)| match level {
-                            Level::Full => crate::display::descend(Step::Key(*key), None, None),
-                            Level::Plain => crate::display::descend(
-                                Step::Key(*key),
-                                plain.clone(),
-                                plain.clone(),
-                            ),
-                            Level::Raw => crate::display::descend_raw(Step::Key(*key)),
+                        slots.iter().map(|(key, level)| {
+                            let view = match level {
+                                Level::Full => crate::display::descend(Step::Key(*key), None, None),
+                                Level::Plain => crate::display::descend(
+                                    Step::Key(*key),
+                                    plain.clone(),
+                                    plain.clone(),
+                                ),
+                                Level::Raw => crate::display::descend_raw(Step::Key(*key)),
+                            };
+                            if captioned {
+                                crate::display::col(
+                                    1,
+                                    4.0,
+                                    [
+                                        crate::display::leaf(puri::Leaf::Text {
+                                            text: level.caption().into(),
+                                            paint: crate::display::Paint::Face(
+                                                crate::display::Face::Dim,
+                                            ),
+                                            script: puri::text::Script::Normal,
+                                        }),
+                                        view,
+                                    ],
+                                )
+                            } else {
+                                view
+                            }
                         }),
                     ))
                 })
