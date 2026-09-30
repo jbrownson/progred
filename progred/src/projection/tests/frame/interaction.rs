@@ -2203,3 +2203,84 @@ fn drawn_shape_coordinates_show_parameters_by_name() {
         "fill evaluates the coordinate, so the parameter reads as its name"
     );
 }
+
+#[test]
+fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
+    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use grap::vocabulary::FUNCTION;
+    let (mut world, names) = lesson_world(
+        r#"{
+          "binders": {
+            "name": 02e562654d6d0828d3a7559e6f75fffe,
+            "function": 751fca4373debdd0b7e6eb73e08d684b,
+            "params": 195b378d0d31d90ab0d7366c15346b70,
+            "body": 986143866eda2e2fbf9ab8484357a0c9,
+            "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+            "tree": 7f46dd29d8450afe5b1ef07d72098f91,
+            "x": 9aa131305c35532eeb45a876bc8fdc22,
+            "call": d3ff654ad635e00b1a21b6ff849231b2,
+            "first": 9940ece27410c72a5308a544890ccc71,
+            "second": f717b766d250a7b86c5eb842885c4417,
+            "third": 5e716c07490849f072b4e9017dd6230d,
+          },
+          "cells": {
+            x: {name: "x"},
+            tree: {name: "tree", params: [x], body: x},
+            call: {function: tree, x: {f64: 0x0000000000004e40}},
+          },
+          "root": {first: call, second: call, third: tree},
+        }"#,
+        &[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ],
+        ["first", "second", "third"],
+    );
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(&format!(
+            "{}:plain,{}:raw,{}",
+            names["first"], names["second"], names["third"]
+        )),
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            blob::ID,
+            absent::ID,
+            number::ID,
+            f64::ID,
+            grap_library::ID,
+        ])
+        .unwrap()
+        .projection,
+    )
+    .unwrap();
+    let frame = editing_frame(&mut world, false);
+    let placed = |path: &[Step]| frame.descends.iter().any(|d| d.path.as_ref() == path);
+    let opened = |path: &[Step]| {
+        frame
+            .descends
+            .iter()
+            .any(|d| d.path.len() > path.len() && d.path.starts_with(path))
+    };
+    for slot in ["first", "second"] {
+        let callee = [
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(FUNCTION),
+        ];
+        assert!(placed(&callee), "{slot} shows its call's function");
+        assert!(!opened(&callee), "{slot} doesn't inline the definition");
+        assert!(placed(&[
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names["x"]),
+        ]));
+    }
+    // A slot showing the definition itself still opens it.
+    assert!(opened(&[Step::Key(names["third"])]));
+}

@@ -99,6 +99,12 @@ pub(crate) fn tutorial_slots(
                     })
                 })
                 .transpose()?;
+            let plain_inside = plain.clone().map(|plain| {
+                crate::display::compose_partials([
+                    crate::display::runtime_partial(named_reference),
+                    plain,
+                ])
+            });
             let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
@@ -111,7 +117,7 @@ pub(crate) fn tutorial_slots(
                                 Level::Plain => crate::display::descend(
                                     Step::Key(*key),
                                     plain.clone(),
-                                    plain.clone(),
+                                    plain_inside.clone(),
                                 ),
                                 Level::Raw => crate::display::descend_raw(Step::Key(*key)),
                             };
@@ -139,6 +145,21 @@ pub(crate) fn tutorial_slots(
             })))
         }
     }
+}
+
+/// Inside a plain slot, a named cell reads as its name, so a call shows
+/// which function it calls instead of inlining the definition.
+fn named_reference(
+    input: &crate::display::ProjectionInput<
+        '_,
+        Editor,
+        crate::frame::Hovered,
+        ::grap::RuntimeValue,
+    >,
+) -> Option<crate::display::Layout<Editor, crate::frame::Hovered>> {
+    crate::libraries::grap::shallow_cell_with(input, |name| {
+        crate::display::selectable_bracket(crate::display::Delim::Paren, name)
+    })
 }
 
 #[derive(PartialEq, Eq)]

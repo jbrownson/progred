@@ -336,6 +336,7 @@ fn drawing_frame(
         completions: None,
         sources: Sources { doc, libraries },
         raw: false,
+        fold_references: false,
         annotations: &annotations,
         styles: &styles,
         selection: None,

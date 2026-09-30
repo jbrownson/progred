@@ -238,6 +238,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
             libraries: &libraries,
         },
         raw: false,
+        fold_references: false,
         annotations: &annotations,
         styles: &styles,
         selection: None,

@@ -790,11 +790,12 @@ pub fn set_value(
 }
 
 /// The collapse class of an already-resolved value. Projection has
-/// the ancestor cells in hand as it walks and supplies `in_cycle`.
+/// the ancestor cells in hand as it walks and supplies whether a
+/// collapsible value starts `folded` (inside a cycle, say).
 pub(crate) fn collapse_default_for_value(
     sources: &Sources,
     value: &grap::RuntimeValue,
-    in_cycle: bool,
+    folded: bool,
 ) -> Option<bool> {
     let is_text = value.field(text::vocabulary::UTF8).is_some_and(|bytes| {
         bytes
@@ -811,7 +812,7 @@ pub(crate) fn collapse_default_for_value(
             .or_else(|| value.record_len())
             .is_some_and(|len| len != 0),
     };
-    collapsible.then_some(in_cycle)
+    collapsible.then_some(folded)
 }
 
 /// Breaks the open edit run: the next write records a fresh undo

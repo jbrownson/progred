@@ -122,6 +122,9 @@ pub(crate) struct Cx<'a> {
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
     pub(crate) raw: bool,
+    /// A tutorial's base view opens only the cell it shows; references
+    /// inside start folded, so a call doesn't inline its callee.
+    pub(crate) fold_references: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
@@ -341,6 +344,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = Cx {
             raw: true,
+            fold_references: true,
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
@@ -666,6 +670,7 @@ fn prepare_project(
         sources,
         edits: Default::default(),
         raw,
+        fold_references: false,
         annotations,
         styles,
         selection,
@@ -955,10 +960,10 @@ fn prepare_value(
     // Ancestry is already available from projection; folds must not re-read an
     // occurrence as a document path (and computed values have no such path).
     let fold_default = value.and_then(|value| {
-        let in_cycle = value
-            .as_cell()
-            .is_some_and(|cell| ancestors.cells.contains(&cell));
-        crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
+        let folded = value.as_cell().is_some_and(|cell| {
+            ancestors.cells.contains(&cell) || cx.fold_references && !ancestors.cells.is_empty()
+        });
+        crate::selection::collapse_default_for_value(&cx.sources, value, folded)
     });
     let layout = value_layout(
         cx,
