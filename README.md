@@ -2,16 +2,24 @@
 
 # Progred
 
-Progred is an experimental **projectional programming environment**, currently
-being developed toward interactive CAD/CAM. The aim is an
-[*Inventing on Principle*](https://worrydream.com/InventingOnPrinciple/)-style
-loop: change the program, see the result, and
-work directly with both.
+**Like JSON, but a graph, and projected.** Progred is an experimental
+programming environment. Your program is a document like that, and everything
+you see, including the code, is a projection of it drawn by some library.
+Working in it feels more like a spreadsheet than a text file: change a value,
+and whatever depends on it updates.
 
-Instead of editing text that is parsed into a program, you edit structured data.
-Different projections present that data as code, editable numbers, color pickers,
-drawings, or 3D geometry. Those views share the same underlying document;
-there is no canonical source-text representation to keep in sync.
+**[Try it in your browser at prog.red](https://prog.red) · [Chat about it on Zulip](https://progred.zulipchat.com)**
+
+Keys aren't strings; they're identities. There are no built-in strings or
+numbers either, just records, lists, bytes, and references to cells. Libraries
+decide what data means and how it's drawn, so one document can be edited as
+code, editable numbers, color pickers, drawings, or 3D geometry, with no
+canonical source text to keep in sync.
+
+The aim is an [*Inventing on Principle*](https://worrydream.com/InventingOnPrinciple/)-style
+loop: change the program, see the result, and work directly with both. CAD/CAM
+is the demanding example it's being pushed on right now, not a limit on what
+it's for.
 
 ![CAM playback beside its editable Grap program: a partially cut cube, upcoming toolpaths, and a playback slider.](docs/images/cam-preview.png)
 
@@ -173,6 +181,9 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 - [`docs/`](docs/) — current references, experiments, and deferred work
 
 ## Development and further reading
+
+Questions, ideas, and criticism are welcome on
+[the Progred Zulip](https://progred.zulipchat.com).
 
 On macOS:
 
