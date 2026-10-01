@@ -334,8 +334,14 @@ class AssetTests(unittest.TestCase):
         page = Page()
         page.feed((public / "index.html").read_text())
         self.assertGreaterEqual(page.links.count("https://progred.zulipchat.com"), 3)
+        # Asks for tutorial feedback go to its channel, not the front page.
+        feedback = "https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback"
+        self.assertIn(feedback, page.links)
         for tutorial in ("tutorial.html", "story.html", "lab/peel.html", "lab/see.html"):
             self.assertIn(tutorial, page.links)
+            tutorial_page = Page()
+            tutorial_page.feed((public / tutorial).read_text())
+            self.assertEqual(tutorial_page.links.count(feedback), 2, tutorial)
         for link in page.links:
             url = urlsplit(link)
             if url.scheme or not url.path:
