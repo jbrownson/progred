@@ -56,24 +56,39 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::MATCH,
-            ForeignFunction::staged(match_prepare).tracked(),
+            ForeignFunction::staged(match_prepare)
+                .parameters([vocabulary::VALUE, vocabulary::CASES])
+                .tracked(),
         )
         .register(
             vocabulary::LET,
-            ForeignFunction::staged(bindings_prepare).tracked(),
+            ForeignFunction::staged(bindings_prepare)
+                .parameters([vocabulary::BINDINGS, ::grap::vocabulary::EXPRESSION])
+                .tracked(),
         )
         .register(
             vocabulary::WHERE,
-            ForeignFunction::staged(bindings_prepare).tracked(),
+            ForeignFunction::staged(bindings_prepare)
+                .parameters([vocabulary::BINDINGS, ::grap::vocabulary::EXPRESSION])
+                .tracked(),
         )
-        .register(vocabulary::DO, ForeignFunction::new(do_foreign).tracked())
+        .register(
+            vocabulary::DO,
+            ForeignFunction::new(do_foreign)
+                .parameters([vocabulary::EXPRESSIONS])
+                .tracked(),
+        )
         .register(
             vocabulary::ALL,
-            ForeignFunction::new(all::evaluate).tracked(),
+            ForeignFunction::new(all::evaluate)
+                .parameters([vocabulary::EXPRESSIONS])
+                .tracked(),
         )
         .register(
             vocabulary::QUOTE,
-            ForeignFunction::new(quote_foreign).tracked(),
+            ForeignFunction::new(quote_foreign)
+                .parameters([::grap::vocabulary::EXPRESSION])
+                .tracked(),
         )
 }
 

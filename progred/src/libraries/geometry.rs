@@ -48,6 +48,7 @@ pub fn functions() -> ForeignFunctions {
                 .map(value)
                 .unwrap_or_else(|| absent::with_reason(vocabulary::INVALID_RADIUS)))
         })
+        .parameters([vocabulary::RADIUS])
         .tracked(),
     )
 }

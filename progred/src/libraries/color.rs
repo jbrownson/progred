@@ -348,6 +348,7 @@ fn functions() -> ForeignFunctions {
                     )
                 }))
         })
+        .parameters([line_edit::vocabulary::INPUT, line_edit::vocabulary::CURRENT])
         .tracked(),
     )
 }

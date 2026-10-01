@@ -338,6 +338,14 @@ pub fn run<T>(
     evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
 }
 
+/// What the 3D path previews require; their other arguments have defaults.
+const PATH_PREVIEW_PARAMETERS: [CellId; 4] = [
+    PROGRAM,
+    presentation::vocabulary::VALUE,
+    LINE_RADIUS,
+    crate::libraries::fidget::vocabulary::COLOR,
+];
+
 fn functions() -> ForeignFunctions {
     let functions = EMITTERS
         .iter()
@@ -345,21 +353,40 @@ fn functions() -> ForeignFunctions {
             functions.register(
                 cell,
                 ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                    .parameters(match cell {
+                        START_AT | LINE_TO => vec![X, Y, Z],
+                        WITH_TOOL => vec![cutter::vocabulary::TOOL, ::grap::vocabulary::EXPRESSION],
+                        SEQUENCE => vec![PROGRAM],
+                        _ => vec![MAPPER, ::grap::vocabulary::EXPRESSION],
+                    })
                     .tracked(),
             )
         });
     functions
-        .register(PREVIEW_3D, ForeignFunction::new(fidget::preview).tracked())
-        .register(PREVIEW_MESH, ForeignFunction::new(mesh::preview).tracked())
+        .register(
+            PREVIEW_3D,
+            ForeignFunction::new(fidget::preview)
+                .parameters(PATH_PREVIEW_PARAMETERS)
+                .tracked(),
+        )
+        .register(
+            PREVIEW_MESH,
+            ForeignFunction::new(mesh::preview)
+                .parameters(PATH_PREVIEW_PARAMETERS)
+                .tracked(),
+        )
         .register(
             PREVIEW_REFINED,
-            ForeignFunction::new(refined::preview).tracked(),
+            ForeignFunction::new(refined::preview)
+                .parameters(PATH_PREVIEW_PARAMETERS)
+                .tracked(),
         )
         .register(
             POINT,
             ForeignFunction::new(|context, call, environment| {
                 runtime_result(point(context, call, environment).map(runtime_point_value))
             })
+            .parameters([X, Y, Z])
             .tracked(),
         )
         .register(
@@ -385,6 +412,11 @@ fn functions() -> ForeignFunctions {
                     )]))
                 })())
             })
+            .parameters([
+                presentation::vocabulary::VALUE,
+                layout::vocabulary::WIDTH,
+                layout::vocabulary::HEIGHT,
+            ])
             .tracked(),
         )
 }

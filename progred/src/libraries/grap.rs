@@ -169,7 +169,14 @@ pub fn function_parameters<'a>(
         }
         let definition = resolve(cell)?;
         if definition.native {
-            return None;
+            return definition
+                .value
+                .as_record()?
+                .get(&PARAMS)?
+                .as_list()?
+                .values()
+                .map(Value::as_cell)
+                .collect();
         }
         function = definition.value.into();
     }
@@ -430,7 +437,12 @@ fn evaluate_foreign(
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
-        ForeignFunction::new(evaluate_foreign).tracked(),
+        ForeignFunction::new(evaluate_foreign)
+            .parameters([
+                ::grap::vocabulary::EXPRESSION,
+                ::grap::vocabulary::ENVIRONMENT,
+            ])
+            .tracked(),
     )
 }
 
@@ -602,6 +614,42 @@ mod tests {
     use crate::display::Env;
     use crate::display::test_support::{ProjectionCall, inspect};
     use gid::new_cell_id;
+
+    #[test]
+    fn every_built_in_declares_its_parameters() {
+        let stack = crate::stack::load();
+        let undeclared: Vec<String> = stack
+            .libraries
+            .iter()
+            .flat_map(|(library, definitions)| {
+                let library = definitions
+                    .value(library)
+                    .and_then(name::read)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| short_id(library));
+                definitions
+                    .iter()
+                    .filter(|(_, definition)| {
+                        matches!(definition, ::grap::Definition::Foreign(_))
+                            && !definition
+                                .value()
+                                .as_record()
+                                .is_some_and(|fields| fields.contains_key(&PARAMS))
+                    })
+                    .map(move |(cell, definition)| {
+                        let name = name::read(definition.value())
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| short_id(cell));
+                        format!("{library}: {name}")
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(
+            undeclared.is_empty(),
+            "built-ins without declared parameters: {undeclared:#?}"
+        );
+    }
 
     #[test]
     fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
@@ -1038,14 +1086,20 @@ mod tests {
             })),
             None
         );
-        assert_eq!(
-            function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
-                source: gid::Resolution::Library(ID),
-                value: &lambda,
-                native: true,
-            })),
-            None
-        );
+        let declared = Value::record([(PARAMS, Value::list([parameter.into()]))]);
+        for (description, expected) in [
+            (&Value::record([]), None),
+            (&declared, Some(vec![parameter])),
+        ] {
+            assert_eq!(
+                function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
+                    source: gid::Resolution::Library(ID),
+                    value: description,
+                    native: true,
+                })),
+                expected
+            );
+        }
         for invalid in [
             Value::record([]),
             ::grap::call(reference.clone(), []),
@@ -1430,16 +1484,33 @@ mod tests {
             argument_order(&project_runtime(call_display, &editing).unwrap()),
             [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, unknown]
         );
-        let native = DefinitionEnv {
+        let declared = DefinitionEnv {
             native: true,
-            ..env
+            definition: Value::record([(
+                PARAMS,
+                Value::list([FIRST_PARAMETER.into(), SECOND_PARAMETER.into()]),
+            )]),
         };
         assert_eq!(
-            argument_order(&project_runtime(call_display, &input(&native, &call)).unwrap()),
+            argument_order(&project_runtime(call_display, &input(&declared, &call)).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
+        );
+        assert_eq!(
+            argument_order(&project_runtime(call_display, &input(&declared, &incomplete)).unwrap()),
+            [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
+        );
+        let undeclared = DefinitionEnv {
+            native: true,
+            definition: Value::record([]),
+        };
+        assert_eq!(
+            argument_order(&project_runtime(call_display, &input(&undeclared, &call)).unwrap()),
             [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
         );
         assert_eq!(
-            argument_order(&project_runtime(call_display, &input(&native, &incomplete)).unwrap()),
+            argument_order(
+                &project_runtime(call_display, &input(&undeclared, &incomplete)).unwrap()
+            ),
             [SECOND_PARAMETER, FIRST_EXTRA]
         );
     }

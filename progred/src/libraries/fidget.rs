@@ -200,6 +200,7 @@ fn unary_function(marker: CellId) -> ForeignFunction {
         };
         Ok(unary(marker, operand))
     })
+    .parameters([vocabulary::OPERAND])
     .tracked()
 }
 
@@ -213,6 +214,7 @@ fn binary_function(marker: CellId) -> ForeignFunction {
         };
         Ok(binary(marker, left, right))
     })
+    .parameters([vocabulary::LEFT, vocabulary::RIGHT])
     .tracked()
 }
 
@@ -364,19 +366,27 @@ pub fn functions() -> ForeignFunctions {
     )
     .register(
         vocabulary::TRANSLATE,
-        ForeignFunction::from_value(translate_function).tracked(),
+        ForeignFunction::from_value(translate_function)
+            .parameters([vocabulary::FIELD])
+            .tracked(),
     )
     .register(
         vocabulary::PREVIEW,
-        ForeignFunction::from_value(preview_function).tracked(),
+        ForeignFunction::from_value(preview_function)
+            .parameters([presentation::vocabulary::VALUE])
+            .tracked(),
     )
     .register(
         vocabulary::PREVIEW_3D,
-        ForeignFunction::from_value(preview_3d_function).tracked(),
+        ForeignFunction::from_value(preview_3d_function)
+            .parameters([presentation::vocabulary::VALUE])
+            .tracked(),
     )
     .register(
         vocabulary::PREVIEW_MESH,
-        ForeignFunction::from_value(mesh::preview).tracked(),
+        ForeignFunction::from_value(mesh::preview)
+            .parameters([presentation::vocabulary::VALUE])
+            .tracked(),
     )
 }
 

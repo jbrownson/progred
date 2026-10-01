@@ -79,6 +79,7 @@ fn functions() -> ForeignFunctions {
                 };
                 Ok(RuntimeValue::list(std::iter::once(item).chain(values)))
             })
+            .parameters([vocabulary::LIST, vocabulary::ITEM])
             .tracked(),
         )
         .register(
@@ -97,6 +98,7 @@ fn functions() -> ForeignFunctions {
                 };
                 Ok(RuntimeValue::list(left.chain(right)))
             })
+            .parameters([number::vocabulary::LEFT, number::vocabulary::RIGHT])
             .tracked(),
         )
         .register(
@@ -110,6 +112,7 @@ fn functions() -> ForeignFunctions {
                     .map(|length| RuntimeValue::f64(length as f64))
                     .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST).into()))
             })
+            .parameters([vocabulary::LIST])
             .tracked(),
         )
         .register(
@@ -136,6 +139,7 @@ fn functions() -> ForeignFunctions {
                     .list_get(index)
                     .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS).into()))
             })
+            .parameters([vocabulary::LIST, vocabulary::INDEX])
             .tracked(),
         )
         .register(
@@ -152,6 +156,7 @@ fn functions() -> ForeignFunctions {
                 }
                 Ok(RuntimeValue::list(values))
             })
+            .parameters([vocabulary::LIST])
             .tracked(),
         )
         .register(
@@ -192,6 +197,7 @@ fn functions() -> ForeignFunctions {
                     state = next;
                 }
             })
+            .parameters([vocabulary::INITIAL, vocabulary::STEP])
             .tracked(),
         )
         .register(
@@ -223,6 +229,7 @@ fn functions() -> ForeignFunctions {
                 }
                 Ok(accumulator)
             })
+            .parameters([vocabulary::LIST, vocabulary::INITIAL, vocabulary::STEP])
             .tracked(),
         )
         .register(
@@ -255,6 +262,7 @@ fn functions() -> ForeignFunctions {
                     state = next;
                 }
             })
+            .parameters([vocabulary::INITIAL, vocabulary::STEP])
             .tracked(),
         )
 }

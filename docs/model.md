@@ -304,8 +304,10 @@ The completion library's `labels` helper turns cell identities into label offers
 `combine` concatenates applicable lazy providers in order, preserving an explicitly
 empty vocabulary. Grap's `parameter_labels` reads an inline or stored lambda's
 declared parameters when asked. The same metadata reader supplies call field order
-and `call_completion`'s initial pending parameter. It follows cell aliases, declines
-cycles and computed callables, and does not interpret native descriptions as lambdas.
+and `call_completion`'s initial pending parameter. It follows cell aliases and declines
+cycles and computed callables. A native function's description lists the arguments
+its implementation requires under `params`; the reader takes that list as is and
+never interprets a native description as a lambda.
 Filtering names and excluding existing record labels remain picker responsibilities.
 
 For nonempty value searches, Grap also offers calls to named stored lambdas,

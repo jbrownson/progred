@@ -359,6 +359,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             functions.register(
                 cell,
                 ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                    .parameters(match cell {
+                        LEAF => vec![VALUE],
+                        MAP => vec![CHILDREN, MAPPING],
+                        _ => vec![CHILDREN],
+                    })
                     .tracked(),
             )
         })
@@ -374,6 +379,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                     Err(error) => error,
                 })
             })
+            .parameters([PROGRAM])
             .tracked(),
         );
     Library::new(

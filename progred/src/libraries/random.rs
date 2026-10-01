@@ -69,7 +69,8 @@ fn functions() -> ForeignFunctions {
             vocabulary::BETWEEN,
             ForeignFunction::from_value(|_, _, _| {
                 Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))
-            }),
+            })
+            .parameters([vocabulary::MIN, vocabulary::MAX]),
         )
         .register(
             vocabulary::WITH_RANDOM,
@@ -89,7 +90,8 @@ fn functions() -> ForeignFunctions {
                 context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
                     context.eval(expression, environment)
                 })
-            }),
+            })
+            .parameters([::grap::vocabulary::EXPRESSION]),
         )
 }
 

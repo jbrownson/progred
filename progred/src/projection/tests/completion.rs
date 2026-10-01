@@ -1558,6 +1558,64 @@ fn grap_call_field_completion_offers_missing_parameters() {
 }
 
 #[test]
+fn built_in_call_completion_opens_its_first_argument() {
+    use crate::libraries::{f64::vocabulary::SUM, number::vocabulary::LEFT};
+    let document = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = core_libraries();
+    let entries = completion_entries(&src(&document, &libraries), false, false, "+");
+    let call = entries
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("call · f64"))
+        .expect("+ is offered as an f64 call");
+    let result = activated(call);
+    assert_eq!(result.value, Some(grap::call(SUM.into(), [])));
+    let (selected, payload) = result.selected.unwrap();
+    assert_eq!(selected, vec![Step::Key(LEFT)]);
+    assert_eq!(
+        payload
+            .as_record()
+            .unwrap()
+            .get(&crate::libraries::selection::vocabulary::STAGE),
+        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+    );
+}
+
+#[test]
+fn built_in_call_field_completion_offers_its_missing_parameters() {
+    use crate::libraries::{
+        f64::vocabulary::SUM,
+        number::vocabulary::{LEFT, RIGHT},
+    };
+    let document = Document {
+        root: Some(grap::call(SUM.into(), [])),
+        cells: Cells::new(),
+    };
+    let stack = crate::stack::load();
+    let selection = pending_edge(
+        &crate::test_root(),
+        &src(&document, &stack.libraries),
+        Vec::new(),
+    )
+    .unwrap();
+    let offered = |document: &Document| {
+        projected_completion_entries(document, &selection)
+            .iter()
+            .filter_map(|entry| entry.source)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(offered(&document), [LEFT, RIGHT]);
+
+    let document = Document {
+        root: Some(grap::call(SUM.into(), [(LEFT, Value::record([]))])),
+        ..document
+    };
+    assert_eq!(offered(&document), [RIGHT]);
+}
+
+#[test]
 fn missing_call_argument_slots_edit_real_fields_without_materializing_other_arguments() {
     let function = new_cell_id();
     let arguments = [new_cell_id(), new_cell_id(), new_cell_id()];

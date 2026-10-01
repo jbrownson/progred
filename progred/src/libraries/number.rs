@@ -263,6 +263,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                 (_, None) => missing(vocabulary::RIGHT),
             }
         })
+        .parameters([vocabulary::LEFT, vocabulary::RIGHT])
         .tracked()
     }
 
@@ -287,6 +288,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     )
                 }))
         })
+        .parameters([line_edit::vocabulary::INPUT])
         .tracked()
     }
 }

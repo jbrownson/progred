@@ -62,6 +62,7 @@ fn functions() -> ForeignFunctions {
                 Ok(value)
             }
         })
+        .parameters([vocabulary::VALUE, vocabulary::DEFAULT])
         .tracked(),
     )
 }

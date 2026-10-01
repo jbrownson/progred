@@ -79,6 +79,7 @@ pub fn functions() -> ForeignFunctions {
                     )
                 }))
         })
+        .parameters([line_edit::vocabulary::INPUT])
         .tracked(),
     )
 }

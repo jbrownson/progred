@@ -156,15 +156,27 @@ fn consume(
 
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(RANGE, ForeignFunction::new(range).tracked())
-        .register(RANGE_STEP, ForeignFunction::new(range_step).tracked())
+        .register(
+            RANGE,
+            ForeignFunction::new(range).parameters([COUNT]).tracked(),
+        )
+        .register(
+            RANGE_STEP,
+            ForeignFunction::new(range_step)
+                .parameters([COUNT, INDEX])
+                .tracked(),
+        )
         .register(
             FOR_EACH,
-            ForeignFunction::new(|cx, call, env| consume(cx, call, env, false)).tracked(),
+            ForeignFunction::new(|cx, call, env| consume(cx, call, env, false))
+                .parameters([ITEMS, ACTION])
+                .tracked(),
         )
         .register(
             COLLECT,
-            ForeignFunction::new(|cx, call, env| consume(cx, call, env, true)).tracked(),
+            ForeignFunction::new(|cx, call, env| consume(cx, call, env, true))
+                .parameters([ITEMS, ACTION])
+                .tracked(),
         )
 }
 

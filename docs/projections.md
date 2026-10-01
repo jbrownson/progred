@@ -36,7 +36,10 @@ implementation. Reading uses the description; calling uses the implementation.
 The built-in builders join their data and function declarations once, when
 constructing this table; they are not separate lookup registries. A repeated
 definition replaces the prior entry. An unnamed native definition has an empty
-record as its description. The library's own name record is an ordinary
+record as its description. A native implementation declares the arguments it
+requires, and its description lists them under `params`, as a lambda's does, so
+calls to either open their first argument and show slots for missing ones.
+Arguments with defaults stay undeclared. The library's own name record is an ordinary
 definition under its library identity, so references and name lookup need no
 metadata side channel.
 

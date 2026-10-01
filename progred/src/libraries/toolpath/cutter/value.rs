@@ -213,6 +213,10 @@ pub(crate) fn functions(mut functions: ForeignFunctions) -> ForeignFunctions {
                     tool.map(|t| t.value()).ok_or_else(invalid)
                 })())
             })
+            .parameters(match id {
+                BULL_MILL => vec![TOOL_DIAMETER, CORNER_RADIUS, TOOL_LENGTH],
+                _ => vec![TOOL_DIAMETER, TOOL_LENGTH],
+            })
             .tracked(),
         );
     }

@@ -219,6 +219,7 @@ enum ForeignImplementation {
 pub struct ForeignFunction {
     implementation: ForeignImplementation,
     tracked: bool,
+    parameters: Option<Rc<[CellId]>>,
 }
 
 /// One host definition. Native implementations retain their ordinary
@@ -235,7 +236,17 @@ pub struct ForeignDefinition {
 }
 
 impl Definition {
-    pub fn foreign(value: Value, implementation: ForeignFunction) -> Self {
+    /// Declared parameters join the description under `params`, as a
+    /// lambda's do, unless the description already lists its own.
+    pub fn foreign(mut value: Value, implementation: ForeignFunction) -> Self {
+        if let (Some(parameters), Value::Record(fields)) = (&implementation.parameters, &mut value)
+            && !fields.contains_key(&vocabulary::PARAMS)
+        {
+            fields.insert(
+                vocabulary::PARAMS,
+                Value::list(parameters.iter().map(|&parameter| parameter.into())),
+            );
+        }
         Self::Foreign(Rc::new(ForeignDefinition {
             value,
             implementation,
@@ -268,6 +279,7 @@ impl ForeignFunction {
                     call(context, expression, environment).map(RuntimeValue::from_value)
                 },
             )),
+            parameters: None,
         }
     }
 
@@ -277,6 +289,7 @@ impl ForeignFunction {
         Self {
             tracked: false,
             implementation: ForeignImplementation::Direct(Rc::new(call)),
+            parameters: None,
         }
     }
 
@@ -291,6 +304,7 @@ impl ForeignFunction {
         Self {
             tracked: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),
+            parameters: None,
         }
     }
 
@@ -299,6 +313,13 @@ impl ForeignFunction {
     /// or evaluation-local; hidden mutable state prevents sound memoization.
     pub fn tracked(mut self) -> Self {
         self.tracked = true;
+        self
+    }
+
+    /// The fields a call must supply, in authoring order; arguments with
+    /// defaults stay undeclared.
+    pub fn parameters(mut self, parameters: impl IntoIterator<Item = CellId>) -> Self {
+        self.parameters = Some(parameters.into_iter().collect());
         self
     }
 }

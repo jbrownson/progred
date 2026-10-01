@@ -63,6 +63,7 @@ fn functions() -> ForeignFunctions {
                 }
             })
         })
+        .parameters([vocabulary::CONDITION])
         .tracked(),
     )
 }

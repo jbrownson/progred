@@ -146,7 +146,9 @@ fn parts() -> number::Parts {
         .set_value(vocabulary::FROM_F64, name::record("f32 from f64", []));
     parts.functions = parts.functions.register(
         vocabulary::FROM_F64,
-        ForeignFunction::from_value(from_f64).tracked(),
+        ForeignFunction::from_value(from_f64)
+            .parameters([number::vocabulary::OPERAND])
+            .tracked(),
     );
     parts
 }

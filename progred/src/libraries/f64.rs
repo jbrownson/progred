@@ -217,12 +217,18 @@ fn parts() -> number::Parts {
             ForeignFunction::new(move |context, call, environment| {
                 unary(context, call, environment, operation)
             })
+            .parameters([vocabulary::OPERAND])
             .tracked(),
         );
     }
     parts.functions = parts
         .functions
-        .register(vocabulary::LERP, ForeignFunction::new(lerp).tracked())
+        .register(
+            vocabulary::LERP,
+            ForeignFunction::new(lerp)
+                .parameters([vocabulary::START, vocabulary::END, vocabulary::AMOUNT])
+                .tracked(),
+        )
         .register(
             vocabulary::IS_FINITE,
             ForeignFunction::new(|context, call, environment| {
@@ -230,6 +236,7 @@ fn parts() -> number::Parts {
                     logic::value(value.is_finite()).into()
                 })
             })
+            .parameters([vocabulary::OPERAND])
             .tracked(),
         );
     for (cell, name) in [
