@@ -126,9 +126,11 @@ rustup component add rust-src llvm-tools --toolchain nightly-2026-08-27
 ./tools/sandbox-cargo web-threaded-fetch
 ```
 
-Also install `wasm-bindgen-cli` matching the lockfile. `make build-web` rebuilds
-the standard library with atomics and enables SIMD under Seatbelt, then generates
-`web/pkg`.
+`make build-web` rebuilds the standard library with atomics and enables SIMD
+under Seatbelt, then generates `web/pkg` with `tools/wasm-bindgen`. That script
+runs the wasm-bindgen CLI matching the lockfile, downloading the release once into
+`target/tools` and checking its published SHA-256, so a separately installed CLI
+can't fall out of step with the crate.
 Native builds continue using stable Rust. The worker instantiates exactly the
 same module with shared memory; ordinary Rust `Send` closures and results stay
 in Rust, while JS transfers job pointers and wake notifications. The page alone

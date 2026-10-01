@@ -127,7 +127,7 @@ high-quality implicit refinement can take time and still has rendering artifacts
 ### Browser and Linux
 
 To build the browser version **on macOS**, set up the pinned nightly toolchain
-and `wasm-bindgen` CLI described in [`web/README.md`](web/README.md). Then run:
+described in [`web/README.md`](web/README.md). Then run:
 
 ```sh
 make run-web

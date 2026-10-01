@@ -79,10 +79,11 @@ sandbox-test:
 sandbox-app:
 	@./tools/build-macos-app
 
-# Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary.
+# Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary,
+# using the release matching Cargo.lock.
 build-web:
 	./tools/sandbox-cargo web-threaded build --release --bin progred -p progred
 	@wasm=target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm; \
 	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \
-		wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred "$$wasm"; \
+		./tools/wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred "$$wasm"; \
 	fi
