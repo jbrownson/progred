@@ -1,7 +1,7 @@
 // Cloudflare Web Analytics. Other hosts would only log a CORS error, since
-// Cloudflare accepts reports from prog.red alone, and an embedded editor is
-// part of a page that already counted the visit.
-if (location.hostname === "prog.red" && window.top === window) {
+// Cloudflare accepts reports from prog.red and its subdomains alone, and an
+// embedded editor is part of a page that already counted the visit.
+if (/(^|\.)prog\.red$/.test(location.hostname) && window.top === window) {
   const beacon = document.createElement("script");
   beacon.type = "module";
   beacon.src = "https://static.cloudflareinsights.com/beacon.min.js";

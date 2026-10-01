@@ -19,7 +19,8 @@ function run(hostname, embedded) {
   return appended;
 }
 
-test("a page on prog.red loads Cloudflare's beacon with the site token", () => {
+test("a page on prog.red or a subdomain loads Cloudflare's beacon with the site token", () => {
+  assert.equal(run("try.prog.red", false).length, 1);
   const appended = run("prog.red", false);
   assert.equal(appended.length, 1);
   const [beacon] = appended;
@@ -31,5 +32,5 @@ test("a page on prog.red loads Cloudflare's beacon with the site token", () => {
 
 test("embedded editors and local previews load nothing", () => {
   assert.deepEqual(run("prog.red", true), []);
-  for (const hostname of ["localhost", "127.0.0.1"]) assert.deepEqual(run(hostname, false), []);
+  for (const hostname of ["localhost", "127.0.0.1", "notprog.red"]) assert.deepEqual(run(hostname, false), []);
 });

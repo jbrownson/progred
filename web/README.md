@@ -15,8 +15,8 @@ The document URL is relative to the editor page. `example` opens one of the
 bundled examples instead, by its file name without `.gid`, with the full editor:
 `/editor/?example=fidget-shapes`. Without those parameters the editor still
 starts blank with its full menu and the default worker pool. The page also loads
-the site's `analytics.js`, which reports a visit only on prog.red and only when
-the editor isn't embedded.
+the site's `analytics.js`, which reports a visit only on prog.red and its
+subdomains, and only when the editor isn't embedded.
 `wheel=auto` captures a wheel event only when a placed editor scroll container
 can move in its direction; otherwise the browser scrolls the page. The same
 policy covers document panes and completion lists. Admission is read-only and

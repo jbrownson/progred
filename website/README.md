@@ -40,12 +40,12 @@ API, without credentials, retries, or a third-party widget. Until it succeeds
 only changes CSS. The icon's MIT license is included in `public/octicons-LICENSE.txt`.
 
 Cloudflare Web Analytics counts visits. `public/analytics.js` loads Cloudflare's
-beacon only on prog.red and only in a top-level page, so a tutorial's embedded
-editors don't each count as a page view; the full editor counts when opened on
-its own. The beacon sets no cookies and stores nothing in the browser, and its
-token is public by design. In the Cloudflare dashboard, prog.red's Web Analytics
-setting is manual installation: automatic setup would inject the beacon into
-every embedded editor too.
+beacon only on prog.red and its subdomains, and only in a top-level page, so a
+tutorial's embedded editors don't each count as a page view; the full editor
+counts when opened on its own. The beacon sets no cookies and stores nothing in
+the browser, and its token is public by design. In the Cloudflare dashboard,
+prog.red's Web Analytics setting is manual installation: automatic setup would
+inject the beacon into every embedded editor too.
 
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
