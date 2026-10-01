@@ -205,15 +205,7 @@ earlier milestone. Their design notes are in [history](docs/history/).
 
 ## License
 
-Progred is licensed under either of
-
-- [Apache License, Version 2.0](LICENSE-APACHE)
-- [MIT license](LICENSE-MIT)
-
-at your option. Unless you explicitly state otherwise, any contribution
-intentionally submitted for inclusion in the work by you, as defined in the
-Apache-2.0 license, shall be dual licensed as above, without any additional
-terms or conditions.
+Progred is licensed under the [MIT license](LICENSE).
 
 Some files keep their own licenses: the vendored Fidget crates and the patches
 against them are [MPL-2.0](vendor/README.md), the Noto Sans fonts use the
