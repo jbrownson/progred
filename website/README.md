@@ -56,12 +56,8 @@ for a free port when running an additional preview alongside this one.
   you can switch off (`public/peel.js`), the key ideas, what works today, the four
   tutorials, and the Zulip links. Narrow screens get stills from `public/images/`
   instead of loading the editor.
-  Regenerate those stills after editor changes:
-  `./tools/sandbox-cargo test -p progred website_home_stills --lib -- --ignored`, then
-  `rsvg-convert -z 2 target/sandbox/build/home_forest_light.svg -o website/public/images/forest-light.png`
-  and likewise for `home_forest_dark`, `home_structure_light`, and `home_structure_dark`
-  (`structure-*.png`). The home page's two screenshots are copies of the
-  [README screenshots](../docs/images/README.md).
+  `make images` regenerates those stills, and the copies of the
+  [README screenshots](../docs/images/README.md), after editor changes.
 - `public/tutorial.html` is the exercise tutorial described below. `public/story.html`,
   `public/lab/peel.html`, and `public/lab/see.html` are the alternative tutorials
   the home page asks visitors to compare.

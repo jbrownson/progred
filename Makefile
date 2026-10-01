@@ -8,7 +8,7 @@ else
 NATIVE_RUN_TARGET := unsupported-native-platform
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web run-website build-web build-website sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web run-website build-web build-website images sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app
 
 help:
 	@echo "Development:"
@@ -18,6 +18,7 @@ help:
 	@echo "  make run-website  Serve the website with its lessons on port 8081"
 	@echo "  make build-web    Build the browser editor (the servers build it first)"
 	@echo "  make build-website  Package the publishable website into target/website"
+	@echo "  make images       Regenerate the README and website screenshots from the editor"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
@@ -45,6 +46,18 @@ build-website: build-web
 
 run-website:
 	@./website/Preview.command $(ARGS)
+
+# Headless captures of the real editor, rasterized by librsvg's rsvg-convert.
+# The CAM capture waits for its progressive render, so it needs --release.
+images:
+	@command -v rsvg-convert >/dev/null || { echo "make images needs rsvg-convert (brew install librsvg)" >&2; exit 1; }
+	./tools/sandbox-cargo test --release -p progred --lib -- --ignored readme_svg_captures website_home_stills
+	rsvg-convert target/sandbox/build/readme_cam.svg -o docs/images/cam-preview.png
+	rsvg-convert target/sandbox/build/readme_iop.svg -o docs/images/iop-tree.png
+	cp docs/images/cam-preview.png docs/images/iop-tree.png website/public/images/
+	for name in forest structure; do for theme in light dark; do \
+		rsvg-convert -z 2 target/sandbox/build/home_$${name}_$$theme.svg -o website/public/images/$$name-$$theme.png; \
+	done; done
 
 # The launcher builds editor changes before serving.
 run-web:
