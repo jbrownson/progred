@@ -243,7 +243,7 @@ class AssetTests(unittest.TestCase):
                     self.frames.append(attrs)
 
         assets = Assets()
-        assets.feed((REPOSITORY / "website/public/index.html").read_text())
+        assets.feed((REPOSITORY / "website/public/tutorial.html").read_text())
         self.assertEqual(assets.external_scripts, [])
         self.assertEqual(len(assets.frames), 9)
         documents = []
@@ -310,6 +310,54 @@ class AssetTests(unittest.TestCase):
                     REPOSITORY / "web" / relative.removeprefix("editor/")
                     if relative.startswith("editor/")
                     else REPOSITORY / "website/public" / relative
+                )
+                self.assertTrue(target.exists(), str(target))
+
+    def test_home_page_funnels_to_zulip_and_links_resolve(self):
+        class Page(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = []
+                self.paths = []
+                self.frames = []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "a":
+                    self.links.append(attrs["href"])
+                elif tag in ("img", "script", "link") and (attrs.get("src") or attrs.get("href")):
+                    self.paths.append(attrs.get("src", attrs.get("href")))
+                if tag == "iframe":
+                    self.frames.append(attrs)
+
+        public = REPOSITORY / "website/public"
+        page = Page()
+        page.feed((public / "index.html").read_text())
+        self.assertGreaterEqual(page.links.count("https://progred.zulipchat.com"), 3)
+        for tutorial in ("tutorial.html", "story.html", "lab/peel.html", "lab/see.html"):
+            self.assertIn(tutorial, page.links)
+        for link in page.links:
+            url = urlsplit(link)
+            if url.scheme or not url.path:
+                continue
+            with self.subTest(link=link):
+                target = public / url.path
+                if target.is_dir():
+                    target /= "index.html"
+                self.assertTrue(target.is_file(), str(target))
+                if url.fragment:
+                    self.assertIn(f'id="{url.fragment}"', target.read_text())
+        # Phones read stills; only a wide window loads the editor.
+        [frame] = page.frames
+        self.assertNotIn("src", frame)
+        self.assertEqual(urlsplit(urljoin("http://localhost/", frame["data-src"])).path, "/editor/")
+        for path in page.paths:
+            with self.subTest(path=path):
+                relative = urlsplit(path).path.removeprefix("./")
+                target = (
+                    REPOSITORY / "web" / relative.removeprefix("editor/")
+                    if relative.startswith("editor/")
+                    else public / relative
                 )
                 self.assertTrue(target.exists(), str(target))
 

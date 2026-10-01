@@ -52,7 +52,20 @@ for a free port when running an additional preview alongside this one.
 
 ## Work on it
 
-- `public/index.html`, `public/style.css`, `public/lessons.js`, and `public/appearance.js` are the website. Edit and refresh.
+- `public/index.html` is the home page: the pitch, a live forest whose libraries
+  you can switch off (`public/peel.js`), the key ideas, what works today, the four
+  tutorials, and the Zulip links. Narrow screens get stills from `public/images/`
+  instead of loading the editor.
+  Regenerate those stills after editor changes:
+  `./tools/sandbox-cargo test -p progred website_home_stills --lib -- --ignored`, then
+  `rsvg-convert -z 2 target/sandbox/build/home_forest_light.svg -o website/public/images/forest-light.png`
+  and likewise for `home_forest_dark`, `home_structure_light`, and `home_structure_dark`
+  (`structure-*.png`). The home page's two screenshots are copies of the
+  [README screenshots](../docs/images/README.md).
+- `public/tutorial.html` is the exercise tutorial described below. `public/story.html`,
+  `public/lab/peel.html`, and `public/lab/see.html` are the alternative tutorials
+  the home page asks visitors to compare.
+- `public/style.css`, `public/lessons.js`, and `public/appearance.js` are shared. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.
 - `/editor/` serves the existing `web/` host and generated `web/pkg/` build.
@@ -64,7 +77,7 @@ for a free port when running an additional preview alongside this one.
 - Browser edits are currently in memory only. Do not author something you need
   to keep here yet; document import/export is a useful next step.
 
-The page opens with a growing forest. A slider scrubs growth forward or backward;
+The exercise tutorial opens with a growing forest. A slider scrubs growth forward or backward;
 the visible `drawing with controls` call connects it to a forest function with editable
 tree count, growth rate, leaf color, and trunk color. Drawing and controls use existing
 libraries; all forest geometry is ordinary Grap in the same document.

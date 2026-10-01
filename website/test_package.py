@@ -35,7 +35,7 @@ class PackageTests(unittest.TestCase):
 
     def test_includes_lessons_and_complete_worker_module_tree(self):
         assemble(self.repository, self.destination)
-        html = (self.destination / "index.html").read_text()
+        html = (self.destination / "tutorial.html").read_text()
         frames = re.findall(r'<iframe\s[^>]*src="([^"]+)"', html)
         self.assertEqual(len(frames), 9)
         for src in frames:
@@ -51,6 +51,8 @@ class PackageTests(unittest.TestCase):
         for name in EDITOR_FILES:
             self.assertTrue((self.destination / "editor" / name).is_file())
         self.assertTrue((self.destination / "logo.svg").is_file())
+        self.assertTrue((self.destination / "index.html").is_file())
+        self.assertTrue((self.destination / "images/forest-light.png").is_file())
 
     def test_excludes_source_and_diagnostic_pages(self):
         (self.repository / "web/secret.env").write_text("private")

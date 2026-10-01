@@ -3,11 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Try Progred, an experimental programming environment. Start with small, editable values and build up from there." />
-    <title>Progred — change a program, see what happens</title>
+    <meta name="description" content="Progred is an experimental programming environment. Your program is a graph of records, lists, bytes, and cells, and everything you see, including the code, is a projection of it." />
+    <title>Progred — like JSON, but a graph, and projected</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://prog.red/" />
+    <meta property="og:title" content="Progred — like JSON, but a graph, and projected" />
+    <meta property="og:description" content="An experimental programming environment where everything you see, including the code, is a projection of one graph. Take a live program apart in your browser." />
+    <meta property="og:image" content="https://prog.red/images/forest-light.png" />
+    <meta property="og:image:alt" content="A drawing of a forest above the Progred program that draws it." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="./editor/icon.svg" />
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./lessons.js"></script>
+    <script type="module" src="./peel.js"></script>
     <script type="module" src="./appearance.js"></script>
     <script type="module" src="./github.js"></script>
   </head>
@@ -33,12 +41,13 @@
           </span>
         </button>
         <div class="social-links">
-          <a class="social-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
+          <a class="social-link zulip-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
             <span class="social-badge">
               <!-- Zulip, Apache-2.0; see zulip-LICENSE.txt. Background removed; mark uses currentColor. -->
               <svg viewBox="206 185 361 403" width="18" height="18" fill="currentColor" aria-hidden="true">
                 <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" />
               </svg>
+              <span class="social-label">Chat on Zulip</span>
             </span>
           </a>
           <a class="social-link github-link" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener" aria-label="View progred on GitHub" title="progred on GitHub">
@@ -54,173 +63,163 @@
       </nav>
     </header>
 
-    <main>
-      <section class="exercise showcase" id="growing-forest" aria-label="Try progred">
-        <p class="lede">This forest is a program. Drag the slider to grow it, or change a number and watch the trees follow. Progred programs aren’t text: they’re structure, and everything you see is drawn from it. The rest of this page builds up to the forest one idea at a time.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,666ba40b81028e32c78bdc1665d6c3a9,d22b834154d60b1df228f9bb4d3c13de,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71" title="A growing forest: scrub the slider and edit the program" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the forest example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
+    <main class="home">
+      <section class="hero" aria-labelledby="pitch">
+        <h1 id="pitch">Like JSON, but a graph, and projected.</h1>
+        <p class="lede">Progred is an experimental programming environment. Your program is a document like that, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates.</p>
+        <p>Keys aren’t strings; they’re identities. There are no built-in strings or numbers either, just records, lists, bytes, and references to cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is eight bytes under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p class="actions">
+          <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
+          <a class="button" href="#ways-in">Try a tutorial</a>
+          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
+        </p>
+      </section>
+
+      <section class="exercise showcase" id="peel" aria-labelledby="peel-title">
+        <h2 id="peel-title">Take a program apart</h2>
+        <p>This forest is a program. Drag its slider to grow it, or hold <kbd data-command-key>Ctrl</kbd> and click a tree to find the code that drew it. Then switch the libraries off, one layer at a time, until you’re looking at what’s stored.</p>
+        <div class="live">
+          <div class="editor-example" id="peel-editor"><iframe data-src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,7b0fa421250c1b5c8a78a3a95b172cb6,f76a2ef341541a5c955fc23094e2df52,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+          <div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
+          <p id="peel-caption" class="peel-caption" aria-live="polite"></p>
+        </div>
+        <script>
+          // Phones read the stills below; only a wide window loads the live editor.
+          {
+            const wide = matchMedia("(min-width: 641px)");
+            const frame = document.querySelector("#peel-editor iframe");
+            const load = () => { if (wide.matches && !frame.hasAttribute("src")) frame.src = frame.dataset.src; };
+            load();
+            wide.addEventListener("change", load);
+          }
+        </script>
+        <div class="still" role="group" aria-label="The forest and its stored structure">
+          <figure>
+            <img class="light-only" src="images/forest-light.png" alt="The forest drawn by every library, with its slider and the start of its program." width="704" height="600" />
+            <img class="dark-only" src="images/forest-dark.png" alt="The forest drawn by every library, with its slider and the start of its program." width="704" height="600" />
+            <figcaption>Drawn by every library.</figcaption>
+          </figure>
+          <figure>
+            <img class="light-only" src="images/structure-light.png" alt="The same document with the libraries off: records, lists, bytes, and cells, with names only where the document defines them." width="704" height="600" />
+            <img class="dark-only" src="images/structure-dark.png" alt="The same document with the libraries off: records, lists, bytes, and cells, with names only where the document defines them." width="704" height="600" />
+            <figcaption>The same document with the libraries off. On a laptop, this is a live editor you can take apart yourself.</figcaption>
+          </figure>
         </div>
       </section>
 
-      <section class="exercise" id="values" aria-labelledby="values-title">
-        <h2 id="values-title">Values, not text</h2>
-        <p>Start small. This planet is a record: named fields holding text, a number, and a list. You edit the values themselves, so there’s no syntax to get wrong.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/values.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=values-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="An editable planet record" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the planet example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Rename the <strong>planet</strong>: click inside <strong>Mars</strong> and type a new name.</span></li>
-          <li data-task="moons"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Give it a different number of <strong>moons</strong>.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a color: click the comma between two colors, type <code>"blue"</code> including the quotes, and press <kbd>Enter</kbd>.</span></li>
-          <li data-task="remove"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Remove a color: double-click it to select the word, press <kbd>Backspace</kbd> to erase it, then <kbd>Backspace</kbd> once more to remove it.</span></li>
-          <li data-task="restore"><span class="task-marker" aria-hidden="true">5</span><span><span class="task-status visually-hidden">Not yet completed: </span>Bring it back with <kbd data-command-key>Ctrl</kbd> + <kbd>Z</kbd>.</span></li>
+      <section class="ideas" id="ideas" aria-labelledby="ideas-title">
+        <h2 id="ideas-title">The ideas</h2>
+        <p>None of these is large on its own. Progred is what they add up to.</p>
+        <h3 class="idea-group">The data</h3>
+        <article class="idea" id="structure">
+          <h4>Structure, not text</h4>
+          <p>A Progred document is built from four things: records, lists, bytes, and cells. Records map keys to values and lists keep them in order; bytes are the leaves; a cell is a value with its own identity that any number of places can point to, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
+          <p class="idea-links"><a href="lab/peel.html#cells">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/gid.md">GID</a></p>
+        </article>
+        <article class="idea" id="identity">
+          <h4>Identity, not names</h4>
+          <p>Every key and every reference is a random 128-bit identity. A name is a fact stored about a cell, <code>{name: "x"}</code>, which views draw as a label. So renaming never breaks a reference, two different things can wear the same name, and a call files its arguments under its parameters’ identities.</p>
+          <p class="idea-links"><a href="lab/peel.html#names">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md">Data and editor model</a></p>
+        </article>
+        <article class="idea" id="meaning">
+          <h4>Libraries give data its meaning</h4>
+          <p>Text is bytes under the text library’s <code>utf8</code> key, and a 64-bit float is eight bytes under the f64 library’s key; the small <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
+          <p class="idea-links"><a href="lab/peel.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
+        </article>
+        <h3 class="idea-group">Views and language</h3>
+        <article class="idea" id="projections">
+          <h4>Everything you see is a projection</h4>
+          <p>Libraries contribute partial views, composed in order above one total structural view, and the first that recognizes a value draws it. Data no library understands falls back to structure instead of disappearing. You can edit through any view: code, a number you scrub, a color picker, a slider, or the base projection that shows what’s stored.</p>
+          <p class="idea-links"><a href="tutorial.html#projections">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#projection-composition">Projection composition</a></p>
+        </article>
+        <article class="idea" id="grap">
+          <h4>Grap, a language made of the same data</h4>
+          <p>Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions rather than syntax. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
+          <p class="idea-links"><a href="lab/peel.html#unfinished">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#evaluation">Evaluation</a></p>
+        </article>
+        <article class="idea" id="linked">
+          <h4>Output linked to source</h4>
+          <p>A drawing remembers the call that drew each shape. Hold <kbd data-command-key>Ctrl</kbd> and click a tree to select the code that drew it; hover a call and its shapes light up. Controls like the forest’s slider are requested by ordinary Grap code, and their values feed the drawing.</p>
+          <p class="idea-links"><a href="tutorial.html#drawing">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/controls.md">Controls</a></p>
+        </article>
+        <article class="idea" id="views">
+          <h4>Views are programs</h4>
+          <p>A view can be a Grap function stored in the document beside the data it draws. A pane can show a value through one, and the planet in <em>Peel the forest</em> is drawn by one. The built-in views are Rust functions today.</p>
+          <p class="idea-links"><a href="lab/peel.html#views">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md#panes">Panes</a></p>
+        </article>
+        <article class="idea" id="panes">
+          <h4>The workspace is part of the document</h4>
+          <p>Panes are an ordinary <code>panes: {left: […], right: […]}</code> record in the document. Opening or moving a pane edits that record, so the layout saves and undoes with everything else.</p>
+          <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/docs/model.md#panes">Panes</a></p>
+        </article>
+        <h3 class="idea-group">Underneath</h3>
+        <article class="idea" id="combinators">
+          <h4>Small constructs, composed</h4>
+          <p>A composition stays an ordinary input to further composition: partial projections combine into a partial projection, and completion providers into a completion provider. Richer behavior lives in compositions rather than in special cases of the primitives.</p>
+          <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/MOTIVATION.md#simple-constructs-and-combinators">Motivation</a></p>
+        </article>
+        <article class="idea" id="puri">
+          <h4>Puri: pure widget descriptions</h4>
+          <p>Progred’s interface is built with Puri, a widget library that keeps no widget tree and mints no identities. A description takes caller-owned state and, from its settled geometry, produces drawing and input handlers. Drawing is a final-tagless language: Vello interprets it natively, Canvas2D in the browser, and a recorder turns frames into data for tests and for pictures like the ones on this page.</p>
+          <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/docs/puri.md">Puri</a></p>
+        </article>
+        <article class="idea" id="trees">
+          <h4>Final-encoded trees</h4>
+          <p>Grap programs build hierarchies by emitting groups and leaves through scoped builders. Whoever runs the program chooses the representation, a retained tree or a stream of emissions, and each emission keeps a link to the call that made it.</p>
+          <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/docs/trees.md">Final-encoded trees</a></p>
+        </article>
+        <article class="idea" id="incremental">
+          <h4>Incremental, cancellable work</h4>
+          <p>Expensive views run as explicit, dependency-tracked computations that can be cancelled in the background and refined progressively. The CAM preview draws a mesh first while implicit rendering refines behind it.</p>
+          <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/docs/incremental.md">Dependency-tracked computations</a></p>
+        </article>
+      </section>
+
+      <section class="today" id="today" aria-labelledby="today-title">
+        <h2 id="today-title">What it does today</h2>
+        <p>Progred is a working prototype. CAD/CAM is the demanding example it’s being pushed on right now, because it needs expensive live views, parameters you can scrub, and output you can trace back to code. It’s an example, not the point.</p>
+        <figure>
+          <img src="images/iop-tree.png" alt="A tree drawing beside the editable program that draws it." width="1200" height="900" loading="lazy" />
+          <figcaption>A recreation of the tree from Bret Victor’s <a href="https://worrydream.com/InventingOnPrinciple/">Inventing on Principle</a>, beside its editable program. The original demo and the inspiration for this loop are his.</figcaption>
+        </figure>
+        <figure>
+          <img src="images/cam-preview.png" alt="CAM playback beside its Grap program: a partially cut cube, upcoming toolpaths, and a playback slider." width="1200" height="900" loading="lazy" />
+          <figcaption>CAM playback beside its Grap program: toolpaths cutting a cube, with a slider through the cut. This is toolpath generation and stock-removal visualization, not machine-ready G-code.</figcaption>
+        </figure>
+        <ul>
+          <li><strong>Structural editing:</strong> completions, names and literals edited in place, color pickers, number scrubbing, panes and windows, undo.</li>
+          <li><strong>Live drawings</strong> linked to the code that drew them.</li>
+          <li><strong>Implicit CAD</strong> with <a href="https://github.com/mkeeter/fidget">Fidget</a>: editable fields and 3D previews you can orbit.</li>
+          <li><strong>Early CAM:</strong> toolpaths, playback, and stock removal.</li>
+        </ul>
+        <p>macOS is the main platform. This site runs the same editor compiled to WebAssembly, and there’s a Linux build too. <a href="https://github.com/jbrownson/progred#try-it">Build it from source</a>.</p>
+      </section>
+
+      <section class="ways-in" id="ways-in" aria-labelledby="ways-in-title">
+        <h2 id="ways-in-title">Four ways in. Which one works?</h2>
+        <p>We haven’t settled how to introduce Progred, so here are four tutorials on the same editor, each taking a different route. Try one or two, then tell us on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
+        <ol class="tutorials">
+          <li><a href="tutorial.html"><strong>Change a program, see what happens</strong><span>A guided tour in short exercises: values, views, cells, calculations, functions, and drawings, with tasks that check themselves.</span></a></li>
+          <li><a href="story.html"><strong>How the forest was made</strong><span>One program grows from a single dot into a forest, and each step adds one idea.</span></a></li>
+          <li><a href="lab/peel.html"><strong>Peel the forest</strong><span>Start from the finished forest and switch its libraries off until only structure is left, then open six doors into what you saw.</span></a></li>
+          <li><a href="lab/see.html"><strong>Teach the editor to see</strong><span>Start from bare structure and load one library at a time, until the editor can draw the forest.</span></a></li>
         </ol>
-        <p class="aside">Quotes make text and digits make a number: each value knows what kind it is.</p>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Tell us which worked</a></p>
       </section>
 
-      <section class="exercise" id="projections" aria-labelledby="projections-title">
-        <h2 id="projections-title">What does it look like?</h2>
-        <p>If a program isn’t text, what do you see? A projection: a drawing of the structure, made by libraries that each know how to draw certain things. Here is one calculation, drawn three ways. Each view says what drew it, and all three are editable.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/projections.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=projections-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="One calculation drawn three ways" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the projections example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="full"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the top view, change the <strong>2</strong>. The other two views change with it.</span></li>
-          <li data-task="plain"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the middle view, change <strong>right</strong>. The result on top updates.</span></li>
-          <li data-task="raw"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the same number in the bottom view. It’s still there, stored as eight bytes.</span></li>
-        </ol>
-        <p class="aside">There’s only one calculation underneath, so an edit in any view is an edit to all of them.</p>
+      <section class="about" id="about" aria-labelledby="about-title">
+        <h2 id="about-title">Who’s building it</h2>
+        <p>Progred is Jake Brownson’s project. It has been in development since 2019, through TypeScript, Swift, egui, and Haskell prototypes to today’s Rust implementation on the Linebender stack. The source is on <a href="https://github.com/jbrownson/progred">GitHub</a>.</p>
       </section>
 
-      <section class="exercise" id="model" aria-labelledby="model-title">
-        <h2 id="model-title">What it’s made of</h2>
-        <p>The bottom view above is the base projection, what’s left with no libraries at all. It shows that everything is built from four things. A <strong>record</strong> pairs keys with values, like the planet. A <strong>list</strong> keeps values in order, like its colors. <strong>Bytes</strong> are the leaves: “Mars” is the four bytes <code>4d 61 72 73</code> under a key that marks them as text, and 2 is eight bytes marked as a number. A <strong>cell</strong> holds a value so it can be used in more than one place; the parentheses around both views are two uses of one planet.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/model.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:raw&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=model-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="The planet drawn by every library and by the base projection" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the base projection example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the top view, rename the <strong>planet</strong>. Its bytes change below.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a color in the top view. A new record appears in the list below.</span></li>
-          <li data-task="key"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the bottom view, click <strong>…f94f0</strong>. The top view selects the same value, because that key is <strong>planet</strong>.</span></li>
-        </ol>
-        <p class="aside">Names like <strong>planet</strong> are labels the top view draws for identities, so renaming one never breaks what uses it.</p>
-      </section>
-
-      <section class="exercise" id="cells" aria-labelledby="cells-title">
-        <h2 id="cells-title">One value, many places</h2>
-        <p>You’ve seen parentheses twice now. Each pair is a reference to a cell, and every reference to a cell is the same value.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/cells.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=cells-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Two references to one editable cell" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the cells example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>7</strong>. Both change, because they’re one cell.</span></li>
-          <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make your own cell: click a comma and type <code>(</code>. Click the empty box inside it, type <strong>11</strong>, and press <kbd>Enter</kbd>.</span></li>
-          <li data-task="link"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Reference it again: click another comma, then hold <kbd data-command-key>Ctrl</kbd> and click a parenthesis around your new cell.</span></li>
-          <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its partner follows; the 7s don’t.</span></li>
-        </ol>
-        <p class="aside">Parentheses select the reference; the inside edits the shared value.</p>
-      </section>
-
-      <section class="exercise" id="grap" aria-labelledby="grap-title">
-        <h2 id="grap-title">Calculations</h2>
-        <p>The calculation from before is a record too: a function with a left and a right. Grap, Progred’s calculation library, draws it as <strong>3 + 2</strong> and shows the result after the arrow. Both calculations here use the parenthesized <strong>3</strong>, a shared cell.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/grap.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the Grap example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the <strong>2</strong> after <strong>+</strong>. Only the sum changes.</span></li>
-          <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the shared <strong>3</strong>. Every calculation using it updates.</span></li>
-          <li data-task="equal"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the sum and the product equal.</span></li>
-          <li data-task="hundred"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the product exactly <strong>100</strong>.</span></li>
-        </ol>
-        <p class="aside">There’s no run button. Every result is always current.</p>
-      </section>
-
-      <section class="exercise" id="functions" aria-labelledby="functions-title">
-        <h2 id="functions-title">Functions</h2>
-        <p>A function is a calculation with a hole in it. <strong>scale</strong> multiplies its <strong>x</strong> by 2, and each call fills in its own <strong>x</strong>.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/functions.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=functions-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Editable function definition and two evaluated calls" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the functions example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the first call’s <strong>3</strong>. Only its result changes.</span></li>
-          <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the definition, change the multiplier <strong>2</strong>. Both results follow.</span></li>
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click <strong>x</strong> in the definition’s parameter list and give it a new name. Its uses and the call labels change too; the results don’t.</span></li>
-          <li data-task="nest"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Put a call inside a call: in the second call, erase the <strong>5</strong> and press <kbd>Backspace</kbd> once more. Click the empty box, type <code>scale</code>, press <kbd>Enter</kbd>, and give the inner call a number.</span></li>
-        </ol>
-        <p class="aside">References use identity, not spelling, so renaming keeps them connected.</p>
-      </section>
-
-      <section class="exercise" id="drawing" aria-labelledby="drawing-title">
-        <h2 id="drawing-title">Pictures are code</h2>
-        <p>A picture is another view of code. <strong>dot</strong> draws a circle at <strong>x</strong>, and <strong>do</strong> runs its calls in order.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/drawing.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=drawing-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two live circles and their editable drawing program" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the drawing example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Move the first dot: change its <strong>60</strong>. Only that dot moves.</span></li>
-          <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the <strong>dot</strong> definition, change the <strong>radius</strong>. Both dots change.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a dot: click the comma between the two <strong>dot</strong> calls, type <code>dot</code>, press <kbd>Enter</kbd>, and give it an x like <strong>200</strong>.</span></li>
-          <li data-task="source"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click any circle. The code that drew it is selected.</span></li>
-        </ol>
-        <p class="aside">Inspired by Bret Victor’s <a href="https://worrydream.com/#!/InventingOnPrinciple">Inventing on Principle</a>.</p>
-      </section>
-
-      <section class="exercise" id="forest" aria-labelledby="forest-title">
-        <h2 id="forest-title">Put it together</h2>
-        <p>Three trees from one shared recipe: <strong>tree</strong> draws a trunk and a canopy at <strong>x</strong> with a <strong>height</strong>.</p>
-        <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/forest.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=forest-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees drawn from one shared recipe" loading="lazy"></iframe>
-          <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the forest example">Reset <span aria-hidden="true">↺</span></button>
-          </div>
-          <span class="reset-status visually-hidden" role="status"></span>
-        </div>
-        <ol class="quests">
-          <li data-task="height"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make one tree taller: change the <strong>height</strong> in one <strong>tree</strong> call. Only that tree grows.</span></li>
-          <li data-task="color"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the green swatch in the <strong>tree</strong> definition and pick a new color. Every tree changes.</span></li>
-          <li data-task="plant"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a tree: click a comma between two <strong>tree</strong> calls, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x. Then click its empty height and give it one too.</span></li>
-        </ol>
-        <p class="aside">That’s every idea in the forest at the top of the page. Scroll up and see how much you can read now.</p>
-      </section>
-
-      <section class="next" aria-label="More">
-        <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a>
-        <p class="session-note">Edits aren’t saved when you reload.</p>
+      <section class="closing" aria-labelledby="closing-title">
+        <h2 id="closing-title">Come talk about it</h2>
+        <p>The conversation happens on Zulip. Questions, ideas, criticism, and which tutorial worked for you are all welcome.</p>
+        <p class="actions">
+          <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Join the Progred Zulip</a>
+          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">GitHub</a>
+        </p>
       </section>
     </main>
-
   </body>
 </html>

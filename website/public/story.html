@@ -33,12 +33,13 @@
           </span>
         </button>
         <div class="social-links">
-          <a class="social-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
+          <a class="social-link zulip-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
             <span class="social-badge">
               <!-- Zulip, Apache-2.0; see zulip-LICENSE.txt. Background removed; mark uses currentColor. -->
               <svg viewBox="206 185 361 403" width="18" height="18" fill="currentColor" aria-hidden="true">
                 <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" />
               </svg>
+              <span class="social-label">Chat on Zulip</span>
             </span>
           </a>
           <a class="social-link github-link" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener" aria-label="View progred on GitHub" title="progred on GitHub">
@@ -55,6 +56,7 @@
     </header>
 
     <main class="story">
+      <p class="variant-note">One of <a href="./#ways-in">four tutorials</a> we’re comparing. Tell us on <a href="https://progred.zulipchat.com" target="_blank" rel="noopener">Zulip</a> which one works for you.</p>
       <section class="exercise showcase" id="growing" aria-label="A growing forest">
         <p class="lede"><strong>This forest is a program.</strong> Drag the slider and it grows.</p>
         <p class="lede">Progred is an editor where a program is structure, not text. What you see are drawings of that structure, and you can edit through any of them. This forest started as a single dot. Below, you’ll rebuild it step by step, strip it down to the records it’s made of, and end with a forest of your own.</p>
@@ -200,9 +202,11 @@
         <p class="aside">The forest at the top of the page is the same idea, with a sky, a sun, and a slider driving its growth.</p>
       </section>
 
-      <section class="next" aria-label="More">
-        <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a>
-        <p class="session-note">This is a prototype of a new tutorial. Edits aren’t saved when you reload.</p>
+      <section class="next feedback" aria-labelledby="feedback-title">
+        <h2 id="feedback-title">Did this one work for you?</h2>
+        <p>This is one of four tutorials we’re comparing. Tell us on Zulip whether it made Progred click and where you got lost; it helps us choose which one to keep building.</p>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Tell us on Zulip</a> <a class="button" href="./#ways-in">Try another way in</a></p>
+        <p class="session-note">Edits aren’t saved when you reload. <a href="./editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a></p>
       </section>
     </main>
 

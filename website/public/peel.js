@@ -35,7 +35,7 @@ const allOff = "This is what's actually stored: records <code>{ }</code>, lists 
 const editor = document.querySelector("#peel-editor iframe");
 // The first library able to draw something wins, so every stack keeps the
 // page's original load order.
-const order = new URL(editor.getAttribute("src"), location.href).searchParams.get("libraries").split(",");
+const order = new URL(editor.getAttribute("src") ?? editor.dataset.src, location.href).searchParams.get("libraries").split(",");
 const slider = document.querySelector("#peel-depth");
 const caption = document.querySelector("#peel-caption");
 const boxes = new Map();

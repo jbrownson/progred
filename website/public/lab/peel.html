@@ -8,8 +8,7 @@
     <link rel="icon" href="../editor/icon.svg" />
     <link rel="stylesheet" href="../style.css" />
     <script type="module" src="../lessons.js"></script>
-    <script type="module" src="./peel.js"></script>
-    <link rel="stylesheet" href="./lab.css" />
+    <script type="module" src="../peel.js"></script>
     <script type="module" src="../appearance.js"></script>
     <script type="module" src="../github.js"></script>
   </head>
@@ -35,12 +34,13 @@
           </span>
         </button>
         <div class="social-links">
-          <a class="social-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
+          <a class="social-link zulip-link" href="https://progred.zulipchat.com" target="_blank" rel="noopener" aria-label="Chat about progred on Zulip" title="progred on Zulip">
             <span class="social-badge">
               <!-- Zulip, Apache-2.0; see zulip-LICENSE.txt. Background removed; mark uses currentColor. -->
               <svg viewBox="206 185 361 403" width="18" height="18" fill="currentColor" aria-hidden="true">
                 <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" />
               </svg>
+              <span class="social-label">Chat on Zulip</span>
             </span>
           </a>
           <a class="social-link github-link" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener" aria-label="View progred on GitHub" title="progred on GitHub">
@@ -57,6 +57,7 @@
     </header>
 
     <main class="story lab">
+      <p class="variant-note">One of <a href="../#ways-in">four tutorials</a> we’re comparing. Tell us on <a href="https://progred.zulipchat.com" target="_blank" rel="noopener">Zulip</a> which one works for you.</p>
 <section class="exercise" id="peel" aria-label="Opening">
 <p class="lede"><strong>Progred is an editor where a program isn’t text.</strong> It’s structure: records, lists, bytes, and cells, stored as they are. Everything you see is a drawing of that structure, made by libraries. That one decision changes a lot, and this page takes it apart.</p>
 <p class="lede">This forest is a program. Drag its slider to grow it; hold <kbd data-command-key>Ctrl</kbd> and click a tree to find the code that drew it. Then take the libraries away, one layer at a time, and watch what’s underneath.</p>
@@ -96,7 +97,12 @@
 <div class="editor-example"><iframe src="../editor/?document=../lab/views.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,7b0fa421250c1b5c8a78a3a95b172cb6,f76a2ef341541a5c955fc23094e2df52,0ad8124ba821acd5fbf2c868371e1492" title="A planet, its drawing, and the view written in Grap" loading="lazy" style="height:30rem"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
 <p class="aside"><strong>Try:</strong> change <code>moons</code> to 5. Then change the planet’s color inside <code>planet drawing</code>. (For now a Grap view draws a read-only picture next to the data; editing through it is future work.)</p>
 </section>
-<section class="next" aria-label="More"><p class="session-note">Lab prototype. What Progred builds in: records, lists, bytes, cells, and identity. Everything else on this page is a library. Edits aren’t saved.</p></section>
+<section class="next feedback" aria-labelledby="feedback-title">
+        <h2 id="feedback-title">Did this one work for you?</h2>
+        <p>This is one of four tutorials we’re comparing. Tell us on Zulip whether it made Progred click and where you got lost; it helps us choose which one to keep building.</p>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Tell us on Zulip</a> <a class="button" href="../#ways-in">Try another way in</a></p>
+        <p class="session-note">Edits aren’t saved when you reload. <a href="../editor/" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a></p>
+      </section>
     </main>
 
   </body>
