@@ -7,6 +7,10 @@ use puri::hover::Claim;
 
 type World = crate::Editor;
 
+/// The keyboard-navigation fixture, opened from disk rather than the
+/// Examples menu.
+const NAVIGATION_EXAMPLE: &str = include_str!("../../../../../examples/navigation.gid");
+
 #[test]
 fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let log = Rc::new(std::cell::RefCell::new(vec![]));

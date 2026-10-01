@@ -720,11 +720,10 @@ mod tests {
     #[test]
     fn example_shortcuts_follow_menu_order() {
         for (digit, example) in [
-            ("1", Example::Grap),
-            ("2", Example::IopTree),
-            ("3", Example::Fidget),
-            ("4", Example::Toolpaths),
-            ("5", Example::Navigation),
+            ("1", Example::IopTree),
+            ("2", Example::Fidget),
+            ("3", Example::Toolpaths),
+            ("4", Example::Grap),
         ] {
             assert_eq!(
                 shortcut(

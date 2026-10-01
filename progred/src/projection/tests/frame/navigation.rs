@@ -404,7 +404,7 @@ fn navigation_named_number_hands_off_from_name_at_text_boundary() {
 
 #[test]
 fn navigation_example_projects_and_navigates_without_an_app_window() {
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, _) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
     let viewport = kurbo::Size::new(900.0, 600.0);
     runner.refresh_frame(1.0, viewport);
@@ -423,8 +423,7 @@ fn navigation_example_projects_and_navigates_without_an_app_window() {
 
 fn navigation_example_cells() -> (World, Vec<Path>) {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) =
-        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let (section_position, section) = fields
         .get(&OUTLINE)
@@ -461,8 +460,7 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
 #[test]
 fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) =
-        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let root = doc.root.as_ref().unwrap();
     let field = |value: &Value, key| value.as_record().unwrap().get(&key).unwrap().clone();
     let section = |value: &Value, key, occurrence| -> Path {
@@ -572,8 +570,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
 #[test]
 fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) =
-        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let sections: Vec<_> = fields
         .get(&OUTLINE)
@@ -902,8 +899,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
 #[test]
 fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) =
-        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let section = binders["lists"];
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let (section_position, _) = fields
@@ -1096,8 +1092,7 @@ fn navigation_empty_list_stops_once_in_either_direction() {
 #[test]
 fn content_after_a_multiline_block_stays_on_its_content_line() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) =
-        crate::gid_text::parse(crate::command::Example::Navigation.source()).unwrap();
+    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let section = |name: &str| -> Path {
         let (position, _) = fields

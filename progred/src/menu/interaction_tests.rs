@@ -114,7 +114,7 @@ fn pointer_switches_open_menus_but_does_not_open_closed_ones() {
     assert_eq!(runner.editor.menu.open(), Some(1));
     let item = point_for(
         &runner,
-        Hover::Item(Command::App(AppCommand::Example(Example::IopTree))),
+        Hover::Item(Command::App(AppCommand::Example(Example::Fidget))),
     );
     move_to(&mut runner, item);
     assert_eq!(runner.editor.menu.cursor(), Some(1));

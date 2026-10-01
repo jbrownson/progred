@@ -14,7 +14,7 @@ The function returns an ordinary `{preview mesh: {...}}` declaration, recognized
 by a partial in the Fidget library. Invalid arguments return absents or decline
 to the structural fallback, as with the existing preview.
 
-The cube in Examples → Fidget Shapes (Command+3 / Ctrl+3) explicitly uses this
+The cube in Examples → Implicit CAD Shapes (Command+2 / Ctrl+2) explicitly uses this
 function at depth 5. Edit its inline call to change the depth or replace its
 function with `preview 3d` for comparison. The toolpath example
 (Command+4 / Ctrl+4) uses `preview paths refined`: a mesh draft followed by

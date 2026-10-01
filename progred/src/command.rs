@@ -73,21 +73,14 @@ pub enum AppCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Example {
-    Grap,
     IopTree,
     Fidget,
     Toolpaths,
-    Navigation,
+    Grap,
 }
 
 impl Example {
-    pub const ALL: [Self; 5] = [
-        Self::Grap,
-        Self::IopTree,
-        Self::Fidget,
-        Self::Toolpaths,
-        Self::Navigation,
-    ];
+    pub const ALL: [Self; 4] = [Self::IopTree, Self::Fidget, Self::Toolpaths, Self::Grap];
 
     /// The bundled document's file name, which also names it in a web address.
     #[cfg(any(test, target_arch = "wasm32"))]
@@ -97,7 +90,6 @@ impl Example {
             Self::IopTree => "iop-tree",
             Self::Fidget => "fidget-shapes",
             Self::Toolpaths => "toolpaths",
-            Self::Navigation => "navigation",
         }
     }
 
@@ -107,7 +99,6 @@ impl Example {
             Self::IopTree => include_str!("../../examples/iop-tree.gid"),
             Self::Fidget => include_str!("../../examples/fidget-shapes.gid"),
             Self::Toolpaths => include_str!("../../examples/toolpaths.gid"),
-            Self::Navigation => include_str!("../../examples/navigation.gid"),
         }
     }
 }
@@ -162,7 +153,6 @@ pub enum ShortcutKey {
     Digit2,
     Digit3,
     Digit4,
-    Digit5,
     D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -185,7 +175,6 @@ impl ShortcutKey {
             Self::Digit2 => "2",
             Self::Digit3 => "3",
             Self::Digit4 => "4",
-            Self::Digit5 => "5",
             Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -247,23 +236,20 @@ pub fn spec(command: Command) -> Spec {
             },
             None,
         ),
-        Command::App(AppCommand::Example(Example::Grap)) => {
-            item("Grap Demo", Some(Shortcut::plain(ShortcutKey::Digit1)))
-        }
         Command::App(AppCommand::Example(Example::IopTree)) => item(
             "Inventing on Principle Tree",
+            Some(Shortcut::plain(ShortcutKey::Digit1)),
+        ),
+        Command::App(AppCommand::Example(Example::Fidget)) => item(
+            "Implicit CAD Shapes",
             Some(Shortcut::plain(ShortcutKey::Digit2)),
         ),
-        Command::App(AppCommand::Example(Example::Fidget)) => {
-            item("Fidget Shapes", Some(Shortcut::plain(ShortcutKey::Digit3)))
-        }
         Command::App(AppCommand::Example(Example::Toolpaths)) => {
-            item("Toolpaths", Some(Shortcut::plain(ShortcutKey::Digit4)))
+            item("CAM Toolpaths", Some(Shortcut::plain(ShortcutKey::Digit3)))
         }
-        Command::App(AppCommand::Example(Example::Navigation)) => item(
-            "Keyboard Navigation",
-            Some(Shortcut::plain(ShortcutKey::Digit5)),
-        ),
+        Command::App(AppCommand::Example(Example::Grap)) => {
+            item("Grap Language", Some(Shortcut::plain(ShortcutKey::Digit4)))
+        }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]

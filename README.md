@@ -96,15 +96,14 @@ for another Ctrl+C. Restarting this development loop discards unsaved changes.
 ### A first tour
 
 Use the **Examples** menu to open a fresh example. On native macOS its shortcuts
-are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
+are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
 
 | Start with | Shortcut | What to try |
 | --- | --- | --- |
-| Grap Demo | 1 | Explore the data model and language constructs |
-| Inventing on Principle Tree | 2 | Change a number and watch the drawing update |
-| Fidget Shapes | 3 | Orbit the shapes and edit their parameters, including the cube |
-| Toolpaths | 4 | Move the slider to inspect cuts into the stock |
-| Keyboard Navigation | 5 | Try arrow navigation through nested structures |
+| Inventing on Principle Tree | 1 | Change a number and watch the drawing update |
+| Implicit CAD Shapes | 2 | Orbit the shapes and edit their parameters, including the cube |
+| CAM Toolpaths | 3 | Move the slider to inspect cuts into the stock |
+| Grap Language | 4 | Explore the data model and language constructs |
 
 - Click numbers to edit them, or **Command-drag** to scrub: horizontal movement
   changes the value; moving upward makes adjustments coarser, downward finer.

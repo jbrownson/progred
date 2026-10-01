@@ -6,15 +6,18 @@ platforms. Examples are numbered consecutively in menu order.
 
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
-| 1 | `grap-demo.gid` | Grap evaluation |
-| 2 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
-| 3 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube; inline source and previews |
-| 4 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
-| 5 | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
+| 1 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
+| 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube; inline source and previews |
+| 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
+| 4 | `grap-demo.gid` | Grap evaluation |
+| | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
+
+The menu lists the examples meant for visitors. The navigation fixture isn't on
+it; open the file directly.
 
 ## Keyboard navigation
 
-Open **Examples → Keyboard Navigation** (Command+5 on macOS, Ctrl+5 otherwise).
+Open `navigation.gid` with **File → Open**.
 
 Arrow navigation follows the chosen layout's logical lines. Left/Right walk
 reading order, including selectable containers, and wrap to the next/previous
@@ -47,11 +50,11 @@ See [layout navigation](../docs/navigation.md) for the current contract.
 
 ## Fidget shapes
 
-**Examples → Fidget Shapes** (Command+3 / Ctrl+3) is an ordinary list of five
+**Examples → Implicit CAD Shapes** (Command+2 / Ctrl+2) is an ordinary list of five
 examples. Each item contains the editable shape definition and an `evaluate`
 call displaying its preview. There is no separate pane or chooser; scroll to
 another shape, or fold its source using the ordinary editor controls. The full
-machining example remains separate at Command+4 / Ctrl+4.
+machining example remains separate at Command+3 / Ctrl+3.
 
 The original `fidget.gid`, `fidget-torus.gid`, `fidget-tanglecube.gid`,
 `fidget-gyroid.gid`, and `fidget-cube.gid` files remain as stable fixtures for
