@@ -329,10 +329,10 @@ No credentials belong in this repository.
 The hosted Linux build and public site were verified on September 21, 2026.
 The generated build directory and npm dependencies are ignored by Git.
 
-Run the preview server and embed-host checks without opening an editor
+Run the preview server and browser script checks without opening an editor
 (the latter uses Node's built-in test runner, with no dependencies):
 
 ```sh
 python3 -B -m unittest discover -s website -p 'test_*.py'
-node --test website/test_embed.cjs
+node --test website/test_*.cjs
 ```
