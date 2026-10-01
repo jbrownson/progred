@@ -2,6 +2,7 @@
 name = "uig"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 kurbo.workspace = true

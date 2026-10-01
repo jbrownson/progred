@@ -2,6 +2,7 @@
 name = "incremental"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 concurrent-queue = "2.5"

@@ -26,6 +26,9 @@ members = [
     "vendor/fidget-wgpu",
 ]
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 # Local patches against the pinned upstream revision; see vendor/README.md.
 [patch."https://github.com/mkeeter/fidget"]
 fidget-core = { path = "vendor/fidget-core" }

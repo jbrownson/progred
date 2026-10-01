@@ -202,3 +202,22 @@ Start with [the motivation](MOTIVATION.md), then the
 Earlier TypeScript, Swift, egui, Haskell, and nested Linebender prototypes are
 preserved at `archive/pre-root-promotion`; `archive/multi-prototype` retains an
 earlier milestone. Their design notes are in [history](docs/history/).
+
+## License
+
+Progred is licensed under either of
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT license](LICENSE-MIT)
+
+at your option. Unless you explicitly state otherwise, any contribution
+intentionally submitted for inclusion in the work by you, as defined in the
+Apache-2.0 license, shall be dual licensed as above, without any additional
+terms or conditions.
+
+Some files keep their own licenses: the vendored Fidget crates and the patches
+against them are [MPL-2.0](vendor/README.md), the Noto Sans fonts use the
+[SIL Open Font License](progred/assets/README.md), and the website's GitHub and
+Zulip icons carry their notices in `website/public/`. `reference/iop-tree.js`
+transcribes the code shown in Bret Victor's *Inventing on Principle* talk; it's
+kept for reference and isn't covered by this license.
