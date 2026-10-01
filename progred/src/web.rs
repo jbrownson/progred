@@ -97,6 +97,15 @@ pub fn computation_finished() {
     });
 }
 
+/// A bundled example's document, named by its file without `.gid`.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn example_source(name: &str) -> Option<String> {
+    crate::command::Example::ALL
+        .into_iter()
+        .find(|example| example.file_stem() == name)
+        .map(|example| example.source().to_owned())
+}
+
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn start_editor(
     source: Option<String>,

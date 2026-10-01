@@ -11,8 +11,10 @@ The built-in documents are under the **Examples** menu.
 
 For a small embedded editor, supply a text-bridge document URL and optionally
 hide the menu: `/editor/?document=../lessons/values.gid&menu=hidden&threads=1`.
-The document URL is relative to the editor page. Without those parameters the
-editor still starts blank with its full menu and the default worker pool.
+The document URL is relative to the editor page. `example` opens one of the
+bundled examples instead, by its file name without `.gid`, with the full editor:
+`/editor/?example=fidget-shapes`. Without those parameters the editor still
+starts blank with its full menu and the default worker pool.
 `wheel=auto` captures a wheel event only when a placed editor scroll container
 can move in its direction; otherwise the browser scrolls the page. The same
 policy covers document panes and completion lists. Admission is read-only and

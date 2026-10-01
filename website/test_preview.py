@@ -341,6 +341,10 @@ class AssetTests(unittest.TestCase):
             if url.scheme or not url.path:
                 continue
             with self.subTest(link=link):
+                if url.path == "editor/":
+                    [example] = parse_qs(url.query)["example"]
+                    self.assertTrue((REPOSITORY / "examples" / f"{example}.gid").is_file())
+                    continue
                 target = public / url.path
                 if target.is_dir():
                     target /= "index.html"

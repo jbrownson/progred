@@ -112,6 +112,12 @@
         }
         if (!crossOriginIsolated) throw new Error("This editor needs an HTTPS page with cross-origin isolation enabled by its host");
         await init();
+        const example = params.get("example");
+        if (example !== null) {
+          if (documentUrl !== null) throw new Error("Choose either a document or an example");
+          source = wasm.example_source(example);
+          if (source === undefined) throw new Error(`There's no example named ${example}`);
+        }
         await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
           wasm.computation_finished, fail,
           params.has("threads") ? Number(params.get("threads")) : undefined);

@@ -89,6 +89,18 @@ impl Example {
         Self::Navigation,
     ];
 
+    /// The bundled document's file name, which also names it in a web address.
+    #[cfg(any(test, target_arch = "wasm32"))]
+    pub fn file_stem(self) -> &'static str {
+        match self {
+            Self::Grap => "grap-demo",
+            Self::IopTree => "iop-tree",
+            Self::Fidget => "fidget-shapes",
+            Self::Toolpaths => "toolpaths",
+            Self::Navigation => "navigation",
+        }
+    }
+
     pub fn source(self) -> &'static str {
         match self {
             Self::Grap => include_str!("../../examples/grap-demo.gid"),
@@ -333,6 +345,23 @@ impl Toggles {
             Command::Doc(DocCommand::Raw) => self.raw,
             Command::Doc(DocCommand::DebugGeometry) => self.debug_geometry,
             _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn example_file_stems_name_their_bundled_documents() {
+        for example in Example::ALL {
+            let path = format!("../examples/{}.gid", example.file_stem());
+            assert_eq!(
+                std::fs::read_to_string(&path).unwrap(),
+                example.source(),
+                "{path}"
+            );
         }
     }
 }
