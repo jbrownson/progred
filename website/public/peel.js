@@ -18,22 +18,20 @@ const layers = [
   {
     id: "calculations",
     label: "Calculations",
-    names: "grap, control, list, sequence, logic, absent",
-    libraries: ["f7735b90f6826b25c350a8fd83af8c47", "ec17915df2d42377574dc90f22500fe2", "7b0fa421250c1b5c8a78a3a95b172cb6", "0ad8124ba821acd5fbf2c868371e1492", "f76a2ef341541a5c955fc23094e2df52", "873c68ac371dbbb98a4f198546d60241"],
+    names: "grap, control, sequence, absent",
+    libraries: ["f7735b90f6826b25c350a8fd83af8c47", "ec17915df2d42377574dc90f22500fe2", "0ad8124ba821acd5fbf2c868371e1492", "873c68ac371dbbb98a4f198546d60241"],
     off: "Grap, the language, is a library. Without it, the editor doesn't know that a record with a <code>function</code> key is a call, or that a record with <code>params</code> and a <code>body</code> is a function. Everything is still here, as plain records. Names in parentheses, like <code>(forest)</code>, are functions this document defines; short codes like <code>…d684b</code> are keys owned by libraries that aren't loaded anymore, such as Grap's own <code>function</code> key.",
   },
   {
     id: "numbers",
     label: "Numbers",
-    names: "number, f64",
-    libraries: ["c46d010325d3a1ec0f2a84dd3a9570ae", "1fdb573a2c56a7063546c195318214bc"],
+    names: "f64",
+    libraries: ["1fdb573a2c56a7063546c195318214bc"],
     off: "Numbers were the f64 library reading eight bytes under its key. The little <strong>f64</strong> was its signature; without it, <code>7<sub class=\"tag\">f64</sub></code> is <code>{…5d561: 0x0000000000001c40}</code>, the eight bytes of 7.0, least significant first.",
   },
 ];
-// Libraries this page never peels: names, text, and hex editing.
-const base = ["3209ad5d23a0c8513f6bd76324a5cf60", "eaaf309c36a65d2811083944da29aec9", "4ab5da466a7c5f1202f5ef862f5ff915"];
 
-const allOn = (count) => `All ${count} of this editor's libraries are on: name, text, and blob, which always stay on, plus the layers above. Each mark on the screen, from the trees to the little <strong>f64</strong> tags, is drawn by one of them. Move the slider, or switch layers off one at a time.`;
+const allOn = (count) => `All ${count} of this editor's libraries are on, grouped into the layers above. Each mark on the screen, from the trees to the little <strong>f64</strong> tags, is drawn by one of them. Move the slider, or switch layers off one at a time.`;
 const allOff = "This is what's actually stored: records <code>{ }</code>, lists <code>[ ]</code>, bytes <code>0x…</code>, and cells <code>( )</code>, plus the names this document gave its own cells. Every library you switched off only changed how it's drawn. Switch them back on, in any order.";
 
 const editor = document.querySelector("#peel-editor iframe");
@@ -67,7 +65,7 @@ slider.addEventListener("input", () => {
 
 function apply(changed) {
   const on = layers.filter((layer) => boxes.get(layer.id).checked);
-  const enabled = new Set([...base, ...on.flatMap((layer) => layer.libraries)]);
+  const enabled = new Set(on.flatMap((layer) => layer.libraries));
   const libraries = order.filter((id) => enabled.has(id));
   editor.contentWindow?.postMessage({ type: "progred:libraries", libraries: libraries.join(",") }, location.origin);
   // The slider follows the checkboxes when they peel in order.

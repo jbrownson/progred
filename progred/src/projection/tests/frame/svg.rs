@@ -1710,36 +1710,52 @@ fn svg_bench_renders_a_pending_edge() {
 }
 
 /// The home page shows these on narrow screens instead of loading the editor:
-/// the forest drawn by every library, and the same document with only names,
-/// text, and bytes.
+/// the forest drawn with the nine libraries it uses, and the same document
+/// with none.
 #[test]
 #[ignore = "regenerates the website home page's forest stills"]
 fn website_home_stills() {
-    use crate::libraries::{blob, name, text};
+    use crate::libraries::{
+        absent, color, control, controls, f64, grap, layout, presentation, sequence,
+    };
+    let (doc, fields) = crate::gid_text::parse(include_str!(
+        "../../../../../website/public/lessons/growing-forest.gid"
+    ))
+    .unwrap();
+    let forest = [
+        absent::ID,
+        color::ID,
+        control::ID,
+        f64::ID,
+        grap::ID,
+        layout::ID,
+        presentation::ID,
+        sequence::ID,
+        controls::ID,
+    ];
     for (theme_name, theme) in [
         ("light", crate::styles::Theme::Light),
         ("dark", crate::styles::Theme::Dark),
     ] {
-        let (mut editor, fields) = website_growing_forest_editor();
-        editor.palette = theme.palette();
-        render_editor(
-            editor,
-            kurbo::Size::new(704.0, 600.0),
-            &format!("home_forest_{theme_name}.svg"),
-        );
-        let (mut editor, _) = website_growing_forest_editor();
-        editor.stack = crate::stack::load_selected(&[name::ID, text::ID, blob::ID]).unwrap();
-        editor.stack.projection = crate::web_embed::tutorial_slots(
-            Some(&format!("{},{}", fields["second"], fields["first"])),
-            editor.stack.projection,
-            &editor.stack.libraries,
-        )
-        .unwrap();
-        editor.palette = theme.palette();
-        render_editor(
-            editor,
-            kurbo::Size::new(704.0, 600.0),
-            &format!("home_structure_{theme_name}.svg"),
-        );
+        for (still, libraries) in [("forest", &forest[..]), ("structure", &[][..])] {
+            let mut editor = crate::test_editor_with_stack(
+                doc.clone(),
+                crate::stack::load_selected(libraries).unwrap(),
+            );
+            editor.stack.projection = crate::web_embed::tutorial_slots(
+                Some(&format!("{},{}", fields["second"], fields["first"])),
+                editor.stack.projection,
+                &editor.stack.libraries,
+            )
+            .unwrap();
+            editor.font_cx = crate::fonts::bundled_font_context();
+            editor.palette = theme.palette();
+            editor.drawn_menu = false;
+            render_editor(
+                editor,
+                kurbo::Size::new(704.0, 600.0),
+                &format!("home_{still}_{theme_name}.svg"),
+            );
+        }
     }
 }
