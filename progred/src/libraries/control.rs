@@ -802,12 +802,19 @@ pub fn quote_display(
 
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
+/// A just-inserted unquote is already one, so its empty hole offers code.
 pub fn unquote_display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    fields.field(vocabulary::UNQUOTE)?;
+    match &input.pending {
+        None => {
+            fields.field(vocabulary::UNQUOTE)?;
+        }
+        Some(crate::display::Pending::Child(Step::Key(field)))
+            if *field == vocabulary::UNQUOTE && fields.record_len() == Some(0) => {}
+        _ => return None,
+    }
     let target = input.targets.current();
     Some(group(row(
         2.0,

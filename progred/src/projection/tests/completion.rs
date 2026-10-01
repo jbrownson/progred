@@ -228,6 +228,95 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
 }
 
 #[test]
+fn quote_and_unquote_are_offered_under_their_marks() {
+    use crate::libraries::{control::vocabulary as control, grap::vocabulary::GRAP};
+    use grap::vocabulary::{BODY, EXPRESSION};
+    use ui_events::keyboard::{Key, NamedKey};
+
+    let cell = new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([(GRAP, cell.into())])),
+        cells: Cells::new(),
+    };
+    let program = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
+    let pending = crate::selection::pending_with_query(&crate::test_root(), program.clone(), "λ");
+    let lambda = projected_completion_entries(&doc, &pending)
+        .into_iter()
+        .find(|entry| entry.display == "new lambda")
+        .unwrap();
+    let mut world = activate_projected(&doc, &pending, &lambda);
+    let press = |world: &mut crate::Editor, key: Key| {
+        let event = KeyboardEvent {
+            key,
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        assert!(
+            editing_frame(world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(world, &event)
+        );
+    };
+    let offered = |world: &mut crate::Editor| {
+        editing_frame(world, false)
+            .completion
+            .expect("the pending shows its picker")
+            .entries
+            .into_iter()
+            .map(|entry| entry.display)
+            .collect::<Vec<_>>()
+    };
+    let character = |text: &str| Key::Character(text.into());
+
+    for typed in ["\"", "h", "i"] {
+        press(&mut world, character(typed));
+    }
+    assert!(
+        !offered(&mut world).contains(&"quote".to_owned()),
+        "text after the mark is a string"
+    );
+    press(&mut world, Key::Named(NamedKey::Backspace));
+    press(&mut world, Key::Named(NamedKey::Backspace));
+    assert!(
+        !offered(&mut world).contains(&"unquote".to_owned()),
+        "outside a quote there is nothing to unquote"
+    );
+    assert_eq!(offered(&mut world)[0], "quote");
+    press(&mut world, Key::Named(NamedKey::Enter));
+    let body: Path = program.iter().cloned().chain([Step::Key(BODY)]).collect();
+    assert_eq!(
+        world.sources().resolve_path(&body),
+        Some(&grap::call(control::QUOTE.into(), []))
+    );
+    let expression: Path = body
+        .iter()
+        .cloned()
+        .chain([Step::Key(EXPRESSION)])
+        .collect();
+    let selected = world.model.selection.as_ref().unwrap();
+    assert_eq!(selected.path(), expression);
+    assert_eq!(selected.stage(&world.sources()), Stage::Pending);
+
+    press(&mut world, character("`"));
+    assert_eq!(offered(&mut world)[0], "unquote");
+    press(&mut world, Key::Named(NamedKey::Enter));
+    assert_eq!(
+        world.sources().resolve_path(&expression),
+        Some(&Value::record([]))
+    );
+    let hole: Path = expression
+        .iter()
+        .cloned()
+        .chain([Step::Key(control::UNQUOTE)])
+        .collect();
+    let selected = world.model.selection.as_ref().unwrap();
+    assert_eq!(selected.path(), hole);
+    assert_eq!(selected.stage(&world.sources()), Stage::Pending);
+    press(&mut world, character("\""));
+    assert_eq!(offered(&mut world)[0], "quote", "the hole is code again");
+}
+
+#[test]
 fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
     use crate::libraries::grap::vocabulary::GRAP;
     use grap::vocabulary::{BODY, PARAMS};

@@ -568,6 +568,20 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
     }
 }
 
+/// Where a call offer's function comes from: the document, or a library by name.
+fn call_detail(request: &crate::display::CompletionRequest<'_>, source: gid::Resolution) -> String {
+    match source {
+        gid::Resolution::Document => "call".to_owned(),
+        gid::Resolution::Library(library) => format!(
+            "call · {}",
+            (request.resolve)(library)
+                .and_then(|definition| name::read(definition.value))
+                .map(str::to_owned)
+                .unwrap_or_else(|| short_id(library))
+        ),
+    }
+}
+
 fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Completion> {
     if matches!(request.path.last(), Some(Step::Key(field)) if *field == FUNCTION || *field == FFI)
     {
@@ -581,18 +595,8 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
                 (definition.native
                     || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
                 .then(|| {
-                    let offer = call_completion(cell.into(), cell, request.resolve).with_detail(
-                        match definition.source {
-                            gid::Resolution::Document => "call".to_owned(),
-                            gid::Resolution::Library(library) => format!(
-                                "call · {}",
-                                (request.resolve)(library)
-                                    .and_then(|definition| name::read(definition.value))
-                                    .map(str::to_owned)
-                                    .unwrap_or_else(|| short_id(library))
-                            ),
-                        },
-                    );
+                    let offer = call_completion(cell.into(), cell, request.resolve)
+                        .with_detail(call_detail(request, definition.source));
                     (
                         matches!(definition.source, gid::Resolution::Library(_)),
                         name,

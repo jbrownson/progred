@@ -16,6 +16,7 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
             return Some(offers);
         }
         let quoted = request.query.trim().starts_with('"');
+        let templated = templated(request);
         let bindings = bindings(request);
         let mut ordered: Vec<_> = bindings.iter().filter(|_| !quoted).collect();
         ordered.sort_by_cached_key(|(cell, depth)| {
@@ -24,10 +25,12 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                 .unwrap_or("");
             (Reverse(**depth), name.to_lowercase(), name)
         });
-        let mut offers: Vec<_> = ordered
-            .into_iter()
-            .map(|(cell, _)| select(*cell, (*cell).into()).with_detail("binding"))
-            .collect();
+        let mut offers: Vec<_> = templated.then(unquote).into_iter().collect();
+        offers.extend(
+            ordered
+                .into_iter()
+                .map(|(cell, _)| select(*cell, (*cell).into()).with_detail("binding")),
+        );
         if !quoted {
             let library_request = CompletionRequest {
                 scope: CompletionScope::Everything,
@@ -55,7 +58,9 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                             .and_then(Value::as_record)
                             .and_then(|fields| fields.get(&FUNCTION))
                             .and_then(Value::as_cell)
-                            .is_some_and(|cell| bindings.contains_key(&cell))
+                            .is_some_and(|cell| {
+                                cell == control::QUOTE || bindings.contains_key(&cell)
+                            })
                     }),
             );
             offers.extend([
@@ -63,9 +68,53 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                 select("new record", Value::record([])).with_aliases(["{"]),
             ]);
         }
+        if !templated {
+            offers.extend(quote(request));
+        }
         offers.push(text::completion(text::query_spelling(request.query)));
         Some(offers)
     })
+}
+
+/// Quote is drawn as `"`, so typing that mark offers it beside the string.
+fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
+    let source = (request.resolve)(control::QUOTE)?.source;
+    Some(
+        super::call_completion(control::QUOTE.into(), control::QUOTE, request.resolve)
+            .with_detail(super::call_detail(request, source))
+            .with_aliases(["\""]),
+    )
+}
+
+/// Unquote is drawn as `` ` ``; its hole is code again, inside the template.
+fn unquote() -> Completion {
+    crate::libraries::completion::insert(
+        control::UNQUOTE,
+        Value::record([]),
+        Some(crate::libraries::selection::pending_at(&[Step::Key(
+            control::UNQUOTE,
+        )])),
+    )
+    .with_aliases(["`"])
+}
+
+/// A quote's expression is a template: data, apart from its unquotes.
+fn templated(request: &CompletionRequest<'_>) -> bool {
+    let mut quoted = false;
+    for offset in 0..request.path.len() {
+        let Some(fields) = (request.value_at)(&request.path[..offset]).and_then(Value::as_record)
+        else {
+            continue;
+        };
+        let next = request.path.get(offset);
+        quoted = if quoted {
+            !matches!(next, Some(Step::Key(field)) if *field == control::UNQUOTE)
+        } else {
+            fields.get(&FUNCTION).and_then(Value::as_cell) == Some(control::QUOTE)
+                && matches!(next, Some(Step::Key(field)) if *field == ::grap::vocabulary::EXPRESSION)
+        };
+    }
+    quoted
 }
 
 fn pattern_bindings(value: &Value, result: &mut BTreeSet<CellId>) {
