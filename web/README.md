@@ -48,8 +48,8 @@ names, and requires `tutorial-slots`. A request that arrives before startup
 finishes applies once the editor is ready.
 An embedded editor posts `{type: "progred:size", height}` to its parent whenever
 the document view's content height changes: CSS pixels from the top of the
-editor through the end of its content. The host sizes the canvas from its layout
-before starting, so even an offscreen frame reports its real layout. The website
+editor through the end of its content. The first frame, built before the canvas
+has been measured, reports nothing. The website
 grows each lesson frame to fit, up to 80% of the window and never below the
 page's own height for it; showcases and the peel keep their designed heights.
 Canvas and window focus/blur events control the editor's active presentation.

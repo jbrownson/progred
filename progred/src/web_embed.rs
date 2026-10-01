@@ -52,6 +52,18 @@ pub(crate) fn peeled(
     Ok(stack)
 }
 
+/// The document view's content height in CSS pixels from the top of the
+/// editor. The first frame is built before winit has measured the canvas, in
+/// an empty window, so its layout says nothing and reports none.
+#[cfg(any(test, target_arch = "wasm32"))]
+pub(crate) fn content_height(regions: &[crate::placed::ViewRegion], scale: f64) -> Option<f64> {
+    regions.iter().find_map(|region| {
+        let content = region.content?;
+        (matches!(region.root.target(), workspace::Target::Document) && region.rect.area() > 0.0)
+            .then(|| (region.rect.y0 / scale + content.y).ceil())
+    })
+}
+
 /// How a tutorial slot draws its value: with every loaded library's
 /// projections, plainly (names, text, and numbers read as themselves while
 /// calls stay records), or as Raw draws it. Several slots can show one shared cell at different levels.
@@ -296,6 +308,21 @@ mod tests {
     use super::*;
     use crate::selection;
     use gid::{Step, Value};
+
+    #[test]
+    fn content_height_waits_for_a_measured_window() {
+        let region = |rect| crate::placed::ViewRegion {
+            root: workspace::Root::document(),
+            rect,
+            maximum: kurbo::Vec2::ZERO,
+            content: Some(kurbo::Vec2::new(300.0, 120.5)),
+        };
+        assert_eq!(content_height(&[region(kurbo::Rect::ZERO)], 2.0), None);
+        assert_eq!(
+            content_height(&[region(kurbo::Rect::new(0.0, 40.0, 600.0, 400.0))], 2.0),
+            Some(141.0)
+        );
+    }
 
     #[test]
     fn tutorial_slots_require_distinct_valid_ids() {

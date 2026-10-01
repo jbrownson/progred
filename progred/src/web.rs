@@ -82,11 +82,7 @@ pub(crate) fn report_content_height(regions: &[crate::placed::ViewRegion], scale
     thread_local! {
         static REPORTED: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
     }
-    let Some(height) = regions.iter().find_map(|region| {
-        let content = region.content?;
-        matches!(region.root.target(), crate::workspace::Target::Document)
-            .then(|| (region.rect.y0 / scale + content.y).ceil())
-    }) else {
+    let Some(height) = web_embed::content_height(regions, scale) else {
         return;
     };
     if REPORTED.with(|reported| reported.replace(Some(height))) == Some(height) {
