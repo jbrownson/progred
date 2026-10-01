@@ -92,6 +92,12 @@
           }
         });
         const canvas = document.querySelector("#progred");
+        // Winit focuses the canvas on every press. A plain focus() scrolls the
+        // embedding page to show the whole frame, so keep the page where it is.
+        if (typeof canvas.focus === "function") {
+          const focus = canvas.focus;
+          canvas.focus = (options) => focus.call(canvas, { ...options, preventScroll: true });
+        }
         const wheel = params.get("wheel") ?? "editor";
         if (wheel === "page" || wheel === "auto") {
           document.documentElement.style.overscrollBehavior = "auto";
