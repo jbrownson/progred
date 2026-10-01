@@ -55,6 +55,19 @@ class PackageTests(unittest.TestCase):
         self.assertTrue((self.destination / "index.html").is_file())
         self.assertTrue((self.destination / "images/forest-light.png").is_file())
 
+    def test_every_page_loads_the_analytics_script_once(self):
+        assemble(self.repository, self.destination)
+        self.assertTrue((self.destination / "analytics.js").is_file())
+        pages = sorted(self.destination.rglob("*.html"))
+        self.assertIn(self.destination / "editor/index.html", pages)
+        for page in pages:
+            relative = page.relative_to(self.destination).as_posix()
+            with self.subTest(page=relative):
+                url = urljoin("https://prog.red/", relative)
+                scripts = [urlsplit(urljoin(url, src)).path
+                           for src in re.findall(r'<script\s[^>]*src="([^"]+)"', page.read_text())]
+                self.assertEqual(scripts.count("/analytics.js"), 1)
+
     def test_excludes_source_and_diagnostic_pages(self):
         (self.repository / "web/secret.env").write_text("private")
         (self.repository / "web/cam-profile.html").write_text("diagnostic")

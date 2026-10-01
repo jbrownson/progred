@@ -39,6 +39,14 @@ API, without credentials, retries, or a third-party widget. Until it succeeds
 (or if it fails), the icon remains an ordinary repository link. Switching themes
 only changes CSS. The icon's MIT license is included in `public/octicons-LICENSE.txt`.
 
+Cloudflare Web Analytics counts visits. `public/analytics.js` loads Cloudflare's
+beacon only on prog.red and only in a top-level page, so a tutorial's embedded
+editors don't each count as a page view; the full editor counts when opened on
+its own. The beacon sets no cookies and stores nothing in the browser, and its
+token is public by design. In the Cloudflare dashboard, prog.red's Web Analytics
+setting is manual installation: automatic setup would inject the beacon into
+every embedded editor too.
+
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
 editor needs the isolation headers provided by the local server.
@@ -151,7 +159,7 @@ not recolored by the theme.
 
 The instructions check off when the actual document or selection satisfies
 the step. Achievements stay checked through later edits and undo; Reset clears
-only that exercise's checklist. There is no persistence or analytics. The
+only that exercise's checklist. Progress isn't saved or reported. The
 predicates live in `public/lesson-progress.mjs`, not in the editor.
 
 The values lesson edits a planet record: its name, its number of moons, and a
@@ -305,6 +313,10 @@ chosen commit is pushed to a `website-live` branch on GitHub:
 Do not connect the development branch as production just to get through the
 wizard: **Settings → Build → Branch control** can select `website-live` if it
 isn't offered during creation. Don't deploy until the production branch is set.
+
+`try`, `iop`, `cad`, and `cam.prog.red` are proxied `AAAA 100::` DNS records,
+each with a Redirect Rule (302) to the matching short path, so `_redirects`
+decides what each one opens.
 
 Publishing means advancing `website-live` to a tested commit, not copying files
 or merging a second implementation of the website. An explicit
