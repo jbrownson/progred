@@ -650,13 +650,17 @@ pub(crate) fn pending_into_first(
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root
 /// has nothing beside it and falls within — a field on a record, an
-/// appended element on a list.
+/// appended element on a list. A cell's whole value is drawn where its
+/// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
     root: &workspace::Root,
     sources: &impl LocationRead,
     path: &[Step],
     before: bool,
 ) -> Option<Selection> {
+    if let Some((Step::Follow(_), reference)) = path.split_last() {
+        return pending_enter(root, sources, reference, before);
+    }
     let beside = if before {
         pending_before(root, sources, path)
     } else {

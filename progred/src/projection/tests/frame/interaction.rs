@@ -248,6 +248,72 @@ fn empty_slots_make_values_through_the_picker() {
 }
 
 #[test]
+fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
+    let shared = gid::new_cell_id();
+    let items = gid::new_cell_id();
+    let program = gid::new_cell_id();
+    let mut cells = gid::Cells::new();
+    cells.set_value(shared, f64::value(7.0));
+    cells.set_value(program, f64::value(1.0));
+    let doc = gid::Document {
+        root: Some(Value::record([
+            (items, Value::list([shared.into(), shared.into()])),
+            (crate::libraries::grap::vocabulary::GRAP, program.into()),
+        ])),
+        cells,
+    };
+    let mut world = crate::test_editor_with_stack(doc, crate::stack::load());
+    let first = world
+        .model
+        .doc
+        .root
+        .as_ref()
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&items))
+        .and_then(Value::as_list)
+        .and_then(|elements| elements.keys().next().cloned())
+        .unwrap();
+    let follow = Step::Follow(gid::Resolution::Document);
+    let enter = KeyboardEvent {
+        key: Key::Named(NamedKey::Enter),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    // A new element pends beside the reference in its list; a new field
+    // pends on the record holding the reference.
+    for (value, expected, pending_at) in [
+        (
+            vec![Step::Key(items), Step::Element(first), follow.clone()],
+            Stage::Pending,
+            2,
+        ),
+        (
+            vec![Step::Key(crate::libraries::grap::vocabulary::GRAP), follow],
+            Stage::Label,
+            0,
+        ),
+    ] {
+        let frame = editing_frame(&mut world, false);
+        let target = frame
+            .descends
+            .iter()
+            .find(|target| target.path.as_ref() == value.as_slice())
+            .expect("the cell's value is selectable");
+        assert!((target.select)(&mut world, None));
+        assert!(
+            editing_frame(&mut world, false)
+                .resolve_for_dispatch()
+                .dispatch_key(&mut world, &enter)
+                || world.insert_key(Default::default(), &enter)
+        );
+        let selection = world.model.selection.as_ref().unwrap();
+        assert_eq!(selection.stage(&world.sources()), expected);
+        assert_eq!(selection.path().len(), pending_at);
+        world.model.selection = None;
+    }
+}
+
+#[test]
 fn website_forest_edits_change_one_height_and_all_leaf_colors() {
     use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
     fn leaves(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, Brush, Affine)> {
