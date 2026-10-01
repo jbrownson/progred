@@ -76,6 +76,37 @@ pub fn set_projections(projections: &str, names: bool) -> Result<(), wasm_bindge
     Ok(())
 }
 
+/// Tells an embedding page how tall the document view's content is, from the
+/// top of the editor, whenever that changes, so the page can fit its frame.
+pub(crate) fn report_content_height(regions: &[crate::placed::ViewRegion], scale: f64) {
+    thread_local! {
+        static REPORTED: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
+    }
+    let Some(height) = regions.iter().find_map(|region| {
+        let content = region.content?;
+        matches!(region.root.target(), crate::workspace::Target::Document)
+            .then(|| (region.rect.y0 / scale + content.y).ceil())
+    }) else {
+        return;
+    };
+    if REPORTED.with(|reported| reported.replace(Some(height))) == Some(height) {
+        return;
+    }
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(parent)) = window.parent() else {
+        return;
+    };
+    if web_sys::js_sys::Object::is(&parent, &window) {
+        return;
+    }
+    let message = web_sys::js_sys::Object::new();
+    let _ = web_sys::js_sys::Reflect::set(&message, &"type".into(), &"progred:size".into());
+    let _ = web_sys::js_sys::Reflect::set(&message, &"height".into(), &height.into());
+    let _ = parent.post_message(&message, &window.origin());
+}
+
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
     let palette = theme

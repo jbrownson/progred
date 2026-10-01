@@ -504,6 +504,8 @@ impl EditorRunner {
         crate::web_scroll::install(scroll_probes, scale);
         #[cfg(not(target_arch = "wasm32"))]
         drop(scroll_probes);
+        #[cfg(target_arch = "wasm32")]
+        crate::web::report_content_height(&dispatch.view_regions, scale);
         self.frame.hover = hover;
         self.frame.dispatch = dispatch;
         self.frame.input_area = input_area;
@@ -920,6 +922,37 @@ mod frame_tests {
         };
         let outcome = editor.scroll_view(gone, &event, 1.0, Size::new(100.0, 100.0), 50.0, 0.0);
         assert!(!outcome.handled());
+    }
+
+    #[test]
+    fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
+        let mut editor = crate::test_editor(Document {
+            root: Some(Value::list(
+                (0..40).map(|n| crate::libraries::f64::value(n as f64)),
+            )),
+            cells: Cells::new(),
+        });
+        editor.drawn_menu = false;
+        let mut runner = EditorRunner::new(editor);
+        let scale = 2.0;
+        let contents = [100.0, 4_000.0].map(|height| {
+            runner.refresh_frame(scale, Size::new(800.0, height));
+            let region = runner
+                .frame
+                .dispatch
+                .view_regions
+                .iter()
+                .find(|region| matches!(region.root.target(), workspace::Target::Document))
+                .expect("document view");
+            let content = region
+                .content
+                .expect("a scrolling view reports its content");
+            // An embedding page sizing its frame to the content gets no scrolling.
+            assert_eq!(region.maximum.y, (content.y - height / scale).max(0.0));
+            content
+        });
+        assert!(contents[0].y > 100.0 / scale);
+        assert_eq!(contents[0], contents[1]);
     }
 
     #[test]

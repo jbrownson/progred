@@ -123,6 +123,13 @@
         await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
           wasm.computation_finished, fail,
           params.has("threads") ? Number(params.get("threads")) : undefined);
+        // Lay out the first frame at the canvas's real size, not the element's
+        // 300×150 default, which a hidden or offscreen frame keeps until it draws.
+        if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+          const ratio = window.devicePixelRatio || 1;
+          canvas.width = Math.round(canvas.clientWidth * ratio);
+          canvas.height = Math.round(canvas.clientHeight * ratio);
+        }
         const renderer = await wasm.prepare_renderer(canvas);
         console.info(`Progred presentation: ${renderer}; ${wasm.worker_threads()} render workers`);
         const channel = params.get("observe");

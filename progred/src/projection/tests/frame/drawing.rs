@@ -584,6 +584,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         root: source_view.clone(),
         rect: Rect::new(0.0, 0.0, 200.0, 100.0),
         maximum: kurbo::Vec2::new(0.0, 1_000.0),
+        content: None,
     }]);
     editor.pointer = Some(Point::new(5.0, 5.0));
     assert!(

@@ -407,6 +407,9 @@ pub struct ViewRegion {
     pub root: Root,
     pub rect: Rect,
     pub maximum: Vec2,
+    /// A scrolling view's whole content in logical units, which an embedding
+    /// page can size its frame to; fixed viewports have none.
+    pub content: Option<Vec2>,
 }
 
 /// The winner and its source attribution, freshly derived for this frame.

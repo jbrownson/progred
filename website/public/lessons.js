@@ -5,6 +5,31 @@ for (const label of document.querySelectorAll("[data-command-key]")) {
   label.textContent = commandIsMeta(navigator.platform) ? "Cmd" : "Ctrl";
 }
 
+// Each editor reports its content's height. Its frame grows to fit that, up to
+// most of the window (a longer program scrolls inside the editor), but never
+// below the page's own height for it, which leaves room for the picker.
+const contentHeights = new Map();
+const designs = new Map();
+const fit = (frame) => {
+  if (!designs.has(frame)) designs.set(frame, frame.style.height);
+  frame.style.height = designs.get(frame);
+  const designed = frame.offsetHeight;
+  const border = designed - frame.clientHeight;
+  const fitted = Math.min(contentHeights.get(frame), Math.round(innerHeight * 0.8)) + border;
+  frame.style.height = `${Math.max(designed, fitted)}px`;
+};
+window.addEventListener("message", (event) => {
+  if (event.origin !== location.origin || event.data?.type !== "progred:size"
+      || !Number.isFinite(event.data.height)) return;
+  const frame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
+  // Showcases and the peel hold whole programs meant to scroll inside; growing
+  // them would move the page, or the peel's controls, under the reader.
+  if (!frame || frame.closest(".showcase, #peel-editor")) return;
+  contentHeights.set(frame, event.data.height);
+  fit(frame);
+});
+window.addEventListener("resize", () => contentHeights.forEach((_, frame) => fit(frame)));
+
 for (const exercise of document.querySelectorAll(".exercise")) {
   const frame = exercise.querySelector("iframe");
   const status = exercise.querySelector(".reset-status");

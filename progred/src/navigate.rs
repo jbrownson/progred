@@ -338,6 +338,7 @@ mod tests {
             root: root.clone(),
             rect: Rect::new(0.0, 0.0, 400.0, 200.0),
             maximum: Vec2::new(0.0, 1_000.0),
+            content: None,
         }];
         let geometry = Geometry {
             descends: &descends,

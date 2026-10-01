@@ -269,6 +269,7 @@ pub fn scrolled_at<C: 'static>(
                     ((extent.width - placement.rect.width()) / scale).max(0.0),
                     ((extent.height() - placement.rect.height()) / scale).max(0.0),
                 ),
+                content: Some(Vec2::new(extent.width, extent.height()) / scale),
             });
         }
     })
@@ -288,6 +289,7 @@ pub fn viewport<C: 'static>(child: Measured<HoverPass<C>>, root: Root) -> Measur
                 root,
                 rect: placement.rect,
                 maximum: Vec2::ZERO,
+                content: None,
             });
         });
     })
