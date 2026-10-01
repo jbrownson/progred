@@ -63,6 +63,36 @@ and a source that can resolve the listed cells; a document can provide that sour
 without becoming part of the library's semantic type. Authoring/loading UI remains
 deferred until there is a compelling use case.
 
+## Quotes that fill bound variables
+
+A quote fills only its `unquote` holes; a bare reference in a template stays
+data. The preferred direction is for a quote to also fill every variable bound
+around it, keeping `unquote` for computed expressions, so a template reads as
+data with names: `"{circle: {x: x, y: 50}}`. It waits on two idioms that rely on
+bare references staying data, both workarounds worth removing first:
+
+- The CAM example writes deferred passes as closures in their stored form,
+  `"{closure: {params, body, environment}}`, whose `body` refers to variables
+  that `environment` captures through `unquote`. A lambda would capture its
+  whole lexical environment. The original reason, not retaining recursive
+  list-mapping accumulators, went away with scoped tree emission. Lambdas that
+  capture only the variables their body uses would let these be ordinary lambdas.
+- Keyed controls (`slider`, `radio`, `tree range`, `tree cursor`, and
+  `tree program cursor`) take their state key as an evaluated argument, so
+  programs quote a cell to pass it. The CAM's `control key: "preview mode` reuses
+  the binder of the variable that holds the radio's value, and that cell is also
+  a record key and a pattern binder in the view. The forest's controls receive
+  their state and an update callable and need no key; giving `radio` and
+  `tree program cursor` that form and retiring the keyed capabilities removes
+  the idiom.
+
+An audit of every document found 25 bare references to bound variables inside
+templates, all in `examples/toolpaths.gid` and `website/public/lessons/shape.gid`,
+which shares its code. Of the 198 holes across all documents, 122 are plain
+variables and 76 are computed expressions, so `unquote` stays common in either
+design. Independently of the semantics, the picker could offer in-scope variables
+inside a template and insert them as holes.
+
 ## Address lifetime
 
 Paths and source traces already preserve definition source. A future identity
