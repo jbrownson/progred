@@ -39,6 +39,13 @@ record-field CellIds in display order. The tutorial entry projection shows just
 those contents in a fixed column, without labels or insertion gaps. Missing
 fields remain ordinary editable empty slots; nested values retain normal editing.
 Omitting this option keeps the standard document projection.
+A same-origin parent can peel an embed in place with
+`{type: "progred:projections", projections, names}`. `projections` lists, in the
+page's order, the page `libraries` whose projections keep drawing; every page
+library's definitions stay loaded, so keys and functions keep their names.
+`names: false` draws each tutorial slot as Raw does, with identities in place of
+names, and requires `tutorial-slots`. A request that arrives before startup
+finishes applies once the editor is ready.
 Canvas and window focus/blur events control the editor's active presentation.
 Leaving an embed clears its selection, caret, completion query, and related
 highlights. Document edits remain. Loading another lesson does not steal focus.

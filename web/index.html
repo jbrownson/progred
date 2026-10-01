@@ -77,16 +77,18 @@
         if (!isTheme(theme)) throw new Error("theme must be 'light' or 'dark'");
         let ready = false;
         document.documentElement.dataset.theme = theme;
-        let libraries = params.get("libraries") ?? undefined;
+        const libraries = params.get("libraries") ?? undefined;
+        let peel;
         window.addEventListener("message", (event) => {
           if (event.origin !== location.origin || event.source !== window.parent) return;
           if (event.data?.type === "progred:theme" && isTheme(event.data.theme)) {
             theme = event.data.theme;
             document.documentElement.dataset.theme = theme;
             if (ready) wasm.set_theme(theme);
-          } else if (event.data?.type === "progred:libraries" && typeof event.data.libraries === "string") {
-            libraries = event.data.libraries;
-            if (ready) wasm.set_libraries(libraries);
+          } else if (event.data?.type === "progred:projections" && typeof event.data.projections === "string"
+              && typeof event.data.names === "boolean") {
+            peel = event.data;
+            if (ready) wasm.set_projections(peel.projections, peel.names);
           }
         });
         const canvas = document.querySelector("#progred");
@@ -133,6 +135,7 @@
         forwardModifiers(canvas, window, wasm.browser_modifiers_changed);
         routeKeyboard(canvas, wasm.browser_keyboard);
         ready = true;
+        if (peel) wasm.set_projections(peel.projections, peel.names);
         window.parent.postMessage({ type: "progred:ready" }, location.origin);
         window.addEventListener("focus", wasm.browser_focus_changed);
         window.addEventListener("blur", wasm.browser_focus_changed);

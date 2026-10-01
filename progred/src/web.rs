@@ -44,30 +44,33 @@ pub fn browser_modifiers_changed(shift: bool, control: bool, alt: bool, meta: bo
 }
 
 thread_local! {
-    /// The page's tutorial slots, reapplied to every library stack it chooses.
-    static TUTORIAL_SLOTS: std::cell::RefCell<Option<String>> =
-        const { std::cell::RefCell::new(None) };
+    /// The page's libraries and tutorial slots, kept so peeling can rebuild
+    /// the stack from them.
+    static PAGE: std::cell::RefCell<(Option<String>, Option<String>)> =
+        const { std::cell::RefCell::new((None, None)) };
 }
 
-pub(crate) fn stack(libraries: &str) -> Result<crate::stack::Stack<crate::Editor>, String> {
-    let mut stack = web_embed::libraries(Some(libraries))?;
-    stack.projection = TUTORIAL_SLOTS.with(|slots| {
-        web_embed::tutorial_slots(
-            slots.borrow().as_deref(),
-            stack.projection,
-            &stack.libraries,
-        )
-    })?;
-    Ok(stack)
+pub(crate) fn stack(
+    projections: &str,
+    names: bool,
+) -> Result<crate::stack::Stack<crate::Editor>, String> {
+    PAGE.with(|page| {
+        let (libraries, slots) = &*page.borrow();
+        web_embed::peeled(libraries.as_deref(), projections, slots.as_deref(), names)
+    })
 }
 
-/// Replace the editor's libraries, keeping its document and selection.
+/// Draw with only some libraries' projections, keeping every definition,
+/// the document, and the selection.
 #[wasm_bindgen::prelude::wasm_bindgen]
-pub fn set_libraries(libraries: &str) -> Result<(), wasm_bindgen::JsValue> {
-    stack(libraries).map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+pub fn set_projections(projections: &str, names: bool) -> Result<(), wasm_bindgen::JsValue> {
+    stack(projections, names).map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     WEB_PROXY.with(|proxy| {
         if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::LibrariesChanged(libraries.to_owned()));
+            let _ = proxy.send_event(UserEvent::ProjectionsChanged {
+                projections: projections.to_owned(),
+                names,
+            });
         }
     });
     Ok(())
@@ -127,7 +130,7 @@ pub fn start_editor(
         &stack.libraries,
     )
     .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
-    TUTORIAL_SLOTS.with(|slots| *slots.borrow_mut() = tutorial_slots);
+    PAGE.with(|page| *page.borrow_mut() = (libraries, tutorial_slots));
     run_document(
         doc,
         binders,

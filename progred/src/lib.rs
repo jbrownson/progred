@@ -108,9 +108,13 @@ pub(crate) enum UserEvent {
     BrowserModifiersChanged(winit::keyboard::ModifiersState),
     #[cfg(target_arch = "wasm32")]
     PaletteChanged(styles::Palette),
-    /// Library IDs chosen by the embedding page.
+    /// The libraries whose projections the embedding page wants drawn, and
+    /// whether names show.
     #[cfg(target_arch = "wasm32")]
-    LibrariesChanged(String),
+    ProjectionsChanged {
+        projections: String,
+        names: bool,
+    },
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
     Command(Command),

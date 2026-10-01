@@ -24,6 +24,34 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>
     }
 }
 
+/// The page's libraries with only some of them drawing, as a tutorial peels
+/// projections away. Every library's definitions stay loaded, so keys and
+/// functions keep their names; with names off, each slot shows the base
+/// projection.
+#[cfg(any(test, target_arch = "wasm32"))]
+pub(crate) fn peeled(
+    libraries: Option<&str>,
+    projections: &str,
+    slots: Option<&str>,
+    names: bool,
+) -> Result<crate::stack::Stack<Editor>, String> {
+    let mut stack = self::libraries(libraries)?;
+    stack.projection = self::libraries(Some(projections))?.projection;
+    let slots = match (names, slots) {
+        (true, slots) => slots.map(str::to_owned),
+        (false, Some(slots)) => Some(
+            slots
+                .split(',')
+                .map(|slot| format!("{}:raw", slot.split(':').next().unwrap_or(slot)))
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        (false, None) => return Err("Names can only be turned off in tutorial slots".into()),
+    };
+    stack.projection = tutorial_slots(slots.as_deref(), stack.projection, &stack.libraries)?;
+    Ok(stack)
+}
+
 /// How a tutorial slot draws its value: with every loaded library's
 /// projections, plainly (names, text, and numbers read as themselves while
 /// calls stay records), or as Raw draws it. Several slots can show one shared cell at different levels.
@@ -124,7 +152,7 @@ pub(crate) fn tutorial_slots(
                 projection.partial().clone(),
                 crate::display::runtime_partial(named_reference),
             ]);
-            let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
+            let captioned = slots.windows(2).any(|pair| pair[0].1 != pair[1].1);
             let captions =
                 [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries));
             Ok(projection.with_entry(crate::display::partial(move |input| {

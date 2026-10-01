@@ -52,8 +52,8 @@ for a free port when running an additional preview alongside this one.
 
 ## Work on it
 
-- `public/index.html` is the home page: the pitch, a live forest whose libraries
-  you can switch off (`public/peel.js`), the key ideas, what works today, the four
+- `public/index.html` is the home page: the pitch, a live forest whose projections
+  and names you can switch off (`public/peel.js`), the key ideas, what works today, the four
   tutorials, and the Zulip links. Narrow screens get stills from `public/images/`
   instead of loading the editor.
   `make images` regenerates those stills, and the copies of the

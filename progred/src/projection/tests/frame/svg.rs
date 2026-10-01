@@ -1737,17 +1737,25 @@ fn website_home_stills() {
         ("light", crate::styles::Theme::Light),
         ("dark", crate::styles::Theme::Dark),
     ] {
-        for (still, libraries) in [("forest", &forest[..]), ("structure", &[][..])] {
+        // The structure still is the peel with every projection off but names on.
+        for (still, projections) in [("forest", &forest[..]), ("structure", &[][..])] {
+            let ids = |libraries: &[CellId]| {
+                libraries
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
             let mut editor = crate::test_editor_with_stack(
                 doc.clone(),
-                crate::stack::load_selected(libraries).unwrap(),
+                crate::web_embed::peeled(
+                    Some(&ids(&forest)),
+                    &ids(projections),
+                    Some(&format!("{},{}", fields["second"], fields["first"])),
+                    true,
+                )
+                .unwrap(),
             );
-            editor.stack.projection = crate::web_embed::tutorial_slots(
-                Some(&format!("{},{}", fields["second"], fields["first"])),
-                editor.stack.projection,
-                &editor.stack.libraries,
-            )
-            .unwrap();
             editor.font_cx = crate::fonts::bundled_font_context();
             editor.palette = theme.palette();
             editor.drawn_menu = false;
