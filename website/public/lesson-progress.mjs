@@ -49,6 +49,8 @@ const drawing = {
   radius: "6423c35e07d7a4ff536127d1f1d8eb53",
   do: "b1fc4cb45c58b1a662c431feef5bd140",
   expressions: "5fab151c006ae1487c28837f2003f43c",
+  expression: "ccc55b0eb63b9f564ea74436094d4014",
+  unquote: "da48703c290e3b35d7353c38110bc953",
 };
 
 // The planet's colors: the list the values lesson removes from and restores.
@@ -265,17 +267,17 @@ export function completedSteps(lesson, state, previous) {
     const definition = contents?.[fn];
     const parameters = field(definition, fields.params)?.list;
     const body = field(definition, fields.body);
-    const circle = field(field(body, drawing.shape), drawing.circle);
-    const radius = number(field(circle, drawing.radius));
+    const shape = circle(body);
+    const radius = number(coordinate(shape, drawing.radius));
     const calls = field(contents?.[program], drawing.expressions)?.list;
     const canvas = field(field(root, slots[2]), drawing.drawing);
     if (typeof fn !== "string" || typeof program !== "string"
         || field(canvas, drawing.program)?.cell !== program
         || parameters?.length !== 1 || parameters[0]?.cell !== drawing.x
         || field(body, fields.function)?.cell !== drawing.fill
-        || field(circle, drawing.x)?.cell !== drawing.x
+        || coordinate(shape, drawing.x)?.cell !== drawing.x
         || !Number.isFinite(radius) || radius <= 0
-        || !Number.isFinite(number(field(circle, drawing.y)))
+        || !Number.isFinite(number(coordinate(shape, drawing.y)))
         || field(contents?.[program], fields.function)?.cell !== drawing.do
         || !Array.isArray(calls) || calls.length < 2
         || !calls.every((call) => field(call, fields.function)?.cell === fn)) return [];
@@ -295,8 +297,15 @@ export function completedSteps(lesson, state, previous) {
   return [];
 }
 
+// A shape with computed coordinates is quoted, and those coordinates unquoted.
 function circle(fill) {
-  return field(field(fill, drawing.shape), drawing.circle);
+  const shape = field(fill, drawing.shape);
+  return field(field(shape, drawing.expression) ?? shape, drawing.circle);
+}
+
+function coordinate(circle, key) {
+  const value = field(circle, key);
+  return field(value, drawing.unquote) ?? value;
 }
 
 function sourceIn(state, slot, length) {
@@ -316,7 +325,7 @@ function storyCalls(state) {
 
 const storySteps = {
   dot(state) {
-    const x = number(field(circle(state?.document?.cells?.[story.program]), drawing.x));
+    const x = number(coordinate(circle(state?.document?.cells?.[story.program]), drawing.x));
     return [
       ...(sourceIn(state, slots[0], 2) ? ["pick"] : []),
       ...(Number.isFinite(x) && x !== 60 ? ["scrub"] : []),
@@ -325,12 +334,12 @@ const storySteps = {
   copies(state) {
     const dots = field(state?.document?.cells?.[story.program], drawing.expressions)?.list;
     return Array.isArray(dots) && dots.length >= 2
-      && dots.every((dot) => number(field(circle(dot), drawing.radius)) > 24) ? ["bigger"] : [];
+      && dots.every((dot) => number(coordinate(circle(dot), drawing.radius)) > 24) ? ["bigger"] : [];
   },
   recipe(state) {
     const body = field(state?.document?.cells?.[story.recipe], fields.body);
     return [
-      ...(number(field(circle(body), drawing.radius)) > 24 ? ["bigger"] : []),
+      ...(number(coordinate(circle(body), drawing.radius)) > 24 ? ["bigger"] : []),
       ...(sourceIn(state, slots[0], 3) ? ["pick"] : []),
     ];
   },
@@ -346,7 +355,7 @@ const storySteps = {
   },
   heights(state) {
     const leaves = field(field(state?.document?.cells?.[story.recipe], fields.body), drawing.expressions)?.list?.[1];
-    const y = field(circle(leaves), drawing.y);
+    const y = coordinate(circle(leaves), drawing.y);
     return [
       ...(field(y, fields.function)?.cell === story.subtract
         && Math.abs(number(field(y, fields.right)) - 90) <= 3 ? ["fit"] : []),

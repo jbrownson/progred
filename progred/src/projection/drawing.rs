@@ -155,99 +155,60 @@ fn number(
         .filter(|number| number.is_finite()))
 }
 
-/// Shape arguments are raw so coordinates may be ordinary Grap
-/// expressions rather than a separately allocated quoted shape value.
-fn shape(
-    context: &mut grap::Context,
-    expression: grap::Expression,
-    environment: &grap::Environment,
-) -> Result<Option<puri::Shape>, grap::Halt> {
-    if let Some(content) = context.field(&expression, layout_data::vocabulary::RECT) {
-        let (Some(x), Some(y), Some(width), Some(height)) = (
-            context.field(&content, layout_data::vocabulary::X),
-            context.field(&content, layout_data::vocabulary::Y),
-            context.field(&content, layout_data::vocabulary::WIDTH),
-            context.field(&content, layout_data::vocabulary::HEIGHT),
-        ) else {
-            return Ok(None);
-        };
-        let (Some(x), Some(y), Some(width), Some(height)) = (
-            number(context, x, environment)?,
-            number(context, y, environment)?,
-            number(context, width, environment)?,
-            number(context, height, environment)?,
-        ) else {
-            return Ok(None);
-        };
-        return Ok((width >= 0.0 && height >= 0.0)
-            .then(|| puri::Shape::Rect(Rect::new(x, y, x + width, y + height))));
+/// The common shapes read straight from evaluated values, sparing each
+/// coordinate a round trip through stored bytes; others read as stored data.
+fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
+    use layout_data::vocabulary::{CIRCLE, HEIGHT, RADIUS, RECT, ROUNDED_RECT, WIDTH, X, Y};
+    if let Some(rect) = value.field(RECT) {
+        let (x, y, width, height) = (
+            coordinate(&rect, X)?,
+            coordinate(&rect, Y)?,
+            coordinate(&rect, WIDTH)?,
+            coordinate(&rect, HEIGHT)?,
+        );
+        return (width >= 0.0 && height >= 0.0)
+            .then(|| puri::Shape::Rect(Rect::new(x, y, x + width, y + height)));
     }
-    if let Some(content) = context.field(&expression, layout_data::vocabulary::CIRCLE) {
-        let (Some(x), Some(y), Some(radius)) = (
-            context.field(&content, layout_data::vocabulary::X),
-            context.field(&content, layout_data::vocabulary::Y),
-            context.field(&content, layout_data::vocabulary::RADIUS),
-        ) else {
-            return Ok(None);
-        };
-        let (Some(x), Some(y), Some(radius)) = (
-            number(context, x, environment)?,
-            number(context, y, environment)?,
-            number(context, radius, environment)?,
-        ) else {
-            return Ok(None);
-        };
-        return Ok((radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius))));
+    if !value.contains_field(ROUNDED_RECT)
+        && let Some(circle) = value.field(CIRCLE)
+    {
+        let (x, y, radius) = (
+            coordinate(&circle, X)?,
+            coordinate(&circle, Y)?,
+            coordinate(&circle, RADIUS)?,
+        );
+        return (radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius)));
     }
-    if let Some(content) = context.field(&expression, layout_data::vocabulary::PATH) {
-        let content = context.eval_to_value(content, environment)?;
-        return Ok(layout_data::read_shape(&Value::record([(
-            layout_data::vocabulary::PATH,
-            content,
-        )])));
-    }
-    let value = context.eval_to_value(expression, environment)?;
-    Ok(layout_data::read_shape(&value))
+    layout_data::read_shape(&value.to_value())
 }
 
-/// Like shapes, literal transform operations evaluate their numeric
-/// children in the caller's environment without constructing a quoted
-/// transform value first.
-fn transform(
-    context: &mut grap::Context,
-    expression: grap::Expression,
-    environment: &grap::Environment,
-) -> Result<Option<Affine>, grap::Halt> {
-    let Some(operations) = context.elements(&expression) else {
-        let value = context.eval_to_value(expression, environment)?;
-        return Ok(layout_data::read_transform(&value));
+fn evaluated_transform(value: &grap::RuntimeValue) -> Option<Affine> {
+    use layout_data::vocabulary::{ROTATE, TRANSLATE, X, Y};
+    let Some(operations) = value.list_values() else {
+        return layout_data::read_transform(&value.to_value());
     };
-    let mut transform = Affine::IDENTITY;
-    for operation in operations {
-        if let Some(point) = context.field(&operation, layout_data::vocabulary::TRANSLATE) {
-            let (Some(x), Some(y)) = (
-                context.field(&point, layout_data::vocabulary::X),
-                context.field(&point, layout_data::vocabulary::Y),
-            ) else {
-                return Ok(None);
-            };
-            let (Some(x), Some(y)) = (
-                number(context, x, environment)?,
-                number(context, y, environment)?,
-            ) else {
-                return Ok(None);
-            };
-            transform *= Affine::translate((x, y));
-        } else if let Some(angle) = context.field(&operation, layout_data::vocabulary::ROTATE) {
-            let Some(angle) = number(context, angle, environment)? else {
-                return Ok(None);
-            };
-            transform *= Affine::rotate(angle);
-        } else {
-            return Ok(None);
-        }
-    }
-    Ok(Some(transform))
+    operations.fold(Some(Affine::IDENTITY), |transform, operation| {
+        let transform = transform?;
+        Some(match operation.field(TRANSLATE) {
+            Some(point) => {
+                transform * Affine::translate((coordinate(&point, X)?, coordinate(&point, Y)?))
+            }
+            None => {
+                let angle = operation
+                    .field(ROTATE)?
+                    .as_f64()
+                    .filter(|n| n.is_finite())?;
+                transform * Affine::rotate(angle)
+            }
+        })
+    })
+}
+
+fn coordinate(value: &grap::RuntimeValue, key: CellId) -> Option<f64> {
+    value
+        .field(key)?
+        .as_f64()
+        .filter(|number| number.is_finite())
 }
 
 fn record_program(
@@ -315,11 +276,11 @@ fn record_program(
                     return Ok(context.missing_argument(layout_data::vocabulary::PAINT));
                 };
                 let shape = match context.field(call, layout_data::vocabulary::SHAPE) {
-                    Some(expression) => shape(context, expression, environment)?,
+                    Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
                     None => Some(puri::Shape::Path(path.borrow().clone())),
                 };
                 let transform = match context.field(call, layout_data::vocabulary::TRANSFORM) {
-                    Some(expression) => transform(context, expression, environment)?,
+                    Some(transform) => evaluated_transform(&context.eval(transform, environment)?),
                     None => Some(Affine::IDENTITY),
                 };
                 let (Some(shape), Some(paint), Some(transform)) =

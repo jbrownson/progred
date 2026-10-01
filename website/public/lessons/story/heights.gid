@@ -34,11 +34,14 @@
     "calls": 46cea6ad72d7e838236fcf490ac3695e,
     "x_param": 2bd03b91a3ab695c54a71efafcb10115,
     "height_param": f747026de922fb0f01823df377de5cb6,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "unquote": da48703c290e3b35d7353c38110bc953,
   },
   "cells": {
     x_param: {name: "x"},
     height_param: {name: "height"},
-    recipe: {name: "tree", params: [x_param, height_param], body: {function: all, expressions: [{function: fill, paint: {rgb: 0x9a6849}, shape: {rect: {height: height_param, width: {f64: 0x0000000000002040}, x: x_param, y: {function: subtract, left: {f64: 0x0000000000006440}, right: height_param}}}}, {function: fill, paint: {rgb: 0x548b64}, shape: {circle: {radius: {f64: 0x0000000000003b40}, x: {function: sum, left: x_param, right: {f64: 0x0000000000001040}}, y: {function: subtract, left: {f64: 0x0000000000006440}, right: {f64: 0x0000000000004e40}}}}}]}},
+    recipe: {name: "tree", params: [x_param, height_param], body: {function: all, expressions: [{function: fill, paint: {rgb: 0x9a6849}, shape: {function: quote, expression: {rect: {height: {unquote: height_param}, width: {f64: 0x0000000000002040}, x: {unquote: x_param}, y: {unquote: {function: subtract, left: {f64: 0x0000000000006440}, right: height_param}}}}}}, {function: fill, paint: {rgb: 0x548b64}, shape: {function: quote, expression: {circle: {radius: {f64: 0x0000000000003b40}, x: {unquote: {function: sum, left: x_param, right: {f64: 0x0000000000001040}}}, y: {unquote: {function: subtract, left: {f64: 0x0000000000006440}, right: {f64: 0x0000000000004e40}}}}}}}]}},
     calls: {function: all, expressions: [{function: recipe, x_param: {f64: 0x0000000000004440}, height_param: {f64: 0x0000000000004e40}}, {function: recipe, x_param: {f64: 0x0000000000006040}, height_param: {f64: 0x0000000000805640}}, {function: recipe, x_param: {f64: 0x0000000000006b40}, height_param: {f64: 0x0000000000005240}}]},
   },
   "root": {

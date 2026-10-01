@@ -694,6 +694,9 @@ const drawingIds = {
   radius: "6423c35e07d7a4ff536127d1f1d8eb53",
   do: "b1fc4cb45c58b1a662c431feef5bd140",
   expressions: "5fab151c006ae1487c28837f2003f43c",
+  quote: "7f81d4812ceb33d4222e9e5cb9c82497",
+  expression: "ccc55b0eb63b9f564ea74436094d4014",
+  unquote: "da48703c290e3b35d7353c38110bc953",
   key: "f12dea12c741fe36312750a264f3a235",
   follow: "33c6fb363ddc6f13fd054c68f7a37a98",
   document: "ef62fa62f008c1eca70389571933aba0",
@@ -705,9 +708,12 @@ const drawingState = ({ x = 60, radius = 24, dots = [160] } = {}) => {
   ], {
     [d.fn]: record(
       [d.params, { list: [cell(d.x)] }],
-      [d.body, record([d.function, cell(d.fill)], [d.shape, record([d.circle, record(
-        [d.x, cell(d.x)], [d.y, number(50)], [d.radius, number(radius)],
-      )])])],
+      [d.body, record([d.function, cell(d.fill)], [d.shape, record(
+        [d.function, cell(d.quote)],
+        [d.expression, record([d.circle, record(
+          [d.x, record([d.unquote, cell(d.x)])], [d.y, number(50)], [d.radius, number(radius)],
+        )])],
+      )])],
     ),
     [d.program]: record([d.function, cell(d.do)], [d.expressions, { list: [x, ...dots].map((value) =>
       record([d.function, cell(d.fn)], [d.x, number(value)])) }]),

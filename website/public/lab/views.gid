@@ -41,10 +41,10 @@
         {function: fill, paint: {rgb: 0xc1440e}, shape: {circle: {x: {f64: 0x0000000000004940},
           y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000004240}}}},
         {function: for_each, items: {function: range, count: n}, action: {params: [item], body: {
-          function: fill, paint: {rgb: 0x8a8a8a}, shape: {circle: {
-            x: {function: sum, left: {f64: 0x0000000000405a40},
-                right: {function: multiply, left: item, right: {f64: 0x0000000000003240}}},
-            y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000001840}}}}}},
+          function: fill, paint: {rgb: 0x8a8a8a}, shape: {function: quote, expression: {circle: {
+            x: {unquote: {function: sum, left: {f64: 0x0000000000405a40},
+                right: {function: multiply, left: item, right: {f64: 0x0000000000003240}}}},
+            y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000001840}}}}}}},
       ]},
     }},
   },

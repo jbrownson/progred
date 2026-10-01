@@ -32,10 +32,13 @@
     "recipe": e93553d9cfad696bf6be0c3618c48858,
     "calls": 46cea6ad72d7e838236fcf490ac3695e,
     "x_param": 2bd03b91a3ab695c54a71efafcb10115,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "unquote": da48703c290e3b35d7353c38110bc953,
   },
   "cells": {
     x_param: {name: "x"},
-    recipe: {name: "dot", params: [x_param], body: {function: all, expressions: [{function: fill, paint: {rgb: 0x9a6849}, shape: {rect: {height: {f64: 0x0000000000004e40}, width: {f64: 0x0000000000002040}, x: x_param, y: {f64: 0x0000000000005940}}}}, {function: fill, paint: {rgb: 0x548b64}, shape: {circle: {radius: {f64: 0x0000000000003b40}, x: {function: sum, left: x_param, right: {f64: 0x0000000000001040}}, y: {f64: 0x0000000000005940}}}}]}},
+    recipe: {name: "dot", params: [x_param], body: {function: all, expressions: [{function: fill, paint: {rgb: 0x9a6849}, shape: {function: quote, expression: {rect: {height: {f64: 0x0000000000004e40}, width: {f64: 0x0000000000002040}, x: {unquote: x_param}, y: {f64: 0x0000000000005940}}}}}, {function: fill, paint: {rgb: 0x548b64}, shape: {function: quote, expression: {circle: {radius: {f64: 0x0000000000003b40}, x: {unquote: {function: sum, left: x_param, right: {f64: 0x0000000000001040}}}, y: {f64: 0x0000000000005940}}}}}]}},
     calls: {function: all, expressions: [{function: recipe, x_param: {f64: 0x0000000000004e40}}, {function: recipe, x_param: {f64: 0x0000000000006440}}]},
   },
   "root": {

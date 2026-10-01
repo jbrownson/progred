@@ -32,6 +32,9 @@
     "first": 9940ece27410c72a5308a544890ccc71,
     "second": f717b766d250a7b86c5eb842885c4417,
     "third": 5e716c07490849f072b4e9017dd6230d,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "unquote": da48703c290e3b35d7353c38110bc953,
   },
   "cells": {
     tree: {
@@ -42,21 +45,21 @@
         expressions: [
           {
             function: fill,
-            shape: {rect: {
-              x: x,
-              y: {function: subtract, left: {f64: 0x0000000000806140}, right: height},
+            shape: {function: quote, expression: {rect: {
+              x: {unquote: x},
+              y: {unquote: {function: subtract, left: {f64: 0x0000000000806140}, right: height}},
               width: {f64: 0x0000000000002040},
-              height: height,
-            }},
+              height: {unquote: height},
+            }}},
             paint: {rgb: 0x9a6849},
           },
           {
             function: fill,
-            shape: {circle: {
-              x: {function: sum, left: x, right: {f64: 0x0000000000001040}},
-              y: {function: subtract, left: {f64: 0x0000000000806140}, right: height},
+            shape: {function: quote, expression: {circle: {
+              x: {unquote: {function: sum, left: x, right: {f64: 0x0000000000001040}}},
+              y: {unquote: {function: subtract, left: {f64: 0x0000000000806140}, right: height}},
               radius: {f64: 0x0000000000003b40},
-            }},
+            }}},
             paint: {rgb: 0x548b64},
           },
         ],

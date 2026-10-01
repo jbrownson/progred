@@ -214,10 +214,19 @@
                             function: fill,
                             paint: paint,
                             shape: {
-                              circle: {
-                                x: x,
-                                y: y,
-                                radius: radius,
+                              function: quote,
+                              expression: {
+                                circle: {
+                                  x: {
+                                    unquote: x,
+                                  },
+                                  y: {
+                                    unquote: y,
+                                  },
+                                  radius: {
+                                    unquote: radius,
+                                  },
+                                },
                               },
                             },
                           },
@@ -1061,35 +1070,53 @@
                             value: {
                               expressions: [
                                 {
-                                  transform: [
-                                    {
-                                      translate: {
-                                        x: x,
-                                        y: y,
+                                  transform: {
+                                    function: quote,
+                                    expression: [
+                                      {
+                                        translate: {
+                                          x: {
+                                            unquote: x,
+                                          },
+                                          y: {
+                                            unquote: y,
+                                          },
+                                        },
                                       },
-                                    },
-                                    {
-                                      rotate: angle,
-                                    },
-                                  ],
+                                      {
+                                        rotate: {
+                                          unquote: angle,
+                                        },
+                                      },
+                                    ],
+                                  },
                                   function: fill,
                                   paint: {
                                     rgb: 0x000000,
                                   },
                                   shape: {
-                                    rect: {
-                                      x: {
-                                        f64: 0x0000000000000000,
-                                      },
-                                      y: {
-                                        right: half_width,
-                                        function: subtract,
-                                        left: {
+                                    function: quote,
+                                    expression: {
+                                      rect: {
+                                        x: {
                                           f64: 0x0000000000000000,
                                         },
+                                        y: {
+                                          unquote: {
+                                            right: half_width,
+                                            function: subtract,
+                                            left: {
+                                              f64: 0x0000000000000000,
+                                            },
+                                          },
+                                        },
+                                        height: {
+                                          unquote: branch_width,
+                                        },
+                                        width: {
+                                          unquote: length,
+                                        },
                                       },
-                                      height: branch_width,
-                                      width: length,
                                     },
                                   },
                                 },
@@ -1491,15 +1518,22 @@
           },
         },
         shape: {
-          rect: {
-            x: {
-              f64: 0x0000000000000000,
+          function: quote,
+          expression: {
+            rect: {
+              x: {
+                f64: 0x0000000000000000,
+              },
+              y: {
+                f64: 0x0000000000000000,
+              },
+              height: {
+                unquote: canvas_height,
+              },
+              width: {
+                unquote: canvas_width,
+              },
             },
-            y: {
-              f64: 0x0000000000000000,
-            },
-            height: canvas_height,
-            width: canvas_width,
           },
         },
       },

@@ -26,6 +26,9 @@
     "first": 9940ece27410c72a5308a544890ccc71,
     "second": f717b766d250a7b86c5eb842885c4417,
     "third": 5e716c07490849f072b4e9017dd6230d,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "unquote": da48703c290e3b35d7353c38110bc953,
   },
   "cells": {
     dot: {
@@ -33,11 +36,11 @@
       params: [x],
       body: {
         function: fill,
-        shape: {circle: {
-          x: x,
+        shape: {function: quote, expression: {circle: {
+          x: {unquote: x},
           y: {f64: 0x0000000000004940},
           radius: {f64: 0x0000000000003840},
-        }},
+        }}},
         paint: {rgb: 0x3b82a0},
       },
     },

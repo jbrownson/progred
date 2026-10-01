@@ -197,9 +197,9 @@
             expressions: [
               {
                 function: fill,
-                shape: {
+                shape: {function: quote, expression: {
                   circle: {
-                    x: {
+                    x: {unquote: {
                       function: sum,
                       left: cloud_x,
                       right: {
@@ -207,8 +207,8 @@
                         left: cloud_radius,
                         right: {f64: 0xcdccccccccccecbf}
                       }
-                    },
-                    y: {
+                    }},
+                    y: {unquote: {
                       function: subtract,
                       left: cloud_y,
                       right: {
@@ -216,21 +216,21 @@
                         left: cloud_radius,
                         right: {f64: 0x9a9999999999e93f}
                       }
-                    },
-                    radius: {
+                    }},
+                    radius: {unquote: {
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0x9a9999999999e93f}
-                    }
+                    }}
                   }
-                },
+                }},
                 paint: color
               },
               {
                 function: fill,
-                shape: {
+                shape: {function: quote, expression: {
                   circle: {
-                    x: {
+                    x: {unquote: {
                       function: sum,
                       left: cloud_x,
                       right: {
@@ -238,8 +238,8 @@
                         left: cloud_radius,
                         right: {f64: 0x0000000000000000}
                       }
-                    },
-                    y: {
+                    }},
+                    y: {unquote: {
                       function: subtract,
                       left: cloud_y,
                       right: {
@@ -247,21 +247,21 @@
                         left: cloud_radius,
                         right: {f64: 0x666666666666f23f}
                       }
-                    },
-                    radius: {
+                    }},
+                    radius: {unquote: {
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0x666666666666f23f}
-                    }
+                    }}
                   }
-                },
+                }},
                 paint: color
               },
               {
                 function: fill,
-                shape: {
+                shape: {function: quote, expression: {
                   circle: {
-                    x: {
+                    x: {unquote: {
                       function: sum,
                       left: cloud_x,
                       right: {
@@ -269,8 +269,8 @@
                         left: cloud_radius,
                         right: {f64: 0x000000000000f03f}
                       }
-                    },
-                    y: {
+                    }},
+                    y: {unquote: {
                       function: subtract,
                       left: cloud_y,
                       right: {
@@ -278,14 +278,14 @@
                         left: cloud_radius,
                         right: {f64: 0xcdccccccccccec3f}
                       }
-                    },
-                    radius: {
+                    }},
+                    radius: {unquote: {
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0xcdccccccccccec3f}
-                    }
+                    }}
                   }
-                },
+                }},
                 paint: color
               }
             ]
@@ -322,9 +322,9 @@
         expressions: [
           {
             function: fill,
-            shape: {
+            shape: {function: quote, expression: {
               rect: {
-                x: {
+                x: {unquote: {
                   function: subtract,
                   left: tree_x,
                   right: {
@@ -332,8 +332,8 @@
                     left: age,
                     right: {f64: 0x0000000000001040}
                   }
-                },
-                y: {
+                }},
+                y: {unquote: {
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
@@ -341,15 +341,15 @@
                     left: tree_height,
                     right: {f64: 0x000000000000f03f}
                   }
-                },
-                width: {
+                }},
+                width: {unquote: {
                   function: multiply,
                   left: age,
                   right: {f64: 0x0000000000002040}
-                },
-                height: tree_height
+                }},
+                height: {unquote: tree_height}
               }
-            },
+            }},
             paint: trunk
           },
           {
@@ -502,9 +502,9 @@
           },
           {
             function: fill,
-            shape: {
+            shape: {function: quote, expression: {
               circle: {
-                x: {
+                x: {unquote: {
                   function: sum,
                   left: tree_x,
                   right: {
@@ -512,8 +512,8 @@
                     left: crown,
                     right: {f64: 0x3d0ad7a3703de2bf}
                   }
-                },
-                y: {
+                }},
+                y: {unquote: {
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
@@ -521,21 +521,21 @@
                     left: tree_height,
                     right: {f64: 0x713d0ad7a370ed3f}
                   }
-                },
-                radius: {
+                }},
+                radius: {unquote: {
                   function: multiply,
                   left: crown,
                   right: {f64: 0xf6285c8fc2f5e83f}
-                }
+                }}
               }
-            },
+            }},
             paint: leaves
           },
           {
             function: fill,
-            shape: {
+            shape: {function: quote, expression: {
               circle: {
-                x: {
+                x: {unquote: {
                   function: sum,
                   left: tree_x,
                   right: {
@@ -543,8 +543,8 @@
                     left: crown,
                     right: {f64: 0xf6285c8fc2f5e03f}
                   }
-                },
-                y: {
+                }},
+                y: {unquote: {
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
@@ -552,22 +552,22 @@
                     left: tree_height,
                     right: {f64: 0x000000000000f03f}
                   }
-                },
-                radius: {
+                }},
+                radius: {unquote: {
                   function: multiply,
                   left: crown,
                   right: {f64: 0x9a9999999999e93f}
-                }
+                }}
               }
-            },
+            }},
             paint: leaves
           },
           {
             function: fill,
-            shape: {
+            shape: {function: quote, expression: {
               circle: {
-                x: tree_x,
-                y: {
+                x: {unquote: tree_x},
+                y: {unquote: {
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
@@ -575,17 +575,17 @@
                     left: tree_height,
                     right: {f64: 0xb81e85eb51b8f23f}
                   }
-                },
-                radius: crown
+                }},
+                radius: {unquote: crown}
               }
-            },
+            }},
             paint: leaves
           },
           {
             function: fill,
-            shape: {
+            shape: {function: quote, expression: {
               circle: {
-                x: {
+                x: {unquote: {
                   function: sum,
                   left: tree_x,
                   right: {
@@ -593,8 +593,8 @@
                     left: crown,
                     right: {f64: 0x295c8fc2f528ccbf}
                   }
-                },
-                y: {
+                }},
+                y: {unquote: {
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
@@ -602,14 +602,14 @@
                     left: tree_height,
                     right: {f64: 0x000000000000f43f}
                   }
-                },
-                radius: {
+                }},
+                radius: {unquote: {
                   function: multiply,
                   left: crown,
                   right: {f64: 0xb81e85eb51b8de3f}
-                }
+                }}
               }
-            },
+            }},
             paint: {rgba: 0xffffff25}
           }
         ]
@@ -787,9 +787,9 @@
     ],
     body: {
       function: fill,
-      shape: {
+      shape: {function: quote, expression: {
         circle: {
-          x: {
+          x: {unquote: {
             function: sum,
             left: {f64: 0x0000000000804640},
             right: {
@@ -805,8 +805,8 @@
                 }
               }
             }
-          },
-          y: {
+          }},
+          y: {unquote: {
             function: subtract,
             left: {f64: 0x0000000000806640},
             right: {
@@ -829,10 +829,10 @@
                 }
               }
             }
-          },
+          }},
           radius: {f64: 0x0000000000003940}
         }
-      },
+      }},
       paint: color
     }
   },

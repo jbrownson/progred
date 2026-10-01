@@ -1077,7 +1077,12 @@ fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_cal
         &mut world,
         &[
             fill_path.as_slice(),
-            &[Step::Key(SHAPE), Step::Key(CIRCLE), Step::Key(RADIUS)],
+            &[
+                Step::Key(SHAPE),
+                Step::Key(grap::vocabulary::EXPRESSION),
+                Step::Key(CIRCLE),
+                Step::Key(RADIUS),
+            ],
         ]
         .concat(),
         "36",
@@ -2171,45 +2176,6 @@ fn website_model_edits_show_through_the_base_projection() {
     ));
     let path = world.model.selection.as_ref().unwrap().path().to_vec();
     assert!(path.starts_with(&at("second", "planet")), "{path:?}");
-}
-
-#[test]
-fn drawn_shape_coordinates_show_parameters_by_name() {
-    use crate::libraries::{absent, blob, color, control, grap as grap_library, layout, number};
-    use grap::vocabulary::BODY;
-    let (mut world, names) = lesson_world(
-        include_str!("../../../../../website/public/lessons/drawing.gid"),
-        &[
-            name::ID,
-            text::ID,
-            blob::ID,
-            absent::ID,
-            color::ID,
-            control::ID,
-            number::ID,
-            f64::ID,
-            grap_library::ID,
-            layout::ID,
-        ],
-        ["third", "first", "second"],
-    );
-    let x = [
-        Step::Key(names["first"]),
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(BODY),
-        Step::Key(layout::vocabulary::SHAPE),
-        Step::Key(layout::vocabulary::CIRCLE),
-        Step::Key(layout::vocabulary::X),
-    ];
-    let frame = editing_frame(&mut world, false);
-    assert!(frame.descends.iter().any(|d| d.path.as_ref() == x));
-    assert!(
-        !frame
-            .descends
-            .iter()
-            .any(|d| d.path.len() > x.len() && d.path.starts_with(&x)),
-        "fill evaluates the coordinate, so the parameter reads as its name"
-    );
 }
 
 #[test]

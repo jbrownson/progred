@@ -488,6 +488,10 @@ evaluation. A visible program records once in the frame; hover and painting
 share the recording and its source origins. There is no cross-frame canvas memo.
 The installed frame's hover probes retain that recording for subsequent pointer
 hit tests; every successor frame still makes its own recording.
+A fill's shape and transform are evaluated like any other argument and read
+as ordinary values. Coordinates computed by the program are written with
+`quote` and `unquote`, as scenes are; a shape of literal numbers is already a
+value.
 
 ## Controls and state
 
