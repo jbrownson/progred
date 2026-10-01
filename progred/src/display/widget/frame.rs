@@ -409,6 +409,7 @@ pub struct ViewRegion {
     pub maximum: Vec2,
     /// A scrolling view's whole content in logical units, which an embedding
     /// page can size its frame to; fixed viewports have none.
+    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
     pub content: Option<Vec2>,
 }
 
