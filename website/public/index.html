@@ -70,6 +70,7 @@
         <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
+          <a class="button" href="try">Try the editor</a>
           <a class="button" href="#ways-in">Try a tutorial</a>
           <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
         </p>
@@ -134,7 +135,7 @@
         </article>
         <article class="idea" id="grap">
           <h4>Grap, a language made of the same data</h4>
-          <p>Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions, not built-in keywords. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
+          <p>Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions, not built-in keywords. <code>quote</code> is one too: it returns its argument as data, filling each <code>`</code> hole, which is how a program builds a shape. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
           <p class="idea-links"><a href="lab/peel.html#unfinished">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#evaluation">Evaluation</a></p>
         </article>
         <article class="idea" id="linked">
@@ -188,9 +189,9 @@
         </figure>
         <ul>
           <li><strong>Structural editing:</strong> completions, names and literals edited in place, color pickers, number scrubbing, panes and windows, undo.</li>
-          <li><strong>Live drawings</strong> linked to the code that drew them. <a href="editor/?example=iop-tree" target="_blank" rel="noopener">Open the tree in the full editor</a>.</li>
-          <li><strong>Implicit CAD</strong> with <a href="https://github.com/mkeeter/fidget">Fidget</a>: editable fields and 3D previews you can orbit. <a href="editor/?example=fidget-shapes" target="_blank" rel="noopener">Open the shapes in the full editor</a>.</li>
-          <li><strong>Early CAM:</strong> toolpaths, playback, and stock removal.</li>
+          <li><strong>Live drawings</strong> linked to the code that drew them. <a href="iop" target="_blank" rel="noopener">Open the tree in the full editor</a>.</li>
+          <li><strong>Implicit CAD</strong> with <a href="https://github.com/mkeeter/fidget">Fidget</a>: editable fields and 3D previews you can orbit. <a href="cad" target="_blank" rel="noopener">Open the shapes in the full editor</a>.</li>
+          <li><strong>Early CAM:</strong> toolpaths, playback, and stock removal. <a href="cam" target="_blank" rel="noopener">Open the toolpaths in the full editor</a>.</li>
         </ul>
         <p>macOS is the main platform. This site runs the same editor compiled to WebAssembly, and there’s a Linux build too. <a href="https://github.com/jbrownson/progred#try-it">Build it from source</a>.</p>
       </section>

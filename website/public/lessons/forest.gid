@@ -5,7 +5,7 @@
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
-    "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "all": bc2f76148affd64e009a1a37a32aa2bf,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "program": bdf607810b274ad5b02bd409aef34b6a,
@@ -41,7 +41,7 @@
       name: "tree",
       params: [x, height],
       body: {
-        function: do,
+        function: all,
         expressions: [
           {
             function: fill,
@@ -66,7 +66,7 @@
       },
     },
     forest: {
-      function: do,
+      function: all,
       expressions: [
         {function: tree, x: {f64: 0x0000000000004440}, height: {f64: 0x0000000000004e40}},
         {function: tree, x: {f64: 0x0000000000006040}, height: {f64: 0x0000000000805640}},

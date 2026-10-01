@@ -21,6 +21,7 @@ def assemble(repository, destination):
 
     shutil.copytree(website / "public", destination)
     shutil.copyfile(website / "_headers", destination / "_headers")
+    shutil.copyfile(website / "_redirects", destination / "_redirects")
     (destination / "editor").mkdir()
     for name in EDITOR_FILES:
         shutil.copyfile(editor / name, destination / "editor" / name)

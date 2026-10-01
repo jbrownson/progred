@@ -1,0 +1,8 @@
+/try /editor/ 302
+/try/ /editor/ 302
+/iop /editor/?example=iop-tree 302
+/iop/ /editor/?example=iop-tree 302
+/cad /editor/?example=fidget-shapes 302
+/cad/ /editor/?example=fidget-shapes 302
+/cam /editor/?example=toolpaths 302
+/cam/ /editor/?example=toolpaths 302

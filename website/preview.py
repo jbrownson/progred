@@ -11,6 +11,17 @@ import webbrowser
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 DEFAULT_PORT = 8081
+REDIRECTS = Path(__file__).resolve().parent / "_redirects"
+
+
+def read_redirects(path):
+    """The site's short paths, in the `_redirects` format Cloudflare serves."""
+    redirects = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            source, destination, status = line.split()
+            redirects[source] = (destination, int(status))
+    return redirects
 
 
 def preview_url(server):
@@ -21,6 +32,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, website, editor, **kwargs):
         self.website = Path(website).resolve()
         self.editor = Path(editor).resolve()
+        self.redirects = read_redirects(REDIRECTS)
         super().__init__(*args, directory=str(self.website), **kwargs)
 
     def target(self, path):
@@ -36,6 +48,13 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         return str(self.target(path)[1])
 
     def send_head(self):
+        redirect = self.redirects.get(urlsplit(self.path).path)
+        if redirect:
+            destination, status = redirect
+            self.send_response(status)
+            self.send_header("Location", destination)
+            self.end_headers()
+            return None
         root, target = self.target(self.path)
         if not target.is_relative_to(root):
             self.send_error(403, "Outside the website")

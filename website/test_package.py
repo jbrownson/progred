@@ -21,6 +21,7 @@ class PackageTests(unittest.TestCase):
         self.destination = self.root / "site"
         shutil.copytree(REPOSITORY / "website/public", self.repository / "website/public")
         shutil.copyfile(REPOSITORY / "website/_headers", self.repository / "website/_headers")
+        shutil.copyfile(REPOSITORY / "website/_redirects", self.repository / "website/_redirects")
         editor = self.repository / "web"
         editor.mkdir()
         for name in EDITOR_FILES:
@@ -99,6 +100,20 @@ class PackageTests(unittest.TestCase):
         config = json.loads((REPOSITORY / "website/wrangler.jsonc").read_text())
         self.assertEqual(config["assets"]["not_found_handling"], "404-page")
         self.assertNotIn("main", config)
+
+    def test_short_paths_open_the_editor_on_bundled_examples(self):
+        assemble(self.repository, self.destination)
+        sources = []
+        for line in (self.destination / "_redirects").read_text().splitlines():
+            source, destination, status = line.split()
+            sources.append(source)
+            with self.subTest(source=source):
+                self.assertEqual(status, "302")
+                url = urlsplit(destination)
+                self.assertEqual(url.path, "/editor/")
+                for example in parse_qs(url.query).get("example", []):
+                    self.assertTrue((REPOSITORY / "examples" / f"{example}.gid").is_file())
+        self.assertTrue({"/try", "/iop", "/cad", "/cam"} <= set(sources))
 
     def test_ci_entry_point_refuses_an_ordinary_local_invocation(self):
         result = subprocess.run(

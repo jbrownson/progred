@@ -47,7 +47,7 @@ const drawing = {
   x: "415def0fa0a9ac40dfba5fca4d0f8876",
   y: "4e2dcde5b1ab1480a2f126176dd148c7",
   radius: "6423c35e07d7a4ff536127d1f1d8eb53",
-  do: "b1fc4cb45c58b1a662c431feef5bd140",
+  all: "bc2f76148affd64e009a1a37a32aa2bf",
   expressions: "5fab151c006ae1487c28837f2003f43c",
   expression: "ccc55b0eb63b9f564ea74436094d4014",
   unquote: "da48703c290e3b35d7353c38110bc953",
@@ -278,7 +278,7 @@ export function completedSteps(lesson, state, previous) {
         || coordinate(shape, drawing.x)?.cell !== drawing.x
         || !Number.isFinite(radius) || radius <= 0
         || !Number.isFinite(number(coordinate(shape, drawing.y)))
-        || field(contents?.[program], fields.function)?.cell !== drawing.do
+        || field(contents?.[program], fields.function)?.cell !== drawing.all
         || !Array.isArray(calls) || calls.length < 2
         || !calls.every((call) => field(call, fields.function)?.cell === fn)) return [];
     const positions = calls.map((call) => number(field(call, drawing.x)));

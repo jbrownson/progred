@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urljoin, urlsplit
 
-from preview import PreviewHandler, REPOSITORY, main, prepare_editor
+from preview import PreviewHandler, REDIRECTS, REPOSITORY, main, prepare_editor, read_redirects
 
 
 class LauncherTests(unittest.TestCase):
@@ -179,6 +179,13 @@ class PreviewTests(unittest.TestCase):
         status, headers, _ = self.request("/editor")
         self.assertEqual(status, 301)
         self.assertEqual(headers["location"], "/editor/")
+
+    def test_short_paths_redirect_to_the_editor(self):
+        status, headers, _ = self.request("/try")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers["location"], "/editor/")
+        status, headers, _ = self.request("/cad")
+        self.assertEqual((status, headers["location"]), (302, "/editor/?example=fidget-shapes"))
 
     def test_wasm_mime_and_reload_headers(self):
         status, headers, body = self.request("/editor/test.wasm", "HEAD")
@@ -347,6 +354,8 @@ class AssetTests(unittest.TestCase):
             if url.scheme or not url.path:
                 continue
             with self.subTest(link=link):
+                if "/" + url.path in read_redirects(REDIRECTS):
+                    continue
                 if url.path == "editor/":
                     [example] = parse_qs(url.query)["example"]
                     self.assertTrue((REPOSITORY / "examples" / f"{example}.gid").is_file())
