@@ -35,7 +35,7 @@ const layers = [
     label: "Names",
     names: "stored with each key and cell",
     libraries: [],
-    off: "Names are stored facts too, like <code>{name: \"tree count\"}</code> on the cell they name, and every label above was drawn from them. Without names, each key and cell shows its identity, a short code like <code>…5d561</code> for <code>f64</code>, and text shows as its bytes. This is what's actually stored: records <code>{ }</code>, lists <code>[ ]</code>, bytes <code>0x…</code>, and cells <code>( )</code>. Every layer you switched off only changed how it's drawn. Switch them back on, in any order.",
+    off: "Names are stored facts too, like <code>{name: \"tree count\"}</code> on the cell they name, and every label above was drawn from them. Without names, each key and cell shows its identity, a short code like <code>…5d561</code> for <code>f64</code>, and text shows as its bytes. This is what's actually stored: records <code>{ }</code>, lists <code>[ ]</code>, blobs <code>0x…</code>, and cells <code>( )</code>. Every layer you switched off only changed how it's drawn. Switch them back on, in any order.",
   },
 ];
 

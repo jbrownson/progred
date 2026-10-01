@@ -15,7 +15,7 @@ it's an identity with a name attached as a label, so renaming a key never breaks
 anything that uses it. A value can also live in a cell, which has its own
 identity, so any number of places can point to it; that's what makes a document
 a graph. There are no built-in strings or numbers either, just records, lists,
-bytes, and cells. Libraries decide what data means and how it's drawn, so one document can be edited as
+blobs of raw bytes, and cells. Libraries decide what data means and how it's drawn, so one document can be edited as
 code, editable numbers, color pickers, drawings, or 3D geometry, with no
 canonical source text to keep in sync.
 

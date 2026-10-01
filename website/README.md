@@ -173,7 +173,7 @@ caption naming what drew it, so the views explain themselves.
 
 The model lesson (`model`) shows the planet again, fully drawn above and in the
 base projection below, both referencing one cell. Its prose names the four
-building blocks: records, lists, bytes, and cells. Renaming the planet and
+building blocks: records, lists, blobs, and cells. Renaming the planet and
 adding a color count from the document; the last step counts a selection in the
 base view inside the planet key's entry, which the editor also highlights in
 the top view.

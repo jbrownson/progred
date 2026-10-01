@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Progred is an experimental programming environment. Your program is a graph of records, lists, bytes, and cells, and everything you see, including the code, is a projection of it." />
+    <meta name="description" content="Progred is an experimental programming environment. Your program is a graph of records, lists, blobs, and cells, and everything you see, including the code, is a projection of it." />
     <title>Progred — like JSON, but a graph, and projected</title>
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://prog.red/" />
@@ -67,7 +67,7 @@
       <section class="hero" aria-labelledby="pitch">
         <h1 id="pitch">Like JSON, but a graph, and projected.</h1>
         <p class="lede">Progred is an experimental programming environment. Your program is a document like that, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates.</p>
-        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is eight bytes under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
           <a class="button" href="#ways-in">Try a tutorial</a>
@@ -100,9 +100,9 @@
             <figcaption>Drawn with the absent, color, control, f64, grap, layout, presentation, sequence, and controls libraries.</figcaption>
           </figure>
           <figure>
-            <img class="light-only" src="images/structure-light.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and bytes they’re stored as, labeled with their names." width="704" height="600" />
-            <img class="dark-only" src="images/structure-dark.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and bytes they’re stored as, labeled with their names." width="704" height="600" />
-            <figcaption>The same document with those libraries’ drawing switched off: calls, colors, and numbers as the records and bytes they’re stored as. On a laptop, this is a live editor you can take apart yourself.</figcaption>
+            <img class="light-only" src="images/structure-light.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as, labeled with their names." width="704" height="600" />
+            <img class="dark-only" src="images/structure-dark.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as, labeled with their names." width="704" height="600" />
+            <figcaption>The same document with those libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as. On a laptop, this is a live editor you can take apart yourself.</figcaption>
           </figure>
         </div>
       </section>
@@ -113,7 +113,7 @@
         <h3 class="idea-group">The data</h3>
         <article class="idea" id="structure">
           <h4>Structure, not text</h4>
-          <p>A Progred document is built from four things: records, lists, bytes, and cells. Records map keys to values and lists keep them in order; bytes are the leaves; a cell is a value with its own identity that any number of places can point to, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
+          <p>A Progred document is built from four things: records, lists, blobs, and cells. Records map keys to values and lists keep them in order; blobs, runs of raw bytes, are the leaves; a cell is a value with its own identity that any number of places can point to, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
           <p class="idea-links"><a href="lab/peel.html#cells">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/gid.md">GID</a></p>
         </article>
         <article class="idea" id="identity">
@@ -123,7 +123,7 @@
         </article>
         <article class="idea" id="meaning">
           <h4>Libraries give data its meaning</h4>
-          <p>Text is bytes under the text library’s <code>utf8</code> key, and a 64-bit float is eight bytes under the f64 library’s key; the small <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
+          <p>Text is a blob under the text library’s <code>utf8</code> key, and a 64-bit float is an eight-byte blob under the f64 library’s key; the small <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
           <p class="idea-links"><a href="lab/peel.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
         </article>
         <h3 class="idea-group">Views and language</h3>
