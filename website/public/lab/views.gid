@@ -6,7 +6,7 @@
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497, "unquote": da48703c290e3b35d7353c38110bc953,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2, "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f, "bind": 5e46d12705690e8a377eb0f16ad9dba6,
-    "subject": 00dafdc01c7e014edd857e174c6c8b6f, "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "subject": 00dafdc01c7e014edd857e174c6c8b6f, "all": bc2f76148affd64e009a1a37a32aa2bf,
     "expressions": 5fab151c006ae1487c28837f2003f43c, "for_each": 58a4ac72abe43dd18117ff17f66e157a,
     "items": f4979d6fbf8752063608f7046c075004, "action": 2669abe847620523793fe4629f5870b8,
     "item": 67bdfe4ec7d3bafc14407235618840aa, "range": 846f3beb349626d4078ab09c988884e3,
@@ -37,7 +37,7 @@
     planet_drawing: {name: "planet drawing", params: [value], body: {
       function: where,
       bindings: [{pattern: {moons: {bind: n}}, subject: value}],
-      expression: {function: do, expressions: [
+      expression: {function: all, expressions: [
         {function: fill, paint: {rgb: 0xc1440e}, shape: {circle: {x: {f64: 0x0000000000004940},
           y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000004240}}}},
         {function: for_each, items: {function: range, count: n}, action: {params: [item], body: {
